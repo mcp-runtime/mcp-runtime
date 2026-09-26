@@ -5332,14 +5332,17 @@ EOF
     fi
 
     log_line oauth "a session certificate must not authorize a different OAuth server"
-    WRONG_SERVER_STATUS="$(curl -ksS --cert "${ADAPTER_CERT_DIR}/client.crt" --key "${ADAPTER_CERT_DIR}/client.key" \
-      -o "${WORKDIR}/adapter-wrong-server.json" -w '%{http_code}' \
-      -H "Host: ${OAUTH_SERVER_HOST}" -H 'content-type: application/json' \
-      -H 'accept: application/json, text/event-stream' -H "Mcp-Protocol-Version: ${MCP_PROTOCOL_VERSION}" \
-      --data '{"jsonrpc":"2.0","id":4,"method":"initialize","params":{}}' \
-      "https://127.0.0.1:${TRAEFIK_TLS_PORT}/${WRONG_SERVER_NAME}/mcp")"
-    if [[ "${WRONG_SERVER_STATUS}" != "401" ]] || ! grep -q 'session_not_found' "${WORKDIR}/adapter-wrong-server.json"; then
-      echo "wrong-server certificate was not rejected (${WRONG_SERVER_STATUS}): $(cat "${WORKDIR}/adapter-wrong-server.json")" >&2
+    WRONG_SERVER_URL="https://127.0.0.1:${TRAEFIK_TLS_PORT}/${WRONG_SERVER_NAME}/mcp"
+    # MCPServer readiness confirms the route object exists but not that
+    # Traefik has loaded the newly issued backend transport certificates.
+    # Retry only transport failures/5xx while that dynamic config converges;
+    # a successful or otherwise unexpected MCP response still fails at once.
+    if ! wait_for_adapter_certificate_initialize "${WRONG_SERVER_URL}" 401 session_not_found \
+      "${WORKDIR}/adapter-wrong-server-headers.txt" "${WORKDIR}/adapter-wrong-server.json" true; then
+      echo "[debug] wrong-server adapter certificate route did not converge to the expected denial" >&2
+      kubectl get certificates,secrets,ingressroutes,serverstransports -n mcp-servers -o wide >&2 || true
+      kubectl logs -n traefik -l app=traefik --tail=100 >&2 || true
+      kubectl logs -n mcp-servers -l "app=${WRONG_SERVER_NAME}" -c mcp-gateway --tail=100 >&2 || true
       exit 1
     fi
 

@@ -8,6 +8,7 @@ trap 'rm -rf "${TEST_DIR}"' EXIT
 
 run_case() (
   local name="$1" expected="$2" reason="$3" statuses="$4" want_rc="$5" want_calls="$6"
+  local retry_server_errors="${8:-false}"
   export ADAPTER_CERT_DIR="${TEST_DIR}" OAUTH_SERVER_HOST=localhost MCP_PROTOCOL_VERSION=2025-06-18
   export ADAPTER_CERT_POLICY_WAIT_SECONDS="${7:-180}"
   printf '%s\n' "${statuses}" >"${TEST_DIR}/responses"
@@ -33,7 +34,7 @@ run_case() (
   sleep() { :; }
   local rc=0
   wait_for_adapter_certificate_initialize https://localhost/mcp "${expected}" "${reason}" \
-    "${TEST_DIR}/headers" "${TEST_DIR}/body" >"${TEST_DIR}/output" 2>&1 || rc=$?
+    "${TEST_DIR}/headers" "${TEST_DIR}/body" "${retry_server_errors}" >"${TEST_DIR}/output" 2>&1 || rc=$?
   local calls
   calls="$(wc -l <"${TEST_DIR}/calls" | tr -d ' ')"
   if [[ "${rc}" != "${want_rc}" || "${calls}" != "${want_calls}" ]]; then
@@ -51,3 +52,6 @@ run_case revoked-at-enrollment 200 '' '401 {"error":"session_revoked"}' 1 1
 run_case gateway-error 200 '' '503 {"error":"policy_unavailable"}' 1 1
 run_case timeout 200 '' '401 {"error":"session_not_found"}' 1 1 0
 run_case tls-error 200 '' curl-error 1 1
+run_case route-converges 401 session_not_found $'curl-error\n500 Internal Server Error\n502 Bad Gateway\n401 {"error":"session_not_found"}' 0 4 180 true
+run_case route-stays-unavailable 401 session_not_found '500 Internal Server Error' 1 1 0 true
+run_case route-accepts-certificate 401 session_not_found '200 {"result":{}}' 1 1 180 true
