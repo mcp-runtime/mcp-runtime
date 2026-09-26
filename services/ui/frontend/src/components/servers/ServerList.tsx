@@ -4,6 +4,7 @@ import { Button } from "../../ui/Button";
 import { CopyButton } from "../../ui/CopyButton";
 import { StatusBadge } from "../../ui/Badge";
 import { Icon } from "../../ui/Icon";
+import { observabilitySessionProxyURL } from "../../api/observabilityLinks";
 import { EmptyState } from "../../ui/States";
 import { formatAbsolute, formatAge } from "../../lib/format";
 import {
@@ -224,7 +225,7 @@ export function ServerList({
                     {observability?.grafana.available && observability.grafana.url ? (
                       <a
                         className="quiet-link"
-                        href={observability.grafana.url}
+                        href={observabilitySessionProxyURL(observability.grafana.url, "grafana/dashboard")}
                         target="_blank"
                         rel="noreferrer"
                         data-testid="server-card-grafana-link"
@@ -236,7 +237,7 @@ export function ServerList({
                       <a
                         key={query.id}
                         className="quiet-link"
-                        href={query.url}
+                        href={observabilitySessionProxyURL(query.url, "prometheus/query")}
                         target="_blank"
                         rel="noreferrer"
                         title={query.description}

@@ -45,6 +45,22 @@ func newGrantCmd(mgr *AccessManager) *cobra.Command {
 	cmd.AddCommand(newDeleteCmd(mgr, GrantResource, "grant"))
 	cmd.AddCommand(newToggleCmd(mgr, GrantResource, "disable", "Disable a grant", true))
 	cmd.AddCommand(newToggleCmd(mgr, GrantResource, "enable", "Enable a grant", false))
+	cmd.AddCommand(newRevokeGrantSessionsCmd(mgr))
+	return cmd
+}
+
+func newRevokeGrantSessionsCmd(mgr *AccessManager) *cobra.Command {
+	var namespace string
+	cmd := &cobra.Command{
+		Use:   "revoke-sessions [grant-name]",
+		Short: "Revoke every session issued from a grant",
+		Long:  "Revoke active agent sessions linked to this grant while leaving the grant itself enabled. This action uses the platform API and records audit events.",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return mgr.RevokeGrantSessions(args[0], namespace)
+		},
+	}
+	cmd.Flags().StringVar(&namespace, "namespace", core.NamespaceMCPServers, "Grant namespace")
 	return cmd
 }
 

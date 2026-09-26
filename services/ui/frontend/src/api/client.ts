@@ -15,6 +15,7 @@ export const SESSION_PROXY_GET_PATHS = new Set([
   "/runtime/grants",
   "/runtime/sessions",
   "/runtime/teams",
+  "/runtime/agents",
   "/runtime/components",
   "/admin/operations",
   "/admin/deployments",
@@ -24,7 +25,7 @@ export const SESSION_PROXY_GET_PATHS = new Set([
   "/user/analytics/usage",
 ]);
 
-const SESSION_PROXY_GET_PREFIXES = ["/runtime/teams/"];
+const SESSION_PROXY_GET_PREFIXES = ["/runtime/teams/", "/runtime/agents/"];
 
 export const SESSION_PROXY_WRITE_PATHS: Array<{
   path: string;
@@ -36,12 +37,16 @@ export const SESSION_PROXY_WRITE_PATHS: Array<{
   { path: "/user/api-keys", methods: ["POST"] },
   { path: "/user/api-keys/", methods: ["DELETE"], segments: 1 },
   { path: "/runtime/grants/", methods: ["PATCH", "DELETE"], segments: 2 },
+  { path: "/runtime/grants/", methods: ["POST"], segments: 3, suffixes: ["revoke-sessions"] },
   { path: "/runtime/grants", methods: ["POST"] },
   { path: "/runtime/sessions/", methods: ["PATCH", "DELETE"], segments: 2 },
   { path: "/runtime/sessions", methods: ["POST"] },
   { path: "/runtime/teams", methods: ["POST"] },
   { path: "/runtime/teams/", methods: ["DELETE"], segments: 1 },
   { path: "/runtime/teams/", methods: ["POST"], segments: 2, suffixes: ["members", "users"] },
+  { path: "/runtime/teams/", methods: ["POST"], segments: 2, suffixes: ["agents"] },
+  { path: "/runtime/agents/", methods: ["PATCH"], segments: 1 },
+  { path: "/runtime/agents/", methods: ["POST"], segments: 2, suffixes: ["deactivate", "reactivate"] },
   { path: "/runtime/teams/", methods: ["PUT", "DELETE"], segments: 3, suffixes: ["members"], suffixIndex: 1 },
   { path: "/runtime/actions/restart", methods: ["POST"] },
   { path: "/runtime/servers/", methods: ["DELETE"], segments: 2 },

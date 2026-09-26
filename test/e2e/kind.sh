@@ -1230,8 +1230,21 @@ tenant_owner_cli() {
     "${PROJECT_ROOT}/bin/mcp-runtime" "$@"
 }
 
-# envless_admin_cli runs the CLI with every MCP_* variable unset but keeps the
-# admin kubeconfig, like an operator's fresh shell.
+tenant_grantee_cli() {
+  local -a unset_args=()
+  local name
+  while IFS= read -r name; do
+    unset_args+=(-u "${name}")
+  done < <(compgen -e | grep '^MCP_' || true)
+  env ${unset_args[@]+"${unset_args[@]}"} \
+    KUBECONFIG="${TENANT_QS_DIR}/no-kubeconfig" \
+    MCP_PLATFORM_API_PROFILE=e2e-grantee \
+    MCP_RUNTIME_CONFIG_DIR="${TENANT_QS_DIR}/grantee-config" \
+    "${PROJECT_ROOT}/bin/mcp-runtime" "$@"
+}
+
+# envless_admin_cli runs the CLI with every MCP_* variable unset, like an
+# operator's fresh shell.
 envless_admin_cli() {
   local -a unset_args=()
   local name
@@ -1301,6 +1314,8 @@ PY
 # refresh; assert both the stamp and a short propagation budget.
 run_tenant_owner_adapter_quickstart() {
   local stamp team namespace owner_email owner_password server image agent grant agent_response
+  local grantee_team grantee_email grantee_password grantee_team_id grantee_human_id grantee_agent grantee_grant grantee_response grantee_token
+  local grantee_proxy_port grantee_proxy_url grantee_session revoked_status revoked_body inactive_status i
   local runtime_url proxy_url policy_revision pod_revisions
   stamp="$(date +%s)"
   team="e2e-tq-${stamp}"
@@ -1355,6 +1370,10 @@ servers:
       - {name: upper, requiredTrust: low, sideEffect: read}
     auth:
       mode: header
+      humanIDHeader: X-MCP-Human-ID
+      agentIDHeader: X-MCP-Agent-ID
+      teamIDHeader: X-MCP-Team-ID
+      sessionIDHeader: X-MCP-Agent-Session
     policy:
       mode: allow-list
       defaultDecision: deny
@@ -1431,6 +1450,148 @@ EOF
     "${TENANT_SESSION_PROPAGATION_TRIES}" "" "tenant-quickstart-add"
   wait_for_mcp_tool_result "${proxy_url}" "upper" '{"text":"x"}' 403 "tool_not_granted" \
     "${TENANT_SESSION_PROPAGATION_TRIES}" "" "tenant-quickstart-upper"
+
+  # A server-owning team can grant a different team's member and managed agent
+  # bounded access. The caller team must be preserved in the session while the
+  # MCPServer's team remains the authority team.
+  grantee_team="e2e-tq-grantee-${stamp}"
+  grantee_email="${grantee_team}@mcpruntime.org"
+  grantee_password="e2e-grantee-pass-${stamp}"
+  grantee_grant="${server}-cross-team"
+  grantee_proxy_port=$((TENANT_ADAPTER_PROXY_PORT + 1))
+  log_line policy "cross-team grant: admin creates an unrelated owning team member and active agent"
+  env MCP_PLATFORM_API_URL="http://127.0.0.1:${SENTINEL_PORT}" MCP_PLATFORM_API_TOKEN="${ADAPTER_PLATFORM_TOKEN}" \
+    ./bin/mcp-runtime team create "${grantee_team}" --name "E2E grantee ${stamp}" >/dev/null
+  env MCP_PLATFORM_API_URL="http://127.0.0.1:${SENTINEL_PORT}" MCP_PLATFORM_API_TOKEN="${ADAPTER_PLATFORM_TOKEN}" \
+    ./bin/mcp-runtime team user create "${grantee_team}" --email "${grantee_email}" \
+      --password "${grantee_password}" --role owner >/dev/null
+  grantee_team_id="$(curl -fsS -H "Authorization: Bearer ${ADAPTER_PLATFORM_TOKEN}" \
+    "http://127.0.0.1:${SENTINEL_PORT}/api/v1/runtime/teams" | python3 -c '
+import json,sys
+slug=sys.argv[1]
+teams=json.load(sys.stdin).get("teams", [])
+matches=[team for team in teams if team.get("slug")==slug]
+assert len(matches)==1, f"expected one team {slug}, got {matches}"
+print(matches[0]["id"])
+' "${grantee_team}")"
+  grantee_human_id="$(curl -fsS -H "Authorization: Bearer ${ADAPTER_PLATFORM_TOKEN}" \
+    "http://127.0.0.1:${SENTINEL_PORT}/api/v1/runtime/teams/${grantee_team}/members" | python3 -c '
+import json,sys
+email=sys.argv[1]
+members=json.load(sys.stdin).get("members", [])
+matches=[member for member in members if member.get("email")==email]
+assert len(matches)==1, f"expected one member {email}, got {matches}"
+print(matches[0]["user_id"])
+' "${grantee_email}")"
+  grantee_response="$(curl -fsS -X POST -H "Authorization: Bearer ${ADAPTER_PLATFORM_TOKEN}" \
+    -H "content-type: application/json" --data '{"name":"E2E cross-team agent"}' \
+    "http://127.0.0.1:${SENTINEL_PORT}/api/v1/runtime/teams/${grantee_team}/agents")"
+  grantee_agent="$(printf '%s' "${grantee_response}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["agent"]["id"])')"
+  tenant_grantee_cli auth login --api-url "http://127.0.0.1:${SENTINEL_PORT}" \
+    --email "${grantee_email}" --password "${grantee_password}" --profile e2e-grantee >/dev/null
+  (cd "${TENANT_QS_DIR}" && tenant_owner_cli access grant init "${grantee_grant}" \
+    --server "${server}" --namespace "${namespace}" --human-id "${grantee_human_id}" \
+    --agent-id "${grantee_agent}" --team-id "${grantee_team_id}" \
+    --tool echo --tool add --expires-in 30m --output cross-team-grant.yaml)
+  (cd "${TENANT_QS_DIR}" && tenant_owner_cli access grant apply --file cross-team-grant.yaml)
+
+  grantee_proxy_url="http://127.0.0.1:${grantee_proxy_port}/mcp"
+  stop_listener_on_port "${grantee_proxy_port}"
+  require_port_available "${grantee_proxy_port}" "cross-team adapter proxy"
+  tenant_grantee_cli adapter proxy \
+    --runtime-url "${runtime_url}" --server "${server}" --namespace "${namespace}" \
+    --agent "${grantee_agent}" --agent-id "${grantee_agent}" --auto-refresh \
+    --listen "127.0.0.1:${grantee_proxy_port}" --log-level info \
+    >"${TENANT_QS_DIR}/grantee-adapter-proxy.log" 2>&1 &
+  local grantee_proxy_pid=$!
+  PIDS+=("${grantee_proxy_pid}")
+  wait_managed_port "${grantee_proxy_port}" "${grantee_proxy_pid}" \
+    "${TENANT_QS_DIR}/grantee-adapter-proxy.log" "cross-team adapter proxy"
+  assert_mcp_tools_list_contains "${grantee_proxy_url}" echo add upper
+  wait_for_mcp_tool_result "${grantee_proxy_url}" echo '{"message":"cross-team"}' 200 "cross-team" \
+    "${TENANT_SESSION_PROPAGATION_TRIES}" "" "cross-team-echo"
+  wait_for_mcp_tool_result "${grantee_proxy_url}" upper '{"text":"x"}' 403 "tool_not_granted" \
+    "${TENANT_SESSION_PROPAGATION_TRIES}" "" "cross-team-upper"
+
+  grantee_session="$(kubectl get mcpagentsessions -n "${namespace}" -o json | python3 -c '
+import json,sys
+doc=json.load(sys.stdin)
+agent,team,grant=sys.argv[1:]
+items=[item for item in doc.get("items", [])
+       if item.get("spec", {}).get("subject", {}).get("agentID")==agent
+       and item.get("spec", {}).get("subject", {}).get("teamID")==team
+       and item.get("metadata", {}).get("annotations", {}).get("mcpruntime.org/access-grant-name")==grant]
+assert len(items)==1, f"expected one linked grantee session, got {items}"
+print(items[0]["metadata"]["name"])
+' "${grantee_agent}" "${grantee_team_id}" "${grantee_grant}")"
+  log_line policy "cross-team grant: revoke all linked sessions and verify the next request is denied"
+  tenant_owner_cli access grant revoke-sessions "${grantee_grant}" --namespace "${namespace}"
+  revoked_body="${TENANT_QS_DIR}/cross-team-session-revoked.json"
+  revoked_status=""
+  for i in $(seq 1 "${TENANT_SESSION_PROPAGATION_TRIES}"); do
+    revoked_status="$(curl -sS -o "${revoked_body}" -w '%{http_code}' -X POST \
+      -H 'content-type: application/json' -H 'accept: application/json, text/event-stream' \
+      -H "Mcp-Protocol-Version: ${MCP_PROTOCOL_VERSION}" \
+      -H "X-MCP-Human-ID: ${grantee_human_id}" -H "X-MCP-Agent-ID: ${grantee_agent}" \
+      -H "X-MCP-Team-ID: ${grantee_team_id}" -H "X-MCP-Agent-Session: ${grantee_session}" \
+      --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"'"${MCP_PROTOCOL_VERSION}"'","capabilities":{},"clientInfo":{"name":"mcp-runtime-e2e","version":"1.0.0"}}}' \
+      "${runtime_url}" || true)"
+    if [[ "${revoked_status}" == "401" ]] && grep -q 'session_revoked' "${revoked_body}"; then break; fi
+    sleep 2
+  done
+  if [[ "${revoked_status}" != "401" ]] || ! grep -q 'session_revoked' "${revoked_body}"; then
+    echo "[cross-team] revoked session request got ${revoked_status}: $(cat "${revoked_body}")" >&2
+    exit 1
+  fi
+  grantee_token="$(printf '{"email":"%s","password":"%s"}' "${grantee_email}" "${grantee_password}" | \
+    curl -fsS -X POST -H 'content-type: application/json' --data-binary @- \
+      "http://127.0.0.1:${SENTINEL_PORT}/api/v1/auth/login" | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')"
+  # The grant remains enabled after revoke-all, so a fresh session can be
+  # issued. Deactivating the grantee agent must then revoke it and prevent any
+  # subsequent session issuance for that ID.
+  curl -fsS -X POST -H "Authorization: Bearer ${grantee_token}" -H 'content-type: application/json' \
+    --data "{\"serverName\":\"${server}\",\"namespace\":\"${namespace}\",\"agentID\":\"${grantee_agent}\",\"requestedTTL\":\"30m\"}" \
+    "http://127.0.0.1:${SENTINEL_PORT}/api/v1/runtime/adapter/sessions" >/dev/null
+  grantee_session="$(kubectl get mcpagentsessions -n "${namespace}" -o json | python3 -c '
+import json,sys
+doc=json.load(sys.stdin)
+agent,team,grant=sys.argv[1:]
+items=[item for item in doc.get("items", [])
+       if item.get("spec", {}).get("subject", {}).get("agentID")==agent
+       and item.get("spec", {}).get("subject", {}).get("teamID")==team
+       and not item.get("spec", {}).get("revoked", False)
+       and item.get("metadata", {}).get("annotations", {}).get("mcpruntime.org/access-grant-name")==grant]
+assert len(items)==1, f"expected one active grantee session, got {items}"
+print(items[0]["metadata"]["name"])
+' "${grantee_agent}" "${grantee_team_id}" "${grantee_grant}")"
+  tenant_grantee_cli agent deactivate "${grantee_agent}"
+  inactive_status="$(curl -sS -o "${revoked_body}" -w '%{http_code}' -X POST \
+    -H "Authorization: Bearer ${grantee_token}" -H 'content-type: application/json' \
+    --data "{\"serverName\":\"${server}\",\"namespace\":\"${namespace}\",\"agentID\":\"${grantee_agent}\"}" \
+    "http://127.0.0.1:${SENTINEL_PORT}/api/v1/runtime/adapter/sessions" || true)"
+  if [[ "${inactive_status}" != "403" ]] || ! grep -q 'unknown or inactive' "${revoked_body}"; then
+    echo "[cross-team] inactive agent session request got ${inactive_status}: $(cat "${revoked_body}")" >&2
+    exit 1
+  fi
+  revoked_status=""
+  for i in $(seq 1 "${TENANT_SESSION_PROPAGATION_TRIES}"); do
+    revoked_status="$(curl -sS -o "${revoked_body}" -w '%{http_code}' -X POST \
+      -H 'content-type: application/json' -H 'accept: application/json, text/event-stream' \
+      -H "Mcp-Protocol-Version: ${MCP_PROTOCOL_VERSION}" \
+      -H "X-MCP-Human-ID: ${grantee_human_id}" -H "X-MCP-Agent-ID: ${grantee_agent}" \
+      -H "X-MCP-Team-ID: ${grantee_team_id}" -H "X-MCP-Agent-Session: ${grantee_session}" \
+      --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"'"${MCP_PROTOCOL_VERSION}"'","capabilities":{},"clientInfo":{"name":"mcp-runtime-e2e","version":"1.0.0"}}}' \
+      "${runtime_url}" || true)"
+    if [[ "${revoked_status}" == "401" ]] && grep -q 'session_revoked' "${revoked_body}"; then break; fi
+    sleep 2
+  done
+  if [[ "${revoked_status}" != "401" ]] || ! grep -q 'session_revoked' "${revoked_body}"; then
+    echo "[cross-team] deactivated agent session request got ${revoked_status}: $(cat "${revoked_body}")" >&2
+    exit 1
+  fi
+  echo "[cross-team][pass] foreign grant was tool-scoped and expiring; grant/agent revocation fail closed"
+  kill "${grantee_proxy_pid}" >/dev/null 2>&1 || true
+  wait "${grantee_proxy_pid}" >/dev/null 2>&1 || true
 
   policy_revision="$(kubectl get configmap "${server}-gateway-policy" -n "${namespace}" \
     -o jsonpath='{.data.policy\.json}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["revision"])')"
@@ -4250,7 +4411,7 @@ print('adapter-session reused:', resp['name'])
     ADAPTER_SESSION_REJECT_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
       -H "Authorization: Bearer ${ADAPTER_CALLER_TOKEN}" \
       -H "content-type: application/json" \
-      --data '{"serverName":"definitely-missing","namespace":"mcp-servers","agentID":"ops-agent"}' \
+      --data "{\"serverName\":\"definitely-missing\",\"namespace\":\"mcp-servers\",\"agentID\":\"${ADAPTER_AGENT_ID}\"}" \
       "http://127.0.0.1:${SENTINEL_PORT}/api/v1/runtime/adapter/sessions")"
     if [[ "${ADAPTER_SESSION_REJECT_STATUS}" != "403" ]]; then
       echo "expected 403 when no grant matches, got ${ADAPTER_SESSION_REJECT_STATUS}" >&2
@@ -5406,7 +5567,7 @@ print('adapter-session reused:', resp['name'])
   ADAPTER_SESSION_REJECT_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
     -H "Authorization: Bearer ${ADAPTER_CALLER_TOKEN}" \
     -H "content-type: application/json" \
-    --data '{"serverName":"definitely-missing","namespace":"mcp-servers","agentID":"ops-agent"}' \
+    --data "{\"serverName\":\"definitely-missing\",\"namespace\":\"mcp-servers\",\"agentID\":\"${ADAPTER_AGENT_ID}\"}" \
     "http://127.0.0.1:${SENTINEL_PORT}/api/v1/runtime/adapter/sessions")"
   if [[ "${ADAPTER_SESSION_REJECT_STATUS}" != "403" ]]; then
     echo "expected 403 when no grant matches, got ${ADAPTER_SESSION_REJECT_STATUS}" >&2

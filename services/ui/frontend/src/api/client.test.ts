@@ -151,6 +151,23 @@ describe("fetchJSON", () => {
     expect(headers.get("x-csrf-token")).toBe("session-csrf");
     expect(headers.get("authorization")).toBeNull();
   });
+
+  it("routes agent directory and revoke-all writes through the CSRF-protected session proxy", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ agent: {} }) });
+    vi.stubGlobal("fetch", fetchMock);
+    setCSRFToken("session-csrf");
+
+    await fetchJSON("/runtime/agents/agt_01arz3ndektsv4rrffq69g5fav/deactivate", { method: "POST" });
+    await fetchJSON("/runtime/grants/mcp-team-a/cross-team/revoke-sessions", { method: "POST" });
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "/api/ui/v1/runtime/agents/agt_01arz3ndektsv4rrffq69g5fav/deactivate",
+      "/api/ui/v1/runtime/grants/mcp-team-a/cross-team/revoke-sessions",
+    ]);
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(new Headers((init as RequestInit).headers).get("x-csrf-token")).toBe("session-csrf");
+    }
+  });
 });
 
 describe("withQuery", () => {

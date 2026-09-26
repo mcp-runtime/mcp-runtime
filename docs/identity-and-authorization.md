@@ -96,13 +96,18 @@ made a request. Authentication continues to come from the configured OAuth
 flow or, for enrolled adapters, the session-bound certificate.
 
 Agent IDs are platform-generated immutable `agt_<26-character lowercase
-ULID>` values. The runtime API requires an active directory record in the
-subject team when writing grants or sessions, issuing adapter sessions, and
-enrolling adapter certificates. Deactivation first marks the agent inactive,
+ULID>` values. Agent subjects must resolve to an active directory record owned
+by the selected subject team. Unknown, malformed, inactive, or wrong-team IDs
+are rejected, and agent IDs cannot be entered as free text in the admin access
+forms. The runtime API checks grants, sessions, adapter session issuance, and
+certificate enrollment; use the runtime API for access changes so it can
+validate agent ownership against the identity store. Direct Kubernetes CRD
+writes do not consult the identity store and therefore bypass these directory
+checks; adapter session issuance and certificate enrollment still verify the
+agent before they issue credentials.
+Deactivation first marks the agent inactive,
 then revokes its active sessions across namespaces and audits each revocation.
 If revocation fails, the agent remains inactive; retry deactivation to finish.
-Direct Kubernetes writes bypass these identity-store checks, so create
-sessions through the runtime API wherever directory enforcement is required.
 
 For audit, keep the **actor** (the agent named by the session) separate from
 the **authority** (the human or team that delegated access). A session and its
@@ -146,7 +151,7 @@ spec:
     namespace: mcp-team-finance
   subject:
     humanID: user-123
-    agentID: coding-agent
+    agentID: agt_01arz3ndektsv4rrffq69g5fav
     teamID: team-finance-id
   maxTrust: medium
   allowedSideEffects: [read, write]
@@ -180,6 +185,12 @@ The grant controls:
 - Whether the grant is disabled
 
 The grant does not prove that the agent has a current session.
+
+Managed agent IDs are created with `mcp-runtime agent create <team-slug>
+--name <name>` and selected from the team's agent directory when creating a
+grant or session. The directory page and `mcp-runtime agent list|get|rename|
+deactivate|reactivate` expose the same records. IDs are generated once and
+never reused; do not invent an agent ID for a new managed subject.
 
 ## Session: active delegated consent
 

@@ -1,0 +1,12 @@
+Revoke active agent sessions linked to this grant while leaving the grant itself enabled. This action uses the platform API and records audit events.
+
+Usage:
+  mcp-runtime access grant revoke-sessions [grant-name] [flags]
+
+Flags:
+  -h, --help               help for revoke-sessions
+      --namespace string   Grant namespace (default "mcp-servers")
+
+Global Flags:
+      --debug      Enable debug mode with structured error logging
+      --use-kube   Use direct Kubernetes mode with kubectl; requires admin/operator cluster access (admin/dev/test only)

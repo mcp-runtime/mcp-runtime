@@ -401,6 +401,9 @@ func deployOperatorManifests(logger *zap.Logger, operatorImage, gatewayProxyImag
 }
 
 func deployOperatorManifestsWithClientGo(logger *zap.Logger, operatorImage, gatewayProxyImage string, operatorArgs []string, imagePullSecretName string) error {
+	if err := validateAdapterCertificateIngressIdentity(); err != nil {
+		return err
+	}
 	if err := ensureRepoManagedTraefikMiddlewareResourcesClientGo(logger); err != nil {
 		return err
 	}
@@ -575,6 +578,9 @@ func renderOperatorManagerManifest(operatorImage, gatewayProxyImage string, oper
 // deployOperatorManifestsWithKubectl deploys operator manifests without requiring kustomize or controller-gen.
 // It applies CRD, RBAC, and manager manifests directly, replacing the image name and injecting operator args/env.
 func deployOperatorManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap.Logger, operatorImage, gatewayProxyImage string, operatorArgs []string, imagePullSecretName string) error {
+	if err := validateAdapterCertificateIngressIdentity(); err != nil {
+		return err
+	}
 	if err := ensureRepoManagedTraefikMiddlewareResources(kubectl, logger); err != nil {
 		return err
 	}
@@ -1007,7 +1013,9 @@ func operatorEnvOverrides(gatewayProxyImage, existingGatewayOTLPEndpoint string)
 	if clusterName != "" {
 		envVars = append(envVars, operatorEnvVar{Name: "MCP_CLUSTER_NAME", Value: clusterName})
 	}
-	envVars = append(envVars, ingressControllerOperatorEnv(detectIngressControllerIdentity())...)
+	if adapterCertificatesEnabled() {
+		envVars = append(envVars, ingressControllerOperatorEnv(detectIngressControllerIdentity())...)
+	}
 	return envVars
 }
 

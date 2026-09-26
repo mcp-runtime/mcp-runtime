@@ -261,7 +261,7 @@ Keep identifiers stable:
 |---|---|
 | `teamID` | Use the platform store team UUID or another immutable identity-provider tenant/team ID. Do not use a mutable display name. |
 | `humanID` | Use the identity provider's stable subject claim, or email when that is stable in your environment. |
-| `agentID` | Use a readable owner-purpose string such as `acme-cron-bot`, `globex-data-loader`, or `claude-code`. |
+| `agentID` | Use the immutable `agt_<26-character lowercase ULID>` returned by the platform agent directory. Do not type or reuse a human-readable name as an ID. |
 
 `mcp-runtime access grant init` and `access session init` scaffold local YAML on
 the workstation only. `access grant apply` uses the platform API by default after

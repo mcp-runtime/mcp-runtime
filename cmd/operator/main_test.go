@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"io"
+	"strings"
 	"testing"
 
 	"mcp-runtime/internal/operator"
@@ -149,6 +150,35 @@ func TestBoolFromEnv(t *testing.T) {
 	if boolFromEnv("nope") {
 		t.Fatal("expected invalid value to be false")
 	}
+}
+
+func TestIngressControllerPodLabelsFromEnv(t *testing.T) {
+	t.Run("unset labels", func(t *testing.T) {
+		labels, err := ingressControllerPodLabelsFromEnv(func(string) string { return "" })
+		if err != nil || labels != nil {
+			t.Fatalf("labels,error = %v,%v; want nil,nil", labels, err)
+		}
+	})
+
+	t.Run("valid selector", func(t *testing.T) {
+		labels, err := ingressControllerPodLabelsFromEnv(func(string) string { return "app.kubernetes.io/name=traefik" })
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if labels["app.kubernetes.io/name"] != "traefik" {
+			t.Fatalf("labels = %v; want app.kubernetes.io/name=traefik", labels)
+		}
+	})
+
+	t.Run("malformed selector is an error", func(t *testing.T) {
+		labels, err := ingressControllerPodLabelsFromEnv(func(string) string { return "app in (traefik)" })
+		if err == nil || labels != nil {
+			t.Fatalf("labels,error = %v,%v; want nil and a configuration error", labels, err)
+		}
+		if !strings.Contains(err.Error(), "MCP_INGRESS_CONTROLLER_POD_LABELS") {
+			t.Fatalf("error = %q; want actionable environment variable name", err)
+		}
+	})
 }
 
 func TestParseConfig(t *testing.T) {

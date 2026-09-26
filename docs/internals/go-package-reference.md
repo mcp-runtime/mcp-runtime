@@ -5114,6 +5114,8 @@ _No package overview is documented._
 - [`type AdapterCertificateRequest struct`](#cli-platform-api-type-adaptercertificaterequest-struct)
 - [`type AdapterSession struct`](#cli-platform-api-type-adaptersession-struct)
 - [`type AdapterSessionRequest struct`](#cli-platform-api-type-adaptersessionrequest-struct)
+- [`type Agent struct`](#cli-platform-api-type-agent-struct)
+- [`type AgentPage struct`](#cli-platform-api-type-agentpage-struct)
 - [`type ImagePublishRecord struct`](#cli-platform-api-type-imagepublishrecord-struct)
 - [`type PlatformClient struct`](#cli-platform-api-type-platformclient-struct)
 - [`func NewPlatformClient() (*PlatformClient, error)`](#cli-platform-api-func-newplatformclient-platformclient-error)
@@ -5123,6 +5125,7 @@ _No package overview is documented._
 - [`func (c *PlatformClient) ApplyRuntimeServerWithScope(ctx context.Context, name, namespace, scope string, spec mcpv1alpha1.MCPServerSpec) (ServerListItem, error)`](#cli-platform-api-func-c-platformclient-applyruntimeserverwithscope-ctx-context-context-name-namespace-scope-string-spec-mcpv1alpha1-mcpserverspec-serverlistitem-error)
 - [`func (c *PlatformClient) ApplyRuntimeServerWithScopeUpdate(ctx context.Context, name, namespace, scope string, spec mcpv1alpha1.MCPServerSpec, update bool) (ServerListItem, error)`](#cli-platform-api-func-c-platformclient-applyruntimeserverwithscopeupdate-ctx-context-context-name-namespace-scope-string-spec-mcpv1alpha1-mcpserverspec-update-bool-serverlistitem-error)
 - [`func (c *PlatformClient) CreateAdapterSession(ctx context.Context, req AdapterSessionRequest) (AdapterSession, error)`](#cli-platform-api-func-c-platformclient-createadaptersession-ctx-context-context-req-adaptersessionrequest-adaptersession-error)
+- [`func (c *PlatformClient) CreateAgent(ctx context.Context, teamSlug, name string) (Agent, error)`](#cli-platform-api-func-c-platformclient-createagent-ctx-context-context-teamslug-name-string-agent-error)
 - [`func (c *PlatformClient) CreateTeam(ctx context.Context, slug, name string) (Team, error)`](#cli-platform-api-func-c-platformclient-createteam-ctx-context-context-slug-name-string-team-error)
 - [`func (c *PlatformClient) CreateTeamUser(ctx context.Context, slug, email, password, role string) (TeamMembership, error)`](#cli-platform-api-func-c-platformclient-createteamuser-ctx-context-context-slug-email-password-role-string-teammembership-error)
 - [`func (c *PlatformClient) CreateUser(ctx context.Context, email, password, role string) (PlatformUser, error)`](#cli-platform-api-func-c-platformclient-createuser-ctx-context-context-email-password-role-string-platformuser-error)
@@ -5130,11 +5133,13 @@ _No package overview is documented._
 - [`func (c *PlatformClient) DeleteGrant(ctx context.Context, namespace, name string) error`](#cli-platform-api-func-c-platformclient-deletegrant-ctx-context-context-namespace-name-string-error)
 - [`func (c *PlatformClient) DeleteRuntimeServer(ctx context.Context, namespace, name string) error`](#cli-platform-api-func-c-platformclient-deleteruntimeserver-ctx-context-context-namespace-name-string-error)
 - [`func (c *PlatformClient) DeleteSession(ctx context.Context, namespace, name string) error`](#cli-platform-api-func-c-platformclient-deletesession-ctx-context-context-namespace-name-string-error)
+- [`func (c *PlatformClient) GetAgent(ctx context.Context, id string) (Agent, error)`](#cli-platform-api-func-c-platformclient-getagent-ctx-context-context-id-string-agent-error)
 - [`func (c *PlatformClient) GetGrant(ctx context.Context, namespace, name string) (sentinelaccess.GrantSummary, error)`](#cli-platform-api-func-c-platformclient-getgrant-ctx-context-context-namespace-name-string-sentinelaccess-grantsummary-error)
 - [`func (c *PlatformClient) GetRuntimePolicy(ctx context.Context, namespace, server string) ([]byte, error)`](#cli-platform-api-func-c-platformclient-getruntimepolicy-ctx-context-context-namespace-server-string-byte-error)
 - [`func (c *PlatformClient) GetSession(ctx context.Context, namespace, name string) (sentinelaccess.SessionSummary, error)`](#cli-platform-api-func-c-platformclient-getsession-ctx-context-context-namespace-name-string-sentinelaccess-sessionsummary-error)
 - [`func (c *PlatformClient) GetTeam(ctx context.Context, slug string) (Team, error)`](#cli-platform-api-func-c-platformclient-getteam-ctx-context-context-slug-string-team-error)
 - [`func (c *PlatformClient) IssueAdapterCertificate(ctx context.Context, req AdapterCertificateRequest) (AdapterCertificate, error)`](#cli-platform-api-func-c-platformclient-issueadaptercertificate-ctx-context-context-req-adaptercertificaterequest-adaptercertificate-error)
+- [`func (c *PlatformClient) ListAgents(ctx context.Context, teamSlug, status, query, cursor string, limit int) (AgentPage, error)`](#cli-platform-api-func-c-platformclient-listagents-ctx-context-context-teamslug-status-query-cursor-string-limit-int-agentpage-error)
 - [`func (c *PlatformClient) ListGrants(ctx context.Context, namespace string) ([]sentinelaccess.GrantSummary, error)`](#cli-platform-api-func-c-platformclient-listgrants-ctx-context-context-namespace-string-sentinelaccess-grantsummary-error)
 - [`func (c *PlatformClient) ListNamespaces(ctx context.Context) ([]namespaceListItem, error)`](#cli-platform-api-func-c-platformclient-listnamespaces-ctx-context-context-namespacelistitem-error)
 - [`func (c *PlatformClient) ListRuntimeServers(ctx context.Context, namespace string) ([]ServerListItem, error)`](#cli-platform-api-func-c-platformclient-listruntimeservers-ctx-context-context-namespace-string-serverlistitem-error)
@@ -5146,6 +5151,9 @@ _No package overview is documented._
 - [`func (c *PlatformClient) PatchSession(ctx context.Context, namespace, name string, revoked bool) error`](#cli-platform-api-func-c-platformclient-patchsession-ctx-context-context-namespace-name-string-revoked-bool-error)
 - [`func (c *PlatformClient) PushRegistryImage(ctx context.Context, tarPath, target, scope string) error`](#cli-platform-api-func-c-platformclient-pushregistryimage-ctx-context-context-tarpath-target-scope-string-error)
 - [`func (c *PlatformClient) RecordImagePublish(ctx context.Context, record ImagePublishRecord) error`](#cli-platform-api-func-c-platformclient-recordimagepublish-ctx-context-context-record-imagepublishrecord-error)
+- [`func (c *PlatformClient) RenameAgent(ctx context.Context, id, name string) (Agent, error)`](#cli-platform-api-func-c-platformclient-renameagent-ctx-context-context-id-name-string-agent-error)
+- [`func (c *PlatformClient) RevokeGrantSessions(ctx context.Context, namespace, name string) (int, error)`](#cli-platform-api-func-c-platformclient-revokegrantsessions-ctx-context-context-namespace-name-string-int-error)
+- [`func (c *PlatformClient) SetAgentActive(ctx context.Context, id string, active bool) (Agent, error)`](#cli-platform-api-func-c-platformclient-setagentactive-ctx-context-context-id-string-active-bool-agent-error)
 - [`func (c *PlatformClient) UpsertTeamMember(ctx context.Context, slug, userID, role string) (TeamMembership, error)`](#cli-platform-api-func-c-platformclient-upsertteammember-ctx-context-context-slug-userid-role-string-teammembership-error)
 - [`func (c *PlatformClient) ValidateCredentials(ctx context.Context) error`](#cli-platform-api-func-c-platformclient-validatecredentials-ctx-context-context-error)
 - [`type PlatformUser struct`](#cli-platform-api-type-platformuser-struct)
@@ -5248,6 +5256,29 @@ type AdapterSessionRequest struct {
 
 ```
 
+<a id="cli-platform-api-type-agent-struct"></a>
+```text
+type Agent struct {
+	ID        string `json:"id"`
+	TeamID    string `json:"team_id"`
+	TeamSlug  string `json:"team_slug"`
+	Name      string `json:"name"`
+	Status    string `json:"status"`
+	CreatedAt string `json:"created_at,omitempty"`
+	UpdatedAt string `json:"updated_at,omitempty"`
+}
+
+```
+
+<a id="cli-platform-api-type-agentpage-struct"></a>
+```text
+type AgentPage struct {
+	Agents     []Agent `json:"agents"`
+	NextCursor string  `json:"next_cursor,omitempty"`
+}
+
+```
+
 <a id="cli-platform-api-type-imagepublishrecord-struct"></a>
 ```text
 type ImagePublishRecord struct {
@@ -5318,6 +5349,12 @@ func (c *PlatformClient) CreateAdapterSession(ctx context.Context, req AdapterSe
 
 ```
 
+<a id="cli-platform-api-func-c-platformclient-createagent-ctx-context-context-teamslug-name-string-agent-error"></a>
+```text
+func (c *PlatformClient) CreateAgent(ctx context.Context, teamSlug, name string) (Agent, error)
+
+```
+
 <a id="cli-platform-api-func-c-platformclient-createteam-ctx-context-context-slug-name-string-team-error"></a>
 ```text
 func (c *PlatformClient) CreateTeam(ctx context.Context, slug, name string) (Team, error)
@@ -5360,6 +5397,12 @@ func (c *PlatformClient) DeleteSession(ctx context.Context, namespace, name stri
 
 ```
 
+<a id="cli-platform-api-func-c-platformclient-getagent-ctx-context-context-id-string-agent-error"></a>
+```text
+func (c *PlatformClient) GetAgent(ctx context.Context, id string) (Agent, error)
+
+```
+
 <a id="cli-platform-api-func-c-platformclient-getgrant-ctx-context-context-namespace-name-string-sentinelaccess-grantsummary-error"></a>
 ```text
 func (c *PlatformClient) GetGrant(ctx context.Context, namespace, name string) (sentinelaccess.GrantSummary, error)
@@ -5387,6 +5430,12 @@ func (c *PlatformClient) GetTeam(ctx context.Context, slug string) (Team, error)
 <a id="cli-platform-api-func-c-platformclient-issueadaptercertificate-ctx-context-context-req-adaptercertificaterequest-adaptercertificate-error"></a>
 ```text
 func (c *PlatformClient) IssueAdapterCertificate(ctx context.Context, req AdapterCertificateRequest) (AdapterCertificate, error)
+
+```
+
+<a id="cli-platform-api-func-c-platformclient-listagents-ctx-context-context-teamslug-status-query-cursor-string-limit-int-agentpage-error"></a>
+```text
+func (c *PlatformClient) ListAgents(ctx context.Context, teamSlug, status, query, cursor string, limit int) (AgentPage, error)
 
 ```
 
@@ -5455,6 +5504,24 @@ func (c *PlatformClient) PushRegistryImage(ctx context.Context, tarPath, target,
 <a id="cli-platform-api-func-c-platformclient-recordimagepublish-ctx-context-context-record-imagepublishrecord-error"></a>
 ```text
 func (c *PlatformClient) RecordImagePublish(ctx context.Context, record ImagePublishRecord) error
+
+```
+
+<a id="cli-platform-api-func-c-platformclient-renameagent-ctx-context-context-id-name-string-agent-error"></a>
+```text
+func (c *PlatformClient) RenameAgent(ctx context.Context, id, name string) (Agent, error)
+
+```
+
+<a id="cli-platform-api-func-c-platformclient-revokegrantsessions-ctx-context-context-namespace-name-string-int-error"></a>
+```text
+func (c *PlatformClient) RevokeGrantSessions(ctx context.Context, namespace, name string) (int, error)
+
+```
+
+<a id="cli-platform-api-func-c-platformclient-setagentactive-ctx-context-context-id-string-active-bool-agent-error"></a>
+```text
+func (c *PlatformClient) SetAgentActive(ctx context.Context, id string, active bool) (Agent, error)
 
 ```
 

@@ -411,8 +411,14 @@ mcp-runtime access grant list    --namespace mcp-team-acme
 mcp-runtime access grant get     workspace-ops --namespace mcp-team-acme
 mcp-runtime access grant disable workspace-ops --namespace mcp-team-acme
 mcp-runtime access grant enable  workspace-ops --namespace mcp-team-acme
+mcp-runtime access grant revoke-sessions workspace-ops --namespace mcp-team-acme
 mcp-runtime access grant delete  workspace-ops --namespace mcp-team-acme
 ```
+
+`grant revoke-sessions` revokes all active adapter sessions explicitly linked
+to the grant, keeps the grant enabled, and records the revocations in the
+platform audit trail. It requires platform API authentication; it is not a
+direct `--use-kube` operation.
 
 ### Sessions
 
@@ -575,6 +581,29 @@ mcp-runtime adapter proxy \
 domain with the adapter session; `--trust-domain` or `MCP_TRUST_DOMAIN` is only
 an optional matching override. See
 [Agent adapters](agent-adapters.md#enterprise-mtls-and-spiffe).
+
+## agent
+
+Create and manage immutable, team-scoped agent identities used by access grants
+and sessions. Deactivation retains history and revokes active sessions.
+
+```bash
+mcp-runtime agent create acme --name "Build assistant"
+mcp-runtime agent list acme --status active --limit 50
+mcp-runtime agent get agt_01arz3ndektsv4rrffq69g5fav
+mcp-runtime agent rename agt_01arz3ndektsv4rrffq69g5fav --name "Release assistant"
+mcp-runtime agent deactivate agt_01arz3ndektsv4rrffq69g5fav
+mcp-runtime agent reactivate agt_01arz3ndektsv4rrffq69g5fav
+```
+
+Agent IDs are platform-generated and immutable. Names are unique per team;
+inactive agents remain in the directory for history but cannot be selected for
+new grants or sessions. Deactivation revokes active sessions. Admins can
+manage all teams; team owners manage their own agents; team members can list
+and view their team's agents. The administration workspace includes an
+**Agents** directory page.
+Agent subjects must be selected from the active directory for the subject's
+team. The API rejects unknown, malformed, inactive, and wrong-team agent IDs.
 
 ## team
 

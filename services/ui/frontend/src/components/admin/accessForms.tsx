@@ -5,13 +5,14 @@ import { StatusBadge } from "../../ui/Badge";
 import { SelectField, TextField } from "../../ui/Field";
 import { EmptyState, ErrorState, LoadingState } from "../../ui/States";
 import type { ServerSummary } from "../../api/types";
-import { useTeamMembers, useTeams } from "../../hooks/useAdminData";
+import { useTeamAgents, useTeamMembers, useTeams } from "../../hooks/useAdminData";
 
 export type GrantDraft = {
   name: string;
   namespace: string;
   server: string;
   humanID: string;
+  agentID: string;
   teamID: string;
   maxTrust: string;
   allowedSideEffects: string[];
@@ -23,6 +24,7 @@ export type SessionDraft = {
   namespace: string;
   server: string;
   humanID: string;
+  agentID: string;
   teamID: string;
   consentedTrust: string;
   expiresAt: string;
@@ -36,10 +38,12 @@ const TRUST_OPTIONS = [
 ];
 export const SIDE_EFFECTS = ["read", "write", "destructive"];
 
-type SubjectMode = "team" | "human";
-type SubjectValues = { humanID: string; teamID: string };
+type SubjectMode = "team" | "human" | "agent" | "human_agent";
+type SubjectValues = { humanID: string; agentID: string; teamID: string };
 
 function subjectModeOf(subject: SubjectValues): SubjectMode {
+  if (subject.humanID && subject.agentID) return "human_agent";
+  if (subject.agentID) return "agent";
   if (subject.humanID) return "human";
   if (subject.teamID) return "team";
   return "human";
@@ -62,13 +66,18 @@ function SubjectFields({
   const [customHuman, setCustomHuman] = useState(false);
   const membersQuery = useTeamMembers(true, teamSlug);
   const members = membersQuery.data ?? [];
+  const agentsQuery = useTeamAgents(true, teamSlug);
+  const agents = agentsQuery.data?.agents ?? [];
+  const activeAgents = agents.filter((agent) => agent.status === "active");
+  const needsHuman = mode === "human" || mode === "human_agent";
+  const needsAgent = mode === "agent" || mode === "human_agent";
 
   function selectMode(nextMode: SubjectMode) {
     setMode(nextMode);
     setTeamSlug("");
     setCustomTeam(false);
     setCustomHuman(false);
-    onChange({ humanID: "", teamID: "" });
+    onChange({ humanID: "", agentID: "", teamID: "" });
   }
 
   function selectTeam(slug: string) {
@@ -76,7 +85,7 @@ function SubjectFields({
     setTeamSlug(slug);
     setCustomHuman(false);
     // Changing the team always drops IDs selected under the previous team.
-    onChange({ humanID: "", teamID: team?.id ?? "" });
+    onChange({ humanID: "", agentID: "", teamID: team?.id ?? "" });
   }
 
   return (
@@ -88,12 +97,14 @@ function SubjectFields({
         options={[
           { value: "team", label: "Team only" },
           { value: "human", label: "Human" },
+          { value: "agent", label: "Agent" },
+          { value: "human_agent", label: "Human and agent" },
         ]}
-        hint="Agent subjects will be selectable after the team-scoped agent directory is available."
+        hint="Agent choices come from the selected team's active agent directory."
         onChange={(event) => selectMode(event.target.value as SubjectMode)}
       />
 
-      {mode === "team" || mode === "human" ? (
+      {mode === "team" || needsHuman || needsAgent ? (
         <>
           {customTeam ? (
             <>
@@ -106,7 +117,7 @@ function SubjectFields({
               <StatusBadge tone="warning" dot={false} testId={`${testPrefix}-team-not-in-directory`}>
                 Not in directory
               </StatusBadge>
-              <button type="button" className="link-button" onClick={() => { setCustomTeam(false); onChange({ ...subject, teamID: "" }); }}>
+              <button type="button" className="link-button" onClick={() => { setCustomTeam(false); onChange({ ...subject, teamID: "", agentID: "" }); }}>
                 Choose a listed team
               </button>
             </>
@@ -148,7 +159,7 @@ function SubjectFields({
                 ]}
                 onChange={(event) => selectTeam(event.target.value)}
               />
-              <button type="button" className="link-button" onClick={() => { setCustomTeam(true); setTeamSlug(""); onChange({ humanID: "", teamID: "" }); }}>
+              <button type="button" className="link-button" onClick={() => { setCustomTeam(true); setTeamSlug(""); onChange({ humanID: "", agentID: "", teamID: "" }); }}>
                 Enter a custom team ID
               </button>
             </>
@@ -156,7 +167,7 @@ function SubjectFields({
         </>
       ) : null}
 
-      {mode === "human" ? (
+      {needsHuman ? (
         customHuman ? (
           <>
             <TextField
@@ -229,6 +240,55 @@ function SubjectFields({
         )
       ) : null}
 
+      {needsAgent ? (
+        !teamSlug ? (
+          <div className="field">
+            <span className="field-label">Agent</span>
+            <EmptyState title="Select a listed team to load active agents." testId={`${testPrefix}-agents-unselected`} />
+          </div>
+        ) : agentsQuery.error ? (
+          <div className="field">
+            <span className="field-label">Agent</span>
+            <ErrorState
+              title="Team agents could not be loaded."
+              detail="Retry the directory request before selecting an agent."
+              onRetry={() => void agentsQuery.refetch()}
+              testId={`${testPrefix}-agents-error`}
+            />
+          </div>
+        ) : agentsQuery.isPending ? (
+          <div className="field">
+            <span className="field-label">Agent</span>
+            <LoadingState label="Loading active agents…" variant="inline" testId={`${testPrefix}-agents-loading`} />
+          </div>
+        ) : activeAgents.length === 0 ? (
+          <div className="field">
+            <span className="field-label">Agent</span>
+            <EmptyState title="This team has no active agents." detail="Create or reactivate an agent in the directory first." testId={`${testPrefix}-agents-empty`} />
+          </div>
+        ) : (
+          <>
+            <SelectField
+              label="Agent"
+              value={subject.agentID}
+              data-testid={`${testPrefix}-agent-select`}
+              options={[
+                { value: "", label: "Select an active agent" },
+                ...agents.map((agent) => ({
+                  value: agent.id,
+                  label: agent.status === "active"
+                    ? `${agent.name} (${agent.id})`
+                    : `${agent.name} (${agent.id}) — inactive, unavailable`,
+                  disabled: agent.status !== "active",
+                })),
+              ]}
+              hint="Only active agents in the selected team are available."
+              onChange={(event) => onChange({ ...subject, agentID: event.target.value })}
+            />
+          </>
+        )
+      ) : null}
+
     </>
   );
 }
@@ -251,11 +311,32 @@ export function validateName(value: string, what: string): string {
   return "";
 }
 
-export function validateSubject(draft: { humanID: string; teamID: string }): string {
-  if (!draft.humanID.trim() && !draft.teamID.trim()) {
-    return "Choose a human or team subject.";
+export function validateSubject(draft: { humanID: string; agentID: string; teamID: string }): string {
+  if (!draft.humanID.trim() && !draft.agentID.trim() && !draft.teamID.trim()) {
+    return "Choose a human, agent, or team subject.";
   }
   return "";
+}
+
+export function subjectIsCrossTeam(servers: ServerSummary[], draft: { namespace: string; server: string; teamID: string }): boolean {
+  const server = servers.find((candidate) => candidate.namespace === draft.namespace && candidate.name === draft.server);
+  return Boolean(server?.team_id && draft.teamID && server.team_id !== draft.teamID);
+}
+
+export function defaultCrossTeamExpiry(): string {
+  const date = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
+export function withCrossTeamExpiry<T extends { namespace: string; server: string; teamID: string; expiresAt: string }>(
+  previous: T,
+  next: T,
+  servers: ServerSummary[]
+): T {
+  if (!subjectIsCrossTeam(servers, previous) && subjectIsCrossTeam(servers, next) && !next.expiresAt) {
+    return { ...next, expiresAt: defaultCrossTeamExpiry() };
+  }
+  return next;
 }
 
 type ServerChoiceProps = {
@@ -325,6 +406,8 @@ export function GrantForm({
   onSubmit,
 }: GrantFormProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const crossTeam = subjectIsCrossTeam(servers, draft);
+  const updateDraft = (next: GrantDraft) => onChange(withCrossTeamExpiry(draft, next, servers));
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -338,6 +421,7 @@ export function GrantForm({
     const subjectError = validateSubject(draft);
     if (subjectError) next.subject = subjectError;
     if (draft.allowedSideEffects.length === 0) next.effects = "Allow at least one side effect.";
+    if (crossTeam && !draft.expiresAt) next.expiresAt = "Cross-team access must expire.";
     if (draft.expiresAt && (!Number.isFinite(Date.parse(draft.expiresAt)) || Date.parse(draft.expiresAt) <= Date.now())) {
       next.expiresAt = "Choose a future expiry time.";
     }
@@ -362,7 +446,7 @@ export function GrantForm({
             error={errors.name}
             announceError
             data-testid="grant-name"
-            onChange={(event) => onChange({ ...draft, name: event.target.value })}
+            onChange={(event) => updateDraft({ ...draft, name: event.target.value })}
           />
           <SelectField
             label="Namespace"
@@ -374,17 +458,23 @@ export function GrantForm({
                 : [{ value: draft.namespace, label: draft.namespace }, ...namespaces.map((ns) => ({ value: ns, label: ns }))]
             }
             data-testid="grant-namespace"
-            onChange={(event) => onChange({ ...draft, namespace: event.target.value })}
+            onChange={(event) => updateDraft({ ...draft, namespace: event.target.value })}
           />
           <ServerChoice
             servers={servers}
             value={draft.server}
             namespace={draft.namespace}
             error={errors.server}
-            onChange={(value) => onChange({ ...draft, server: value })}
+            onChange={(value) => updateDraft({ ...draft, server: value })}
           />
         </div>
       </fieldset>
+
+      {crossTeam ? (
+        <p className="notice notice-warning" role="status" data-testid="grant-cross-team-banner">
+          <span className="notice-body">Cross-team access: this subject belongs to a different team than the server. An expiry is required; the default is 24 hours.</span>
+        </p>
+      ) : null}
 
       <fieldset className="form-fieldset">
         <legend>Subject</legend>
@@ -392,7 +482,7 @@ export function GrantForm({
           <SubjectFields
             testPrefix="grant"
             subject={draft}
-            onChange={(subject) => onChange({ ...draft, ...subject })}
+            onChange={(subject) => updateDraft({ ...draft, ...subject })}
           />
         </div>
         {errors.subject ? (
@@ -411,17 +501,18 @@ export function GrantForm({
             options={TRUST_OPTIONS}
             hint="A call is denied when the tool needs more trust than this."
             data-testid="grant-trust"
-            onChange={(event) => onChange({ ...draft, maxTrust: event.target.value })}
+            onChange={(event) => updateDraft({ ...draft, maxTrust: event.target.value })}
           />
           <TextField
-            label="Expires at (optional)"
+            label={crossTeam ? "Expires at (required for cross-team access)" : "Expires at (optional)"}
             type="datetime-local"
             value={draft.expiresAt}
+            required={crossTeam}
             error={errors.expiresAt}
             announceError
             hint="After this time, the grant cannot authorize calls or session refreshes."
             data-testid="grant-expires-at"
-            onChange={(event) => onChange({ ...draft, expiresAt: event.target.value })}
+            onChange={(event) => updateDraft({ ...draft, expiresAt: event.target.value })}
           />
           <div className="field">
             <span className="field-label" id="grant-effects-label">
@@ -437,7 +528,7 @@ export function GrantForm({
                       checked={checked}
                       data-testid={`grant-effect-${effect}`}
                       onChange={() =>
-                        onChange({
+                        updateDraft({
                           ...draft,
                           allowedSideEffects: checked
                             ? draft.allowedSideEffects.filter((value) => value !== effect)
@@ -504,6 +595,8 @@ export function SessionForm({
   onSubmit,
 }: SessionFormProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const crossTeam = subjectIsCrossTeam(servers, draft);
+  const updateDraft = (next: SessionDraft) => onChange(withCrossTeamExpiry(draft, next, servers));
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -516,6 +609,7 @@ export function SessionForm({
     if (!draft.server.trim()) next.server = "Choose the server this session applies to.";
     const subjectError = validateSubject(draft);
     if (subjectError) next.subject = subjectError;
+    if (crossTeam && !draft.expiresAt) next.expiresAt = "Cross-team access must expire.";
     if (draft.expiresAt && Number.isNaN(Date.parse(draft.expiresAt))) {
       next.expiresAt = "Enter a valid date and time.";
     }
@@ -540,7 +634,7 @@ export function SessionForm({
             error={errors.name}
             announceError
             data-testid="session-name"
-            onChange={(event) => onChange({ ...draft, name: event.target.value })}
+            onChange={(event) => updateDraft({ ...draft, name: event.target.value })}
           />
           <SelectField
             label="Namespace"
@@ -552,14 +646,14 @@ export function SessionForm({
                 : [{ value: draft.namespace, label: draft.namespace }, ...namespaces.map((ns) => ({ value: ns, label: ns }))]
             }
             data-testid="session-namespace"
-            onChange={(event) => onChange({ ...draft, namespace: event.target.value })}
+            onChange={(event) => updateDraft({ ...draft, namespace: event.target.value })}
           />
           <ServerChoice
             servers={servers}
             value={draft.server}
             namespace={draft.namespace}
             error={errors.server}
-            onChange={(value) => onChange({ ...draft, server: value })}
+            onChange={(value) => updateDraft({ ...draft, server: value })}
           />
         </div>
       </fieldset>
@@ -570,7 +664,7 @@ export function SessionForm({
           <SubjectFields
             testPrefix="session"
             subject={draft}
-            onChange={(subject) => onChange({ ...draft, ...subject })}
+            onChange={(subject) => updateDraft({ ...draft, ...subject })}
           />
         </div>
         {errors.subject ? (
@@ -579,6 +673,12 @@ export function SessionForm({
           </p>
         ) : null}
       </fieldset>
+
+      {crossTeam ? (
+        <p className="notice notice-warning" role="status" data-testid="session-cross-team-banner">
+          <span className="notice-body">Cross-team access: this subject belongs to a different team than the server. An expiry is required; the default is 24 hours.</span>
+        </p>
+      ) : null}
 
       <fieldset className="form-fieldset">
         <legend>Consent</legend>
@@ -589,17 +689,18 @@ export function SessionForm({
             options={TRUST_OPTIONS}
             hint="The ceiling this session consented to, capped again by the grant."
             data-testid="session-trust"
-            onChange={(event) => onChange({ ...draft, consentedTrust: event.target.value })}
+            onChange={(event) => updateDraft({ ...draft, consentedTrust: event.target.value })}
           />
           <TextField
-            label="Expires at"
+            label={crossTeam ? "Expires at (required for cross-team access)" : "Expires at"}
             type="datetime-local"
             value={draft.expiresAt}
+            required={crossTeam}
             error={errors.expiresAt}
             announceError
             hint="Leave empty for no expiry."
             data-testid="session-expires"
-            onChange={(event) => onChange({ ...draft, expiresAt: event.target.value })}
+            onChange={(event) => updateDraft({ ...draft, expiresAt: event.target.value })}
           />
         </div>
       </fieldset>

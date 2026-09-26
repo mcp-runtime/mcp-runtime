@@ -3,6 +3,8 @@ package platform
 import (
 	"context"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -43,6 +45,25 @@ func ingressControllerIdentityFromDeployment(deployment *appsv1.Deployment) ingr
 
 // detectIngressControllerIdentity is a variable so tests can stub cluster access.
 var detectIngressControllerIdentity = detectIngressControllerIdentityClientGo
+
+// validateAdapterCertificateIngressIdentity stops setup when the optional
+// certificate path is enabled but the ingress identity needed by its gateway
+// NetworkPolicy and SPIFFE check cannot be discovered.
+func validateAdapterCertificateIngressIdentity() error {
+	if !adapterCertificatesEnabled() {
+		return nil
+	}
+	identity := detectIngressControllerIdentity()
+	if strings.TrimSpace(identity.Namespace) == "" || strings.TrimSpace(identity.ServiceAccount) == "" || len(identity.PodLabels) == 0 {
+		return fmt.Errorf("MCP_ADAPTER_CERTIFICATES=true requires the Traefik Deployment identity; setup could not read its namespace, pod labels, and service account. Check Kubernetes access and PLATFORM_TRAEFIK_NAMESPACE, then retry")
+	}
+	return nil
+}
+
+func adapterCertificatesEnabled() bool {
+	enabled, err := strconv.ParseBool(strings.TrimSpace(os.Getenv("MCP_ADAPTER_CERTIFICATES")))
+	return err == nil && enabled
+}
 
 func detectIngressControllerIdentityClientGo() ingressControllerIdentity {
 	namespace := strings.TrimSpace(setupAnalyticsConfigEnvValue("PLATFORM_TRAEFIK_NAMESPACE"))

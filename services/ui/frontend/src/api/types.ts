@@ -295,6 +295,21 @@ export type TeamMembership = {
   namespace?: string;
 };
 
+export type AgentRecord = {
+  id: string;
+  team_id: string;
+  team_slug: string;
+  name: string;
+  status: "active" | "inactive";
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type AgentPage = {
+  agents: AgentRecord[];
+  next_cursor?: string;
+};
+
 export type ComponentStatus = {
   key: string;
   display: string;

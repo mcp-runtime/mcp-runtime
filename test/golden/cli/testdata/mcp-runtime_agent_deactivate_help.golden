@@ -1,0 +1,10 @@
+Deactivate an agent
+
+Usage:
+  mcp-runtime agent deactivate [agent-id] [flags]
+
+Flags:
+  -h, --help   help for deactivate
+
+Global Flags:
+      --debug   Enable debug mode with structured error logging

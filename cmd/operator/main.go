@@ -2,10 +2,12 @@ package main
 
 import (
 	"flag"
-	"k8s.io/apimachinery/pkg/labels"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
+
+	"k8s.io/apimachinery/pkg/labels"
 
 	_ "go.uber.org/automaxprocs" // align GOMAXPROCS with container CPU quota
 	"k8s.io/apimachinery/pkg/runtime"
@@ -35,6 +37,11 @@ func main() {
 	cfg, err := parseConfig(flag.CommandLine, os.Args[1:])
 	if err != nil {
 		setupLog.Error(err, "failed to parse flags")
+		os.Exit(1)
+	}
+	ingressControllerPodLabels, err := ingressControllerPodLabelsFromEnv(os.Getenv)
+	if err != nil {
+		setupLog.Error(err, "invalid ingress controller identity configuration")
 		os.Exit(1)
 	}
 
@@ -78,7 +85,7 @@ func main() {
 		AdapterCertificatesEnabled:       boolFromEnv(os.Getenv("MCP_ADAPTER_CERTIFICATES")),
 		IngressControllerNamespace:       strings.TrimSpace(os.Getenv("MCP_INGRESS_CONTROLLER_NAMESPACE")),
 		IngressControllerServiceAccount:  strings.TrimSpace(os.Getenv("MCP_INGRESS_CONTROLLER_SERVICE_ACCOUNT")),
-		IngressControllerPodLabels:       ingressControllerPodLabelsFromEnv(os.Getenv),
+		IngressControllerPodLabels:       ingressControllerPodLabels,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MCPServer")
 		os.Exit(1)
@@ -124,19 +131,16 @@ func main() {
 	}
 }
 
-func ingressControllerPodLabelsFromEnv(getenv func(string) string) map[string]string {
+func ingressControllerPodLabelsFromEnv(getenv func(string) string) (map[string]string, error) {
 	raw := strings.TrimSpace(getenv("MCP_INGRESS_CONTROLLER_POD_LABELS"))
 	if raw == "" {
-		return nil
+		return nil, nil
 	}
 	parsed, err := labels.ConvertSelectorToLabelsMap(raw)
 	if err != nil {
-		// Falling back to app=traefik can lock Traefik out of adapter-
-		// certificate gateways, so make the misconfiguration visible.
-		setupLog.Error(err, "Invalid MCP_INGRESS_CONTROLLER_POD_LABELS; falling back to app=traefik, which may not match the running ingress controller", "value", raw)
-		return nil
+		return nil, fmt.Errorf("invalid MCP_INGRESS_CONTROLLER_POD_LABELS %q: %w; provide simple pod label equality selectors such as app.kubernetes.io/name=traefik", raw, err)
 	}
-	return parsed
+	return parsed, nil
 }
 
 type operatorConfig struct {

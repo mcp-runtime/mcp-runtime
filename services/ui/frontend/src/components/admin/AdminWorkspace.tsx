@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 
 import { AdminGuard } from "./AdminGuard";
+import { AgentsPanel } from "./AgentsPanel";
 import { ADMIN_GROUPS, ADMIN_SECTIONS, adminSection, type AdminSectionId } from "./adminSections";
 import { OperationsPanel } from "./OperationsPanel";
 import { PlatformHealthPanel } from "./PlatformHealthPanel";
@@ -83,6 +84,8 @@ export function AdminWorkspace({ auth, onSignIn, section, onSectionChange }: Adm
         <div>
           {active === "teams" ? (
             <TeamsPanel onSignIn={onSignIn} />
+          ) : active === "agents" ? (
+            <AgentsPanel onSignIn={onSignIn} />
           ) : active === "operations" ? (
             <OperationsPanel onSignIn={onSignIn} />
           ) : active === "analytics" ? (

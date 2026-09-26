@@ -21,6 +21,12 @@ type agentIdentityStub struct {
 	agent   platformclient.Agent
 }
 
+type missingAgentIdentityStub struct{ agentIdentityStub }
+
+func (missingAgentIdentityStub) GetAgent(context.Context, string) (platformclient.Agent, bool, error) {
+	return platformclient.Agent{}, false, nil
+}
+
 func (agentIdentityStub) Configured() bool { return true }
 func (s *agentIdentityStub) CreateAgent(_ context.Context, slug, name, createdBy string) (platformclient.Agent, error) {
 	s.created = true
@@ -47,6 +53,8 @@ func TestRequireActiveAgent(t *testing.T) {
 		{name: "active matching", id: "agt_01arz3ndektsv4rrffq69g5fav", team: "team-id", store: store},
 		{name: "wrong team", id: "agt_01arz3ndektsv4rrffq69g5fav", team: "other", store: store, want: errAgentNotActive},
 		{name: "directory unavailable", id: "agt_01arz3ndektsv4rrffq69g5fav", team: "team-id", want: errAgentDirectoryUnavailable},
+		{name: "missing team", id: "agt_01arz3ndektsv4rrffq69g5fav", store: store, want: errAgentNotActive},
+		{name: "malformed ID", id: "legacy-agent", team: "team-id", store: store, want: errAgentNotActive},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -59,6 +67,34 @@ func TestRequireActiveAgent(t *testing.T) {
 	store.agent = platformclient.Agent{ID: "agt_01arz3ndektsv4rrffq69g5fav", TeamID: "team-id", Status: "inactive"}
 	if err := requireActiveAgent(t.Context(), store, store.agent.ID, store.agent.TeamID); !errors.Is(err, errAgentNotActive) {
 		t.Fatalf("inactive agent error = %v, want %v", err, errAgentNotActive)
+	}
+}
+
+func TestRequireActiveAgentRejectsUnknownAndUnavailableDirectory(t *testing.T) {
+	unknown := &missingAgentIdentityStub{}
+	validID := "agt_01arz3ndektsv4rrffq69g5fav"
+	if err := requireActiveAgent(t.Context(), unknown, validID, "team-id"); !errors.Is(err, errAgentNotActive) {
+		t.Fatalf("unknown agent error = %v, want unknown-agent error", err)
+	}
+	if err := requireActiveAgent(t.Context(), nil, validID, "team-id"); !errors.Is(err, errAgentDirectoryUnavailable) {
+		t.Fatalf("unavailable directory error = %v, want directory-unavailable error", err)
+	}
+
+}
+
+func TestRequireActiveAgentRejectsMalformedGeneratedIDs(t *testing.T) {
+	store := &agentIdentityStub{}
+	for _, id := range []string{
+		"legacy-agent",
+		"agt_81arz3ndektsv4rrffq69g5fav",
+		"agt_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		"agt_01arz3ndektsv4rrffq69g5fa",
+	} {
+		t.Run(id, func(t *testing.T) {
+			if err := requireActiveAgent(t.Context(), store, id, "team-id"); !errors.Is(err, errAgentNotActive) {
+				t.Fatalf("malformed agent ID error = %v, want %v", err, errAgentNotActive)
+			}
+		})
 	}
 }
 

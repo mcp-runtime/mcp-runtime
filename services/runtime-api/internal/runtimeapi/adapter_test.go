@@ -48,11 +48,11 @@ func newAdapterTestFixture(t *testing.T, grants ...mcpv1alpha1.MCPAccessGrant) a
 	agentTeamID := "team-acme"
 	agentStatus := "active"
 	identityHTTP := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/internal/identity/agents/ops-agent" {
+		if r.Method != http.MethodGet || r.URL.Path != "/internal/identity/agents/agt_01arz3ndektsv4rrffq69g5fav" {
 			http.NotFound(w, r)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(platformclient.Agent{ID: "ops-agent", TeamID: agentTeamID, TeamSlug: "acme", Name: "Ops", Status: agentStatus})
+		_ = json.NewEncoder(w).Encode(platformclient.Agent{ID: "agt_01arz3ndektsv4rrffq69g5fav", TeamID: agentTeamID, TeamSlug: "acme", Name: "Ops", Status: agentStatus})
 	}))
 	t.Cleanup(identityHTTP.Close)
 	identity := &platformclient.Client{BaseURL: identityHTTP.URL, Token: "test-token", HTTP: identityHTTP.Client()}
@@ -100,7 +100,7 @@ func TestAdapterSessionIssuesNewSessionFromMatchingGrant(t *testing.T) {
 		},
 		Spec: mcpv1alpha1.MCPAccessGrantSpec{
 			ServerRef:     mcpv1alpha1.ServerReference{Name: "demo", Namespace: "mcp-team-acme"},
-			Subject:       mcpv1alpha1.SubjectRef{HumanID: "user-123", AgentID: "ops-agent", TeamID: "team-acme"},
+			Subject:       mcpv1alpha1.SubjectRef{HumanID: "user-123", AgentID: "agt_01arz3ndektsv4rrffq69g5fav", TeamID: "team-acme"},
 			MaxTrust:      mcpv1alpha1.TrustLevel("high"),
 			PolicyVersion: "v3",
 		},
@@ -109,7 +109,7 @@ func TestAdapterSessionIssuesNewSessionFromMatchingGrant(t *testing.T) {
 	req := adapterRequest(t, adapterSessionRequest{
 		ServerName:     "demo",
 		Namespace:      "mcp-team-acme",
-		AgentID:        "ops-agent",
+		AgentID:        "agt_01arz3ndektsv4rrffq69g5fav",
 		RequestedTrust: "medium",
 	})
 	req = req.WithContext(withPrincipal(req.Context(), fx.principal))
@@ -119,8 +119,8 @@ func TestAdapterSessionIssuesNewSessionFromMatchingGrant(t *testing.T) {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
 	}
 	got := decodeAdapterResponse(t, w)
-	if got.HumanID != "user-123" || got.AgentID != "ops-agent" || got.TeamID != "team-acme" {
-		t.Fatalf("identity = %#v, want user-123/ops-agent/team-acme", got)
+	if got.HumanID != "user-123" || got.AgentID != "agt_01arz3ndektsv4rrffq69g5fav" || got.TeamID != "team-acme" {
+		t.Fatalf("identity = %#v, want user-123/agt_01arz3ndektsv4rrffq69g5fav/team-acme", got)
 	}
 	if got.ConsentedTrust != "medium" {
 		t.Fatalf("consentedTrust = %q, want medium (requested, within max=high)", got.ConsentedTrust)
@@ -145,13 +145,13 @@ func TestAdapterSessionLifetimeCannotOutliveGrant(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "debug-window", Namespace: "mcp-team-acme"},
 		Spec: mcpv1alpha1.MCPAccessGrantSpec{
 			ServerRef: mcpv1alpha1.ServerReference{Name: "demo", Namespace: "mcp-team-acme"},
-			Subject:   mcpv1alpha1.SubjectRef{AgentID: "ops-agent", TeamID: "team-acme"},
+			Subject:   mcpv1alpha1.SubjectRef{AgentID: "agt_01arz3ndektsv4rrffq69g5fav", TeamID: "team-acme"},
 			MaxTrust:  mcpv1alpha1.TrustLevel("low"),
 			ExpiresAt: &metav1.Time{Time: grantExpiry},
 		},
 	}
 	fx := newAdapterTestFixture(t, grant)
-	req := adapterRequest(t, adapterSessionRequest{ServerName: "demo", Namespace: "mcp-team-acme", AgentID: "ops-agent", RequestedTTL: "2h"})
+	req := adapterRequest(t, adapterSessionRequest{ServerName: "demo", Namespace: "mcp-team-acme", AgentID: "agt_01arz3ndektsv4rrffq69g5fav", RequestedTTL: "2h"})
 	req = req.WithContext(withPrincipal(req.Context(), fx.principal))
 	w := httptest.NewRecorder()
 	fx.server.Access().HandleAdapterSession(w, req)
@@ -173,18 +173,18 @@ func TestAdapterSessionRefreshCapsExistingSessionWhenGrantExpiryIsShortened(t *t
 		ObjectMeta: metav1.ObjectMeta{Name: "debug-window", Namespace: "mcp-team-acme"},
 		Spec: mcpv1alpha1.MCPAccessGrantSpec{
 			ServerRef: mcpv1alpha1.ServerReference{Name: "demo", Namespace: "mcp-team-acme"},
-			Subject:   mcpv1alpha1.SubjectRef{AgentID: "ops-agent", TeamID: "team-acme"},
+			Subject:   mcpv1alpha1.SubjectRef{AgentID: "agt_01arz3ndektsv4rrffq69g5fav", TeamID: "team-acme"},
 			MaxTrust:  mcpv1alpha1.TrustLevel("low"),
 			ExpiresAt: &metav1.Time{Time: grantExpiry},
 		},
 	}
 	fx := newAdapterTestFixture(t, grant)
-	sessionName := adapterSessionName("user-123", "ops-agent", "team-acme", "demo")
+	sessionName := adapterSessionName("user-123", "agt_01arz3ndektsv4rrffq69g5fav", "team-acme", "demo")
 	_, err := fx.server.accessMgr.ApplySession(t.Context(), &sentinelaccess.MCPAgentSession{
 		ObjectMeta: metav1.ObjectMeta{Name: sessionName, Namespace: "mcp-team-acme"},
 		Spec: sentinelaccess.MCPAgentSessionSpec{
 			ServerRef:      sentinelaccess.ServerReference{Name: "demo", Namespace: "mcp-team-acme"},
-			Subject:        sentinelaccess.SubjectRef{HumanID: "user-123", AgentID: "ops-agent", TeamID: "team-acme"},
+			Subject:        sentinelaccess.SubjectRef{HumanID: "user-123", AgentID: "agt_01arz3ndektsv4rrffq69g5fav", TeamID: "team-acme"},
 			ConsentedTrust: sentinelaccess.TrustLow,
 			PolicyVersion:  "v1",
 			ExpiresAt:      &metav1.Time{Time: time.Now().UTC().Add(time.Hour)},
@@ -193,7 +193,7 @@ func TestAdapterSessionRefreshCapsExistingSessionWhenGrantExpiryIsShortened(t *t
 	if err != nil {
 		t.Fatalf("seed longer-lived adapter session: %v", err)
 	}
-	req := adapterRequest(t, adapterSessionRequest{ServerName: "demo", Namespace: "mcp-team-acme", AgentID: "ops-agent", RequestedTTL: "2h"})
+	req := adapterRequest(t, adapterSessionRequest{ServerName: "demo", Namespace: "mcp-team-acme", AgentID: "agt_01arz3ndektsv4rrffq69g5fav", RequestedTTL: "2h"})
 	req = req.WithContext(withPrincipal(req.Context(), fx.principal))
 	w := httptest.NewRecorder()
 	fx.server.Access().HandleAdapterSession(w, req)
@@ -214,12 +214,12 @@ func TestAdapterSessionCannotRefreshExpiredGrant(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "expired-debug", Namespace: "mcp-team-acme"},
 		Spec: mcpv1alpha1.MCPAccessGrantSpec{
 			ServerRef: mcpv1alpha1.ServerReference{Name: "demo", Namespace: "mcp-team-acme"},
-			Subject:   mcpv1alpha1.SubjectRef{AgentID: "ops-agent", TeamID: "team-acme"},
+			Subject:   mcpv1alpha1.SubjectRef{AgentID: "agt_01arz3ndektsv4rrffq69g5fav", TeamID: "team-acme"},
 			ExpiresAt: &metav1.Time{Time: time.Now().Add(-time.Second)},
 		},
 	}
 	fx := newAdapterTestFixture(t, grant)
-	req := adapterRequest(t, adapterSessionRequest{ServerName: "demo", Namespace: "mcp-team-acme", AgentID: "ops-agent"})
+	req := adapterRequest(t, adapterSessionRequest{ServerName: "demo", Namespace: "mcp-team-acme", AgentID: "agt_01arz3ndektsv4rrffq69g5fav"})
 	req = req.WithContext(withPrincipal(req.Context(), fx.principal))
 	w := httptest.NewRecorder()
 	fx.server.Access().HandleAdapterSession(w, req)
@@ -233,7 +233,7 @@ func TestAdapterSessionIssuesCrossTeamSessionFromGrantedTeam(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "globex-to-acme", Namespace: "mcp-team-acme"},
 		Spec: mcpv1alpha1.MCPAccessGrantSpec{
 			ServerRef: mcpv1alpha1.ServerReference{Name: "demo", Namespace: "mcp-team-acme"},
-			Subject:   mcpv1alpha1.SubjectRef{AgentID: "ops-agent", TeamID: "team-globex"},
+			Subject:   mcpv1alpha1.SubjectRef{AgentID: "agt_01arz3ndektsv4rrffq69g5fav", TeamID: "team-globex"},
 			MaxTrust:  mcpv1alpha1.TrustLevel("low"),
 		},
 	}
@@ -246,7 +246,7 @@ func TestAdapterSessionIssuesCrossTeamSessionFromGrantedTeam(t *testing.T) {
 	req := adapterRequest(t, adapterSessionRequest{
 		ServerName: "demo",
 		Namespace:  "mcp-team-acme",
-		AgentID:    "ops-agent",
+		AgentID:    "agt_01arz3ndektsv4rrffq69g5fav",
 	})
 	req = req.WithContext(withPrincipal(req.Context(), fx.principal))
 	w := httptest.NewRecorder()
@@ -265,7 +265,7 @@ func TestAdapterSessionRejectsGrantForUnheldTeam(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "globex-to-acme", Namespace: "mcp-team-acme"},
 		Spec: mcpv1alpha1.MCPAccessGrantSpec{
 			ServerRef: mcpv1alpha1.ServerReference{Name: "demo", Namespace: "mcp-team-acme"},
-			Subject:   mcpv1alpha1.SubjectRef{AgentID: "ops-agent", TeamID: "team-globex"},
+			Subject:   mcpv1alpha1.SubjectRef{AgentID: "agt_01arz3ndektsv4rrffq69g5fav", TeamID: "team-globex"},
 			MaxTrust:  mcpv1alpha1.TrustLevel("low"),
 		},
 	}
@@ -273,7 +273,7 @@ func TestAdapterSessionRejectsGrantForUnheldTeam(t *testing.T) {
 	req := adapterRequest(t, adapterSessionRequest{
 		ServerName: "demo",
 		Namespace:  "mcp-team-acme",
-		AgentID:    "ops-agent",
+		AgentID:    "agt_01arz3ndektsv4rrffq69g5fav",
 	})
 	req = req.WithContext(withPrincipal(req.Context(), fx.principal))
 	w := httptest.NewRecorder()
@@ -291,7 +291,7 @@ func TestAdapterSessionRejectsWhenNoGrantMatches(t *testing.T) {
 	req := adapterRequest(t, adapterSessionRequest{
 		ServerName: "demo",
 		Namespace:  "mcp-team-acme",
-		AgentID:    "ops-agent",
+		AgentID:    "agt_01arz3ndektsv4rrffq69g5fav",
 	})
 	req = req.WithContext(withPrincipal(req.Context(), fx.principal))
 	w := httptest.NewRecorder()
@@ -317,7 +317,7 @@ func TestAdapterSessionTrustCappedAtGrantMaxTrust(t *testing.T) {
 	req := adapterRequest(t, adapterSessionRequest{
 		ServerName:     "demo",
 		Namespace:      "mcp-team-acme",
-		AgentID:        "ops-agent",
+		AgentID:        "agt_01arz3ndektsv4rrffq69g5fav",
 		RequestedTrust: "high",
 	})
 	req = req.WithContext(withPrincipal(req.Context(), fx.principal))
@@ -369,7 +369,7 @@ func TestAdapterSessionPicksHighestTrustWithDeterministicTiebreak(t *testing.T) 
 	g, teamID, err := fx.server.Access().selectAdapterGrant(
 		t.Context(),
 		"mcp-team-acme", "demo",
-		"user-123", "ops-agent", []string{"team-acme"}, "team-acme", false,
+		"user-123", "agt_01arz3ndektsv4rrffq69g5fav", []string{"team-acme"}, "team-acme", false,
 	)
 	if err != nil {
 		t.Fatalf("selectAdapterGrant: %v", err)
@@ -383,11 +383,11 @@ func TestAdapterSessionPicksHighestTrustWithDeterministicTiebreak(t *testing.T) 
 }
 
 func TestMatchingAdapterGrantRequiresCallerTeamEvenForAdmin(t *testing.T) {
-	grant := sentinelaccess.SubjectRef{HumanID: "user-123", AgentID: "ops-agent", TeamID: "team-b"}
-	if _, ok := matchingAdapterGrantTeamID(grant, "user-123", "ops-agent", []string{"team-a"}, "team-a", true); ok {
+	grant := sentinelaccess.SubjectRef{HumanID: "user-123", AgentID: "agt_01arz3ndektsv4rrffq69g5fav", TeamID: "team-b"}
+	if _, ok := matchingAdapterGrantTeamID(grant, "user-123", "agt_01arz3ndektsv4rrffq69g5fav", []string{"team-a"}, "team-a", true); ok {
 		t.Fatal("admin without membership in the subject team matched a cross-team grant")
 	}
-	if team, ok := matchingAdapterGrantTeamID(grant, "user-123", "ops-agent", []string{"team-b"}, "team-a", false); !ok || team != "team-b" {
+	if team, ok := matchingAdapterGrantTeamID(grant, "user-123", "agt_01arz3ndektsv4rrffq69g5fav", []string{"team-b"}, "team-a", false); !ok || team != "team-b" {
 		t.Fatalf("matchingAdapterGrantTeamID() = (%q, %t), want (team-b, true)", team, ok)
 	}
 }
@@ -397,7 +397,7 @@ func TestSessionGrantLinkRequiresExactServerAndSubject(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "cross-team", Namespace: "mcp-team-acme"},
 		Spec: mcpv1alpha1.MCPAccessGrantSpec{
 			ServerRef: mcpv1alpha1.ServerReference{Name: "demo", Namespace: "mcp-team-acme"},
-			Subject:   mcpv1alpha1.SubjectRef{HumanID: "user-123", AgentID: "ops-agent", TeamID: "team-b"},
+			Subject:   mcpv1alpha1.SubjectRef{HumanID: "user-123", AgentID: "agt_01arz3ndektsv4rrffq69g5fav", TeamID: "team-b"},
 			MaxTrust:  mcpv1alpha1.TrustLevel(sentinelaccess.TrustHigh),
 		},
 	}
@@ -405,7 +405,7 @@ func TestSessionGrantLinkRequiresExactServerAndSubject(t *testing.T) {
 	req := accessSessionRequest{
 		Namespace: "mcp-team-acme", GrantName: "cross-team",
 		ServerRef: sentinelaccess.ServerReference{Name: "demo", Namespace: "mcp-team-acme"},
-		Subject:   sentinelaccess.SubjectRef{HumanID: "user-123", AgentID: "ops-agent", TeamID: "team-b"},
+		Subject:   sentinelaccess.SubjectRef{HumanID: "user-123", AgentID: "agt_01arz3ndektsv4rrffq69g5fav", TeamID: "team-b"},
 	}
 	annotations, linked, err := fx.server.Access().sessionGrantLink(t.Context(), req)
 	if err != nil || linked == nil || annotations[adapterGrantNameAnnotation] != grant.Name {
@@ -479,7 +479,7 @@ func TestAdapterSessionRejectsUnknownOrInactiveAgent(t *testing.T) {
 		status  string
 	}{
 		{name: "unknown agent", agentID: "unknown-agent", status: "active"},
-		{name: "inactive agent", agentID: "ops-agent", status: "inactive"},
+		{name: "inactive agent", agentID: "agt_01arz3ndektsv4rrffq69g5fav", status: "inactive"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fx := newAdapterTestFixture(t)
@@ -500,7 +500,7 @@ func TestAdapterSessionRejectsUnknownOrInactiveAgent(t *testing.T) {
 
 func TestAdapterSessionRequiresServerName(t *testing.T) {
 	fx := newAdapterTestFixture(t)
-	req := adapterRequest(t, adapterSessionRequest{Namespace: "mcp-team-acme", AgentID: "ops-agent"})
+	req := adapterRequest(t, adapterSessionRequest{Namespace: "mcp-team-acme", AgentID: "agt_01arz3ndektsv4rrffq69g5fav"})
 	req = req.WithContext(withPrincipal(req.Context(), fx.principal))
 	w := httptest.NewRecorder()
 	fx.server.Access().HandleAdapterSession(w, req)
@@ -512,7 +512,7 @@ func TestAdapterSessionRequiresServerName(t *testing.T) {
 func TestAdapterSessionRequiresResolvedNamespace(t *testing.T) {
 	fx := newAdapterTestFixture(t)
 	fx.principal.Namespace = ""
-	req := adapterRequest(t, adapterSessionRequest{ServerName: "demo", AgentID: "ops-agent"})
+	req := adapterRequest(t, adapterSessionRequest{ServerName: "demo", AgentID: "agt_01arz3ndektsv4rrffq69g5fav"})
 	req = req.WithContext(withPrincipal(req.Context(), fx.principal))
 	w := httptest.NewRecorder()
 	fx.server.Access().HandleAdapterSession(w, req)

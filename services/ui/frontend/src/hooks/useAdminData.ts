@@ -3,6 +3,7 @@ import { useCallback } from "react";
 
 import {
   listComponents,
+  listTeamAgents,
   listEvents,
   listGrants,
   listSessions,
@@ -70,6 +71,18 @@ export function useTeamMembers(enabled: boolean, slug: string) {
   return useQuery({
     queryKey: [ADMIN_QUERY_KEY, "team-members", slug],
     queryFn: () => listTeamMembers(slug),
+    enabled: enabled && Boolean(slug),
+  });
+}
+
+export function useTeamAgents(
+  enabled: boolean,
+  slug: string,
+  filters: { status?: string; q?: string; cursor?: string } = {}
+) {
+  return useQuery({
+    queryKey: [ADMIN_QUERY_KEY, "team-agents", slug, filters.status ?? "all", filters.q ?? "", filters.cursor ?? ""],
+    queryFn: () => listTeamAgents(slug, { ...filters, limit: "100" }),
     enabled: enabled && Boolean(slug),
   });
 }

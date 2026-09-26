@@ -7,6 +7,7 @@ import (
 	"mcp-runtime/internal/cli/access"
 	"mcp-runtime/internal/cli/adapter"
 	"mcp-runtime/internal/cli/admin"
+	"mcp-runtime/internal/cli/agent"
 	"mcp-runtime/internal/cli/auth"
 	"mcp-runtime/internal/cli/bootstrap"
 	"mcp-runtime/internal/cli/catalog"
@@ -31,6 +32,7 @@ func AddCommands(root *cobra.Command, logger *zap.Logger) {
 	root.AddCommand(registry.New(runtime))
 	root.AddCommand(server.New(runtime))
 	root.AddCommand(access.New(runtime))
+	root.AddCommand(agent.New(runtime))
 	root.AddCommand(adapter.New(runtime))
 	root.AddCommand(admin.New(runtime))
 	root.AddCommand(auth.New(runtime))

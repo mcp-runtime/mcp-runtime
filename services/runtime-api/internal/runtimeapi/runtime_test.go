@@ -2218,8 +2218,8 @@ func TestRuntimeGrantApplyAllowsValidatedCrossTeamSubjectWithoutChangingServerOw
 			_, _ = fmt.Fprint(w, `{"teams":[{"id":"team-other","slug":"other"}]}`)
 		case "/internal/identity/teams/other/members":
 			_, _ = fmt.Fprint(w, `{"members":[{"user_id":"user-1","team_id":"team-other"}]}`)
-		case "/internal/identity/agents/agent-b":
-			_, _ = fmt.Fprint(w, `{"id":"agent-b","team_id":"team-other","team_slug":"other","name":"Agent B","status":"active"}`)
+		case "/internal/identity/agents/agt_01arz3ndektsv4rrffq69g5faw":
+			_, _ = fmt.Fprint(w, `{"id":"agt_01arz3ndektsv4rrffq69g5faw","team_id":"team-other","team_slug":"other","name":"Agent B","status":"active"}`)
 		default:
 			http.NotFound(w, r)
 		}
@@ -2245,7 +2245,7 @@ func TestRuntimeGrantApplyAllowsValidatedCrossTeamSubjectWithoutChangingServerOw
 		"name": "grant-team",
 		"namespace": "mcp-team-acme",
 		"serverRef": {"name": "demo"},
-		"subject": {"humanID": "user-1", "agentID": "agent-b", "teamID": "team-other"},
+		"subject": {"humanID": "user-1", "agentID": "agt_01arz3ndektsv4rrffq69g5faw", "teamID": "team-other"},
 		"expiresAt": "`+time.Now().Add(24*time.Hour).UTC().Format(time.RFC3339)+`",
 		"allowedSideEffects": ["read"],
 		"maxTrust": "low"
@@ -2275,8 +2275,8 @@ func TestRuntimeGrantApplyAllowsValidatedCrossTeamSubjectWithoutChangingServerOw
 	if grant.Spec.Subject.TeamID != "team-other" {
 		t.Fatalf("subject.teamID = %q, want team-other", grant.Spec.Subject.TeamID)
 	}
-	if grant.Spec.Subject.AgentID != "agent-b" {
-		t.Fatalf("subject.agentID = %q, want agent-b", grant.Spec.Subject.AgentID)
+	if grant.Spec.Subject.AgentID != "agt_01arz3ndektsv4rrffq69g5faw" {
+		t.Fatalf("subject.agentID = %q, want agt_...", grant.Spec.Subject.AgentID)
 	}
 	storedServer, err := accessMgr.GetMCPServerRef(ctx, sentinelaccess.ServerReference{Name: "demo", Namespace: "mcp-team-acme"})
 	if err != nil {

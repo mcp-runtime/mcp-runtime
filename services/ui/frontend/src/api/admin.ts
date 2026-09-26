@@ -1,6 +1,8 @@
 import { fetchJSON, withQuery } from "./client";
 import type {
   AdminOperations,
+  AgentPage,
+  AgentRecord,
   AuditLogEntry,
   ComponentStatus,
   GatewayEvent,
@@ -21,6 +23,10 @@ function asArray<T>(value: unknown, key: string): T[] {
   }
   const items = (value as Record<string, unknown>)[key];
   return Array.isArray(items) ? (items as T[]) : [];
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? value as Record<string, unknown> : {};
 }
 
 export async function listGrants(namespace?: string): Promise<GrantSummary[]> {
@@ -117,6 +123,45 @@ export async function listTeamMembers(slug: string): Promise<import("./types").T
     await fetchJSON(`/runtime/teams/${segment(slug)}/members`),
     "members"
   );
+}
+
+export async function listTeamAgents(
+  slug: string,
+  filters: { status?: string; q?: string; cursor?: string; limit?: string } = {}
+): Promise<AgentPage> {
+  const payload = await fetchJSON(withQuery(`/runtime/teams/${segment(slug)}/agents`, filters));
+  const record = asRecord(payload);
+  return {
+    agents: asArray<AgentRecord>(record, "agents"),
+    next_cursor: typeof record.next_cursor === "string" ? record.next_cursor : undefined,
+  };
+}
+
+export async function createTeamAgent(slug: string, name: string): Promise<AgentRecord> {
+  const payload = asRecord(await fetchJSON(`/runtime/teams/${segment(slug)}/agents`, jsonBody({ name })));
+  return asRecord(payload.agent) as unknown as AgentRecord;
+}
+
+export async function renameAgent(id: string, name: string): Promise<AgentRecord> {
+  const payload = asRecord(await fetchJSON(`/runtime/agents/${segment(id)}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name }),
+  }));
+  return asRecord(payload.agent) as unknown as AgentRecord;
+}
+
+export async function setAgentActive(id: string, active: boolean): Promise<AgentRecord> {
+  const action = active ? "reactivate" : "deactivate";
+  const payload = asRecord(await fetchJSON(`/runtime/agents/${segment(id)}/${action}`, { method: "POST" }));
+  return asRecord(payload.agent) as unknown as AgentRecord;
+}
+
+export async function revokeGrantSessions(namespace: string, name: string): Promise<number> {
+  const payload = asRecord(await fetchJSON(`/runtime/grants/${segment(namespace)}/${segment(name)}/revoke-sessions`, {
+    method: "POST",
+  }));
+  return Number(payload.revokedSessions || 0);
 }
 
 export async function createTeamUser(

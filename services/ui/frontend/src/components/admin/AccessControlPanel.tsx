@@ -14,7 +14,7 @@ import { PageHeader } from "../../ui/PageHeader";
 import { expiryState, formatAbsolute, formatTimestamp } from "../../lib/format";
 import { useAdminReload, useGrants, useSessions } from "../../hooks/useAdminData";
 import { useCatalog } from "../../hooks/useCatalog";
-import { createGrant, createSession, setGrantDisabled, setSessionRevoked } from "../../api/admin";
+import { createGrant, createSession, revokeGrantSessions, setGrantDisabled, setSessionRevoked } from "../../api/admin";
 import { readRuntimeConfig } from "../../api/config";
 import { accessKey, subjectLabel } from "../../api/types";
 import type { GrantSummary, SessionSummary } from "../../api/types";
@@ -40,6 +40,7 @@ function emptyGrantDraft(namespace: string): GrantDraft {
     namespace: defaultNamespace(namespace),
     server: "",
     humanID: "",
+    agentID: "",
     teamID: "",
     maxTrust: "low",
     allowedSideEffects: ["read"],
@@ -53,6 +54,7 @@ function emptySessionDraft(namespace: string): SessionDraft {
     namespace: defaultNamespace(namespace),
     server: "",
     humanID: "",
+    agentID: "",
     teamID: "",
     consentedTrust: "low",
     expiresAt: "",
@@ -193,6 +195,20 @@ export function AccessControlPanel({
     });
   }
 
+  function askRevokeGrantSessions(grant: GrantSummary) {
+    setConfirm({
+      title: `Revoke sessions created from grant "${grant.name}"?`,
+      body: "Every active session linked to this grant will be revoked. The grant itself remains enabled.",
+      confirmLabel: "Revoke sessions",
+      destructive: true,
+      onConfirm: () => runAction(
+        `grant-sessions:${accessKey(grant)}`,
+        `Sessions from grant "${grant.name}" revoked.`,
+        async () => { await revokeGrantSessions(grant.namespace, grant.name); }
+      ),
+    });
+  }
+
   const grantColumns = useMemo(
     () =>
       buildColumns<GrantSummary>([
@@ -256,6 +272,15 @@ export function AccessControlPanel({
                 onClick={() => askToggleGrant(grant)}
               >
                 {grant.disabled ? "Enable" : "Disable"}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                data-testid="grant-revoke-sessions"
+                busy={busyKey === `grant-sessions:${accessKey(grant)}`}
+                onClick={() => askRevokeGrantSessions(grant)}
+              >
+                Revoke sessions
               </Button>
             </div>
           ),
@@ -467,6 +492,7 @@ export function AccessControlPanel({
                 serverRef: { name: grantDraft.server.trim() },
                 subject: {
                   humanID: grantDraft.humanID.trim() || undefined,
+                  agentID: grantDraft.agentID.trim() || undefined,
                   teamID: grantDraft.teamID.trim() || undefined,
                 },
                 maxTrust: grantDraft.maxTrust,
@@ -496,6 +522,7 @@ export function AccessControlPanel({
                 serverRef: { name: sessionDraft.server.trim() },
                 subject: {
                   humanID: sessionDraft.humanID.trim() || undefined,
+                  agentID: sessionDraft.agentID.trim() || undefined,
                   teamID: sessionDraft.teamID.trim() || undefined,
                 },
                 consentedTrust: sessionDraft.consentedTrust,

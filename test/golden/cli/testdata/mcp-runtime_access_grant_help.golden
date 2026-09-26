@@ -4,13 +4,14 @@ Usage:
   mcp-runtime access grant [command]
 
 Available Commands:
-  apply       Apply a grant manifest
-  delete      Delete an access grant
-  disable     Disable a grant
-  enable      Enable a grant
-  get         Get an access grant
-  init        Initialize an MCPAccessGrant manifest
-  list        List access grants
+  apply           Apply a grant manifest
+  delete          Delete an access grant
+  disable         Disable a grant
+  enable          Enable a grant
+  get             Get an access grant
+  init            Initialize an MCPAccessGrant manifest
+  list            List access grants
+  revoke-sessions Revoke every session issued from a grant
 
 Flags:
   -h, --help   help for grant

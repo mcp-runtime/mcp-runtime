@@ -124,6 +124,23 @@ func (m *AccessManager) InitSessionManifest(opts accessManifestInitOptions) erro
 	return nil
 }
 
+// RevokeGrantSessions revokes sessions linked to a grant through the audited platform API.
+func (m *AccessManager) RevokeGrantSessions(name, namespace string) error {
+	if m.useKube {
+		return fmt.Errorf("revoke all grant sessions requires the platform API; omit --use-kube and authenticate with mcp-runtime auth login")
+	}
+	client, err := platformapi.NewPlatformClient()
+	if err != nil {
+		return err
+	}
+	count, err := client.RevokeGrantSessions(context.Background(), strings.TrimSpace(namespace), strings.TrimSpace(name))
+	if err != nil {
+		return err
+	}
+	core.Success(fmt.Sprintf("Revoked %d session(s) linked to grant %s/%s", count, strings.TrimSpace(namespace), strings.TrimSpace(name)))
+	return nil
+}
+
 func buildAccessManifest(opts accessManifestInitOptions) ([]byte, error) {
 	name, namespace, err := validateAccessResourceInput(opts.Name, opts.Namespace)
 	if err != nil {

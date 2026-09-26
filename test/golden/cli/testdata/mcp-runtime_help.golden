@@ -10,6 +10,7 @@ Usage:
 Available Commands:
   access      Manage grants and agent sessions
   adapter     Run agent-side adapters that inject issued MCP governance headers
+  agent       Manage team-owned governance agents
   auth        Log in to the platform API and manage saved credentials
   bootstrap   Bootstrap cluster prerequisites (on-prem focused)
   catalog     Search MCP Runtime catalogs

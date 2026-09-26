@@ -1,0 +1,10 @@
+Reactivate an agent
+
+Usage:
+  mcp-runtime agent reactivate [agent-id] [flags]
+
+Flags:
+  -h, --help   help for reactivate
+
+Global Flags:
+      --debug   Enable debug mode with structured error logging

@@ -1,4 +1,4 @@
-export type AdminSectionId = "teams" | "operations" | "platform" | "analytics";
+export type AdminSectionId = "teams" | "agents" | "operations" | "platform" | "analytics";
 
 export type AdminSection = {
   id: AdminSectionId;
@@ -17,6 +17,12 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     label: "Teams",
     group: "Organization",
     description: "Tenant teams, their namespaces, and membership.",
+  },
+  {
+    id: "agents",
+    label: "Agents",
+    group: "Organization",
+    description: "Team-owned governance identities and lifecycle.",
   },
   {
     id: "operations",

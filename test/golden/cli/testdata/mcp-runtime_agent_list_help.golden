@@ -1,0 +1,14 @@
+List agents in a team
+
+Usage:
+  mcp-runtime agent list [team-slug] [flags]
+
+Flags:
+      --cursor string   Continue a paginated result
+  -h, --help            help for list
+      --limit int       Maximum records (1-200) (default 50)
+      --query string    Filter by agent name
+      --status string   Filter by active or inactive status
+
+Global Flags:
+      --debug   Enable debug mode with structured error logging

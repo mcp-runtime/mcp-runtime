@@ -1,0 +1,11 @@
+Create a managed agent in a team
+
+Usage:
+  mcp-runtime agent create [team-slug] [flags]
+
+Flags:
+  -h, --help          help for create
+      --name string   Human-readable name (1-64 characters)
+
+Global Flags:
+      --debug   Enable debug mode with structured error logging

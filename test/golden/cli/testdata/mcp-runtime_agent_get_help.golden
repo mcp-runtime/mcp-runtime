@@ -1,0 +1,10 @@
+Get an agent by immutable ID
+
+Usage:
+  mcp-runtime agent get [agent-id] [flags]
+
+Flags:
+  -h, --help   help for get
+
+Global Flags:
+      --debug   Enable debug mode with structured error logging
