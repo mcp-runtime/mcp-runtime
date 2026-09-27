@@ -17,6 +17,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -260,6 +261,62 @@ func TestEnsureDefaultDenyNetworkPolicyAllowsConfiguredIngressNamespace(t *testi
 	}
 	if !networkPolicyAllowsNamespace(policy, "kube-system") {
 		t.Fatalf("network policy does not allow ingress from kube-system: %#v", policy.Spec.Ingress)
+	}
+}
+
+func TestManagedNamespaceHTTPSOnlyReachesConfiguredIngressController(t *testing.T) {
+	client := kubernetesfake.NewSimpleClientset(&networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "platform-default-deny", Namespace: "mcp-team-acme"},
+		Spec:       desiredDefaultDenyNetworkPolicy("mcp-team-acme").Spec,
+	})
+	if err := ensureDefaultDenyNetworkPolicy(context.Background(), client, "mcp-team-acme", "kube-system", "traefik", " "); err != nil {
+		t.Fatal(err)
+	}
+	policy, err := client.NetworkingV1().NetworkPolicies("mcp-team-acme").Get(context.Background(), "platform-default-deny", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, namespace string
+		podLabels       map[string]string
+		port            int
+		want            bool
+	}{
+		{"k3s target HTTPS", "kube-system", map[string]string{"app.kubernetes.io/name": "traefik"}, 8443, true},
+		{"k3s Service HTTPS", "kube-system", map[string]string{"app.kubernetes.io/name": "traefik"}, 443, true},
+		{"bundled HTTPS", "traefik", map[string]string{"app": "traefik"}, 8443, true},
+		{"unrelated system pod", "kube-system", map[string]string{"app.kubernetes.io/name": "unrelated"}, 8443, false},
+		{"other namespace", "other", map[string]string{"app": "traefik"}, 8443, false},
+		{"HTTP remains blocked", "kube-system", map[string]string{"app.kubernetes.io/name": "traefik"}, 8000, false},
+		{"dashboard port remains blocked", "kube-system", map[string]string{"app.kubernetes.io/name": "traefik"}, 8080, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			allowed := false
+			for _, rule := range policy.Spec.Egress {
+				for _, port := range rule.Ports {
+					if port.Port == nil || port.Port.IntVal != int32(tc.port) || port.Protocol == nil || *port.Protocol != corev1.ProtocolTCP {
+						continue
+					}
+					for _, peer := range rule.To {
+						if peer.NamespaceSelector == nil || peer.PodSelector == nil {
+							continue
+						}
+						ns, err := metav1.LabelSelectorAsSelector(peer.NamespaceSelector)
+						if err != nil {
+							t.Fatal(err)
+						}
+						pods, err := metav1.LabelSelectorAsSelector(peer.PodSelector)
+						if err != nil {
+							t.Fatal(err)
+						}
+						allowed = allowed || ns.Matches(labels.Set{"kubernetes.io/metadata.name": tc.namespace}) && pods.Matches(labels.Set(tc.podLabels))
+					}
+				}
+			}
+			if allowed != tc.want {
+				t.Fatalf("HTTPS policy allows destination = %t, want %t", allowed, tc.want)
+			}
+		})
 	}
 }
 
