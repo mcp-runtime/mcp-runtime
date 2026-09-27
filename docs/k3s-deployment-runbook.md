@@ -256,6 +256,14 @@ for an externally managed certificate. The connector's
 `KEYCLOAK_CLIENT_SECRET` value is read from the environment and converted into
 a Kubernetes Secret; it must not be committed to Git.
 
+Setup waits for the current auth and operator Deployment revisions to finish
+rolling out. A healthy old auth pod does not prove the new image or resource
+allowlist is active. If authorization returns `resource is not recognized`,
+compare `MCP_AUTH_RESOURCES` on the serving pods with the Deployment and inspect
+replacement pod startup logs. A published image that rejects connector fields
+must be replaced with a compatible image; preserve the connector config,
+signing key, and data PVC during recovery.
+
 The bundled server uses SQLite on a PVC in production and memory storage only
 in `--test-mode`. Test mode also permits the loopback development issuer and an
 ephemeral signing key. A public deployment must use HTTPS for Keycloak's

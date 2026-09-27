@@ -22,11 +22,13 @@ There is no `2026-07-28` stateless server fixture in this set yet.
 `mcp-auth-sdk-client/` is an OAuth client fixture; neither is an MCP server
 language/version entry.
 
-Each server's `.mcp/` directory contains the CLI-generated server, grant, and
-session metadata. The `-gateway` names use Runtime gateway governance; the
+Each server's `.mcp/` directory contains CLI-generated server metadata. Gateway
+examples also include grant and session metadata. Standalone examples omit
+these unused gateway configurations. The `-gateway` names use Runtime gateway governance; the
 `-standalone` names validate OAuth in the MCP server itself without gateway
 grants, sessions, policy, or audit. Adapter mTLS remains a separate
-adapter-to-Runtime identity feature. Check the gateway example metadata with:
+adapter-to-Runtime identity feature. OAuth issuer and audience settings derive
+from the platform configuration and public MCP URL. Check the gateway example metadata with:
 
 ```bash
 ./bin/mcp-runtime server validate \

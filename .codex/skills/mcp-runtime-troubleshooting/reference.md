@@ -162,6 +162,16 @@ by a manual/scripted flow using the `cursor://` redirect URI, not by Cursor itse
   that `MCP_AUTH_RESOURCES` (plural, comma-separated — **not** just `MCP_AUTH_RESOURCE`)
   carries every deployed server's absolute resource URI. See
   `internal/cli/setup/platform/mcp_auth_server.go` and `k8s/23-mcp-auth-server.yaml`.
+  Compare the env on the **ready serving pods**, not only the Deployment. A
+  stuck rolling update can keep an old allowlist serving while the replacement
+  crashes. Inspect replacement `--previous` logs and require `kubectl rollout
+  status deployment/mcp-auth-server` to finish. `unknown field` during connector
+  parsing means the candidate image cannot read the existing connector schema;
+  recover with a known compatible image digest, retaining the intended resource
+  env, connector config, signing key, and data PVC. Do not remove private IdP
+  endpoint fields merely to make an older published image start: they may be
+  needed for server-side token exchange. Setup now requires full auth/operator
+  rollouts rather than accepting an old available replica.
 
 After any server-side fix, **remove and re-add the server in the client and restart it** —
 Cursor caches the DCR client registration and discovery document per server, so a stale

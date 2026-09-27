@@ -164,8 +164,8 @@ func TestMCPAuthResourceURLsTestModeCoversGoExample(t *testing.T) {
 	}
 }
 
-// Every bundled example manifest's auth.audience must appear in the test-mode
-// resource set, or that example cannot complete an authenticated tool call.
+// The bundled local example's OAuth resource, derived from its route when no
+// audience is pinned, must appear in the test-mode resource set.
 func TestTestModeResourcesMatchBundledExampleAudiences(t *testing.T) {
 	resources, err := mcpAuthResourceURLs(nil, "http://localhost:18080/mcp-auth", true)
 	if err != nil {
@@ -182,19 +182,36 @@ func TestTestModeResourcesMatchBundledExampleAudiences(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read %s: %v", name, err)
 		}
-		audience := ""
-		for _, line := range strings.Split(string(raw), "\n") {
-			if trimmed := strings.TrimSpace(line); strings.HasPrefix(trimmed, "audience:") {
-				audience = strings.TrimSpace(strings.TrimPrefix(trimmed, "audience:"))
-				break
+		var document struct {
+			Servers []struct {
+				Route string `json:"route"`
+				Auth  struct {
+					Mode     string `json:"mode"`
+					Audience string `json:"audience"`
+				} `json:"auth"`
+			} `json:"servers"`
+		}
+		if err := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(raw), 4096).Decode(&document); err != nil {
+			t.Fatalf("decode %s: %v", name, err)
+		}
+		if len(document.Servers) == 0 {
+			t.Fatalf("%s has no servers", name)
+		}
+		for _, server := range document.Servers {
+			if server.Auth.Mode != "oauth" {
+				t.Errorf("%s must exercise OAuth", name)
+				continue
 			}
-		}
-		if audience == "" {
-			t.Errorf("%s has no auth.audience", name)
-			continue
-		}
-		if !indexed[audience] {
-			t.Errorf("%s audience %q is not in the test-mode resource set %v", name, audience, resources)
+			audience := server.Auth.Audience
+			if audience == "" {
+				if server.Route == "" || !strings.HasPrefix(server.Route, "/") {
+					t.Fatalf("%s must have a route for its derived audience", name)
+				}
+				audience = "http://localhost:18080" + server.Route
+			}
+			if !indexed[audience] {
+				t.Errorf("%s audience %q is not in the test-mode resource set %v", name, audience, resources)
+			}
 		}
 	}
 }

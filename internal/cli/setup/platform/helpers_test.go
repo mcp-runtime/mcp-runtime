@@ -2741,6 +2741,9 @@ func TestSetupDepsWithDefaultsSetsNil(t *testing.T) {
 	if deps.WaitForDeploymentAvailable == nil {
 		t.Fatal("expected WaitForDeploymentAvailable default")
 	}
+	if deps.WaitForDeploymentRolledOut == nil {
+		t.Fatal("expected WaitForDeploymentRolledOut default")
+	}
 	if deps.PrintDeploymentDiagnostics == nil {
 		t.Fatal("expected PrintDeploymentDiagnostics default")
 	}

@@ -15,13 +15,5 @@ servers:
           sideEffect: read
       auth:
         mode: oauth
-        tokenHeader: Authorization
-        issuerURL: https://auth.mcpruntime.org/mcp-auth
-        audience: https://mcp.mcpruntime.org/oauth-example-typescript-2025-06-18-standalone/mcp
-      policy:
-        mode: allow-list
-        defaultDecision: deny
-      session:
-        required: true
       gateway:
         enabled: false

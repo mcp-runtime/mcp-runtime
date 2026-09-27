@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,26 @@ import (
 	mcpauth "github.com/Agent-Hellboy/mcp-auth/auth-client/go/mcpauth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+func TestProtectedResourceMetadataAdvertisesEnforcedScopes(t *testing.T) {
+	verifier := &mcpauth.JWTVerifier{RequiredScopes: map[string]bool{"tools:read": true, "resources:read": true}}
+	handler := newProtectedResourceMetadataHandler(verifier, "https://mcp.example.com/example/mcp", "https://auth.example.com/mcp-auth")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-protected-resource", nil))
+	var metadata struct {
+		mcpauth.ProtectedResourceMetadata
+		BearerMethodsSupported []string `json:"bearer_methods_supported"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &metadata); err != nil {
+		t.Fatal(err)
+	}
+	if metadata.Resource != "https://mcp.example.com/example/mcp" || len(metadata.AuthorizationServers) != 1 || metadata.AuthorizationServers[0] != "https://auth.example.com/mcp-auth" {
+		t.Fatalf("wrong resource metadata: %+v", metadata)
+	}
+	if strings.Join(metadata.ScopesSupported, ",") != "resources:read,tools:read" || strings.Join(metadata.BearerMethodsSupported, ",") != "header" {
+		t.Fatalf("metadata does not advertise enforced scopes and bearer method: %+v", metadata)
+	}
+}
 
 func TestOAuthHTTPSessionBindsSubjectAndUsesCurrentClaims(t *testing.T) {
 	protocolHandler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {

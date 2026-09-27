@@ -7,8 +7,9 @@ source supports direct OAuth token validation through the `mcp-auth` SDK or no
 server-side auth. The checked-in metadata keeps the Runtime gateway enabled so
 OAuth requests retain grants, sessions, policy, and audit enforcement.
 
-To run locally, set the issuer, resource audience, and protected-resource
-metadata URL for the authorization server you are using:
+Runtime derives the OAuth issuer and resource audience from the platform
+configuration and public MCP URL. To run the standalone Go process locally,
+provide the issuer and resource URL:
 
 ```bash
 MCP_AUTH_ISSUER=http://localhost:18080/mcp-auth \
@@ -28,4 +29,6 @@ and audit features. Without OAuth settings, the server accepts unauthenticated
 requests. The standalone OAuth path uses `oauth-example-go-2025-11-25-standalone`.
 
 The `whoami` tool returns the verified token subject, agent, session, and scopes
-in OAuth mode, and reports anonymous status when no OAuth settings are present.
+in standalone OAuth mode. With the gateway enabled, Runtime owns the verified
+identity, governance, and audit; the server process has no OAuth settings and
+`whoami` reports anonymous status.

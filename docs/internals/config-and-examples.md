@@ -12,7 +12,7 @@
 ## examples/
 - `oauth-example-go-2025-11-25/`, `example-python-2025-11-25/`, and `example-rust-2025-11-25/` provide gateway-enabled servers; their `.mcp/servers.yaml` names end in `-gateway`.
 - `oauth-example-typescript-2025-06-18/` demonstrates direct server OAuth with gateway disabled; its server name ends in `-standalone`.
-- Each server's `.mcp/` directory is the source for server, grant, and session metadata. Avoid duplicate hand-maintained server manifests.
+- Each server's `.mcp/` directory is the source for server metadata; gateway examples also contain sample grants and sessions. Avoid duplicate hand-maintained server manifests.
 
 ## Makefiles
 - `Makefile` exposes high-level tasks (fmt, lint, test, build) for the CLI binary.

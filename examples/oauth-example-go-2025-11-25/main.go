@@ -133,12 +133,9 @@ func main() {
 		// Token verification and the OAuth challenge are handled by this
 		// server's mcp-auth SDK middleware, without Runtime gateway auth.
 		mux.Handle(mcpPath, mcpauth.RequireToken(verifier, mcpauth.ResourceMetadata{URL: metadataURL}, bindVerifiedIdentity(handler)))
-		metadataHandler := func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("content-type", "application/json")
-			_, _ = fmt.Fprintf(w, `{"resource":%q,"authorization_servers":[%q],"bearer_methods_supported":["header"]}`, resource, issuer)
-		}
-		mux.HandleFunc("/.well-known/oauth-protected-resource"+mcpPath, metadataHandler)
-		mux.HandleFunc("/.well-known/oauth-protected-resource", metadataHandler)
+		metadataHandler := newProtectedResourceMetadataHandler(verifier, resource, issuer)
+		mux.Handle("/.well-known/oauth-protected-resource"+mcpPath, metadataHandler)
+		mux.Handle("/.well-known/oauth-protected-resource", metadataHandler)
 	} else {
 		mux.Handle(mcpPath, handler)
 	}
@@ -162,6 +159,29 @@ func resolveJWKS(issuer string) (string, error) {
 		return "", err
 	}
 	return metadata.JWKSURI, nil
+}
+
+// The published SDK version exposes the metadata type but not its handler.
+// Derive scopes from the same verifier that enforces them on MCP requests.
+func newProtectedResourceMetadataHandler(verifier *mcpauth.JWTVerifier, resource, issuer string) http.Handler {
+	scopes := make([]string, 0, len(verifier.RequiredScopes))
+	for scope := range verifier.RequiredScopes {
+		scopes = append(scopes, scope)
+	}
+	sort.Strings(scopes)
+	metadata := struct {
+		mcpauth.ProtectedResourceMetadata
+		BearerMethodsSupported []string `json:"bearer_methods_supported"`
+	}{
+		ProtectedResourceMetadata: mcpauth.ProtectedResourceMetadata{
+			Resource: resource, AuthorizationServers: []string{issuer}, ScopesSupported: scopes,
+		},
+		BearerMethodsSupported: []string{"header"},
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_ = json.NewEncoder(w).Encode(metadata)
+	})
 }
 
 // The mcp-auth middleware validates the JWT. Forward its verified identity to

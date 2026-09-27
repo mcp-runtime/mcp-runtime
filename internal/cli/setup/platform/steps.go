@@ -194,10 +194,12 @@ func (s mcpAuthServerStep) Run(logger *zap.Logger, deps SetupDeps, ctx *SetupCon
 	if err := deployMCPAuthServer(ctx.Plan.MCPAuthServerImage, ctx.Plan.MCPAuthIssuerURL, ctx.Plan.MCPAuthResourceURLs, ctx.Plan.MCPAuthTLSSecret, ctx.Plan.MCPAuthSigningKeySecret, ctx.Plan.MCPAuthConnectorsFile, ctx.Plan.MCPAuthConnector, ctx.Plan.TestMode, deps); err != nil {
 		return err
 	}
-	if err := deps.WaitForDeploymentAvailable(logger, "mcp-auth-server", core.DefaultAnalyticsNamespace, "app=mcp-auth-server", analyticsRolloutTimeoutDuration()); err != nil {
-		return err
+	// An old ready auth pod may still serve an obsolete resource allowlist while
+	// the replacement crashes. Require the current revision before proceeding.
+	if err := deps.WaitForDeploymentRolledOut(logger, "mcp-auth-server", core.DefaultAnalyticsNamespace, "app=mcp-auth-server", analyticsRolloutTimeoutDuration()); err != nil {
+		return fmt.Errorf("mcp-auth authorization server rollout: %w", err)
 	}
-	return deps.WaitForDeploymentAvailable(logger, "mcp-runtime-operator-controller-manager", core.NamespaceMCPRuntime, "control-plane=controller-manager", deps.GetDeploymentTimeout())
+	return deps.WaitForDeploymentRolledOut(logger, "mcp-runtime-operator-controller-manager", core.NamespaceMCPRuntime, "control-plane=controller-manager", deps.GetDeploymentTimeout())
 }
 
 func (s verifyStep) Name() string { return "verify" }
