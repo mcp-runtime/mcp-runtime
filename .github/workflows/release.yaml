@@ -47,8 +47,9 @@ jobs:
 
       # platform-manifest.json is the authoritative component version list that
       # `mcp-runtime update --to <tag>` fetches. It is generated from the CLI's
-      # component catalog; crdChange is set when config/crd/bases changed since
-      # the previous tag so update refuses and points operators to setup.
+      # component catalog. When config/crd/bases changed since the previous tag,
+      # crdChange is set and CRD YAML is embedded in the JSON (and also written
+      # as platform-crds.yaml) so update can apply schema changes.
       - name: Generate platform component manifest
         shell: bash
         working-directory: src
@@ -61,8 +62,23 @@ jobs:
           if [[ -z "${previous_tag}" ]] || ! git diff --quiet "${previous_tag}" "${RELEASE_TAG}" -- config/crd/bases; then
             crd_flag="-crd-change"
           fi
-          go run ./hack/release/platformmanifest -version "${RELEASE_TAG}" ${crd_flag} > ../dist/platform-manifest.json
-          cat ../dist/platform-manifest.json
+          go run ./hack/release/platformmanifest \
+            -version "${RELEASE_TAG}" \
+            ${crd_flag} \
+            -write-crds ../dist/platform-crds.yaml \
+            > ../dist/platform-manifest.json
+          # Always publish a standalone CRD bundle for --crds / operators.
+          if [[ ! -s ../dist/platform-crds.yaml ]]; then
+            go run ./hack/release/platformmanifest \
+              -version "${RELEASE_TAG}" \
+              -write-crds ../dist/platform-crds.yaml \
+              >/dev/null
+          fi
+          python3 - <<'PY'
+          import json
+          m=json.load(open("../dist/platform-manifest.json"))
+          print("version", m.get("version"), "crdChange", m.get("crdChange"), "components", len(m.get("components",[])), "crds_bytes", len(m.get("crds") or ""))
+          PY
 
       - name: List release assets
         run: find dist -type f | sort
@@ -78,6 +94,7 @@ jobs:
             mcp-runtime-linux-amd64
             mcp-runtime-windows-amd64.exe
             platform-manifest.json
+            platform-crds.yaml
           )
           for asset in "${expected[@]}"; do
             if [[ ! -s "dist/${asset}" ]]; then
@@ -88,6 +105,10 @@ jobs:
           actual_count="$(find dist -maxdepth 1 -type f | wc -l | tr -d ' ')"
           if [[ "${actual_count}" != "${#expected[@]}" ]]; then
             echo "Expected ${#expected[@]} release assets, found ${actual_count}" >&2
+            exit 1
+          fi
+          if ! python3 -c 'import json; m=json.load(open("dist/platform-manifest.json")); assert m.get("crdChange") is False or (m.get("crds") or "").strip()'; then
+            echo "platform-manifest.json with crdChange must embed non-empty crds" >&2
             exit 1
           fi
 

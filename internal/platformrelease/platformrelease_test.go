@@ -3,6 +3,8 @@ package platformrelease
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -129,12 +131,13 @@ func TestTargetRefResolution(t *testing.T) {
 }
 
 func TestGenerateManifestCoversBuiltComponents(t *testing.T) {
-	m, err := GenerateManifest("v0.5.0", true)
+	crdYAML := "apiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\nmetadata:\n  name: mcpservers.mcpruntime.org\nspec:\n  group: mcpruntime.org\n"
+	m, err := GenerateManifest("v0.5.0", true, crdYAML)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !m.CRDChange {
-		t.Fatal("crdChange not propagated")
+	if !m.CRDChange || m.CRDs == "" {
+		t.Fatal("crdChange/crds not propagated")
 	}
 	names := map[string]bool{}
 	for _, c := range m.Components {
@@ -153,14 +156,43 @@ func TestGenerateManifestCoversBuiltComponents(t *testing.T) {
 			t.Errorf("generated manifest must not include third-party %s", not)
 		}
 	}
-	if _, err := GenerateManifest("dev", false); err == nil {
+	if _, err := GenerateManifest("v0.5.0", true, ""); err == nil {
+		t.Fatal("crdChange without CRD YAML must be rejected")
+	}
+	if _, err := GenerateManifest("dev", false, ""); err == nil {
 		t.Fatal("non-semver version must be rejected")
+	}
+}
+
+func TestBundleAndCRDObjectNames(t *testing.T) {
+	dir := t.TempDir()
+	a := "apiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\nmetadata:\n  name: mcpservers.mcpruntime.org\n"
+	b := "apiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\nmetadata:\n  name: mcpaccessgrants.mcpruntime.org\n"
+	if err := os.WriteFile(filepath.Join(dir, "z.yaml"), []byte(a), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "a.yaml"), []byte(b), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bundled, err := BundleCRDs(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names, err := CRDObjectNames(bundled)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(names) != 2 || names[0] != "mcpaccessgrants.mcpruntime.org" || names[1] != "mcpservers.mcpruntime.org" {
+		t.Fatalf("names = %v", names)
 	}
 }
 
 func TestReleaseManifestURL(t *testing.T) {
 	if got := ReleaseManifestURL("v0.5.0"); got != "https://github.com/mcp-runtime/mcp-runtime/releases/download/v0.5.0/platform-manifest.json" {
 		t.Fatalf("url = %s", got)
+	}
+	if got := ReleaseCRDsURL("v0.5.0"); got != "https://github.com/mcp-runtime/mcp-runtime/releases/download/v0.5.0/platform-crds.yaml" {
+		t.Fatalf("crds url = %s", got)
 	}
 }
 

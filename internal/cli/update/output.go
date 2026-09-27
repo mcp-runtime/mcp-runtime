@@ -19,7 +19,11 @@ func writePlanText(out io.Writer, plan *Plan) {
 	fmt.Fprintf(out, "  API server:     %s\n", dash(plan.Cluster.Server))
 	fmt.Fprintf(out, "  Cluster ID:     %s\n", dash(plan.Cluster.ClusterID))
 	fmt.Fprintf(out, "  Manifest:       %s\n", plan.ManifestSource)
-	fmt.Fprintf(out, "  Version:        %s -> %s\n\n", dash(plan.InstalledVersion), plan.TargetVersion)
+	fmt.Fprintf(out, "  Version:        %s -> %s\n", dash(plan.InstalledVersion), plan.TargetVersion)
+	if plan.ApplyCRDs {
+		fmt.Fprintf(out, "  CRDs:           apply %s\n", stringsJoin(plan.CRDNames))
+	}
+	fmt.Fprintln(out)
 
 	tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "COMPONENT\tWORKLOAD\tACTION\tCURRENT\tTARGET\tREASON")
@@ -49,6 +53,15 @@ func writePlanText(out io.Writer, plan *Plan) {
 
 func writeResultText(out io.Writer, res *Result) {
 	fmt.Fprintln(out, "\nUpdate result:")
+	if len(res.CRDs) > 0 {
+		tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(tw, "CRD\tACTION\tDETAIL")
+		for _, c := range res.CRDs {
+			fmt.Fprintf(tw, "%s\t%s\t%s\n", c.Name, dash(c.Action), dash(c.Error))
+		}
+		_ = tw.Flush()
+		fmt.Fprintln(out)
+	}
 	tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "WORKLOAD\tCOMPONENTS\tSTATUS\tDETAIL")
 	for _, w := range res.Workloads {

@@ -793,7 +793,7 @@ Deeper guides: [Cluster readiness](cluster-readiness.md),
 mcp-runtime update --to v0.5.0 --dry-run
 mcp-runtime update --release-manifest ./platform-manifest.json
 mcp-runtime update --to v0.5.0 --only ui,platform-api --yes
-mcp-runtime update --release-manifest ./platform-manifest.json --include-auth --output json
+mcp-runtime update --release-manifest ./platform-manifest.json --crds ./platform-crds.yaml --yes
 ```
 
 The target comes from a release component manifest (service -> image
@@ -803,13 +803,14 @@ URL). update compares it with the images running in the cluster and patches
 only the Deployments whose images changed, one at a time, waiting for each
 rollout.
 
-update only patches container images (and the operator's
-`MCP_GATEWAY_PROXY_IMAGE` env var) plus version labels/annotations. It never
-modifies Secrets, PVCs, ConfigMaps, cert-manager Issuers/Certificates, CRDs,
+When a release sets `crdChange`, the published `platform-manifest.json` embeds
+CustomResourceDefinition YAML in the `crds` field (and the release also ships
+`platform-crds.yaml`). update applies those CRDs before image rollouts. Pass
+`--crds` only when a local manifest omits the embedded bundle. update never
+modifies Secrets, PVCs, ConfigMaps, cert-manager Issuers/Certificates,
 Services, or Ingresses, and never deletes or recreates workloads. mcp-auth and
 cert-manager are skipped unless selected with `--include-auth`,
-`--include-cert-manager`, or `--only`. Releases that change CRDs are refused; run
-setup from that release instead.
+`--include-cert-manager`, or `--only`.
 
 The plan always shows the kube context and cluster ID. Without `--dry-run`,
 update asks for confirmation (or requires `--yes` when not interactive).
@@ -820,6 +821,7 @@ relative repositories resolve against the registry of the running image.
 |---|---|---|
 | `--to` | none | Target release version (for example v0.5.0); fetches that release's platform-manifest.json unless `--release-manifest` is set |
 | `--release-manifest` | none | Release component manifest path or https URL; its version must match `--to` when both are set |
+| `--crds` | none | CRD multi-document YAML path or https URL when the manifest omits embedded `crds` |
 | `--dry-run` | `false` | Print the update plan and exit without changing the cluster |
 | `--yes` | `false` | Apply without the interactive confirmation prompt |
 | `--only` | all non-opt-in components | Comma-separated components to consider |
@@ -846,7 +848,8 @@ Manifest shape (`platform-manifest.json`, attached to each GitHub release):
   "kind": "PlatformRelease",
   "version": "v0.5.0",
   "registry": "",
-  "crdChange": false,
+  "crdChange": true,
+  "crds": "apiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\n...",
   "components": [
     {"name": "platform-api", "repository": "mcp-platform-api", "tag": "v0.5.0", "digest": "sha256:..."}
   ]
@@ -859,8 +862,9 @@ A digest in the manifest pins the workload to `repo:tag@digest`, so reruns are
 exact no-ops. A downgrade is refused unless you pass `--allow-downgrade`. If a
 rollout fails, update stops, restores the previous images by default, and
 prints `kubectl rollout undo` / `kubectl set image` recovery commands. Required
-RBAC: `get`/`list` on namespaces, deployments, and pods, and `patch` on
-deployments.
+RBAC: `get`/`list` on namespaces, deployments, pods, and
+`customresourcedefinitions`, and `patch`/`create`/`update` on deployments and
+CRDs when `crdChange` is set.
 
 ## cluster
 

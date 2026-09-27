@@ -71,7 +71,7 @@ func installed(version string) []runtime.Object {
 
 func manifest(t *testing.T, version string, mutate ...func(*platformrelease.Manifest)) *platformrelease.Manifest {
 	t.Helper()
-	m, err := platformrelease.GenerateManifest(version, false)
+	m, err := platformrelease.GenerateManifest(version, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -315,11 +315,32 @@ func TestPlanDowngradeGuard(t *testing.T) {
 	}
 }
 
-func TestPlanRefusesCRDChange(t *testing.T) {
+func TestPlanAppliesEmbeddedCRDs(t *testing.T) {
+	cs := fake.NewSimpleClientset(installed("v0.4.0")...)
+	m := manifest(t, "v0.4.0", func(m *platformrelease.Manifest) {
+		m.CRDChange = true
+		m.CRDs = "apiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\nmetadata:\n  name: mcpservers.mcpruntime.org\n"
+	})
+	plan, err := BuildPlan(context.Background(), cs, m, Selection{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !plan.ApplyCRDs || len(plan.CRDNames) != 1 || plan.CRDNames[0] != "mcpservers.mcpruntime.org" {
+		t.Fatalf("plan CRDs = apply=%v names=%v", plan.ApplyCRDs, plan.CRDNames)
+	}
+	if len(plan.Changed()) != 0 {
+		t.Fatalf("expected image no-op with matching tags, got %+v", plan.Changed())
+	}
+	if !plan.NeedsApply() {
+		t.Fatal("expected NeedsApply with CRD change even if images match")
+	}
+}
+
+func TestPlanRefusesCRDChangeWithoutBundle(t *testing.T) {
 	cs := fake.NewSimpleClientset(installed("v0.4.0")...)
 	m := manifest(t, "v0.5.0", func(m *platformrelease.Manifest) { m.CRDChange = true })
-	if _, err := BuildPlan(context.Background(), cs, m, Selection{}); err == nil || !strings.Contains(err.Error(), "CustomResourceDefinitions") {
-		t.Fatalf("expected CRD refusal, got %v", err)
+	if _, err := BuildPlan(context.Background(), cs, m, Selection{}); err == nil || !strings.Contains(err.Error(), "no embedded crds") {
+		t.Fatalf("expected missing CRD bundle error, got %v", err)
 	}
 }
 
@@ -441,8 +462,11 @@ func testDeps(cs kubernetes.Interface, m *platformrelease.Manifest, confirm func
 	data, _ := json.Marshal(m)
 	return deps{
 		loadManifest: func(context.Context, string) ([]byte, error) { return data, nil },
-		kube: func(string, string) (kubernetes.Interface, ClusterInfo, error) {
-			return cs, ClusterInfo{Context: "kind-mcp-runtime", Server: "https://127.0.0.1:6443", ClusterID: "uid-1"}, nil
+		kube: func(string, string) (kubeHandle, error) {
+			return kubeHandle{
+				Clientset: cs,
+				Cluster:   ClusterInfo{Context: "kind-mcp-runtime", Server: "https://127.0.0.1:6443", ClusterID: "uid-1"},
+			}, nil
 		},
 		waiter:  func(kubernetes.Interface) RolloutWaiter { return noopWaiter },
 		confirm: confirm,

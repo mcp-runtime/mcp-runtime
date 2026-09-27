@@ -21,12 +21,14 @@ import (
 
 	"mcp-runtime/internal/cli/core"
 	"mcp-runtime/internal/platformrelease"
+	"mcp-runtime/pkg/k8sclient"
 )
 
 // Options holds parsed update flags.
 type Options struct {
 	To                 string
 	ReleaseManifest    string
+	CRDs               string
 	DryRun             bool
 	Yes                bool
 	Only               []string
@@ -40,10 +42,17 @@ type Options struct {
 	Context            string
 }
 
+// kubeHandle is the Kubernetes client pair update needs for inventory and CRD apply.
+type kubeHandle struct {
+	Clientset kubernetes.Interface
+	Clients   *k8sclient.Clients
+	Cluster   ClusterInfo
+}
+
 // deps are injectable for tests.
 type deps struct {
 	loadManifest func(ctx context.Context, source string) ([]byte, error)
-	kube         func(kubeconfig, context string) (kubernetes.Interface, ClusterInfo, error)
+	kube         func(kubeconfig, context string) (kubeHandle, error)
 	waiter       func(cs kubernetes.Interface) RolloutWaiter
 	confirm      func(in io.Reader, out io.Writer, cluster ClusterInfo) (bool, error)
 	stdin        io.Reader
@@ -80,13 +89,13 @@ URL). update compares it with the images running in the cluster and patches
 only the Deployments whose images changed, one at a time, waiting for each
 rollout.
 
-update only patches container images (and the operator's
-MCP_GATEWAY_PROXY_IMAGE env var) plus version labels/annotations. It never
-modifies Secrets, PVCs, ConfigMaps, cert-manager Issuers/Certificates, CRDs,
-Services, or Ingresses, and never deletes or recreates workloads. mcp-auth and
-cert-manager are skipped unless selected with --include-auth,
---include-cert-manager, or --only. Releases that change CRDs are refused; run
-setup from that release instead.
+When the release sets crdChange, the manifest embeds CustomResourceDefinition
+YAML (field "crds") so update applies those CRDs before image rollouts. You
+can also pass --crds or rely on the release's platform-crds.yaml asset.
+update never modifies Secrets, PVCs, ConfigMaps, cert-manager Issuers/
+Certificates, Services, or Ingresses, and never deletes or recreates
+workloads. mcp-auth and cert-manager are skipped unless selected with
+--include-auth, --include-cert-manager, or --only.
 
 The plan always shows the kube context and cluster ID. Without --dry-run,
 update asks for confirmation (or requires --yes when not interactive).
@@ -95,7 +104,7 @@ relative repositories resolve against the registry of the running image.`,
 		Example: `  mcp-runtime update --to v0.5.0 --dry-run
   mcp-runtime update --release-manifest ./platform-manifest.json
   mcp-runtime update --to v0.5.0 --only ui,platform-api --yes
-  mcp-runtime update --release-manifest ./platform-manifest.json --include-auth --output json`,
+  mcp-runtime update --release-manifest ./platform-manifest.json --crds ./platform-crds.yaml --yes`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return run(cmd.Context(), cmd.OutOrStdout(), opts, d)
@@ -104,6 +113,7 @@ relative repositories resolve against the registry of the running image.`,
 	f := cmd.Flags()
 	f.StringVar(&opts.To, "to", "", "Target release version (for example v0.5.0); fetches that release's platform-manifest.json unless --release-manifest is set")
 	f.StringVar(&opts.ReleaseManifest, "release-manifest", "", "Release component manifest path or https URL; its version must match --to when both are set")
+	f.StringVar(&opts.CRDs, "crds", "", "CRD multi-document YAML path or https URL when the manifest omits embedded crds (optional; --to also tries platform-crds.yaml)")
 	f.BoolVar(&opts.DryRun, "dry-run", false, "Print the update plan and exit without changing the cluster")
 	f.BoolVar(&opts.Yes, "yes", false, "Apply without the interactive confirmation prompt")
 	f.StringSliceVar(&opts.Only, "only", nil, "Comma-separated components to consider (default: all non-opt-in components)")
@@ -129,11 +139,11 @@ func run(ctx context.Context, out io.Writer, opts Options, d deps) error {
 	if err != nil {
 		return err
 	}
-	cs, cluster, err := d.kube(opts.Kubeconfig, opts.Context)
+	kh, err := d.kube(opts.Kubeconfig, opts.Context)
 	if err != nil {
 		return core.WrapWithSentinel(core.ErrUpdateKubeClientFailed, err, fmt.Sprintf("connect to Kubernetes: %v (pass --kubeconfig/--context)", err))
 	}
-	plan, err := BuildPlan(ctx, cs, manifest, Selection{
+	plan, err := BuildPlan(ctx, kh.Clientset, manifest, Selection{
 		Only:               opts.Only,
 		IncludeAuth:        opts.IncludeAuth,
 		IncludeCertManager: opts.IncludeCertManager,
@@ -142,7 +152,7 @@ func run(ctx context.Context, out io.Writer, opts Options, d deps) error {
 	if err != nil {
 		return err
 	}
-	plan.Cluster = cluster
+	plan.Cluster = kh.Cluster
 	plan.ManifestSource = source
 
 	jsonOut := opts.Output == "json"
@@ -168,19 +178,24 @@ func run(ctx context.Context, out io.Writer, opts Options, d deps) error {
 		return core.NewWithSentinel(core.ErrUpdateBlocked, fmt.Sprintf("update blocked for %s; see plan reasons", strings.Join(names, ", ")))
 	}
 	changed := plan.Changed()
-	if opts.DryRun || len(changed) == 0 {
+	if opts.DryRun || !plan.NeedsApply() {
 		if !jsonOut {
-			if len(changed) == 0 {
+			if !plan.NeedsApply() {
 				fmt.Fprintln(out, "\nPlatform is up to date; nothing to roll out.")
 			} else {
-				fmt.Fprintf(out, "\nDry run: %d component(s) would be updated. Re-run without --dry-run to apply.\n", len(changed))
+				n := len(changed)
+				extra := ""
+				if plan.ApplyCRDs {
+					extra = fmt.Sprintf(" and %d CustomResourceDefinition(s)", len(plan.CRDNames))
+				}
+				fmt.Fprintf(out, "\nDry run: %d component(s)%s would be updated. Re-run without --dry-run to apply.\n", n, extra)
 			}
 		}
 		return report(nil)
 	}
 
 	if !opts.Yes {
-		ok, err := d.confirm(d.stdin, out, cluster)
+		ok, err := d.confirm(d.stdin, out, kh.Cluster)
 		if err != nil {
 			return err
 		}
@@ -194,10 +209,11 @@ func run(ctx context.Context, out io.Writer, opts Options, d deps) error {
 			fmt.Fprintln(out, msg)
 		}
 	}
-	res := Apply(ctx, cs, plan, ApplyOptions{
+	res := Apply(ctx, kh.Clientset, plan, ApplyOptions{
 		Timeout:           opts.Timeout,
 		RollbackOnFailure: opts.RollbackOnFailure,
-		Waiter:            d.waiter(cs),
+		Waiter:            d.waiter(kh.Clientset),
+		Clients:           kh.Clients,
 		Progress:          progress,
 	})
 	if err := report(res); err != nil {
@@ -243,12 +259,49 @@ func resolveManifest(ctx context.Context, opts Options, d deps) (*platformreleas
 	if opts.To != "" && m.Version != opts.To {
 		return nil, source, core.NewWithSentinel(core.ErrUpdateTargetMismatch, fmt.Sprintf("release manifest %s is for %s but --to is %s; refusing to change the target silently", source, m.Version, opts.To))
 	}
+	if err := ensureManifestCRDs(ctx, m, opts, d); err != nil {
+		return nil, source, err
+	}
 	return m, source, nil
 }
 
-// kubeClient builds a clientset from kubeconfig and reports the context,
+// ensureManifestCRDs fills m.CRDs when the release changes CRDs but the JSON
+// omitted the embedded bundle. Order: --crds, then platform-crds.yaml for --to.
+func ensureManifestCRDs(ctx context.Context, m *platformrelease.Manifest, opts Options, d deps) error {
+	if m == nil || !m.CRDChange || strings.TrimSpace(m.CRDs) != "" {
+		return nil
+	}
+	sources := make([]string, 0, 2)
+	if s := strings.TrimSpace(opts.CRDs); s != "" {
+		sources = append(sources, s)
+	}
+	if opts.To != "" {
+		sources = append(sources, platformrelease.ReleaseCRDsURL(opts.To))
+	}
+	var last error
+	for _, src := range sources {
+		data, err := d.loadManifest(ctx, src)
+		if err != nil {
+			last = err
+			continue
+		}
+		text := strings.TrimSpace(string(data))
+		if text == "" {
+			last = fmt.Errorf("empty CRD bundle at %s", src)
+			continue
+		}
+		m.CRDs = text
+		return nil
+	}
+	if last != nil {
+		return core.WrapWithSentinel(core.ErrUpdateCRDChange, last, fmt.Sprintf("release %s changes CustomResourceDefinitions but no CRD bundle was found (embed crds in platform-manifest.json, pass --crds, or publish %s): %v", m.Version, platformrelease.CRDsAssetName, last))
+	}
+	return core.NewWithSentinel(core.ErrUpdateCRDChange, fmt.Sprintf("release %s changes CustomResourceDefinitions but the manifest has no embedded crds; pass --crds <path|https-url> or use a release that publishes platform-manifest.json with crds / %s", m.Version, platformrelease.CRDsAssetName))
+}
+
+// kubeClient builds clients from kubeconfig and reports the context,
 // API server, and cluster ID (kube-system namespace UID).
-func kubeClient(kubeconfig, kubeContext string) (kubernetes.Interface, ClusterInfo, error) {
+func kubeClient(kubeconfig, kubeContext string) (kubeHandle, error) {
 	rules := clientcmd.NewDefaultClientConfigLoadingRules()
 	if kubeconfig != "" {
 		rules.ExplicitPath = kubeconfig
@@ -256,7 +309,7 @@ func kubeClient(kubeconfig, kubeContext string) (kubernetes.Interface, ClusterIn
 	cfg := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, &clientcmd.ConfigOverrides{CurrentContext: kubeContext})
 	raw, err := cfg.RawConfig()
 	if err != nil {
-		return nil, ClusterInfo{}, err
+		return kubeHandle{}, err
 	}
 	info := ClusterInfo{Context: kubeContext}
 	if info.Context == "" {
@@ -269,23 +322,23 @@ func kubeClient(kubeconfig, kubeContext string) (kubernetes.Interface, ClusterIn
 	}
 	restCfg, err := cfg.ClientConfig()
 	if err != nil {
-		return nil, info, err
+		return kubeHandle{Cluster: info}, err
 	}
 	if info.Server == "" {
 		info.Server = restCfg.Host
 	}
-	cs, err := kubernetes.NewForConfig(restCfg)
+	clients, err := k8sclient.NewFromConfig(restCfg)
 	if err != nil {
-		return nil, info, err
+		return kubeHandle{Cluster: info}, err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	ns, err := cs.CoreV1().Namespaces().Get(ctx, "kube-system", metav1.GetOptions{})
+	ns, err := clients.Clientset.CoreV1().Namespaces().Get(ctx, "kube-system", metav1.GetOptions{})
 	if err != nil {
-		return nil, info, fmt.Errorf("read cluster identity (kube-system namespace) on %s: %w", info.Server, err)
+		return kubeHandle{Cluster: info}, fmt.Errorf("read cluster identity (kube-system namespace) on %s: %w", info.Server, err)
 	}
 	info.ClusterID = string(ns.UID)
-	return cs, info, nil
+	return kubeHandle{Clientset: clients.Clientset, Clients: clients, Cluster: info}, nil
 }
 
 func promptConfirm(in io.Reader, out io.Writer, cluster ClusterInfo) (bool, error) {

@@ -7,13 +7,13 @@ URL). update compares it with the images running in the cluster and patches
 only the Deployments whose images changed, one at a time, waiting for each
 rollout.
 
-update only patches container images (and the operator's
-MCP_GATEWAY_PROXY_IMAGE env var) plus version labels/annotations. It never
-modifies Secrets, PVCs, ConfigMaps, cert-manager Issuers/Certificates, CRDs,
-Services, or Ingresses, and never deletes or recreates workloads. mcp-auth and
-cert-manager are skipped unless selected with --include-auth,
---include-cert-manager, or --only. Releases that change CRDs are refused; run
-setup from that release instead.
+When the release sets crdChange, the manifest embeds CustomResourceDefinition
+YAML (field "crds") so update applies those CRDs before image rollouts. You
+can also pass --crds or rely on the release's platform-crds.yaml asset.
+update never modifies Secrets, PVCs, ConfigMaps, cert-manager Issuers/
+Certificates, Services, or Ingresses, and never deletes or recreates
+workloads. mcp-auth and cert-manager are skipped unless selected with
+--include-auth, --include-cert-manager, or --only.
 
 The plan always shows the kube context and cluster ID. Without --dry-run,
 update asks for confirmation (or requires --yes when not interactive).
@@ -27,11 +27,12 @@ Examples:
   mcp-runtime update --to v0.5.0 --dry-run
   mcp-runtime update --release-manifest ./platform-manifest.json
   mcp-runtime update --to v0.5.0 --only ui,platform-api --yes
-  mcp-runtime update --release-manifest ./platform-manifest.json --include-auth --output json
+  mcp-runtime update --release-manifest ./platform-manifest.json --crds ./platform-crds.yaml --yes
 
 Flags:
       --allow-downgrade           Allow a target version lower than the installed version
       --context string            Kubernetes context to use (default: current context)
+      --crds string               CRD multi-document YAML path or https URL when the manifest omits embedded crds (optional; --to also tries platform-crds.yaml)
       --dry-run                   Print the update plan and exit without changing the cluster
   -h, --help                      help for update
       --include-auth              Include the mcp-auth authorization server

@@ -30,7 +30,7 @@ var preservedResources = []string{
 	"PersistentVolumeClaims and PersistentVolumes (ClickHouse, Kafka, Postgres, registry data)",
 	"ConfigMaps (mcp-sentinel-config, operator and gateway config)",
 	"cert-manager Issuers, ClusterIssuers, and Certificates",
-	"CustomResourceDefinitions and MCP Runtime custom resources",
+	"Existing MCP Runtime custom resources (MCPServer, grants, sessions)",
 	"Services, Ingresses, IngressRoutes, NetworkPolicies, and RBAC",
 	"Deployment replicas, resources, env (except MCP_GATEWAY_PROXY_IMAGE), and probes",
 }
@@ -67,9 +67,17 @@ type Plan struct {
 	ManifestSource   string      `json:"manifestSource"`
 	TargetVersion    string      `json:"targetVersion"`
 	InstalledVersion string      `json:"installedVersion,omitempty"`
-	Rows             []Row       `json:"components"`
-	Preserved        []string    `json:"preservedResources"`
-	Warnings         []string    `json:"warnings,omitempty"`
+	// ApplyCRDs is true when this release embeds CustomResourceDefinitions
+	// that must be applied before image rollouts.
+	ApplyCRDs bool `json:"applyCRDs,omitempty"`
+	// CRDNames lists CustomResourceDefinition metadata.name values to apply.
+	CRDNames []string `json:"crdNames,omitempty"`
+	// crdsYAML is the multi-document YAML applied when ApplyCRDs is true.
+	// It is omitted from JSON output (large); use CRDNames in plans.
+	crdsYAML  string
+	Rows      []Row    `json:"components"`
+	Preserved []string `json:"preservedResources"`
+	Warnings  []string `json:"warnings,omitempty"`
 }
 
 // Changed returns the rows that will be updated.
@@ -81,6 +89,11 @@ func (p *Plan) Changed() []Row {
 		}
 	}
 	return out
+}
+
+// NeedsApply reports whether the plan would mutate the cluster (CRDs and/or images).
+func (p *Plan) NeedsApply() bool {
+	return p != nil && (p.ApplyCRDs || len(p.Changed()) > 0)
 }
 
 // Blocked returns rows blocked by a safety rule.
@@ -145,18 +158,34 @@ func checkInstalled(ctx context.Context, cs kubernetes.Interface) error {
 }
 
 // BuildPlan reads the installed inventory and diffs it with the manifest.
-// It only reads: namespaces, deployments, and pods.
+// It only reads: namespaces, deployments, and pods. When the manifest marks
+// a CRD change, CRD YAML must already be present on the Manifest (embedded,
+// --crds, or fetched platform-crds.yaml).
 func BuildPlan(ctx context.Context, cs kubernetes.Interface, m *platformrelease.Manifest, sel Selection) (*Plan, error) {
 	if err := sel.validate(); err != nil {
 		return nil, err
-	}
-	if m.CRDChange {
-		return nil, core.NewWithSentinel(core.ErrUpdateCRDChange, fmt.Sprintf("release %s changes CustomResourceDefinitions; `mcp-runtime update` does not update CRDs in this version. Run `mcp-runtime setup` from the %s release instead", m.Version, m.Version))
 	}
 	if err := checkInstalled(ctx, cs); err != nil {
 		return nil, err
 	}
 	plan := &Plan{TargetVersion: m.Version, Preserved: append([]string(nil), preservedResources...)}
+	if m.CRDChange {
+		crds := strings.TrimSpace(m.CRDs)
+		if crds == "" {
+			return nil, core.NewWithSentinel(core.ErrUpdateCRDChange, fmt.Sprintf("release %s changes CustomResourceDefinitions but the manifest has no embedded crds; pass --crds <path|https-url> or use a release that publishes platform-manifest.json with crds / platform-crds.yaml", m.Version))
+		}
+		names, err := platformrelease.CRDObjectNames(crds)
+		if err != nil {
+			return nil, core.WrapWithSentinel(core.ErrUpdateManifestInvalid, err, fmt.Sprintf("release %s CRD bundle: %v", m.Version, err))
+		}
+		if len(names) == 0 {
+			return nil, core.NewWithSentinel(core.ErrUpdateManifestInvalid, fmt.Sprintf("release %s CRD bundle contains no CustomResourceDefinition objects", m.Version))
+		}
+		plan.ApplyCRDs = true
+		plan.CRDNames = names
+		plan.crdsYAML = crds
+		plan.Warnings = append(plan.Warnings, fmt.Sprintf("release %s applies CustomResourceDefinitions before image rollouts: %s", m.Version, strings.Join(names, ", ")))
+	}
 	only := sel.onlySet()
 	installedVersions := map[string]bool{}
 

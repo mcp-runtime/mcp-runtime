@@ -8,9 +8,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
+	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/yaml"
 )
 
@@ -21,10 +24,13 @@ const (
 	ManifestKind = "PlatformRelease"
 	// ManifestAssetName is the file name attached to GitHub releases.
 	ManifestAssetName = "platform-manifest.json"
+	// CRDsAssetName is the standalone multi-document CRD YAML attached to
+	// GitHub releases. update also accepts CRDs embedded in the manifest.
+	CRDsAssetName = "platform-crds.yaml"
 	// DefaultReleaseBaseURL is where --to resolves release manifests.
 	DefaultReleaseBaseURL = "https://github.com/mcp-runtime/mcp-runtime/releases/download"
 
-	maxManifestBytes    = 1 << 20
+	maxManifestBytes    = 4 << 20
 	manifestHTTPTimeout = 30 * time.Second
 )
 
@@ -38,9 +44,14 @@ type Manifest struct {
 	// empty, relative repositories resolve against the registry host of the
 	// image currently running in the cluster.
 	Registry string `json:"registry,omitempty"`
-	// CRDChange reports that this release changes CRDs. update v1 refuses such
-	// releases and directs operators to setup.
-	CRDChange  bool                `json:"crdChange,omitempty"`
+	// CRDChange reports that this release changes CustomResourceDefinitions.
+	// When true, update applies CRDs from CRDs (or --crds / platform-crds.yaml)
+	// before patching component images.
+	CRDChange bool `json:"crdChange,omitempty"`
+	// CRDs is a multi-document YAML of CustomResourceDefinitions embedded in
+	// the release manifest so `mcp-runtime update --to` can apply schema
+	// changes without a separate setup run.
+	CRDs       string              `json:"crds,omitempty"`
 	Components []ManifestComponent `json:"components"`
 }
 
@@ -142,6 +153,11 @@ func ReleaseManifestURL(version string) string {
 	return DefaultReleaseBaseURL + "/" + url.PathEscape(version) + "/" + ManifestAssetName
 }
 
+// ReleaseCRDsURL returns the GitHub release asset URL for the CRD bundle.
+func ReleaseCRDsURL(version string) string {
+	return DefaultReleaseBaseURL + "/" + url.PathEscape(version) + "/" + CRDsAssetName
+}
+
 // LoadManifest reads a manifest from a local path or an https:// URL.
 func LoadManifest(ctx context.Context, source string, client *http.Client) ([]byte, error) {
 	source = strings.TrimSpace(source)
@@ -191,12 +207,20 @@ func readLimited(r io.Reader) ([]byte, error) {
 }
 
 // GenerateManifest builds the default release manifest for version: every
-// MCP Runtime-built component, relative repositories, tag = version.
-func GenerateManifest(version string, crdChange bool) (*Manifest, error) {
+// MCP Runtime-built component, relative repositories, tag = version. When
+// crdChange is true, crdsYAML (multi-document CustomResourceDefinition YAML)
+// is embedded so update can apply schema changes from the release JSON alone.
+func GenerateManifest(version string, crdChange bool, crdsYAML string) (*Manifest, error) {
 	if _, err := ParseVersion(version); err != nil {
 		return nil, err
 	}
 	m := &Manifest{APIVersion: ManifestAPIVersion, Kind: ManifestKind, Version: version, CRDChange: crdChange}
+	if crdChange {
+		m.CRDs = strings.TrimSpace(crdsYAML)
+		if m.CRDs == "" {
+			return nil, errors.New("crdChange requires non-empty CRD YAML")
+		}
+	}
 	for _, c := range catalog {
 		if !c.Built || c.Repository == "" {
 			continue
@@ -204,4 +228,86 @@ func GenerateManifest(version string, crdChange bool) (*Manifest, error) {
 		m.Components = append(m.Components, ManifestComponent{Name: c.Name, Repository: c.Repository, Tag: version})
 	}
 	return m, m.Validate()
+}
+
+// BundleCRDs reads every .yaml/.yml file under dir (lexically sorted) and
+// returns a multi-document YAML bundle suitable for embedding in a release
+// manifest or publishing as platform-crds.yaml.
+func BundleCRDs(dir string) (string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", fmt.Errorf("read CRD directory %s: %w", dir, err)
+	}
+	var names []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		ext := strings.ToLower(filepath.Ext(name))
+		if ext != ".yaml" && ext != ".yml" {
+			continue
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	if len(names) == 0 {
+		return "", fmt.Errorf("no YAML CRDs found in %s", dir)
+	}
+	var b strings.Builder
+	for i, name := range names {
+		data, err := os.ReadFile(filepath.Join(dir, name)) // #nosec G304 -- release packaging of repo CRDs.
+		if err != nil {
+			return "", fmt.Errorf("read CRD %s: %w", name, err)
+		}
+		text := strings.TrimSpace(string(data))
+		if text == "" {
+			continue
+		}
+		if i > 0 {
+			b.WriteString("\n---\n")
+		}
+		b.WriteString(text)
+		b.WriteByte('\n')
+	}
+	out := strings.TrimSpace(b.String())
+	if out == "" {
+		return "", fmt.Errorf("CRD directory %s produced an empty bundle", dir)
+	}
+	return out, nil
+}
+
+// CRDObjectNames returns metadata.name values for CustomResourceDefinition
+// documents in a multi-document YAML bundle. Non-CRD documents are skipped.
+func CRDObjectNames(crdsYAML string) ([]string, error) {
+	crdsYAML = strings.TrimSpace(crdsYAML)
+	if crdsYAML == "" {
+		return nil, nil
+	}
+	decoder := k8syaml.NewYAMLOrJSONDecoder(strings.NewReader(crdsYAML), 4096)
+	var names []string
+	for {
+		var obj map[string]any
+		if err := decoder.Decode(&obj); err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return nil, fmt.Errorf("decode CRD bundle: %w", err)
+		}
+		if len(obj) == 0 {
+			continue
+		}
+		kind, _ := obj["kind"].(string)
+		if kind != "CustomResourceDefinition" {
+			continue
+		}
+		meta, _ := obj["metadata"].(map[string]any)
+		name, _ := meta["name"].(string)
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return nil, errors.New("CustomResourceDefinition missing metadata.name")
+		}
+		names = append(names, name)
+	}
+	return names, nil
 }

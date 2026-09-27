@@ -47,8 +47,16 @@ type WorkloadResult struct {
 	changes []imageChange
 }
 
+// CRDResult reports one CustomResourceDefinition apply outcome.
+type CRDResult struct {
+	Name   string `json:"name"`
+	Action string `json:"action,omitempty"`
+	Error  string `json:"error,omitempty"`
+}
+
 // Result is the outcome of applying a plan.
 type Result struct {
+	CRDs      []CRDResult      `json:"crds,omitempty"`
 	Workloads []WorkloadResult `json:"workloads"`
 	Failed    bool             `json:"failed"`
 }
@@ -64,6 +72,8 @@ type ApplyOptions struct {
 	Timeout           time.Duration
 	RollbackOnFailure bool
 	Waiter            RolloutWaiter
+	// Clients applies CRD YAML when the plan sets ApplyCRDs. Required only then.
+	Clients *k8sclient.Clients
 	// Progress receives human-readable progress lines (may be nil).
 	Progress func(string)
 }
@@ -89,9 +99,11 @@ func groupByWorkload(rows []Row) []*WorkloadResult {
 	return out
 }
 
-// Apply patches only the changed workloads, one at a time, waiting for each
-// rollout. On failure it stops and, when enabled, restores previous images of
-// every workload touched in this run in reverse order.
+// Apply applies release CRDs (when planned) then patches only the changed
+// workloads, one at a time, waiting for each rollout. On image-rollout
+// failure it stops and, when enabled, restores previous images of every
+// workload touched in this run in reverse order. CRD applies are not rolled
+// back (Kubernetes CRD downgrades are unsafe).
 func Apply(ctx context.Context, cs kubernetes.Interface, plan *Plan, opts ApplyOptions) *Result {
 	progress := opts.Progress
 	if progress == nil {
@@ -103,6 +115,26 @@ func Apply(ctx context.Context, cs kubernetes.Interface, plan *Plan, opts ApplyO
 	}
 	workloads := groupByWorkload(plan.Changed())
 	res := &Result{}
+
+	if plan.ApplyCRDs {
+		if opts.Clients == nil {
+			res.Failed = true
+			res.CRDs = []CRDResult{{Name: "*", Error: "Kubernetes dynamic client is required to apply CustomResourceDefinitions"}}
+			return res
+		}
+		progress(fmt.Sprintf("Applying CustomResourceDefinitions (%s)", stringsJoin(plan.CRDNames)))
+		applied, err := k8sclient.ApplyManifestYAML(ctx, opts.Clients, []byte(plan.crdsYAML), "")
+		if err != nil {
+			res.Failed = true
+			res.CRDs = append(res.CRDs, CRDResult{Name: "*", Error: err.Error()})
+			return res
+		}
+		for _, a := range applied {
+			res.CRDs = append(res.CRDs, CRDResult{Name: a.Name, Action: a.Action})
+			progress(fmt.Sprintf("CRD %s %s", a.Name, a.Action))
+		}
+	}
+
 	var touched []*WorkloadResult
 
 	for _, w := range workloads {
@@ -150,6 +182,17 @@ func joinErr(a, b string) string {
 		return b
 	}
 	return a + "; " + b
+}
+
+func stringsJoin(parts []string) string {
+	if len(parts) == 0 {
+		return "-"
+	}
+	out := parts[0]
+	for i := 1; i < len(parts); i++ {
+		out += ", " + parts[i]
+	}
+	return out
 }
 
 // buildPatch renders the strategic-merge patch for a workload. It sets only
