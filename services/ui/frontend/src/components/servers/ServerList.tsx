@@ -4,7 +4,6 @@ import { Button } from "../../ui/Button";
 import { CopyButton } from "../../ui/CopyButton";
 import { StatusBadge } from "../../ui/Badge";
 import { Icon } from "../../ui/Icon";
-import { observabilitySessionProxyURL } from "../../api/observabilityLinks";
 import { EmptyState } from "../../ui/States";
 import { formatAbsolute, formatAge } from "../../lib/format";
 import {
@@ -122,7 +121,7 @@ export function ServerList({
           );
           const observability = server.observability;
           const hasObservability = Boolean(
-            observability && (observability.grafana.available || observability.prometheus.queries.length)
+            observability && ((observability.grafana.available && observability.grafana.url) || observability.prometheus.queries.some((query) => query.grafana_url))
           );
 
           return (
@@ -225,7 +224,7 @@ export function ServerList({
                     {observability?.grafana.available && observability.grafana.url ? (
                       <a
                         className="quiet-link"
-                        href={observabilitySessionProxyURL(observability.grafana.url, "grafana/dashboard")}
+                        href={observability.grafana.url}
                         target="_blank"
                         rel="noreferrer"
                         data-testid="server-card-grafana-link"
@@ -233,11 +232,11 @@ export function ServerList({
                         Grafana <Icon name="external" size={11} />
                       </a>
                     ) : null}
-                    {observability?.prometheus.queries.map((query) => (
+                    {observability?.prometheus.queries.filter((query) => query.grafana_url).map((query) => (
                       <a
                         key={query.id}
                         className="quiet-link"
-                        href={observabilitySessionProxyURL(query.url, "prometheus/query")}
+                        href={query.grafana_url}
                         target="_blank"
                         rel="noreferrer"
                         title={query.description}

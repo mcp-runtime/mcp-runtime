@@ -581,7 +581,7 @@ describe("ServersWorkspace connect config, protocol inventory, and observability
           namespace: "mcp-servers",
           server: "workspace-assistant",
           prometheus: {
-            queries: [{ id: "latency", name: "Latency", description: "p99 latency", url: "http://prom/query?latency" }],
+            queries: [{ id: "latency", name: "Latency", description: "p99 latency", url: "http://prom/query?latency", grafana_url: "http://grafana/d/workspace-assistant?viewPanel=4" }],
             direct_admin_only: false,
           },
           grafana: { available: true, url: "http://grafana/d/workspace-assistant", direct_admin_only: false },
@@ -656,7 +656,7 @@ describe("ServersWorkspace connect config, protocol inventory, and observability
     const observability = within(richCard).getByTestId("server-card-observability");
     const grafanaLink = within(observability).getByTestId("server-card-grafana-link");
     expect(grafanaLink).toHaveAttribute("href", "http://grafana/d/workspace-assistant");
-    expect(observability).toHaveTextContent("Latency");
+    expect(within(observability).getByText("Latency").closest("a")).toHaveAttribute("href", "http://grafana/d/workspace-assistant?viewPanel=4");
   });
 });
 

@@ -1,0 +1,87 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: mcp-sentinel
+data:
+  dashboard-provider.yaml: |
+    apiVersion: 1
+    providers:
+      - name: MCP Runtime
+        orgId: 1
+        folder: MCP Runtime
+        type: file
+        disableDeletion: true
+        allowUiUpdates: false
+        updateIntervalSeconds: 30
+        options:
+          path: /etc/grafana/dashboards
+  mcp-server.json: |
+    {
+      "annotations": {"list": []},
+      "editable": false,
+      "panels": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "mappings": [{"options": {"0": {"color": "red", "index": 1, "text": "Down"}, "1": {"color": "green", "index": 0, "text": "Up"}}, "type": "value"}],
+              "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]},
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+          "id": 1,
+          "options": {"colorMode": "value", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}},
+          "targets": [{"expr": "up{namespace=\"$namespace\",server=\"$server\"}", "refId": "A"}],
+          "title": "Target health",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "unit": "short"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+          "id": 2,
+          "options": {"legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "single", "sort": "none"}},
+          "targets": [{"expr": "sum(rate(mcp_gateway_requests_total{namespace=\"$namespace\",server=\"$server\"}[5m]))", "legendFormat": "requests/sec", "refId": "A"}],
+          "title": "Request rate",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "unit": "short"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+          "id": 3,
+          "options": {"legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "single", "sort": "none"}},
+          "targets": [{"expr": "sum(rate(mcp_gateway_policy_decisions_total{namespace=\"$namespace\",server=\"$server\",decision=\"deny\"}[5m]))", "legendFormat": "denials/sec", "refId": "A"}],
+          "title": "Deny rate",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "unit": "s"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+          "id": 4,
+          "options": {"legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "single", "sort": "none"}},
+          "targets": [{"expr": "histogram_quantile(0.95, sum(rate(mcp_gateway_request_duration_seconds_bucket{namespace=\"$namespace\",server=\"$server\"}[5m])) by (le))", "legendFormat": "p95", "refId": "A"}],
+          "title": "p95 latency",
+          "type": "timeseries"
+        }
+      ],
+      "refresh": "30s",
+      "schemaVersion": 39,
+      "tags": ["mcp-runtime"],
+      "templating": {
+        "list": [
+          {"current": {"selected": true, "text": "", "value": ""}, "label": "Namespace", "name": "namespace", "options": [], "query": "", "type": "textbox"},
+          {"current": {"selected": true, "text": "", "value": ""}, "label": "Server", "name": "server", "options": [], "query": "", "type": "textbox"}
+        ]
+      },
+      "time": {"from": "now-1h", "to": "now"},
+      "timezone": "browser",
+      "title": "MCP Server",
+      "uid": "mcp-server",
+      "version": 1
+    }
