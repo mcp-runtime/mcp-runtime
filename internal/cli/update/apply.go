@@ -17,6 +17,7 @@ import (
 // Workload outcome states.
 const (
 	StatusUpdated        = "updated"
+	StatusSkipped        = "skipped"
 	StatusFailed         = "failed"
 	StatusRolledBack     = "rolled-back"
 	StatusRollbackFailed = "rollback-failed"
@@ -132,6 +133,17 @@ func Apply(ctx context.Context, cs kubernetes.Interface, plan *Plan, opts ApplyO
 	var touched []*WorkloadResult
 
 	for _, w := range workloads {
+		current, err := workloadAlreadyCurrent(ctx, cs, w)
+		if err != nil {
+			w.Status, w.Error = StatusFailed, fmt.Sprintf("read deployment: %v", err)
+			res.Failed = true
+			break
+		}
+		if current {
+			w.Status = StatusSkipped
+			progress(fmt.Sprintf("Skipping %s/%s (already on target images)", w.Namespace, w.Deployment))
+			continue
+		}
 		progress(fmt.Sprintf("Updating %s/%s (%v)", w.Namespace, w.Deployment, w.Components))
 		touched = append(touched, w)
 		if err := patchWorkload(ctx, cs, w, plan.TargetVersion, false); err != nil {
@@ -255,6 +267,32 @@ func patchWorkload(ctx context.Context, cs kubernetes.Interface, w *WorkloadResu
 	}
 	_, err = cs.AppsV1().Deployments(w.Namespace).Patch(ctx, w.Deployment, types.StrategicMergePatchType, patch, metav1.PatchOptions{FieldManager: "mcp-runtime-update"})
 	return err
+}
+
+// workloadAlreadyCurrent reports whether every planned image/env change is
+// already present on the live Deployment (no-op patch).
+func workloadAlreadyCurrent(ctx context.Context, cs kubernetes.Interface, w *WorkloadResult) (bool, error) {
+	deploy, err := cs.AppsV1().Deployments(w.Namespace).Get(ctx, w.Deployment, metav1.GetOptions{})
+	if err != nil {
+		return false, err
+	}
+	for _, ch := range w.changes {
+		c := ch.component
+		container := findContainer(deploy.Spec.Template.Spec.Containers, c.Container)
+		if container == nil {
+			return false, nil
+		}
+		if c.EnvVar != "" {
+			if envValue(container.Env, c.EnvVar) != ch.target {
+				return false, nil
+			}
+			continue
+		}
+		if container.Image != ch.target {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func recoveryCommands(w *WorkloadResult) []string {

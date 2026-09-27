@@ -5,22 +5,29 @@ repository, tag, optional digest), selected with --to (fetches the manifest
 attached to that GitHub release) or --release-manifest (local path or https
 URL). update compares it with the images running in the cluster and patches
 only the Deployments whose images changed, one at a time, waiting for each
-rollout.
+rollout. Every component the release changes is included; unchanged
+components are left alone.
 
 When the release sets crdChange, the manifest embeds CustomResourceDefinition
-YAML (field "crds") so update applies only those CRD objects, waits until
-each is Established, then rolls images. Pass --crds or use the release's
-platform-crds.yaml when the JSON omits the bundle. With --only, CRD apply is
-skipped so scoped image updates cannot mutate cluster schemas. update never
-modifies Secrets, PVCs, ConfigMaps, cert-manager Issuers/Certificates,
-Services, or Ingresses, and never deletes or recreates workloads. mcp-auth
-and cert-manager are skipped unless selected with --include-auth,
---include-cert-manager, or --only.
+YAML (field "crds") so update applies only those CRD objects whose live spec
+differs, waits until each written CRD is Established, then rolls images. Pass
+--crds or use the release's platform-crds.yaml when the JSON omits the bundle.
+With --only, CRD apply is skipped so scoped image updates cannot mutate
+cluster schemas. update never modifies Secrets, PVCs, ConfigMaps, cert-manager
+Issuers/Certificates, Services, or Ingresses, and never deletes or recreates
+workloads. mcp-auth and cert-manager are skipped unless selected with
+--include-auth, --include-cert-manager, or --only.
+
+With --build, update builds and pushes only Built-component images from the
+release that are missing from the registry (sequential by default; use
+--build-parallelism to raise concurrency), then rolls those Deployments.
+Images already present are reused; Deployments still on an older tag are
+patched. Failed builds retry once and cancel sibling builds. Without --build,
+images must already be published.
 
 The plan always shows the kube context and cluster ID. Without --dry-run,
 update asks for confirmation (or requires --yes when not interactive).
-Images must already be published to the registry the manifest resolves to;
-relative repositories resolve against the registry of the running image.
+Relative repositories resolve against the registry of the running image.
 
 Usage:
   mcp-runtime update [flags]
@@ -30,13 +37,17 @@ Examples:
   mcp-runtime update --release-manifest ./platform-manifest.json
   mcp-runtime update --to v0.5.0 --only ui,platform-api --yes
   mcp-runtime update --release-manifest ./platform-manifest.json --crds ./platform-crds.yaml --yes
+  mcp-runtime update --to v0.3.1 --release-manifest ./platform-manifest.json --build --source . --yes
 
 Flags:
       --allow-downgrade           Allow a target version lower than the installed version
+      --build                     Build and push missing Built-component images from --source before rolling Deployments
+      --build-parallelism int     Max concurrent image builds with --build (default 1; raise carefully) (default 1)
       --context string            Kubernetes context to use (default: current context)
       --crds string               CRD multi-document YAML path or https URL when the manifest omits embedded crds (optional; --to also tries platform-crds.yaml)
       --dry-run                   Print the update plan and exit without changing the cluster
   -h, --help                      help for update
+      --image-platform string     Docker --platform for --build (default: MCP_IMAGE_PLATFORM or linux/amd64)
       --include-auth              Include the mcp-auth authorization server
       --include-cert-manager      Include cert-manager images (patch releases only; CRDs are not upgraded)
       --kubeconfig string         Path to kubeconfig file (default: KUBECONFIG or ~/.kube/config)
@@ -44,6 +55,7 @@ Flags:
       --output string             Output format: text or json (default "text")
       --release-manifest string   Release component manifest path or https URL; its version must match --to when both are set
       --rollback-on-failure       Restore previous images of workloads changed in this run if a rollout fails (default true)
+      --source string             Repository root used with --build (must contain go.mod, services/, k8s/) (default ".")
       --timeout duration          Rollout wait timeout per workload (default 5m0s)
       --to string                 Target release version (for example v0.5.0); fetches that release's platform-manifest.json unless --release-manifest is set
       --yes                       Apply without the interactive confirmation prompt

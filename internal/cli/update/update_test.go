@@ -389,8 +389,9 @@ func TestCRDReadyConditions(t *testing.T) {
 	obj["status"].(map[string]any)["conditions"] = []any{
 		map[string]any{"type": "Established", "status": "False", "message": "pending"},
 	}
-	if _, _, err := crdReadyConditions(obj); err == nil || !strings.Contains(err.Error(), "Established=False") {
-		t.Fatalf("expected Established=False error, got %v", err)
+	est, names, err = crdReadyConditions(obj)
+	if err != nil || est || names {
+		t.Fatalf("Established=False should keep polling, got est=%v names=%v err=%v", est, names, err)
 	}
 }
 
@@ -644,5 +645,188 @@ func TestCommandRolloutFailureReturnsError(t *testing.T) {
 	}
 	if !strings.Contains(out, "Manual recovery commands") {
 		t.Fatalf("missing recovery:\n%s", out)
+	}
+}
+
+func TestPlanImageBuildsChangedOnlyReuseAndBuild(t *testing.T) {
+	cs := fake.NewSimpleClientset(installed("v0.4.0")...)
+	plan, err := BuildPlan(context.Background(), cs, manifest(t, "v0.5.0"), Selection{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	present := map[string]bool{
+		reg + "/mcp-sentinel-ui:v0.5.0": true,
+	}
+	actions, err := planImageBuilds(context.Background(), plan, BuildOptions{
+		RegistryHasImage: func(_ context.Context, image string) (bool, error) {
+			return present[image], nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(actions) < 7 {
+		t.Fatalf("expected every changed Built image, got %d: %+v", len(actions), actions)
+	}
+	byComp := map[string]ImageBuildAction{}
+	for _, a := range actions {
+		byComp[a.Component] = a
+	}
+	if a := byComp["ui"]; a.Action != ImageActionReuse {
+		t.Fatalf("ui should reuse existing tag: %+v", a)
+	}
+	if a := byComp["platform-api"]; a.Action != ImageActionBuild {
+		t.Fatalf("platform-api should build: %+v", a)
+	}
+	if _, ok := byComp["operator"]; !ok {
+		t.Fatal("operator must be in build plan when release changes it")
+	}
+}
+
+func TestBuildAndPushChangedSkipsReuse(t *testing.T) {
+	var built, pushed []string
+	actions := []ImageBuildAction{
+		{Component: "ui", Image: reg + "/mcp-sentinel-ui:v0.5.0", Action: ImageActionReuse},
+		{Component: "platform-api", Image: reg + "/mcp-platform-api:v0.5.0", Action: ImageActionBuild},
+	}
+	err := buildAndPushChanged(context.Background(), actions, BuildOptions{
+		Enabled: true,
+		Source:  ".",
+		BuildImage: func(_ context.Context, _, _ string, spec imageBuildSpec, image string) error {
+			built = append(built, spec.Component+":"+image)
+			return nil
+		},
+		PushImage: func(_ context.Context, image string) error {
+			pushed = append(pushed, image)
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(built) != 1 || !strings.Contains(built[0], "platform-api") {
+		t.Fatalf("built = %v", built)
+	}
+	if len(pushed) != 1 || pushed[0] != reg+"/mcp-platform-api:v0.5.0" {
+		t.Fatalf("pushed = %v", pushed)
+	}
+}
+
+func TestApplySkipsAlreadyCurrentDeployment(t *testing.T) {
+	cs := fake.NewSimpleClientset(installed("v0.5.0")...)
+	// Force a plan row that thinks ui needs update while the live image already matches.
+	plan, err := BuildPlan(context.Background(), cs, manifest(t, "v0.5.0", setComponent("ui", "mcp-sentinel-ui", "v0.5.1", "")), Selection{Only: []string{"ui"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Pretend inventory said update, but put the target image on the Deployment before Apply.
+	ui, _ := cs.AppsV1().Deployments("mcp-sentinel").Get(context.Background(), "mcp-sentinel-ui", metav1.GetOptions{})
+	ui.Spec.Template.Spec.Containers[0].Image = reg + "/mcp-sentinel-ui:v0.5.1"
+	_, _ = cs.AppsV1().Deployments("mcp-sentinel").Update(context.Background(), ui, metav1.UpdateOptions{})
+	cs.ClearActions()
+
+	res := Apply(context.Background(), cs, plan, ApplyOptions{Timeout: time.Second, Waiter: noopWaiter})
+	if res.Failed || len(res.Workloads) != 1 || res.Workloads[0].Status != StatusSkipped {
+		t.Fatalf("res = %+v", res)
+	}
+	if len(patchedDeployments(cs)) != 0 {
+		t.Fatalf("expected no patch, got %v", patchedDeployments(cs))
+	}
+}
+
+func TestCRDSpecEqualAndDecode(t *testing.T) {
+	yamlDoc := "apiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\nmetadata:\n  name: mcpservers.mcpruntime.org\nspec:\n  group: mcpruntime.org\n"
+	docs, err := decodeCRDDocuments(yamlDoc)
+	if err != nil || len(docs) != 1 || docs[0].Name != "mcpservers.mcpruntime.org" {
+		t.Fatalf("docs = %+v err=%v", docs, err)
+	}
+	live := map[string]any{"spec": docs[0].Object["spec"], "status": map[string]any{"conditions": []any{}}}
+	if !crdSpecEqual(docs[0].Object, live) {
+		t.Fatal("expected matching specs")
+	}
+	live["spec"] = map[string]any{"group": "other.org"}
+	if crdSpecEqual(docs[0].Object, live) {
+		t.Fatal("expected differing specs")
+	}
+}
+
+func TestCommandBuildDryRunPlansImagesWithoutDocker(t *testing.T) {
+	cs := fake.NewSimpleClientset(installed("v0.4.0")...)
+	d := testDeps(cs, manifest(t, "v0.5.0"), func(io.Reader, io.Writer, ClusterInfo) (bool, error) {
+		t.Fatal("dry-run must not prompt")
+		return false, nil
+	})
+	d.build = BuildOptions{
+		BuildImage: func(context.Context, string, string, imageBuildSpec, string) error {
+			t.Fatal("dry-run must not build")
+			return nil
+		},
+		PushImage: func(context.Context, string) error {
+			t.Fatal("dry-run must not push")
+			return nil
+		},
+	}
+	out, err := execute(t, d, "--to", "v0.5.0", "--dry-run", "--build", "--source", ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "Images (--build):") || !strings.Contains(out, "build") {
+		t.Fatalf("expected build plan:\n%s", out)
+	}
+	if !strings.Contains(out, "registry not checked") {
+		t.Fatalf("dry-run should skip registry probe:\n%s", out)
+	}
+	if !strings.Contains(out, "image build(s)") {
+		t.Fatalf("expected dry-run build summary:\n%s", out)
+	}
+	if len(patchedDeployments(cs)) != 0 {
+		t.Fatal("dry-run patched deployments")
+	}
+}
+
+func TestBuildAndPushRetriesThenSucceeds(t *testing.T) {
+	attempts := 0
+	actions := []ImageBuildAction{
+		{Component: "ui", Image: reg + "/mcp-sentinel-ui:v0.5.0", Action: ImageActionBuild},
+	}
+	err := buildAndPushChanged(context.Background(), actions, BuildOptions{
+		Enabled: true,
+		Source:  ".",
+		Retries: 1,
+		BuildImage: func(context.Context, string, string, imageBuildSpec, string) error {
+			attempts++
+			if attempts == 1 {
+				return errors.New("fatal error: fault")
+			}
+			return nil
+		},
+		PushImage: func(context.Context, string) error { return nil },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 2 {
+		t.Fatalf("attempts = %d, want 2", attempts)
+	}
+}
+
+func TestIsRegistryNotFound(t *testing.T) {
+	if !isRegistryNotFound("manifest unknown: tag v0.3.1") {
+		t.Fatal("expected not-found")
+	}
+	if isRegistryNotFound("unauthorized: authentication required") {
+		t.Fatal("auth errors must not look like missing")
+	}
+}
+
+func TestPlanOnlyTrimsSpaces(t *testing.T) {
+	cs := fake.NewSimpleClientset(installed("v0.4.0")...)
+	plan, err := BuildPlan(context.Background(), cs, manifest(t, "v0.5.0"), Selection{Only: []string{" ui ", "platform-api"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := plan.Changed()
+	if len(changed) != 2 {
+		t.Fatalf("changed = %+v", changed)
 	}
 }

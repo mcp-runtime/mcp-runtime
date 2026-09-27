@@ -794,6 +794,7 @@ mcp-runtime update --to v0.5.0 --dry-run
 mcp-runtime update --release-manifest ./platform-manifest.json
 mcp-runtime update --to v0.5.0 --only ui,platform-api --yes
 mcp-runtime update --release-manifest ./platform-manifest.json --crds ./platform-crds.yaml --yes
+mcp-runtime update --to v0.3.1 --release-manifest ./platform-manifest.json --build --source . --yes
 ```
 
 The target comes from a release component manifest (service -> image
@@ -801,24 +802,32 @@ repository, tag, optional digest), selected with `--to` (fetches the manifest
 attached to that GitHub release) or `--release-manifest` (local path or https
 URL). update compares it with the images running in the cluster and patches
 only the Deployments whose images changed, one at a time, waiting for each
-rollout.
+rollout. Every component the release changes is included; unchanged components
+are left alone.
 
 When a release sets `crdChange`, the published `platform-manifest.json` embeds
 CustomResourceDefinition YAML in the `crds` field (and the release also ships
-`platform-crds.yaml`). update applies only CRD objects from that bundle, waits
-until each CRD is Established, then rolls images. Pass `--crds` only when a
-local manifest omits the embedded bundle. With `--only`, CRD apply is skipped
-so a scoped image update cannot mutate cluster schemas; re-run without `--only`
-to apply schema changes. `--dry-run` prints the plan only and does not
-server-side validate CRD apply. update never modifies Secrets, PVCs,
-ConfigMaps, cert-manager Issuers/Certificates, Services, or Ingresses, and
-never deletes or recreates workloads. mcp-auth and cert-manager are skipped
-unless selected with `--include-auth`, `--include-cert-manager`, or `--only`.
+`platform-crds.yaml`). update applies only CRD objects whose live spec differs
+from the release, waits until each written CRD is Established, then rolls
+images. Pass `--crds` only when a local manifest omits the embedded bundle.
+With `--only`, CRD apply is skipped so a scoped image update cannot mutate
+cluster schemas; re-run without `--only` to apply schema changes. `--dry-run`
+prints the plan only and does not apply CRDs or roll images. update never
+modifies Secrets, PVCs, ConfigMaps, cert-manager Issuers/Certificates,
+Services, or Ingresses, and never deletes or recreates workloads. mcp-auth and
+cert-manager are skipped unless selected with `--include-auth`,
+`--include-cert-manager`, or `--only`.
+
+With `--build`, update builds and pushes only Built-component images from the
+release plan that are missing from the registry (from `--source`, default `.`),
+then rolls Deployments that still run an older tag. Builds run sequentially by
+default (`--build-parallelism 1`); raise carefully. Failed builds retry once
+and cancel sibling builds. Tags already in the registry are reused. Without
+`--build`, images must already be published.
 
 The plan always shows the kube context and cluster ID. Without `--dry-run`,
 update asks for confirmation (or requires `--yes` when not interactive).
-Images must already be published to the registry the manifest resolves to;
-relative repositories resolve against the registry of the running image.
+Relative repositories resolve against the registry of the running image.
 
 | Flag | Default | Notes |
 |---|---|---|
@@ -834,6 +843,10 @@ relative repositories resolve against the registry of the running image.
 | `--rollback-on-failure` | `true` | Restore previous images of workloads changed in this run if a rollout fails |
 | `--timeout` | `5m0s` | Rollout wait timeout per workload |
 | `--output` | `text` | Output format: text or json |
+| `--build` | `false` | Build and push missing Built-component images from `--source` before rolling |
+| `--source` | `.` | Repository root used with `--build` |
+| `--image-platform` | `MCP_IMAGE_PLATFORM` or `linux/amd64` | Docker `--platform` for `--build` |
+| `--build-parallelism` | `1` | Max concurrent image builds with `--build` |
 | `--kubeconfig`, `--context` | current kubeconfig context | Target cluster |
 
 Components: `operator`, `gateway-proxy`, `platform-api`, `runtime-api`,

@@ -22,6 +22,8 @@ func writePlanText(out io.Writer, plan *Plan) {
 	fmt.Fprintf(out, "  Version:        %s -> %s\n", dash(plan.InstalledVersion), plan.TargetVersion)
 	if plan.ApplyCRDs {
 		fmt.Fprintf(out, "  CRDs:           apply %s\n", stringsJoin(plan.CRDNames))
+	} else if len(plan.CRDPreview) > 0 {
+		fmt.Fprintf(out, "  CRDs:           all match release (skip apply)\n")
 	}
 	fmt.Fprintln(out)
 
@@ -39,6 +41,25 @@ func writePlanText(out io.Writer, plan *Plan) {
 	}
 	_ = tw.Flush()
 
+	if len(plan.ImageBuilds) > 0 {
+		fmt.Fprintln(out, "\nImages (--build):")
+		tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(tw, "COMPONENT\tIMAGE\tACTION\tREASON")
+		for _, a := range plan.ImageBuilds {
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", a.Component, a.Image, a.Action, dash(a.Reason))
+		}
+		_ = tw.Flush()
+	}
+	if len(plan.CRDPreview) > 0 {
+		fmt.Fprintln(out, "\nCustomResourceDefinitions:")
+		tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(tw, "CRD\tACTION")
+		for _, c := range plan.CRDPreview {
+			fmt.Fprintf(tw, "%s\t%s\n", c.Name, dash(c.Action))
+		}
+		_ = tw.Flush()
+	}
+
 	if len(plan.Warnings) > 0 {
 		fmt.Fprintln(out, "\nWarnings:")
 		for _, w := range plan.Warnings {
@@ -48,6 +69,30 @@ func writePlanText(out io.Writer, plan *Plan) {
 	fmt.Fprintln(out, "\nPreserved (never modified by update):")
 	for _, p := range plan.Preserved {
 		fmt.Fprintf(out, "  - %s\n", p)
+	}
+}
+
+func writeConfirmSummary(out io.Writer, plan *Plan, build bool) {
+	fmt.Fprintln(out)
+	if plan.ApplyCRDs {
+		fmt.Fprintf(out, "This update will apply CustomResourceDefinitions (%s) before rolling images.\n", stringsJoin(plan.CRDNames))
+	}
+	if build && len(plan.ImageBuilds) > 0 {
+		var builds, reuses int
+		for _, a := range plan.ImageBuilds {
+			if a.Action == ImageActionBuild {
+				builds++
+			} else {
+				reuses++
+			}
+		}
+		fmt.Fprintf(out, "Image builds: %d to build, %d to reuse from the registry.\n", builds, reuses)
+	}
+	for _, r := range plan.Changed() {
+		if r.Component == "gateway-proxy" {
+			fmt.Fprintln(out, "Note: gateway-proxy change restarts tenant MCP server pods.")
+			break
+		}
 	}
 }
 

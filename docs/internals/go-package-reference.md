@@ -3295,6 +3295,7 @@ var (
 	ErrUpdateConfirmationMissing = newSentinelError("update confirmation required", errx.CodeSetup, errx.DescSetup)
 	ErrUpdateAborted             = newSentinelError("update aborted", errx.CodeSetup, errx.DescSetup)
 	ErrUpdateRolloutFailed       = newSentinelError("platform update rollout failed", errx.CodeSetup, errx.DescSetup)
+	ErrUpdateBuildFailed         = newSentinelError("platform update image build failed", errx.CodeSetup, errx.DescSetup)
 
 	// Cert errors.
 	ErrCertManagerNotInstalled     = newSentinelError("cert-manager not installed", errx.CodeCert, errx.DescCert)

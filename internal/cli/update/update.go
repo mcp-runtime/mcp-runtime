@@ -40,6 +40,10 @@ type Options struct {
 	Output             string
 	Kubeconfig         string
 	Context            string
+	Build              bool
+	Source             string
+	ImagePlatform      string
+	BuildParallelism   int
 }
 
 // kubeHandle is the Kubernetes client pair update needs for inventory and CRD apply.
@@ -56,6 +60,7 @@ type deps struct {
 	waiter       func(cs kubernetes.Interface) RolloutWaiter
 	confirm      func(in io.Reader, out io.Writer, cluster ClusterInfo) (bool, error)
 	stdin        io.Reader
+	build        BuildOptions
 }
 
 func defaultDeps() deps {
@@ -87,26 +92,34 @@ repository, tag, optional digest), selected with --to (fetches the manifest
 attached to that GitHub release) or --release-manifest (local path or https
 URL). update compares it with the images running in the cluster and patches
 only the Deployments whose images changed, one at a time, waiting for each
-rollout.
+rollout. Every component the release changes is included; unchanged
+components are left alone.
 
 When the release sets crdChange, the manifest embeds CustomResourceDefinition
-YAML (field "crds") so update applies only those CRD objects, waits until
-each is Established, then rolls images. Pass --crds or use the release's
-platform-crds.yaml when the JSON omits the bundle. With --only, CRD apply is
-skipped so scoped image updates cannot mutate cluster schemas. update never
-modifies Secrets, PVCs, ConfigMaps, cert-manager Issuers/Certificates,
-Services, or Ingresses, and never deletes or recreates workloads. mcp-auth
-and cert-manager are skipped unless selected with --include-auth,
---include-cert-manager, or --only.
+YAML (field "crds") so update applies only those CRD objects whose live spec
+differs, waits until each written CRD is Established, then rolls images. Pass
+--crds or use the release's platform-crds.yaml when the JSON omits the bundle.
+With --only, CRD apply is skipped so scoped image updates cannot mutate
+cluster schemas. update never modifies Secrets, PVCs, ConfigMaps, cert-manager
+Issuers/Certificates, Services, or Ingresses, and never deletes or recreates
+workloads. mcp-auth and cert-manager are skipped unless selected with
+--include-auth, --include-cert-manager, or --only.
+
+With --build, update builds and pushes only Built-component images from the
+release that are missing from the registry (sequential by default; use
+--build-parallelism to raise concurrency), then rolls those Deployments.
+Images already present are reused; Deployments still on an older tag are
+patched. Failed builds retry once and cancel sibling builds. Without --build,
+images must already be published.
 
 The plan always shows the kube context and cluster ID. Without --dry-run,
 update asks for confirmation (or requires --yes when not interactive).
-Images must already be published to the registry the manifest resolves to;
-relative repositories resolve against the registry of the running image.`,
+Relative repositories resolve against the registry of the running image.`,
 		Example: `  mcp-runtime update --to v0.5.0 --dry-run
   mcp-runtime update --release-manifest ./platform-manifest.json
   mcp-runtime update --to v0.5.0 --only ui,platform-api --yes
-  mcp-runtime update --release-manifest ./platform-manifest.json --crds ./platform-crds.yaml --yes`,
+  mcp-runtime update --release-manifest ./platform-manifest.json --crds ./platform-crds.yaml --yes
+  mcp-runtime update --to v0.3.1 --release-manifest ./platform-manifest.json --build --source . --yes`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return run(cmd.Context(), cmd.OutOrStdout(), opts, d)
@@ -127,6 +140,10 @@ relative repositories resolve against the registry of the running image.`,
 	f.StringVar(&opts.Output, "output", "text", "Output format: text or json")
 	f.StringVar(&opts.Kubeconfig, "kubeconfig", "", "Path to kubeconfig file (default: KUBECONFIG or ~/.kube/config)")
 	f.StringVar(&opts.Context, "context", "", "Kubernetes context to use (default: current context)")
+	f.BoolVar(&opts.Build, "build", false, "Build and push missing Built-component images from --source before rolling Deployments")
+	f.StringVar(&opts.Source, "source", ".", "Repository root used with --build (must contain go.mod, services/, k8s/)")
+	f.StringVar(&opts.ImagePlatform, "image-platform", "", "Docker --platform for --build (default: MCP_IMAGE_PLATFORM or linux/amd64)")
+	f.IntVar(&opts.BuildParallelism, "build-parallelism", defaultBuildParallelism, "Max concurrent image builds with --build (default 1; raise carefully)")
 	return cmd
 }
 
@@ -157,6 +174,14 @@ func run(ctx context.Context, out io.Writer, opts Options, d deps) error {
 	plan.Cluster = kh.Cluster
 	plan.ManifestSource = source
 
+	if plan.ApplyCRDs && kh.Clients != nil {
+		preview, err := refineCRDPlan(ctx, kh.Clients, plan)
+		if err != nil {
+			return core.WrapWithSentinel(core.ErrUpdateCRDChange, err, fmt.Sprintf("compare CustomResourceDefinitions: %v", err))
+		}
+		plan.CRDPreview = preview
+	}
+
 	jsonOut := opts.Output == "json"
 	report := func(res *Result) error {
 		if jsonOut {
@@ -167,11 +192,11 @@ func run(ctx context.Context, out io.Writer, opts Options, d deps) error {
 		}
 		return nil
 	}
-	if !jsonOut {
-		writePlanText(out, plan)
-	}
 
 	if blocked := plan.Blocked(); len(blocked) > 0 {
+		if !jsonOut {
+			writePlanText(out, plan)
+		}
 		_ = report(nil)
 		names := make([]string, 0, len(blocked))
 		for _, r := range blocked {
@@ -179,6 +204,40 @@ func run(ctx context.Context, out io.Writer, opts Options, d deps) error {
 		}
 		return core.NewWithSentinel(core.ErrUpdateBlocked, fmt.Sprintf("update blocked for %s; see plan reasons", strings.Join(names, ", ")))
 	}
+
+	buildOpts := d.build
+	buildOpts.Enabled = opts.Build
+	if opts.Build {
+		if buildOpts.Source == "" {
+			buildOpts.Source = opts.Source
+		}
+		if buildOpts.ImagePlatform == "" {
+			buildOpts.ImagePlatform = opts.ImagePlatform
+		}
+		if buildOpts.Parallelism <= 0 {
+			buildOpts.Parallelism = opts.BuildParallelism
+		}
+		if buildOpts.Out == nil {
+			buildOpts.Out = out
+		}
+		// Dry-run must not require Docker/registry unless a test injects a probe.
+		if opts.DryRun && buildOpts.RegistryHasImage == nil {
+			buildOpts.SkipRegistryProbe = true
+		}
+		if err := rewriteBuiltTargetsToTags(plan); err != nil {
+			return core.WrapWithSentinel(core.ErrUpdateBuildFailed, err, err.Error())
+		}
+		actions, err := planImageBuilds(ctx, plan, buildOpts)
+		if err != nil {
+			return core.WrapWithSentinel(core.ErrUpdateBuildFailed, err, err.Error())
+		}
+		plan.ImageBuilds = actions
+	}
+
+	if !jsonOut {
+		writePlanText(out, plan)
+	}
+
 	changed := plan.Changed()
 	if opts.DryRun || !plan.NeedsApply() {
 		if !jsonOut {
@@ -190,15 +249,27 @@ func run(ctx context.Context, out io.Writer, opts Options, d deps) error {
 				if plan.ApplyCRDs {
 					extra = fmt.Sprintf(" and %d CustomResourceDefinition(s)", len(plan.CRDNames))
 				}
-				fmt.Fprintf(out, "\nDry run (plan only; no CRD apply or rollouts were attempted): %d component(s)%s would be updated. Re-run without --dry-run to apply.\n", n, extra)
+				buildNote := ""
+				if opts.Build {
+					var builds, reuses int
+					for _, a := range plan.ImageBuilds {
+						if a.Action == ImageActionBuild {
+							builds++
+						} else {
+							reuses++
+						}
+					}
+					buildNote = fmt.Sprintf(" (%d image build(s), %d reuse)", builds, reuses)
+				}
+				fmt.Fprintf(out, "\nDry run (plan only; no CRD apply, builds, or rollouts were attempted): %d component(s)%s%s would be updated. Re-run without --dry-run to apply.\n", n, extra, buildNote)
 			}
 		}
 		return report(nil)
 	}
 
 	if !opts.Yes {
-		if plan.ApplyCRDs && !jsonOut {
-			fmt.Fprintf(out, "\nThis update will apply CustomResourceDefinitions (%s) before rolling images.\n", stringsJoin(plan.CRDNames))
+		if !jsonOut {
+			writeConfirmSummary(out, plan, opts.Build)
 		}
 		ok, err := d.confirm(d.stdin, out, kh.Cluster)
 		if err != nil {
@@ -212,6 +283,13 @@ func run(ctx context.Context, out io.Writer, opts Options, d deps) error {
 	progress := func(msg string) {
 		if !jsonOut {
 			fmt.Fprintln(out, msg)
+		}
+	}
+	if opts.Build {
+		buildOpts.Progress = progress
+		buildOpts.SkipRegistryProbe = false
+		if err := buildAndPushChanged(ctx, plan.ImageBuilds, buildOpts); err != nil {
+			return err
 		}
 	}
 	res := Apply(ctx, kh.Clientset, plan, ApplyOptions{
@@ -244,6 +322,14 @@ func validateOptions(opts Options) error {
 	}
 	if opts.Timeout <= 0 {
 		return core.NewWithSentinel(core.ErrUpdateInvalidFlag, "--timeout must be positive")
+	}
+	if opts.Build {
+		if _, err := resolveSourceDir(opts.Source); err != nil {
+			return core.WrapWithSentinel(core.ErrUpdateInvalidFlag, err, fmt.Sprintf("--source: %v", err))
+		}
+		if opts.BuildParallelism <= 0 {
+			return core.NewWithSentinel(core.ErrUpdateInvalidFlag, "--build-parallelism must be positive")
+		}
 	}
 	return nil
 }

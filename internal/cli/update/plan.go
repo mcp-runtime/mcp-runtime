@@ -72,6 +72,10 @@ type Plan struct {
 	ApplyCRDs bool `json:"applyCRDs,omitempty"`
 	// CRDNames lists CustomResourceDefinition metadata.name values to apply.
 	CRDNames []string `json:"crdNames,omitempty"`
+	// CRDPreview lists per-CRD create/update/skipped intents after live compare.
+	CRDPreview []CRDResult `json:"crdPreview,omitempty"`
+	// ImageBuilds lists unique Built images to build or reuse when --build is set.
+	ImageBuilds []ImageBuildAction `json:"imageBuilds,omitempty"`
 	// crdsYAML is the multi-document YAML applied when ApplyCRDs is true.
 	// It is omitted from JSON output (large); use CRDNames in plans.
 	crdsYAML  string
@@ -121,6 +125,10 @@ func (s Selection) onlySet() map[string]bool {
 	}
 	set := map[string]bool{}
 	for _, n := range s.Only {
+		n = strings.TrimSpace(n)
+		if n == "" {
+			continue
+		}
 		set[n] = true
 	}
 	return set
@@ -130,6 +138,10 @@ func (s Selection) onlySet() map[string]bool {
 func (s Selection) validate() error {
 	var unknown []string
 	for _, n := range s.Only {
+		n = strings.TrimSpace(n)
+		if n == "" {
+			continue
+		}
 		if _, ok := platformrelease.Lookup(n); !ok {
 			unknown = append(unknown, n)
 		}
