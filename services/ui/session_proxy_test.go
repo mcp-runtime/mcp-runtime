@@ -114,7 +114,7 @@ func TestSessionProxyUpstreamPathAllowlist(t *testing.T) {
 		{in: "/api/ui/v1/runtime/servers", want: "/api/v1/runtime/servers", ok: true},
 		{in: "/api/ui/v1/runtime/tools", want: "/api/v1/runtime/tools", ok: true},
 		{in: "/api/ui/v1/runtime/observability/prometheus/query", want: "/api/v1/runtime/observability/prometheus/query", ok: true},
-		{in: "/api/ui/v1/runtime/observability/grafana/dashboard", want: "/api/v1/runtime/observability/grafana/dashboard", ok: true},
+		{in: "/api/ui/v1/runtime/observability/grafana/dashboard", ok: false},
 		{in: "/api/ui/v1/runtime/servers/", want: "/api/v1/runtime/servers", ok: true},
 		{in: "/api/ui/v1/events", want: "/api/v1/events", ok: true},
 		{in: "/api/ui/v1/runtime/unknown", ok: false},
@@ -205,37 +205,6 @@ func TestSessionProxyInjectsBearerAndStripsClientAuth(t *testing.T) {
 	}
 	if strings.Contains(body, "session-token") || strings.Contains(body, "attacker-token") {
 		t.Fatalf("response leaked credential: %q", body)
-	}
-}
-
-func TestSessionProxyOpensObservabilityDashboardWithPlatformSession(t *testing.T) {
-	var gotPath, gotAuth string
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
-		gotAuth = r.Header.Get("authorization")
-		w.Header().Set("content-type", "text/html; charset=utf-8")
-		_, _ = io.WriteString(w, "<html>server observability</html>")
-	}))
-	t.Cleanup(upstream.Close)
-
-	proxy := newTestSessionProxy(t, upstream.URL)
-	sess := createTestSession(t, proxy.store, uiSession{
-		Principal:          sessionPrincipal{Role: "user", Email: "user@example.com"},
-		UpstreamAuthHeader: "Bearer platform-session-token",
-	})
-	request := httptest.NewRequest(http.MethodGet, "/api/ui/v1/runtime/observability/grafana/dashboard?namespace=team-a&server=buddy", nil)
-	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: sess.ID})
-	recorder := httptest.NewRecorder()
-	proxy.ServeHTTP(recorder, request)
-
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
-	}
-	if gotPath != "/api/v1/runtime/observability/grafana/dashboard" || gotAuth != "Bearer platform-session-token" {
-		t.Fatalf("upstream path/auth = %q/%q", gotPath, gotAuth)
-	}
-	if got := recorder.Header().Get("content-type"); got != "text/html; charset=utf-8" {
-		t.Fatalf("content-type = %q", got)
 	}
 }
 

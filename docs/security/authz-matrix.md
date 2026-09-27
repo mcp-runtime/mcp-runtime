@@ -66,7 +66,6 @@ Expected codes:
 | `/api/v1/user/api-keys/{id}`                             | GET, DEL      | 401  | 200         | 200      | 200       | 401/403    | |
 | `/api/v1/runtime/servers`                                | GET, POST     | 401  | 200         | 200      | 200       | 401/403    | List/create MCP servers. |
 | `/api/v1/runtime/observability/links`                    | GET           | 401  | 200/403     | 200/403  | 200       | 401/403    | Normal users are limited to team namespaces or caller-owned catalog servers. |
-| `/api/v1/runtime/observability/grafana/dashboard`        | GET           | 401  | 200/403     | 200/403  | 200       | 401/403    | Renders a server-scoped dashboard through the API. |
 | `/api/v1/runtime/observability/prometheus/query`         | GET           | 401  | 200/403     | 200/403  | 200       | 401/403    | PromQL is allowlisted and server-scoped by the API. |
 | `/api/v1/runtime/teams`                                  | GET           | 401  | 200         | 200      | 200       | 401/403    | |
 | `/api/v1/runtime/teams`                                  | POST          | 401  | 403         | 403      | 200       | 401/403    | Admin-only team + namespace provisioning. |

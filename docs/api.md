@@ -420,7 +420,6 @@ DELETE /api/v1/runtime/sessions/{namespace}/{name} # Delete one MCPAgentSession
 POST /api/v1/runtime/adapter/sessions     # Issue/reuse an adapter MCPAgentSession for a human/user principal
 POST /api/v1/runtime/adapter/certificates # Sign an adapter CSR for an owned session (mTLS enrollment)
 GET  /api/v1/runtime/observability/links  # Scoped Prometheus/Grafana links for one server
-GET  /api/v1/runtime/observability/grafana/dashboard  # Scoped Grafana dashboard for one server
 GET  /api/v1/runtime/observability/prometheus/query   # Allowlisted PromQL query IDs for one server
 GET  /api/v1/runtime/teams                # Admin: all teams; user: caller memberships
 POST /api/v1/runtime/teams                # Admin-only team + namespace provisioning

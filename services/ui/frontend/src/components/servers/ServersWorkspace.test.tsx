@@ -568,6 +568,7 @@ describe("ServersWorkspace server retire", () => {
 });
 
 describe("ServersWorkspace connect config, protocol inventory, and observability", () => {
+  const dashboardURL = "/grafana/d/mcp-server/mcp-server?var-namespace=mcp-servers&var-server=workspace-assistant";
   const RICH_SERVERS = {
     servers: [
       {
@@ -581,10 +582,15 @@ describe("ServersWorkspace connect config, protocol inventory, and observability
           namespace: "mcp-servers",
           server: "workspace-assistant",
           prometheus: {
-            queries: [{ id: "latency", name: "Latency", description: "p99 latency", url: "http://prom/query?latency" }],
-            direct_admin_only: false,
+            queries: [
+              { id: "up", name: "Target health", url: "http://prom/query?up", grafana_url: `${dashboardURL}&viewPanel=1` },
+              { id: "request_rate", name: "Request rate", url: "http://prom/query?request_rate", grafana_url: `${dashboardURL}&viewPanel=2` },
+              { id: "deny_rate", name: "Deny rate", url: "http://prom/query?deny_rate", grafana_url: `${dashboardURL}&viewPanel=3` },
+              { id: "latency_p95", name: "p95 latency", url: "http://prom/query?latency_p95", grafana_url: `${dashboardURL}&viewPanel=4` },
+            ],
+            direct_admin_only: true,
           },
-          grafana: { available: true, url: "http://grafana/d/workspace-assistant", direct_admin_only: false },
+          grafana: { available: true, url: dashboardURL, direct_admin_only: true },
         },
       },
       SERVERS.servers[1],
@@ -644,10 +650,10 @@ describe("ServersWorkspace connect config, protocol inventory, and observability
     expect(inventory).toHaveTextContent("nightly-sync");
   });
 
-  it("shows owner-scoped observability links and hides them when the backend omits them", async () => {
+  it("opens the dashboard and all four metrics in real Grafana panels", async () => {
     stubRichCatalog();
 
-    renderWorkspace({ authenticated: true });
+    renderWorkspace({ authenticated: true, auth: { authenticated: true, principal: { role: "admin" } } });
     await screen.findByTestId("server-list");
 
     const [richCard, plainCard] = screen.getAllByTestId("server-card");
@@ -655,8 +661,35 @@ describe("ServersWorkspace connect config, protocol inventory, and observability
 
     const observability = within(richCard).getByTestId("server-card-observability");
     const grafanaLink = within(observability).getByTestId("server-card-grafana-link");
-    expect(grafanaLink).toHaveAttribute("href", "http://grafana/d/workspace-assistant");
-    expect(observability).toHaveTextContent("Latency");
+    expect(grafanaLink).toHaveAttribute("href", dashboardURL);
+    for (const [name, panel] of [["Target health", 1], ["Request rate", 2], ["Deny rate", 3], ["p95 latency", 4]] as const) {
+      const link = within(observability).getByRole("link", { name: new RegExp(name, "i") });
+      expect(link).toHaveAttribute("href", `${dashboardURL}&viewPanel=${panel}`);
+      expect(link).toHaveAttribute("target", "_blank");
+      expect(link).toHaveAttribute("rel", "noreferrer");
+    }
+    expect(within(observability).getAllByRole("link")).toHaveLength(5);
+    expect(observability.innerHTML).not.toContain("http://prom/query");
+  });
+
+  it("does not render Grafana or raw Prometheus query links when Grafana access is unavailable", async () => {
+    const server = RICH_SERVERS.servers[0];
+    stubCatalog({ servers: { servers: [{
+      ...server,
+      observability: {
+        ...server.observability,
+        grafana: { available: false, direct_admin_only: true, reason: "admin only" },
+        prometheus: {
+          ...server.observability.prometheus,
+          queries: server.observability.prometheus.queries.map(({ grafana_url: _grafanaURL, ...query }) => query),
+        },
+      },
+    }, RICH_SERVERS.servers[1]] } });
+
+    renderWorkspace({ authenticated: true });
+    const [richCard] = await screen.findAllByTestId("server-card");
+    expect(within(richCard).queryByTestId("server-card-observability")).not.toBeInTheDocument();
+    expect(within(richCard).queryByRole("link", { name: /grafana|target health|request rate|deny rate|p95 latency/i })).not.toBeInTheDocument();
   });
 });
 

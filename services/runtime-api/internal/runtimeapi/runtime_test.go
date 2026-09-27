@@ -763,14 +763,11 @@ func TestRuntimeObservabilityLinksAllowOwnedNamespace(t *testing.T) {
 			if got := payload.Prometheus.Queries[0].URL; !strings.HasPrefix(got, tt.wantPrefix+"prometheus/query?") {
 				t.Fatalf("prometheus URL = %q, want prefix %q", got, tt.wantPrefix+"prometheus/query?")
 			}
-			if !payload.Grafana.Available {
-				t.Fatalf("grafana should be available through the default scoped dashboard: %#v", payload.Grafana)
+			if payload.Grafana.Available || !payload.Grafana.DirectAdminOnly {
+				t.Fatalf("bundled Grafana must remain admin-only: %#v", payload.Grafana)
 			}
-			if payload.Grafana.DirectAdminOnly {
-				t.Fatalf("default scoped grafana dashboard should not be admin-only: %#v", payload.Grafana)
-			}
-			if got := payload.Grafana.URL; !strings.HasPrefix(got, tt.wantPrefix+"grafana/dashboard?") {
-				t.Fatalf("grafana URL = %q, want prefix %q", got, tt.wantPrefix+"grafana/dashboard?")
+			if got := payload.Prometheus.Queries[0].GrafanaURL; got != "" {
+				t.Fatalf("non-admin Grafana panel URL = %q, want none", got)
 			}
 		})
 	}
@@ -822,6 +819,9 @@ func TestRuntimeObservabilityLinksGenerateGrafanaURLAfterAuthorization(t *testin
 	wantURL := "/grafana/d/server/mcp-server?var-namespace=mcp-team-acme&var-server=team-demo"
 	if payload.Grafana.URL != wantURL {
 		t.Fatalf("grafana URL = %q, want %q", payload.Grafana.URL, wantURL)
+	}
+	if got := payload.Prometheus.Queries[0].GrafanaURL; got != wantURL+"&viewPanel=1" {
+		t.Fatalf("Grafana panel URL = %q, want %q", got, wantURL+"&viewPanel=1")
 	}
 }
 
@@ -953,56 +953,6 @@ func TestRuntimeObservabilityPrometheusProxyLogsBoundedFailureBody(t *testing.T)
 	}
 	if strings.Contains(got, "secret-after-limit") {
 		t.Fatalf("log included content beyond %d-byte limit: %q", prometheusErrorBodyLimit, got)
-	}
-}
-
-func TestRuntimeObservabilityGrafanaDashboardScopesQueries(t *testing.T) {
-	var gotQueries []string
-	prometheus := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotQueries = append(gotQueries, r.URL.Query().Get("query"))
-		w.Header().Set("content-type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"vector","result":[]}}`))
-	}))
-	defer prometheus.Close()
-	t.Setenv(envMCPPrometheusAPIURL, prometheus.URL+"/prometheus")
-
-	server := newRuntimeServerWithMCPServers(t, ownedTestMCPServer("demo", "user-1", "user-1"))
-	request := httptest.NewRequest(http.MethodGet, "/api/runtime/observability/grafana/dashboard?namespace=user-1&server=demo", nil)
-	request = request.WithContext(withPrincipal(request.Context(), principal{
-		Role:      roleUser,
-		Subject:   "user-1",
-		Namespace: "user-1",
-		AllowedNamespaces: []string{
-			"user-1",
-			sharedCatalogNamespace,
-		},
-	}))
-	recorder := httptest.NewRecorder()
-
-	server.HandleRuntimeObservabilityGrafanaDashboard(recorder, request)
-
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
-	}
-	if got := recorder.Header().Get("content-type"); !strings.Contains(got, "text/html") {
-		t.Fatalf("content-type = %q, want text/html", got)
-	}
-	body := recorder.Body.String()
-	for _, want := range []string{"Scoped Grafana", "user-1", "demo", "mcp_gateway_requests_total"} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("dashboard body missing %q: %s", want, body)
-		}
-	}
-	if strings.Contains(body, "tenant-b") {
-		t.Fatalf("dashboard leaked foreign tenant marker: %s", body)
-	}
-	if len(gotQueries) == 0 {
-		t.Fatal("expected scoped prometheus queries")
-	}
-	for _, query := range gotQueries {
-		if !strings.Contains(query, `namespace="user-1",server="demo"`) {
-			t.Fatalf("query = %q, want user/server scoped selector", query)
-		}
 	}
 }
 

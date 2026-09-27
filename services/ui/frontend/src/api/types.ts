@@ -36,6 +36,7 @@ export type ObservabilityPrometheusQueryLink = {
   name: string;
   description?: string;
   url: string;
+  grafana_url?: string;
   query?: string;
 };
 

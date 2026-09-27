@@ -27,7 +27,6 @@ var sessionProxyRuntimePrefixes = []string{
 	"/runtime/tools",
 	"/runtime/server-events",
 	"/runtime/observability/links",
-	"/runtime/observability/grafana/dashboard",
 	"/runtime/observability/prometheus/query",
 	"/runtime/teams",
 	"/runtime/agents",

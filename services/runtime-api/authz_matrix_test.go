@@ -76,7 +76,6 @@ func TestAuthzMatrixCoversRegisteredRoutes(t *testing.T) {
 		"/api/v1/runtime/servers/",
 		"/api/v1/runtime/server-events",
 		"/api/v1/runtime/observability/links",
-		"/api/v1/runtime/observability/grafana/dashboard",
 		"/api/v1/runtime/observability/prometheus/query",
 		"/api/v1/runtime/teams",
 		"/api/v1/runtime/teams/",

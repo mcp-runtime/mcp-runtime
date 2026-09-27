@@ -2230,6 +2230,7 @@ func TestDeployAnalyticsManifestsWithKubectl_RecreatesInitializationJobs(t *test
 		"17-loki.yaml",
 		"18-promtail.yaml",
 		"19-grafana-datasources.yaml",
+		"21-grafana-dashboards.yaml",
 		"20-postgres.yaml",
 	} {
 		if err := os.WriteFile(filepath.Join(manifestDir, name), []byte(manifestContent), 0o644); err != nil {
@@ -2503,6 +2504,7 @@ func TestDeployAnalyticsManifestsReturnsRolloutFailures(t *testing.T) {
 		"17-loki.yaml",
 		"18-promtail.yaml",
 		"19-grafana-datasources.yaml",
+		"21-grafana-dashboards.yaml",
 		"20-postgres.yaml",
 		"20-postgres-hostpath.yaml",
 	} {
@@ -2672,6 +2674,7 @@ func TestDeployAnalyticsManifestsWithKubectl_WaitsForPostgresStatefulSet(t *test
 		"17-loki.yaml",
 		"18-promtail.yaml",
 		"19-grafana-datasources.yaml",
+		"21-grafana-dashboards.yaml",
 		"20-postgres.yaml",
 	} {
 		if err := os.WriteFile(filepath.Join(manifestDir, name), []byte(manifestContent), 0o644); err != nil {
