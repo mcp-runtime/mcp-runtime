@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -613,6 +615,74 @@ func TestEnsureTeamNamespaceCreatesRegistryPullSecret(t *testing.T) {
 	}
 	if len(binding.Subjects) != 1 || binding.Subjects[0].Kind != rbacv1.ServiceAccountKind || binding.Subjects[0].Name != platformNamespaceAPIServiceAccountName || binding.Subjects[0].Namespace != sentinel.DefaultNamespace {
 		t.Fatalf("namespace API secret access subjects = %#v", binding.Subjects)
+	}
+}
+
+func TestEnsureTeamNamespaceWaitsForRegistrySecretRBAC(t *testing.T) {
+	t.Setenv("PLATFORM_TEAM_TRAEFIK_WATCH", "disabled")
+	t.Setenv("MCP_REGISTRY_INGRESS_HOST", "registry.example.org")
+	t.Setenv("ADMIN_API_KEYS", "test-admin-key")
+	client := kubernetesfake.NewSimpleClientset()
+	attempts := 0
+	client.PrependReactor("get", "secrets", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		if action.GetNamespace() != "mcp-team-acme" {
+			return false, nil, nil
+		}
+		attempts++
+		if _, err := client.Tracker().Get(rbacv1.SchemeGroupVersion.WithResource("rolebindings"), "mcp-team-acme", platformNamespaceAPISecretAccessName); err != nil {
+			t.Errorf("registry access attempted before RoleBinding: %v", err)
+		}
+		if attempts <= 2 {
+			return true, nil, apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, registryPullSecretName, errors.New("RBAC cache has not observed binding"))
+		}
+		return false, nil, nil
+	})
+	server := &RuntimeServer{k8sClients: &k8sclient.Clients{Clientset: client}}
+	if err := server.Deployments().ensureTeamNamespace(context.Background(), teamRecord{ID: "team-acme-id", Slug: "acme", Namespace: "mcp-team-acme"}); err != nil {
+		t.Fatalf("team provisioning failed during RBAC propagation: %v", err)
+	}
+	if attempts != 3 {
+		t.Fatalf("secret GET attempts = %d, want 3", attempts)
+	}
+	if _, err := client.Tracker().Get(corev1.SchemeGroupVersion.WithResource("secrets"), "mcp-team-acme", registryPullSecretName); err != nil {
+		t.Fatalf("pull secret not created: %v", err)
+	}
+	sa, err := client.CoreV1().ServiceAccounts("mcp-team-acme").Get(context.Background(), kubeworkload.DefaultServiceAccountName, metav1.GetOptions{})
+	if err != nil || len(sa.ImagePullSecrets) != 1 || sa.ImagePullSecrets[0].Name != registryPullSecretName {
+		t.Fatalf("pull secret not attached to workload account: %#v, %v", sa, err)
+	}
+}
+
+func TestRegistrySecretRBACRetryStopsOnErrorOrCancellation(t *testing.T) {
+	for _, forbidden := range []bool{false, true} {
+		t.Run(fmt.Sprintf("forbidden=%t", forbidden), func(t *testing.T) {
+			t.Setenv("MCP_REGISTRY_INGRESS_HOST", "registry.example.org")
+			t.Setenv("ADMIN_API_KEYS", "test-admin-key")
+			client := kubernetesfake.NewSimpleClientset()
+			attempts := 0
+			failure := errors.New("API unavailable")
+			if forbidden {
+				failure = apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, registryPullSecretName, errors.New("permanent denial"))
+			}
+			client.PrependReactor("get", "secrets", func(k8stesting.Action) (bool, runtime.Object, error) {
+				attempts++
+				return true, nil, failure
+			})
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+			defer cancel()
+			server := &RuntimeServer{k8sClients: &k8sclient.Clients{Clientset: client}}
+			err := server.Deployments().ensureNamespaceRegistryPullSecretAfterBinding(ctx, client, "mcp-team-acme")
+			if forbidden {
+				if !errors.Is(err, context.DeadlineExceeded) || !strings.Contains(err.Error(), "permanent denial") {
+					t.Fatalf("error = %v, want deadline and original denial", err)
+				}
+			} else if !errors.Is(err, failure) {
+				t.Fatalf("error = %v, want immediate API failure", err)
+			}
+			if attempts != 1 {
+				t.Fatalf("attempts = %d, want 1", attempts)
+			}
+		})
 	}
 }
 

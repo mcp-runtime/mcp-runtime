@@ -385,6 +385,54 @@ servers:
 	})
 }
 
+func TestBuildImageTenantAuthenticationFailureDoesNotBuildOrRewrite(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		status int
+		body   string
+		want   string
+	}{
+		{"expired_profile", http.StatusUnauthorized, `{"error":"authentication required"}`, "401"},
+		{"admin_without_team", http.StatusOK, `{"authenticated":true,"principal":{"role":"admin"}}`, "no team membership"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mock := &core.MockExecutor{}
+			defer core.SwapExecExecutor(mock)()
+			api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/api/v1/auth/me" {
+					t.Errorf("unexpected platform path %q", r.URL.Path)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer api.Close()
+			t.Setenv("MCP_PLATFORM_API_TOKEN", "test-token")
+			t.Setenv("MCP_PLATFORM_API_URL", api.URL)
+			t.Setenv("MCP_RUNTIME_CONFIG_DIR", t.TempDir())
+			file := filepath.Join(t.TempDir(), "servers.yaml")
+			const original = "version: v1\nservers:\n  - name: example\n    scope: tenant\n    image: old-image\n    imageTag: old-tag\n"
+			if err := os.WriteFile(file, []byte(original), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			err := buildImage(context.Background(), zap.NewNop(), "example", "Dockerfile", file, "", "registry.example.org", "new-tag", "linux/amd64", ".")
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("build error = %v, want %q", err, tc.want)
+			}
+			if mock.HasCommand("docker") {
+				t.Fatal("Docker must not run when tenant identity cannot be resolved")
+			}
+			data, err := os.ReadFile(file)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(data) != original {
+				t.Fatalf("failed build changed metadata: %s", data)
+			}
+		})
+	}
+}
+
 func equalStringSlices(a, b []string) bool {
 	if len(a) != len(b) {
 		return false

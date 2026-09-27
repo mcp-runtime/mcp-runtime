@@ -21,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
@@ -498,7 +499,7 @@ func (s *DeploymentService) ensureManagedNamespace(ctx context.Context, namespac
 	if err := ensureNamespacePlatformAPISecretAccess(ctx, base, namespace); err != nil {
 		return err
 	}
-	if err := s.ensureNamespaceRegistryPullSecret(ctx, base, namespace); err != nil {
+	if err := s.ensureNamespaceRegistryPullSecretAfterBinding(ctx, base, namespace); err != nil {
 		return fmt.Errorf("provision registry pull secret for namespace %q: %w", namespace, err)
 	}
 	return nil
@@ -507,6 +508,24 @@ func (s *DeploymentService) ensureManagedNamespace(ctx context.Context, namespac
 const registryPullSecretName = "mcp-runtime-registry-pull" // #nosec G101 -- Kubernetes Secret object name, not credential material.
 const platformNamespaceAPISecretAccessName = "mcp-runtime-api-team-secrets"
 const platformNamespaceAPIServiceAccountName = "mcp-runtime-api"
+
+// A newly created RoleBinding can be visible before the API server's RBAC
+// authorizer observes it. Retry only Forbidden errors in this provisioning
+// path, after the namespace-local binding has been successfully ensured.
+func (s *DeploymentService) ensureNamespaceRegistryPullSecretAfterBinding(ctx context.Context, client kubernetes.Interface, namespace string) error {
+	var lastErr error
+	err := wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
+		lastErr = s.ensureNamespaceRegistryPullSecret(ctx, client, namespace)
+		if apierrors.IsForbidden(lastErr) {
+			return false, nil
+		}
+		return lastErr == nil, lastErr
+	})
+	if err != nil && apierrors.IsForbidden(lastErr) {
+		return fmt.Errorf("waiting for namespace registry secret access: %w (last error: %v)", err, lastErr)
+	}
+	return err
+}
 
 func (s *DeploymentService) ensureNamespaceRegistryPullSecret(ctx context.Context, client kubernetes.Interface, namespace string) error {
 	registryHost := registryPullSecretHost()
