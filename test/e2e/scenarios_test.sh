@@ -150,6 +150,57 @@ selector_expect "platform-update" "smoke-auth,platform-update" "internal/cli/upd
 selector_expect "broad" "all" "api/v1alpha1/mcpserver_types.go"
 selector_expect "staging-e2e-only" "smoke-auth" "test/e2e/staging-vm.sh" "test/e2e/lib/staging.sh" ".github/workflows/staging-e2e.yaml"
 
+python3 - "${PROJECT_ROOT}/.github/workflows/staging-e2e.yaml" "${PROJECT_ROOT}/test/e2e/kind.sh" "${PROJECT_ROOT}/docs/contributor/staging-e2e.md" <<'PY'
+import pathlib
+import sys
+
+workflow = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+assert "  push:\n    branches: [main]\n    paths:" in workflow, "staging E2E must trigger on relevant pushes to main"
+for path in (
+    "'.github/workflows/staging-e2e-remote.yaml'",
+    "'services/**'",
+    "'internal/**'",
+    "'test/e2e/**'",
+    "'hack/deploy/mcpruntime-org/**'",
+):
+    assert path in workflow, f"staging E2E push trigger is missing {path}"
+assert "RUN_MULTITENANCY: ${{ github.event_name == 'push' || inputs.run-multitenancy }}" in workflow
+assert "FRESH_CERTIFICATE: ${{ github.event_name == 'workflow_dispatch' && inputs.fresh-certificate }}" in workflow
+print("[pass] staging E2E main-push trigger and event defaults")
+
+staging_docs = pathlib.Path(sys.argv[3]).read_text(encoding="utf-8")
+assert "gh workflow run staging-e2e.yaml" in staging_docs, "staging E2E docs must name the on-VM workflow"
+assert "gh workflow run staging-e2e-remote.yaml" in staging_docs, "staging E2E docs must name the runner-driven workflow"
+
+kind = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")
+build_start = kind.index("build_and_publish_image() {")
+build_end = kind.index("\n}\n", build_start)
+build_image = kind[build_start:build_end]
+assert "pull_cached_image" not in build_image, (
+    "images built from the checkout must not be replaced with stale local-mirror tags"
+)
+assert "prune_kind_platform_images" in kind, "setup must evict stale node-local platform image tags"
+assert "restart_kind_platform_deployments" in kind, "setup must restart deployments to pull refreshed image tags"
+setup_branch = kind.index('echo "[setup] running platform setup in test mode')
+setup_call = kind.index('run_logged_stage "setup test mode"', setup_branch)
+image_refresh = kind.index("prune_kind_platform_images", setup_branch)
+deployment_refresh = kind.index("restart_kind_platform_deployments", setup_call)
+assert image_refresh < setup_call < deployment_refresh, (
+    "platform image eviction must precede setup and rollout restart must follow its registry pushes"
+)
+for prefix in (
+    "--providers.kubernetesingress.namespaces=",
+    "--providers.kubernetescrd.namespaces=",
+):
+    assert prefix in kind, f"Traefik E2E cleanup must reset {prefix}"
+setup_ready = kind.index("wait_core_platform_rollouts\n\n# Setup can reuse an existing IngressClass")
+user_flows = kind.index('echo "[cli] checking platform status commands"', setup_ready)
+assert "reset_traefik_namespace_watches" in kind[setup_ready:user_flows], (
+    "Traefik watch reset must run after setup for cache and fresh-install paths"
+)
+print("[pass] stale Traefik namespace watches are reset before E2E flows")
+PY
+
 echo "[pass] scenario selector validation"
 
 # Validation-only exits before sourcing libraries, so also check that static

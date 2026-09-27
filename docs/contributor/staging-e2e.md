@@ -204,11 +204,17 @@ only as an unexplained deployment timeout. On-VM run directories live in
 
 ## Running it
 
-Run a workflow manually after changing setup, registry, auth, ingress, TLS,
-doctor/diagnostics, or CLI behavior:
+Relevant changes pushed to `main` automatically run the **Staging E2E
+(Disposable VM)** workflow with the multi-tenancy flow enabled and the existing
+staging TLS snapshot. Pull requests do not receive the disposable-VM secrets;
+dispatch a workflow manually when you need staging evidence before merge or
+are iterating on a PR. The remote workflow keeps the repository on the runner;
+the disposable-VM workflow packages it and runs it on the VM:
 
 ```bash
 gh workflow run staging-e2e-remote.yaml --ref <branch> -f run-multitenancy=true
+gh workflow run staging-e2e.yaml --ref <branch> -f run-multitenancy=true
+# Add this input only when a fresh staging certificate is part of the check:
 gh workflow run staging-e2e.yaml --ref <branch> -f run-multitenancy=true -f fresh-certificate=true
 ```
 

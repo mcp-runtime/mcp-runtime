@@ -21,8 +21,9 @@ set -euo pipefail
 #
 # For repeated local debugging, set E2E_CACHE_MODE=1. Cache mode implies
 # E2E_KEEP_CLUSTER=1, reuses an existing kind cluster and local registry, skips
-# platform setup when the core platform is already ready, and reuses cached
-# image tags from the local registry instead of pulling/building them again.
+# platform setup when the core platform is already ready, and reuses upstream
+# image tags from the local registry. If setup must run, application images are
+# rebuilt from this checkout so an old local tag cannot hide changed source.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
@@ -192,6 +193,7 @@ LOCAL_REGISTRY_NAME="${LOCAL_REGISTRY_NAME:-${CLUSTER_NAME}-dockerhub-mirror}"
 LOCAL_REGISTRY_PORT="${LOCAL_REGISTRY_PORT:-5001}"
 LOCAL_REGISTRY_PUSH_HOST="${LOCAL_REGISTRY_PUSH_HOST:-127.0.0.1:${LOCAL_REGISTRY_PORT}}"
 LOCAL_REGISTRY_MIRROR_ENDPOINT="${LOCAL_REGISTRY_NAME}:5000"
+KIND_DOCKER_NETWORK="${KIND_EXPERIMENTAL_DOCKER_NETWORK:-kind}"
 LOCAL_REGISTRY_RETRY_TRIES="${LOCAL_REGISTRY_RETRY_TRIES:-5}"
 LOCAL_REGISTRY_RETRY_DELAY="${LOCAL_REGISTRY_RETRY_DELAY:-5}"
 E2E_WORKLOAD_TAG="${E2E_WORKLOAD_TAG:-e2e}"
@@ -647,6 +649,25 @@ wait_http() {
   return 1
 }
 
+traefik_http_responding() {
+  local status
+  status="$(curl -sS --connect-timeout 2 --max-time 3 -o /dev/null -w '%{http_code}' \
+    "http://127.0.0.1:${TRAEFIK_PORT}/" 2>/dev/null || true)"
+  [[ "${status}" =~ ^[1-5][0-9]{2}$ ]]
+}
+
+wait_for_traefik_http_response() {
+  local tries="${1:-10}"
+  local attempt
+  for attempt in $(seq 1 "${tries}"); do
+    if traefik_http_responding; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
 # Run rollout status with diagnostics on failure.
 rollout_status_with_logs() {
   local namespace="$1"
@@ -866,7 +887,9 @@ port_forward_resource_bg() {
 }
 
 recover_traefik_port_forward_if_needed() {
-  if port_is_listening "${TRAEFIK_PORT}"; then
+  if [[ -n "${TRAEFIK_PORT_FORWARD_PID:-}" ]] \
+    && kill -0 "${TRAEFIK_PORT_FORWARD_PID}" >/dev/null 2>&1 \
+    && traefik_http_responding; then
     return 0
   fi
 
@@ -876,12 +899,26 @@ recover_traefik_port_forward_if_needed() {
   fi
   TRAEFIK_PORT_FORWARD_PID=""
 
-  TRAEFIK_PORT_FORWARD_RESTARTS=$((TRAEFIK_PORT_FORWARD_RESTARTS + 1))
-  local log_file="${WORKDIR}/traefik-port-forward-restart-${TRAEFIK_PORT_FORWARD_RESTARTS}.log"
-  echo "[port-forward] restarting Traefik port-forward on localhost:${TRAEFIK_PORT}" >&2
-  port_forward_bg traefik traefik "${TRAEFIK_PORT}" 8000 "${log_file}" || return 1
-  TRAEFIK_PORT_FORWARD_PID="${LAST_MANAGED_PID}"
-  wait_port "${TRAEFIK_PORT}" 30
+  local attempt log_file
+  for attempt in 1 2 3; do
+    TRAEFIK_PORT_FORWARD_RESTARTS=$((TRAEFIK_PORT_FORWARD_RESTARTS + 1))
+    log_file="${WORKDIR}/traefik-port-forward-restart-${TRAEFIK_PORT_FORWARD_RESTARTS}.log"
+    echo "[port-forward] restarting Traefik port-forward on localhost:${TRAEFIK_PORT} (attempt ${attempt}/3)" >&2
+    if port_forward_bg traefik traefik "${TRAEFIK_PORT}" 8000 "${log_file}" \
+      && wait_for_traefik_http_response 10; then
+      TRAEFIK_PORT_FORWARD_PID="${LAST_MANAGED_PID}"
+      return 0
+    fi
+    if [[ -n "${LAST_MANAGED_PID:-}" ]] && kill -0 "${LAST_MANAGED_PID}" >/dev/null 2>&1; then
+      kill "${LAST_MANAGED_PID}" >/dev/null 2>&1 || true
+      wait "${LAST_MANAGED_PID}" >/dev/null 2>&1 || true
+    fi
+    stop_listener_on_port "${TRAEFIK_PORT}"
+    TRAEFIK_PORT_FORWARD_PID=""
+    sleep 2
+  done
+  echo "[error] Traefik port-forward on localhost:${TRAEFIK_PORT} did not return HTTP responses after 3 attempts" >&2
+  return 1
 }
 
 # recover_traefik_tls_port_forward_if_needed mirrors recover_traefik_port_forward_if_needed
@@ -935,10 +972,8 @@ ensure_traefik_port_forward() {
     port_forward_bg traefik traefik "${TRAEFIK_PORT}" 8000 "${WORKDIR}/traefik-port-forward.log"
     TRAEFIK_PORT_FORWARD_PID="${LAST_MANAGED_PID}"
     TRAEFIK_PORT_FORWARD_RESTARTS=0
-  else
-    recover_traefik_port_forward_if_needed
   fi
-  wait_port "${TRAEFIK_PORT}"
+  recover_traefik_port_forward_if_needed
 }
 
 stop_listener_on_port() {
@@ -1303,22 +1338,84 @@ print(f"[mcp] tools/list returned {len(names)} tools including {', '.join(sys.ar
 PY
 }
 
-# Retry a protected grantee tool call while its session or policy update
-# propagates. initialize is intentionally outside grant/session authorization.
+# Send one MCP request under a tenant grantee session and write its response.
+tenant_grantee_mcp_request() {
+  local session="$1" payload="$2" body_file="$3" runtime_url="$4"
+  local human_id="$5" agent_id="$6" team_id="$7" transport_session="${8:-}"
+  local -a request_args
+  request_args=(-sS --connect-timeout 5 --max-time 10 -D "${body_file}.headers" -o "${body_file}" \
+    -w '%{http_code}' -X POST \
+    -H 'content-type: application/json' -H 'accept: application/json, text/event-stream' \
+    -H "Mcp-Protocol-Version: ${MCP_PROTOCOL_VERSION}" \
+    -H "X-MCP-Human-ID: ${human_id}" -H "X-MCP-Agent-ID: ${agent_id}" \
+    -H "X-MCP-Team-ID: ${team_id}" -H "X-MCP-Agent-Session: ${session}")
+  if [[ -n "${transport_session}" ]]; then
+    request_args+=(-H "Mcp-Session-Id: ${transport_session}")
+  fi
+  request_args+=(--data "${payload}" "${runtime_url}")
+  curl "${request_args[@]}" || true
+}
+
+# A new API-issued session must complete MCP initialization before its first
+# protected tool call. initialize itself is outside grant/session auth.
+initialize_tenant_grantee_mcp_session() {
+  local description="$1" session="$2" body_file="$3" runtime_url="$4"
+  local human_id="$5" agent_id="$6" team_id="$7" status=""
+  local initialize_payload initialized_payload transport_session=""
+  initialize_payload='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"'"${MCP_PROTOCOL_VERSION}"'","capabilities":{},"clientInfo":{"name":"mcp-runtime-e2e","version":"1.0.0"}}}'
+  initialized_payload='{"jsonrpc":"2.0","method":"notifications/initialized"}'
+  : >"${body_file}"
+  status="$(tenant_grantee_mcp_request "${session}" "${initialize_payload}" "${body_file}" \
+    "${runtime_url}" "${human_id}" "${agent_id}" "${team_id}" "")"
+  if [[ "${status}" != "200" ]] || ! python3 - "${body_file}" "${MCP_PROTOCOL_VERSION}" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as response_file:
+    response = json.load(response_file)
+result = response.get("result")
+if not isinstance(result, dict) or result.get("protocolVersion") != sys.argv[2]:
+    raise SystemExit(f"initialize returned an unexpected MCP result: {response}")
+PY
+  then
+    echo "[cross-team] ${description} initialize got ${status}: $(cat "${body_file}")" >&2
+    return 1
+  fi
+  transport_session="$(python3 -c '
+import sys
+session=""
+for line in open(sys.argv[1], encoding="utf-8"):
+    name, separator, value = line.partition(":")
+    if separator and name.strip().lower() == "mcp-session-id":
+        session = value.strip()
+print(session)
+' "${body_file}.headers")"
+  if [[ -z "${transport_session}" ]]; then
+    echo "[cross-team] ${description} initialize did not return Mcp-Session-Id" >&2
+    return 1
+  fi
+  : >"${body_file}"
+  status="$(tenant_grantee_mcp_request "${session}" "${initialized_payload}" "${body_file}" \
+    "${runtime_url}" "${human_id}" "${agent_id}" "${team_id}" "${transport_session}")"
+  if [[ "${status}" != "200" && "${status}" != "202" ]]; then
+    echo "[cross-team] ${description} initialized notification got ${status}: $(cat "${body_file}")" >&2
+    return 1
+  fi
+  printf '%s' "${transport_session}"
+}
+
+# Retry a protected tool call while its session or policy update propagates.
 wait_for_tenant_grantee_tool_call() {
   local description="$1" session="$2" expected_status="$3" expected_body_text="$4"
   local body_file="$5" runtime_url="$6" human_id="$7" agent_id="$8" team_id="$9"
+  local transport_session="${10:-}"
+  local payload='{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"add","arguments":{"a":1,"b":2}}}'
   local status="" attempt
 
   for attempt in $(seq 1 "${TENANT_SESSION_PROPAGATION_TRIES}"); do
     : >"${body_file}"
-    status="$(curl -sS --connect-timeout 5 --max-time 10 -o "${body_file}" -w '%{http_code}' -X POST \
-      -H 'content-type: application/json' -H 'accept: application/json, text/event-stream' \
-      -H "Mcp-Protocol-Version: ${MCP_PROTOCOL_VERSION}" \
-      -H "X-MCP-Human-ID: ${human_id}" -H "X-MCP-Agent-ID: ${agent_id}" \
-      -H "X-MCP-Team-ID: ${team_id}" -H "X-MCP-Agent-Session: ${session}" \
-      --data '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"add","arguments":{"a":1,"b":2}}}' \
-      "${runtime_url}" || true)"
+    status="$(tenant_grantee_mcp_request "${session}" "${payload}" "${body_file}" \
+      "${runtime_url}" "${human_id}" "${agent_id}" "${team_id}" "${transport_session}")"
     if [[ "${status}" == "${expected_status}" ]] && grep -Fq "${expected_body_text}" "${body_file}"; then
       return 0
     fi
@@ -1359,7 +1456,7 @@ print(items[0]["metadata"]["name"])
 run_tenant_owner_adapter_quickstart() {
   local stamp team namespace owner_email owner_password server image agent grant agent_response
   local grantee_team grantee_email grantee_password grantee_team_id grantee_human_id grantee_agent grantee_grant grantee_response grantee_token
-  local grantee_proxy_port grantee_proxy_url grantee_session revoked_body inactive_status
+  local grantee_proxy_port grantee_proxy_url grantee_session grantee_mcp_session revoked_body inactive_status
   local runtime_url proxy_url policy_revision pod_revisions
   stamp="$(date +%s)"
   team="e2e-tq-${stamp}"
@@ -1575,8 +1672,10 @@ print(matches[0]["user_id"])
     --data "{\"serverName\":\"${server}\",\"namespace\":\"${namespace}\",\"agentID\":\"${grantee_agent}\",\"requestedTTL\":\"30m\"}" \
     "http://127.0.0.1:${SENTINEL_PORT}/api/v1/runtime/adapter/sessions" >/dev/null
   grantee_session="$(find_active_tenant_grantee_session "${namespace}" "${grantee_agent}" "${grantee_team_id}" "${grantee_grant}")"
+  grantee_mcp_session="$(initialize_tenant_grantee_mcp_session "fresh session after grant revocation" "${grantee_session}" \
+    "${revoked_body}" "${runtime_url}" "${grantee_human_id}" "${grantee_agent}" "${grantee_team_id}")" || exit 1
   if ! wait_for_tenant_grantee_tool_call "fresh session after grant revocation" "${grantee_session}" 200 '"text":"3"' \
-    "${revoked_body}" "${runtime_url}" "${grantee_human_id}" "${grantee_agent}" "${grantee_team_id}"; then
+    "${revoked_body}" "${runtime_url}" "${grantee_human_id}" "${grantee_agent}" "${grantee_team_id}" "${grantee_mcp_session}"; then
     exit 1
   fi
   tenant_grantee_cli agent deactivate "${grantee_agent}"
@@ -1590,7 +1689,7 @@ print(matches[0]["user_id"])
     exit 1
   fi
   if ! wait_for_tenant_grantee_tool_call "agent deactivation" "${grantee_session}" 401 session_revoked \
-    "${revoked_body}" "${runtime_url}" "${grantee_human_id}" "${grantee_agent}" "${grantee_team_id}"; then
+    "${revoked_body}" "${runtime_url}" "${grantee_human_id}" "${grantee_agent}" "${grantee_team_id}" "${grantee_mcp_session}"; then
     exit 1
   fi
   echo "[cross-team][pass] foreign grant was tool-scoped and expiring; grant/agent revocation fail closed"
@@ -3333,6 +3432,36 @@ prune_kind_image() {
   fi
 }
 
+prune_kind_platform_images() {
+  local repository
+  echo "[kind] removing cached platform image tags before setup refreshes the internal registry"
+  for repository in \
+    mcp-runtime-operator \
+    mcp-sentinel-mcp-gateway \
+    mcp-sentinel-ingest \
+    mcp-platform-api \
+    mcp-runtime-api \
+    mcp-analytics-api \
+    mcp-sentinel-processor \
+    mcp-sentinel-ui; do
+    prune_kind_image "registry.registry.svc.cluster.local:5000/${repository}:latest"
+  done
+}
+
+restart_kind_platform_deployments() {
+  echo "[kind] restarting platform deployments to pull the freshly published image tags"
+  kubectl rollout restart deployment/mcp-runtime-operator-controller-manager -n mcp-runtime
+  kubectl rollout restart \
+    deployment/mcp-sentinel-gateway \
+    deployment/mcp-sentinel-ingest \
+    deployment/mcp-platform-api \
+    deployment/mcp-runtime-api \
+    deployment/mcp-analytics-api \
+    deployment/mcp-sentinel-processor \
+    deployment/mcp-sentinel-ui \
+    -n mcp-sentinel
+}
+
 run_logged_stage() {
   local label="$1"
   local log_file
@@ -3505,10 +3634,10 @@ build_and_publish_image() {
   local dockerfile="$2"
   local context_dir="$3"
 
-  if pull_cached_image "${image}"; then
-    return 0
-  fi
-
+  # Do not use the local mirror as a cache for images built from this checkout.
+  # When setup runs, the platform was not ready (or needed reconfiguration),
+  # and reusing a matching :latest tag can deploy code from an older checkout.
+  # Docker's layer cache still avoids repeating unchanged build work.
   echo "[image] building ${image}"
   docker build -t "${image}" -f "${dockerfile}" "${context_dir}"
   publish_image_to_local_registry "${image}"
@@ -3679,14 +3808,14 @@ start_local_registry() {
 }
 
 connect_local_registry_to_kind_network() {
-  docker network connect kind "${LOCAL_REGISTRY_NAME}" >/dev/null 2>&1 || true
+  docker network connect "${KIND_DOCKER_NETWORK}" "${LOCAL_REGISTRY_NAME}" >/dev/null 2>&1 || true
 }
 
 ensure_local_registry_running() {
   if ! docker ps --format '{{.Names}}' | grep -qx "${LOCAL_REGISTRY_NAME}"; then
     echo "[registry] local mirror ${LOCAL_REGISTRY_NAME} is not running; restarting"
     start_local_registry
-    if docker network inspect kind >/dev/null 2>&1; then
+    if docker network inspect "${KIND_DOCKER_NETWORK}" >/dev/null 2>&1; then
       connect_local_registry_to_kind_network
     fi
   fi
@@ -3712,21 +3841,45 @@ platform_cache_ready() {
   kubectl rollout status statefulset/tempo -n mcp-sentinel --timeout=5s >/dev/null 2>&1 || return 1
 }
 
-refresh_cached_platform_ingress_contract() {
-  local traefik_base_namespaces="registry,mcp-sentinel,mcp-servers,mcp-servers-org,mcp-servers-public"
+reset_traefik_namespace_watches() {
+  local patch
+  patch="$(kubectl get deployment traefik -n traefik -o json | python3 -c '
+import json
+import sys
 
+deployment = json.load(sys.stdin)
+args = deployment["spec"]["template"]["spec"]["containers"][0]["args"]
+desired = {
+    "--providers.kubernetesingress.namespaces=": "--providers.kubernetesingress.namespaces=registry,mcp-sentinel,mcp-servers,mcp-servers-org,mcp-servers-public",
+    "--providers.kubernetescrd.namespaces=": "--providers.kubernetescrd.namespaces=mcp-servers,mcp-servers-org,mcp-servers-public,mcp-sentinel",
+}
+patch = []
+for prefix, value in desired.items():
+    indexes = [index for index, arg in enumerate(args) if arg.startswith(prefix)]
+    if len(indexes) != 1:
+        raise SystemExit(f"expected one Traefik argument with prefix {prefix!r}, found {len(indexes)}")
+    index = indexes[0]
+    if args[index] != value:
+        patch.append({"op": "replace", "path": f"/spec/template/spec/containers/0/args/{index}", "value": value})
+print(json.dumps(patch))
+')"
+  if [[ "${patch}" == "[]" ]]; then
+    return 0
+  fi
+
+  kubectl patch deployment traefik -n traefik --type=json -p="${patch}" >/dev/null
+  kubectl rollout status deployment/traefik -n traefik --timeout=180s >/dev/null
+}
+
+refresh_cached_platform_ingress_contract() {
   echo "[cache] refreshing registry ingress and Traefik forward-auth contract"
   kubectl apply -f "${PROJECT_ROOT}/config/registry/base/ingress.yaml"
   kubectl apply -f "${PROJECT_ROOT}/config/ingress/overlays/http/dynamic-config.yaml"
 
   if kubectl get deploy traefik -n traefik >/dev/null 2>&1; then
-    # Reset Traefik to the bundled namespace watch list so stale per-team namespaces
-    # from prior cache-mode runs cannot break MCP ingress routing.
-    kubectl patch deployment traefik -n traefik --type='json' \
-      -p="[{\"op\":\"replace\",\"path\":\"/spec/template/spec/containers/0/args/1\",\"value\":\"--providers.kubernetesingress.namespaces=${traefik_base_namespaces}\"}]" \
-      >/dev/null 2>&1 || true
-    kubectl rollout restart deploy/traefik -n traefik >/dev/null 2>&1 || true
-    kubectl rollout status deploy/traefik -n traefik --timeout=180s >/dev/null 2>&1 || true
+    # Remove stale E2E namespaces from both provider watches; missing per-team
+    # RBAC makes Traefik drop the whole provider configuration and return 404s.
+    reset_traefik_namespace_watches
   fi
 }
 
@@ -3876,12 +4029,23 @@ if [[ "${PLATFORM_CACHE_READY}" == "1" ]]; then
   echo "[setup] skipping platform setup because E2E_CACHE_MODE=1 found a ready platform"
 else
   echo "[setup] running platform setup in test mode (platform mode: ${E2E_PLATFORM_MODE})"
+  # Test-mode setup publishes mutable :latest tags into the in-cluster registry.
+  # Kind's IfNotPresent policy can otherwise keep using an older node-local tag
+  # even after setup has pushed the new image for this checkout.
+  prune_kind_platform_images
   run_logged_stage "setup test mode" \
     env MCP_RUNTIME_REGISTRY_IMAGE_OVERRIDE="${TEST_MODE_REGISTRY_IMAGE}" \
     ./bin/mcp-runtime setup --test-mode --parallel-builds --platform-mode "${E2E_PLATFORM_MODE}" --ingress-manifest config/ingress/overlays/http --kubeconfig "${KUBECONFIG_FILE}"
+  restart_kind_platform_deployments
 fi
 
 wait_core_platform_rollouts
+
+# Setup can reuse an existing IngressClass and leave the previous E2E run's
+# watched team namespaces in place. Restore the base watch list before flows
+# create this run's team namespaces and their matching Traefik RBAC.
+echo "[cache] resetting Traefik namespace watches before E2E flows"
+reset_traefik_namespace_watches
 
 echo "[cli] checking platform status commands"
 ./bin/mcp-runtime status

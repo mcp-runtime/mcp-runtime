@@ -97,8 +97,12 @@ E2E_CACHE_MODE=1 E2E_SCENARIOS=multitenancy bash test/e2e/kind.sh
 Set `E2E_PLATFORM_MODE=org` or `E2E_PLATFORM_MODE=public` when you need the
 Kind setup step to exercise a non-default catalog mode.
 
-Use `E2E_CACHE_MODE=1` only for repeated local debugging. Omit it when you want
-a CI-equivalent fresh cluster.
+Use `E2E_CACHE_MODE=1` only for repeated local debugging. It skips setup when
+the platform is ready and reuses mirrored upstream images. If setup must run,
+images built from the current checkout are rebuilt so an older `:latest` image
+in the local mirror cannot mask source changes; the Kind node's mutable platform
+image tags are evicted and the deployments are restarted after setup publishes
+them. Omit cache mode for a CI-equivalent fresh cluster.
 
 Image mirroring and local image builds run concurrently during fresh e2e setup.
 `E2E_IMAGE_PREP_PARALLELISM` still tunes the default prep concurrency, while

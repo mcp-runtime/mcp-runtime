@@ -6,6 +6,29 @@ name: Staging E2E (Disposable VM)
 # that VM; it never targets the live production cluster.
 
 on:
+  # Run the disposable-VM customer journey after relevant changes land on
+  # main. Pull requests remain opt-in so unreviewed code never receives the
+  # long-lived disposable-VM credentials.
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/staging-e2e.yaml'
+      - '.github/workflows/staging-e2e-remote.yaml'
+      - 'api/**'
+      - 'cmd/**'
+      - 'config/**'
+      - 'examples/**'
+      - 'hack/deploy/mcpruntime-org/**'
+      - 'internal/**'
+      - 'k8s/**'
+      - 'pkg/**'
+      - 'services/**'
+      - 'test/e2e/**'
+      - 'Dockerfile*'
+      - '**/Dockerfile*'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Makefile*'
   workflow_dispatch:
     inputs:
       run-multitenancy:
@@ -37,6 +60,8 @@ jobs:
     timeout-minutes: 90
     env:
       E2E_RUN_ID: gh-${{ github.run_id }}-${{ github.run_attempt }}
+      RUN_MULTITENANCY: ${{ github.event_name == 'push' || inputs.run-multitenancy }}
+      FRESH_CERTIFICATE: ${{ github.event_name == 'workflow_dispatch' && inputs.fresh-certificate }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -107,8 +132,6 @@ jobs:
       - name: Run staging E2E
         env:
           SSHPASS: ${{ secrets.E2E_VM_PASSWORD }}
-          RUN_MULTITENANCY: ${{ inputs.run-multitenancy }}
-          FRESH_CERTIFICATE: ${{ inputs.fresh-certificate }}
         run: |
           # Setup has multi-minute silent stretches while it builds images, and
           # an idle SSH session that drops there fails the job with exit 255
