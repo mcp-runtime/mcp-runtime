@@ -158,7 +158,7 @@ Notes:
   shorter entry summary remains in
   [`docs/getting-started.md`](docs/getting-started.md#3-contributor-test-mode-cluster).
 - To exercise agent-side governance against a real MCP route, use the
-  [`examples/governed-agent`](examples/governed-agent/) demo.
+  [Go example's grant/session workflow](examples/oauth-example-go-2025-11-25/README-oauth-example-go-2025-11-25.md#governance).
 
 ## Common commands
 

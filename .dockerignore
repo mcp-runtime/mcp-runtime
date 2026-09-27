@@ -28,7 +28,6 @@ services/ui/frontend/node_modules/
 services/ui/frontend/dist/
 
 # Local validation binaries and screenshots are not part of platform images.
-examples/mcp-auth-sdk-client/mcp-auth-sdk-client
 live-platform.png
 ui-admin-dark.png
 ui-admin-light.png
