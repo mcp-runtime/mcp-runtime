@@ -11,9 +11,9 @@ import {
   authModeInfo,
   isServerReady,
   serverKey,
-  serverPrompts,
-  serverResources,
-  serverTasks,
+  serverPromptDetails,
+  serverResourceDetails,
+  serverTaskDetails,
   type ServerSummary,
 } from "../../api/types";
 
@@ -24,6 +24,7 @@ type ServerListProps = {
   inspectedServerKey: string;
   onScope: (key: string) => void;
   onInspect: (key: string) => void;
+  onInspectInventory?: (key: string, item: string) => void;
   onClearFilters: () => void;
   filtered: boolean;
   // Retiring is offered to any authenticated principal: the runtime API checks
@@ -41,6 +42,7 @@ export function ServerList({
   inspectedServerKey,
   onScope,
   onInspect,
+  onInspectInventory,
   onClearFilters,
   filtered,
   onRetire,
@@ -113,9 +115,9 @@ export function ServerList({
           const scoped = key === scopedServerKey;
           const inspected = key === inspectedServerKey;
           const toolCount = toolCounts[key] ?? 0;
-          const prompts = serverPrompts(server);
-          const resources = serverResources(server);
-          const tasks = serverTasks(server);
+          const prompts = serverPromptDetails(server);
+          const resources = serverResourceDetails(server);
+          const tasks = serverTaskDetails(server);
           const auth = authModeInfo(server.authMode);
           const hasConnectConfig = Boolean(
             server.access_json && Object.keys(server.access_json).length
@@ -200,22 +202,39 @@ export function ServerList({
 
                 {prompts.length || resources.length || tasks.length ? (
                   <details className="server-card-inventory" data-testid="server-card-inventory">
-                    <summary>Protocol inventory</summary>
-                    {prompts.length ? (
-                      <p>
-                        <strong>Prompts:</strong> {prompts.join(", ")}
-                      </p>
-                    ) : null}
-                    {resources.length ? (
-                      <p>
-                        <strong>Resources:</strong> {resources.join(", ")}
-                      </p>
-                    ) : null}
-                    {tasks.length ? (
-                      <p>
-                        <strong>Tasks:</strong> {tasks.join(", ")}
-                      </p>
-                    ) : null}
+                    <summary>Protocol inventory <span>{prompts.length + resources.length + tasks.length} items</span></summary>
+                    <div className="server-card-inventory-groups">
+                      {[
+                        { label: "Prompts", items: prompts },
+                        { label: "Resources", items: resources },
+                        { label: "Tasks", items: tasks },
+                      ].filter((group) => group.items.length).map((group) => (
+                        <div className="server-card-inventory-group" key={group.label}>
+                          <strong>{group.label}</strong>
+                          <div className="server-card-inventory-items">
+                            {group.items.map((item) => (
+                              onInspectInventory ? (
+                                <button
+                                  key={item.name}
+                                  type="button"
+                                  className="server-card-inventory-item"
+                                  onClick={() => onInspectInventory(key, `${group.label}:${item.name}`)}
+                                  title={`View ${item.name} in server details`}
+                                >
+                                  <span>{item.name}</span>
+                                  <small>{item.description || "No description published"}</small>
+                                </button>
+                              ) : (
+                                <div key={item.name} className="server-card-inventory-item">
+                                  <span>{item.name}</span>
+                                  <small>{item.description || "No description published"}</small>
+                                </div>
+                              )
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </details>
                 ) : null}
 

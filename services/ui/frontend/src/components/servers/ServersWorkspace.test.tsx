@@ -573,10 +573,16 @@ describe("ServersWorkspace connect config, protocol inventory, and observability
       {
         ...SERVERS.servers[0],
         access_json: { mcpServers: { "workspace-assistant": { type: "http", url: "http://x/mcp" } } },
-        prompts: [{ name: "summarize" }],
-        resources: [{ name: "workspace-doc" }],
-        tasks: [{ name: "nightly-sync" }],
-        liveInventory: { prompts: [{ name: "summarize" }, { name: "translate" }], resources: [] },
+        prompts: [{ name: "summarize", description: "Summarize workspace notes", labels: { category: "writing" } }],
+        resources: [{ name: "workspace-doc", description: "Workspace documentation" }],
+        tasks: [{ name: "nightly-sync", description: "Prepare the nightly sync" }],
+        liveInventory: {
+          prompts: [
+            { name: "summarize", description: "Summarize current workspace", arguments: [{ name: "topic", description: "Topic to summarize", required: true }] },
+            { name: "translate", description: "Translate text" },
+          ],
+          resources: [{ name: "workspace-doc", uri: "file:///workspace/doc.md", mimeType: "text/markdown" }],
+        },
         observability: {
           namespace: "mcp-servers",
           server: "workspace-assistant",
@@ -629,6 +635,7 @@ describe("ServersWorkspace connect config, protocol inventory, and observability
   });
 
   it("shows the merged declared/live protocol inventory and hides it when there is none", async () => {
+    const user = userEvent.setup();
     stubRichCatalog();
 
     renderWorkspace({ authenticated: true });
@@ -638,10 +645,20 @@ describe("ServersWorkspace connect config, protocol inventory, and observability
     expect(within(plainCard).queryByTestId("server-card-inventory")).not.toBeInTheDocument();
 
     const inventory = within(richCard).getByTestId("server-card-inventory");
-    // Declared "summarize" + live-only "translate" - union by name, not double-counted.
-    expect(inventory).toHaveTextContent("summarize, translate");
-    expect(inventory).toHaveTextContent("workspace-doc");
-    expect(inventory).toHaveTextContent("nightly-sync");
+    await user.click(within(inventory).getByText(/Protocol inventory/));
+    // Declared "summarize" and live "summarize" appear as one item.
+    expect(within(inventory).getAllByRole("button")).toHaveLength(4);
+    const summarize = within(inventory).getByRole("button", { name: /summarize/i });
+    expect(summarize).toHaveTextContent("Summarize current workspace");
+    await user.click(summarize);
+
+    const details = await screen.findByTestId("server-detail-inventory");
+    const selected = within(details).getByText("summarize").closest("details");
+    expect(selected).toHaveAttribute("open");
+    expect(selected).toHaveTextContent("topic (required)");
+    expect(selected).toHaveTextContent("category: writing");
+    expect(details).toHaveTextContent("file:///workspace/doc.md");
+    expect(details).toHaveTextContent("Prepare the nightly sync");
   });
 
   it("shows owner-scoped observability links and hides them when the backend omits them", async () => {
