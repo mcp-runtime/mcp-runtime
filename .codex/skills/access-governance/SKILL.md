@@ -12,7 +12,7 @@ description: Apply and debug MCP Runtime access grants, agent sessions, gateway 
 | **UI** | Create/apply grants and sessions; toggle enable/revoke |
 | **CLI (default)** | `mcp-runtime auth login --api-url <url>` → `agent create|list|...` and `access grant init` / `access grant apply --file …` |
 | **Adapter (recommended for agents)** | `adapter stdio\|proxy --server <name> --agent <id> [--auto-refresh]` → `POST /api/v1/runtime/adapter/sessions` |
-| **Admin kube fallback** | `kubectl apply -f` or `access … --use-kube` (bypasses platform auth and agent-directory checks) |
+| **Explicit Kubernetes test/recovery** | `access … --use-kube` only when that path is explicitly requested; never bypass a failed CLI/UI flow |
 
 Session apply via platform API is **admin-only**. Adapters usually skip manual session apply.
 
