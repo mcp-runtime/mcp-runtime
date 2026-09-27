@@ -8,12 +8,14 @@ only the Deployments whose images changed, one at a time, waiting for each
 rollout.
 
 When the release sets crdChange, the manifest embeds CustomResourceDefinition
-YAML (field "crds") so update applies those CRDs before image rollouts. You
-can also pass --crds or rely on the release's platform-crds.yaml asset.
-update never modifies Secrets, PVCs, ConfigMaps, cert-manager Issuers/
-Certificates, Services, or Ingresses, and never deletes or recreates
-workloads. mcp-auth and cert-manager are skipped unless selected with
---include-auth, --include-cert-manager, or --only.
+YAML (field "crds") so update applies only those CRD objects, waits until
+each is Established, then rolls images. Pass --crds or use the release's
+platform-crds.yaml when the JSON omits the bundle. With --only, CRD apply is
+skipped so scoped image updates cannot mutate cluster schemas. update never
+modifies Secrets, PVCs, ConfigMaps, cert-manager Issuers/Certificates,
+Services, or Ingresses, and never deletes or recreates workloads. mcp-auth
+and cert-manager are skipped unless selected with --include-auth,
+--include-cert-manager, or --only.
 
 The plan always shows the kube context and cluster ID. Without --dry-run,
 update asks for confirmation (or requires --yes when not interactive).

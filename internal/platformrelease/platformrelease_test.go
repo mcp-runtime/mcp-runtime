@@ -178,12 +178,19 @@ func TestBundleAndCRDObjectNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	names, err := CRDObjectNames(bundled)
+	filtered, names, err := FilterCRDBundle(bundled)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(names) != 2 || names[0] != "mcpaccessgrants.mcpruntime.org" || names[1] != "mcpservers.mcpruntime.org" {
 		t.Fatalf("names = %v", names)
+	}
+	if !strings.Contains(filtered, "kind: CustomResourceDefinition") {
+		t.Fatalf("filtered missing CRD kind: %s", filtered)
+	}
+	mixed := bundled + "\n---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: nope\n"
+	if _, _, err := FilterCRDBundle(mixed); err == nil || !strings.Contains(err.Error(), "ConfigMap") {
+		t.Fatalf("expected non-CRD rejection, got %v", err)
 	}
 }
 

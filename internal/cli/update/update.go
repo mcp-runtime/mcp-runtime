@@ -90,12 +90,14 @@ only the Deployments whose images changed, one at a time, waiting for each
 rollout.
 
 When the release sets crdChange, the manifest embeds CustomResourceDefinition
-YAML (field "crds") so update applies those CRDs before image rollouts. You
-can also pass --crds or rely on the release's platform-crds.yaml asset.
-update never modifies Secrets, PVCs, ConfigMaps, cert-manager Issuers/
-Certificates, Services, or Ingresses, and never deletes or recreates
-workloads. mcp-auth and cert-manager are skipped unless selected with
---include-auth, --include-cert-manager, or --only.
+YAML (field "crds") so update applies only those CRD objects, waits until
+each is Established, then rolls images. Pass --crds or use the release's
+platform-crds.yaml when the JSON omits the bundle. With --only, CRD apply is
+skipped so scoped image updates cannot mutate cluster schemas. update never
+modifies Secrets, PVCs, ConfigMaps, cert-manager Issuers/Certificates,
+Services, or Ingresses, and never deletes or recreates workloads. mcp-auth
+and cert-manager are skipped unless selected with --include-auth,
+--include-cert-manager, or --only.
 
 The plan always shows the kube context and cluster ID. Without --dry-run,
 update asks for confirmation (or requires --yes when not interactive).
@@ -188,13 +190,16 @@ func run(ctx context.Context, out io.Writer, opts Options, d deps) error {
 				if plan.ApplyCRDs {
 					extra = fmt.Sprintf(" and %d CustomResourceDefinition(s)", len(plan.CRDNames))
 				}
-				fmt.Fprintf(out, "\nDry run: %d component(s)%s would be updated. Re-run without --dry-run to apply.\n", n, extra)
+				fmt.Fprintf(out, "\nDry run (plan only; no CRD apply or rollouts were attempted): %d component(s)%s would be updated. Re-run without --dry-run to apply.\n", n, extra)
 			}
 		}
 		return report(nil)
 	}
 
 	if !opts.Yes {
+		if plan.ApplyCRDs && !jsonOut {
+			fmt.Fprintf(out, "\nThis update will apply CustomResourceDefinitions (%s) before rolling images.\n", stringsJoin(plan.CRDNames))
+		}
 		ok, err := d.confirm(d.stdin, out, kh.Cluster)
 		if err != nil {
 			return err
@@ -294,9 +299,9 @@ func ensureManifestCRDs(ctx context.Context, m *platformrelease.Manifest, opts O
 		return nil
 	}
 	if last != nil {
-		return core.WrapWithSentinel(core.ErrUpdateCRDChange, last, fmt.Sprintf("release %s changes CustomResourceDefinitions but no CRD bundle was found (embed crds in platform-manifest.json, pass --crds, or publish %s): %v", m.Version, platformrelease.CRDsAssetName, last))
+		return core.WrapWithSentinel(core.ErrUpdateCRDChange, last, fmt.Sprintf("release %s changes CustomResourceDefinitions but no CRD bundle was found (embed crds in platform-manifest.json, pass --crds, or publish %s on the release): %v", m.Version, platformrelease.CRDsAssetName, last))
 	}
-	return core.NewWithSentinel(core.ErrUpdateCRDChange, fmt.Sprintf("release %s changes CustomResourceDefinitions but the manifest has no embedded crds; pass --crds <path|https-url> or use a release that publishes platform-manifest.json with crds / %s", m.Version, platformrelease.CRDsAssetName))
+	return core.NewWithSentinel(core.ErrUpdateCRDChange, fmt.Sprintf("release %s changes CustomResourceDefinitions but the manifest has no embedded crds; pass --crds <path|https-url> or publish %s on the release", m.Version, platformrelease.CRDsAssetName))
 }
 
 // kubeClient builds clients from kubeconfig and reports the context,

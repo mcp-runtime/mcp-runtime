@@ -1,12 +1,13 @@
 name: Release
 
+# Push a v* tag first, then create/publish the GitHub Release from the UI.
+# Tag push alone does not build or upload assets.
 on:
-  push:
-    tags:
-      - "v*"
+  release:
+    types: [published]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-publish
+  group: ${{ github.workflow }}-${{ github.event.release.tag_name }}-publish
   cancel-in-progress: false
 
 permissions:
@@ -15,15 +16,16 @@ permissions:
 jobs:
   build:
     name: Build CLI binaries
+    if: startsWith(github.event.release.tag_name, 'v')
     uses: ./.github/workflows/release-build.yaml
     permissions:
       contents: read
 
   publish:
-    name: Publish GitHub Release
+    name: Upload release assets
     runs-on: ubuntu-24.04
     needs: [build]
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.event.release.tag_name, 'v')
     permissions:
       contents: write
     steps:
@@ -36,6 +38,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event.release.tag_name }}
           fetch-depth: 0
           path: src
 
@@ -46,15 +49,14 @@ jobs:
           cache: false
 
       # platform-manifest.json is the authoritative component version list that
-      # `mcp-runtime update --to <tag>` fetches. It is generated from the CLI's
-      # component catalog. When config/crd/bases changed since the previous tag,
-      # crdChange is set and CRD YAML is embedded in the JSON (and also written
-      # as platform-crds.yaml) so update can apply schema changes.
+      # `mcp-runtime update --to <tag>` fetches. When config/crd/bases changed
+      # since the previous tag, crdChange is set and CRD YAML is embedded so
+      # update can apply schema changes before image rollouts.
       - name: Generate platform component manifest
         shell: bash
         working-directory: src
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
           crd_flag=""
@@ -67,17 +69,10 @@ jobs:
             ${crd_flag} \
             -write-crds ../dist/platform-crds.yaml \
             > ../dist/platform-manifest.json
-          # Always publish a standalone CRD bundle for --crds / operators.
-          if [[ ! -s ../dist/platform-crds.yaml ]]; then
-            go run ./hack/release/platformmanifest \
-              -version "${RELEASE_TAG}" \
-              -write-crds ../dist/platform-crds.yaml \
-              >/dev/null
-          fi
           python3 - <<'PY'
           import json
           m=json.load(open("../dist/platform-manifest.json"))
-          print("version", m.get("version"), "crdChange", m.get("crdChange"), "components", len(m.get("components",[])), "crds_bytes", len(m.get("crds") or ""))
+          print("version", m.get("version"), "crdChange", bool(m.get("crdChange")), "components", len(m.get("components",[])), "crds_bytes", len(m.get("crds") or ""))
           PY
 
       - name: List release assets
@@ -105,30 +100,19 @@ jobs:
           actual_count="$(find dist -maxdepth 1 -type f | wc -l | tr -d ' ')"
           if [[ "${actual_count}" != "${#expected[@]}" ]]; then
             echo "Expected ${#expected[@]} release assets, found ${actual_count}" >&2
+            find dist -maxdepth 1 -type f | sort >&2
             exit 1
           fi
-          if ! python3 -c 'import json; m=json.load(open("dist/platform-manifest.json")); assert m.get("crdChange") is False or (m.get("crds") or "").strip()'; then
+          if ! python3 -c 'import json; m=json.load(open("dist/platform-manifest.json")); assert (not m.get("crdChange")) or (m.get("crds") or "").strip()'; then
             echo "platform-manifest.json with crdChange must embed non-empty crds" >&2
             exit 1
           fi
 
-      - name: Publish release
+      # The GitHub Release already exists (created from the UI). Only upload
+      # binaries and manifests; do not overwrite the release notes body.
+      - name: Upload release assets
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
-          tag_name: ${{ github.ref_name }}
-          name: MCP Runtime ${{ github.ref_name }}
-          body: |
-            ## Try it
-
-            Download the `mcp-runtime` CLI binary for your platform:
-
-            - [macOS Apple Silicon](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/mcp-runtime-darwin-arm64)
-            - [macOS Intel](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/mcp-runtime-darwin-amd64)
-            - [Linux amd64](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/mcp-runtime-linux-amd64)
-            - [Linux arm64](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/mcp-runtime-linux-arm64)
-            - [Windows amd64](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/mcp-runtime-windows-amd64.exe)
-
-            Install and setup guide: https://mcpruntime.org/docs/getting-started/
-          generate_release_notes: true
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          tag_name: ${{ github.event.release.tag_name }}
           files: dist/*
+          fail_on_unmatched_files: true

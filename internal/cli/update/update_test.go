@@ -336,11 +336,61 @@ func TestPlanAppliesEmbeddedCRDs(t *testing.T) {
 	}
 }
 
+func TestPlanSkipsCRDsWhenOnlySet(t *testing.T) {
+	cs := fake.NewSimpleClientset(installed("v0.4.0")...)
+	m := manifest(t, "v0.5.0", func(m *platformrelease.Manifest) {
+		m.CRDChange = true
+		m.CRDs = "apiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\nmetadata:\n  name: mcpservers.mcpruntime.org\n"
+	})
+	plan, err := BuildPlan(context.Background(), cs, m, Selection{Only: []string{"ui"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.ApplyCRDs {
+		t.Fatal("expected CRD apply skipped with --only")
+	}
+	if len(plan.Warnings) == 0 || !strings.Contains(plan.Warnings[0], "--only") {
+		t.Fatalf("expected --only CRD skip warning, got %v", plan.Warnings)
+	}
+}
+
+func TestPlanRejectsNonCRDBundle(t *testing.T) {
+	cs := fake.NewSimpleClientset(installed("v0.4.0")...)
+	m := manifest(t, "v0.5.0", func(m *platformrelease.Manifest) {
+		m.CRDChange = true
+		m.CRDs = "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: nope\n"
+	})
+	if _, err := BuildPlan(context.Background(), cs, m, Selection{}); err == nil || !strings.Contains(err.Error(), "ConfigMap") {
+		t.Fatalf("expected non-CRD rejection, got %v", err)
+	}
+}
+
 func TestPlanRefusesCRDChangeWithoutBundle(t *testing.T) {
 	cs := fake.NewSimpleClientset(installed("v0.4.0")...)
 	m := manifest(t, "v0.5.0", func(m *platformrelease.Manifest) { m.CRDChange = true })
 	if _, err := BuildPlan(context.Background(), cs, m, Selection{}); err == nil || !strings.Contains(err.Error(), "no embedded crds") {
 		t.Fatalf("expected missing CRD bundle error, got %v", err)
+	}
+}
+
+func TestCRDReadyConditions(t *testing.T) {
+	obj := map[string]any{
+		"status": map[string]any{
+			"conditions": []any{
+				map[string]any{"type": "NamesAccepted", "status": "True"},
+				map[string]any{"type": "Established", "status": "True"},
+			},
+		},
+	}
+	est, names, err := crdReadyConditions(obj)
+	if err != nil || !est || !names {
+		t.Fatalf("ready = %v %v %v", est, names, err)
+	}
+	obj["status"].(map[string]any)["conditions"] = []any{
+		map[string]any{"type": "Established", "status": "False", "message": "pending"},
+	}
+	if _, _, err := crdReadyConditions(obj); err == nil || !strings.Contains(err.Error(), "Established=False") {
+		t.Fatalf("expected Established=False error, got %v", err)
 	}
 }
 
@@ -513,7 +563,7 @@ func TestCommandDryRunMakesNoChanges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"Kube context:   kind-mcp-runtime", "Cluster ID:     uid-1", "Version:        v0.4.0 -> v0.5.0", "Dry run:", "Preserved (never modified by update):", "mcp-sentinel/mcp-sentinel-ui"} {
+	for _, want := range []string{"Kube context:   kind-mcp-runtime", "Cluster ID:     uid-1", "Version:        v0.4.0 -> v0.5.0", "Dry run (plan only;", "Preserved (never modified by update):", "mcp-sentinel/mcp-sentinel-ui"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("dry-run output missing %q:\n%s", want, out)
 		}

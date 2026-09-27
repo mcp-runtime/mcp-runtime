@@ -277,37 +277,54 @@ func BundleCRDs(dir string) (string, error) {
 	return out, nil
 }
 
-// CRDObjectNames returns metadata.name values for CustomResourceDefinition
-// documents in a multi-document YAML bundle. Non-CRD documents are skipped.
-func CRDObjectNames(crdsYAML string) ([]string, error) {
+// FilterCRDBundle keeps only CustomResourceDefinition documents from a
+// multi-document YAML bundle and returns their metadata.name values in order.
+// Any other non-empty kind is rejected so update cannot apply arbitrary
+// cluster objects from a release or --crds file.
+func FilterCRDBundle(crdsYAML string) (filtered string, names []string, err error) {
 	crdsYAML = strings.TrimSpace(crdsYAML)
 	if crdsYAML == "" {
-		return nil, nil
+		return "", nil, nil
 	}
 	decoder := k8syaml.NewYAMLOrJSONDecoder(strings.NewReader(crdsYAML), 4096)
-	var names []string
+	var docs []string
 	for {
 		var obj map[string]any
 		if err := decoder.Decode(&obj); err != nil {
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			return nil, fmt.Errorf("decode CRD bundle: %w", err)
+			return "", nil, fmt.Errorf("decode CRD bundle: %w", err)
 		}
 		if len(obj) == 0 {
 			continue
 		}
 		kind, _ := obj["kind"].(string)
 		if kind != "CustomResourceDefinition" {
-			continue
+			return "", nil, fmt.Errorf("CRD bundle may only contain CustomResourceDefinition objects; found %q", kind)
 		}
 		meta, _ := obj["metadata"].(map[string]any)
 		name, _ := meta["name"].(string)
 		name = strings.TrimSpace(name)
 		if name == "" {
-			return nil, errors.New("CustomResourceDefinition missing metadata.name")
+			return "", nil, errors.New("CustomResourceDefinition missing metadata.name")
 		}
+		raw, err := yaml.Marshal(obj)
+		if err != nil {
+			return "", nil, fmt.Errorf("encode CustomResourceDefinition %s: %w", name, err)
+		}
+		docs = append(docs, strings.TrimSpace(string(raw)))
 		names = append(names, name)
 	}
-	return names, nil
+	if len(docs) == 0 {
+		return "", nil, nil
+	}
+	return strings.Join(docs, "\n---\n") + "\n", names, nil
+}
+
+// CRDObjectNames returns metadata.name values for CustomResourceDefinition
+// documents in a multi-document YAML bundle.
+func CRDObjectNames(crdsYAML string) ([]string, error) {
+	_, names, err := FilterCRDBundle(crdsYAML)
+	return names, err
 }

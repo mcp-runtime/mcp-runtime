@@ -170,21 +170,26 @@ func BuildPlan(ctx context.Context, cs kubernetes.Interface, m *platformrelease.
 	}
 	plan := &Plan{TargetVersion: m.Version, Preserved: append([]string(nil), preservedResources...)}
 	if m.CRDChange {
-		crds := strings.TrimSpace(m.CRDs)
-		if crds == "" {
-			return nil, core.NewWithSentinel(core.ErrUpdateCRDChange, fmt.Sprintf("release %s changes CustomResourceDefinitions but the manifest has no embedded crds; pass --crds <path|https-url> or use a release that publishes platform-manifest.json with crds / platform-crds.yaml", m.Version))
+		if len(sel.Only) > 0 {
+			// Scoped image updates must not silently mutate cluster CRDs.
+			plan.Warnings = append(plan.Warnings, fmt.Sprintf("release %s changes CustomResourceDefinitions, but --only is set so CRD apply is skipped; re-run without --only to apply schema changes", m.Version))
+		} else {
+			crds := strings.TrimSpace(m.CRDs)
+			if crds == "" {
+				return nil, core.NewWithSentinel(core.ErrUpdateCRDChange, fmt.Sprintf("release %s changes CustomResourceDefinitions but the manifest has no embedded crds; pass --crds <path|https-url> or use a release that publishes platform-manifest.json with crds / platform-crds.yaml", m.Version))
+			}
+			filtered, names, err := platformrelease.FilterCRDBundle(crds)
+			if err != nil {
+				return nil, core.WrapWithSentinel(core.ErrUpdateManifestInvalid, err, fmt.Sprintf("release %s CRD bundle: %v", m.Version, err))
+			}
+			if len(names) == 0 {
+				return nil, core.NewWithSentinel(core.ErrUpdateManifestInvalid, fmt.Sprintf("release %s CRD bundle contains no CustomResourceDefinition objects", m.Version))
+			}
+			plan.ApplyCRDs = true
+			plan.CRDNames = names
+			plan.crdsYAML = filtered
+			plan.Warnings = append(plan.Warnings, fmt.Sprintf("release %s applies CustomResourceDefinitions before image rollouts: %s", m.Version, strings.Join(names, ", ")))
 		}
-		names, err := platformrelease.CRDObjectNames(crds)
-		if err != nil {
-			return nil, core.WrapWithSentinel(core.ErrUpdateManifestInvalid, err, fmt.Sprintf("release %s CRD bundle: %v", m.Version, err))
-		}
-		if len(names) == 0 {
-			return nil, core.NewWithSentinel(core.ErrUpdateManifestInvalid, fmt.Sprintf("release %s CRD bundle contains no CustomResourceDefinition objects", m.Version))
-		}
-		plan.ApplyCRDs = true
-		plan.CRDNames = names
-		plan.crdsYAML = crds
-		plan.Warnings = append(plan.Warnings, fmt.Sprintf("release %s applies CustomResourceDefinitions before image rollouts: %s", m.Version, strings.Join(names, ", ")))
 	}
 	only := sel.onlySet()
 	installedVersions := map[string]bool{}

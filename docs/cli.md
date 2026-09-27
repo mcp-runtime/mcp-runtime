@@ -805,12 +805,15 @@ rollout.
 
 When a release sets `crdChange`, the published `platform-manifest.json` embeds
 CustomResourceDefinition YAML in the `crds` field (and the release also ships
-`platform-crds.yaml`). update applies those CRDs before image rollouts. Pass
-`--crds` only when a local manifest omits the embedded bundle. update never
-modifies Secrets, PVCs, ConfigMaps, cert-manager Issuers/Certificates,
-Services, or Ingresses, and never deletes or recreates workloads. mcp-auth and
-cert-manager are skipped unless selected with `--include-auth`,
-`--include-cert-manager`, or `--only`.
+`platform-crds.yaml`). update applies only CRD objects from that bundle, waits
+until each CRD is Established, then rolls images. Pass `--crds` only when a
+local manifest omits the embedded bundle. With `--only`, CRD apply is skipped
+so a scoped image update cannot mutate cluster schemas; re-run without `--only`
+to apply schema changes. `--dry-run` prints the plan only and does not
+server-side validate CRD apply. update never modifies Secrets, PVCs,
+ConfigMaps, cert-manager Issuers/Certificates, Services, or Ingresses, and
+never deletes or recreates workloads. mcp-auth and cert-manager are skipped
+unless selected with `--include-auth`, `--include-cert-manager`, or `--only`.
 
 The plan always shows the kube context and cluster ID. Without `--dry-run`,
 update asks for confirmation (or requires `--yes` when not interactive).
@@ -862,9 +865,10 @@ A digest in the manifest pins the workload to `repo:tag@digest`, so reruns are
 exact no-ops. A downgrade is refused unless you pass `--allow-downgrade`. If a
 rollout fails, update stops, restores the previous images by default, and
 prints `kubectl rollout undo` / `kubectl set image` recovery commands. Required
-RBAC: `get`/`list` on namespaces, deployments, pods, and
-`customresourcedefinitions`, and `patch`/`create`/`update` on deployments and
-CRDs when `crdChange` is set.
+RBAC: `get`/`list` on namespaces, deployments, and pods; `patch` on
+deployments; and when `crdChange` is set, cluster-scoped
+`get`/`create`/`update` on `customresourcedefinitions.apiextensions.k8s.io`
+plus API discovery.
 
 ## cluster
 

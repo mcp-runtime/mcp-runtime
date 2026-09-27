@@ -117,21 +117,15 @@ func Apply(ctx context.Context, cs kubernetes.Interface, plan *Plan, opts ApplyO
 	res := &Result{}
 
 	if plan.ApplyCRDs {
-		if opts.Clients == nil {
-			res.Failed = true
-			res.CRDs = []CRDResult{{Name: "*", Error: "Kubernetes dynamic client is required to apply CustomResourceDefinitions"}}
-			return res
+		crdTimeout := opts.Timeout
+		if crdTimeout < 2*time.Minute {
+			crdTimeout = 2 * time.Minute
 		}
-		progress(fmt.Sprintf("Applying CustomResourceDefinitions (%s)", stringsJoin(plan.CRDNames)))
-		applied, err := k8sclient.ApplyManifestYAML(ctx, opts.Clients, []byte(plan.crdsYAML), "")
+		crdResults, err := applyReleaseCRDs(ctx, opts.Clients, plan, crdTimeout, progress)
+		res.CRDs = crdResults
 		if err != nil {
 			res.Failed = true
-			res.CRDs = append(res.CRDs, CRDResult{Name: "*", Error: err.Error()})
 			return res
-		}
-		for _, a := range applied {
-			res.CRDs = append(res.CRDs, CRDResult{Name: a.Name, Action: a.Action})
-			progress(fmt.Sprintf("CRD %s %s", a.Name, a.Action))
 		}
 	}
 
