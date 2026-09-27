@@ -583,7 +583,8 @@ TLS Secret. Do not rerun `setup --with-tls` for an image-only release.
 
 The Runtime CLI release and the hosted platform images are separate artifacts.
 Tagging a Runtime release publishes platform-specific CLI binaries through
-`.github/workflows/release.yaml`; it does not update the hosted platform.
+`.github/workflows/release.yaml` (triggered when a GitHub Release is published
+from the UI for a pushed `v*` tag); it does not update the hosted platform.
 The production rollout updates platform APIs/UI (and mcp-auth only when explicitly
 selected); it does not publish a new CLI release. Publish either project's
 release only after its candidate passes the checks below.

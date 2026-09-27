@@ -17,6 +17,7 @@ import (
 // Workload outcome states.
 const (
 	StatusUpdated        = "updated"
+	StatusSkipped        = "skipped"
 	StatusFailed         = "failed"
 	StatusRolledBack     = "rolled-back"
 	StatusRollbackFailed = "rollback-failed"
@@ -47,8 +48,16 @@ type WorkloadResult struct {
 	changes []imageChange
 }
 
+// CRDResult reports one CustomResourceDefinition apply outcome.
+type CRDResult struct {
+	Name   string `json:"name"`
+	Action string `json:"action,omitempty"`
+	Error  string `json:"error,omitempty"`
+}
+
 // Result is the outcome of applying a plan.
 type Result struct {
+	CRDs      []CRDResult      `json:"crds,omitempty"`
 	Workloads []WorkloadResult `json:"workloads"`
 	Failed    bool             `json:"failed"`
 }
@@ -64,6 +73,8 @@ type ApplyOptions struct {
 	Timeout           time.Duration
 	RollbackOnFailure bool
 	Waiter            RolloutWaiter
+	// Clients applies CRD YAML when the plan sets ApplyCRDs. Required only then.
+	Clients *k8sclient.Clients
 	// Progress receives human-readable progress lines (may be nil).
 	Progress func(string)
 }
@@ -89,9 +100,11 @@ func groupByWorkload(rows []Row) []*WorkloadResult {
 	return out
 }
 
-// Apply patches only the changed workloads, one at a time, waiting for each
-// rollout. On failure it stops and, when enabled, restores previous images of
-// every workload touched in this run in reverse order.
+// Apply applies release CRDs (when planned) then patches only the changed
+// workloads, one at a time, waiting for each rollout. On image-rollout
+// failure it stops and, when enabled, restores previous images of every
+// workload touched in this run in reverse order. CRD applies are not rolled
+// back (Kubernetes CRD downgrades are unsafe).
 func Apply(ctx context.Context, cs kubernetes.Interface, plan *Plan, opts ApplyOptions) *Result {
 	progress := opts.Progress
 	if progress == nil {
@@ -103,9 +116,34 @@ func Apply(ctx context.Context, cs kubernetes.Interface, plan *Plan, opts ApplyO
 	}
 	workloads := groupByWorkload(plan.Changed())
 	res := &Result{}
+
+	if plan.ApplyCRDs {
+		crdTimeout := opts.Timeout
+		if crdTimeout < 2*time.Minute {
+			crdTimeout = 2 * time.Minute
+		}
+		crdResults, err := applyReleaseCRDs(ctx, opts.Clients, plan, crdTimeout, progress)
+		res.CRDs = crdResults
+		if err != nil {
+			res.Failed = true
+			return res
+		}
+	}
+
 	var touched []*WorkloadResult
 
 	for _, w := range workloads {
+		current, err := workloadAlreadyCurrent(ctx, cs, w)
+		if err != nil {
+			w.Status, w.Error = StatusFailed, fmt.Sprintf("read deployment: %v", err)
+			res.Failed = true
+			break
+		}
+		if current {
+			w.Status = StatusSkipped
+			progress(fmt.Sprintf("Skipping %s/%s (already on target images)", w.Namespace, w.Deployment))
+			continue
+		}
 		progress(fmt.Sprintf("Updating %s/%s (%v)", w.Namespace, w.Deployment, w.Components))
 		touched = append(touched, w)
 		if err := patchWorkload(ctx, cs, w, plan.TargetVersion, false); err != nil {
@@ -150,6 +188,17 @@ func joinErr(a, b string) string {
 		return b
 	}
 	return a + "; " + b
+}
+
+func stringsJoin(parts []string) string {
+	if len(parts) == 0 {
+		return "-"
+	}
+	out := parts[0]
+	for i := 1; i < len(parts); i++ {
+		out += ", " + parts[i]
+	}
+	return out
 }
 
 // buildPatch renders the strategic-merge patch for a workload. It sets only
@@ -218,6 +267,32 @@ func patchWorkload(ctx context.Context, cs kubernetes.Interface, w *WorkloadResu
 	}
 	_, err = cs.AppsV1().Deployments(w.Namespace).Patch(ctx, w.Deployment, types.StrategicMergePatchType, patch, metav1.PatchOptions{FieldManager: "mcp-runtime-update"})
 	return err
+}
+
+// workloadAlreadyCurrent reports whether every planned image/env change is
+// already present on the live Deployment (no-op patch).
+func workloadAlreadyCurrent(ctx context.Context, cs kubernetes.Interface, w *WorkloadResult) (bool, error) {
+	deploy, err := cs.AppsV1().Deployments(w.Namespace).Get(ctx, w.Deployment, metav1.GetOptions{})
+	if err != nil {
+		return false, err
+	}
+	for _, ch := range w.changes {
+		c := ch.component
+		container := findContainer(deploy.Spec.Template.Spec.Containers, c.Container)
+		if container == nil {
+			return false, nil
+		}
+		if c.EnvVar != "" {
+			if envValue(container.Env, c.EnvVar) != ch.target {
+				return false, nil
+			}
+			continue
+		}
+		if container.Image != ch.target {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func recoveryCommands(w *WorkloadResult) []string {
