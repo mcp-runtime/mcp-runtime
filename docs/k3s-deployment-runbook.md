@@ -263,7 +263,7 @@ compare `MCP_AUTH_RESOURCES` on the serving pods with the Deployment and inspect
 replacement pod startup logs. A published image that rejects connector fields
 must be replaced with a compatible image; preserve the connector config,
 signing key, and data PVC during recovery.
-`cluster doctor` checks the current auth revision, observed generation, and
+`cluster diagnostics` checks the current auth revision, observed generation, and
 replacement replicas; API access failures are reported rather than treated as
 an absent optional auth installation.
 

@@ -171,7 +171,7 @@ by a manual/scripted flow using the `cursor://` redirect URI, not by Cursor itse
   env, connector config, signing key, and data PVC. Do not remove private IdP
   endpoint fields merely to make an older published image start: they may be
   needed for server-side token exchange. Setup now requires full auth/operator
-  rollouts rather than accepting an old available replica. `cluster doctor`
+  rollouts rather than accepting an old available replica. `cluster diagnostics`
   also checks the auth revision, observed generation, and replacement replicas;
   it reports API access errors instead of skipping them as an absent install.
 
