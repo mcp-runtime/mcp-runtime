@@ -1,0 +1,25 @@
+{
+  "skill_name": "kubernetes-hardening-audit",
+  "evals": [
+    {
+      "id": "rbac-pss-networkpolicy-review",
+      "prompt": "Review the Kubernetes manifests I changed under k8s/ and config/ for RBAC, service account, pod security, and NetworkPolicy hardening gaps.",
+      "expected_output": "A Kubernetes hardening review that inventories affected namespaces and resources, checks RBAC/PSS/NetworkPolicy/securityContext/secret access, and reports concrete findings with file references.",
+      "assertions": [
+        "Mentions RBAC, Pod Security Standards, NetworkPolicies, securityContext, and secret access",
+        "Uses ../_shared/FINDINGS-TEMPLATE.md for findings",
+        "Separates skipped live-cluster checks from completed static checks"
+      ]
+    },
+    {
+      "id": "cluster-cis-posture",
+      "prompt": "Run a cluster hardening sweep on the contributor Kind cluster and tell me whether our namespaces still meet the expected security posture.",
+      "expected_output": "A live-cluster posture report that confirms the current context, runs Kubernetes inventory and CIS-relevant checks, and records any environment blockers explicitly.",
+      "assertions": [
+        "Confirms the target cluster before live checks",
+        "Includes namespace-scoped posture results",
+        "Records commands run and checks skipped"
+      ]
+    }
+  ]
+}

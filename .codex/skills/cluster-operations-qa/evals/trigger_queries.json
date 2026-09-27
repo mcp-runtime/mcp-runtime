@@ -1,0 +1,21 @@
+{
+  "skill_name": "cluster-operations-qa",
+  "queries": [
+    {
+      "query": "Verify this operator and CLI change does not regress setup, reconciliation, registry, or rollout behavior.",
+      "should_trigger": true
+    },
+    {
+      "query": "Run live-cluster operational QA for ingress wiring and component rollout health.",
+      "should_trigger": true
+    },
+    {
+      "query": "Check whether the UI API Keys tab loads in the browser.",
+      "should_trigger": false
+    },
+    {
+      "query": "Validate MCP JSON-RPC error codes against the protocol spec.",
+      "should_trigger": false
+    }
+  ]
+}

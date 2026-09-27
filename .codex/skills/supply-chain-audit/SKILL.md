@@ -10,8 +10,8 @@ description: Audit MCP Runtime supply chain — Go modules, container images, ba
 Use this skill to audit everything that crosses the trust boundary into the
 build: Go modules, container base images, image signatures, SBOMs, and
 GitHub Actions. Scope intentionally excludes runtime authn/z, RBAC, and
-cluster posture — those live in `security-audit-platform` and
-`k8s-hardening-audit`.
+cluster posture — those live in `platform-security-audit` and
+`kubernetes-hardening-audit`.
 
 Findings use the shared template at
 `../_shared/FINDINGS-TEMPLATE.md`.
@@ -211,6 +211,6 @@ include in the Summary section:
 - Workflow count, % pinned by SHA, list of unpinned actions.
 - SBOM diff vs previous release if applicable.
 
-Cross-reference findings against `security-audit-platform` (e.g., a CVE in
+Cross-reference findings against `platform-security-audit` (e.g., a CVE in
 the gateway proxy is also a runtime finding) so the same root cause is not
 counted twice.

@@ -1,7 +1,7 @@
 # MCP Runtime — Security Findings Template
 
-Shared by `security-audit`, `security-audit-platform`, `supply-chain-audit`, and
-`k8s-hardening-audit`. Use this template for every reported finding so two
+Shared by `change-security-audit`, `platform-security-audit`, `supply-chain-audit`, and
+`kubernetes-hardening-audit`. Use this template for every reported finding so two
 auditors converge on severity and a maintainer can act without follow-up.
 
 ## Severity rubric

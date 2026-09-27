@@ -1,0 +1,21 @@
+{
+  "skill_name": "platform-security-audit",
+  "queries": [
+    {
+      "query": "Run a deep platform-wide MCP Runtime security audit before release.",
+      "should_trigger": true
+    },
+    {
+      "query": "Do a red-team style assessment across auth, tenant isolation, registry, ingress, audit logs, and DAST.",
+      "should_trigger": true
+    },
+    {
+      "query": "Review this one-line UI bug fix for security side effects.",
+      "should_trigger": false
+    },
+    {
+      "query": "Bring up the Kind contributor cluster for QA.",
+      "should_trigger": false
+    }
+  ]
+}

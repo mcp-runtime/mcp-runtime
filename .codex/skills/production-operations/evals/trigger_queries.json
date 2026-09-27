@@ -1,0 +1,21 @@
+{
+  "skill_name": "production-operations",
+  "queries": [
+    {
+      "query": "Validate a rollout to the public mcpruntime.org k3s cluster using the repo deployment scripts.",
+      "should_trigger": true
+    },
+    {
+      "query": "Run the Staging E2E disposable VM workflow with multitenancy and a fresh certificate.",
+      "should_trigger": true
+    },
+    {
+      "query": "My local Kind cluster has a dashboard 401 in test mode.",
+      "should_trigger": true
+    },
+    {
+      "query": "How do I make an unrelated documentation-only edit without using production-operations?",
+      "should_trigger": false
+    }
+  ]
+}

@@ -2,8 +2,8 @@
 
 This is the **source of truth** for which roles can call which endpoint on the
 split Sentinel API services (`mcp-platform-api`, `mcp-runtime-api`,
-`mcp-analytics-api`). The `security-audit-platform` skill (see
-`.codex/skills/security-audit-platform/SKILL.md`, Step 2) compares the live
+`mcp-analytics-api`). The `platform-security-audit` skill (see
+`.codex/skills/platform-security-audit/SKILL.md`, Step 2) compares the live
 services against this table. A divergence in either direction is a finding:
 
 - A route in `services/platform-api/routes.go`, `services/runtime-api/routes.go`,
@@ -130,7 +130,7 @@ row above, the auditor must also confirm:
 ## Drift check
 
 The platform audit harness in
-`.codex/skills/security-audit-platform/SKILL.md` (Step 2) reads this table
+`.codex/skills/platform-security-audit/SKILL.md` (Step 2) reads this table
 and exercises each row. The starter harness lives in
 `docs/security/authz-matrix.json` (subset of rows); unit tests in each split
 service load that file via `pkg/authzmatrix`. Expand the JSON toward full table

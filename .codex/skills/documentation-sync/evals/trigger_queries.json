@@ -1,0 +1,21 @@
+{
+  "skill_name": "documentation-sync",
+  "queries": [
+    {
+      "query": "Review this code change and update README, docs, or AGENTS.md if contributor guidance is now stale.",
+      "should_trigger": true
+    },
+    {
+      "query": "The CLI help changed; sync docs with the live help output.",
+      "should_trigger": true
+    },
+    {
+      "query": "Run a live cluster security regression for auth and gateway policy.",
+      "should_trigger": false
+    },
+    {
+      "query": "Measure gateway p95 latency against the perf baseline.",
+      "should_trigger": false
+    }
+  ]
+}

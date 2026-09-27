@@ -1,0 +1,25 @@
+{
+  "skill_name": "change-security-audit",
+  "evals": [
+    {
+      "id": "change-scoped-auth-review",
+      "prompt": "Review this small auth-related diff for security risks and choose the right tests to run.",
+      "expected_output": "A change-scoped security review that defines the trust boundary, checks auth/role/secret/logging invariants, runs targeted tests, and reports findings or no findings with residual risk.",
+      "assertions": [
+        "Inspects git diff and touched files",
+        "Runs checks matched to the changed surface",
+        "Uses the shared findings template for security issues"
+      ]
+    },
+    {
+      "id": "container-workflow-change",
+      "prompt": "I changed Dockerfiles and GitHub Actions. Audit only the relevant security risks and tell me what checks are required.",
+      "expected_output": "A focused security review covering action permissions, secret exposure, image build risks, dependency scanners, and whether supply-chain-audit should also run.",
+      "assertions": [
+        "Identifies when supply-chain-audit is the better skill",
+        "Checks for untrusted PR and secret exposure risks",
+        "Lists scanners run or skipped"
+      ]
+    }
+  ]
+}

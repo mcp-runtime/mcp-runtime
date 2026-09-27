@@ -1,0 +1,17 @@
+{
+  "skill_name": "local-development",
+  "queries": [
+    {
+      "query": "I need the local Kind UI/API URLs and test-mode credentials, and the dashboard API returns 401.",
+      "should_trigger": true
+    },
+    {
+      "query": "Configure public TLS and DNS for a production install.",
+      "should_trigger": true
+    },
+    {
+      "query": "How do I make an unrelated documentation-only edit without using local-development?",
+      "should_trigger": false
+    }
+  ]
+}
