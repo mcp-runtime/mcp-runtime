@@ -163,6 +163,10 @@ by a manual/scripted flow using the `cursor://` redirect URI, not by Cursor itse
   deferred cleanup. The ingress probe now uses this pattern, matching the
   registry and API probes. Check the public MCP endpoint separately before
   attributing this diagnostic failure to an actual ingress outage.
+  A TLS-only ingress returns 404 on Traefik's HTTP entrypoint even when public
+  HTTPS works. Detect both `router.tls: "true"` and Ingress TLS Secret settings;
+  use the secure service port with curl `--connect-to` and the public HTTPS URL
+  so SNI and certificate verification remain correct. Do not bypass TLS checks.
 - **`400 {"error":"resource is not recognized"}` from the token or authorize endpoint:** the
   RFC 8707 `resource` the client sends is not in the AS allowlist. On this platform check
   that `MCP_AUTH_RESOURCES` (plural, comma-separated — **not** just `MCP_AUTH_RESOURCE`)

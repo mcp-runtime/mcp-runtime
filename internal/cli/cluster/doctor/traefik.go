@@ -765,9 +765,26 @@ func checkIngressRouteProbe(kubectl core.KubectlRunner, namespace string, distro
 	if host != "" {
 		probeArgs = append(probeArgs, "-H", "Host: "+host)
 	}
+	probeURL := fmt.Sprintf("http://%s:%d%s", doctorServiceDNS(traefik.Name, traefik.Namespace), traefik.WebPort, path)
+	if route.TLS {
+		securePort := 0
+		for _, port := range parseDoctorServicePorts(traefikDetail) {
+			if port.Name == "websecure" || port.Name == "https" {
+				securePort = port.Port
+				break
+			}
+		}
+		if host == "" || securePort == 0 {
+			return DoctorCheck{Name: "ingress route probe", OK: false, Detail: "TLS ingress requires a public host and a Traefik websecure/https service port", Remedy: "inspect ingress host and Traefik secure service ports"}
+		}
+		// Connect inside the cluster while preserving public TLS SNI and
+		// certificate verification. A Host header alone cannot select TLS SNI.
+		probeArgs = append(probeArgs, "--connect-to", fmt.Sprintf("%s:443:%s:%d", host, doctorServiceDNS(traefik.Name, traefik.Namespace), securePort))
+		probeURL = "https://" + host + path
+	}
 	probeArgs = append(probeArgs,
 		"-d", `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`,
-		fmt.Sprintf("http://%s:%d%s", doctorServiceDNS(traefik.Name, traefik.Namespace), traefik.WebPort, path),
+		probeURL,
 	)
 	curlArgs := []string{
 		"run", podName, "-n", namespace,
@@ -829,12 +846,12 @@ func checkIngressRouteProbe(kubectl core.KubectlRunner, namespace string, distro
 }
 
 func resolveIngressRouteProbeTarget(kubectl core.KubectlRunner, namespace string) (doctorIngressRoute, error) {
-	out, err := readKubectlOutput(kubectl, []string{"get", "ingress", "-n", namespace, "-o", "jsonpath={range .items[*]}{.metadata.name}|{.spec.rules[0].host}|{.spec.rules[0].http.paths[0].path}{\"\\n\"}{end}"})
+	out, err := readKubectlOutput(kubectl, []string{"get", "ingress", "-n", namespace, "-o", "jsonpath={range .items[*]}{.metadata.name}|{.spec.rules[0].host}|{.spec.rules[0].http.paths[0].path}|{.metadata.annotations.traefik\\.ingress\\.kubernetes\\.io/router\\.tls}|{.spec.tls[0].secretName}{\"\\n\"}{end}"})
 	if err != nil {
 		return doctorIngressRoute{}, err
 	}
 	for _, line := range filterNonEmptyLines(out) {
-		parts := strings.SplitN(line, "|", 3)
+		parts := strings.SplitN(line, "|", 5)
 		if len(parts) == 0 {
 			continue
 		}
@@ -848,6 +865,12 @@ func resolveIngressRouteProbeTarget(kubectl core.KubectlRunner, namespace string
 		}
 		if len(parts) > 2 {
 			route.Path = strings.TrimSpace(parts[2])
+		}
+		if len(parts) > 3 {
+			route.TLS = strings.TrimSpace(parts[3]) == "true"
+		}
+		if len(parts) > 4 && strings.TrimSpace(parts[4]) != "" {
+			route.TLS = true
 		}
 		return route, nil
 	}
