@@ -168,7 +168,7 @@ Use `--from-server` to discover them from a running local instance:
 
 ```bash
 # oauth-example-go-2025-11-25-gateway (Go)
-cd examples/oauth-example-go-2025-11-25-gateway
+cd examples/oauth-example-go-2025-11-25
 go run . &
 SERVER_PID=$!
 mcp-runtime server init workspace-demo --from-server http://localhost:8088
@@ -243,7 +243,7 @@ overrides `--metadata-dir`.
 Run from the directory where the Dockerfile lives:
 
 ```bash
-cd examples/oauth-example-go-2025-11-25-gateway
+cd examples/oauth-example-go-2025-11-25
 mcp-runtime server build image workspace-demo --tag v1
 ```
 
@@ -293,7 +293,7 @@ mcp-runtime server deploy workspace-demo \
 ### Full example: oauth-example-go-2025-11-25-gateway
 
 ```bash
-cd examples/oauth-example-go-2025-11-25-gateway
+cd examples/oauth-example-go-2025-11-25
 
 go run . &
 SERVER_PID=$!
