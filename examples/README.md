@@ -18,9 +18,9 @@ implementation. The legacy SDK based servers use the `initialize` handshake;
 the TypeScript fixture declares `2025-06-18` directly in its JSON-RPC response.
 There is no `2026-07-28` stateless server fixture in this set yet.
 
-`governed-agent/` demonstrates a governed client workflow, and
-`mcp-auth-sdk-client/` is an OAuth client fixture; neither is an MCP server
-language/version entry.
+`governed-agent/` demonstrates a governed client workflow; it is not an MCP
+server language/version entry. OAuth server examples import the published
+`mcp-auth` SDK directly; no separate SDK client checkout is needed.
 
 Each server's `.mcp/` directory contains CLI-generated server metadata. Gateway
 examples also include grant and session metadata. Standalone examples omit
