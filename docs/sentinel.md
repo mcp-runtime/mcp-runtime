@@ -161,6 +161,20 @@ response bytes, in-flight requests, and policy reload state. HTTP and MCP method
 labels are normalized to bounded sets to prevent attacker-controlled label
 cardinality.
 
+The platform-api, runtime-api, analytics-api, ingest, and MCP gateway also
+export `mcp_request_total`, `mcp_request_errors_total`, and the
+`mcp_request_duration_seconds` histogram. Labels are `service`, `operation`,
+`status`, and `server`; API operations use registered route patterns and the
+gateway uses its allowlisted MCP method names. Errors count server responses
+(HTTP 5xx). These Grafana queries show p50, p95, and p99 latency by service
+and operation:
+
+```promql
+histogram_quantile(0.50, sum by (le, service, operation) (rate(mcp_request_duration_seconds_bucket[5m])))
+histogram_quantile(0.95, sum by (le, service, operation) (rate(mcp_request_duration_seconds_bucket[5m])))
+histogram_quantile(0.99, sum by (le, service, operation) (rate(mcp_request_duration_seconds_bucket[5m])))
+```
+
 ### Auth model
 
 | Service | Auth behavior |

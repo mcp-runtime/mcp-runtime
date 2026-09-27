@@ -5993,6 +5993,7 @@ fi
 
 if scenario_selected "observability" && checkpoint_enabled "observability"; then
   echo "[observe] validating audit, traces, and logs"
+  wait_for_mcp_tool_result "${MCP_SESSION_URL}" "aaa-ping" '{}' 200 "pong" 20 "" "metrics-warmup"
   API_BASE="http://127.0.0.1:${SENTINEL_PORT}/api/v1" \
   API_KEY="${API_KEY}" \
   INGEST_API_KEY="${INGEST_API_KEY}" \
@@ -6010,6 +6011,7 @@ if scenario_selected "observability" && checkpoint_enabled "observability"; then
   python3 <<'PY'
 import base64
 import json
+import math
 import os
 import time
 import urllib.parse
@@ -6238,6 +6240,57 @@ def wait_for_prometheus_up(base_url, *, headers=None, description):
             f"{description} missing healthy {job}: {jobs}",
         )
     return jobs
+
+
+def wait_for_prometheus_metric(base_url, query, *, headers=None, description):
+    url = f"{base_url}/api/v1/query?{urllib.parse.urlencode({'query': query})}"
+    doc = wait_for_json(
+        url,
+        lambda payload: payload.get("status") == "success"
+        and any(
+            len(result.get("value", [])) >= 2
+            and float(result["value"][1]) > 0
+            for result in payload.get("data", {}).get("result", [])
+        ),
+        headers=headers,
+        retries=60,
+        delay=2,
+        description=description,
+    )
+    return sum(
+        float(result["value"][1])
+        for result in doc.get("data", {}).get("result", [])
+        if len(result.get("value", [])) >= 2
+    )
+
+
+def wait_for_prometheus_quantile(base_url, quantile, service, operation, *, headers=None, description):
+    query = (
+        f'histogram_quantile({quantile}, '
+        f'sum by (le) (rate(mcp_request_duration_seconds_bucket{{service="{service}",operation="{operation}"}}[5m])))'
+    )
+    url = f"{base_url}/api/v1/query?{urllib.parse.urlencode({'query': query})}"
+    doc = wait_for_json(
+        url,
+        lambda payload: payload.get("status") == "success"
+        and any(
+            len(result.get("value", [])) >= 2
+            and math.isfinite(float(result["value"][1]))
+            and float(result["value"][1]) >= 0
+            for result in payload.get("data", {}).get("result", [])
+        ),
+        headers=headers,
+        retries=60,
+        delay=2,
+        description=description,
+    )
+    values = [
+        float(result["value"][1])
+        for result in doc.get("data", {}).get("result", [])
+        if len(result.get("value", [])) >= 2
+    ]
+    check(bool(values), f"{description} returned finite latency values", f"{description} returned invalid values: {values}")
+    return max(values)
 
 
 expected_gateway_rpc_methods = (
@@ -6696,6 +6749,57 @@ grafana_prometheus_jobs = wait_for_prometheus_up(
     headers=grafana_headers,
     description="grafana prometheus up query",
 )
+
+sentinel_request_counts = {}
+for service_name in ("mcp-platform-api", "mcp-runtime-api", "mcp-analytics-api", "mcp-sentinel-ingest"):
+    sentinel_request_counts[service_name] = wait_for_prometheus_metric(
+        prometheus_base,
+        f'sum(mcp_request_total{{service="{service_name}"}})',
+        headers=headers,
+        description=f"Prometheus request counter for {service_name}",
+    )
+    wait_for_prometheus_metric(
+        prometheus_base,
+        f'sum(mcp_request_duration_seconds_bucket{{service="{service_name}",le="+Inf"}})',
+        headers=headers,
+        description=f"Prometheus latency histogram samples for {service_name}",
+    )
+
+gateway_request_counts = {}
+for rpc_method in ("tools/call", "prompts/get", "resources/read"):
+    gateway_request_counts[rpc_method] = wait_for_prometheus_metric(
+        prometheus_base,
+        f'sum(mcp_request_total{{service="mcp-gateway",operation="{rpc_method}"}})',
+        headers=headers,
+        description=f"Prometheus MCP request counter for {rpc_method}",
+    )
+    wait_for_prometheus_metric(
+        prometheus_base,
+        f'sum(mcp_request_duration_seconds_bucket{{service="mcp-gateway",operation="{rpc_method}",le="+Inf"}})',
+        headers=headers,
+        description=f"Prometheus MCP latency histogram samples for {rpc_method}",
+    )
+
+gateway_quantiles = {}
+for quantile in (0.50, 0.95, 0.99):
+    key = f"p{int(quantile * 100)}"
+    gateway_quantiles[key] = wait_for_prometheus_quantile(
+        prometheus_base,
+        quantile,
+        "mcp-gateway",
+        "tools/call",
+        headers=headers,
+        description=f"Prometheus gateway {key} latency quantile",
+    )
+grafana_gateway_p95 = wait_for_prometheus_quantile(
+    f"{grafana_base}/api/datasources/proxy/uid/{prometheus_uid}",
+    0.95,
+    "mcp-gateway",
+    "tools/call",
+    headers=grafana_headers,
+    description="Grafana gateway p95 latency quantile",
+)
+
 grafana_loki_base = f"{grafana_base}/api/datasources/proxy/uid/{loki_uid}"
 
 end_ns = int(time.time() * 1e9)
@@ -6759,6 +6863,10 @@ rows = [
     ("grafana.datasources", str(len(grafana_datasources))),
     ("prometheus.jobs", ",".join(f"{k}:{v}" for k, v in sorted(prometheus_jobs.items()))),
     ("grafana.prometheus.jobs", ",".join(f"{k}:{v}" for k, v in sorted(grafana_prometheus_jobs.items()))),
+    ("metrics.sentinel.requests", ",".join(f"{k}:{int(v)}" for k, v in sorted(sentinel_request_counts.items()))),
+    ("metrics.gateway.rpc", ",".join(f"{k}:{int(v)}" for k, v in sorted(gateway_request_counts.items()))),
+    ("metrics.gateway.quantiles", ",".join(f"{k}:{v:.6f}s" for k, v in sorted(gateway_quantiles.items()))),
+    ("metrics.grafana.gateway.p95", f"{grafana_gateway_p95:.6f}s"),
     ("logs.loki_streams", str(len(streams))),
     ("grafana.loki_streams", str(len(grafana_streams))),
 ]

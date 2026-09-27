@@ -129,6 +129,7 @@ classify_path() {
       add_scenario "trust"
       add_scenario "oauth"
       add_scenario "adapter-proxy"
+      add_observability
       return
       ;;
     services/ingest/*|services/processor/*|pkg/clickhouse/*|pkg/events/*|pkg/sentinel/*|pkg/serviceutil/*)
