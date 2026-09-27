@@ -1,4 +1,0 @@
-interface:
-  display_name: "QA — E2E Security"
-  short_description: "Real-cluster security regression: auth, grants, audit, headers, secret leaks"
-  default_prompt: "Use $qa-e2e-security to fire real requests at the live Kind cluster and verify auth, grant/session policy, gateway deny paths, audit emission, UI security headers, login/lockout, and that no secret leaks into pod logs (qa-cluster-bringup must have run)."

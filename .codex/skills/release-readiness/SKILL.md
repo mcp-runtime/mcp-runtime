@@ -44,17 +44,17 @@ Choose every applicable focused skill:
 
 | Surface | Required skill |
 |---|---|
-| Operator, setup, registry, ingress, CLI, CRDs, service rollout | `qa-e2e-operations` |
-| Auth, grants, sessions, gateway policy, audit, TLS, secrets | `security-audit` and often `qa-e2e-security` |
-| Platform-wide release security signoff | `security-audit-platform` |
-| Kubernetes RBAC, PSS, NetworkPolicy, manifests | `k8s-hardening-audit` |
+| Operator, setup, registry, ingress, CLI, CRDs, service rollout | `cluster-operations-qa` |
+| Auth, grants, sessions, gateway policy, audit, TLS, secrets | `change-security-audit` and often `security-regression-qa` |
+| Platform-wide release security signoff | `platform-security-audit` |
+| Kubernetes RBAC, PSS, NetworkPolicy, manifests | `kubernetes-hardening-audit` |
 | Images, SBOMs, GitHub Actions, dependency or base-image changes | `supply-chain-audit` |
-| Sentinel dashboard, UI-visible API behavior, login/admin/tenant flows | `qa-e2e-ui` |
-| MCP protocol behavior or upstream spec compatibility | `mcp-spec-compliance` |
-| Gateway/API/operator hot paths or "feels slower" risk | `qa-e2e-perf` |
-| Public k3s, TLS, ACME, production hostnames | `k3s-public-ops` or `mcp-runtime-platform-public` |
-| Full strict-prod install path (setup, public TLS, registry auth, tenants) | `k3s-public-ops` Staging E2E workflows on the disposable VM (`docs/contributor/staging-e2e.md`) |
-| Docs, CLI examples, contributor guidance, release notes | `repo-guidance-sync` |
+| Sentinel dashboard, UI-visible API behavior, login/admin/tenant flows | `dashboard-browser-qa` |
+| MCP protocol behavior or upstream spec compatibility | `mcp-protocol-compliance` |
+| Gateway/API/operator hot paths or "feels slower" risk | `performance-regression-qa` |
+| Public k3s, TLS, ACME, production hostnames | `production-operations` or `public-platform-configuration` |
+| Full strict-prod install path (setup, public TLS, registry auth, tenants) | `production-operations` Staging E2E workflows on the disposable VM (`docs/contributor/staging-e2e.md`) |
+| Docs, CLI examples, contributor guidance, release notes | `documentation-sync` |
 
 Do not substitute a generic review pass for a domain skill when one exists.
 
@@ -75,7 +75,7 @@ rm -f "$TEST_ISOLATION_KUBECONFIG"
 ```
 
 For merge or release candidates, prefer the CI-parity gate from
-`qa-e2e-operations` Step 3, which adds race tests, service-module tests,
+`cluster-operations-qa` Step 3, which adds race tests, service-module tests,
 benchmarks, scenario selector validation, envtest integration, generated-file
 drift checks, and docs-generated reference drift checks.
 
@@ -109,12 +109,12 @@ For a canary or deploy-readiness request, collect:
 - browser evidence for changed UI workflows
 - rollback plan: previous image/tag, command, and expected health signal
 
-For public k3s or TLS/ACME work, switch to `k3s-public-ops` or
-`mcp-runtime-platform-public` and use their runbooks for live validation.
+For public k3s or TLS/ACME work, switch to `production-operations` or
+`public-platform-configuration` and use their runbooks for live validation.
 
 ## Step 5 - Docs And Release Notes
 
-Run `repo-guidance-sync` when the change affects CLI help, commands, setup,
+Run `documentation-sync` when the change affects CLI help, commands, setup,
 configuration, docs, API/CRD shape, deployment behavior, agent guidance, or
 operator/debug workflows.
 

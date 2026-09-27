@@ -1,4 +1,0 @@
-interface:
-  display_name: "Repo Guidance Sync"
-  short_description: "Sync repo docs and AGENTS with behavior"
-  default_prompt: "Use $repo-guidance-sync to audit whether recent code, product, CLI, API, or test-flow changes require documentation, AGENTS.md, or test guidance updates, then make only the necessary edits."

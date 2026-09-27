@@ -1,4 +1,0 @@
-interface:
-  display_name: "QA — E2E UI"
-  short_description: "Browser-first Sentinel UI QA: roles, tabs, forms, data, network evidence"
-  default_prompt: "Use $qa-e2e-ui to audit the Sentinel dashboard against the live Kind cluster with Playwright and Chrome DevTools MCP: role-gated navigation, auth/session flows, every tab, forms, filters, rendered data, network/API evidence, console evidence, responsive/accessibility checks, automated regression checks, cleanup, and public-host defenses (qa-cluster-bringup must have run)."

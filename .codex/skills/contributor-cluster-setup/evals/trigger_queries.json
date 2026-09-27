@@ -1,0 +1,21 @@
+{
+  "skill_name": "contributor-cluster-setup",
+  "queries": [
+    {
+      "query": "Stand up the Kind test-mode MCP Runtime cluster so the e2e skills can run.",
+      "should_trigger": true
+    },
+    {
+      "query": "Recover the contributor cluster and make sure a real MCP tools/call succeeds.",
+      "should_trigger": true
+    },
+    {
+      "query": "Run a browser-only smoke test against the already running UI.",
+      "should_trigger": false
+    },
+    {
+      "query": "Audit Docker base images for CVEs.",
+      "should_trigger": false
+    }
+  ]
+}

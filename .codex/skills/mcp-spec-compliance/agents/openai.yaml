@@ -1,4 +1,0 @@
-interface:
-  display_name: "MCP Spec Compliance"
-  short_description: "Audit MCP Runtime against the upstream Model Context Protocol spec"
-  default_prompt: "Use $mcp-spec-compliance to audit MCP Runtime against the pinned MCP protocol revision in github.com/modelcontextprotocol/modelcontextprotocol — static schema validation of envelopes, live transport conformance against the Kind cluster, capability-vs-implementation matrix, SEP cross-reference, and cross-component protocol-version coherence."

@@ -113,7 +113,7 @@ Expose the result of automated protocol checks per server:
 - advertised capability correctness;
 - malformed request and cancellation behavior.
 
-Use the existing `mcp-spec-compliance` checks as the implementation seed.
+Use the existing `mcp-protocol-compliance` checks as the implementation seed.
 Display last checked time, tested protocol version, failures, and warnings in
 the catalog.
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Contributor Cluster Setup"
+  short_description: "Stand up the real Kind+test-mode contributor cluster for E2E QA"
+  default_prompt: "Use $contributor-cluster-setup to stand up or recover the real Kind+test-mode MCP Runtime cluster (per docs/getting-started.md#3-contributor-test-mode-cluster) and gate on a successful MCP tools/call before handing off to qa-e2e-* skills."
