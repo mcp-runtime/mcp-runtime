@@ -31,7 +31,7 @@ func main() {
 		}
 		crdsYAML = bundled
 		if out := strings.TrimSpace(*writeCRDs); out != "" {
-			if err := os.WriteFile(out, []byte(crdsYAML+"\n"), 0o644); err != nil {
+			if err := os.WriteFile(out, []byte(crdsYAML+"\n"), 0o600); err != nil {
 				fmt.Fprintf(os.Stderr, "platformmanifest: write CRDs: %v\n", err)
 				os.Exit(1)
 			}
