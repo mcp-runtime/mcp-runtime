@@ -1,5 +1,11 @@
 .git/
 .gocache/
+.claude/
+.playwright-mcp/
+graphify-out/
+inspirations/
+prs/
+support/
 bin/
 man/
 tags
@@ -23,8 +29,6 @@ services/ui/frontend/dist/
 
 # Local validation binaries and screenshots are not part of platform images.
 examples/mcp-auth-sdk-client/mcp-auth-sdk-client
-examples/mcp-auth-sdk-echo/mcp-auth-sdk-echo
-examples/mcp-auth-sdk-ping/mcp-auth-sdk-ping
 live-platform.png
 ui-admin-dark.png
 ui-admin-light.png

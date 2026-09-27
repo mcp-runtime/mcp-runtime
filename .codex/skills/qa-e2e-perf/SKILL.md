@@ -82,7 +82,7 @@ without contention.
 python3 - <<'PY' "$PERF_OUT_DIR" "$PERF_SAMPLES"
 import json, time, urllib.request, sys
 out_dir, n = sys.argv[1], int(sys.argv[2])
-BASE="http://localhost:18080/workspace-assistant-mcp/mcp"; PROTO="2025-06-18"
+BASE="http://localhost:18080/oauth-example-go-2025-11-25-gateway/mcp"; PROTO="2025-06-18"
 H={"content-type":"application/json","accept":"application/json, text/event-stream",
    "Mcp-Protocol-Version":PROTO,
    "X-MCP-Human-ID":"local-user","X-MCP-Agent-ID":"local-agent",
@@ -116,7 +116,7 @@ latency under contention.
 python3 - <<'PY' "$PERF_OUT_DIR" "$PERF_SAMPLES" "$PERF_CONCURRENCY"
 import json, time, threading, urllib.request, sys
 out_dir, n, c = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
-BASE="http://localhost:18080/workspace-assistant-mcp/mcp"; PROTO="2025-06-18"
+BASE="http://localhost:18080/oauth-example-go-2025-11-25-gateway/mcp"; PROTO="2025-06-18"
 H={"content-type":"application/json","accept":"application/json, text/event-stream",
    "Mcp-Protocol-Version":PROTO,
    "X-MCP-Human-ID":"local-user","X-MCP-Agent-ID":"local-agent",
@@ -196,10 +196,10 @@ submission-to-ready wall time rather than ten separately completed reconciles.
 ```bash
 START="$(python3 -c 'import time; print(int(time.time() * 1000))')"
 for i in $(seq 1 10); do
-  kubectl annotate mcpserver -n mcp-servers workspace-assistant-mcp \
+  kubectl annotate mcpserver -n mcp-servers oauth-example-go-2025-11-25-gateway \
     qa.mcpruntime.org/ping="$START-$i" --overwrite >/dev/null
 done
-kubectl wait --for=condition=Ready=true mcpserver/workspace-assistant-mcp \
+kubectl wait --for=condition=Ready=true mcpserver/oauth-example-go-2025-11-25-gateway \
   -n mcp-servers --timeout=120s >/dev/null
 END="$(python3 -c 'import time; print(int(time.time() * 1000))')"
 python3 -c "import json,sys; print(json.dumps({'scenario':'S4','burst':10,'wall_ms':int(sys.argv[1])-int(sys.argv[2])}))" \
@@ -242,7 +242,7 @@ Do not auto-revert. Capture context so the author can act:
 
 ```bash
 # CPU profile of the proxy sidecar (if pprof is enabled on the build).
-POD="$(kubectl get pods -n mcp-servers -l app=workspace-assistant-mcp -o jsonpath='{.items[0].metadata.name}')"
+POD="$(kubectl get pods -n mcp-servers -l app=oauth-example-go-2025-11-25-gateway -o jsonpath='{.items[0].metadata.name}')"
 kubectl exec -n mcp-servers "$POD" -c mcp-gateway -- \
   wget -qO- http://127.0.0.1:6060/debug/pprof/profile?seconds=10 > /tmp/proxy-cpu.pprof 2>/dev/null \
   || echo "pprof not enabled on mcp-gateway"

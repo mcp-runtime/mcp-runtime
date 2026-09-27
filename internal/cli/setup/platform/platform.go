@@ -176,6 +176,7 @@ type SetupDeps struct {
 	LoginRegistry                   func(logger *zap.Logger, registryURL, username, password string) error
 	DeployRegistry                  func(logger *zap.Logger, namespace string, port int, registryType, registryStorageSize, manifestPath string) error
 	WaitForDeploymentAvailable      func(logger *zap.Logger, name, namespace, selector string, timeout time.Duration) error
+	WaitForDeploymentRolledOut      func(logger *zap.Logger, name, namespace, selector string, timeout time.Duration) error
 	PrintDeploymentDiagnostics      func(deploy, namespace, selector string)
 	SetupTLS                        func(logger *zap.Logger, plan setupplan.Plan) error
 	BuildOperatorImage              func(image string) error
@@ -227,6 +228,9 @@ func (d SetupDeps) withDefaults(logger *zap.Logger) SetupDeps {
 	}
 	if d.WaitForDeploymentAvailable == nil {
 		d.WaitForDeploymentAvailable = waitForDeploymentAvailable
+	}
+	if d.WaitForDeploymentRolledOut == nil {
+		d.WaitForDeploymentRolledOut = waitForDeploymentRolledOut
 	}
 	if d.PrintDeploymentDiagnostics == nil {
 		d.PrintDeploymentDiagnostics = printDeploymentDiagnostics

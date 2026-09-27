@@ -28,7 +28,7 @@ const SERVERS = {
       ready: "1/1",
       status: "Running",
       description: "Workspace helper",
-      endpoint: "http://localhost:18080/workspace-assistant-mcp/mcp",
+      endpoint: "http://localhost:18080/oauth-example-go-2025-11-25/mcp",
     },
     {
       name: "degraded-server",

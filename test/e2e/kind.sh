@@ -110,15 +110,17 @@ OAUTH_SERVER_NAME="${OAUTH_SERVER_NAME:-oauth-mcp-server}"
 ADAPTER_CERT_WRONG_SERVER_NAME="${OAUTH_SERVER_NAME}-wrong-server"
 ADAPTER_CERT_SESSION=""
 OAUTH_SERVER_HOST="${OAUTH_SERVER_HOST:-${PLATFORM_HOST}}"
-PYTHON_EXAMPLE_SERVER_NAME="${PYTHON_EXAMPLE_SERVER_NAME:-data-utility-mcp}"
+PYTHON_EXAMPLE_SERVER_NAME="${PYTHON_EXAMPLE_SERVER_NAME:-example-python-2025-11-25-gateway}"
 PYTHON_EXAMPLE_SERVER_HOST="${PYTHON_EXAMPLE_SERVER_HOST:-${PLATFORM_HOST}}"
 PYTHON_EXAMPLE_SERVER_ROUTE="${PYTHON_EXAMPLE_SERVER_ROUTE:-/${PYTHON_EXAMPLE_SERVER_NAME}/mcp}"
-RUST_EXAMPLE_SERVER_NAME="${RUST_EXAMPLE_SERVER_NAME:-text-analysis-mcp}"
+RUST_EXAMPLE_SERVER_NAME="${RUST_EXAMPLE_SERVER_NAME:-example-rust-2025-11-25-gateway}"
 RUST_EXAMPLE_SERVER_HOST="${RUST_EXAMPLE_SERVER_HOST:-${PLATFORM_HOST}}"
 RUST_EXAMPLE_SERVER_ROUTE="${RUST_EXAMPLE_SERVER_ROUTE:-/${RUST_EXAMPLE_SERVER_NAME}/mcp}"
-GO_EXAMPLE_SERVER_NAME="${GO_EXAMPLE_SERVER_NAME:-workspace-assistant-mcp}"
+GO_EXAMPLE_SERVER_NAME="${GO_EXAMPLE_SERVER_NAME:-oauth-example-go-2025-11-25-gateway}"
 GO_EXAMPLE_SERVER_HOST="${GO_EXAMPLE_SERVER_HOST:-${PLATFORM_HOST}}"
 GO_EXAMPLE_SERVER_ROUTE="${GO_EXAMPLE_SERVER_ROUTE:-/${GO_EXAMPLE_SERVER_NAME}/mcp}"
+GO_EXAMPLE_STANDALONE_NAME="${GO_EXAMPLE_STANDALONE_NAME:-oauth-example-go-2025-11-25-standalone}"
+GO_EXAMPLE_STANDALONE_ROUTE="/${GO_EXAMPLE_STANDALONE_NAME}/mcp"
 MT_TENANT_A="${MT_TENANT_A:-mt-tenant-a}"
 MT_TENANT_B="${MT_TENANT_B:-mt-tenant-b}"
 MT_HUMAN_A="${MT_HUMAN_A:-alice}"
@@ -142,6 +144,8 @@ OAUTH_AUDIENCE_CONFIGURED="${OAUTH_AUDIENCE:+1}"
 # advertises it in protected resource metadata and validates the token audience
 # against it, so it must be the absolute URL clients connect to.
 OAUTH_AUDIENCE="${OAUTH_AUDIENCE:-http://${OAUTH_SERVER_HOST}:${TRAEFIK_PORT}/${OAUTH_SERVER_NAME}/mcp}"
+GO_OAUTH_STANDALONE_AUDIENCE_CONFIGURED="${GO_OAUTH_STANDALONE_AUDIENCE:+1}"
+GO_OAUTH_STANDALONE_AUDIENCE="${GO_OAUTH_STANDALONE_AUDIENCE:-http://${GO_EXAMPLE_SERVER_HOST}:${TRAEFIK_PORT}${GO_EXAMPLE_STANDALONE_ROUTE}}"
 SENTINEL_PORT="${SENTINEL_PORT:-18083}"
 TEMPO_PORT="${TEMPO_PORT:-13200}"
 LOKI_PORT="${LOKI_PORT:-13100}"
@@ -181,6 +185,10 @@ MCP_CURL_BAD_SESSION_PORT="${MCP_CURL_BAD_SESSION_PORT:-${MCP_SMOKE_BAD_SESSION_
 MCP_CURL_OAUTH_ANON_PORT="${MCP_CURL_OAUTH_ANON_PORT:-${MCP_SMOKE_OAUTH_ANON_PORT:-18088}}"
 MCP_CURL_OAUTH_INVALID_PORT="${MCP_CURL_OAUTH_INVALID_PORT:-${MCP_SMOKE_OAUTH_INVALID_PORT:-18089}}"
 MCP_CURL_OAUTH_VALID_PORT="${MCP_CURL_OAUTH_VALID_PORT:-${MCP_SMOKE_OAUTH_VALID_PORT:-18090}}"
+MCP_CURL_GO_OAUTH_ANON_PORT="${MCP_CURL_GO_OAUTH_ANON_PORT:-19180}"
+MCP_CURL_GO_OAUTH_INVALID_PORT="${MCP_CURL_GO_OAUTH_INVALID_PORT:-19181}"
+MCP_CURL_GO_OAUTH_VALID_PORT="${MCP_CURL_GO_OAUTH_VALID_PORT:-19182}"
+GO_OAUTH_SERVER_PORT="${GO_OAUTH_SERVER_PORT:-19183}"
 MCP_PROTOCOL_VERSION="${MCP_PROTOCOL_VERSION:-2025-06-18}"
 MCP_INGRESS_PATH="${MCP_INGRESS_PATH:-/${SERVER_NAME}/mcp}"
 MCP_DIRECT_URL="${MCP_DIRECT_URL:-http://127.0.0.1:${TRAEFIK_PORT}${MCP_INGRESS_PATH}}"
@@ -351,6 +359,9 @@ oauth_proxy_paths_selected() {
 
 if scenario_selected "adapter-certificates" && [[ -z "${OAUTH_AUDIENCE_CONFIGURED}" ]]; then
   OAUTH_AUDIENCE="https://${OAUTH_SERVER_HOST}:${TRAEFIK_TLS_PORT}/${OAUTH_SERVER_NAME}/mcp"
+fi
+if scenario_selected "adapter-certificates" && [[ -z "${GO_OAUTH_STANDALONE_AUDIENCE_CONFIGURED}" ]]; then
+  GO_OAUTH_STANDALONE_AUDIENCE="https://${GO_EXAMPLE_SERVER_HOST}:${TRAEFIK_TLS_PORT}${GO_EXAMPLE_STANDALONE_ROUTE}"
 fi
 
 e2e_mcp_server_budget() {
@@ -1793,10 +1804,11 @@ func main() {
 	outDir := os.Getenv("OAUTH_FIXTURE_DIR")
 	issuerURL := os.Getenv("OAUTH_ISSUER_URL")
 	audience := os.Getenv("OAUTH_AUDIENCE")
+	goAudience := os.Getenv("GO_OAUTH_STANDALONE_AUDIENCE")
 	humanID := os.Getenv("OAUTH_HUMAN_ID")
 	agentID := os.Getenv("OAUTH_AGENT_ID")
 	sessionID := os.Getenv("OAUTH_SESSION_ID")
-	if outDir == "" || issuerURL == "" || audience == "" || humanID == "" || agentID == "" || sessionID == "" {
+	if outDir == "" || issuerURL == "" || audience == "" || goAudience == "" || humanID == "" || agentID == "" || sessionID == "" {
 		panic("missing required OAuth fixture environment")
 	}
 
@@ -1813,6 +1825,7 @@ func main() {
 		"azp": agentID,
 		"sid": sessionID,
 		"aud": []string{audience},
+		"scope": "tools:read",
 		"iat": now.Add(-1 * time.Minute).Unix(),
 		"exp": now.Add(24 * time.Hour).Unix(),
 	}
@@ -1822,6 +1835,27 @@ func main() {
 		"azp": agentID,
 		"sid": sessionID,
 		"aud": []string{"wrong-audience"},
+		"scope": "tools:read",
+		"iat": now.Add(-1 * time.Minute).Unix(),
+		"exp": now.Add(24 * time.Hour).Unix(),
+	}
+	goValidClaims := map[string]any{
+		"iss": issuerURL,
+		"sub": humanID,
+		"azp": agentID,
+		"sid": sessionID,
+		"aud": []string{goAudience},
+		"scope": "tools:read",
+		"iat": now.Add(-1 * time.Minute).Unix(),
+		"exp": now.Add(24 * time.Hour).Unix(),
+	}
+	goInvalidAudienceClaims := map[string]any{
+		"iss": issuerURL,
+		"sub": humanID,
+		"azp": agentID,
+		"sid": sessionID,
+		"aud": []string{"wrong-audience"},
+		"scope": "tools:read",
 		"iat": now.Add(-1 * time.Minute).Unix(),
 		"exp": now.Add(24 * time.Hour).Unix(),
 	}
@@ -1857,6 +1891,8 @@ func main() {
 	mustWrite(filepath.Join(outDir, "keys"), append(jwksJSON, '\n'))
 	mustWrite(filepath.Join(outDir, "valid-token.txt"), []byte(signToken(privateKey, validClaims)))
 	mustWrite(filepath.Join(outDir, "invalid-token.txt"), []byte(signToken(privateKey, invalidAudienceClaims)))
+	mustWrite(filepath.Join(outDir, "valid-go-token.txt"), []byte(signToken(privateKey, goValidClaims)))
+	mustWrite(filepath.Join(outDir, "invalid-go-token.txt"), []byte(signToken(privateKey, goInvalidAudienceClaims)))
 
 	fmt.Println("generated oauth fixtures in", outDir)
 }
@@ -1865,6 +1901,7 @@ EOF
   OAUTH_FIXTURE_DIR="${out_dir}" \
   OAUTH_ISSUER_URL="${OAUTH_ISSUER_URL}" \
   OAUTH_AUDIENCE="${OAUTH_AUDIENCE}" \
+  GO_OAUTH_STANDALONE_AUDIENCE="${GO_OAUTH_STANDALONE_AUDIENCE}" \
   OAUTH_HUMAN_ID="${OAUTH_HUMAN_ID}" \
   OAUTH_AGENT_ID="${OAUTH_AGENT_ID}" \
   OAUTH_SESSION_ID="${OAUTH_SESSION_ID}" \
@@ -4087,8 +4124,8 @@ if cache_mode_enabled; then
     "${MT_SESSION_B}" \
     --ignore-not-found --wait=true >/dev/null
   echo "[cache] removing previous policy/OAuth test workloads before cluster doctor"
-  kubectl delete mcpserver -n mcp-servers "${SERVER_NAME}" "${OAUTH_SERVER_NAME}" "${MT_TENANT_A}" "${MT_TENANT_B}" --ignore-not-found --wait=true >/dev/null
-  kubectl delete deployment -n mcp-servers "${SERVER_NAME}" "${OAUTH_SERVER_NAME}" "${MT_TENANT_A}" "${MT_TENANT_B}" --ignore-not-found --wait=true >/dev/null
+  kubectl delete mcpserver -n mcp-servers "${SERVER_NAME}" "${OAUTH_SERVER_NAME}" "${GO_EXAMPLE_STANDALONE_NAME}" "${MT_TENANT_A}" "${MT_TENANT_B}" --ignore-not-found --wait=true >/dev/null
+  kubectl delete deployment -n mcp-servers "${SERVER_NAME}" "${OAUTH_SERVER_NAME}" "${GO_EXAMPLE_STANDALONE_NAME}" "${MT_TENANT_A}" "${MT_TENANT_B}" --ignore-not-found --wait=true >/dev/null
   kubectl delete pod -n mcp-servers -l "app=${SERVER_NAME}" --ignore-not-found --wait=false >/dev/null
   kubectl delete pod -n mcp-servers -l "app=${OAUTH_SERVER_NAME}" --ignore-not-found --wait=false >/dev/null
   kubectl delete pod -n mcp-servers -l "app=${MT_TENANT_A}" --ignore-not-found --wait=false >/dev/null
@@ -4190,12 +4227,12 @@ METADATA_FILE="${WORKDIR}/metadata.yaml"
 MANIFEST_DIR="${WORKDIR}/manifests"
 SERVER_IMAGE="registry.registry.svc.cluster.local:5000/${SERVER_NAME}:${E2E_WORKLOAD_TAG}"
 SERVER_SECRET_NAME="${SERVER_NAME}-analytics-creds"
-PYTHON_EXAMPLE_SOURCE_DIR="${PROJECT_ROOT}/examples/data-utility-mcp"
-PYTHON_EXAMPLE_WORKDIR="${WORKDIR}/data-utility-mcp"
-RUST_EXAMPLE_SOURCE_DIR="${PROJECT_ROOT}/examples/text-analysis-mcp"
-RUST_EXAMPLE_WORKDIR="${WORKDIR}/text-analysis-mcp"
-GO_EXAMPLE_SOURCE_DIR="${PROJECT_ROOT}/examples/workspace-assistant-mcp"
-GO_EXAMPLE_WORKDIR="${WORKDIR}/workspace-assistant-mcp"
+PYTHON_EXAMPLE_SOURCE_DIR="${PROJECT_ROOT}/examples/example-python-2025-11-25"
+PYTHON_EXAMPLE_WORKDIR="${WORKDIR}/example-python-2025-11-25"
+RUST_EXAMPLE_SOURCE_DIR="${PROJECT_ROOT}/examples/example-rust-2025-11-25"
+RUST_EXAMPLE_WORKDIR="${WORKDIR}/example-rust-2025-11-25"
+GO_EXAMPLE_SOURCE_DIR="${PROJECT_ROOT}/examples/oauth-example-go-2025-11-25"
+GO_EXAMPLE_WORKDIR="${WORKDIR}/oauth-example-go-2025-11-25"
 
 if checkpoint_enabled "platform"; then
   echo "[deploy] creating server-local analytics credentials secret"
@@ -4974,6 +5011,9 @@ spec:
         - podSelector:
             matchLabels:
               app: ${OAUTH_SERVER_NAME}
+        - podSelector:
+            matchLabels:
+              app: ${GO_EXAMPLE_STANDALONE_NAME}
       ports:
         - protocol: TCP
           port: 8080
@@ -5152,6 +5192,111 @@ EOF
     exit 1
   fi
   wait_for_named_server_ready "${OAUTH_SERVER_NAME}"
+
+  if [[ "$(e2e_mcp_server_budget)" -ge 3 ]]; then
+  echo "[oauth] deploying Go example with server-side SDK verification and no gateway"
+  GO_OAUTH_METADATA_FILE="${WORKDIR}/go-oauth-metadata.yaml"
+  GO_OAUTH_MANIFEST_DIR="${WORKDIR}/go-oauth-manifests"
+  cat > "${GO_OAUTH_METADATA_FILE}" <<EOF
+version: v1
+servers:
+  - name: ${GO_EXAMPLE_STANDALONE_NAME}
+    description: Go example using the mcp-auth SDK directly.
+    image: ${SERVER_IMAGE%:*}
+    imageTag: ${SERVER_IMAGE##*:}
+    route: ${GO_EXAMPLE_STANDALONE_ROUTE}
+    publicPathPrefix: ${GO_EXAMPLE_STANDALONE_NAME}
+    port: 8088
+    namespace: mcp-servers
+    tools:
+      - name: whoami
+        description: Return verified token identity.
+        requiredTrust: low
+        sideEffect: read
+      - name: aaa-ping
+        description: Check that the server is reachable.
+        requiredTrust: low
+        sideEffect: read
+    auth:
+      mode: oauth
+      tokenHeader: Authorization
+      issuerURL: ${OAUTH_ISSUER_URL}
+      audience: ${GO_OAUTH_STANDALONE_AUDIENCE}
+    policy:
+      mode: allow-list
+      defaultDecision: deny
+    session:
+      required: false
+    gateway:
+      enabled: false
+EOF
+  ./bin/mcp-runtime server validate --metadata-file "${GO_OAUTH_METADATA_FILE}"
+  run_logged_stage "generate Go server OAuth manifest" \
+    ./bin/mcp-runtime server generate \
+      --metadata-file "${GO_OAUTH_METADATA_FILE}" \
+      --output "${GO_OAUTH_MANIFEST_DIR}"
+  run_logged_stage "apply Go server OAuth manifest" \
+    ./bin/mcp-runtime server --use-kube apply \
+      --file "${GO_OAUTH_MANIFEST_DIR}/${GO_EXAMPLE_STANDALONE_NAME}.yaml"
+  if ! restart_deployment_pods mcp-servers "${GO_EXAMPLE_STANDALONE_NAME}" 180s; then
+    echo "[debug] Go SDK OAuth server rollout failed" >&2
+    kubectl get mcpserver "${GO_EXAMPLE_STANDALONE_NAME}" -n mcp-servers -o yaml || true
+    kubectl logs -n mcp-servers -l "app=${GO_EXAMPLE_STANDALONE_NAME}" --all-containers=true --tail=200 || true
+    exit 1
+  fi
+  wait_for_named_server_ready "${GO_EXAMPLE_STANDALONE_NAME}"
+
+  port_forward_bg mcp-servers "${GO_EXAMPLE_STANDALONE_NAME}" "${GO_OAUTH_SERVER_PORT}" 80 "${WORKDIR}/go-oauth-port-forward.log"
+  wait_port "${GO_OAUTH_SERVER_PORT}"
+  GO_OAUTH_VALID_TOKEN="$(tr -d '\n' <"${OAUTH_FIXTURE_DIR}/valid-go-token.txt")"
+  GO_OAUTH_INVALID_TOKEN="$(tr -d '\n' <"${OAUTH_FIXTURE_DIR}/invalid-go-token.txt")"
+  start_header_proxy_bg "${MCP_CURL_GO_OAUTH_ANON_PORT}" \
+    "http://127.0.0.1:${GO_OAUTH_SERVER_PORT}" "${WORKDIR}/go-oauth-anon-proxy.log"
+  start_header_proxy_bg "${MCP_CURL_GO_OAUTH_INVALID_PORT}" \
+    "http://127.0.0.1:${GO_OAUTH_SERVER_PORT}" "${WORKDIR}/go-oauth-invalid-proxy.log" \
+    --header "Authorization=Bearer ${GO_OAUTH_INVALID_TOKEN}"
+  start_header_proxy_bg "${MCP_CURL_GO_OAUTH_VALID_PORT}" \
+    "http://127.0.0.1:${GO_OAUTH_SERVER_PORT}" "${WORKDIR}/go-oauth-valid-proxy.log" \
+    --header "Authorization=Bearer ${GO_OAUTH_VALID_TOKEN}"
+  wait_port "${MCP_CURL_GO_OAUTH_ANON_PORT}"
+  wait_port "${MCP_CURL_GO_OAUTH_INVALID_PORT}"
+  wait_port "${MCP_CURL_GO_OAUTH_VALID_PORT}"
+  wait_for_mcp_initialize_result \
+    "http://127.0.0.1:${MCP_CURL_GO_OAUTH_ANON_PORT}${GO_EXAMPLE_STANDALONE_ROUTE}" \
+    401 "" "www-authenticate" "resource_metadata="
+  wait_for_mcp_initialize_result \
+    "http://127.0.0.1:${MCP_CURL_GO_OAUTH_INVALID_PORT}${GO_EXAMPLE_STANDALONE_ROUTE}" \
+    401 "" "www-authenticate" 'error="invalid_token"'
+  wait_for_mcp_tool_result \
+    "http://127.0.0.1:${MCP_CURL_GO_OAUTH_VALID_PORT}${GO_EXAMPLE_STANDALONE_ROUTE}" \
+    whoami '{}' 200 "${OAUTH_HUMAN_ID}" "${MCP_POLICY_WAIT_TRIES}" "" go-oauth-identity
+  GO_OAUTH_IDENTITY_RESULT="${WORKDIR}/last-mcp-tool-result-go-oauth-identity.json" \
+  GO_OAUTH_METADATA_URL="http://127.0.0.1:${GO_OAUTH_SERVER_PORT}/.well-known/oauth-protected-resource${GO_EXAMPLE_STANDALONE_ROUTE}" \
+  GO_OAUTH_RESOURCE="${GO_OAUTH_STANDALONE_AUDIENCE}" \
+  OAUTH_ISSUER_URL="${OAUTH_ISSUER_URL}" \
+  OAUTH_HUMAN_ID="${OAUTH_HUMAN_ID}" OAUTH_AGENT_ID="${OAUTH_AGENT_ID}" OAUTH_SESSION_ID="${OAUTH_SESSION_ID}" \
+  python3 <<'PY'
+import json
+import os
+import urllib.request
+
+with open(os.environ["GO_OAUTH_IDENTITY_RESULT"]) as source:
+    result = json.load(source)
+identity = json.loads(json.loads(result["body"])["result"]["content"][0]["text"])
+assert identity["authenticated"] is True, identity
+assert identity["subject"] == os.environ["OAUTH_HUMAN_ID"], identity
+assert identity["agentId"] == os.environ["OAUTH_AGENT_ID"], identity
+assert identity["sessionId"] == os.environ["OAUTH_SESSION_ID"], identity
+assert "tools:read" in identity["scopes"], identity
+with urllib.request.urlopen(os.environ["GO_OAUTH_METADATA_URL"], timeout=10) as response:
+    metadata = json.load(response)
+assert metadata["resource"] == os.environ["GO_OAUTH_RESOURCE"], metadata
+assert metadata["authorization_servers"] == [os.environ["OAUTH_ISSUER_URL"]], metadata
+print("standalone OAuth: missing/invalid tokens rejected; verified identity and derived metadata matched")
+PY
+  else
+    echo "[oauth] standalone OAuth fixture skipped: MCP server budget is below 3"
+  fi
 
   echo "[oauth] applying OAuth grant"
   cat <<EOF | kubectl apply -f -

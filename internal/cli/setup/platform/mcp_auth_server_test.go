@@ -147,18 +147,13 @@ func TestRenderMCPAuthServerManifestProductionGuards(t *testing.T) {
 	}
 }
 
-// One authorization server has to cover every bundled fixture, otherwise the
-// standalone SDK examples receive tokens whose audience they reject.
-func TestMCPAuthResourceURLsTestModeCoversEveryBundledExample(t *testing.T) {
+// Test mode configures the OAuth route for the Go protocol example.
+func TestMCPAuthResourceURLsTestModeCoversGoExample(t *testing.T) {
 	got, err := mcpAuthResourceURLs(nil, "http://localhost:18080/mcp-auth", true)
 	if err != nil {
 		t.Fatalf("mcpAuthResourceURLs() error = %v", err)
 	}
-	want := []string{
-		"http://localhost:18080/mcp-auth-sdk-ping/mcp",
-		"http://localhost:18080/mcp-auth-sdk-echo/mcp",
-		"http://localhost:18080/mcp-auth-sdk-ping-py/mcp",
-	}
+	want := []string{"http://localhost:18080/oauth-example-go-2025-11-25-gateway/mcp"}
 	if len(got) != len(want) {
 		t.Fatalf("mcpAuthResourceURLs() = %v, want %v", got, want)
 	}
@@ -169,8 +164,8 @@ func TestMCPAuthResourceURLsTestModeCoversEveryBundledExample(t *testing.T) {
 	}
 }
 
-// Every bundled example manifest's auth.audience must appear in the test-mode
-// resource set, or that example cannot complete an authenticated tool call.
+// The bundled local example's OAuth resource, derived from its route when no
+// audience is pinned, must appear in the test-mode resource set.
 func TestTestModeResourcesMatchBundledExampleAudiences(t *testing.T) {
 	resources, err := mcpAuthResourceURLs(nil, "http://localhost:18080/mcp-auth", true)
 	if err != nil {
@@ -182,24 +177,41 @@ func TestTestModeResourcesMatchBundledExampleAudiences(t *testing.T) {
 	}
 	_, thisFile, _, _ := runtime.Caller(0)
 	examples := filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "..", "examples")
-	for _, name := range []string{"mcp-auth-sdk-ping.yaml", "mcp-auth-sdk-echo.yaml"} {
+	for _, name := range []string{filepath.Join("oauth-example-go-2025-11-25", ".mcp", "servers.yaml")} {
 		raw, err := os.ReadFile(filepath.Join(examples, name))
 		if err != nil {
 			t.Fatalf("read %s: %v", name, err)
 		}
-		audience := ""
-		for _, line := range strings.Split(string(raw), "\n") {
-			if trimmed := strings.TrimSpace(line); strings.HasPrefix(trimmed, "audience:") {
-				audience = strings.TrimSpace(strings.TrimPrefix(trimmed, "audience:"))
-				break
+		var document struct {
+			Servers []struct {
+				Route string `json:"route"`
+				Auth  struct {
+					Mode     string `json:"mode"`
+					Audience string `json:"audience"`
+				} `json:"auth"`
+			} `json:"servers"`
+		}
+		if err := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(raw), 4096).Decode(&document); err != nil {
+			t.Fatalf("decode %s: %v", name, err)
+		}
+		if len(document.Servers) == 0 {
+			t.Fatalf("%s has no servers", name)
+		}
+		for _, server := range document.Servers {
+			if server.Auth.Mode != "oauth" {
+				t.Errorf("%s must exercise OAuth", name)
+				continue
 			}
-		}
-		if audience == "" {
-			t.Errorf("%s has no auth.audience", name)
-			continue
-		}
-		if !indexed[audience] {
-			t.Errorf("%s audience %q is not in the test-mode resource set %v", name, audience, resources)
+			audience := server.Auth.Audience
+			if audience == "" {
+				if server.Route == "" || !strings.HasPrefix(server.Route, "/") {
+					t.Fatalf("%s must have a route for its derived audience", name)
+				}
+				audience = "http://localhost:18080" + server.Route
+			}
+			if !indexed[audience] {
+				t.Errorf("%s audience %q is not in the test-mode resource set %v", name, audience, resources)
+			}
 		}
 	}
 }
@@ -342,7 +354,7 @@ func TestRenderMCPAuthServerManifestCarriesEveryResource(t *testing.T) {
 }
 
 // Test mode resolves all shipped SDK fixtures, so each must be served.
-func TestRenderMCPAuthServerManifestTestModeServesSDKFixtures(t *testing.T) {
+func TestRenderMCPAuthServerManifestTestModeServesGoExample(t *testing.T) {
 	manifest, err := renderMCPAuthServerManifest(mcpAuthManifestTemplate(t), mcpAuthServerOptions{
 		Image:     "registry.example.com/mcp-auth-server:1.0.0",
 		IssuerURL: "http://localhost:18080/mcp-auth",
@@ -351,7 +363,7 @@ func TestRenderMCPAuthServerManifestTestModeServesSDKFixtures(t *testing.T) {
 	if err != nil {
 		t.Fatalf("renderMCPAuthServerManifest() error = %v", err)
 	}
-	want := `{name: MCP_AUTH_RESOURCES, value: "http://localhost:18080/mcp-auth-sdk-ping/mcp,http://localhost:18080/mcp-auth-sdk-echo/mcp,http://localhost:18080/mcp-auth-sdk-ping-py/mcp"}`
+	want := `{name: MCP_AUTH_RESOURCES, value: "http://localhost:18080/oauth-example-go-2025-11-25-gateway/mcp"}`
 	if !strings.Contains(manifest, want) {
 		t.Fatalf("test mode must serve every SDK fixture.\nwant: %s\ngot:\n%s", want, manifest)
 	}

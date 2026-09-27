@@ -58,8 +58,8 @@ Full recipe, the OAuth state machine, and symptom→cause table (SSE 404 red her
 When a server is deployed but grants, policy, or analytics look wrong:
 
 ```bash
-SERVER=workspace-assistant-mcp
-CONTAINER=workspace-assistant-mcp
+SERVER=oauth-example-go-2025-11-25-gateway
+CONTAINER=oauth-example-go-2025-11-25-gateway
 NS=mcp-servers
 
 kubectl get mcpservers -n "$NS"

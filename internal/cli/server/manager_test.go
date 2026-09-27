@@ -142,7 +142,7 @@ func TestInitServerAppendsAndRejectsDuplicate(t *testing.T) {
 	}
 }
 
-// The quickstart runs `server init` inside examples/workspace-assistant-mcp,
+// The quickstart runs `server init` inside examples/oauth-example-go-2025-11-25,
 // whose .mcp/servers.yaml already lists a server without an image. Merging the
 // new entry must not persist the loader's registry.local placeholder into that
 // sibling entry.
@@ -157,8 +157,8 @@ func TestInitServerDoesNotPersistLoaderDefaultsIntoExistingEntries(t *testing.T)
 	path := filepath.Join(dir, "servers.yaml")
 	if err := os.WriteFile(path, []byte(`version: v1
 servers:
-  - name: workspace-assistant-mcp
-    route: /workspace-assistant-mcp/mcp
+  - name: oauth-example-go-2025-11-25
+    route: /oauth-example-go-2025-11-25/mcp
     port: 8088
 `), 0o600); err != nil {
 		t.Fatalf("write metadata: %v", err)
@@ -371,7 +371,7 @@ func TestServerManager_ListServersModeSelection(t *testing.T) {
 				t.Fatalf("x-api-key = %q, want token-1", r.Header.Get("x-api-key"))
 			}
 			w.Header().Set("content-type", "application/json")
-			_, _ = w.Write([]byte(`{"servers":[{"name":"workspace-assistant-mcp","namespace":"mcp-team-acme","ready":"True","status":"Ready","age":"1m"}]}`))
+			_, _ = w.Write([]byte(`{"servers":[{"name":"oauth-example-go-2025-11-25","namespace":"mcp-team-acme","ready":"True","status":"Ready","age":"1m"}]}`))
 		}))
 		defer api.Close()
 		t.Setenv(authfile.EnvAPIToken, "token-1")
@@ -385,7 +385,7 @@ func TestServerManager_ListServersModeSelection(t *testing.T) {
 		out := captureStdout(t, func() error {
 			return mgr.ListServers("", "")
 		})
-		if !strings.Contains(out, "workspace-assistant-mcp") {
+		if !strings.Contains(out, "oauth-example-go-2025-11-25") {
 			t.Fatalf("platform list output = %q, want server name", out)
 		}
 		if apiCalls != 1 {
@@ -1012,7 +1012,7 @@ func TestApplyDeployMetadataDefaultsUsesSingleLocalMetadataServer(t *testing.T) 
 	}
 	if err := os.WriteFile(".mcp/servers.yaml", []byte(`version: v1
 servers:
-  - name: workspace-assistant-mcp
+  - name: oauth-example-go-2025-11-25
     description: Workspace assistant metadata
     tools:
       - name: add
@@ -1461,13 +1461,13 @@ func TestSelectDeployMetadataNameMatching(t *testing.T) {
 
 	t.Run("single server fallback when name does not match", func(t *testing.T) {
 		dir := filepath.Join(t.TempDir(), ".mcp")
-		writeRegistry(t, dir, []metadata.ServerMetadata{{Name: "data-utility-mcp", Image: "data-utility-mcp"}})
+		writeRegistry(t, dir, []metadata.ServerMetadata{{Name: "example-python-2025-11-25", Image: "example-python-2025-11-25"}})
 		m, err := selectDeployMetadata("data-utility", "", dir)
 		if err != nil {
 			t.Fatalf("single-server fallback error = %v", err)
 		}
-		if m.Name != "data-utility-mcp" {
-			t.Fatalf("got name %q, want data-utility-mcp", m.Name)
+		if m.Name != "example-python-2025-11-25" {
+			t.Fatalf("got name %q, want example-python-2025-11-25", m.Name)
 		}
 	})
 

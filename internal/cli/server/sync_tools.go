@@ -81,7 +81,7 @@ type mcpToolsListResult struct {
 
 // normalizeMCPURL ensures the URL has an explicit path. If the parsed URL has
 // no path (or just "/"), "/mcp" is appended — the default endpoint used by the
-// go-sdk and the workspace-assistant-mcp example server.
+// go-sdk and the oauth-example-go-2025-11-25 example server.
 func normalizeMCPURL(raw string) (string, error) {
 	u, err := url.Parse(strings.TrimRight(raw, "/"))
 	if err != nil {

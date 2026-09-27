@@ -209,11 +209,25 @@ func checkCRDInstalledWithKubectl(kubectl core.KubectlRunner, name string) error
 
 // waitForDeploymentAvailable polls a deployment until it has at least one available replica or times out.
 func waitForDeploymentAvailable(logger *zap.Logger, name, namespace, selector string, timeout time.Duration) error {
+	return waitForDeploymentReady(logger, name, namespace, selector, timeout, false)
+}
+
+// waitForDeploymentRolledOut requires the current revision to replace every old
+// replica, including when the old revision remains available during a failure.
+func waitForDeploymentRolledOut(logger *zap.Logger, name, namespace, selector string, timeout time.Duration) error {
+	return waitForDeploymentReady(logger, name, namespace, selector, timeout, true)
+}
+
+func waitForDeploymentReady(logger *zap.Logger, name, namespace, selector string, timeout time.Duration, rollout bool) error {
 	clients, err := platformKubernetesClients()
 	if err != nil {
 		return err
 	}
-	if err := k8sclient.WaitForDeploymentAvailable(context.Background(), clients, namespace, name, timeout); err != nil {
+	waitForDeployment := k8sclient.WaitForDeploymentAvailable
+	if rollout {
+		waitForDeployment = k8sclient.WaitForDeploymentRolledOut
+	}
+	if err := waitForDeployment(context.Background(), clients, namespace, name, timeout); err != nil {
 		msg := fmt.Sprintf("timed out waiting for deployment %s in namespace %s", name, namespace)
 		cause := core.NewWithSentinel(core.ErrSetupDeploymentReadinessDeadlineExceeded, "deployment readiness deadline exceeded")
 		ctx := map[string]any{
@@ -221,6 +235,7 @@ func waitForDeploymentAvailable(logger *zap.Logger, name, namespace, selector st
 			"namespace":  namespace,
 			"selector":   selector,
 			"component":  "deployment-wait",
+			"cause":      err.Error(),
 		}
 		mergeDeploymentDebugDiagnosticsIfNeeded(core.DefaultKubectlClient(), ctx, name, namespace, selector)
 		wrappedErr := core.WrapWithSentinelAndContext(core.ErrDeploymentTimeout, cause, msg, ctx)

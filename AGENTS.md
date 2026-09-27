@@ -29,13 +29,22 @@ This file is the **onboarding index** for the MCP Runtime repo. It complements `
 | Control-plane / K8s | `pkg/controlplane/`, `pkg/k8sclient/`, `pkg/kubeworkload/`, `pkg/manifest/`, `pkg/metadata/` | MCPServer ops, manifests, registry resolution |
 | Sentinel packages | `pkg/events/`, `pkg/clickhouse/`, `pkg/serviceutil/`, `pkg/sentinel/` | Events, analytics, service utilities |
 | Sentinel services | `services/platform-api`, `services/runtime-api`, `services/analytics-api`, `services/ui`, `services/ingest`, `services/processor`, `services/mcp-gateway`, … | Separate `go.mod` where present; Go 1.26 for shared imports |
-| Samples / install YAML | `examples/workspace-assistant-mcp/`, `k8s/`, `config/` | Demo server; overlays and CRDs |
+| Samples / install YAML | `examples/oauth-example-go-2025-11-25/`, `k8s/`, `config/` | Demo server; overlays and CRDs |
 | Team isolation | `docs/multi-team.md` | Namespaces, RBAC, ingress watch scope |
 | Deployment targets | `docs/deployment-targets.md`, `docs/k3s-on-prem-cluster.md` | Before distribution-specific runbooks |
 | E2E | `test/e2e/`, `test/integration/` | Kind script; envtest integration; Staging E2E on the disposable VM (`test/e2e/staging-*.sh`, `docs/contributor/staging-e2e.md`) |
 | Agent skills | `.codex/skills/`, `.claude/skills` → `../.codex/skills` | Canonical skills tree |
 
 **Patterns:** mirror nearest similar packages; CLI errors → `internal/cli/core/errors.go`, `pkg/errx/`.
+
+**Exercise the CLI:** Prefer the `mcp-runtime` CLI for contributor workflows
+whenever it provides the operation. Use `server init`, `server validate`,
+`server build`, `server push`, `server deploy`, `setup`, and other user-facing
+commands instead of hand-writing metadata or calling lower-level APIs. This
+keeps real usage paths exercised and catches CLI regressions. Use direct
+Kubernetes operations only for tests of that path or when the platform API is
+unavailable. For server examples, generate `.mcp/servers.yaml` with
+`mcp-runtime server init`, then validate it with `mcp-runtime server validate`.
 
 ## Agent workflow passes
 
@@ -154,7 +163,7 @@ Grafana: dev ingress `/grafana` or `https://platform.<domain>/grafana` (admin). 
 - `README.md`: product overview
 - `k8s/`, `config/crd/bases/`
 - https://mcpruntime.org/docs/ and https://mcpruntime.org/docs/api
-- `examples/workspace-assistant-mcp/`
+- `examples/oauth-example-go-2025-11-25/`
 
 ---
 

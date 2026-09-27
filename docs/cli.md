@@ -24,11 +24,17 @@ Examples on this page use the example servers in the repository.
 
 | Server | Language | Run command | Tools |
 |---|---|---|---|
-| `workspace-assistant-mcp` | Go | `go run .` | `aaa-ping`, `echo`, `add`, `upper`, `lower`, `slugify`, `create_task`, `draft_release_note` |
-| `data-utility-mcp` | Python | `python app.py` | `echo`, `add`, `multiply`, `upper`, `lower`, `ping`, `reverse` |
-| `text-analysis-mcp` | Rust | `cargo run` | `repeat`, `word_count`, `extract_keywords` |
+| `oauth-example-go-2025-11-25-gateway` | Go | `go run .` | `whoami`, `aaa-ping`, `echo`, `add`, `upper`, `lower`, `slugify`, `create_task`, `draft_release_note` |
+| `example-python-2025-11-25-gateway` | Python | `python app.py` | `echo`, `add`, `multiply`, `upper`, `lower`, `ping`, `reverse` |
+| `example-rust-2025-11-25-gateway` | Rust | `cargo run` | `repeat`, `word_count`, `extract_keywords` |
+| `oauth-example-typescript-2025-06-18-standalone` | TypeScript | See [the example README](../examples/oauth-example-typescript-2025-06-18/README-oauth-example-typescript-2025-06-18.md) | `whoami` (server-side OAuth) |
 
-All three listen on `http://localhost:8088/mcp` by default.
+The Go, Python, and Rust examples listen on `http://localhost:8088/mcp` by
+default. The Go server validates OAuth tokens directly when OAuth settings are
+configured and runs without server auth when they are omitted. The TypeScript
+OAuth example listens on port `8081` and uses its standalone server-side OAuth
+route. Gateway-enabled examples apply Runtime grants, sessions, policy, and
+gateway audit; standalone OAuth validates tokens in the MCP server itself.
 `--from-server http://localhost:8088` appends `/mcp` automatically.
 
 ## Access model
@@ -161,8 +167,8 @@ and policy. Tool names must exactly match what your server implements.
 Use `--from-server` to discover them from a running local instance:
 
 ```bash
-# workspace-assistant-mcp (Go)
-cd examples/workspace-assistant-mcp
+# oauth-example-go-2025-11-25-gateway (Go)
+cd examples/oauth-example-go-2025-11-25-gateway
 go run . &
 SERVER_PID=$!
 mcp-runtime server init workspace-demo --from-server http://localhost:8088
@@ -171,8 +177,8 @@ kill $SERVER_PID
 ```
 
 ```bash
-# data-utility-mcp (Python)
-cd examples/data-utility-mcp
+# example-python-2025-11-25 (Python)
+cd examples/example-python-2025-11-25
 pip install "mcp[cli]"
 python app.py &
 SERVER_PID=$!
@@ -182,8 +188,8 @@ kill $SERVER_PID
 ```
 
 ```bash
-# text-analysis-mcp (Rust)
-cd examples/text-analysis-mcp
+# example-rust-2025-11-25 (Rust)
+cd examples/example-rust-2025-11-25
 cargo run &
 SERVER_PID=$!
 mcp-runtime server init text-analysis --from-server http://localhost:8088
@@ -237,7 +243,7 @@ overrides `--metadata-dir`.
 Run from the directory where the Dockerfile lives:
 
 ```bash
-cd examples/workspace-assistant-mcp
+cd examples/oauth-example-go-2025-11-25-gateway
 mcp-runtime server build image workspace-demo --tag v1
 ```
 
@@ -284,10 +290,10 @@ mcp-runtime server deploy workspace-demo \
   --update
 ```
 
-### Full example: workspace-assistant-mcp
+### Full example: oauth-example-go-2025-11-25-gateway
 
 ```bash
-cd examples/workspace-assistant-mcp
+cd examples/oauth-example-go-2025-11-25-gateway
 
 go run . &
 SERVER_PID=$!

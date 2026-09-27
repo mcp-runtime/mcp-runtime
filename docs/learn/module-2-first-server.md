@@ -25,7 +25,7 @@ Clone the repo to use the workspace-assistant MCP server:
 
 ```bash
 git clone https://github.com/mcp-runtime/mcp-runtime
-cd mcp-runtime/examples/workspace-assistant-mcp
+cd mcp-runtime/examples/oauth-example-go-2025-11-25
 ```
 
 This is a Go MCP server with 8 tools: `echo`, `add`, `upper`, `lower`,

@@ -224,20 +224,22 @@ Secret; test mode may use the local issuer:
   --ingress-manifest config/ingress/overlays/http
 ```
 
-Deploy the shipped SDK examples separately through the normal CLI flow. These
-standalone fixtures verify the mcp-auth SDK inside the MCP server process:
+Validate the Go SDK example's server-side OAuth metadata with the Runtime CLI:
 
 ```bash
-./bin/mcp-runtime server apply --use-kube --file examples/mcp-auth-sdk-ping.yaml
-./bin/mcp-runtime server apply --use-kube --file examples/mcp-auth-sdk-echo.yaml
+./bin/mcp-runtime server validate --metadata-dir examples/oauth-example-go-2025-11-25/.mcp
 ```
 
-The SDK verifier in the standalone examples is configured with the external
-issuer, canonical MCP resource, discovery URL, and required scope. Use a real
-development access token from the mcp-auth authorization server for testing.
+With `gateway.enabled: true`, Runtime validates OAuth tokens and applies its
+grants, sessions, policy, and audit behavior. The Go source can also validate
+OAuth directly with the `mcp-auth` SDK when deployed with the gateway disabled;
+that standalone mode bypasses those gateway features. E2E uses distinct
+`-gateway` and `-standalone` server names so the deployment modes are visible
+in routes and cluster resources. To run the Go process without server auth,
+omit the OAuth settings.
 
-In `--test-mode` the authorization server is configured with the resource of
-every bundled fixture, so one deployment issues tokens all three examples
+In `--test-mode` the authorization server is configured with the Go example
+resource, so one deployment issues a token for the protected fixture.
 accept. Add resources with `--mcp-auth-resource-url` (repeat the flag or
 comma-separate) when you deploy your own server:
 

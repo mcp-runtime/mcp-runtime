@@ -286,7 +286,7 @@ func TestDefaultedMCPServerForReconcile(t *testing.T) {
 		mcpServer := mcpv1alpha1.MCPServer{
 			ObjectMeta: metav1.ObjectMeta{Name: "test"},
 			Spec: mcpv1alpha1.MCPServerSpec{
-				Image: "10.43.109.51:5000/data-utility-mcp",
+				Image: "10.43.109.51:5000/example-python-2025-11-25",
 			},
 		}
 		r := MCPServerReconciler{Scheme: runtime.NewScheme()}
@@ -299,7 +299,7 @@ func TestDefaultedMCPServerForReconcile(t *testing.T) {
 		mcpServer := mcpv1alpha1.MCPServer{
 			ObjectMeta: metav1.ObjectMeta{Name: "test"},
 			Spec: mcpv1alpha1.MCPServerSpec{
-				Image: "10.43.109.51:5000/data-utility-mcp:52c916f",
+				Image: "10.43.109.51:5000/example-python-2025-11-25:52c916f",
 			},
 		}
 		r := MCPServerReconciler{Scheme: runtime.NewScheme()}
@@ -1509,7 +1509,7 @@ func TestReconcileIngress(t *testing.T) {
 
 	t.Run("uses publicPathPrefix for path-based routing", func(t *testing.T) {
 		mcpServer := &mcpv1alpha1.MCPServer{
-			ObjectMeta: metav1.ObjectMeta{Name: "workspace-assistant-mcp", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: "oauth-example-go-2025-11-25", Namespace: "default"},
 			Spec: mcpv1alpha1.MCPServerSpec{
 				Image:            "test-image",
 				IngressPath:      "/ignored-when-prefix-set",
@@ -1536,7 +1536,7 @@ func TestReconcileIngress(t *testing.T) {
 
 	t.Run("uses ingress host and websecure defaults with publicPathPrefix", func(t *testing.T) {
 		mcpServer := &mcpv1alpha1.MCPServer{
-			ObjectMeta: metav1.ObjectMeta{Name: "workspace-assistant-mcp", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: "oauth-example-go-2025-11-25", Namespace: "default"},
 			Spec: mcpv1alpha1.MCPServerSpec{
 				Image:            "test-image",
 				IngressHost:      "mcp.example.com",
@@ -1679,7 +1679,7 @@ func TestResolveImage(t *testing.T) {
 		mcpServer := &mcpv1alpha1.MCPServer{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-server", Namespace: "default"},
 			Spec: mcpv1alpha1.MCPServerSpec{
-				Image:    "10.43.109.51:5000/data-utility-mcp",
+				Image:    "10.43.109.51:5000/example-python-2025-11-25",
 				ImageTag: "52c916f",
 			},
 		}
@@ -1688,13 +1688,13 @@ func TestResolveImage(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to resolve image: %v", err)
 		}
-		assertEqual(t, "image", image, "10.43.109.51:5000/data-utility-mcp:52c916f")
+		assertEqual(t, "image", image, "10.43.109.51:5000/example-python-2025-11-25:52c916f")
 	})
 	t.Run("preserves explicit tag when image uses hostport registry", func(t *testing.T) {
 		mcpServer := &mcpv1alpha1.MCPServer{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-server", Namespace: "default"},
 			Spec: mcpv1alpha1.MCPServerSpec{
-				Image:    "10.43.109.51:5000/data-utility-mcp:52c916f",
+				Image:    "10.43.109.51:5000/example-python-2025-11-25:52c916f",
 				ImageTag: "ignored",
 			},
 		}
@@ -1703,7 +1703,7 @@ func TestResolveImage(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to resolve image: %v", err)
 		}
-		assertEqual(t, "image", image, "10.43.109.51:5000/data-utility-mcp:52c916f")
+		assertEqual(t, "image", image, "10.43.109.51:5000/example-python-2025-11-25:52c916f")
 	})
 	t.Run("returns user-specified image with registry override", func(t *testing.T) {
 		mcpServer := &mcpv1alpha1.MCPServer{

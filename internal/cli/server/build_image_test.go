@@ -287,8 +287,8 @@ servers:
 		metadataFile := filepath.Join(tmp, "servers.yaml")
 		if err := os.WriteFile(metadataFile, []byte(`version: v1
 servers:
-  - name: workspace-assistant-mcp
-    route: /workspace-assistant-mcp/mcp
+  - name: oauth-example-go-2025-11-25
+    route: /oauth-example-go-2025-11-25/mcp
   - name: workspace-demo
     image: workspace-demo
     scope: tenant

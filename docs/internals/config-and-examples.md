@@ -10,9 +10,9 @@
 - `config/cert-manager/` contains sample issuer/certificate resources for registry and ingress TLS.
 
 ## examples/
-- `workspace-assistant-mcp/` implements the `workspace-assistant-mcp` sample used by smoke/e2e flows.
-- `data-utility-mcp/` implements `data-utility-mcp`, and `text-analysis-mcp/` implements `text-analysis-mcp` for e2e validation.
-- `mcpserver-path-based.yaml` is the maintained MCPServer manifest example for path-based ingress.
+- `oauth-example-go-2025-11-25/`, `example-python-2025-11-25/`, and `example-rust-2025-11-25/` provide gateway-enabled servers; their `.mcp/servers.yaml` names end in `-gateway`.
+- `oauth-example-typescript-2025-06-18/` demonstrates direct server OAuth with gateway disabled; its server name ends in `-standalone`.
+- Each server's `.mcp/` directory is the source for server metadata; gateway examples also contain sample grants and sessions. Avoid duplicate hand-maintained server manifests.
 
 ## Makefiles
 - `Makefile` exposes high-level tasks (fmt, lint, test, build) for the CLI binary.
@@ -21,7 +21,7 @@
 
 ## Dockerfiles
 - `Dockerfile.operator` builds the operator image with Go build steps and copies manifests.
-- `examples/workspace-assistant-mcp/Dockerfile` builds the workspace assistant sample container.
+- `examples/oauth-example-go-2025-11-25/Dockerfile` builds the Go OAuth-capable sample container.
 - `test/e2e/Dockerfile` builds images for end-to-end tests.
 
 ## Scripts

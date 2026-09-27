@@ -26,11 +26,36 @@ mcpruntime_org_backup_init_snapshot() {
   fi
   local stamp
   stamp="$(date -u +%Y-%m-%dT%H%M%SZ)"
+  if [[ -e "$MCP_TLS_BACKUP_ROOT/$stamp" ]]; then
+    stamp="${stamp}-$$"
+  fi
   MCP_TLS_SNAPSHOT_DIR="$MCP_TLS_BACKUP_ROOT/$stamp"
   mkdir -p "$MCP_TLS_SNAPSHOT_DIR"
   chmod 0700 "$MCP_TLS_SNAPSHOT_DIR"
+  echo "backup snapshot staging: $MCP_TLS_SNAPSHOT_DIR"
+}
+
+mcpruntime_org_backup_publish_latest() {
+  local backup_kind="${1:-platform}"
+  if [[ "$MCP_TLS_DRY_RUN" == "1" ]]; then
+    echo "[dry-run] would publish $backup_kind snapshot: $MCP_TLS_SNAPSHOT_DIR"
+    return 0
+  fi
+  [[ -n "$MCP_TLS_SNAPSHOT_DIR" && -d "$MCP_TLS_SNAPSHOT_DIR" ]] || {
+    echo "error: backup snapshot directory is not initialized" >&2
+    return 1
+  }
+  date -u +%Y-%m-%dT%H:%M:%SZ >"$MCP_TLS_SNAPSHOT_DIR/BACKUP_COMPLETE.tmp"
+  chmod 0600 "$MCP_TLS_SNAPSHOT_DIR/BACKUP_COMPLETE.tmp"
+  mv "$MCP_TLS_SNAPSHOT_DIR/BACKUP_COMPLETE.tmp" "$MCP_TLS_SNAPSHOT_DIR/BACKUP_COMPLETE"
+  if [[ "$backup_kind" == "full" ]]; then
+    cp "$MCP_TLS_SNAPSHOT_DIR/BACKUP_COMPLETE" "$MCP_TLS_SNAPSHOT_DIR/FULL_BACKUP_COMPLETE"
+    chmod 0600 "$MCP_TLS_SNAPSHOT_DIR/FULL_BACKUP_COMPLETE"
+  fi
+  local stamp
+  stamp="$(basename "$MCP_TLS_SNAPSHOT_DIR")"
   ln -sfn "$stamp" "$MCP_TLS_BACKUP_ROOT/latest"
-  echo "platform backup snapshot: $MCP_TLS_SNAPSHOT_DIR"
+  echo "complete $backup_kind backup snapshot: $MCP_TLS_SNAPSHOT_DIR"
 }
 
 mcpruntime_org_backup_resolve_dir() {
@@ -111,7 +136,9 @@ mcpruntime_org_backup_platform_auth_env() {
 }
 
 mcpruntime_org_backup_platform_runtime() {
-  mcpruntime_org_backup_init_snapshot
+  if [[ -z "$MCP_TLS_SNAPSHOT_DIR" ]]; then
+    mcpruntime_org_backup_init_snapshot
+  fi
   echo "Platform-runtime backup root: $MCP_TLS_BACKUP_ROOT"
   mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/registry-tls.yaml" get secret registry-tls -n registry
   mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-sentinel-platform-tls.yaml" get secret mcp-sentinel-platform-tls -n mcp-sentinel
@@ -129,6 +156,60 @@ mcpruntime_org_backup_platform_runtime() {
   mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/keycloak-admin.yaml" get secret keycloak-admin -n mcp-sentinel
   mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/keycloak-tls.yaml" get secret keycloak-tls -n mcp-sentinel
   mcpruntime_org_backup_platform_auth_env
+  if [[ "${MCP_TLS_DEFER_PUBLISH:-0}" != "1" ]]; then
+    mcpruntime_org_backup_publish_latest platform
+  fi
+}
+
+# Save Kubernetes API objects as a protected inventory. It is a recovery
+# reference and must not be blindly applied; the K3s datastore snapshot is the
+# source of truth for full cluster-state recovery.
+mcpruntime_org_backup_kubernetes_resources() {
+  if [[ "$MCP_TLS_DRY_RUN" == "1" ]]; then
+    echo "[dry-run] would export namespaced and cluster-scoped Kubernetes resources"
+    return 0
+  fi
+  local scope resource base_resource path tmp resources
+  mkdir -p "$MCP_TLS_SNAPSHOT_DIR/resources/namespaced" \
+    "$MCP_TLS_SNAPSHOT_DIR/resources/cluster-scoped"
+  chmod 0700 "$MCP_TLS_SNAPSHOT_DIR/resources" \
+    "$MCP_TLS_SNAPSHOT_DIR/resources/namespaced" \
+    "$MCP_TLS_SNAPSHOT_DIR/resources/cluster-scoped"
+  mcpruntime_org_kubectl get crds -o yaml >"$MCP_TLS_SNAPSHOT_DIR/crds.yaml"
+  chmod 0600 "$MCP_TLS_SNAPSHOT_DIR/crds.yaml"
+
+  for scope in namespaced cluster-scoped; do
+    local list_args=(--namespaced=true)
+    if [[ "$scope" == "cluster-scoped" ]]; then
+      list_args=(--namespaced=false)
+    fi
+    if ! resources="$(mcpruntime_org_kubectl api-resources "${list_args[@]}" --verbs=list -o name | sort -u)"; then
+      echo "error: unable to enumerate $scope Kubernetes resources" >&2
+      return 1
+    fi
+    while IFS= read -r resource; do
+      [[ -n "$resource" ]] || continue
+      base_resource="${resource%%.*}"
+      case "$base_resource" in
+        pods|events|endpoints|endpointslices|leases|replicasets|controllerrevisions) continue ;;
+      esac
+      path="$MCP_TLS_SNAPSHOT_DIR/resources/$scope/${resource//\//_}.yaml"
+      tmp="${path}.tmp"
+      if [[ "$scope" == "namespaced" ]]; then
+        if ! mcpruntime_org_kubectl get "$resource" -A -o yaml >"$tmp"; then
+          rm -f "$tmp"
+          echo "error: unable to export $scope resource $resource" >&2
+          return 1
+        fi
+      elif ! mcpruntime_org_kubectl get "$resource" -o yaml >"$tmp"; then
+        rm -f "$tmp"
+        echo "error: unable to export $scope resource $resource" >&2
+        return 1
+      fi
+      chmod 0600 "$tmp"
+      mv "$tmp" "$path"
+    done <<<"$resources"
+  done
 }
 
 mcpruntime_org_backup_strip_and_apply() {

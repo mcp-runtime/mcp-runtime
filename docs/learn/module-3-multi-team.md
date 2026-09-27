@@ -61,7 +61,7 @@ mcp-runtime auth use alice
 Scaffold metadata from the running server, validate, build, push, deploy:
 
 ```bash
-cd examples/workspace-assistant-mcp
+cd examples/oauth-example-go-2025-11-25
 go run . &; SERVER_PID=$!
 mcp-runtime server init payments --from-server http://localhost:8088
 kill $SERVER_PID

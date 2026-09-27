@@ -157,11 +157,33 @@ by a manual/scripted flow using the `cursor://` redirect URI, not by Cursor itse
 - **Client re-registers on every attempt:** RFC 7591 requires the registration response to
   echo `client_id_issued_at`, `grant_types`, `response_types`, and `scope`. Clients that
   cannot read back what they registered treat the stored registration as unusable.
+- **Installed diagnostics reports an empty ingress probe HTTP status:** a fast
+  curl helper can finish before `kubectl run --attach` attaches, losing stdout.
+  Create the helper, wait for `Succeeded`, read its logs, and delete it in a
+  deferred cleanup. The ingress probe now uses this pattern, matching the
+  registry and API probes. Check the public MCP endpoint separately before
+  attributing this diagnostic failure to an actual ingress outage.
+  A TLS-only ingress returns 404 on Traefik's HTTP entrypoint even when public
+  HTTPS works. Detect both `router.tls: "true"` and Ingress TLS Secret settings;
+  use the secure service port with curl `--connect-to` and the public HTTPS URL
+  so SNI and certificate verification remain correct. Do not bypass TLS checks.
 - **`400 {"error":"resource is not recognized"}` from the token or authorize endpoint:** the
   RFC 8707 `resource` the client sends is not in the AS allowlist. On this platform check
   that `MCP_AUTH_RESOURCES` (plural, comma-separated — **not** just `MCP_AUTH_RESOURCE`)
   carries every deployed server's absolute resource URI. See
   `internal/cli/setup/platform/mcp_auth_server.go` and `k8s/23-mcp-auth-server.yaml`.
+  Compare the env on the **ready serving pods**, not only the Deployment. A
+  stuck rolling update can keep an old allowlist serving while the replacement
+  crashes. Inspect replacement `--previous` logs and require `kubectl rollout
+  status deployment/mcp-auth-server` to finish. `unknown field` during connector
+  parsing means the candidate image cannot read the existing connector schema;
+  recover with a known compatible image digest, retaining the intended resource
+  env, connector config, signing key, and data PVC. Do not remove private IdP
+  endpoint fields merely to make an older published image start: they may be
+  needed for server-side token exchange. Setup now requires full auth/operator
+  rollouts rather than accepting an old available replica. `cluster diagnostics`
+  also checks the auth revision, observed generation, and replacement replicas;
+  it reports API access errors instead of skipping them as an absent install.
 
 After any server-side fix, **remove and re-add the server in the client and restart it** —
 Cursor caches the DCR client registration and discovery document per server, so a stale

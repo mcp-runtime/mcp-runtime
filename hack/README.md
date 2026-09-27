@@ -16,6 +16,7 @@ hack/
     dev-setup.sh
   deploy/
     mcpruntime-org/           # Public k3s cluster (mcpruntime.org)
+      backup.sh              # Full online K3s/API/local-path recovery bundle
       setup.sh                # Full platform install
       clean.sh                # Wipe MCP Runtime namespaces (with backup)
       restore.sh              # Re-apply TLS/OIDC/bootstrap backups
@@ -29,11 +30,15 @@ hack/
 Configure `config/deployments/mcpruntime-org.env` (copy from `.example`), then:
 
 ```bash
+hack/deploy/mcpruntime-org/backup.sh --setup
 hack/deploy/mcpruntime-org/setup.sh
 hack/deploy/mcpruntime-org/clean.sh --yes --wait
 hack/deploy/mcpruntime-org/rollout.sh
 PLATFORM_URL=... MCP_URL=... REGISTRY_HOST=... hack/deploy/mcpruntime-org/multitenancy-test.sh
 ```
+
+Use `backup.sh --full --online-copy` before destructive cleanup or for full
+node recovery; see `docs/k3s-deployment-runbook.md` for coverage and limits.
 
 See `docs/k3s-deployment-runbook.md` for the full runbook.
 

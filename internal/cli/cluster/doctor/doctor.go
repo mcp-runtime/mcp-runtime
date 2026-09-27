@@ -119,6 +119,7 @@ type doctorIngressRoute struct {
 	Name string
 	Host string
 	Path string
+	TLS  bool
 }
 
 // AllOK reports whether every check passed.

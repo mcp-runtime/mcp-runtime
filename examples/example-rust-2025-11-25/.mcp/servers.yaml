@@ -1,0 +1,30 @@
+version: v1
+servers:
+    - name: example-rust-2025-11-25-gateway
+      description: Rust MCP server demonstrating protocol revision 2025-11-25.
+      image: registry.mcpruntime.org/example-rust-2025-11-25
+      imageTag: latest
+      route: /example-rust-2025-11-25-gateway/mcp
+      publicPathPrefix: example-rust-2025-11-25-gateway
+      port: 8088
+      scope: tenant
+      tools:
+        - name: repeat
+          description: repeat tool
+          requiredTrust: low
+          sideEffect: read
+        - name: word_count
+          description: word_count tool
+          requiredTrust: low
+          sideEffect: read
+        - name: extract_keywords
+          description: extract_keywords tool
+          requiredTrust: low
+          sideEffect: read
+      policy:
+        mode: allow-list
+        defaultDecision: deny
+      session:
+        required: true
+      gateway:
+        enabled: true

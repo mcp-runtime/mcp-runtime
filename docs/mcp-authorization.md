@@ -296,7 +296,7 @@ curl -fsS https://keycloak.example.com/realms/mcp-runtime/.well-known/openid-con
 kubectl -n mcp-sentinel rollout status deploy/mcp-auth-server
 ```
 
-Then use an MCP client or the shipped SDK OAuth fixture (`examples/mcp-auth-sdk-ping.yaml`)
+Then use an MCP client or the Go example's OAuth metadata (`examples/oauth-example-go-2025-11-25/.mcp/servers.yaml`)
 to run the real PKCE flow.
 Verify all of these outcomes:
 

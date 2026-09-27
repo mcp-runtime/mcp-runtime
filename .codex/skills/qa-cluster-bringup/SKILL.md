@@ -180,16 +180,14 @@ exactly — gateway policy, analytics, and required headers all depend on the
 documented shape.
 
 ```bash
-cat > /tmp/workspace-assistant-mcp.yaml <<'EOF'
+cat > /tmp/oauth-example-go-2025-11-25-gateway.yaml <<'EOF'
 version: v1
 servers:
-  - name: workspace-assistant-mcp
-    route: /workspace-assistant-mcp/mcp
-    publicPathPrefix: workspace-assistant-mcp
+  - name: oauth-example-go-2025-11-25-gateway
+    route: /oauth-example-go-2025-11-25-gateway/mcp
+    publicPathPrefix: oauth-example-go-2025-11-25-gateway
     port: 8088
     namespace: mcp-servers
-    envVars:
-      - { name: MCP_PATH, value: /workspace-assistant-mcp/mcp }
     tools:
       - { name: add,   requiredTrust: low, sideEffect: read }
       - { name: upper, requiredTrust: medium, sideEffect: read }
@@ -207,31 +205,31 @@ servers:
     analytics:
       enabled: true
       ingestURL: http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events
-      apiKeySecretRef: { name: workspace-assistant-mcp-analytics, key: api-key }
+      apiKeySecretRef: { name: oauth-example-go-2025-11-25-gateway-analytics, key: api-key }
 EOF
 
 API_KEY="$(kubectl get secret mcp-sentinel-secrets -n mcp-sentinel \
   -o jsonpath='{.data.INGEST_API_KEYS}' | base64 -d | cut -d, -f1)"
-kubectl create secret generic workspace-assistant-mcp-analytics -n mcp-servers \
+kubectl create secret generic oauth-example-go-2025-11-25-gateway-analytics -n mcp-servers \
   --from-literal=api-key="$API_KEY" \
   --dry-run=client -o yaml | kubectl apply -f -
 
-./bin/mcp-runtime server build image workspace-assistant-mcp \
-  --metadata-file /tmp/workspace-assistant-mcp.yaml \
-  --dockerfile examples/workspace-assistant-mcp/Dockerfile \
-  --context examples/workspace-assistant-mcp \
+./bin/mcp-runtime server build image oauth-example-go-2025-11-25-gateway \
+  --metadata-file /tmp/oauth-example-go-2025-11-25-gateway.yaml \
+  --dockerfile examples/oauth-example-go-2025-11-25/Dockerfile \
+  --context examples/oauth-example-go-2025-11-25 \
   --registry registry.registry.svc.cluster.local:5000 \
   --tag dev
 
 ./bin/mcp-runtime server push \
-  --image registry.registry.svc.cluster.local:5000/workspace-assistant-mcp:dev
+  --image registry.registry.svc.cluster.local:5000/oauth-example-go-2025-11-25-gateway:dev
 
-rm -rf /tmp/workspace-assistant-mcp-manifests
+rm -rf /tmp/oauth-example-go-2025-11-25-gateway-manifests
 ./bin/mcp-runtime pipeline generate \
-  --file /tmp/workspace-assistant-mcp.yaml \
-  --output /tmp/workspace-assistant-mcp-manifests
-./bin/mcp-runtime pipeline deploy --dir /tmp/workspace-assistant-mcp-manifests
-kubectl rollout status deploy/workspace-assistant-mcp -n mcp-servers --timeout=180s
+  --file /tmp/oauth-example-go-2025-11-25-gateway.yaml \
+  --output /tmp/oauth-example-go-2025-11-25-gateway-manifests
+./bin/mcp-runtime pipeline deploy --dir /tmp/oauth-example-go-2025-11-25-gateway-manifests
+kubectl rollout status deploy/oauth-example-go-2025-11-25-gateway -n mcp-servers --timeout=180s
 ```
 
 ## Step 8 — Apply baseline grant + session
@@ -242,7 +240,7 @@ apiVersion: mcpruntime.org/v1alpha1
 kind: MCPAccessGrant
 metadata: { name: workspace-assistant-local, namespace: mcp-servers }
 spec:
-  serverRef: { name: workspace-assistant-mcp }
+  serverRef: { name: oauth-example-go-2025-11-25-gateway }
   subject: { humanID: local-user, agentID: local-agent }
   maxTrust: high
   allowedSideEffects: [read]
@@ -255,14 +253,14 @@ apiVersion: mcpruntime.org/v1alpha1
 kind: MCPAgentSession
 metadata: { name: local-session, namespace: mcp-servers }
 spec:
-  serverRef: { name: workspace-assistant-mcp }
+  serverRef: { name: oauth-example-go-2025-11-25-gateway }
   subject: { humanID: local-user, agentID: local-agent }
   consentedTrust: high
   policyVersion: v1
 EOF
 kubectl apply -f /tmp/workspace-assistant-access.yaml
 
-until ./bin/mcp-runtime server policy inspect workspace-assistant-mcp --namespace mcp-servers \
+until ./bin/mcp-runtime server policy inspect oauth-example-go-2025-11-25-gateway --namespace mcp-servers \
   | grep -q local-session; do sleep 2; done
 sleep 6   # proxy sidecar polls; do not skip this wait
 ```
@@ -274,7 +272,7 @@ the regressions that unit tests miss (Traefik routing, gateway policy
 materialization, proxy reload, auth headers, analytics path).
 
 ```bash
-BASE=http://localhost:18080/workspace-assistant-mcp/mcp
+BASE=http://localhost:18080/oauth-example-go-2025-11-25-gateway/mcp
 PROTO=2025-06-18
 H=(-H "content-type: application/json"
    -H "accept: application/json, text/event-stream"
@@ -309,7 +307,7 @@ to know the environment is ready.
 - Mode: reuse | create | rebuild-from-broken.
 - Cluster context: `kubectl config current-context`.
 - Image SHAs pushed (operator, gateway proxy, sentinel api/ui/ingest/processor,
-  workspace-assistant-mcp).
+  oauth-example-go-2025-11-25-gateway).
 - `cluster doctor` summary line.
 - Traefik port-forward pid + log path.
 - Demo `tools/call` result: `5` ✓ / details on failure.

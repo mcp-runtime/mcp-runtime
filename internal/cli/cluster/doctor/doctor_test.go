@@ -1495,6 +1495,10 @@ func TestDoctorCurlProbesPassPathValidator(t *testing.T) {
 					if strings.Contains(strings.Join(spec.Args, "\x00"), "/dev/null") {
 						t.Fatal("doctor curl helper should not pass /dev/null through kubectl validators")
 					}
+					return &core.MockCommand{OutputData: []byte("pod created")}
+				case contains(spec.Args, "get") && contains(spec.Args, "pod"):
+					return &core.MockCommand{OutputData: []byte("Succeeded")}
+				case contains(spec.Args, "logs"):
 					return &core.MockCommand{OutputData: []byte("200")}
 				default:
 					return &core.MockCommand{}
@@ -1505,6 +1509,11 @@ func TestDoctorCurlProbesPassPathValidator(t *testing.T) {
 		check := checkIngressRouteProbe(kubectl, "mcp-servers", DistroGeneric)
 		if !check.OK {
 			t.Fatalf("expected OK, got detail=%q", check.Detail)
+		}
+		for _, arg := range probeArgs {
+			if arg == "--attach" || arg == "--rm" {
+				t.Fatalf("ingress probe should read completed pod logs, got args=%v", probeArgs)
+			}
 		}
 		overrides := argValueWithPrefix(probeArgs, "--overrides=")
 		if overrides == "" {

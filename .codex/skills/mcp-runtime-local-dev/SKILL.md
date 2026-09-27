@@ -25,7 +25,7 @@ kubectl port-forward -n traefik svc/traefik 18080:8000
 | UI | `http://localhost:18080/` |
 | API | `http://localhost:18080/api/v1` |
 | Grafana | `http://localhost:18080/grafana` |
-| MCP samples | `http://localhost:18080/workspace-assistant-mcp/mcp`, `…/data-utility-mcp/mcp`, `…/text-analysis-mcp/mcp` |
+| MCP samples | `http://localhost:18080/oauth-example-go-2025-11-25-gateway/mcp`, `…/example-python-2025-11-25-gateway/mcp`, `…/example-rust-2025-11-25-gateway/mcp` |
 | Prometheus (debug) | `kubectl port-forward -n mcp-sentinel svc/prometheus 9090:9090` |
 
 PII redaction: `config/ingress/overlays/http` + `pii-redactor@file` — keep off `/api/v1` routes (keys and grant subjects must stay exact).

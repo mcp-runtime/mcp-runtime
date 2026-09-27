@@ -1,0 +1,20 @@
+apiVersion: mcpruntime.org/v1alpha1
+kind: MCPAccessGrant
+metadata:
+    name: example-rust-agent-read
+    namespace: mcp-servers
+spec:
+    allowedSideEffects:
+        - read
+    maxTrust: low
+    policyVersion: v1
+    serverRef:
+        name: example-rust-2025-11-25-gateway
+        namespace: mcp-servers
+    subject:
+        agentID: example-agent
+        humanID: example-human
+    toolRules:
+        - decision: allow
+          name: repeat
+          requiredTrust: low

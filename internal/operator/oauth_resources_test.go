@@ -95,7 +95,7 @@ func TestReconcileBundledOAuthResourcesPublishesOnlyServedAudiences(t *testing.T
 func TestReconcileBundledOAuthResourcesAcceptsIssuerHostWithoutMCPHost(t *testing.T) {
 	scheme := bundledOAuthScheme(t)
 	issuer := "http://localhost:18080/mcp-auth"
-	server := oauthMCPServer("mcp-auth-sdk-ping", "http://localhost:18080/mcp-auth-sdk-ping/mcp")
+	server := oauthMCPServer("oauth-example-go-2025-11-25", "http://localhost:18080/oauth-example-go-2025-11-25/mcp")
 	server.Spec.Auth.IssuerURL = issuer
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(bundledAuthDeployment(), server).Build()
 	r := MCPServerReconciler{Client: c, Scheme: scheme, OAuthIssuerURL: issuer}
@@ -103,7 +103,7 @@ func TestReconcileBundledOAuthResourcesAcceptsIssuerHostWithoutMCPHost(t *testin
 	if err := r.reconcileBundledOAuthResources(context.Background()); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
-	if got := bundledAuthEnv(t, c)["MCP_AUTH_RESOURCES"]; got != "http://localhost:18080/mcp-auth-sdk-ping/mcp" {
+	if got := bundledAuthEnv(t, c)["MCP_AUTH_RESOURCES"]; got != "http://localhost:18080/oauth-example-go-2025-11-25/mcp" {
 		t.Fatalf("MCP_AUTH_RESOURCES = %q", got)
 	}
 }

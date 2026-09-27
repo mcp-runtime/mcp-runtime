@@ -297,13 +297,11 @@ func mcpAuthResourceURLs(configured []string, issuer string, testMode bool) ([]s
 			// The operator fills this list from live OAuth MCPServer audiences.
 			return resources, nil
 		}
-		// Test mode serves the shipped SDK fixtures, so one authorization
-		// server covers both standalone SDK examples.
+		// Test mode serves the Go example's OAuth route through the Runtime
+		// gateway.
 		base := strings.TrimSuffix(issuer, "/mcp-auth")
 		return []string{
-			base + "/mcp-auth-sdk-ping/mcp",
-			base + "/mcp-auth-sdk-echo/mcp",
-			base + "/mcp-auth-sdk-ping-py/mcp",
+			base + "/oauth-example-go-2025-11-25-gateway/mcp",
 		}, nil
 	}
 	seen := map[string]bool{}

@@ -1,0 +1,23 @@
+apiVersion: mcpruntime.org/v1alpha1
+kind: MCPAccessGrant
+metadata:
+    name: oauth-example-go-agent-read
+    namespace: mcp-servers
+spec:
+    allowedSideEffects:
+        - read
+    maxTrust: low
+    policyVersion: v1
+    serverRef:
+        name: oauth-example-go-2025-11-25-gateway
+        namespace: mcp-servers
+    subject:
+        agentID: example-agent
+        humanID: example-human
+    toolRules:
+        - decision: allow
+          name: aaa-ping
+          requiredTrust: low
+        - decision: allow
+          name: whoami
+          requiredTrust: low

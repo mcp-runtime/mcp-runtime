@@ -105,7 +105,7 @@ matches `RequireRole` enforcement in each split service `routes.go`.
 Baseline traffic (should succeed):
 
 ```bash
-BASE=http://localhost:18080/workspace-assistant-mcp/mcp
+BASE=http://localhost:18080/oauth-example-go-2025-11-25-gateway/mcp
 PROTO=2025-06-18
 H=(-H "content-type: application/json" -H "accept: application/json, text/event-stream"
    -H "Mcp-Protocol-Version: $PROTO"
@@ -194,7 +194,7 @@ a `502` as an audit-path finding.
 
 ```bash
 BEFORE="$(curl -sS -H "x-api-key: $ADMIN_KEY" \
-  "http://localhost:18080/api/v1/events?server=workspace-assistant-mcp&limit=100" \
+  "http://localhost:18080/api/v1/events?server=oauth-example-go-2025-11-25-gateway&limit=100" \
   | jq '.events | length // length // 0')"
 # fire one allow + one deny (tool not in policy)
 init
@@ -202,7 +202,7 @@ call '{"name":"add","arguments":{"a":1,"b":1}}'               >/dev/null
 call '{"name":"definitely-not-a-tool","arguments":{}}'        >/dev/null
 sleep 3
 AFTER="$(curl -sS -H "x-api-key: $ADMIN_KEY" \
-  "http://localhost:18080/api/v1/events?server=workspace-assistant-mcp&limit=100" \
+  "http://localhost:18080/api/v1/events?server=oauth-example-go-2025-11-25-gateway&limit=100" \
   | jq '.events | length // length // 0')"
 [ "$AFTER" -ge "$((BEFORE + 2))" ] || echo "FAIL: missing audit events"
 ```

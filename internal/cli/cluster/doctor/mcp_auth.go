@@ -1,8 +1,11 @@
 package doctor
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
+
+	appsv1 "k8s.io/api/apps/v1"
 
 	"mcp-runtime/internal/cli/core"
 )
@@ -13,19 +16,37 @@ const doctorMCPAuthDeployment = "mcp-auth-server"
 // from Sentinel. An install without the opt-in deployment is healthy and is
 // explicitly skipped; an enabled deployment must have its rollout ready.
 func checkMCPAuthDeployment(kubectl core.KubectlRunner) DoctorCheck {
-	if _, err := readKubectlOutput(kubectl, []string{"get", "deployment", doctorMCPAuthDeployment, "-n", doctorSentinelNamespace, "-o", "jsonpath={.metadata.name}"}); err != nil {
+	output, err := readKubectlOutput(kubectl, []string{"get", "deployment", doctorMCPAuthDeployment, "-n", doctorSentinelNamespace, "--ignore-not-found", "-o", "json"})
+	if err != nil {
+		return DoctorCheck{Name: "mcp-auth deployment", OK: false, Detail: fmt.Sprintf("failed reading optional authorization server deployment: %v", err), Remedy: "check Kubernetes API access to deployments in mcp-sentinel"}
+	}
+	if strings.TrimSpace(output) == "" {
 		return DoctorCheck{Name: "mcp-auth deployment", OK: true, Detail: "optional mcp-auth authorization server is not installed; skipping"}
 	}
-	ready, err := readKubectlOutput(kubectl, []string{"get", "deployment", doctorMCPAuthDeployment, "-n", doctorSentinelNamespace, "-o", "jsonpath={.status.readyReplicas}"})
-	if err != nil || strings.TrimSpace(ready) != "1" {
+	var deployment appsv1.Deployment
+	if err := json.Unmarshal([]byte(output), &deployment); err != nil {
+		return DoctorCheck{Name: "mcp-auth deployment", OK: false, Detail: fmt.Sprintf("failed parsing authorization server deployment: %v", err), Remedy: "inspect kubectl get deployment mcp-auth-server -n mcp-sentinel -o json"}
+	}
+	desired := int32(1)
+	if deployment.Spec.Replicas != nil {
+		desired = *deployment.Spec.Replicas
+	}
+	status := deployment.Status
+	failed := false
+	for _, condition := range status.Conditions {
+		if condition.Type == appsv1.DeploymentProgressing && condition.Status == "False" {
+			failed = true
+		}
+	}
+	if desired < 1 || failed || status.ObservedGeneration < deployment.Generation || status.UpdatedReplicas < desired || status.Replicas > status.UpdatedReplicas || status.ReadyReplicas < desired || status.AvailableReplicas < desired || status.UnavailableReplicas > 0 {
 		return DoctorCheck{
 			Name:   "mcp-auth deployment",
 			OK:     false,
-			Detail: fmt.Sprintf("deployment %s is not ready (readyReplicas=%q)", doctorMCPAuthDeployment, strings.TrimSpace(ready)),
+			Detail: fmt.Sprintf("deployment %s rollout is incomplete (generation=%d observed=%d ready=%d/%d updated=%d total=%d unavailable=%d)", doctorMCPAuthDeployment, deployment.Generation, status.ObservedGeneration, status.ReadyReplicas, desired, status.UpdatedReplicas, status.Replicas, status.UnavailableReplicas),
 			Remedy: "kubectl rollout status deployment/mcp-auth-server -n mcp-sentinel and inspect its pod events/logs",
 		}
 	}
-	return DoctorCheck{Name: "mcp-auth deployment", OK: true, Detail: "optional authorization server deployment is ready"}
+	return DoctorCheck{Name: "mcp-auth deployment", OK: true, Detail: "optional authorization server deployment's current revision is ready"}
 }
 
 func checkMCPAuthSecrets(kubectl core.KubectlRunner) DoctorCheck {

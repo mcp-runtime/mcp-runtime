@@ -1,0 +1,70 @@
+version: v1
+servers:
+    - name: example-python-2025-11-25-gateway
+      description: Python MCP server demonstrating protocol revision 2025-11-25.
+      image: registry.mcpruntime.org/example-python-2025-11-25
+      imageTag: latest
+      route: /example-python-2025-11-25-gateway/mcp
+      publicPathPrefix: example-python-2025-11-25-gateway
+      port: 8088
+      scope: tenant
+      tools:
+        - name: ping
+          description: ping tool
+          requiredTrust: low
+          sideEffect: read
+        - name: echo
+          description: echo tool
+          requiredTrust: low
+          sideEffect: read
+        - name: reverse
+          description: reverse tool
+          requiredTrust: low
+          sideEffect: read
+        - name: add
+          description: add tool
+          requiredTrust: low
+          sideEffect: read
+        - name: multiply
+          description: multiply tool
+          requiredTrust: low
+          sideEffect: read
+        - name: upper
+          description: upper tool
+          requiredTrust: medium
+          sideEffect: read
+        - name: lower
+          description: lower tool
+          requiredTrust: low
+          sideEffect: read
+        - name: slugify
+          description: slugify tool
+          requiredTrust: low
+          sideEffect: read
+        - name: word_count
+          description: word_count tool
+          requiredTrust: low
+          sideEffect: read
+        - name: extract_keywords
+          description: extract_keywords tool
+          requiredTrust: low
+          sideEffect: read
+        - name: summarize_numbers
+          description: summarize_numbers tool
+          requiredTrust: medium
+          sideEffect: read
+        - name: now
+          description: now tool
+          requiredTrust: low
+          sideEffect: read
+        - name: create_task
+          description: create_task tool
+          requiredTrust: low
+          sideEffect: write
+      policy:
+        mode: allow-list
+        defaultDecision: deny
+      session:
+        required: true
+      gateway:
+        enabled: true
