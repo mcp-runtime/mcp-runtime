@@ -90,6 +90,13 @@ rm -f "$TEST_ISOLATION_KUBECONFIG"
 git diff --check
 ```
 
+Platform API schema regression tests use a disposable local PostgreSQL instance.
+From `services/platform-api`, set `MCP_PLATFORM_TEST_POSTGRES_DSN` to its
+`postgres://` URL and run `go test ./test/integration -race -count=1` with an
+isolated kubeconfig. Only `localhost` or `127.0.0.1` database URLs are accepted;
+the test creates and removes its own schema. Without this variable the database
+tests skip. CI supplies a pinned PostgreSQL service and runs them automatically.
+
 For changes that affect Kind setup, ingress, registry pushes, gateway policy,
 sessions, grants, analytics, or tenant isolation, run the relevant e2e scenario:
 
