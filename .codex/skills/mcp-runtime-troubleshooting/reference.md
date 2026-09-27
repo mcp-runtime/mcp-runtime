@@ -157,6 +157,12 @@ by a manual/scripted flow using the `cursor://` redirect URI, not by Cursor itse
 - **Client re-registers on every attempt:** RFC 7591 requires the registration response to
   echo `client_id_issued_at`, `grant_types`, `response_types`, and `scope`. Clients that
   cannot read back what they registered treat the stored registration as unusable.
+- **Installed diagnostics reports an empty ingress probe HTTP status:** a fast
+  curl helper can finish before `kubectl run --attach` attaches, losing stdout.
+  Create the helper, wait for `Succeeded`, read its logs, and delete it in a
+  deferred cleanup. The ingress probe now uses this pattern, matching the
+  registry and API probes. Check the public MCP endpoint separately before
+  attributing this diagnostic failure to an actual ingress outage.
 - **`400 {"error":"resource is not recognized"}` from the token or authorize endpoint:** the
   RFC 8707 `resource` the client sends is not in the AS allowlist. On this platform check
   that `MCP_AUTH_RESOURCES` (plural, comma-separated — **not** just `MCP_AUTH_RESOURCE`)

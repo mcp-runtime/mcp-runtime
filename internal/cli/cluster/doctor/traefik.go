@@ -770,14 +770,14 @@ func checkIngressRouteProbe(kubectl core.KubectlRunner, namespace string, distro
 		fmt.Sprintf("http://%s:%d%s", doctorServiceDNS(traefik.Name, traefik.Namespace), traefik.WebPort, path),
 	)
 	curlArgs := []string{
-		"run", "-n", namespace,
-		"--rm", "--restart=Never", "--attach",
-		"--pod-running-timeout=" + doctorProbePodRunTimeout,
-		"--quiet",
+		"run", podName, "-n", namespace,
+		"--restart=Never",
 		"--image=" + image,
 		"--overrides=" + restrictedRunOverrides(podName, image, "curl", probeArgs...),
-		podName,
 	}
+	defer func() {
+		_ = kubectl.Run([]string{"delete", "pod", podName, "-n", namespace, "--ignore-not-found"})
+	}()
 	cmd, err := kubectl.CommandArgs(curlArgs)
 	if err != nil {
 		return DoctorCheck{
@@ -788,15 +788,23 @@ func checkIngressRouteProbe(kubectl core.KubectlRunner, namespace string, distro
 		}
 	}
 	out, runErr := cmd.CombinedOutput()
-	status := strings.TrimSpace(string(out))
 	if runErr != nil {
 		return DoctorCheck{
 			Name:   "ingress route probe",
 			OK:     false,
-			Detail: fmt.Sprintf("probe failed: %s", status),
+			Detail: fmt.Sprintf("failed creating probe pod: %v: %s", runErr, strings.TrimSpace(string(out))),
 			Remedy: "inspect Traefik logs and ingress rules",
 		}
 	}
+	if err := waitForDoctorPodSucceeded(kubectl, podName, namespace, 90*time.Second); err != nil {
+		logs, _ := readKubectlOutput(kubectl, []string{"logs", podName, "-n", namespace, "--tail=50"})
+		return DoctorCheck{Name: "ingress route probe", OK: false, Detail: fmt.Sprintf("probe pod did not complete: %v: %s", err, strings.TrimSpace(logs)), Remedy: "inspect Traefik service, NetworkPolicies, and helper pod events"}
+	}
+	logs, logsErr := readKubectlOutput(kubectl, []string{"logs", podName, "-n", namespace})
+	if logsErr != nil {
+		return DoctorCheck{Name: "ingress route probe", OK: false, Detail: fmt.Sprintf("failed reading probe logs: %v", logsErr), Remedy: "check helper pod log access"}
+	}
+	status := strings.TrimSpace(logs)
 	if status == "" {
 		return DoctorCheck{
 			Name:   "ingress route probe",
