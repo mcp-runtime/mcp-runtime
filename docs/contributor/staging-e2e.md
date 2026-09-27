@@ -4,7 +4,8 @@ Staging E2E exercises the full production install path using
 `setup --strict-prod`, public TLS, the bundled HTTPS registry, the platform
 API/UI, tenants, grants, adapters, and analytics on a dedicated **disposable** VM whose
 hostnames live under `*.e2e.mcpruntime.org`. It is intentionally separate from
-the Kind suite. It was previously called "Production E2E"; the name changed
+QA E2E, which uses a local Kind test-mode cluster. Staging was previously called
+"Production E2E"; the name changed
 because it never touches the production cluster.
 
 ## Two runners
@@ -206,8 +207,9 @@ only as an unexplained deployment timeout. On-VM run directories live in
 
 Relevant changes pushed to `main` automatically run the **Staging E2E
 (Disposable VM)** workflow with the multi-tenancy flow enabled and the existing
-staging TLS snapshot. Pull requests do not receive the disposable-VM secrets;
-dispatch a workflow manually when you need staging evidence before merge or
+staging TLS snapshot. Pull requests do not receive the disposable-VM secrets.
+QA E2E runs on PRs or manual CI dispatch and is skipped on main pushes.
+Dispatch a workflow manually when you need staging evidence before merge or
 are iterating on a PR. The remote workflow keeps the repository on the runner;
 the disposable-VM workflow packages it and runs it on the VM:
 
@@ -248,5 +250,5 @@ bash test/e2e/staging_lib_test.sh
 The local Kind suite remains the fast test-mode path:
 
 ```bash
-E2E_VALIDATE_SCENARIOS_ONLY=1 E2E_SCENARIOS=all bash test/e2e/kind.sh
+E2E_VALIDATE_SCENARIOS_ONLY=1 E2E_SCENARIOS=all bash test/e2e/qa-e2e.sh
 ```

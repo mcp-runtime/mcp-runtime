@@ -174,10 +174,12 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
 
-  e2e-kind:
-    name: Kind E2E
+  qa-e2e:
+    name: QA E2E
     runs-on: ubuntu-24.04
-    # Start after lint only so Kind E2E overlaps unit/integration tests on the runner queue.
+    # Staging E2E covers relevant main pushes after merge.
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    # Start after lint only so QA E2E overlaps unit/integration tests on the runner queue.
     needs: [lint]
     timeout-minutes: 90
     permissions:
@@ -197,7 +199,7 @@ jobs:
             changed:
               - '**'
 
-      - name: Select Kind E2E scenarios
+      - name: Select QA E2E scenarios
         run: |
           changed_files=( ${{ steps.e2e_changes.outputs.changed_files }} )
           if [ "${#changed_files[@]}" -gt 0 ]; then
@@ -208,7 +210,7 @@ jobs:
 
           scenarios="$(bash test/e2e/select_pr_scenarios.sh < "${RUNNER_TEMP}/e2e-changed-files.txt")"
           echo "E2E_SCENARIOS=${scenarios}" >> "${GITHUB_ENV}"
-          echo "Selected Kind E2E scenarios: ${scenarios}"
+          echo "Selected QA E2E scenarios: ${scenarios}"
           echo "Changed files considered for E2E selection:"
           sed 's/^/  /' "${RUNNER_TEMP}/e2e-changed-files.txt"
 
@@ -271,9 +273,9 @@ jobs:
             echo "LOCAL_REGISTRY_PORT=${port}"
           } >> "${GITHUB_ENV}"
 
-      - name: Run kind e2e
+      - name: Run QA E2E
         env:
-          E2E_ARTIFACT_DIR: ${{ github.workspace }}/.e2e-artifacts/kind
+          E2E_ARTIFACT_DIR: ${{ github.workspace }}/.e2e-artifacts/qa
           # Mirror stays single-worker to avoid registry push contention on shared runners.
           E2E_IMAGE_MIRROR_PARALLELISM: "1"
           # Local image builds are CPU-bound; two workers matches docs/internals/tests.md guidance.
@@ -288,14 +290,14 @@ jobs:
           MCP_POLICY_WAIT_TRIES: "45"
           MCP_HTTP_TIMEOUT: "15"
           RAW_REQUEST_TRIES: "8"
-        run: bash test/e2e/kind.sh
+        run: bash test/e2e/qa-e2e.sh
 
       - name: Upload e2e artifacts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: kind-e2e-artifacts
-          path: .e2e-artifacts/kind
+          name: qa-e2e-artifacts
+          path: .e2e-artifacts/qa
           if-no-files-found: ignore
 
   benchmark:

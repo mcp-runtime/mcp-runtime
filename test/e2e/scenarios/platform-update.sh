@@ -1,4 +1,4 @@
-# `mcp-runtime update` checks for Kind E2E. Sourced from kind.sh when the
+# `mcp-runtime update` checks for QA E2E. Sourced from qa-e2e.sh when the
 # platform-update scenario is selected. Requires a test-mode setup with the
 # Sentinel stack installed.
 #

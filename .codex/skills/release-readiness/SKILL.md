@@ -83,7 +83,7 @@ For release candidates, run or verify CI has run:
 
 ```bash
 KUBECONFIG="$HOME/.kube/test-mcp-runtime-config" \
-  E2E_SCENARIOS=all bash test/e2e/kind.sh
+  E2E_SCENARIOS=all bash test/e2e/qa-e2e.sh
 ```
 
 When reusing a contributor cluster for a targeted canary, record the cached
@@ -92,7 +92,7 @@ traffic gate:
 ```bash
 KUBECONFIG="$HOME/.kube/test-mcp-runtime-config" \
   E2E_CACHE_MODE=1 E2E_KEEP_CLUSTER=1 CLUSTER_NAME=mcp-runtime \
-  E2E_SCENARIOS=smoke-auth,governance bash test/e2e/kind.sh
+  E2E_SCENARIOS=smoke-auth,governance bash test/e2e/qa-e2e.sh
 ```
 
 If a live cluster or browser gate cannot run, mark that surface **blocked**.

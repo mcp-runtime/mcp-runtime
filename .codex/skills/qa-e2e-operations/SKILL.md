@@ -107,14 +107,14 @@ Then the contributor traffic gate (regression canary):
 ```bash
 KUBECONFIG="$TEST_KUBECONFIG" E2E_CACHE_MODE=1 E2E_KEEP_CLUSTER=1 \
   CLUSTER_NAME=mcp-runtime E2E_SCENARIOS=smoke-auth,governance \
-  bash test/e2e/kind.sh
+  bash test/e2e/qa-e2e.sh
 ```
 
 For merge readiness after non-doc code changes, also run or verify CI ran the
 full Kind matrix:
 
 ```bash
-KUBECONFIG="$TEST_KUBECONFIG" E2E_SCENARIOS=all bash test/e2e/kind.sh
+KUBECONFIG="$TEST_KUBECONFIG" E2E_SCENARIOS=all bash test/e2e/qa-e2e.sh
 ```
 
 Reusing the contributor cluster is intentional — `CLAUDE.md` documents that

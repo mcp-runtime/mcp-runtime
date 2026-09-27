@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-KIND_SCRIPT="${PROJECT_ROOT}/test/e2e/kind.sh"
+QA_E2E_SCRIPT="${PROJECT_ROOT}/test/e2e/qa-e2e.sh"
 SELECT_SCRIPT="${PROJECT_ROOT}/test/e2e/select_pr_scenarios.sh"
 
 run_valid() {
@@ -12,7 +12,7 @@ run_valid() {
   local expected="$3"
   local output
 
-  if ! output="$(E2E_COLOR=never E2E_VALIDATE_SCENARIOS_ONLY=1 E2E_SCENARIOS="${scenarios}" bash "${KIND_SCRIPT}" 2>&1)"; then
+  if ! output="$(E2E_COLOR=never E2E_VALIDATE_SCENARIOS_ONLY=1 E2E_SCENARIOS="${scenarios}" bash "${QA_E2E_SCRIPT}" 2>&1)"; then
     echo "[fail] ${name}: expected validation success" >&2
     printf '%s\n' "${output}" >&2
     exit 1
@@ -33,7 +33,7 @@ run_invalid() {
   local expected_error="$3"
   local output
 
-  if output="$(E2E_COLOR=never E2E_VALIDATE_SCENARIOS_ONLY=1 E2E_SCENARIOS="${scenarios}" bash "${KIND_SCRIPT}" 2>&1)"; then
+  if output="$(E2E_COLOR=never E2E_VALIDATE_SCENARIOS_ONLY=1 E2E_SCENARIOS="${scenarios}" bash "${QA_E2E_SCRIPT}" 2>&1)"; then
     echo "[fail] ${name}: expected validation failure" >&2
     printf '%s\n' "${output}" >&2
     exit 1
@@ -71,7 +71,7 @@ run_invalid "unsupported-token" "smoke-auth,bad" "unsupported E2E scenario: bad"
 run_invalid "observability-alone" "observability" "observability requires smoke-auth, governance, trust, and oauth scenarios"
 run_invalid "observability-missing-oauth" "smoke-auth,governance,trust,observability" "observability requires smoke-auth, governance, trust, and oauth scenarios"
 
-if ! output="$(E2E_COLOR=never E2E_VALIDATE_SCENARIOS_ONLY=1 E2E_DEEP_REQUEST_FLOWS=1 E2E_SCENARIOS=all bash "${KIND_SCRIPT}" 2>&1)"; then
+if ! output="$(E2E_COLOR=never E2E_VALIDATE_SCENARIOS_ONLY=1 E2E_DEEP_REQUEST_FLOWS=1 E2E_SCENARIOS=all bash "${QA_E2E_SCRIPT}" 2>&1)"; then
   echo "[fail] deep-request-flows-all: expected validation success" >&2
   printf '%s\n' "${output}" >&2
   exit 1
@@ -83,7 +83,7 @@ if ! printf '%s\n' "${output}" | grep -F -q -- "Pre-release deep request-flow ch
 fi
 echo "[pass] deep-request-flows-all"
 
-if output="$(E2E_COLOR=never E2E_VALIDATE_SCENARIOS_ONLY=1 E2E_DEEP_REQUEST_FLOWS=1 E2E_SCENARIOS=smoke-auth,governance bash "${KIND_SCRIPT}" 2>&1)"; then
+if output="$(E2E_COLOR=never E2E_VALIDATE_SCENARIOS_ONLY=1 E2E_DEEP_REQUEST_FLOWS=1 E2E_SCENARIOS=smoke-auth,governance bash "${QA_E2E_SCRIPT}" 2>&1)"; then
   echo "[fail] deep-request-flows-subset: expected validation failure" >&2
   printf '%s\n' "${output}" >&2
   exit 1
@@ -96,7 +96,7 @@ fi
 echo "[pass] deep-request-flows-subset"
 
 for mode in tenant org public; do
-  if ! output="$(E2E_COLOR=never E2E_VALIDATE_SCENARIOS_ONLY=1 E2E_SCENARIOS=smoke-auth E2E_PLATFORM_MODE="${mode}" bash "${KIND_SCRIPT}" 2>&1)"; then
+  if ! output="$(E2E_COLOR=never E2E_VALIDATE_SCENARIOS_ONLY=1 E2E_SCENARIOS=smoke-auth E2E_PLATFORM_MODE="${mode}" bash "${QA_E2E_SCRIPT}" 2>&1)"; then
     echo "[fail] platform-mode-${mode}: expected validation success" >&2
     printf '%s\n' "${output}" >&2
     exit 1
@@ -109,7 +109,7 @@ for mode in tenant org public; do
   echo "[pass] platform-mode-${mode}"
 done
 
-if output="$(E2E_COLOR=never E2E_VALIDATE_SCENARIOS_ONLY=1 E2E_SCENARIOS=smoke-auth E2E_PLATFORM_MODE=bad bash "${KIND_SCRIPT}" 2>&1)"; then
+if output="$(E2E_COLOR=never E2E_VALIDATE_SCENARIOS_ONLY=1 E2E_SCENARIOS=smoke-auth E2E_PLATFORM_MODE=bad bash "${QA_E2E_SCRIPT}" 2>&1)"; then
   echo "[fail] platform-mode-invalid: expected validation failure" >&2
   printf '%s\n' "${output}" >&2
   exit 1
@@ -150,7 +150,7 @@ selector_expect "platform-update" "smoke-auth,platform-update" "internal/cli/upd
 selector_expect "broad" "all" "api/v1alpha1/mcpserver_types.go"
 selector_expect "staging-e2e-only" "smoke-auth" "test/e2e/staging-vm.sh" "test/e2e/lib/staging.sh" ".github/workflows/staging-e2e.yaml"
 
-python3 - "${PROJECT_ROOT}/.github/workflows/staging-e2e.yaml" "${PROJECT_ROOT}/test/e2e/kind.sh" "${PROJECT_ROOT}/docs/contributor/staging-e2e.md" <<'PY'
+python3 - "${PROJECT_ROOT}/.github/workflows/staging-e2e.yaml" "${PROJECT_ROOT}/test/e2e/qa-e2e.sh" "${PROJECT_ROOT}/docs/contributor/staging-e2e.md" <<'PY'
 import pathlib
 import sys
 
@@ -205,7 +205,7 @@ echo "[pass] scenario selector validation"
 
 # Validation-only exits before sourcing libraries, so also check that static
 # PROJECT_ROOT source targets exist (a merge can revive a removed scenario).
-python3 - "${KIND_SCRIPT}" "${PROJECT_ROOT}" <<'PY'
+python3 - "${QA_E2E_SCRIPT}" "${PROJECT_ROOT}" <<'PY'
 import pathlib, re, sys
 script, root = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
 for target in re.findall(r'^source "\$\{PROJECT_ROOT\}/([^"\n]+)"', script.read_text(), re.MULTILINE):

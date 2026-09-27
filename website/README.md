@@ -45,7 +45,7 @@ The `deploy-website` job in [`.github/workflows/ci.yaml`](../.github/workflows/c
 syncs `website/` to your remote host and, by default, builds/runs a Docker
 container there. On `main`, website-only changes deploy as soon as the path
 filter detects changes under `website/`; the deploy job does not wait for Go
-unit, integration, or Kind e2e jobs.
+unit, integration, or QA E2E jobs.
 
 ```sh
 docker build -t mcp-runtime-website:latest .

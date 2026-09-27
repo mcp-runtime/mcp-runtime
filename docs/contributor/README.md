@@ -95,11 +95,11 @@ sessions, grants, analytics, or tenant isolation, run the relevant e2e scenario:
 
 ```bash
 KUBECONFIG="$HOME/.kube/test-mcp-runtime-config" E2E_CACHE_MODE=1 \
-  E2E_SCENARIOS=smoke-auth bash test/e2e/kind.sh
+  E2E_SCENARIOS=smoke-auth bash test/e2e/qa-e2e.sh
 KUBECONFIG="$HOME/.kube/test-mcp-runtime-config" E2E_CACHE_MODE=1 \
-  E2E_SCENARIOS=governance bash test/e2e/kind.sh
+  E2E_SCENARIOS=governance bash test/e2e/qa-e2e.sh
 KUBECONFIG="$HOME/.kube/test-mcp-runtime-config" E2E_CACHE_MODE=1 \
-  E2E_SCENARIOS=multitenancy bash test/e2e/kind.sh
+  E2E_SCENARIOS=multitenancy bash test/e2e/qa-e2e.sh
 ```
 
 Set `E2E_PLATFORM_MODE=org` or `E2E_PLATFORM_MODE=public` when you need the

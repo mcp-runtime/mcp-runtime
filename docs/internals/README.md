@@ -58,7 +58,7 @@ flowchart LR
 | API service internals | `services/runtime-api/internal/runtimeapi/`, `services/platform-api/internal/platformstore/`, `pkg/apihttp/`, `pkg/platformauth/`, `pkg/internalapi/` | Split API modules: runtime HTTP/Kubernetes orchestration, platform Postgres persistence, shared HTTP contract helpers. |
 | Metadata helpers | [`pkg-metadata.md`](pkg-metadata.md) | Covers `.mcp` metadata loading, host resolution, and CRD generation helpers. |
 | Manifests and examples | [`config-and-examples.md`](config-and-examples.md) | Explains Kustomize overlays, registry/ingress config, and example MCP servers. |
-| Tests | [`tests.md`](tests.md) | Maps unit, golden, integration, and Kind e2e coverage. |
+| Tests | [`tests.md`](tests.md) | Maps unit, golden, integration, and QA E2E coverage. |
 
 ## Control-plane flow
 

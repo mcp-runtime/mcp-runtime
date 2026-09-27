@@ -289,6 +289,10 @@ sessions already exist for the selected `RUN_ID`.
 ## Staging E2E (disposable VM)
 
 Runbook: [`docs/contributor/staging-e2e.md`](../../../docs/contributor/staging-e2e.md).
+The on-VM staging workflow runs automatically after relevant changes land on
+`main`; the remote workflow is manual. CI runs QA E2E on PRs or manual dispatch,
+using `test/e2e/qa-e2e.sh` with Kind, and skips it on main pushes.
+
 Workflows `Staging E2E (Disposable VM)` / `Staging E2E (Remote Cluster)` drive
 the full strict-prod install on the disposable VM (`*.e2e.mcpruntime.org`) and
 upload `summary.md`, `summary.json`, `stages/NN-<stage>.log`, and

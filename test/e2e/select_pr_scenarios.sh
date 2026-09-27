@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Select the smallest conservative Kind E2E scenario set for a PR/main change.
+# Select the smallest conservative QA E2E scenario set for a PR/manual run.
 # Read changed paths from arguments or stdin. Unknown code paths fall back to
 # all scenarios so CI never silently under-tests a shared surface.
 

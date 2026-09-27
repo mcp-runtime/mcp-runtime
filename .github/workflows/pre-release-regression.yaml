@@ -322,8 +322,8 @@ jobs:
           sarif_file: trivy-image.sarif
           category: pre-release-trivy-operator-image
 
-  kind-e2e:
-    name: Full Kind E2E (${{ matrix.platform_mode }})
+  qa-e2e:
+    name: Full QA E2E (${{ matrix.platform_mode }})
     runs-on: ubuntu-24.04
     needs:
       - static
@@ -404,28 +404,28 @@ jobs:
             echo "LOCAL_REGISTRY_PORT=${port}"
           } >> "${GITHUB_ENV}"
 
-      - name: Run full fresh Kind e2e
+      - name: Run full fresh QA E2E
         env:
-          E2E_ARTIFACT_DIR: ${{ github.workspace }}/.e2e-artifacts/kind-${{ matrix.platform_mode }}-full
+          E2E_ARTIFACT_DIR: ${{ github.workspace }}/.e2e-artifacts/qa-${{ matrix.platform_mode }}-full
           E2E_SCENARIOS: all
           E2E_PLATFORM_MODE: ${{ matrix.platform_mode }}
           E2E_DEEP_REQUEST_FLOWS: "1"
           E2E_KEEP_CLUSTER: ${{ inputs.run-cache-replay && matrix.platform_mode == 'tenant' && '1' || '0' }}
           E2E_IMAGE_BUILD_PARALLELISM: "1"
           E2E_IMAGE_MIRROR_PARALLELISM: "1"
-        run: bash test/e2e/kind.sh
+        run: bash test/e2e/qa-e2e.sh
 
       - name: Run cache-mode replay
         if: ${{ inputs.run-cache-replay && matrix.platform_mode == 'tenant' }}
         env:
-          E2E_ARTIFACT_DIR: ${{ github.workspace }}/.e2e-artifacts/kind-tenant-cache
+          E2E_ARTIFACT_DIR: ${{ github.workspace }}/.e2e-artifacts/qa-tenant-cache
           E2E_SCENARIOS: ${{ inputs.cache-scenarios }}
           E2E_PLATFORM_MODE: ${{ matrix.platform_mode }}
           E2E_CACHE_MODE: "1"
           E2E_KEEP_CLUSTER: "1"
           E2E_IMAGE_BUILD_PARALLELISM: "1"
           E2E_IMAGE_MIRROR_PARALLELISM: "1"
-        run: bash test/e2e/kind.sh
+        run: bash test/e2e/qa-e2e.sh
 
       - name: Cleanup Kind resources
         if: always()
@@ -437,6 +437,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: pre-release-kind-e2e-${{ matrix.platform_mode }}-artifacts
+          name: pre-release-qa-e2e-${{ matrix.platform_mode }}-artifacts
           path: .e2e-artifacts
           if-no-files-found: ignore

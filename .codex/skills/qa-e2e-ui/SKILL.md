@@ -320,11 +320,11 @@ KUBECONFIG="$TEST_KUBECONFIG" E2E_CACHE_MODE=1 \
   E2E_SCENARIOS=smoke-auth,governance \
   CLUSTER_NAME=mcp-runtime \
   E2E_KEEP_CLUSTER=1 \
-  bash test/e2e/kind.sh
+  bash test/e2e/qa-e2e.sh
 ```
 
 If a check is unsafe or too expensive for the requested scope, skip it with a
-specific reason. For example, skip Kind e2e when the live contributor cluster is
+specific reason. For example, skip QA E2E when the live contributor cluster is
 busy with unrelated user work or when the user requested a read-only audit.
 
 ## Step 7a - Know the console's routes and test ids

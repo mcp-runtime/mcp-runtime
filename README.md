@@ -5,7 +5,7 @@
 </p>
 
 [![CI](https://github.com/mcp-runtime/mcp-runtime/actions/workflows/ci.yaml/badge.svg)](https://github.com/mcp-runtime/mcp-runtime/actions/workflows/ci.yaml)
-[![Kind E2E](https://img.shields.io/github/actions/workflow/status/mcp-runtime/mcp-runtime/ci.yaml?branch=main&label=Kind%20E2E&job=Kind%20E2E)](https://github.com/mcp-runtime/mcp-runtime/actions/workflows/ci.yaml?query=branch%3Amain+job%3AKind%20E2E)
+[![QA E2E](https://img.shields.io/github/actions/workflow/status/mcp-runtime/mcp-runtime/ci.yaml?event=pull_request&label=QA%20E2E&job=QA%20E2E)](https://github.com/mcp-runtime/mcp-runtime/actions/workflows/ci.yaml?query=event%3Apull_request+job%3AQA%20E2E)
 [![Staging E2E](https://img.shields.io/github/actions/workflow/status/mcp-runtime/mcp-runtime/staging-e2e.yaml?branch=main&label=Staging%20E2E)](https://github.com/mcp-runtime/mcp-runtime/actions/workflows/staging-e2e.yaml)
 [![Gosec Scan](https://img.shields.io/github/actions/workflow/status/mcp-runtime/mcp-runtime/security-gosec.yaml?branch=main&label=Gosec%20Scan)](https://github.com/mcp-runtime/mcp-runtime/actions/workflows/security-gosec.yaml)
 [![Gitleaks Scan](https://img.shields.io/github/actions/workflow/status/mcp-runtime/mcp-runtime/security-gitleaks.yaml?branch=main&label=Gitleaks%20Scan)](https://github.com/mcp-runtime/mcp-runtime/actions/workflows/security-gitleaks.yaml)

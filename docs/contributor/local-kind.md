@@ -92,7 +92,7 @@ Pass that path explicitly when invoking E2E scripts:
 ```bash
 KUBECONFIG="$HOME/.kube/test-mcp-runtime-config" \
   E2E_CACHE_MODE=1 E2E_KEEP_CLUSTER=1 CLUSTER_NAME=mcp-runtime \
-  E2E_SCENARIOS=smoke-auth,governance bash test/e2e/kind.sh
+  E2E_SCENARIOS=smoke-auth,governance bash test/e2e/qa-e2e.sh
 ```
 
 Expose the dashboard and MCP routes:

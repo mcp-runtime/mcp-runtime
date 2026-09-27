@@ -14,7 +14,7 @@
     {
       "id": "pre-release-candidate",
       "prompt": "Prepare this commit for a release tag and tell me whether it is safe to ship.",
-      "expected_output": "A release-readiness report that requires CI parity, full Kind e2e or verified CI, security/supply-chain checks, docs/release-note review, and exact commit/version evidence before a go/no-go decision.",
+      "expected_output": "A release-readiness report that requires CI parity, full QA E2E or verified CI, security/supply-chain checks, docs/release-note review, and exact commit/version evidence before a go/no-go decision.",
       "assertions": [
         "Requires release candidate identity such as commit, version, and target mode",
         "Includes full E2E or verified CI evidence for release readiness",

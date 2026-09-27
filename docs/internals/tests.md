@@ -42,9 +42,9 @@ go test ./test/integration/... -count=1
 If envtest assets are missing, follow the setup in `Makefile.operator` or the CI
 workflow.
 
-## Kind E2E
+## QA E2E
 
-`test/e2e/kind.sh` creates a Kind cluster, configures a local registry mirror,
+`test/e2e/qa-e2e.sh` creates a Kind cluster, configures a local registry mirror,
 builds and publishes runtime images, runs `setup --test-mode`, deploys example
 servers, exercises MCP requests, and verifies governance/observability paths.
 
@@ -53,15 +53,15 @@ For the component-level request paths behind each scenario, see [Request Flows](
 Useful local runs:
 
 ```bash
-E2E_SCENARIOS=smoke-auth bash test/e2e/kind.sh
-E2E_SCENARIOS=api-platform bash test/e2e/kind.sh
-E2E_SCENARIOS=ui-auth bash test/e2e/kind.sh
-E2E_SCENARIOS=adapter-proxy bash test/e2e/kind.sh
-E2E_SCENARIOS=cli-platform bash test/e2e/kind.sh
-E2E_SCENARIOS=all MCP_DEPLOYMENT_TIMEOUT=900s bash test/e2e/kind.sh
-E2E_DEEP_REQUEST_FLOWS=1 E2E_SCENARIOS=all bash test/e2e/kind.sh
-E2E_KEEP_CLUSTER=1 E2E_SCENARIOS=smoke-auth bash test/e2e/kind.sh
-E2E_CACHE_MODE=1 E2E_SCENARIOS=smoke-auth bash test/e2e/kind.sh
+E2E_SCENARIOS=smoke-auth bash test/e2e/qa-e2e.sh
+E2E_SCENARIOS=api-platform bash test/e2e/qa-e2e.sh
+E2E_SCENARIOS=ui-auth bash test/e2e/qa-e2e.sh
+E2E_SCENARIOS=adapter-proxy bash test/e2e/qa-e2e.sh
+E2E_SCENARIOS=cli-platform bash test/e2e/qa-e2e.sh
+E2E_SCENARIOS=all MCP_DEPLOYMENT_TIMEOUT=900s bash test/e2e/qa-e2e.sh
+E2E_DEEP_REQUEST_FLOWS=1 E2E_SCENARIOS=all bash test/e2e/qa-e2e.sh
+E2E_KEEP_CLUSTER=1 E2E_SCENARIOS=smoke-auth bash test/e2e/qa-e2e.sh
+E2E_CACHE_MODE=1 E2E_SCENARIOS=smoke-auth bash test/e2e/qa-e2e.sh
 ```
 
 Supported scenario selectors are `all`, `smoke-auth`, `governance`, `trust`,
@@ -93,7 +93,7 @@ Docker. CI also sets `MCP_POLICY_WAIT_TRIES=45` so stuck gateway-policy waits
 fail sooner than the local default of 90, and `MCP_HTTP_TIMEOUT=15` so Traefik
 504/502 retries on the ingress path recover faster than the local 30s default.
 
-Kind E2E deploys a single primary MCP server (`policy-mcp-server`) for most PR
+QA E2E deploys a single primary MCP server (`policy-mcp-server`) for most PR
 paths. CI sets `E2E_MAX_MCP_SERVERS=2` so multitenancy can reuse that server as
 tenant-a and deploy only `mt-tenant-b` as the second workload. The older
 data-utility, text-analysis, and workspace-assistant sample deploys are not used
@@ -124,7 +124,7 @@ E2E output uses ANSI color for interactive terminals and GitHub Actions by
 default. Set `E2E_COLOR=always` or `E2E_COLOR=never` to override
 auto-detection; `NO_COLOR` disables color.
 
-Kind e2e traffic uses deterministic curl-based MCP requests. The previous
+QA E2E traffic uses deterministic curl-based MCP requests. The previous
 real-client agent prompts are disabled so CI and local runs do not consume
 OpenAI or Anthropic tokens while validating gateway policy, auth, audit, and
 observability paths.
@@ -135,17 +135,17 @@ contains the gateway service, `mcp-sentinel-ingest`, `mcp-sentinel-processor`,
 and the `kafka.produce`, `kafka.consume`, `clickhouse.insert_event`, and
 `clickhouse.insert_batch` spans.
 
-Normal PRs and `main` run short Kind e2e with `smoke-auth` as the baseline, then
+Normal PRs run short QA E2E with `smoke-auth` as the baseline, then
 `.github/workflows/ci.yaml` calls `test/e2e/select_pr_scenarios.sh` to add
 targeted scenarios based on the changed files. API, UI, adapter, CLI, OAuth,
 observability, and multi-tenancy changes get the matching request-path mode;
 shared or unknown code paths fall back to `all` so CI stays conservative. The
-manual Pre-release Regression workflow runs full Kind e2e with
+manual Pre-release Regression workflow runs full QA E2E with
 `E2E_SCENARIOS=all` and `E2E_DEEP_REQUEST_FLOWS=1` across tenant, org, and
 public platform modes, plus a tenant cache-mode replay when requested.
 
 The script writes artifacts when `E2E_ARTIFACT_DIR` is set. In CI, those
-artifacts are uploaded from `.e2e-artifacts/kind`.
+artifacts are uploaded from `.e2e-artifacts/qa`.
 
 ## CI Coverage
 
@@ -159,9 +159,13 @@ The main CI workflow runs:
 - service module tests
 - generated file drift
 - repository SBOM generation
-- path-selected short Kind e2e on PRs and `main`
+- path-selected short QA E2E on PRs and manual CI runs
 
-The manual Pre-release Regression workflow adds full Kind e2e in tenant, org,
+Relevant pushes to `main` after merge run Staging E2E on the disposable VM;
+the CI QA E2E job is skipped on main pushes. QA E2E still uses Kind for its
+local test-mode cluster.
+
+The manual Pre-release Regression workflow adds full QA E2E in tenant, org,
 and public platform modes, cache replay, benchmarks, repository/operator-image
 SBOMs, gosec, Gitleaks, and Trivy scans. Security workflows add pinned gosec,
 Trivy repository/image scans with SARIF upload, pinned Gitleaks secret

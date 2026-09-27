@@ -793,7 +793,7 @@ for the public host. This happens when the non-TLS base manifest
 (`config/registry/base`, rule host `registry.local`) is applied over a public
 install, for example by a registry apply from a shell that lacks
 `MCP_PLATFORM_DOMAIN`, or by `kubectl apply -f config/registry/base/ingress.yaml`
-(the Kind e2e cache refresh) against the wrong context. The apply replaces
+(the QA E2E cache refresh) against the wrong context. The apply replaces
 `spec.rules` but keeps the existing `spec.tls`. Setup now resolves the host from
 the live Ingress TLS host and `mcp-sentinel-config`, and refuses to apply a
 `registry.local` rule host over a public Ingress. Fix a live cluster with the

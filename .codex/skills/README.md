@@ -87,9 +87,9 @@ existing `kind-mcp-runtime` contributor cluster. Skill-eval rows covered the
 | UI static syntax | `node --check services/ui/static/app.js` | 0.30s | Browser bundle JavaScript parses |
 | UI skill validation | `quick_validate.py .codex/skills/qa-e2e-ui` | 0.07s | `qa-e2e-ui` format after edits |
 | UI browser smoke | Playwright against `http://localhost:18080/` | about 4-6 min manual | Signed-out state, tenant login, admin login, tabs, UI-triggered API 200s, console sanity, and mobile overflow |
-| Cached Kind e2e smoke/governance | `KUBECONFIG="$HOME/.kube/test-mcp-runtime-config" E2E_CACHE_MODE=1 E2E_SCENARIOS=smoke-auth,governance CLUSTER_NAME=mcp-runtime E2E_KEEP_CLUSTER=1 bash test/e2e/kind.sh` | 630.62s, about 10m31s | Real cluster auth, grant/session governance, gateway policy, CLI flows, ingress, registry auth |
+| Cached QA E2E smoke/governance | `KUBECONFIG="$HOME/.kube/test-mcp-runtime-config" E2E_CACHE_MODE=1 E2E_SCENARIOS=smoke-auth,governance CLUSTER_NAME=mcp-runtime E2E_KEEP_CLUSTER=1 bash test/e2e/qa-e2e.sh` | 630.62s, about 10m31s | Real cluster auth, grant/session governance, gateway policy, CLI flows, ingress, registry auth |
 
-The cached Kind e2e command initially failed after 1m17s because a manual
+The cached QA E2E command initially failed after 1m17s because a manual
 port-forward was already using `localhost:18080`. That was an environment
 collision from the QA session, not a product regression. The port-forward was
 stopped and the command was rerun.
@@ -102,7 +102,7 @@ checks that match the requested scope:
 
 1. `qa-cluster-bringup` creates or recovers the real Kind test-mode cluster.
 2. `qa-e2e-ui` uses browser tooling first, then supports findings with curl,
-   static asset checks, UI Go tests, golden tests, and optional cached Kind e2e.
+   static asset checks, UI Go tests, golden tests, and optional cached QA E2E.
 3. `qa-e2e-security`, `qa-e2e-operations`, `qa-e2e-perf`, and
    `mcp-spec-compliance` cover runtime security, operations, performance, and
    protocol-specific regressions against the same live cluster.
@@ -135,7 +135,7 @@ CI/test surface has an owning skill:
 | Sentinel service module tests (`services/platform-api`, `services/runtime-api`, `services/analytics-api`, `ingest`, `processor`, `mcp-gateway`, `ui`) | `qa-e2e-operations` plus focused QA skills | CI parity gate plus live rollout checks |
 | CLI golden tests | `repo-guidance-sync`, `qa-e2e-operations`, `qa-e2e-ui` | Docs/help drift and UI-adjacent CLI changes |
 | `test/e2e/scenarios_test.sh` selector validation | `qa-e2e-operations` | CI parity gate covers scenario parsing edge cases |
-| Kind E2E `all` plus cached `smoke-auth,governance` | `qa-cluster-bringup`, `qa-e2e-operations`, `qa-e2e-security`, `mcp-spec-compliance` | Full merge gate and targeted live regression gates |
+| QA E2E `all` plus cached `smoke-auth,governance` | `qa-cluster-bringup`, `qa-e2e-operations`, `qa-e2e-security`, `mcp-spec-compliance` | Full merge gate and targeted live regression gates |
 | Browser UI workflows and responsive checks | `qa-e2e-ui` | Browser evidence required; curl-only pass is blocked |
 | Merge, ship, canary, and release readiness | `release-readiness` | Coordinates focused skills and gives one go/no-go/blocked decision |
 | Benchmarks under `test/benchmark` | `qa-e2e-operations`, `qa-e2e-perf` | CI benchmark plus live baseline comparison |
