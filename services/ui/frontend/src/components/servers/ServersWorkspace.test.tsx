@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { axe } from "vitest-axe";
 
 import { ServersWorkspace } from "./ServersWorkspace";
 import { AppProviders } from "../../providers/AppProviders";
@@ -659,6 +660,70 @@ describe("ServersWorkspace connect config, protocol inventory, and observability
     expect(selected).toHaveTextContent("category: writing");
     expect(details).toHaveTextContent("file:///workspace/doc.md");
     expect(details).toHaveTextContent("Prepare the nightly sync");
+    expect(within(details).queryByRole("button", { name: /download/i })).not.toBeInTheDocument();
+    expect(selected).toHaveTextContent("Server metadata and latest probe");
+    await user.click(within(selected as HTMLElement).getByText("summarize"));
+    expect(selected).not.toHaveAttribute("open");
+  });
+
+  it("opens resource and task details from the server card", async () => {
+    const user = userEvent.setup();
+    stubRichCatalog();
+    renderWorkspace({ authenticated: true });
+    const [richCard] = await screen.findAllByTestId("server-card");
+    const inventory = within(richCard).getByTestId("server-card-inventory");
+    await user.click(within(inventory).getByText(/Protocol inventory/));
+
+    await user.click(within(inventory).getByRole("button", { name: /workspace-doc/i }));
+    let details = await screen.findByTestId("server-detail-inventory");
+    let selected = within(details).getByText("workspace-doc").closest("details");
+    expect(selected).toHaveAttribute("open");
+    expect(selected).toHaveTextContent("Workspace documentation");
+    expect(selected).toHaveTextContent("file:///workspace/doc.md");
+    expect(selected).toHaveTextContent("text/markdown");
+    expect(selected).toHaveTextContent("Server metadata and latest probe");
+
+    await user.click(screen.getByTestId("server-detail-close"));
+    await user.click(within(inventory).getByRole("button", { name: /nightly-sync/i }));
+    details = await screen.findByTestId("server-detail-inventory");
+    selected = within(details).getByText("nightly-sync").closest("details");
+    expect(selected).toHaveAttribute("open");
+    expect(selected).toHaveTextContent("Prepare the nightly sync");
+    expect(selected).toHaveTextContent("Server metadata");
+    expect(selected).not.toHaveTextContent("Latest probe");
+  });
+
+  it("shows live-only prompts and keeps the unselected detail entries collapsed", async () => {
+    const user = userEvent.setup();
+    stubRichCatalog();
+    renderWorkspace({ authenticated: true });
+    const [richCard] = await screen.findAllByTestId("server-card");
+    await user.click(within(richCard).getByTestId("server-card-details"));
+
+    const details = await screen.findByTestId("server-detail-inventory");
+    const translate = within(details).getByText("translate").closest("details");
+    const summarize = within(details).getByText("summarize").closest("details");
+    expect(translate).not.toHaveAttribute("open");
+    expect(summarize).not.toHaveAttribute("open");
+    await user.click(within(translate as HTMLElement).getByText("translate"));
+    expect(translate).toHaveAttribute("open");
+    expect(translate).toHaveTextContent("Latest probe");
+    expect(translate).toHaveTextContent("Translate text");
+  });
+
+  it("keeps inventory disclosures accessible by name and keyboard", async () => {
+    const user = userEvent.setup();
+    stubRichCatalog();
+    const { container } = renderWorkspace({ authenticated: true });
+    const [richCard] = await screen.findAllByTestId("server-card");
+    await user.click(within(richCard).getByText(/Protocol inventory/));
+    const prompt = within(richCard).getByRole("button", { name: /summarize/i });
+    prompt.focus();
+    await user.keyboard("{Enter}");
+
+    const details = await screen.findByTestId("server-detail-inventory");
+    expect(within(details).getByText("summarize").closest("details")).toHaveAttribute("open");
+    expect(await axe(container, { rules: { "color-contrast": { enabled: false } } })).toHaveNoViolations();
   });
 
   it("shows owner-scoped observability links and hides them when the backend omits them", async () => {
