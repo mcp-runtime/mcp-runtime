@@ -203,7 +203,16 @@ func (c *Client) RenameAgent(ctx context.Context, id, name string) (Agent, error
 
 func (c *Client) SetAgentStatus(ctx context.Context, id, statusName, actorID string) (Agent, error) {
 	var item Agent
-	path := "/internal/identity/agents/" + url.PathEscape(id) + "/" + statusName
+	var action string
+	switch statusName {
+	case "inactive":
+		action = "deactivate"
+	case "active":
+		action = "reactivate"
+	default:
+		return Agent{}, fmt.Errorf("set agent status: unsupported status %q", statusName)
+	}
+	path := "/internal/identity/agents/" + url.PathEscape(id) + "/" + action
 	status, err := c.authorizedJSON(ctx, http.MethodPost, path, map[string]string{"actor_id": actorID}, &item)
 	if err != nil {
 		return Agent{}, err
