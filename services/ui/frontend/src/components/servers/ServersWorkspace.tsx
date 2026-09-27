@@ -424,7 +424,8 @@ export function ServersWorkspace({
                 setToolFilters((current) => ({ ...current, serverKey: key }));
                 setParams({ tool: undefined });
               }}
-              onInspect={(key) => setParams({ server: key, tool: undefined })}
+              onInspect={(key) => setParams({ server: key, tool: undefined, inventory: undefined })}
+              onInspectInventory={(key, item) => setParams({ server: key, tool: undefined, inventory: item })}
               onRetire={askRetire}
               retiringKey={retiringKey}
               retireError={actionError}
@@ -450,14 +451,16 @@ export function ServersWorkspace({
           <ToolDetail tool={selectedTool} onClose={() => setParams({ tool: undefined })} />
         ) : inspectedServer ? (
           <ServerDetail
+            key={`${inspectedServerKey}:${activeParams.inventory || ""}`}
             server={inspectedServer}
             tools={inspectedServerTools}
-            onClose={() => setParams({ server: undefined })}
+            selectedInventory={activeParams.inventory}
+            onClose={() => setParams({ server: undefined, inventory: undefined })}
             onShowTools={() => {
               setToolFilters((current) => ({ ...current, serverKey: serverKey(inspectedServer) }));
-              setParams({ server: undefined });
+              setParams({ server: undefined, inventory: undefined });
             }}
-            onSelectTool={(key) => setParams({ tool: key, server: undefined })}
+            onSelectTool={(key) => setParams({ tool: key, server: undefined, inventory: undefined })}
           />
         ) : null}
       </div>

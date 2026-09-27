@@ -9,10 +9,11 @@ import { formatAbsolute, formatAge } from "../../lib/format";
 import {
   authModeInfo,
   isServerReady,
-  serverPrompts,
-  serverResources,
-  serverTasks,
+  serverPromptDetails,
+  serverResourceDetails,
+  serverTaskDetails,
   toolKey,
+  type InventoryDetail,
   type ServerSummary,
   type ToolRow,
 } from "../../api/types";
@@ -24,15 +25,67 @@ type ServerDetailProps = {
   onClose: () => void;
   onShowTools: () => void;
   onSelectTool: (key: string) => void;
+  selectedInventory?: string;
 };
 
-export function ServerDetail({ server, tools, onClose, onShowTools, onSelectTool }: ServerDetailProps) {
+function InventoryGroup({ title, items, selectedInventory }: { title: string; items: InventoryDetail[]; selectedInventory?: string }) {
+  if (items.length === 0) return null;
+
+  return (
+    <section className="protocol-group" aria-label={title}>
+      <h3 className="protocol-group-title">{title} <span>{items.length}</span></h3>
+      <div className="protocol-items">
+        {items.map((item) => (
+          <details key={item.name} className="protocol-item" data-testid="server-detail-inventory-item" open={selectedInventory === `${title}:${item.name}` || undefined}>
+            <summary>
+              <span className="protocol-item-heading">
+                <span className="protocol-item-name">{item.name}</span>
+                <span className="protocol-item-description">{item.description || "No description published"}</span>
+              </span>
+              <span className="protocol-item-cue">Details</span>
+            </summary>
+            <div className="protocol-item-body">
+              <p><strong>Source:</strong> {item.source === "both" ? "Server metadata and latest probe" : item.source === "live" ? "Latest probe" : "Server metadata"}</p>
+              {item.uri ? <p><strong>URI:</strong> <code>{item.uri}</code></p> : null}
+              {item.mimeType ? <p><strong>Media type:</strong> {item.mimeType}</p> : null}
+              {item.arguments?.length ? (
+                <div>
+                  <strong>Arguments</strong>
+                  <ul className="protocol-item-arguments">
+                    {item.arguments.map((argument) => (
+                      <li key={argument.name}>
+                        <code>{argument.name}</code>{argument.required ? " (required)" : ""}
+                        {argument.description ? <span> — {argument.description}</span> : null}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {item.labels && Object.keys(item.labels).length ? (
+                <div>
+                  <strong>Labels</strong>
+                  <div className="protocol-item-labels">
+                    {Object.entries(item.labels).map(([key, value]) => (
+                      <span key={key}>{key}: {value}</span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </details>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function ServerDetail({ server, tools, onClose, onShowTools, onSelectTool, selectedInventory }: ServerDetailProps) {
   const [configTab, setConfigTab] = useState<"claude" | "cursor" | "vscode" | "raw">("claude");
   const ready = isServerReady(server);
   const auth = authModeInfo(server.authMode);
-  const prompts = serverPrompts(server);
-  const resources = serverResources(server);
-  const tasks = serverTasks(server);
+  const prompts = serverPromptDetails(server);
+  const resources = serverResourceDetails(server);
+  const tasks = serverTaskDetails(server);
 
   // The runtime hands back a complete MCP client config for this server. It is
   // shown in full and selectable, so it is usable even if the clipboard is
@@ -268,6 +321,18 @@ export function ServerDetail({ server, tools, onClose, onShowTools, onSelectTool
           </div>
         )}
       </div>
+
+      {prompts.length || resources.length || tasks.length ? (
+        <section className="protocol-inventory" data-testid="server-detail-inventory">
+          <div className="section-head">
+            <p className="detail-label">Protocol inventory</p>
+            <span className="section-note">Select an item to see its details</span>
+          </div>
+          <InventoryGroup title="Prompts" items={prompts} selectedInventory={selectedInventory} />
+          <InventoryGroup title="Resources" items={resources} selectedInventory={selectedInventory} />
+          <InventoryGroup title="Tasks" items={tasks} selectedInventory={selectedInventory} />
+        </section>
+      ) : null}
 
       <div>
         <div className="section-head">

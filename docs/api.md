@@ -487,7 +487,10 @@ cache miss or probe failure, `liveInventory` is `null` and
 `liveInventoryError` contains a short reason. For HTTP identity-authenticated
 servers, probes use the server's configured `spec.auth.humanIDHeader` and
 `spec.auth.agentIDHeader`; mTLS probes authenticate with their client
-certificate. `DELETE /api/v1/runtime/servers/{namespace}/{name}` retires a server and frees one
+certificate. The Servers workspace combines declared and probed prompts and
+resources by name, then shows their descriptions, prompt arguments, resource
+URIs, media types, and labels in expandable server details. Tasks use declared
+metadata only. `DELETE /api/v1/runtime/servers/{namespace}/{name}` retires a server and frees one
 active-server slot for the owning publisher. The active-server limit is
 enforced by runtime-api before Kubernetes apply; strict serialization of
 concurrent publishes would require a shared reservation or admission-control
