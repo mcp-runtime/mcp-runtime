@@ -36,7 +36,7 @@ metadata:
   namespace: mcp-team-finance
 spec:
   subject: {humanID: user-123, agentID: agt_01arz3ndektsv4rrffq69g5fav, teamID: team-finance-id}
-  serverRef: {name: workspace-assistant-mcp, namespace: mcp-team-finance}
+  serverRef: {name: oauth-example-go-2025-11-25-gateway, namespace: mcp-team-finance}
   maxTrust: high
   allowedSideEffects: [read]
   toolRules:
@@ -49,7 +49,7 @@ metadata:
   namespace: mcp-team-finance
 spec:
   subject: {humanID: user-123, agentID: agt_01arz3ndektsv4rrffq69g5fav, teamID: team-finance-id}
-  serverRef: {name: workspace-assistant-mcp, namespace: mcp-team-finance}
+  serverRef: {name: oauth-example-go-2025-11-25-gateway, namespace: mcp-team-finance}
   consentedTrust: high
   policyVersion: v1
 ```
@@ -66,7 +66,7 @@ spec:
 
 ```bash
 PROTO=2025-06-18
-BASE=http://localhost:18080/workspace-assistant-mcp/mcp
+BASE=http://localhost:18080/oauth-example-go-2025-11-25-gateway/mcp
 curl -sS -H "content-type: application/json" \
   -H "accept: application/json, text/event-stream" \
   -H "Mcp-Protocol-Version: $PROTO" \

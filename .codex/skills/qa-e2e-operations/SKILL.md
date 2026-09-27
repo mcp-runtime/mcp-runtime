@@ -126,14 +126,14 @@ creating a duplicate `mcp-e2e` cluster.
 ```bash
 # Apply an MCPServer change and watch it converge.
 kubectl get mcpservers -n mcp-servers -o wide
-kubectl describe mcpserver -n mcp-servers workspace-assistant-mcp | sed -n '/Status:/,$p'
+kubectl describe mcpserver -n mcp-servers oauth-example-go-2025-11-25-gateway | sed -n '/Status:/,$p'
 
 # Force a reconcile and confirm Ready / phase transition.
-kubectl annotate mcpserver -n mcp-servers workspace-assistant-mcp \
+kubectl annotate mcpserver -n mcp-servers oauth-example-go-2025-11-25-gateway \
   qa.mcpruntime.org/reconcile-ping="$(date +%s)" --overwrite
-kubectl wait --for=condition=Ready=true mcpserver/workspace-assistant-mcp \
+kubectl wait --for=condition=Ready=true mcpserver/oauth-example-go-2025-11-25-gateway \
   -n mcp-servers --timeout=120s \
-  || kubectl describe mcpserver -n mcp-servers workspace-assistant-mcp
+  || kubectl describe mcpserver -n mcp-servers oauth-example-go-2025-11-25-gateway
 
 # Operator log scan for reconcile errors (last 10m).
 kubectl logs -n mcp-runtime deploy/mcp-runtime-operator-controller-manager \
@@ -145,7 +145,7 @@ governance objects:
 
 ```bash
 kubectl apply -f /tmp/workspace-assistant-access.yaml
-./bin/mcp-runtime server policy inspect workspace-assistant-mcp --namespace mcp-servers \
+./bin/mcp-runtime server policy inspect oauth-example-go-2025-11-25-gateway --namespace mcp-servers \
   | grep -q local-session || echo "FAIL: policy missing session"
 ```
 
@@ -156,9 +156,9 @@ about behavior).
 
 ```bash
 ./bin/mcp-runtime server status --namespace mcp-servers
-./bin/mcp-runtime server logs workspace-assistant-mcp --namespace mcp-servers \
+./bin/mcp-runtime server logs oauth-example-go-2025-11-25-gateway --namespace mcp-servers \
   --since 5m | head -40
-./bin/mcp-runtime server policy inspect workspace-assistant-mcp --namespace mcp-servers \
+./bin/mcp-runtime server policy inspect oauth-example-go-2025-11-25-gateway --namespace mcp-servers \
   | head -40
 ./bin/mcp-runtime sentinel events | head -20
 ./bin/mcp-runtime sentinel logs api --since 5m | tail -40
@@ -180,14 +180,14 @@ For user MCP server validation, follow
 `server build image`, then push the exact image ref written back into metadata:
 
 ```bash
-./bin/mcp-runtime server build image workspace-assistant-mcp \
-  --metadata-file /tmp/workspace-assistant-mcp.yaml \
-  --dockerfile examples/workspace-assistant-mcp/Dockerfile \
-  --context examples/workspace-assistant-mcp \
+./bin/mcp-runtime server build image oauth-example-go-2025-11-25-gateway \
+  --metadata-file /tmp/oauth-example-go-2025-11-25-gateway.yaml \
+  --dockerfile examples/oauth-example-go-2025-11-25/Dockerfile \
+  --context examples/oauth-example-go-2025-11-25 \
   --tag dev
 IMAGE_REF="$(python3 - <<'PY'
 image = tag = ""
-with open('/tmp/workspace-assistant-mcp.yaml') as f:
+with open('/tmp/oauth-example-go-2025-11-25-gateway.yaml') as f:
     for line in f:
         stripped = line.strip()
         if stripped.startswith("image: "):
@@ -200,9 +200,9 @@ print(f"{image}:{tag}")
 PY
 )"
 ./bin/mcp-runtime server push --image "$IMAGE_REF"
-./bin/mcp-runtime server deploy workspace-assistant-mcp \
+./bin/mcp-runtime server deploy oauth-example-go-2025-11-25-gateway \
   --scope tenant \
-  --metadata-file /tmp/workspace-assistant-mcp.yaml
+  --metadata-file /tmp/oauth-example-go-2025-11-25-gateway.yaml
 ```
 
 If `server push` returns `504 Gateway Timeout`, treat that as a platform
@@ -221,7 +221,7 @@ curl -fsS -o /dev/null -w "%{http_code}\n" http://localhost:18080/    # 200
 ADMIN_KEY=$(kubectl get secret mcp-sentinel-secrets -n mcp-sentinel -o jsonpath='{.data.ADMIN_API_KEYS}' | base64 -d | cut -d, -f1)
 curl -fsS -o /dev/null -w "%{http_code}\n" \
   -H "x-api-key: $ADMIN_KEY" http://localhost:18080/api/v1/dashboard/summary  # 200
-curl -fsS -o /dev/null -w "%{http_code}\n" http://localhost:18080/workspace-assistant-mcp/mcp # 405/406 expected (POST-only)
+curl -fsS -o /dev/null -w "%{http_code}\n" http://localhost:18080/oauth-example-go-2025-11-25-gateway/mcp # 405/406 expected (POST-only)
 ```
 
 If image pulls fail with `http: server gave HTTP response to HTTPS client`,
@@ -284,7 +284,7 @@ kubectl -n mcp-sentinel scale deploy/mcp-runtime-api --replicas=0
 kubectl apply -f /tmp/workspace-assistant-access.yaml
 kubectl -n mcp-sentinel scale deploy/mcp-runtime-api --replicas=1
 kubectl -n mcp-sentinel rollout status deploy/mcp-runtime-api --timeout=90s
-./bin/mcp-runtime server policy inspect workspace-assistant-mcp --namespace mcp-servers \
+./bin/mcp-runtime server policy inspect oauth-example-go-2025-11-25-gateway --namespace mcp-servers \
   | grep -q local-session
 ```
 

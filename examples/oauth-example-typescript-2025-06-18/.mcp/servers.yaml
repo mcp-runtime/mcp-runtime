@@ -1,0 +1,27 @@
+version: v1
+servers:
+    - name: oauth-example-typescript-2025-06-18-standalone
+      description: TypeScript OAuth protected-resource example using MCP protocol revision 2025-06-18.
+      image: registry.mcpruntime.org/oauth-example-typescript-2025-06-18
+      imageTag: latest
+      route: /oauth-example-typescript-2025-06-18-standalone/mcp
+      publicPathPrefix: oauth-example-typescript-2025-06-18-standalone
+      port: 8081
+      scope: public
+      tools:
+        - name: whoami
+          description: Return the subject and scopes from the verified access token.
+          requiredTrust: low
+          sideEffect: read
+      auth:
+        mode: oauth
+        tokenHeader: Authorization
+        issuerURL: https://auth.mcpruntime.org/mcp-auth
+        audience: https://mcp.mcpruntime.org/oauth-example-typescript-2025-06-18-standalone/mcp
+      policy:
+        mode: allow-list
+        defaultDecision: deny
+      session:
+        required: true
+      gateway:
+        enabled: false

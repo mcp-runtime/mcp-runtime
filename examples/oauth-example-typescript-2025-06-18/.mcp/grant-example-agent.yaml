@@ -1,0 +1,20 @@
+apiVersion: mcpruntime.org/v1alpha1
+kind: MCPAccessGrant
+metadata:
+    name: oauth-example-typescript-agent-read
+    namespace: mcp-servers
+spec:
+    allowedSideEffects:
+        - read
+    maxTrust: low
+    policyVersion: v1
+    serverRef:
+        name: oauth-example-typescript-2025-06-18-standalone
+        namespace: mcp-servers
+    subject:
+        agentID: example-agent
+        humanID: example-human
+    toolRules:
+        - decision: allow
+          name: whoami
+          requiredTrust: low

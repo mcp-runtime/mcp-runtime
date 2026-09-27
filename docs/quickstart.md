@@ -78,7 +78,7 @@ Clone the repo to get the example server source:
 
 ```bash
 git clone https://github.com/mcp-runtime/mcp-runtime
-cd mcp-runtime/examples/workspace-assistant-mcp
+cd mcp-runtime/examples/oauth-example-go-2025-11-25
 ```
 
 Run it locally to discover its tool names, then scaffold the metadata:

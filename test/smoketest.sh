@@ -34,7 +34,7 @@ docker build -t mcp-analytics-api:latest -f services/analytics-api/Dockerfile .
 docker build -t mcp-sentinel-ingest:latest -f services/ingest/Dockerfile .
 docker build -t mcp-sentinel-processor:latest -f services/processor/Dockerfile .
 docker build -t mcp-sentinel-ui:latest -f services/ui/Dockerfile .
-docker build -t workspace-assistant-mcp:latest examples/workspace-assistant-mcp
+docker build -t oauth-example-go-2025-11-25:latest examples/oauth-example-go-2025-11-25
 docker build -t mcp-sentinel-mcp-gateway:latest -f services/mcp-gateway/Dockerfile .
 
 kind load docker-image mcp-platform-api:latest --name "$KIND_CLUSTER_NAME"
@@ -43,7 +43,7 @@ kind load docker-image mcp-analytics-api:latest --name "$KIND_CLUSTER_NAME"
 kind load docker-image mcp-sentinel-ingest:latest --name "$KIND_CLUSTER_NAME"
 kind load docker-image mcp-sentinel-processor:latest --name "$KIND_CLUSTER_NAME"
 kind load docker-image mcp-sentinel-ui:latest --name "$KIND_CLUSTER_NAME"
-kind load docker-image workspace-assistant-mcp:latest --name "$KIND_CLUSTER_NAME"
+kind load docker-image oauth-example-go-2025-11-25:latest --name "$KIND_CLUSTER_NAME"
 kind load docker-image mcp-sentinel-mcp-gateway:latest --name "$KIND_CLUSTER_NAME"
 
 kubectl apply -f k8s
@@ -130,7 +130,7 @@ wait_http "http://127.0.0.1:${LOKI_PORT}/loki/api/v1/status/buildinfo" ""
 
 echo "ingest: skipped (using MCP traffic only)"
 
-echo -e "\nworkspace-assistant-mcp (MCP JSON-RPC):"
+echo -e "\noauth-example-go-2025-11-25 (MCP JSON-RPC):"
 env GATEWAY_PORT="$GATEWAY_PORT" python3 <<'PY'
 import json
 import os

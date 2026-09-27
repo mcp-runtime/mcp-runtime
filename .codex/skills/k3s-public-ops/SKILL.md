@@ -17,7 +17,7 @@ user-facing commands and scripts over private shortcuts.
 - Example profile: `config/deployments/mcpruntime-org.env.example`
 - Runbook: `docs/k3s-deployment-runbook.md`
 - Readiness/debug guide: `docs/cluster-readiness.md`
-- Scripts (canonical): `hack/deploy/mcpruntime-org/{setup,clean,restore,rollout,multitenancy-test}.sh`
+- Scripts (canonical): `hack/deploy/mcpruntime-org/{backup,setup,clean,restore,rollout,multitenancy-test}.sh`
 - Script index: `hack/README.md`
 - User path: `docs/quickstart.md` (published CLI install, hosted platform login,
   server publish, grant, adapter, and analytics UI)
@@ -57,6 +57,15 @@ KUBECONFIG="$PROD_KUBECONFIG" ./bin/mcp-runtime cluster doctor
 
 ## Non-Negotiables
 
+- Before a production setup redeployment, run
+  `hack/deploy/mcpruntime-org/backup.sh --setup`. It captures Kubernetes
+  resource definitions (including PVC/PV specs), Secrets, and platform restore
+  inputs without copying live PVC contents. Before destructive cleanup or full
+  node recovery, use `hack/deploy/mcpruntime-org/backup.sh --full
+  --online-copy` to also capture the K3s database and local-path files. Live
+  volume copies are not application-consistent and may need database WAL
+  recovery. Bundles are not encrypted; store them on encrypted storage and
+  copy them off-host.
 - Before every production deployment, ask which MCP Runtime branch or ref to
   build and deploy. Show the current branch/ref and working-tree state as
   context, but do not silently choose `main` or the currently checked-out ref.
@@ -83,7 +92,7 @@ KUBECONFIG="$PROD_KUBECONFIG" ./bin/mcp-runtime cluster doctor
   After rollout, verify the public authorization metadata advertises support
   and use a new or cleared Claude/Codex OAuth client entry so cached DCR
   credentials do not mask CIMD behavior. See the TypeScript SDK resource example
-  in `examples/mcp-auth-sdk-typescript/`.
+  in `examples/oauth-example-typescript-2025-06-18/`.
 - Ask whether this rollout should update mcp-auth. If yes, ask whether to
   deploy published Docker Hub `latest` (recommended) or intentionally build a
   selected local mcp-auth ref for source testing. For local-source testing,

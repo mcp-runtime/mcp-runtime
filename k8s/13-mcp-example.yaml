@@ -31,7 +31,7 @@ spec:
         runAsNonRoot: true
       containers:
         - name: workspace-assistant-server
-          image: workspace-assistant-mcp:latest
+          image: oauth-example-go-2025-11-25:latest
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false

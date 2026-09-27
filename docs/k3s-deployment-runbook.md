@@ -173,7 +173,7 @@ The protected MCP resource separately publishes Protected Resource Metadata;
 clients should follow its `WWW-Authenticate` challenge or query the resource
 metadata URL generated for that server.
 
-A ready-to-adapt protected server is in `examples/mcpserver-oauth.yaml`. Its
+A ready-to-adapt protected server definition is in `examples/oauth-example-go-2025-11-25/.mcp/servers.yaml`. Its
 `auth.issuerURL` defaults from the bundled issuer configured during setup.
 `auth.audience` must be the
 server's canonical resource URI (`https://mcp.<domain>/<prefix>/mcp`). The
@@ -262,17 +262,80 @@ ephemeral signing key. A public deployment must use HTTPS for Keycloak's
 issuer, authorization endpoint, token endpoint, and JWKS endpoint. Use internal
 HTTP only for local testing.
 
-#### Platform-runtime backup (`hack/deploy/mcpruntime-org/clean.sh`)
+#### Production backups
+
+Before a production `setup` redeployment, capture resources and credentials
+that setup may reapply. The snapshot includes PVC/PV definitions, but does not
+copy live volume contents because setup does not delete claims or their data:
+
+```bash
+hack/deploy/mcpruntime-org/backup.sh --setup
+```
+
+The command requires the isolated `prod-mcp-runtime` context. It creates a
+timestamped snapshot under
+`~/.mcpruntime/backups/mcpruntime-org/` and updates `latest` only after all
+parts validate. The snapshot directory is mode `0700`; files containing
+Secrets are mode `0600`. Setup merges existing resources and reuses matching
+PVCs, but may update config/Secrets and roll workloads. An immutable
+StatefulSet change can recreate that StatefulSet while leaving its claims in
+place. The resource inventory is for recovery reference, not bulk
+`kubectl apply`; its selected platform files are consumed by the existing
+setup restore path.
+
+For destructive cleanup or full node recovery, create a full backup:
+
+```bash
+hack/deploy/mcpruntime-org/backup.sh --full --online-copy
+```
+
+The full snapshot also requires the configured SSH host and captures K3s
+control-plane state and local-path volume files without stopping workloads.
+
+A full snapshot includes namespaced and cluster-scoped Kubernetes objects,
+CRDs, Secrets, grants, sessions, PV/PVC specs, a consistent SQLite online
+backup of the K3s control-plane database, `/etc/rancher/k3s`, K3s server
+credentials, and every file under `/var/lib/rancher/k3s/storage`. That volume
+archive includes Postgres, ClickHouse, Kafka, Keycloak, mcp-auth,
+observability, and registry data. It also contains the TLS and platform
+config/Secret files used by the existing setup restore path, plus a SHA-256
+manifest.
+
+The bundle is **not encrypted by the backup command**; file permissions reduce
+local access but do not protect it from device loss or disk compromise. Encrypt
+it with the team's approved storage before copying it off-host.
+
+The full backup runs without stopping workloads. Kubernetes objects and SQLite
+state are captured online; PVC files are copied live and are not guaranteed to
+be an application-consistent point-in-time image. Databases may need WAL
+recovery after restore. Store this bundle on encrypted storage and copy it off
+the production node and workstation. Full node recovery restores the K3s state
+and volume archive on the original node. Validate the SHA-256 manifest before
+restoring.
+
+For a full node restore, provision the same host and K3s version, stop K3s,
+extract `k3s-host-and-pv-data.tar.gz` at `/`, copy `k3s-state.db` to
+`/var/lib/rancher/k3s/server/db/state.db` with owner `root:root` and mode `0600`,
+then start K3s and validate node and workload readiness. Keep the existing
+server token and `/etc/rancher/k3s` configuration from the archive. Verify the
+bundle first with `cd ~/.mcpruntime/backups/mcpruntime-org/latest && shasum -a
+256 -c SHA256SUMS`. Check each database's recovery logs before accepting
+traffic. This does not restore an external identity provider or data stored
+outside the cluster.
+
+`hack/deploy/mcpruntime-org/clean.sh` still takes a smaller **platform-runtime
+restore snapshot** before its intentional namespace wipe. It covers platform
+TLS/config/bootstrap material, not the full node or PVC data.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `MCP_TLS_BACKUP_DIR` | `~/.mcpruntime/backups/mcpruntime-org` | Root directory for timestamped platform-runtime snapshots. |
+| `MCP_TLS_BACKUP_DIR` | `~/.mcpruntime/backups/mcpruntime-org` | Root directory for timestamped setup or full snapshots. |
 | `MCP_RESTORE_TLS_AFTER_SETUP` | `1` | When `1`, `hack/deploy/mcpruntime-org/setup.sh` runs `hack/deploy/mcpruntime-org/restore.sh` after setup. |
 | `MCP_DEPLOY_ENV` | `config/deployments/mcpruntime-org.env` | Env file path for all hack scripts. |
 
-Backup scope is **platform-runtime state only**: TLS, cert-manager, OIDC, and
-bootstrap secrets. Tenant users, teams, MCP CRs, and registry images are not
-backed up.
+The `clean.sh` snapshot covers TLS, cert-manager, OIDC, and bootstrap secrets.
+Use `backup.sh --setup` before setup, or `backup.sh --full --online-copy` for
+the Kubernetes object and persistent volume recovery bundle described above.
 
 #### Rollout-only (`hack/deploy/mcpruntime-org/rollout.sh`)
 
@@ -630,12 +693,12 @@ MCP_PLATFORM_API_URL=https://platform.mcpruntime.org \
   ./bin/mcp-runtime auth login --email member@example.com --password 'YourPassword123!' \
   --profile myteam-user
 
-cd examples/workspace-assistant-mcp
+cd examples/oauth-example-go-2025-11-25
 # .mcp/servers.yaml already exists in the example; for a new server run:
 # ../../bin/mcp-runtime server init <name> --tool <tool> --metadata-dir .mcp
 
 MCP_PLATFORM_API_URL=https://platform.mcpruntime.org MCP_PLATFORM_API_PROFILE=myteam-user \
-  ../../bin/mcp-runtime server build image workspace-assistant-mcp \
+  ../../bin/mcp-runtime server build image oauth-example-go-2025-11-25-gateway \
   --metadata-dir .mcp \
   --tag verify-e2e \
   --platform linux/amd64
@@ -646,7 +709,7 @@ MCP_PLATFORM_API_URL=https://platform.mcpruntime.org MCP_PLATFORM_API_PROFILE=my
   ../../bin/mcp-runtime server push --scope tenant --image "$IMAGE_REF"
 
 MCP_PLATFORM_API_URL=https://platform.mcpruntime.org MCP_PLATFORM_API_PROFILE=myteam-user \
-  ../../bin/mcp-runtime server deploy workspace-assistant-mcp \
+  ../../bin/mcp-runtime server deploy oauth-example-go-2025-11-25-gateway \
   --scope tenant \
   --metadata-dir .mcp
 ```

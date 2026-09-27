@@ -34,7 +34,7 @@ cmd_go_modules() {
 	go mod tidy
 
 	local mods=(
-		"examples/workspace-assistant-mcp"
+		"examples/oauth-example-go-2025-11-25"
 		"services/platform-api"
 		"services/runtime-api"
 		"services/analytics-api"

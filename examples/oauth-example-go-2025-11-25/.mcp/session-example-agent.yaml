@@ -1,0 +1,14 @@
+apiVersion: mcpruntime.org/v1alpha1
+kind: MCPAgentSession
+metadata:
+    name: oauth-example-go-agent-session
+    namespace: mcp-servers
+spec:
+    consentedTrust: low
+    policyVersion: v1
+    serverRef:
+        name: oauth-example-go-2025-11-25-gateway
+        namespace: mcp-servers
+    subject:
+        agentID: example-agent
+        humanID: example-human

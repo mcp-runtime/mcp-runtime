@@ -31,18 +31,15 @@ Keep it separate from long-lived shared-cluster MCPs.
 Create metadata:
 
 ```bash
-cat > /tmp/workspace-assistant-mcp.yaml <<'EOF'
+cat > /tmp/oauth-example-go-2025-11-25-gateway.yaml <<'EOF'
 version: v1
 servers:
-  - name: workspace-assistant-mcp
+  - name: oauth-example-go-2025-11-25-gateway
     description: Workspace assistant MCP server for task cards, release notes, and text cleanup.
     namespace: mcp-servers
-    route: /workspace-assistant-mcp/mcp
-    publicPathPrefix: workspace-assistant-mcp
+    route: /oauth-example-go-2025-11-25-gateway/mcp
+    publicPathPrefix: oauth-example-go-2025-11-25-gateway
     port: 8088
-    envVars:
-      - name: MCP_PATH
-        value: /workspace-assistant-mcp/mcp
     tools:
       - name: add
         description: Add two numeric values.
@@ -87,7 +84,7 @@ API_KEY="$(
     -o jsonpath='{.data.INGEST_API_KEYS}' | base64 -d | cut -d, -f1
 )"
 
-kubectl create secret generic workspace-assistant-mcp-analytics-creds \
+kubectl create secret generic oauth-example-go-2025-11-25-gateway-analytics-creds \
   -n mcp-servers \
   --from-literal=api-key="$API_KEY" \
   --dry-run=client -o yaml | kubectl apply -f -
@@ -96,10 +93,10 @@ kubectl create secret generic workspace-assistant-mcp-analytics-creds \
 Build, push, and deploy:
 
 ```bash
-./bin/mcp-runtime server build image workspace-assistant-mcp \
-  --metadata-file /tmp/workspace-assistant-mcp.yaml \
-  --dockerfile examples/workspace-assistant-mcp/Dockerfile \
-  --context examples/workspace-assistant-mcp \
+./bin/mcp-runtime server build image oauth-example-go-2025-11-25-gateway \
+  --metadata-file /tmp/oauth-example-go-2025-11-25-gateway.yaml \
+  --dockerfile examples/oauth-example-go-2025-11-25/Dockerfile \
+  --context examples/oauth-example-go-2025-11-25 \
   --tag dev
 
 ./bin/mcp-runtime auth login --api-url http://localhost:18080
@@ -109,7 +106,7 @@ Build, push, and deploy:
 # name, so the push command and deploy metadata stay in sync.
 IMAGE_REF="$(python3 - <<'PY'
 image = tag = ""
-with open('/tmp/workspace-assistant-mcp.yaml') as f:
+with open('/tmp/oauth-example-go-2025-11-25-gateway.yaml') as f:
     for line in f:
         stripped = line.strip()
         if stripped.startswith("image: "):
@@ -124,20 +121,20 @@ PY
 ./bin/mcp-runtime server push \
   --image "$IMAGE_REF"
 
-./bin/mcp-runtime server deploy workspace-assistant-mcp \
+./bin/mcp-runtime server deploy oauth-example-go-2025-11-25-gateway \
   --scope tenant \
-  --metadata-file /tmp/workspace-assistant-mcp.yaml
+  --metadata-file /tmp/oauth-example-go-2025-11-25-gateway.yaml
 SERVER_NAMESPACE="$(
-  kubectl get deploy -A -l app=workspace-assistant-mcp \
+  kubectl get deploy -A -l app=oauth-example-go-2025-11-25-gateway \
     -o jsonpath='{.items[0].metadata.namespace}'
 )"
-kubectl rollout status deploy/workspace-assistant-mcp -n "$SERVER_NAMESPACE" --timeout=180s
+kubectl rollout status deploy/oauth-example-go-2025-11-25-gateway -n "$SERVER_NAMESPACE" --timeout=180s
 ```
 
 ## Inspect runtime outputs
 
 ```bash
-SERVER=workspace-assistant-mcp
+SERVER=oauth-example-go-2025-11-25-gateway
 NAMESPACE="$(
   kubectl get deploy -A -l app="$SERVER" \
     -o jsonpath='{.items[0].metadata.namespace}'
@@ -184,7 +181,7 @@ documented below.
 
 ./bin/mcp-runtime access grant init workspace-assistant-grant \
   --namespace mcp-servers \
-  --server workspace-assistant-mcp \
+  --server oauth-example-go-2025-11-25-gateway \
   --human-id local-user \
   --agent-id local-agent \
   --tool add --tool upper \
@@ -193,7 +190,7 @@ documented below.
 
 ./bin/mcp-runtime access session init local-session \
   --namespace mcp-servers \
-  --server workspace-assistant-mcp \
+  --server oauth-example-go-2025-11-25-gateway \
   --human-id local-user \
   --agent-id local-agent \
   --trust high \

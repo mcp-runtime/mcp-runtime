@@ -52,7 +52,7 @@ func TestRunStdioShimInjectsHeadersAndMaintainsRuntimeMCPSession(t *testing.T) {
 	}))
 	t.Cleanup(upstream.Close)
 
-	runtimeURL, err := url.Parse(upstream.URL + "/workspace-assistant-mcp/mcp")
+	runtimeURL, err := url.Parse(upstream.URL + "/oauth-example-go-2025-11-25/mcp")
 	if err != nil {
 		t.Fatalf("url.Parse() error = %v", err)
 	}
@@ -114,7 +114,7 @@ func TestRunStdioShimConvertsHTTPDenialToJSONRPCError(t *testing.T) {
 	}))
 	t.Cleanup(upstream.Close)
 
-	runtimeURL, err := url.Parse(upstream.URL + "/workspace-assistant-mcp/mcp")
+	runtimeURL, err := url.Parse(upstream.URL + "/oauth-example-go-2025-11-25/mcp")
 	if err != nil {
 		t.Fatalf("url.Parse() error = %v", err)
 	}
@@ -160,7 +160,7 @@ func TestRunStdioShimLogsRuntimeDenialWhenInfoEnabled(t *testing.T) {
 	}))
 	t.Cleanup(upstream.Close)
 
-	runtimeURL, err := url.Parse(upstream.URL + "/workspace-assistant-mcp/mcp")
+	runtimeURL, err := url.Parse(upstream.URL + "/oauth-example-go-2025-11-25/mcp")
 	if err != nil {
 		t.Fatalf("url.Parse() error = %v", err)
 	}
@@ -204,7 +204,7 @@ func TestRunStdioShimAppliesRequestTimeout(t *testing.T) {
 	}))
 	t.Cleanup(upstream.Close)
 
-	runtimeURL, err := url.Parse(upstream.URL + "/workspace-assistant-mcp/mcp")
+	runtimeURL, err := url.Parse(upstream.URL + "/oauth-example-go-2025-11-25/mcp")
 	if err != nil {
 		t.Fatalf("url.Parse() error = %v", err)
 	}
@@ -320,7 +320,7 @@ func TestRunStdioShimStreamsEventsAndContinuesReadingStdin(t *testing.T) {
 	}))
 	t.Cleanup(upstream.Close)
 
-	runtimeURL, err := url.Parse(upstream.URL + "/workspace-assistant-mcp/mcp")
+	runtimeURL, err := url.Parse(upstream.URL + "/oauth-example-go-2025-11-25/mcp")
 	if err != nil {
 		t.Fatalf("url.Parse() error = %v", err)
 	}
@@ -390,7 +390,7 @@ func TestRunStdioShimDoesNotWriteResponseForNotificationAcceptedByHTTP(t *testin
 	}))
 	t.Cleanup(upstream.Close)
 
-	runtimeURL, err := url.Parse(upstream.URL + "/workspace-assistant-mcp/mcp")
+	runtimeURL, err := url.Parse(upstream.URL + "/oauth-example-go-2025-11-25/mcp")
 	if err != nil {
 		t.Fatalf("url.Parse() error = %v", err)
 	}
@@ -425,7 +425,7 @@ func TestRunStdioShimReturnsParseErrorForMalformedJSON(t *testing.T) {
 	}))
 	t.Cleanup(upstream.Close)
 
-	runtimeURL, err := url.Parse(upstream.URL + "/workspace-assistant-mcp/mcp")
+	runtimeURL, err := url.Parse(upstream.URL + "/oauth-example-go-2025-11-25/mcp")
 	if err != nil {
 		t.Fatalf("url.Parse() error = %v", err)
 	}

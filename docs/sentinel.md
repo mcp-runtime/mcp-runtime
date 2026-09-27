@@ -13,7 +13,7 @@
 | **api** | Three HTTP services behind Traefik path routing: **platform-api** (Postgres identity/auth/registry), **runtime-api** (Kubernetes runtime governance + registry push), **analytics-api** (ClickHouse events/stats/usage). OpenAPI at `GET /api/v1/openapi.yaml` per service. |
 | **ui** | Control-plane dashboard: user MCP server dashboard, MCP server catalog and connect config, user API keys, analytics dashboard, governance, MCP operations, and platform management. |
 | **gateway** | The Traefik ingress Deployment in front of the API, ingest, and UI. It is cluster ingress and makes no policy decisions. Per-server enforcement happens in `mcp-gateway`. |
-| **workspace assistant sample** | Sample MCP server in `examples/workspace-assistant-mcp` for end-to-end smoke tests. |
+| **Go OAuth sample** | Sample MCP server in `examples/oauth-example-go-2025-11-25`; gateway-enabled resource name is `oauth-example-go-2025-11-25-gateway`. |
 
 ## Kubernetes awareness and hardening
 
@@ -109,7 +109,7 @@ For local `setup --test-mode` clusters, setup seeds two email/password logins:
 | **Ingest** | `/ingest/events` | `mcp-sentinel-ingest:8081/events` | Event intake used by `mcp-gateway`; the public ingress strips `/ingest`. |
 | **Grafana** | `/grafana` | `grafana:3000` | Admin observability UI. The generated platform-host route is guarded by `sentinel-admin-auth@file`; Grafana still keeps its own login unless you wire auth proxy settings. Tenant-scoped access is intentionally not exposed by the user dashboard. |
 | **Prometheus** | Not exposed | `prometheus:9090` | Internal metrics backend and Grafana datasource. Use a temporary `kubectl port-forward` only for backend debugging. |
-| **MCP gateway sidecar** | per-server route, for example `/workspace-assistant-mcp/mcp` | pod-local sidecar port | Enforces policy and forwards to the MCP server container. |
+| **MCP gateway sidecar** | per-server route, for example `/oauth-example-go-2025-11-25-gateway/mcp` | pod-local sidecar port | Enforces policy and forwards to the MCP server container. |
 
 ### Admin Grafana access
 
