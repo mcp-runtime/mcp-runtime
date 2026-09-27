@@ -49,6 +49,13 @@ spec:
           volumeMounts:
             - name: datasources
               mountPath: /etc/grafana/provisioning/datasources
+              readOnly: true
+            - name: dashboards
+              mountPath: /etc/grafana/provisioning/dashboards
+              readOnly: true
+            - name: dashboard-files
+              mountPath: /etc/grafana/dashboards
+              readOnly: true
             - name: grafana-storage
               mountPath: /var/lib/grafana
           env:
@@ -70,6 +77,18 @@ spec:
         - name: datasources
           configMap:
             name: grafana-datasources
+        - name: dashboards
+          configMap:
+            name: grafana-dashboards
+            items:
+              - key: dashboard-provider.yaml
+                path: dashboard-provider.yaml
+        - name: dashboard-files
+          configMap:
+            name: grafana-dashboards
+            items:
+              - key: mcp-server.json
+                path: mcp-server.json
         - name: grafana-storage
           persistentVolumeClaim:
             claimName: grafana-pvc

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Performance Regression QA"
+  short_description: "Real-cluster perf regression: gateway latency, throughput, analytics, reconcile"
+  default_prompt: "Use $performance-regression-qa to run a deterministic perf matrix (tools/call p95, concurrent throughput, analytics latency, operator burst reconcile) against the live Kind cluster and compare to a stored baseline (contributor-cluster-setup must have run)."

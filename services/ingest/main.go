@@ -130,7 +130,8 @@ func main() {
 	}()
 
 	log.Printf("mcp-sentinel-ingest listening on :%s", port)
-	handler := otelhttp.NewHandler(serviceutil.LogRequests(mux), "http.server")
+	requestMetrics := serviceutil.DefaultRequestMetrics()
+	handler := otelhttp.NewHandler(serviceutil.LogRequests(requestMetrics.Middleware("mcp-sentinel-ingest", mux)), "http.server")
 	httpServer := &http.Server{
 		Addr:              ":" + port,
 		Handler:           handler,

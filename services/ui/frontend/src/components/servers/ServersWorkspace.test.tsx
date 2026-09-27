@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { axe } from "vitest-axe";
 
 import { ServersWorkspace } from "./ServersWorkspace";
 import { AppProviders } from "../../providers/AppProviders";
@@ -568,23 +569,35 @@ describe("ServersWorkspace server retire", () => {
 });
 
 describe("ServersWorkspace connect config, protocol inventory, and observability", () => {
+  const dashboardURL = "/grafana/d/mcp-server/mcp-server?var-namespace=mcp-servers&var-server=workspace-assistant";
   const RICH_SERVERS = {
     servers: [
       {
         ...SERVERS.servers[0],
         access_json: { mcpServers: { "workspace-assistant": { type: "http", url: "http://x/mcp" } } },
-        prompts: [{ name: "summarize" }],
-        resources: [{ name: "workspace-doc" }],
-        tasks: [{ name: "nightly-sync" }],
-        liveInventory: { prompts: [{ name: "summarize" }, { name: "translate" }], resources: [] },
+        prompts: [{ name: "summarize", description: "Summarize workspace notes", labels: { category: "writing" } }],
+        resources: [{ name: "workspace-doc", description: "Workspace documentation" }],
+        tasks: [{ name: "nightly-sync", description: "Prepare the nightly sync" }],
+        liveInventory: {
+          prompts: [
+            { name: "summarize", description: "Summarize current workspace", arguments: [{ name: "topic", description: "Topic to summarize", required: true }] },
+            { name: "translate", description: "Translate text" },
+          ],
+          resources: [{ name: "workspace-doc", uri: "file:///workspace/doc.md", mimeType: "text/markdown" }],
+        },
         observability: {
           namespace: "mcp-servers",
           server: "workspace-assistant",
           prometheus: {
-            queries: [{ id: "latency", name: "Latency", description: "p99 latency", url: "http://prom/query?latency" }],
-            direct_admin_only: false,
+            queries: [
+              { id: "up", name: "Target health", url: "http://prom/query?up", grafana_url: `${dashboardURL}&viewPanel=1` },
+              { id: "request_rate", name: "Request rate", url: "http://prom/query?request_rate", grafana_url: `${dashboardURL}&viewPanel=2` },
+              { id: "deny_rate", name: "Deny rate", url: "http://prom/query?deny_rate", grafana_url: `${dashboardURL}&viewPanel=3` },
+              { id: "latency_p95", name: "p95 latency", url: "http://prom/query?latency_p95", grafana_url: `${dashboardURL}&viewPanel=4` },
+            ],
+            direct_admin_only: true,
           },
-          grafana: { available: true, url: "http://grafana/d/workspace-assistant", direct_admin_only: false },
+          grafana: { available: true, url: dashboardURL, direct_admin_only: true },
         },
       },
       SERVERS.servers[1],
@@ -629,6 +642,7 @@ describe("ServersWorkspace connect config, protocol inventory, and observability
   });
 
   it("shows the merged declared/live protocol inventory and hides it when there is none", async () => {
+    const user = userEvent.setup();
     stubRichCatalog();
 
     renderWorkspace({ authenticated: true });
@@ -638,16 +652,90 @@ describe("ServersWorkspace connect config, protocol inventory, and observability
     expect(within(plainCard).queryByTestId("server-card-inventory")).not.toBeInTheDocument();
 
     const inventory = within(richCard).getByTestId("server-card-inventory");
-    // Declared "summarize" + live-only "translate" - union by name, not double-counted.
-    expect(inventory).toHaveTextContent("summarize, translate");
-    expect(inventory).toHaveTextContent("workspace-doc");
-    expect(inventory).toHaveTextContent("nightly-sync");
+    await user.click(within(inventory).getByText(/Protocol inventory/));
+    // Declared "summarize" and live "summarize" appear as one item.
+    expect(within(inventory).getAllByRole("button")).toHaveLength(4);
+    const summarize = within(inventory).getByRole("button", { name: /summarize/i });
+    expect(summarize).toHaveTextContent("Summarize current workspace");
+    await user.click(summarize);
+
+    const details = await screen.findByTestId("server-detail-inventory");
+    const selected = within(details).getByText("summarize").closest("details");
+    expect(selected).toHaveAttribute("open");
+    expect(selected).toHaveTextContent("topic (required)");
+    expect(selected).toHaveTextContent("category: writing");
+    expect(details).toHaveTextContent("file:///workspace/doc.md");
+    expect(details).toHaveTextContent("Prepare the nightly sync");
+    expect(within(details).queryByRole("button", { name: /download/i })).not.toBeInTheDocument();
+    expect(selected).toHaveTextContent("Server metadata and latest probe");
+    await user.click(within(selected as HTMLElement).getByText("summarize"));
+    expect(selected).not.toHaveAttribute("open");
   });
 
-  it("shows owner-scoped observability links and hides them when the backend omits them", async () => {
+  it("opens resource and task details from the server card", async () => {
+    const user = userEvent.setup();
+    stubRichCatalog();
+    renderWorkspace({ authenticated: true });
+    const [richCard] = await screen.findAllByTestId("server-card");
+    const inventory = within(richCard).getByTestId("server-card-inventory");
+    await user.click(within(inventory).getByText(/Protocol inventory/));
+
+    await user.click(within(inventory).getByRole("button", { name: /workspace-doc/i }));
+    let details = await screen.findByTestId("server-detail-inventory");
+    let selected = within(details).getByText("workspace-doc").closest("details");
+    expect(selected).toHaveAttribute("open");
+    expect(selected).toHaveTextContent("Workspace documentation");
+    expect(selected).toHaveTextContent("file:///workspace/doc.md");
+    expect(selected).toHaveTextContent("text/markdown");
+    expect(selected).toHaveTextContent("Server metadata and latest probe");
+
+    await user.click(screen.getByTestId("server-detail-close"));
+    await user.click(within(inventory).getByRole("button", { name: /nightly-sync/i }));
+    details = await screen.findByTestId("server-detail-inventory");
+    selected = within(details).getByText("nightly-sync").closest("details");
+    expect(selected).toHaveAttribute("open");
+    expect(selected).toHaveTextContent("Prepare the nightly sync");
+    expect(selected).toHaveTextContent("Server metadata");
+    expect(selected).not.toHaveTextContent("Latest probe");
+  });
+
+  it("shows live-only prompts and keeps the unselected detail entries collapsed", async () => {
+    const user = userEvent.setup();
+    stubRichCatalog();
+    renderWorkspace({ authenticated: true });
+    const [richCard] = await screen.findAllByTestId("server-card");
+    await user.click(within(richCard).getByTestId("server-card-details"));
+
+    const details = await screen.findByTestId("server-detail-inventory");
+    const translate = within(details).getByText("translate").closest("details");
+    const summarize = within(details).getByText("summarize").closest("details");
+    expect(translate).not.toHaveAttribute("open");
+    expect(summarize).not.toHaveAttribute("open");
+    await user.click(within(translate as HTMLElement).getByText("translate"));
+    expect(translate).toHaveAttribute("open");
+    expect(translate).toHaveTextContent("Latest probe");
+    expect(translate).toHaveTextContent("Translate text");
+  });
+
+  it("keeps inventory disclosures accessible by name and keyboard", async () => {
+    const user = userEvent.setup();
+    stubRichCatalog();
+    const { container } = renderWorkspace({ authenticated: true });
+    const [richCard] = await screen.findAllByTestId("server-card");
+    await user.click(within(richCard).getByText(/Protocol inventory/));
+    const prompt = within(richCard).getByRole("button", { name: /summarize/i });
+    prompt.focus();
+    await user.keyboard("{Enter}");
+
+    const details = await screen.findByTestId("server-detail-inventory");
+    expect(within(details).getByText("summarize").closest("details")).toHaveAttribute("open");
+    expect(await axe(container, { rules: { "color-contrast": { enabled: false } } })).toHaveNoViolations();
+  });
+
+  it("opens the dashboard and all four metrics in real Grafana panels", async () => {
     stubRichCatalog();
 
-    renderWorkspace({ authenticated: true });
+    renderWorkspace({ authenticated: true, auth: { authenticated: true, principal: { role: "admin" } } });
     await screen.findByTestId("server-list");
 
     const [richCard, plainCard] = screen.getAllByTestId("server-card");
@@ -655,8 +743,35 @@ describe("ServersWorkspace connect config, protocol inventory, and observability
 
     const observability = within(richCard).getByTestId("server-card-observability");
     const grafanaLink = within(observability).getByTestId("server-card-grafana-link");
-    expect(grafanaLink).toHaveAttribute("href", "http://grafana/d/workspace-assistant");
-    expect(observability).toHaveTextContent("Latency");
+    expect(grafanaLink).toHaveAttribute("href", dashboardURL);
+    for (const [name, panel] of [["Target health", 1], ["Request rate", 2], ["Deny rate", 3], ["p95 latency", 4]] as const) {
+      const link = within(observability).getByRole("link", { name: new RegExp(name, "i") });
+      expect(link).toHaveAttribute("href", `${dashboardURL}&viewPanel=${panel}`);
+      expect(link).toHaveAttribute("target", "_blank");
+      expect(link).toHaveAttribute("rel", "noreferrer");
+    }
+    expect(within(observability).getAllByRole("link")).toHaveLength(5);
+    expect(observability.innerHTML).not.toContain("http://prom/query");
+  });
+
+  it("does not render Grafana or raw Prometheus query links when Grafana access is unavailable", async () => {
+    const server = RICH_SERVERS.servers[0];
+    stubCatalog({ servers: { servers: [{
+      ...server,
+      observability: {
+        ...server.observability,
+        grafana: { available: false, direct_admin_only: true, reason: "admin only" },
+        prometheus: {
+          ...server.observability.prometheus,
+          queries: server.observability.prometheus.queries.map(({ grafana_url: _grafanaURL, ...query }) => query),
+        },
+      },
+    }, RICH_SERVERS.servers[1]] } });
+
+    renderWorkspace({ authenticated: true });
+    const [richCard] = await screen.findAllByTestId("server-card");
+    expect(within(richCard).queryByTestId("server-card-observability")).not.toBeInTheDocument();
+    expect(within(richCard).queryByRole("link", { name: /grafana|target health|request rate|deny rate|p95 latency/i })).not.toBeInTheDocument();
   });
 });
 

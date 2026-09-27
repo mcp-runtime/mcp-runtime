@@ -1,0 +1,21 @@
+{
+  "skill_name": "dashboard-browser-qa",
+  "queries": [
+    {
+      "query": "The admin dashboard shows failed to load API keys; reproduce it in the browser and fix the UI/API path.",
+      "should_trigger": true
+    },
+    {
+      "query": "Run full browser QA for Sentinel dashboard roles, tabs, forms, filters, responsive layout, and console errors.",
+      "should_trigger": true
+    },
+    {
+      "query": "Audit GitHub Actions for unpinned actions and weak permissions.",
+      "should_trigger": false
+    },
+    {
+      "query": "Compare our gateway JSON-RPC envelopes to the upstream MCP schema.",
+      "should_trigger": false
+    }
+  ]
+}

@@ -21,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
@@ -498,7 +499,7 @@ func (s *DeploymentService) ensureManagedNamespace(ctx context.Context, namespac
 	if err := ensureNamespacePlatformAPISecretAccess(ctx, base, namespace); err != nil {
 		return err
 	}
-	if err := s.ensureNamespaceRegistryPullSecret(ctx, base, namespace); err != nil {
+	if err := s.ensureNamespaceRegistryPullSecretAfterBinding(ctx, base, namespace); err != nil {
 		return fmt.Errorf("provision registry pull secret for namespace %q: %w", namespace, err)
 	}
 	return nil
@@ -507,6 +508,24 @@ func (s *DeploymentService) ensureManagedNamespace(ctx context.Context, namespac
 const registryPullSecretName = "mcp-runtime-registry-pull" // #nosec G101 -- Kubernetes Secret object name, not credential material.
 const platformNamespaceAPISecretAccessName = "mcp-runtime-api-team-secrets"
 const platformNamespaceAPIServiceAccountName = "mcp-runtime-api"
+
+// A newly created RoleBinding can be visible before the API server's RBAC
+// authorizer observes it. Retry only Forbidden errors in this provisioning
+// path, after the namespace-local binding has been successfully ensured.
+func (s *DeploymentService) ensureNamespaceRegistryPullSecretAfterBinding(ctx context.Context, client kubernetes.Interface, namespace string) error {
+	var lastErr error
+	err := wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
+		lastErr = s.ensureNamespaceRegistryPullSecret(ctx, client, namespace)
+		if apierrors.IsForbidden(lastErr) {
+			return false, nil
+		}
+		return lastErr == nil, lastErr
+	})
+	if err != nil && apierrors.IsForbidden(lastErr) {
+		return fmt.Errorf("waiting for namespace registry secret access: %w (last error: %v)", err, lastErr)
+	}
+	return err
+}
 
 func (s *DeploymentService) ensureNamespaceRegistryPullSecret(ctx context.Context, client kubernetes.Interface, namespace string) error {
 	registryHost := registryPullSecretHost()
@@ -800,6 +819,30 @@ func desiredDefaultDenyNetworkPolicy(ns string, ingressFromNamespaces ...string)
 				},
 			},
 		},
+	}
+	// OAuth resource servers discover the public issuer through the platform's
+	// ingress controller. Permit HTTPS to that controller, not general Internet
+	// access. Include the Service and target ports for CNI implementations that
+	// enforce policy before or after Service destination translation.
+	for _, ingressNamespace := range ingressFromNamespaces {
+		ingressNamespace = strings.TrimSpace(ingressNamespace)
+		if ingressNamespace == "" {
+			continue
+		}
+		peers := make([]networkingv1.NetworkPolicyPeer, 0, 2)
+		for _, label := range []string{"app.kubernetes.io/name", "app"} {
+			peers = append(peers, networkingv1.NetworkPolicyPeer{
+				NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"kubernetes.io/metadata.name": ingressNamespace}},
+				PodSelector:       &metav1.LabelSelector{MatchLabels: map[string]string{label: "traefik"}},
+			})
+		}
+		policy.Spec.Egress = append(policy.Spec.Egress, networkingv1.NetworkPolicyEgressRule{
+			To: peers,
+			Ports: []networkingv1.NetworkPolicyPort{
+				{Protocol: &tcpProtocol, Port: intstrPtr(443)},
+				{Protocol: &tcpProtocol, Port: intstrPtr(8443)},
+			},
+		})
 	}
 	return policy
 }

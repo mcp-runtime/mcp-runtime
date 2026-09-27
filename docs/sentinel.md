@@ -122,10 +122,15 @@ separate Prometheus UI link.
 
 ### Scoped user observability
 
-The Activity server list exposes Prometheus and Grafana actions only for an
-`MCPServer` the authenticated principal can observe. The API checks the live
-server before returning links or querying Prometheus, and normal users are
-limited to their team namespaces or explicitly caller-owned catalog servers.
+The Servers workspace links to the provisioned MCP Server Grafana dashboard
+and its Target health, Request rate, Deny rate, and p95 latency panels. The
+links include the selected server's namespace and name. The bundled Grafana
+route is admin-only, so these links are shown to admins by default.
+
+The API checks the live `MCPServer` before returning links or querying
+Prometheus. Normal users are limited to their team namespaces or explicitly
+caller-owned catalog servers. Their Grafana links remain hidden unless a
+tenant-aware Grafana deployment is configured.
 
 Prometheus requests use
 `/api/v1/runtime/observability/prometheus/query?namespace=<namespace>&server=<server>&query_id=<id>`.
@@ -133,19 +138,21 @@ The `query_id` is allowlisted (`up`, `request_rate`, `deny_rate`,
 `latency_p95`); arbitrary PromQL is never accepted. `PROMETHEUS_API_URL`
 defaults to `http://prometheus:9090/prometheus`.
 
-The link form depends on the caller. Requests that arrive through the UI
-session proxy (`x-mcp-source: ui`) get `/api/ui/v1/runtime/observability/...`
-links. That same-origin proxy forwards the signed-in platform session to
-runtime-api, so browser users do not need to copy an API key or bearer token.
-Direct API and CLI callers get `/api/v1/runtime/observability/...` links, which
-they call with their own API key or bearer token. Both paths apply the same
-runtime-api authorization and tenant checks.
+The Prometheus query API link form depends on the caller. Requests that arrive
+through the UI session proxy (`x-mcp-source: ui`) get
+`/api/ui/v1/runtime/observability/...` links. That same-origin proxy forwards
+the signed-in platform session to runtime-api. Direct API and CLI callers get
+`/api/v1/runtime/observability/...` links, which they call with their own API
+key or bearer token. Both paths apply the same runtime-api authorization and
+tenant checks. Grafana and panel links open Grafana directly.
 
-Without an external Grafana dashboard template, the API renders a scoped
-dashboard from the same allowlisted queries. Set `GRAFANA_SERVER_DASHBOARD_URL`
-to a template containing `{namespace}` and `{server}` only when that Grafana
-deployment enforces tenant-aware access. Normal-user external links also
-require `GRAFANA_SCOPED_USER_ACCESS=true`.
+The bundled dashboard is provisioned at `/grafana/d/mcp-server/mcp-server`.
+The UI opens Grafana panel links directly; it does not display raw Prometheus
+query responses as dashboards. To use another dashboard, set
+`GRAFANA_SERVER_DASHBOARD_URL` to a URL template containing `{namespace}` and
+`{server}`. Its first four panel IDs must correspond to the four links above.
+Expose these links to normal users only when the Grafana deployment enforces
+tenant-aware data source access, then set `GRAFANA_SCOPED_USER_ACCESS=true`.
 
 The bundled Prometheus uses read-only Kubernetes discovery for annotated
 MCPServer Services and scrapes the gateway sidecar `/metrics` endpoint.
@@ -153,6 +160,20 @@ Gateway metrics include request totals, policy decisions, latency, request and
 response bytes, in-flight requests, and policy reload state. HTTP and MCP method
 labels are normalized to bounded sets to prevent attacker-controlled label
 cardinality.
+
+The platform-api, runtime-api, analytics-api, ingest, and MCP gateway also
+export `mcp_request_total`, `mcp_request_errors_total`, and the
+`mcp_request_duration_seconds` histogram. Labels are `service`, `operation`,
+`status`, and `server`; API operations use registered route patterns and the
+gateway uses its allowlisted MCP method names. Errors count server responses
+(HTTP 5xx). These Grafana queries show p50, p95, and p99 latency by service
+and operation:
+
+```promql
+histogram_quantile(0.50, sum by (le, service, operation) (rate(mcp_request_duration_seconds_bucket[5m])))
+histogram_quantile(0.95, sum by (le, service, operation) (rate(mcp_request_duration_seconds_bucket[5m])))
+histogram_quantile(0.99, sum by (le, service, operation) (rate(mcp_request_duration_seconds_bucket[5m])))
+```
 
 ### Auth model
 
@@ -390,7 +411,7 @@ source subject preserved, never on the other server.
 | Group | Files |
 |---|---|
 | **Core app** | `00-namespace`, `01-config`, `02-secrets`, `03-clickhouse`, `04-clickhouse-init`, `05-kafka`, `06-ingest`, `07-processor`, `08-platform-api`, `08-runtime-api`, `08-analytics-api`, `09-ui`, `10-gateway`, `20-postgres`, `21-platform-admin-bootstrap-job`, `22-split-api-networkpolicy` |
-| **Observability** | `11-prometheus`, `12-grafana`, `15-otel-collector`, `16-tempo`, `17-loki`, `18-promtail`, `19-grafana-datasources` |
+| **Observability** | `11-prometheus`, `12-grafana`, `15-otel-collector`, `16-tempo`, `17-loki`, `18-promtail`, `19-grafana-datasources`, `21-grafana-dashboards` |
 | **Example wiring** | `13-mcp-example`, `14-mcp-gateway-sidecar` |
 
 `mcp-runtime setup` builds the sentinel images and deploys this stack by default. Use `--without-sentinel` to skip.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Kubernetes Hardening Audit"
+  short_description: "Audit RBAC, PSS, NetworkPolicy, manifest hygiene"
+  default_prompt: "Use $kubernetes-hardening-audit to audit MCP Runtime cluster posture — RBAC graph, Pod Security Standards, NetworkPolicies, securityContext, and CIS benchmark — across operator, sentinel, registry, traefik, and mcp-servers namespaces."

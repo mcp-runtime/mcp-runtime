@@ -253,6 +253,14 @@ wiring, or override `PLATFORM_TRAEFIK_NAMESPACE`,
 `PLATFORM_TRAEFIK_DEPLOYMENT`, and `PLATFORM_TRAEFIK_SERVICE_ACCOUNT` when the
 repo-managed Traefik names differ.
 
+Managed namespace policies allow outbound HTTPS to Traefik pods in the
+configured ingress namespace on ports 443 and 8443. This lets standalone OAuth
+servers fetch discovery and signing keys from the platform's public issuer.
+Both the namespace and Traefik pod labels must match; the rule does not allow
+general Internet egress or ingress-controller dashboard access. Namespace
+provisioning through `team create` or `server deploy` refreshes this policy for
+existing namespaces as well.
+
 ## Identifier Conventions
 
 Keep identifiers stable:

@@ -6,13 +6,13 @@ This file is the **onboarding index** for the MCP Runtime repo. It complements `
 
 | Task | Skill |
 |------|--------|
-| Kind contributor cluster bring-up | `qa-cluster-bringup` |
-| Local URLs, API keys, test logins | `mcp-runtime-local-dev` |
-| Grants, sessions, MCP JSON-RPC | `mcp-runtime-governance` |
-| Cluster failures (401, ingress, registry, pulls) | `mcp-runtime-troubleshooting` |
-| Public domain, TLS, ACME, prod hostnames | `mcp-runtime-platform-public` |
-| Public k3s deploy scripts | `k3s-public-ops` |
-| Real-cluster QA sweeps | `qa-e2e-operations`, `qa-e2e-security`, `qa-e2e-ui`, … |
+| Kind contributor cluster bring-up | `contributor-cluster-setup` |
+| Local URLs, API keys, test logins | `local-development` |
+| Grants, sessions, MCP JSON-RPC | `access-governance` |
+| Cluster failures (401, ingress, registry, pulls) | `cluster-troubleshooting` |
+| Public domain, TLS, ACME, prod hostnames | `public-platform-configuration` |
+| Production Kubernetes operations | `production-operations` |
+| Real-cluster QA sweeps | `cluster-operations-qa`, `security-regression-qa`, `dashboard-browser-qa`, … |
 | Release / ship readiness | `release-readiness` |
 | API / CRD / CLI design review | Use the focused skill for the change surface; consult `.codex/skills/_shared/design-principles.md` for contract or system design choices |
 | Codebase navigation | `graphify` (when `graphify-out/` exists) |
@@ -37,13 +37,22 @@ This file is the **onboarding index** for the MCP Runtime repo. It complements `
 
 **Patterns:** mirror nearest similar packages; CLI errors → `internal/cli/core/errors.go`, `pkg/errx/`.
 
-**Exercise the CLI:** Prefer the `mcp-runtime` CLI for contributor workflows
-whenever it provides the operation. Use `server init`, `server validate`,
+**Manage through the CLI and UI:** Use supported `mcp-runtime` CLI and platform
+UI workflows for setup, teams/users, registry publishing, servers, grants,
+sessions, updates, and cleanup. Use `server init`, `server validate`,
 `server build`, `server push`, `server deploy`, `setup`, and other user-facing
 commands instead of hand-writing metadata or calling lower-level APIs. This
-keeps real usage paths exercised and catches CLI regressions. Use direct
-Kubernetes operations only for tests of that path or when the platform API is
-unavailable. For server examples, generate `.mcp/servers.yaml` with
+keeps real usage paths exercised and catches CLI regressions. A failed CLI/UI
+operation is a product issue: diagnose it, add regression coverage, fix the
+supported path, open a focused PR, and re-run the original workflow. Do not
+work around failures with `kubectl` mutations, manual namespace/RBAC/Secret
+provisioning, database edits, or direct API writes. An unavailable platform API
+is a blocker to repair, not permission to bypass the product. Read-only
+Kubernetes/API diagnostics are allowed. Direct Kubernetes mutations are allowed
+only when the user explicitly requests that path or a test specifically targets
+it; they do not count as CLI/UI validation. If an operation is missing, report
+the gap and implement the supported management path instead of silently using
+a workaround. For server examples, generate `.mcp/servers.yaml` with
 `mcp-runtime server init`, then validate it with `mcp-runtime server validate`.
 
 ## Agent workflow passes
@@ -54,13 +63,13 @@ but do not make them required or let them override MCP Runtime-specific skills
 unless their workflow has been adapted into `.codex/skills/`.
 
 - **Code review:** use the default code-review stance for ordinary PR review;
-  add `security-audit`, `k8s-hardening-audit`, or `supply-chain-audit` when the
+  add `change-security-audit`, `kubernetes-hardening-audit`, or `supply-chain-audit` when the
   diff crosses those trust boundaries.
-- **Browser/UI QA and design critique:** use `qa-e2e-ui` for dashboard
+- **Browser/UI QA and design critique:** use `dashboard-browser-qa` for dashboard
   workflows, role-gating, responsive checks, console/network evidence, and
   visual/design regressions.
 - **DevEx review:** for CLI, docs, setup, contributor, and golden-help changes,
-  combine `repo-guidance-sync` with the relevant targeted tests.
+  combine `documentation-sync` with the relevant targeted tests.
 - **Ship/canary/release:** use `release-readiness` to compose CI parity,
   real-cluster operations, security, UI, protocol, performance, docs, and
   deployment/canary evidence before tagging or promoting a release.
@@ -98,8 +107,9 @@ exercise the user-facing CLI flow (`server build image` → `server push` →
 `server deploy`) as well as checking Kubernetes readiness. This verifies image
 publication, namespace setup, pull-secret provisioning, and deployment through
 the same path users run. Use direct `kubectl`/`server apply --use-kube` only
-when the test specifically targets the direct-manifest path or platform API is
-unavailable; record that limitation in the QA result.
+when the user explicitly requests that path or the test specifically targets
+the direct-manifest path; record that limitation in the QA result. Repair a
+failed platform API flow and re-run the CLI/UI journey before accepting it.
 
 ## Conventions for code changes
 
@@ -109,14 +119,14 @@ unavailable; record that limitation in the QA result.
 - **Commits:** use `fix(<component>):`, `feat(<component>):`, `doc:`, or `website:`. Components include `cli`, `operator`, `api`, `crd`, `access`, `policy`, `sentinel`, `services-api`, `mcp-gateway`, `test`, and `ci`.
 - **Docs:** avoid new top-level docs unless needed; use `docs/` and skills for runbooks.
 - **Secrets:** this is an alpha repo, so do not add real credentials to the tree.
-- **Skills:** keep `.claude/skills` linked to `../.codex/skills`. After non-trivial changes, update affected `.codex/skills/*/SKILL.md` files when workflows or gotchas shift. Check for an existing `reference.md` or `references/` companion first (for example, `mcp-runtime-troubleshooting/reference.md` or `qa-e2e-ui/references/`) and extend it with symptom-oriented or long-form content instead of growing `SKILL.md` past ~250–400 lines.
+- **Skills:** keep `.claude/skills` linked to `../.codex/skills`. After non-trivial changes, update affected `.codex/skills/*/SKILL.md` files when workflows or gotchas shift. Check for an existing `reference.md` or `references/` companion first (for example, `cluster-troubleshooting/reference.md` or `dashboard-browser-qa/references/`) and extend it with symptom-oriented or long-form content instead of growing `SKILL.md` past ~250–400 lines.
 ## Local dev (short)
 
 Prereqs: Docker, Kind, `kubectl`, `curl`, `jq`, Python 3, Go.
 
 ```bash
 go build -o bin/mcp-runtime ./cmd/mcp-runtime
-# Full Kind + test-mode path: see .codex/skills/qa-cluster-bringup/SKILL.md
+# Full Kind + test-mode path: see .codex/skills/contributor-cluster-setup/SKILL.md
 ./bin/mcp-runtime bootstrap
 MCP_SETUP_WAIT_TIMEOUT=900 ./bin/mcp-runtime setup --test-mode --ingress-manifest config/ingress/overlays/http
 ./bin/mcp-runtime cluster doctor
@@ -125,13 +135,13 @@ kubectl port-forward -n traefik svc/traefik 18080:8000
 
 `setup --test-mode` builds and pushes images to the bundled registry (`registry.registry.svc.cluster.local:5000` in Kind) and provisions the local `mcp-runtime-ca` workload issuer for mTLS/SPIFFE validation. Prefer existing `kind-mcp-runtime` when healthy. Contributor runbook: `docs/contributor/README.md`.
 
-Endpoints, API keys, test logins: **`mcp-runtime-local-dev`** skill.
+Endpoints, API keys, test logins: **`local-development`** skill.
 
 ## Debugging and production ops
 
-Do not inline the full failure checklist here. Use **`mcp-runtime-troubleshooting`**, and **`mcp-runtime-platform-public`** for TLS/DNS.
+Do not inline the full failure checklist here. Use **`cluster-troubleshooting`**, and **`public-platform-configuration`** for TLS/DNS.
 
-k3s public deploy: **`k3s-public-ops`** + `docs/k3s-deployment-runbook.md`.
+Production Kubernetes operations: **`production-operations`** + `docs/k3s-deployment-runbook.md`.
 
 ## Prod guardrails
 
@@ -141,12 +151,12 @@ Tests and scripts that fall back to the current kube context have written to a p
 - **Isolate unit tests and commits.** Before `go test`, `pre-commit`, or `git commit` (the hooks run the Go test suite), run `export KUBECONFIG=$(mktemp)` in that shell so no test can reach a real cluster. Unit tests must use fakes; a test that needs a live cluster is an integration/E2E test and belongs under `test/`.
 - **QA E2E runs only against `kind-*` contexts.** Pass the Kind kubeconfig explicitly; never let `test/e2e/qa-e2e.sh` or any script default to the ambient context.
 - **Staging E2E never targets production.** The disposable-VM suites (`test/e2e/staging-*.sh`) must pass their target guard; never set the `E2E_GUARD_ALLOW_*` escape hatches.
-- **Production changes are deliberate.** Follow the `k3s-public-ops` non-negotiables: confirm the ref and the mcp-auth choice, snapshot state before mutating, preserve certificates, and prefer targeted rollouts. Don't run `setup`, `cluster doctor --fix`, `kubectl apply/patch/delete`, or cleanup scripts against production as a side effect of testing.
+- **Production changes are deliberate.** Follow the `production-operations` non-negotiables: confirm the ref and the mcp-auth choice, snapshot state before mutating, preserve certificates, and prefer targeted rollouts. Don't run `setup`, `cluster doctor --fix`, `kubectl apply/patch/delete`, or cleanup scripts against production as a side effect of testing.
 - **Verify prod after any suspected leak.** Check `kubectl get <kind> -o json --show-managed-fields` for recent `mcp-runtime`-manager updates (for example the registry Ingress host and the operator Deployment image), then roll back from the prior ReplicaSet or snapshot.
 
 ## Governance (short)
 
-Grants, sessions, adapter flows, MCP curl examples: **`mcp-runtime-governance`** skill.
+Grants, sessions, adapter flows, MCP curl examples: **`access-governance`** skill.
 
 ## Logs and observability
 

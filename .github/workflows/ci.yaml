@@ -80,6 +80,18 @@ jobs:
   test:
     name: Unit + Integration Tests
     runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+        env:
+          POSTGRES_PASSWORD: disposable-test-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -134,6 +146,7 @@ jobs:
           done
           exit "${failed}"
         env:
+          MCP_PLATFORM_TEST_POSTGRES_DSN: postgres://postgres:disposable-test-password@127.0.0.1:5432/postgres?sslmode=disable
           SENTINEL_SERVICE_TEST_LOG_DIR: ${{ runner.temp }}/sentinel-service-test-logs
 
       - name: Test Traefik plugin modules

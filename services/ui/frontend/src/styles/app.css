@@ -328,8 +328,63 @@
   color: var(--text);
 }
 
-.server-card-inventory p {
-  margin-top: var(--space-2);
+.server-card-inventory summary span {
+  margin-left: var(--space-2);
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.server-card-inventory-groups {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.server-card-inventory-group {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.server-card-inventory-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.server-card-inventory-item {
+  appearance: none;
+  display: flex;
+  flex: 1 1 130px;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+
+.server-card-inventory-item:is(button) {
+  cursor: pointer;
+}
+
+.server-card-inventory-item:is(button):hover,
+.server-card-inventory-item:is(button):focus-visible {
+  border-color: var(--text-secondary);
+  background: var(--surface-hover);
+}
+
+.server-card-inventory-item span {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.server-card-inventory-item small {
+  color: var(--text-secondary);
+  font-size: var(--fs-meta);
   overflow-wrap: anywhere;
 }
 
@@ -918,6 +973,107 @@
   margin-top: 2px;
   font-size: var(--fs-meta);
   color: var(--text-secondary);
+}
+
+.protocol-inventory,
+.protocol-group {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.protocol-group-title {
+  margin: 0;
+  font-size: var(--fs-body);
+}
+
+.protocol-group-title span {
+  margin-left: var(--space-1);
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.protocol-items {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.protocol-item {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+}
+
+.protocol-item summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  list-style: none;
+  cursor: pointer;
+}
+
+.protocol-item summary::-webkit-details-marker {
+  display: none;
+}
+
+.protocol-item summary:hover,
+.protocol-item summary:focus-visible {
+  background: var(--surface-hover);
+}
+
+.protocol-item-heading {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.protocol-item-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.protocol-item-description,
+.protocol-item-cue {
+  color: var(--text-secondary);
+  font-size: var(--fs-meta);
+}
+
+.protocol-item-cue {
+  flex: none;
+}
+
+.protocol-item-body {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-top: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: var(--fs-meta);
+  overflow-wrap: anywhere;
+}
+
+.protocol-item-body p {
+  margin: 0;
+}
+
+.protocol-item-arguments {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-4);
+}
+
+.protocol-item-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+.protocol-item-labels span {
+  padding: 2px var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
 }
 
 /* Observability is reference material, not an action: quiet links on one row. */

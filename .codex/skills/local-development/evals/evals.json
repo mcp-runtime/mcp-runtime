@@ -1,0 +1,23 @@
+{
+  "skill_name": "local-development",
+  "evals": [
+    {
+      "id": "local-api-auth",
+      "prompt": "I need the local Kind UI/API URLs and test-mode credentials, and the dashboard API returns 401.",
+      "expected_output": "Use local-dev guidance for port-forward, test URLs, key placement, and doctor.",
+      "assertions": [
+        "Uses localhost:18080 test-mode context.",
+        "Distinguishes UI/admin and ingest credentials."
+      ]
+    },
+    {
+      "id": "production-tls",
+      "prompt": "Configure public TLS and DNS for a production install.",
+      "expected_output": "Route to public-platform-configuration.",
+      "assertions": [
+        "Does not use test-mode endpoints or credentials.",
+        "Routes to public platform guidance."
+      ]
+    }
+  ]
+}

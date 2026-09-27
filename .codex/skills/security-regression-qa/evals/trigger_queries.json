@@ -1,0 +1,21 @@
+{
+  "skill_name": "security-regression-qa",
+  "queries": [
+    {
+      "query": "Verify auth, grant/session policy, gateway deny paths, and audit events against the live Kind cluster.",
+      "should_trigger": true
+    },
+    {
+      "query": "Run a real traffic security regression for UI headers, login lockout, and secret leaks in logs.",
+      "should_trigger": true
+    },
+    {
+      "query": "Create a Figma screen for the dashboard.",
+      "should_trigger": false
+    },
+    {
+      "query": "Run a full browser feature-correctness pass for every UI form and tab.",
+      "should_trigger": false
+    }
+  ]
+}

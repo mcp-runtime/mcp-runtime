@@ -1,4 +1,0 @@
-interface:
-  display_name: "Security Audit"
-  short_description: "Audit repo changes for security risks"
-  default_prompt: "Use $security-audit to review this MCP Runtime change for security risks and required security checks."

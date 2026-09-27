@@ -1,0 +1,25 @@
+{
+  "skill_name": "platform-security-audit",
+  "evals": [
+    {
+      "id": "pre-release-platform-audit",
+      "prompt": "Run a deep pre-release security review of the whole MCP Runtime platform and produce a structured findings report.",
+      "expected_output": "A platform-wide security audit with threat model, authn/authz matrix, tenant isolation probes, protocol fuzzing, audit integrity, TLS/ingress posture, DAST, scanners, and prioritized findings.",
+      "assertions": [
+        "Builds an explicit threat model before tool execution",
+        "Covers every major platform trust boundary",
+        "Uses ../_shared/FINDINGS-TEMPLATE.md and records skipped checks"
+      ]
+    },
+    {
+      "id": "tenant-isolation-red-team",
+      "prompt": "Do a red-team style assessment of tenant isolation, registry exposure, public ingress, and audit integrity.",
+      "expected_output": "A deep security assessment focused on cross-tenant access, registry auth, ingress exposure, audit tampering or gaps, and concrete exploit paths.",
+      "assertions": [
+        "Includes live-cluster probes where safe",
+        "Separates confirmed findings from untested hypotheses",
+        "Provides file and endpoint references for each finding"
+      ]
+    }
+  ]
+}

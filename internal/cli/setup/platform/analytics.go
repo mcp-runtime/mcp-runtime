@@ -94,6 +94,7 @@ func analyticsServiceManifests(postgresManifest string) []string {
 		"k8s/17-loki.yaml",
 		"k8s/18-promtail.yaml",
 		"k8s/19-grafana-datasources.yaml",
+		"k8s/21-grafana-dashboards.yaml",
 		"k8s/12-grafana.yaml",
 	}
 	return manifests

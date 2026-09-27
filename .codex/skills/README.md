@@ -52,9 +52,9 @@ skills point to it only when their task includes design decisions.
 - `.codex/skills/scripts/validate_skill_evals.py` validates every eval and
   trigger manifest so malformed regression prompts fail fast.
 - MCP live transport details are split into
-  `mcp-spec-compliance/references/live-conformance.md`.
+  `mcp-protocol-compliance/references/live-conformance.md`.
 - Large UI coverage detail is split into
-  `qa-e2e-ui/references/ui-coverage.md` for progressive disclosure.
+  `dashboard-browser-qa/references/ui-coverage.md` for progressive disclosure.
 - Shared report templates are referenced through relative paths such as
   `../_shared/FINDINGS-TEMPLATE.md`.
 
@@ -85,7 +85,7 @@ existing `kind-mcp-runtime` contributor cluster. Skill-eval rows covered the
 | UI service unit tests | `cd services/ui && go test ./... -race -count=1` | 6.99s | UI server handlers, config, auth/session behavior covered by Go tests |
 | CLI golden tests | `go test ./test/golden/... -count=1` | 4.64s | CLI help/output drift that can affect docs and UI-adjacent flows |
 | UI static syntax | `node --check services/ui/static/app.js` | 0.30s | Browser bundle JavaScript parses |
-| UI skill validation | `quick_validate.py .codex/skills/qa-e2e-ui` | 0.07s | `qa-e2e-ui` format after edits |
+| UI skill validation | `quick_validate.py .codex/skills/dashboard-browser-qa` | 0.07s | `dashboard-browser-qa` format after edits |
 | UI browser smoke | Playwright against `http://localhost:18080/` | about 4-6 min manual | Signed-out state, tenant login, admin login, tabs, UI-triggered API 200s, console sanity, and mobile overflow |
 | Cached QA E2E smoke/governance | `KUBECONFIG="$HOME/.kube/test-mcp-runtime-config" E2E_CACHE_MODE=1 E2E_SCENARIOS=smoke-auth,governance CLUSTER_NAME=mcp-runtime E2E_KEEP_CLUSTER=1 bash test/e2e/qa-e2e.sh` | 630.62s, about 10m31s | Real cluster auth, grant/session governance, gateway policy, CLI flows, ingress, registry auth |
 
@@ -100,18 +100,18 @@ The QA skills are run as guided workflows, not as one monolithic test binary.
 The agent activates the relevant skill, reads its `SKILL.md`, and then runs the
 checks that match the requested scope:
 
-1. `qa-cluster-bringup` creates or recovers the real Kind test-mode cluster.
-2. `qa-e2e-ui` uses browser tooling first, then supports findings with curl,
+1. `contributor-cluster-setup` creates or recovers the real Kind test-mode cluster.
+2. `dashboard-browser-qa` uses browser tooling first, then supports findings with curl,
    static asset checks, UI Go tests, golden tests, and optional cached QA E2E.
-3. `qa-e2e-security`, `qa-e2e-operations`, `qa-e2e-perf`, and
-   `mcp-spec-compliance` cover runtime security, operations, performance, and
+3. `security-regression-qa`, `cluster-operations-qa`, `performance-regression-qa`, and
+   `mcp-protocol-compliance` cover runtime security, operations, performance, and
    protocol-specific regressions against the same live cluster.
 4. Audit skills use `../_shared/FINDINGS-TEMPLATE.md` so findings stay
    comparable across security, supply chain, Kubernetes, and protocol reviews.
 5. `release-readiness` composes CI parity, live cluster, browser, security,
    protocol, performance, docs, canary, and deployment evidence for merge,
    ship, canary, and release decisions.
-6. `repo-guidance-sync` checks whether code or behavior changes require docs,
+6. `documentation-sync` checks whether code or behavior changes require docs,
    AGENTS.md, runbook, or contributor guidance updates.
 7. `.codex/skills/scripts/validate_skill_evals.py` checks that every skill's
    eval and trigger prompt manifests stay structurally usable.
@@ -130,29 +130,29 @@ CI/test surface has an owning skill:
 
 | CI/test surface | Owning skill path | Coverage status |
 |---|---|---|
-| `gofmt`, `go vet`, `staticcheck` | `qa-e2e-operations` | CI parity gate for merge/release readiness |
-| Root unit tests and `test/integration` envtest | `qa-e2e-operations` | CI parity gate; envtest asset setup included |
-| Sentinel service module tests (`services/platform-api`, `services/runtime-api`, `services/analytics-api`, `ingest`, `processor`, `mcp-gateway`, `ui`) | `qa-e2e-operations` plus focused QA skills | CI parity gate plus live rollout checks |
-| CLI golden tests | `repo-guidance-sync`, `qa-e2e-operations`, `qa-e2e-ui` | Docs/help drift and UI-adjacent CLI changes |
-| `test/e2e/scenarios_test.sh` selector validation | `qa-e2e-operations` | CI parity gate covers scenario parsing edge cases |
-| QA E2E `all` plus cached `smoke-auth,governance` | `qa-cluster-bringup`, `qa-e2e-operations`, `qa-e2e-security`, `mcp-spec-compliance` | Full merge gate and targeted live regression gates |
-| Browser UI workflows and responsive checks | `qa-e2e-ui` | Browser evidence required; curl-only pass is blocked |
+| `gofmt`, `go vet`, `staticcheck` | `cluster-operations-qa` | CI parity gate for merge/release readiness |
+| Root unit tests and `test/integration` envtest | `cluster-operations-qa` | CI parity gate; envtest asset setup included |
+| Sentinel service module tests (`services/platform-api`, `services/runtime-api`, `services/analytics-api`, `ingest`, `processor`, `mcp-gateway`, `ui`) | `cluster-operations-qa` plus focused QA skills | CI parity gate plus live rollout checks |
+| CLI golden tests | `documentation-sync`, `cluster-operations-qa`, `dashboard-browser-qa` | Docs/help drift and UI-adjacent CLI changes |
+| `test/e2e/scenarios_test.sh` selector validation | `cluster-operations-qa` | CI parity gate covers scenario parsing edge cases |
+| QA E2E `all` plus cached `smoke-auth,governance` | `contributor-cluster-setup`, `cluster-operations-qa`, `security-regression-qa`, `mcp-protocol-compliance` | Full merge gate and targeted live regression gates |
+| Browser UI workflows and responsive checks | `dashboard-browser-qa` | Browser evidence required; curl-only pass is blocked |
 | Merge, ship, canary, and release readiness | `release-readiness` | Coordinates focused skills and gives one go/no-go/blocked decision |
-| Benchmarks under `test/benchmark` | `qa-e2e-operations`, `qa-e2e-perf` | CI benchmark plus live baseline comparison |
-| Generated CRD/manifests and Go package docs drift | `qa-e2e-operations`, `repo-guidance-sync` | Exact generator commands and `git diff --exit-code` |
-| Gitleaks, gosec, Trivy, dependency review | `security-audit`, `security-audit-platform`, `supply-chain-audit` | Security scan selection and supply-chain workflow audit |
+| Benchmarks under `test/benchmark` | `cluster-operations-qa`, `performance-regression-qa` | CI benchmark plus live baseline comparison |
+| Generated CRD/manifests and Go package docs drift | `cluster-operations-qa`, `documentation-sync` | Exact generator commands and `git diff --exit-code` |
+| Gitleaks, gosec, Trivy, dependency review | `change-security-audit`, `platform-security-audit`, `supply-chain-audit` | Security scan selection and supply-chain workflow audit |
 | Repository and operator image SBOMs | `supply-chain-audit` | SBOM generation/diff and image scan guidance |
-| Docs and website validation/deploy assumptions | `repo-guidance-sync` | Docs build, generated-doc drift, and stale guidance checks |
+| Docs and website validation/deploy assumptions | `documentation-sync` | Docs build, generated-doc drift, and stale guidance checks |
 
 Audit result: the skills can route all current CI/test surfaces, but they still
 do not enumerate every individual unit test case. That is intentional; the skill
 contract is to select and run the right suite, then add or update concrete tests
 when a behavior gap is found.
 
-For `qa-e2e-ui`, the current smoke coverage includes role-based navigation,
+For `dashboard-browser-qa`, the current smoke coverage includes role-based navigation,
 auth flows, key tabs, network/API evidence, console evidence, static assets,
 and responsive sanity. Full UI coverage is broader and lives in
-`qa-e2e-ui/references/ui-coverage.md`; it includes forms, filters, destructive
+`dashboard-browser-qa/references/ui-coverage.md`; it includes forms, filters, destructive
 actions, empty/error states, and public-host defenses. Destructive UI actions
 must use temporary `qa-audit-*` objects only.
 

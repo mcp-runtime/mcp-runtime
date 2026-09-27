@@ -1,0 +1,4 @@
+interface:
+  display_name: "Platform Security Audit"
+  short_description: "Deep platform-wide MCP Runtime security audit"
+  default_prompt: "Use $platform-security-audit to run a deep, repository-wide security audit of MCP Runtime — threat model, authn/authz matrix, tenant isolation, protocol fuzz, audit-log integrity, TLS hygiene, DAST, and full scanner pass."

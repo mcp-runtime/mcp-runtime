@@ -1,0 +1,21 @@
+{
+  "skill_name": "kubernetes-hardening-audit",
+  "queries": [
+    {
+      "query": "Audit the RBAC, service accounts, pod security labels, and NetworkPolicies in k8s/ after this manifest change.",
+      "should_trigger": true
+    },
+    {
+      "query": "Do a Kubernetes hardening review of the live contributor cluster namespaces.",
+      "should_trigger": true
+    },
+    {
+      "query": "Check if this Go handler validates request JSON correctly.",
+      "should_trigger": false
+    },
+    {
+      "query": "Update the docs for the setup command flags.",
+      "should_trigger": false
+    }
+  ]
+}

@@ -4,7 +4,7 @@
     {
       "id": "merge-readiness-for-code-change",
       "prompt": "Can this branch merge? It changes the operator, gateway policy, and CLI docs.",
-      "expected_output": "A release-readiness plan that scopes the diff, routes to qa-e2e-operations, security-audit or qa-e2e-security, and repo-guidance-sync, then reports required CI parity and live cluster gates before giving a go/no-go decision.",
+      "expected_output": "A release-readiness plan that scopes the diff, routes to cluster-operations-qa, change-security-audit or security-regression-qa, and documentation-sync, then reports required CI parity and live cluster gates before giving a go/no-go decision.",
       "assertions": [
         "Inspects branch status and changed surfaces before choosing checks",
         "Routes each surface to the relevant repo-local skill",
@@ -24,7 +24,7 @@
     {
       "id": "canary-after-ui-change",
       "prompt": "Run a canary readiness pass for a dashboard change before we promote it.",
-      "expected_output": "A canary-readiness pass that coordinates qa-e2e-ui browser evidence, qa-e2e-operations rollout and doctor checks, smoke-auth/governance traffic, changed image/version evidence, and rollback instructions.",
+      "expected_output": "A canary-readiness pass that coordinates dashboard-browser-qa browser evidence, cluster-operations-qa rollout and doctor checks, smoke-auth/governance traffic, changed image/version evidence, and rollback instructions.",
       "assertions": [
         "Requires browser evidence for UI-visible behavior",
         "Collects rollout, cluster doctor, and ingress traffic evidence",

@@ -18,6 +18,19 @@ export type InventoryItem = {
   labels?: Record<string, string>;
 };
 
+export type PromptArgument = {
+  name: string;
+  description?: string;
+  required?: boolean;
+};
+
+export type InventoryDetail = InventoryItem & {
+  source: "declared" | "live" | "both";
+  arguments?: PromptArgument[];
+  uri?: string;
+  mimeType?: string;
+};
+
 // GET /runtime/servers's liveInventory field
 // (services/runtime-api/internal/runtimeapi/live_inventory.go): what the
 // server itself reported the last time its live MCP session was inspected,
@@ -27,8 +40,8 @@ export type LiveInventory = {
   fetchedAt?: string;
   protocolVersion?: string;
   tools?: Array<{ name: string; description?: string }>;
-  prompts?: InventoryItem[];
-  resources?: InventoryItem[];
+  prompts?: Array<InventoryItem & { arguments?: PromptArgument[] }>;
+  resources?: Array<Partial<InventoryItem> & { uri?: string; mimeType?: string }>;
 };
 
 export type ObservabilityPrometheusQueryLink = {
@@ -36,6 +49,7 @@ export type ObservabilityPrometheusQueryLink = {
   name: string;
   description?: string;
   url: string;
+  grafana_url?: string;
   query?: string;
 };
 
@@ -138,19 +152,32 @@ export function serverKey(server: Pick<ServerSummary, "name" | "namespace">): st
   return `${server.namespace}/${server.name}`;
 }
 
-// Prompts and resources can be declared on the MCPServer spec, reported by
-// the server's own live MCP session, both, or neither - union by name so a
-// live-only or declared-only entry isn't dropped. Tasks have no live source,
-// so they're declared-only.
-function mergedInventoryNames(declared: InventoryItem[] | undefined, live: Array<{ name: string }> | undefined): string[] {
-  const names = new Set<string>();
+// Merge declared metadata with the last live MCP inventory probe. Prefer a
+// live description when one is available, while keeping declared labels.
+function mergedInventoryDetails(
+  declared: InventoryItem[] | undefined,
+  live: Array<Partial<InventoryItem> & { uri?: string; mimeType?: string; arguments?: PromptArgument[] }> | undefined
+): InventoryDetail[] {
+  const items = new Map<string, InventoryDetail>();
   for (const item of declared || []) {
-    names.add(item.name);
+    const name = item.name.trim();
+    if (name) items.set(name, { ...item, name, source: "declared" });
   }
   for (const item of live || []) {
-    names.add(item.name);
+    const name = item.name?.trim() || item.uri?.trim() || "";
+    if (!name) continue;
+    const current = items.get(name);
+    items.set(name, {
+      ...current,
+      name,
+      description: item.description?.trim() || current?.description,
+      arguments: item.arguments,
+      uri: item.uri,
+      mimeType: item.mimeType,
+      source: current ? "both" : "live",
+    });
   }
-  return Array.from(names).sort();
+  return [...items.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export type AuthModeInfo = {
@@ -194,15 +221,27 @@ export function authModeInfo(mode: string | undefined): AuthModeInfo {
 }
 
 export function serverPrompts(server: ServerSummary): string[] {
-  return mergedInventoryNames(server.prompts, server.liveInventory?.prompts);
+  return serverPromptDetails(server).map((item) => item.name);
 }
 
 export function serverResources(server: ServerSummary): string[] {
-  return mergedInventoryNames(server.resources, server.liveInventory?.resources);
+  return serverResourceDetails(server).map((item) => item.name);
 }
 
 export function serverTasks(server: ServerSummary): string[] {
-  return (server.tasks || []).map((item) => item.name).sort();
+  return serverTaskDetails(server).map((item) => item.name);
+}
+
+export function serverPromptDetails(server: ServerSummary): InventoryDetail[] {
+  return mergedInventoryDetails(server.prompts, server.liveInventory?.prompts);
+}
+
+export function serverResourceDetails(server: ServerSummary): InventoryDetail[] {
+  return mergedInventoryDetails(server.resources, server.liveInventory?.resources);
+}
+
+export function serverTaskDetails(server: ServerSummary): InventoryDetail[] {
+  return mergedInventoryDetails(server.tasks, undefined);
 }
 
 export function toolKey(tool: ToolRow): string {

@@ -82,7 +82,8 @@ func Run(cfg Config) error {
 	metricsShutdown, metricsErrs := serviceutil.StartMetricsServer(metricsPort)
 	log.Printf("%s listening on :%s", serviceName, port)
 
-	handler := otelhttp.NewHandler(serviceutil.LogRequests(cfg.Handler), "http.server")
+	requestMetrics := serviceutil.DefaultRequestMetrics()
+	handler := otelhttp.NewHandler(serviceutil.LogRequests(requestMetrics.Middleware(serviceName, cfg.Handler)), "http.server")
 	httpServer := NewHTTPServer(":"+port, handler)
 
 	shutdownSignals, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

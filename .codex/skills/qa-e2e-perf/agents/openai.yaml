@@ -1,4 +1,0 @@
-interface:
-  display_name: "QA — E2E Performance"
-  short_description: "Real-cluster perf regression: gateway latency, throughput, analytics, reconcile"
-  default_prompt: "Use $qa-e2e-perf to run a deterministic perf matrix (tools/call p95, concurrent throughput, analytics latency, operator burst reconcile) against the live Kind cluster and compare to a stored baseline (qa-cluster-bringup must have run)."

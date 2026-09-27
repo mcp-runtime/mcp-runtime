@@ -27,7 +27,6 @@
   {"service": "runtime-api", "path": "/api/v1/runtime/servers/default/demo", "method": "GET", "role": "anon", "expect": 401},
   {"service": "runtime-api", "path": "/api/v1/runtime/server-events", "method": "GET", "role": "anon", "expect": 401},
   {"service": "runtime-api", "path": "/api/v1/runtime/observability/links", "method": "GET", "role": "anon", "expect": 401},
-  {"service": "runtime-api", "path": "/api/v1/runtime/observability/grafana/dashboard", "method": "GET", "role": "anon", "expect": 401},
   {"service": "runtime-api", "path": "/api/v1/runtime/observability/prometheus/query", "method": "GET", "role": "anon", "expect": 401},
   {"service": "runtime-api", "path": "/api/v1/runtime/teams", "method": "GET", "role": "anon", "expect": 401},
   {"service": "runtime-api", "path": "/api/v1/runtime/teams/core/agents", "method": "GET", "role": "anon", "expect": 401},

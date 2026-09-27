@@ -161,7 +161,7 @@ func main() {
 		Handler:     mux,
 		OnShutdown: func(context.Context) error {
 			if store != nil {
-				store.Close()
+				return store.Close()
 			}
 			return nil
 		},

@@ -92,7 +92,6 @@ func (rr runtimeRoutes) registerRoutes(mux *http.ServeMux) {
 		runtimehandlers.HandleRuntimeServerEvents(runtimeServer, w, r)
 	})))
 	rr.mount("/runtime/observability/links", rr.auth(http.HandlerFunc(runtimeServer.HandleRuntimeObservabilityLinks)))
-	rr.mount("/runtime/observability/grafana/dashboard", rr.auth(http.HandlerFunc(runtimeServer.HandleRuntimeObservabilityGrafanaDashboard)))
 	rr.mount("/runtime/observability/prometheus/query", rr.auth(http.HandlerFunc(runtimeServer.HandleRuntimeObservabilityPrometheusQuery)))
 	rr.mount("/runtime/teams", rr.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		runtimehandlers.HandleRuntimeTeams(runtimeServer, w, r)

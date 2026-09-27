@@ -420,7 +420,6 @@ DELETE /api/v1/runtime/sessions/{namespace}/{name} # Delete one MCPAgentSession
 POST /api/v1/runtime/adapter/sessions     # Issue/reuse an adapter MCPAgentSession for a human/user principal
 POST /api/v1/runtime/adapter/certificates # Sign an adapter CSR for an owned session (mTLS enrollment)
 GET  /api/v1/runtime/observability/links  # Scoped Prometheus/Grafana links for one server
-GET  /api/v1/runtime/observability/grafana/dashboard  # Scoped Grafana dashboard for one server
 GET  /api/v1/runtime/observability/prometheus/query   # Allowlisted PromQL query IDs for one server
 GET  /api/v1/runtime/teams                # Admin: all teams; user: caller memberships
 POST /api/v1/runtime/teams                # Admin-only team + namespace provisioning
@@ -488,7 +487,10 @@ cache miss or probe failure, `liveInventory` is `null` and
 `liveInventoryError` contains a short reason. For HTTP identity-authenticated
 servers, probes use the server's configured `spec.auth.humanIDHeader` and
 `spec.auth.agentIDHeader`; mTLS probes authenticate with their client
-certificate. `DELETE /api/v1/runtime/servers/{namespace}/{name}` retires a server and frees one
+certificate. The Servers workspace combines declared and probed prompts and
+resources by name, then shows their descriptions, prompt arguments, resource
+URIs, media types, and labels in expandable server details. Tasks use declared
+metadata only. `DELETE /api/v1/runtime/servers/{namespace}/{name}` retires a server and frees one
 active-server slot for the owning publisher. The active-server limit is
 enforced by runtime-api before Kubernetes apply; strict serialization of
 concurrent publishes would require a shared reservation or admission-control

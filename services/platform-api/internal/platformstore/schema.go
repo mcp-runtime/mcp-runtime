@@ -67,12 +67,14 @@ ALTER TABLE IF EXISTS namespaces
 CREATE UNIQUE INDEX IF NOT EXISTS uq_namespaces_active ON namespaces(namespace) WHERE deleted_at IS NULL;
 CREATE TABLE IF NOT EXISTS teams (
   id uuid primary key,
-  slug text unique not null,
+  slug text not null,
   display_name text not null,
   created_by uuid references users(id),
   created_at timestamptz not null default now(),
   deleted_at timestamptz
 );
+ALTER TABLE IF EXISTS teams
+  DROP CONSTRAINT IF EXISTS teams_slug_key;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_teams_slug_active ON teams(slug) WHERE deleted_at IS NULL;
 ALTER TABLE namespaces
   DROP CONSTRAINT IF EXISTS namespaces_team_id_fkey;
