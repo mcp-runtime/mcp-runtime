@@ -820,6 +820,30 @@ func desiredDefaultDenyNetworkPolicy(ns string, ingressFromNamespaces ...string)
 			},
 		},
 	}
+	// OAuth resource servers discover the public issuer through the platform's
+	// ingress controller. Permit HTTPS to that controller, not general Internet
+	// access. Include the Service and target ports for CNI implementations that
+	// enforce policy before or after Service destination translation.
+	for _, ingressNamespace := range ingressFromNamespaces {
+		ingressNamespace = strings.TrimSpace(ingressNamespace)
+		if ingressNamespace == "" {
+			continue
+		}
+		peers := make([]networkingv1.NetworkPolicyPeer, 0, 2)
+		for _, label := range []string{"app.kubernetes.io/name", "app"} {
+			peers = append(peers, networkingv1.NetworkPolicyPeer{
+				NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"kubernetes.io/metadata.name": ingressNamespace}},
+				PodSelector:       &metav1.LabelSelector{MatchLabels: map[string]string{label: "traefik"}},
+			})
+		}
+		policy.Spec.Egress = append(policy.Spec.Egress, networkingv1.NetworkPolicyEgressRule{
+			To: peers,
+			Ports: []networkingv1.NetworkPolicyPort{
+				{Protocol: &tcpProtocol, Port: intstrPtr(443)},
+				{Protocol: &tcpProtocol, Port: intstrPtr(8443)},
+			},
+		})
+	}
 	return policy
 }
 
