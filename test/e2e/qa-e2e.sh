@@ -5759,7 +5759,9 @@ if scenario_selected "governance"; then
 
   ./bin/mcp-runtime access --use-kube session revoke "${ADAPTER_SESSION_NAME}" --namespace mcp-servers
   wait_for_policy_text "\"revoked\": true" "${SERVER_NAME}"
-  wait_for_mcp_tool_result "${MCP_SESSION_URL}" "aaa-ping" '{}' 401 "session_revoked"
+  # Revocation is enforced during MCP initialize for the certificate-bound
+  # session, before a tools/call can be sent. Assert the early denial directly.
+  wait_for_mcp_initialize_result "${MCP_SESSION_URL}" 401 "session_revoked"
 
   log_line policy "restoring adapter session; mtls path should allow again"
   ./bin/mcp-runtime access --use-kube session unrevoke "${ADAPTER_SESSION_NAME}" --namespace mcp-servers
