@@ -37,6 +37,15 @@ explicitly for production commands, never as the default kubeconfig.
 
 For public k3s / `mcpruntime.org` deploys, also read `.codex/skills/production-operations/SKILL.md` and `docs/cluster-readiness.md`.
 
+For production incidents, inspect metrics, aggregated logs, and traces at
+`https://platform.mcpruntime.org/grafana` for a shared incident window.
+Read private credentials from `~/.mcpruntime/infra.env` without displaying
+them. Check collection coverage and correlate request/trace IDs with client
+logs. Follow the [production observability workflow](../../../docs/k3s-deployment-runbook.md#production-observability-and-debugging).
+Find or create an actionable repository ticket for each concrete
+maintainability or debugging gap and attach it to
+[Maintainability and Debuggability Improvement](https://github.com/orgs/mcp-runtime/projects/1).
+
 ## Full checklist
 
 Read **[reference.md](reference.md) end-to-end** before diagnosing (ingress, registry, cert-manager, ImagePullBackOff, UI redirect loops, registry push timeouts, k3s NetworkPolicy, duplicate Traefik, and more). Public TLS/DNS detail: `public-platform-configuration` skill.

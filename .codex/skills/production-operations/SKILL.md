@@ -58,6 +58,16 @@ KUBECONFIG="$PROD_KUBECONFIG" ./bin/mcp-runtime cluster doctor
 
 ## Non-Negotiables
 
+- For production debugging, inspect Prometheus metrics, Loki logs, and Tempo
+  traces at `https://platform.mcpruntime.org/grafana` for the same incident
+  window. Load private credentials from `~/.mcpruntime/infra.env` without
+  displaying them. Verify coverage, freshness, and request/trace correlation;
+  do not infer health from missing telemetry. Follow the
+  [production observability workflow](../../../docs/k3s-deployment-runbook.md#production-observability-and-debugging).
+  For each concrete maintainability or debugging gap, find or create an
+  evidence-based repository issue and attach it to
+  [Maintainability and Debuggability Improvement](https://github.com/orgs/mcp-runtime/projects/1).
+
 - Manage supported operations through the CLI and platform UI. If team,
   publishing, deployment, access, update, or cleanup commands fail, reproduce
   the failure, add regression tests, fix the product path, open a focused PR,
