@@ -77,7 +77,7 @@ func setupMTLS(ctx context.Context, client *platformapi.PlatformClient, flags pl
 	}
 	tlsCfg := &tls.Config{
 		RootCAs:            pool,
-		InsecureSkipVerify: insecure, //nolint:gosec // inherits opt-in local Kind flag
+		InsecureSkipVerify: insecure, // #nosec G402 -- inherits opt-in local Kind --tls-insecure
 		GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
 			return r.cert.Load(), nil
 		},

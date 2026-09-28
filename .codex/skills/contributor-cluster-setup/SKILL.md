@@ -113,6 +113,11 @@ MCP_SETUP_WAIT_TIMEOUT=900 \
   --ingress-manifest config/ingress/overlays/http
 ```
 
+CI QA E2E can skip rebuilding unchanged platform images via content-hash
+tags on GHCR (`E2E_IMAGE_CACHE=1`, `MCP_SETUP_IMAGE_CACHE=1`,
+`E2E_GHCR_PUSH=1`). Local bring-up leaves those unset and builds as usual.
+See `docs/internals/tests.md` (Content-hash GHCR image cache).
+
 In **reuse** mode, skip `kind create`; still run `make build` (CLI may be
 stale) and `bootstrap`. Skip `setup` only if `cluster doctor` already
 reports a healthy install; otherwise rerun setup so manifests catch up to

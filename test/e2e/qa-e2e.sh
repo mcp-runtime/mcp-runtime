@@ -137,6 +137,9 @@ OAUTH_AGENT_ID="${OAUTH_AGENT_ID:-oauth-client}"
 OAUTH_SESSION_ID="${OAUTH_SESSION_ID:-oauth-session-1}"
 OAUTH_ISSUER_NAME="${OAUTH_ISSUER_NAME:-oauth-issuer}"
 OAUTH_ISSUER_URL="${OAUTH_ISSUER_URL:-}"
+# DNS form for oauth MCPServers before the mock issuer ClusterIP exists.
+# The oauth scenario may replace OAUTH_ISSUER_URL with the Service ClusterIP.
+E2E_OAUTH_ISSUER_URL="${E2E_OAUTH_ISSUER_URL:-http://${OAUTH_ISSUER_NAME}.mcp-servers.svc.cluster.local:8080}"
 TRAEFIK_PORT="${TRAEFIK_PORT:-18080}"
 TRAEFIK_TLS_PORT="${TRAEFIK_TLS_PORT:-18443}"
 OAUTH_AUDIENCE_CONFIGURED="${OAUTH_AUDIENCE:+1}"
@@ -1507,6 +1510,8 @@ servers:
       - {name: upper, requiredTrust: low, sideEffect: read}
     auth:
       mode: oauth
+      issuerURL: ${E2E_OAUTH_ISSUER_URL}
+      audience: http://127.0.0.1:${TRAEFIK_PORT}/${server}/mcp
     policy:
       mode: allow-list
       defaultDecision: deny
@@ -3668,13 +3673,13 @@ build_and_publish_image() {
   local image="$1"
   local dockerfile="$2"
   local context_dir="$3"
+  local repo_root
+  repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-  # Do not use the local mirror as a cache for images built from this checkout.
-  # When setup runs, the platform was not ready (or needed reconfiguration),
-  # and reusing a matching :latest tag can deploy code from an older checkout.
-  # Docker's layer cache still avoids repeating unchanged build work.
-  echo "[image] building ${image}"
-  docker build -t "${image}" -f "${dockerfile}" "${context_dir}"
+  # Content-hash GHCR cache (when E2E_IMAGE_CACHE=1): pull unchanged components;
+  # build and optionally push on miss. When cache is off the helper builds locally.
+  echo "[image] ensuring ${image}"
+  (cd "${repo_root}" && go run ./hack/e2e-image-cache ensure --image "${image}" --dockerfile "${dockerfile}" --context "${context_dir}" --root "${repo_root}")
   publish_image_to_local_registry "${image}"
 }
 
@@ -6777,6 +6782,8 @@ spec:
       sideEffect: read
   auth:
     mode: oauth
+    issuerURL: ${E2E_OAUTH_ISSUER_URL}
+    audience: http://${SERVER_HOST}/${prefix}/mcp
   policy:
     mode: allow-list
     defaultDecision: deny
