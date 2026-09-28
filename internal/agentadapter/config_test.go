@@ -5,6 +5,7 @@ import (
 	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,6 +24,23 @@ func TestLoadProxyConfigRequiresRuntimeIdentityAndSession(t *testing.T) {
 		if !strings.Contains(err.Error(), name) {
 			t.Fatalf("loadProxyConfig() error = %q, missing %s", err, name)
 		}
+	}
+}
+
+func TestProxyConfigAllowsCertificateDerivedIdentityWithoutHeaders(t *testing.T) {
+	t.Parallel()
+
+	runtimeURL, err := url.Parse("https://localhost:8443/demo/mcp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := ProxyConfig{RuntimeURL: runtimeURL, IdentityFromCertificate: true}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v, want certificate-derived identity to satisfy auth", err)
+	}
+	cfg.RuntimeURL = nil
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), EnvRuntimeURL) {
+		t.Fatalf("Validate() error = %v, want missing runtime URL", err)
 	}
 }
 

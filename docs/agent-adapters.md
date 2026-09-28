@@ -153,8 +153,10 @@ mcp-runtime adapter proxy
 use. With `--server`, missing fields are populated from the issued response.
 
 With `--auth mtls`, governance identity is the session-bound client
-certificate (not request headers). Set `MCP_RUNTIME_AUTH_HEADER` when the
-MCP server expects a Bearer token for OAuth.
+certificate (not request headers), so human, agent, team, and session identity
+header flags are not required. The proxy still strips spoofed identity headers
+from inbound requests. Set `MCP_RUNTIME_AUTH_HEADER` when the MCP server
+expects a Bearer token for OAuth.
 
 `adapter proxy` is a reverse proxy: it **forwards the client's request
 headers** to the runtime (including MCP protocol headers such as

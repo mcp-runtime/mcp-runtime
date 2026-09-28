@@ -189,15 +189,16 @@ func (f identityFlags) toProxyConfig(listenAddr string) (agentadapter.ProxyConfi
 		listen = agentadapter.DefaultListenAddr
 	}
 	return agentadapter.ProxyConfig{
-		RuntimeURL:        r.runtimeURL,
-		Identity:          r.identity,
-		Transport:         r.transport,
-		HostHeader:        r.hostHeader,
-		ListenAddr:        listen,
-		ProtocolVersion:   r.protocolVersion,
-		LogLevel:          r.logLevel,
-		DisableXForwarded: f.disableXFF,
-		MaxInboundBytes:   f.maxInboundBytes,
+		RuntimeURL:              r.runtimeURL,
+		Identity:                r.identity,
+		IdentityFromCertificate: f.mtlsEnabled(),
+		Transport:               r.transport,
+		HostHeader:              r.hostHeader,
+		ListenAddr:              listen,
+		ProtocolVersion:         r.protocolVersion,
+		LogLevel:                r.logLevel,
+		DisableXForwarded:       f.disableXFF,
+		MaxInboundBytes:         f.maxInboundBytes,
 	}, nil
 }
 

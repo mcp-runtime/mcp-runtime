@@ -56,15 +56,19 @@ type envLookup func(string) string
 // ProxyConfig configures the local HTTP reverse-proxy adapter that exposes
 // Streamable HTTP MCP to an agent SDK.
 type ProxyConfig struct {
-	RuntimeURL        *url.URL
-	Identity          Identity
-	Transport         *RuntimeTransport
-	HostHeader        string
-	ListenAddr        string
-	ProtocolVersion   string
-	LogLevel          string
-	LogWriter         io.Writer
-	DisableXForwarded bool
+	RuntimeURL *url.URL
+	Identity   Identity
+	// IdentityFromCertificate allows the proxy to omit governance identity
+	// headers because the runtime derives the caller from a verified client
+	// certificate instead. The CLI sets this for its mTLS auth mode.
+	IdentityFromCertificate bool
+	Transport               *RuntimeTransport
+	HostHeader              string
+	ListenAddr              string
+	ProtocolVersion         string
+	LogLevel                string
+	LogWriter               io.Writer
+	DisableXForwarded       bool
 	// MaxInboundBytes caps the size of JSON-RPC request bodies the proxy
 	// buffers when capturing metadata. Zero (or negative) means use
 	// DefaultMaxInboundBytes (16 MiB). Over-cap requests respond with 413.
@@ -218,6 +222,12 @@ func parseNonNegativeBytes(s string) (int64, error) {
 
 // Validate enforces the runtime identity invariants for the HTTP proxy.
 func (cfg ProxyConfig) Validate() error {
+	if cfg.IdentityFromCertificate {
+		if cfg.RuntimeURL == nil {
+			return fmt.Errorf("missing required environment variable: %s", EnvRuntimeURL)
+		}
+		return nil
+	}
 	return validateRequiredIdentity(cfg.RuntimeURL, cfg.Identity)
 }
 

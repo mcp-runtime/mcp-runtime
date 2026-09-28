@@ -21,8 +21,9 @@ func newProxyCmd(_ *core.Runtime) *cobra.Command {
 		Use:   "proxy",
 		Short: "Run a local Streamable HTTP MCP proxy that forwards to the runtime",
 		Long: `Start a local HTTP listener that accepts Streamable HTTP MCP traffic from an
-agent SDK and forwards each request to the configured platform runtime route,
-injecting the issued governance identity headers.
+agent SDK and forwards each request to the configured platform runtime route.
+Header mode forwards the issued governance identity headers. mTLS mode uses a
+session-bound SPIFFE client certificate and omits those headers.
 
 Configure identity via flags or the matching MCP_RUNTIME_* environment
 variables. Flags win when both are set. With --server, the adapter fetches

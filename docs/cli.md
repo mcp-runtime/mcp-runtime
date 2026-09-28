@@ -543,7 +543,6 @@ mcp-runtime adapter proxy \
   --runtime-url https://mcp.mcpruntime.org/workspace-demo/mcp \
   --server workspace-demo \
   --agent cursor \
-  --agent-id cursor \
   --auth mtls \
   --auto-refresh \
   --listen 127.0.0.1:8099
@@ -553,7 +552,6 @@ mcp-runtime adapter stdio \
   --runtime-url https://mcp.mcpruntime.org/workspace-demo/mcp \
   --server workspace-demo \
   --agent cursor \
-  --agent-id cursor \
   --auth mtls \
   --auto-refresh
 ```

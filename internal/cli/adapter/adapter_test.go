@@ -108,6 +108,25 @@ func TestIdentityFlagsToProxyConfigParsesTeamAndTimeout(t *testing.T) {
 	}
 }
 
+func TestIdentityFlagsToProxyConfigAllowsCertificateIdentity(t *testing.T) {
+	t.Parallel()
+
+	flags := identityFlags{
+		runtimeURL: "https://localhost:8443/demo/mcp",
+		authMode:   "mtls",
+	}
+	cfg, err := flags.toProxyConfig("")
+	if err != nil {
+		t.Fatalf("toProxyConfig() error = %v", err)
+	}
+	if !cfg.IdentityFromCertificate {
+		t.Fatal("IdentityFromCertificate = false, want true for mTLS")
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v, want certificate-derived identity to satisfy auth", err)
+	}
+}
+
 func TestIdentityFlagsToConfigRejectsBadTimeout(t *testing.T) {
 	t.Parallel()
 
