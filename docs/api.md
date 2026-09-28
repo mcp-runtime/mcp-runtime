@@ -340,10 +340,12 @@ sequenceDiagram
 
 Adapters must also present a session-bound client certificate. Traefik verifies
 it before forwarding; the gateway resolves the certificate's SPIFFE identity
-to the rendered agent session and binds the session human to the OAuth subject.
-Direct clients use OAuth without a certificate. Set
-`MCP_ADAPTER_CERTIFICATES=true` with platform-wide `MCP_MTLS_CLUSTER_ISSUER`
-and `MCP_TRUST_DOMAIN` to enable adapter enrollment.
+to the rendered agent session. On OAuth-enabled targets it also binds the
+session human to the OAuth subject. Direct clients use OAuth without a
+certificate only when the server configures `spec.auth`; omit `spec.auth` for
+cert-only governed routes. Set `MCP_ADAPTER_CERTIFICATES=true` with
+platform-wide `MCP_MTLS_CLUSTER_ISSUER` and `MCP_TRUST_DOMAIN` to enable
+adapter enrollment.
 
 ## Dashboard API
 

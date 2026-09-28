@@ -514,12 +514,14 @@ fixed deadline is more appropriate than a duration.
 
 > Full guide: [Agent adapters](agent-adapters.md)
 
-The adapter forwards the local MCP client's OAuth bearer token and identifies
-its enrolled session with a client certificate. Use `adapter enroll` to save one under
+The adapter identifies its enrolled session with a client certificate. When the
+target configures OAuth (`spec.auth`), it also forwards the local MCP client's
+bearer token. Use `adapter enroll` to save a certificate under
 `MCP_RUNTIME_CONFIG_DIR/certs` (default `~/.mcpruntime/certs`), or let `proxy`
-enroll one in memory at startup with `--server` and `--agent`. The
-gateway derives session identity from the verified certificate and requires its
-human identity to match the OAuth subject. Governance identity headers are not supported.
+enroll one in memory at startup with `--server` and `--agent`. The gateway
+derives session identity from the verified certificate and, on OAuth-enabled
+targets, requires its human identity to match the OAuth subject. Governance
+identity headers are not supported.
 
 The platform issues certificates only when an enabled `MCPAccessGrant` matches the server, signed-in user, and agent. Apply the grant first with `access grant apply`.
 

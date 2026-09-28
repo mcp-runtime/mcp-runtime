@@ -135,9 +135,10 @@ To check the applied policy, use the gateway endpoints:
 
 The agent adapter is a helper process for frameworks and IDEs. `mcp-runtime
 adapter proxy` accepts local Streamable HTTP MCP traffic and authenticates to
-the governed runtime route with OAuth plus a session-bound client certificate.
-The gateway validates the bearer token, derives the enrolled session identity
-from the certificate, and requires the human identities to match.
+the governed runtime route with a session-bound client certificate. The gateway
+derives the enrolled session identity from the verified certificate. When the
+target configures `spec.auth`, the adapter also forwards the OAuth bearer and
+the gateway requires the token subject to match the session human.
 
 With `--server <MCPServer name> --agent <id>`, the adapter creates or reuses an
 `MCPAgentSession` through `POST /api/v1/runtime/adapter/sessions`, then submits

@@ -139,3 +139,158 @@ When the target enables OAuth, the gateway also rejects requests that lack a
 bearer token or whose OAuth subject does not match the certificate's enrolled
 session. When OAuth is omitted, the verified certificate alone authenticates
 the adapter.
+
+## Enterprise mTLS and SPIFFE
+
+To authenticate adapters with session-bound client certificates, install
+cert-manager and an internal `ClusterIssuer` backed by your company CA, Vault,
+ADCS, or another workload PKI. Do not use Let's Encrypt for client certificates.
+
+Local `setup --test-mode` installs cert-manager and provisions the bundled
+`mcp-runtime-ca` ClusterIssuer automatically so this flow can be validated on
+Kind without public DNS or a production CA.
+
+```bash
+mcp-runtime setup \
+  --with-tls \
+  --tls-cluster-issuer letsencrypt-prod \
+  --mtls-cluster-issuer company-workload-ca
+```
+
+Adapter certificate authentication on **gateway** server routes is opt-in: set
+`MCP_ADAPTER_CERTIFICATES=true` for setup (it passes it to the operator) in
+addition to naming a workload issuer with `--mtls-cluster-issuer`. Enabling it
+moves every gateway-enabled server that uses the Traefik ingress class from a
+plain Ingress to a Traefik IngressRoute, and puts the gateway behind an mTLS hop
+that only Traefik can reach; servers are then no longer reachable directly on
+their Service. It requires `--with-tls` because Traefik terminates client TLS;
+the IngressRoute uses the operator's configured ingress entrypoints (`websecure`
+when none are set). `--tls-cluster-issuer` controls public ingress and registry
+certificates and is separate from the workload issuer. Set `MCP_TRUST_DOMAIN` to
+the platform's SPIFFE trust domain. Production must configure both
+`MCP_TRUST_DOMAIN` and `MCP_SETUP_MTLS_CLUSTER_ISSUER`; test mode defaults the
+issuer to `mcp-runtime-ca`.
+
+OAuth is independent. Omit `spec.auth` for a cert-only governed route; add
+`spec.auth` only when direct clients (or adapters calling an OAuth-enabled
+target) need a bearer. Do not apply empty `auth: {}` unless you intend to turn
+OAuth on via the derived issuer.
+
+```yaml
+# Cert-only (adapters present the session certificate; no bearer required)
+spec:
+  ingressHost: mcp.mcpruntime.org
+  publicPathPrefix: workspace-assistant
+  ingressClass: traefik
+  gateway:
+    enabled: true
+  # omit auth
+
+# Optional OAuth on the same certificate-capable route
+spec:
+  ingressHost: mcp.mcpruntime.org
+  publicPathPrefix: workspace-assistant
+  ingressClass: traefik
+  gateway:
+    enabled: true
+  auth:
+    mode: oauth
+    issuerURL: https://auth.mcpruntime.org
+    audience: https://mcp.mcpruntime.org/workspace-assistant/mcp
+```
+
+**How termination works.** Traefik verifies a presented adapter client
+certificate against the platform workload CA, asserts the verified SPIFFE
+identity to the gateway, and re-encrypts over a second mTLS hop. Client-supplied
+`X-MCP-*` identity headers are not trusted. Ordinary OAuth clients without a
+client certificate continue with Bearer only on OAuth-enabled servers. The
+operator generates the Traefik `TLSOption` (`VerifyClientCertIfGiven`), the
+`spiffe-identity` middleware, a `ServersTransport` (re-encrypted hop with a
+pinned ingress certificate), and a path-based `IngressRoute`. A
+`NetworkPolicy` restricts the gateway port to the ingress so the SPIFFE
+assertion cannot be forged by another pod, and the gateway requires a
+verified mTLS hop before trusting that assertion.
+
+The caller-facing server certificate for the route is published as Traefik's
+**default certificate** via a single `TLSStore` named `default`, not a
+per-IngressRoute `secretName` (Traefik resolves `secretName` only in the
+IngressRoute's own tenant namespace, where the shared platform host certificate
+does not exist). Configure the operator with `MCP_DEFAULT_INGRESS_TLS_SECRET`
+(the host certificate Secret) and `MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE` (a
+Traefik-watched namespace holding that Secret); the operator then reconciles the
+one `default` TLSStore there. When unset, Traefik falls back to its built-in
+default certificate.
+
+**Kind contributor cluster.** Adapter-certificate IngressRoutes are
+websecure-only. Port-forward both Traefik ports and probe HTTPS with an
+insecure TLS skip for the local default cert:
+
+```bash
+kubectl port-forward -n traefik svc/traefik 18080:8000 18443:8443
+# Platform / plain Ingress samples: http://127.0.0.1:18080/...
+# Adapter-certificate MCP routes: https://127.0.0.1:18443/<publicPathPrefix>/mcp
+```
+
+Enroll an external adapter after signing in to the platform:
+
+```bash
+mcp-runtime adapter enroll \
+  --platform-url https://platform.mcpruntime.org \
+  --server workspace-assistant \
+  --namespace mcp-servers \
+  --agent cursor \
+  --trust-domain mcpruntime.org
+```
+
+The command generates `client.key` locally and submits only a CSR. The platform
+checks that the SPIFFE URI identifies a session owned by the signed-in
+principal, then returns short-lived `client.crt` and `ca.crt` under
+`MCP_RUNTIME_CONFIG_DIR/certs` (normally `~/.mcpruntime/certs`).
+`--platform-url` takes scheme and host with no `/api` path, and defaults to the
+URL saved by `auth login` or `$MCP_PLATFORM_API_URL`. Because enrollment is
+session-bound, the grant prerequisite above applies here too.
+
+```bash
+mcp-runtime adapter proxy \
+  --runtime-url https://mcp.mcpruntime.org/workspace-assistant/mcp \
+  --tls-client-cert ~/.mcpruntime/certs/<scope>/client.crt \
+  --tls-client-key ~/.mcpruntime/certs/<scope>/client.key \
+  --tls-ca-bundle ~/.mcpruntime/certs/<scope>/ca.crt
+```
+
+### One-command mode
+
+Pass `--server` and `--agent` to `adapter proxy` so it enrolls a session-bound
+certificate in memory at startup (nothing is written to disk) and feeds it
+straight to the runtime transport:
+
+```bash
+mcp-runtime adapter proxy \
+  --runtime-url https://mcp.mcpruntime.org/workspace-assistant/mcp \
+  --platform-url https://platform.mcpruntime.org \
+  --server workspace-assistant \
+  --namespace mcp-servers \
+  --agent cursor \
+  --trust-domain mcpruntime.org \
+  --auto-refresh
+```
+
+In-memory enrollment requires an `https` `--runtime-url` and the same
+`--server`/`--agent` inputs as `enroll` (the certificate's SPIFFE URI encodes
+the issued session). With `--auto-refresh`, the adapter re-enrolls a fresh
+certificate a few minutes before the session expires and drains idle
+connections so subsequent requests renegotiate with it. Long-running adapters
+keep working without restarts. To reuse `enroll` output instead of in-memory
+enrollment, pass the `--tls-client-cert`/`-key`/`-ca-bundle` files.
+
+Adapters authenticate with the session-bound certificate; grant and session
+policy authorize that identity. On OAuth-enabled targets they also forward the
+bearer and the gateway binds the certificate session human to the OAuth
+subject. Existing MCPServer resources using the removed `auth.mode: mtls` must
+omit `spec.auth` for cert-only routes or set `auth.mode: oauth` with
+`issuerURL` and `audience` when OAuth is required. Set platform-wide
+`MCP_TRUST_DOMAIN` and `MCP_MTLS_CLUSTER_ISSUER` to enable adapter enrollment;
+test-mode defaults the issuer to `mcp-runtime-ca`.
+
+The gateway derives adapter governance identity from the verified SPIFFE URI
+and the operator-rendered session binding.

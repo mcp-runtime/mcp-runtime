@@ -172,10 +172,12 @@ the deployment image to the same ref, and wait for rollout.
 
 ```bash
 pgrep -f 'port-forward.*svc/traefik' >/dev/null \
-  || kubectl port-forward -n traefik svc/traefik 18080:8000 \
+  || kubectl port-forward -n traefik svc/traefik 18080:8000 18443:8443 \
        >/tmp/mcp-runtime-traefik-pf.log 2>&1 &
 
 curl -fsS -o /dev/null http://localhost:18080/ && echo "dashboard reachable"
+# Adapter-certificate MCP routes (when MCP_ADAPTER_CERTIFICATES=true):
+#   https://127.0.0.1:18443/<publicPathPrefix>/mcp  (use -k for local default cert)
 ```
 
 ## Step 7 — Deploy the bundled Go MCP example

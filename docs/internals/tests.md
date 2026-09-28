@@ -113,10 +113,17 @@ fail sooner than the local default of 90, and `MCP_HTTP_TIMEOUT=15` so Traefik
 504/502 retries on the ingress path recover faster than the local 30s default.
 
 QA E2E deploys a single primary MCP server (`policy-mcp-server`) for most PR
-paths. CI sets `E2E_MAX_MCP_SERVERS=2` so multitenancy can reuse that server as
+paths. That primary omits `spec.auth` so adapter-certificate and grant/deny
+checks exercise cert-first identity; do not apply empty `auth: {}` (that turns
+OAuth on via the derived issuer and changes expected `401` reason codes). CI
+sets `E2E_MAX_MCP_SERVERS=2` so multitenancy can reuse that server as
 tenant-a and deploy only `mt-tenant-b` as the second workload. The older
 data-utility, text-analysis, and workspace-assistant sample deploys are not used
 anymore; ingress checks exercise multiple tools on the primary server instead.
+When `MCP_ADAPTER_CERTIFICATES=true`, adapter and DIRECT/header-proxy probes use
+Traefik `websecure` at `https://127.0.0.1:18443/...` (insecure TLS skip for the
+local default cert); plain Ingress and platform routes stay on
+`http://127.0.0.1:18080/...`.
 Set `E2E_MAX_MCP_SERVERS=0` locally for unlimited servers during full
 `E2E_SCENARIOS=all` pre-release runs.
 

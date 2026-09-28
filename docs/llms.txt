@@ -11,7 +11,7 @@
 ## Developer guide
 
 - Publish an MCP Server: https://docs.mcpruntime.org/publish-mcp-server/ — Write metadata, build and push a Docker image, deploy, verify reconciliation, observe traffic.
-- Agent Adapter: https://docs.mcpruntime.org/agent-adapters/ — OAuth plus certificate Streamable HTTP proxy, enrollment, and environment variables.
+- Agent Adapter: https://docs.mcpruntime.org/agent-adapters/ — Session-bound SPIFFE certificate Streamable HTTP proxy (OAuth optional when the target enables it), enrollment, and environment variables.
 - Multi-Team Isolation: https://docs.mcpruntime.org/multi-team/ — Namespace-per-team, RBAC, NetworkPolicy, team fields on MCPServer/Grant/Session, cross-team access patterns.
 
 ## Learning path (structured modules)

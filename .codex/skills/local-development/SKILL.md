@@ -1,6 +1,6 @@
 ---
 name: local-development
-description: Local Kind contributor endpoints, API keys, test-mode logins, port-forward URLs, and Sentinel auth for MCP Runtime. Use when developing against the `mcp-runtime` Kind cluster with `test-mcp-runtime` context, curling `/api/v1` or MCP paths on localhost:18080, or debugging 401s in test-mode — after cluster bring-up (contributor-cluster-setup).
+description: Local Kind contributor endpoints, API keys, test-mode logins, port-forward URLs, and Sentinel auth for MCP Runtime. Use when developing against the `mcp-runtime` Kind cluster with `test-mcp-runtime` context, curling `/api/v1` or MCP paths on localhost:18080 (plain Ingress) or https://localhost:18443 (adapter-certificate IngressRoute), or debugging 401s in test-mode — after cluster bring-up (contributor-cluster-setup).
 ---
 
 # Local Development
@@ -15,7 +15,7 @@ On a fresh workstation, create the isolated test kubeconfig using
 production kubeconfig for test-mode setup.
 
 ```bash
-kubectl port-forward -n traefik svc/traefik 18080:8000
+kubectl port-forward -n traefik svc/traefik 18080:8000 18443:8443
 ```
 
 ## URLs (test-mode)
@@ -25,7 +25,8 @@ kubectl port-forward -n traefik svc/traefik 18080:8000
 | UI | `http://localhost:18080/` |
 | API | `http://localhost:18080/api/v1` |
 | Grafana | `http://localhost:18080/grafana` |
-| MCP samples | `http://localhost:18080/oauth-example-go-2025-11-25-gateway/mcp`, `…/example-python-2025-11-25-gateway/mcp`, `…/example-rust-2025-11-25-gateway/mcp` |
+| MCP samples (plain Ingress) | `http://localhost:18080/oauth-example-go-2025-11-25-gateway/mcp`, `…/example-python-2025-11-25-gateway/mcp`, `…/example-rust-2025-11-25-gateway/mcp` |
+| Adapter-certificate MCP routes | `https://localhost:18443/<publicPathPrefix>/mcp` (use `-k` / insecure TLS skip for Traefik's local default cert; IngressRoute is websecure-only) |
 | Prometheus (debug) | `kubectl port-forward -n mcp-sentinel svc/prometheus 9090:9090` |
 
 PII redaction: `config/ingress/overlays/http` + `pii-redactor@file` — keep off `/api/v1` routes (keys and grant subjects must stay exact).

@@ -103,7 +103,7 @@ export KUBECONFIG="$HOME/.kube/test-mcp-runtime-config"
 ./bin/mcp-runtime bootstrap
 ./bin/mcp-runtime cluster doctor
 ./bin/mcp-runtime setup --test-mode --ingress-manifest config/ingress/overlays/http
-kubectl port-forward -n traefik svc/traefik 18080:8000
+kubectl port-forward -n traefik svc/traefik 18080:8000 18443:8443
 ./bin/mcp-runtime cluster diagnostics
 ```
 
@@ -115,7 +115,10 @@ k3s can install) missing cluster prerequisites, `cluster doctor` checks nodes,
 storage, ingress, DNS, and TLS readiness. `cluster diagnostics` runs after setup
 to validate what was installed.
 
-Local surfaces: platform `http://localhost:18080/`, MCP routes `http://localhost:18080/<server-name>/mcp`.
+Local surfaces: platform `http://localhost:18080/`, plain Ingress MCP
+`http://localhost:18080/<server-name>/mcp`, adapter-certificate MCP
+`https://localhost:18443/<server-name>/mcp` (use `-k` for the local default
+cert when `MCP_ADAPTER_CERTIFICATES=true`).
 
 ## 4. Production-style install
 
@@ -281,12 +284,14 @@ config/ingress/overlays/http`, `--registry-mode auto`, `--registry-type docker`,
 dynamic`. `--parallel-builds` changes image build and publish only; cluster,
 registry, TLS, and rollout sequencing stay the same.
 
-To enable optional adapter client certificates alongside OAuth, add
+To enable optional adapter client certificates on gateway server routes, add
 `--mtls-cluster-issuer <cluster-issuer>` alongside `--with-tls`. Name an
 enterprise cert-manager issuer, or the bundled `mcp-runtime-ca` to have setup
 provision one; `--test-mode` defaults to `mcp-runtime-ca`. Set
 `MCP_ADAPTER_CERTIFICATES=true` to turn the feature on; production must also
-set `MCP_TRUST_DOMAIN` (for example `mcpruntime.org`). See
+set `MCP_TRUST_DOMAIN` (for example `mcpruntime.org`). OAuth remains optional:
+omit `spec.auth` for cert-only routes, or add `spec.auth` when direct clients
+need a bearer. See
 [Agent Adapters](agent-adapters.md#enterprise-mtls-and-spiffe).
 
 The bundled mcp-auth authorization server is optional and off by default. Check
@@ -309,10 +314,14 @@ For Kind or other local setups where traffic reaches Traefik through `kubectl po
 ```bash
 export MCP_INGRESS_READINESS_MODE=permissive
 ./bin/mcp-runtime setup --test-mode --ingress-manifest config/ingress/overlays/http
-kubectl port-forward -n traefik svc/traefik 18080:8000
+kubectl port-forward -n traefik svc/traefik 18080:8000 18443:8443
 ```
 
-Then use `http://127.0.0.1:18080/<publicPathPrefix>/mcp` for local MCP traffic.
+Then use `http://127.0.0.1:18080/<publicPathPrefix>/mcp` for plain Ingress MCP
+traffic. When `MCP_ADAPTER_CERTIFICATES=true`, gateway routes use Traefik
+IngressRoute on `websecure` only — probe them at
+`https://127.0.0.1:18443/<publicPathPrefix>/mcp` (local Kind typically needs
+`-k` / insecure TLS skip for Traefik's default certificate).
 
 !!! warning "`MCPServer` stuck in `PartiallyReady` while traffic works"
     Strict readiness (the default) waits for the Ingress to publish

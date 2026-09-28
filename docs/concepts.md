@@ -167,8 +167,9 @@ reaches your server.
 
 On each tool call the gateway:
 
-1. Authenticates the OAuth bearer token and, for an adapter, resolves its
-   session identity from the verified client certificate
+1. Authenticates identity: OAuth bearer when `spec.auth` is set; for an adapter,
+   resolves session identity from the verified client certificate (and binds the
+   bearer subject to the session human when OAuth is also enabled)
 2. Looks up the active `MCPAgentSession` and `MCPAccessGrant` for that agent+server pair
 3. Checks trust level, side-effect class, and per-tool allow/deny rules
 4. Either forwards the call to your server or returns a denial with a reason code
@@ -189,7 +190,7 @@ agent process). It:
 
 - Calls the platform API to create or reuse an authorized session
 - Presents a certificate whose SPIFFE identity is bound to that session
-- Forwards the local MCP client's OAuth bearer token to the protected resource
+- Forwards the local MCP client's OAuth bearer token when the target enables OAuth
 - Refreshes the certificate automatically before it expires (`--auto-refresh`)
 
 The adapter does not make authorization decisions; the gateway does.

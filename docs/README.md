@@ -53,7 +53,8 @@ mcp-runtime server deploy my-server --scope tenant --metadata-dir .mcp
 
 The CLI generates the Kubernetes resources. To connect a client, run the
 [adapter](agent-adapters.md) and point Claude Desktop, Cursor, or any MCP client
-at it. The adapter adds the identity and session headers the gateway checks.
+at it. The adapter presents a session-bound client certificate the gateway
+uses for grant and session checks (and forwards OAuth when the target enables it).
 
 ## Who is this for?
 
@@ -135,7 +136,7 @@ preparation.
 <a class="docs-card" href="agent-adapters/">
   <span class="docs-card-kicker">Connect</span>
   <strong>Agent adapters</strong>
-  <span>A Streamable HTTP adapter that forwards OAuth and adds session-bound certificate identity.</span>
+  <span>A Streamable HTTP adapter that presents session-bound certificate identity and forwards OAuth when the target enables it.</span>
 </a>
 
 <a class="docs-card" href="multi-team/">

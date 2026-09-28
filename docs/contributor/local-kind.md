@@ -98,7 +98,7 @@ KUBECONFIG="$HOME/.kube/test-mcp-runtime-config" \
 Expose the dashboard and MCP routes:
 
 ```bash
-kubectl port-forward -n traefik svc/traefik 18080:8000
+kubectl port-forward -n traefik svc/traefik 18080:8000 18443:8443
 ```
 
 Local URLs:
@@ -107,14 +107,16 @@ Local URLs:
 |---|---|
 | Platform UI | `http://localhost:18080/` |
 | Platform API | `http://localhost:18080/api/v1` |
-| MCP route shape | `http://localhost:18080/<server-name>/mcp` |
+| MCP route shape (plain Ingress) | `http://localhost:18080/<server-name>/mcp` |
+| Adapter-certificate MCP routes | `https://localhost:18443/<server-name>/mcp` (`-k` for Traefik's local default cert; websecure-only when `MCP_ADAPTER_CERTIFICATES=true`) |
 
 Keep the Traefik port-forward running while using the browser or `curl`.
 
-These URLs are plain HTTP over a port-forward because `--test-mode` with the
-HTTP ingress overlay is a local-only shape. Any shared or public install uses
-`--with-tls` and the `platform`, `registry`, and `mcp` hostnames instead; see
-[Deployment Targets](../deployment-targets.md).
+Platform and plain Ingress URLs are HTTP over a port-forward because
+`--test-mode` with the HTTP ingress overlay is a local-only shape.
+Adapter-certificate IngressRoutes still terminate TLS on `:18443`. Any shared
+or public install uses `--with-tls` and the `platform`, `registry`, and `mcp`
+hostnames instead; see [Deployment Targets](../deployment-targets.md).
 
 ## Seeded Logins
 
