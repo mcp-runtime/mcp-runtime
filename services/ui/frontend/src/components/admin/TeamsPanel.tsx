@@ -363,7 +363,7 @@ export function TeamsPanel({ onSignIn }: TeamsPanelProps) {
             {selectedTeam ? `Members of ${selectedTeam.name || selectedTeam.slug}` : "Members"}
           </h2>
           {selectedTeam ? (
-            <p className="section-note">Namespace {selectedTeam.namespace || "—"}</p>
+            <p className="section-note">Namespace {selectedTeam.namespace || "—"} · <a className="link-button" href={`#/agents?team=${encodeURIComponent(selectedTeam.slug)}`}>View agents</a></p>
           ) : null}
         </div>
 

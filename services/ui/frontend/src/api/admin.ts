@@ -2,6 +2,7 @@ import { fetchJSON, withQuery } from "./client";
 import type {
   AdminOperations,
   AgentPage,
+  AgentDetail,
   AgentRecord,
   AuditLogEntry,
   ComponentStatus,
@@ -135,6 +136,10 @@ export async function listTeamAgents(
     agents: asArray<AgentRecord>(record, "agents"),
     next_cursor: typeof record.next_cursor === "string" ? record.next_cursor : undefined,
   };
+}
+
+export async function getAgent(id: string): Promise<AgentDetail> {
+  return await fetchJSON(`/runtime/agents/${segment(id)}`) as AgentDetail;
 }
 
 export async function createTeamAgent(slug: string, name: string): Promise<AgentRecord> {

@@ -22,6 +22,13 @@ export const WORKSPACE_TABS: WorkspaceTab[] = [
     icon: "server",
   },
   {
+    id: "agents",
+    label: "Agents",
+    description: "Agent identities, access, sessions, and connection steps.",
+    icon: "users",
+    visible: (auth) => auth.authenticated,
+  },
+  {
     id: "access",
     label: "Access control",
     description: "Grants and agent sessions enforced by the MCP gateway.",

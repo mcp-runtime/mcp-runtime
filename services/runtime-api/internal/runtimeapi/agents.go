@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"mcp-runtime-api/internal/platformclient"
+	sentinelaccess "mcp-runtime/pkg/access"
 	"mcp-runtime/pkg/serviceutil"
 )
 
@@ -56,6 +57,34 @@ func (s *RuntimeServer) HandleRuntimeTeamAgents(w http.ResponseWriter, r *http.R
 		if err != nil {
 			writeAPIError(w, http.StatusInternalServerError, "failed to list agents")
 			return
+		}
+		if p.Role != roleAdmin && p.TeamRole(teamSlug) != teamRoleOwner {
+			access, accessErr := s.agentAccessForPrincipal(ctx, p)
+			if accessErr != nil {
+				writeAPIError(w, http.StatusServiceUnavailable, "agent access records unavailable")
+				return
+			}
+			for attempts := 0; attempts < 100; attempts++ {
+				visible := make([]platformclient.Agent, 0, len(page.Agents))
+				for _, agent := range page.Agents {
+					if access.canUse(agent) {
+						visible = append(visible, agent)
+					}
+				}
+				if len(visible) > 0 || page.NextCursor == "" {
+					page.Agents = visible
+					break
+				}
+				page, err = s.identity.ListAgents(ctx, teamSlug, status, r.URL.Query().Get("q"), page.NextCursor, limit)
+				if err != nil {
+					writeAPIError(w, http.StatusInternalServerError, "failed to list agents")
+					return
+				}
+				if attempts == 99 {
+					writeAPIError(w, http.StatusServiceUnavailable, "agent directory page window exceeded")
+					return
+				}
+			}
 		}
 		writeJSON(w, http.StatusOK, page)
 		return
@@ -115,12 +144,23 @@ func (s *RuntimeServer) HandleRuntimeAgentPath(w http.ResponseWriter, r *http.Re
 		return
 	}
 	teamSlug := NormalizeTeamSlug(item.TeamSlug)
+	manager := p.Role == roleAdmin || p.TeamRole(teamSlug) == teamRoleOwner
 	if p.Role != roleAdmin && p.TeamRole(teamSlug) == "" {
-		writeAPIError(w, http.StatusForbidden, "forbidden")
+		writeAPIError(w, http.StatusNotFound, "agent not found")
 		return
 	}
 	if len(parts) == 1 && r.Method == http.MethodGet {
-		writeJSON(w, http.StatusOK, map[string]any{"agent": item})
+		access, accessErr := s.agentAccessForPrincipal(ctx, p)
+		if accessErr != nil {
+			writeAPIError(w, http.StatusServiceUnavailable, "agent access records unavailable")
+			return
+		}
+		if !manager && !access.canUse(item) {
+			writeAPIError(w, http.StatusNotFound, "agent not found")
+			return
+		}
+		grants, sessions := access.forAgent(item, manager)
+		writeJSON(w, http.StatusOK, map[string]any{"agent": item, "grants": grants, "sessions": sessions, "can_manage": manager})
 		return
 	}
 	if p.Role != roleAdmin && p.TeamRole(teamSlug) != teamRoleOwner {
@@ -177,6 +217,85 @@ func (s *RuntimeServer) HandleRuntimeAgentPath(w http.ResponseWriter, r *http.Re
 	}
 	w.Header().Set("allow", "GET, PATCH, POST")
 	writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed")
+}
+
+// agentAccessForPrincipal takes one snapshot for directory and detail reads.
+// A member can see an agent only through an applicable grant or their own
+// session. The UI never receives unrelated subjects or another user's session.
+type agentAccessSnapshot struct {
+	principal principal
+	grants    []sentinelaccess.MCPAccessGrant
+	sessions  []sentinelaccess.MCPAgentSession
+}
+
+func (s *RuntimeServer) agentAccessForPrincipal(ctx context.Context, p principal) (agentAccessSnapshot, error) {
+	result := agentAccessSnapshot{principal: p}
+	if s.accessMgr == nil {
+		return result, errors.New("kubernetes unavailable")
+	}
+	grants, err := s.accessMgr.ListGrants(ctx, "")
+	if err != nil {
+		return result, err
+	}
+	sessions, err := s.accessMgr.ListSessions(ctx, "")
+	if err != nil {
+		return result, err
+	}
+	result.grants = grants.Items
+	result.sessions = sessions.Items
+	return result, nil
+}
+
+func (a agentAccessSnapshot) canUse(agent platformclient.Agent) bool {
+	if agent.Status != "active" {
+		return false
+	}
+	for _, grant := range a.grants {
+		if grant.Spec.Disabled || (grant.Spec.ExpiresAt != nil && !grant.Spec.ExpiresAt.After(time.Now())) {
+			continue
+		}
+		if a.grantMatches(grant, agent, false) {
+			return true
+		}
+	}
+	for _, session := range a.sessions {
+		if a.sessionMatches(session, agent, false) && !session.Spec.Revoked && (session.Spec.ExpiresAt == nil || session.Spec.ExpiresAt.After(time.Now())) {
+			return true
+		}
+	}
+	return false
+}
+
+func (a agentAccessSnapshot) grantMatches(grant sentinelaccess.MCPAccessGrant, agent platformclient.Agent, manager bool) bool {
+	subject := grant.Spec.Subject
+	if string(subject.TeamID) != agent.TeamID || (subject.AgentID != "" && string(subject.AgentID) != agent.ID) {
+		return false
+	}
+	return manager || subject.HumanID == "" || string(subject.HumanID) == a.principal.UserID()
+}
+
+func (a agentAccessSnapshot) sessionMatches(session sentinelaccess.MCPAgentSession, agent platformclient.Agent, manager bool) bool {
+	subject := session.Spec.Subject
+	if string(subject.TeamID) != agent.TeamID || string(subject.AgentID) != agent.ID {
+		return false
+	}
+	return manager || (subject.HumanID != "" && string(subject.HumanID) == a.principal.UserID())
+}
+
+func (a agentAccessSnapshot) forAgent(agent platformclient.Agent, manager bool) ([]sentinelaccess.GrantSummary, []sentinelaccess.SessionSummary) {
+	grants := []sentinelaccess.GrantSummary{}
+	sessions := []sentinelaccess.SessionSummary{}
+	for _, grant := range a.grants {
+		if a.grantMatches(grant, agent, manager) {
+			grants = append(grants, sentinelaccess.ToGrantSummary(grant))
+		}
+	}
+	for _, session := range a.sessions {
+		if a.sessionMatches(session, agent, manager) {
+			sessions = append(sessions, sentinelaccess.ToSessionSummary(session))
+		}
+	}
+	return grants, sessions
 }
 
 func (s *RuntimeServer) revokeAgentSessions(ctx context.Context, r *http.Request, p principal, item platformclient.Agent) error {

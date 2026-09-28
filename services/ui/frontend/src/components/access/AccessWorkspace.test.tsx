@@ -170,6 +170,17 @@ describe("AccessWorkspace gating", () => {
     }
   });
 
+  it("shows a normal user read-only access records", async () => {
+    const fetchMock = stubAccessApi();
+    renderAccess(TENANT);
+    await screen.findByTestId("grants-table");
+    expect(screen.queryByTestId("grant-create-toggle")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("session-create-toggle")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("grant-toggle")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("session-toggle")).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter((call) => (call[1] as RequestInit)?.method)).toHaveLength(0);
+  });
+
   it("leaves an admin scoped to every namespace by default", async () => {
     const fetchMock = stubAccessApi();
 
@@ -272,7 +283,7 @@ describe("AccessWorkspace mutations", () => {
     const user = userEvent.setup();
     const fetchMock = stubAccessApi();
 
-    renderAccess(TENANT);
+    renderAccess(ADMIN);
     await screen.findByTestId("grants-table");
 
     await user.click(screen.getAllByTestId("grant-toggle")[0]);

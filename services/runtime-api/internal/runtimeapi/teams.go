@@ -48,13 +48,12 @@ func (s *RuntimeServer) handleRuntimeTeamList(w http.ResponseWriter, r *http.Req
 		writeJSON(w, http.StatusOK, map[string]any{"teams": teams})
 		return
 	}
-	out := make([]teamRecord, 0, len(p.Teams))
+	out := make([]map[string]any, 0, len(p.Teams))
 	for _, membership := range p.Teams {
-		out = append(out, teamRecord{
-			ID:        membership.ID,
-			Slug:      membership.Slug,
-			Name:      membership.Name,
-			Namespace: membership.Namespace,
+		out = append(out, map[string]any{
+			"id": membership.ID, "slug": membership.Slug,
+			"name": membership.Name, "namespace": membership.Namespace,
+			"role": membership.Role,
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"teams": out})

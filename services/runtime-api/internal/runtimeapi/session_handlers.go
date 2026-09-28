@@ -12,7 +12,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtimeaccess "mcp-runtime-api/internal/runtimeapi/access"
-	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
 	sentinelaccess "mcp-runtime/pkg/access"
 )
 
@@ -72,24 +71,10 @@ func (s *AccessService) handleRuntimeSessionList(w http.ResponseWriter, r *http.
 
 	p, filterByPrincipal := principalFromContext(ctx)
 	filterByPrincipal = filterByPrincipal && p.Role != roleAdmin
-	var serverCache accessServerCache
-	if filterByPrincipal {
-		serverCache, err = s.accessServerCacheForSessionRefs(ctx, namespace, sessions.Items)
-		if err != nil {
-			log.Printf("runtime session list: list MCPServers for visibility failed: %v", err)
-			writeAPIError(w, http.StatusInternalServerError, "failed to inspect server references")
-			return
-		}
-	}
 
 	summaries := make([]sentinelaccess.SessionSummary, 0, len(sessions.Items))
 	for _, sess := range sessions.Items {
-		if filterByPrincipal && !runtimeaccess.AccessRefVisibleWithServerCache(sess.Namespace, sess.Spec.ServerRef, serverCache,
-			func(server mcpv1alpha1.MCPServer) bool { return principalCanAdministerMCPServer(p, server) },
-			func(namespace string, serverLabels map[string]string) bool {
-				return principalCanAdministerServerLabels(p, namespace, serverLabels)
-			},
-		) {
+		if filterByPrincipal && !principalCanReadSessionSubject(p, sess) {
 			continue
 		}
 		summaries = append(summaries, sentinelaccess.ToSessionSummary(sess))
@@ -103,11 +88,6 @@ func (s *AccessService) handleRuntimeSessionApply(w http.ResponseWriter, r *http
 		writeAPIError(w, http.StatusServiceUnavailable, "kubernetes not available")
 		return
 	}
-	if p, ok := principalFromContext(r.Context()); ok && p.Role != roleAdmin {
-		writeAPIError(w, http.StatusForbidden, "admin role required")
-		return
-	}
-
 	var req accessSessionRequest
 	r.Body = http.MaxBytesReader(w, r.Body, accessApplyMaxBytes)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

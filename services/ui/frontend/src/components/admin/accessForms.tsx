@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import { Button } from "../../ui/Button";
 import { StatusBadge } from "../../ui/Badge";
@@ -62,6 +62,12 @@ function SubjectFields({
   const teamsQuery = useTeams(true);
   const teams = teamsQuery.data ?? [];
   const [teamSlug, setTeamSlug] = useState(() => teams.find((team) => team.id === subject.teamID)?.slug ?? "");
+  useEffect(() => {
+    if (!teamSlug && subject.teamID) {
+      const selected = teams.find((team) => team.id === subject.teamID);
+      if (selected) setTeamSlug(selected.slug);
+    }
+  }, [subject.teamID, teamSlug, teams]);
   const [customTeam, setCustomTeam] = useState(false);
   const [customHuman, setCustomHuman] = useState(false);
   const membersQuery = useTeamMembers(true, teamSlug);
@@ -393,6 +399,7 @@ type GrantFormProps = {
   onChange: (draft: GrantDraft) => void;
   onCancel: () => void;
   onSubmit: () => void;
+  fixedAgent?: { id: string; teamID: string; teamSlug: string };
 };
 
 export function GrantForm({
@@ -404,6 +411,7 @@ export function GrantForm({
   onChange,
   onCancel,
   onSubmit,
+  fixedAgent,
 }: GrantFormProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const crossTeam = subjectIsCrossTeam(servers, draft);
@@ -479,11 +487,14 @@ export function GrantForm({
       <fieldset className="form-fieldset">
         <legend>Subject</legend>
         <div className="form-grid">
-          <SubjectFields
+          {fixedAgent ? <dl className="detail-grid" data-testid="grant-fixed-agent">
+            <div><dt>Team</dt><dd>{fixedAgent.teamSlug}</dd></div>
+            <div><dt>Agent ID</dt><dd>{fixedAgent.id}</dd></div>
+          </dl> : <SubjectFields
             testPrefix="grant"
             subject={draft}
             onChange={(subject) => updateDraft({ ...draft, ...subject })}
-          />
+          />}
         </div>
         {errors.subject ? (
           <p className="field-error" role="alert" data-testid="grant-subject-error">

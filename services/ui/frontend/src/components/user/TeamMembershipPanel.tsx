@@ -53,6 +53,7 @@ export function TeamMembershipPanel({ teams }: TeamMembershipPanelProps) {
                         {slug}
                       </span>
                       <CopyButton value={slug} label={`Copy the slug for ${team.name || slug}`} />
+                      <a className="link-button" href={`#/agents?team=${encodeURIComponent(slug)}`}>View agents</a>
                     </span>
                   ) : null}
                 </article>

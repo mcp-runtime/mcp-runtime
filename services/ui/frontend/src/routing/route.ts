@@ -4,7 +4,7 @@
 // URLs. A hash keeps every deep link working against the unmodified server and
 // keeps browser back/forward honest.
 
-export type WorkspaceId = "servers" | "access" | "activity" | "keys" | "admin" | "signin";
+export type WorkspaceId = "servers" | "agents" | "access" | "activity" | "keys" | "admin" | "signin";
 
 export type Route = {
   workspace: WorkspaceId;
@@ -12,7 +12,7 @@ export type Route = {
   params: Record<string, string>;
 };
 
-const WORKSPACES: WorkspaceId[] = ["servers", "access", "activity", "keys", "admin", "signin"];
+const WORKSPACES: WorkspaceId[] = ["servers", "agents", "access", "activity", "keys", "admin", "signin"];
 
 export const HOME: Route = { workspace: "servers", section: "", params: {} };
 

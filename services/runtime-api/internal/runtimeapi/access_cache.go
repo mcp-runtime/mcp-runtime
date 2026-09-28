@@ -13,19 +13,45 @@ import (
 type accessServerCache map[string]mcpv1alpha1.MCPServer
 
 func (s *AccessService) grantVisibleToPrincipal(ctx context.Context, grant sentinelaccess.MCPAccessGrant) bool {
-	if p, ok := principalFromContext(ctx); !ok || p.Role == roleAdmin {
-		return true
-	}
-	allowed, err := s.canAdministerAccessServerRef(ctx, grant.Namespace, grant.Spec.ServerRef)
-	return err == nil && allowed
+	p, ok := principalFromContext(ctx)
+	return !ok || principalCanReadGrantSubject(p, grant)
 }
 
 func (s *AccessService) sessionVisibleToPrincipal(ctx context.Context, session sentinelaccess.MCPAgentSession) bool {
-	if p, ok := principalFromContext(ctx); !ok || p.Role == roleAdmin {
+	p, ok := principalFromContext(ctx)
+	return !ok || principalCanReadSessionSubject(p, session)
+}
+
+func principalCanReadGrantSubject(p principal, grant sentinelaccess.MCPAccessGrant) bool {
+	if p.Role == roleAdmin {
 		return true
 	}
-	allowed, err := s.canAdministerAccessServerRef(ctx, session.Namespace, session.Spec.ServerRef)
-	return err == nil && allowed
+	if team, ok := p.TeamForNamespace(grant.Namespace); ok && team.Role == teamRoleOwner {
+		return true
+	}
+	subject := grant.Spec.Subject
+	if subject.HumanID != "" && string(subject.HumanID) != p.UserID() {
+		return false
+	}
+	if subject.TeamID != "" {
+		for _, team := range p.Teams {
+			if team.ID == string(subject.TeamID) {
+				return true
+			}
+		}
+		return false
+	}
+	return subject.HumanID != "" && string(subject.HumanID) == p.UserID()
+}
+
+func principalCanReadSessionSubject(p principal, session sentinelaccess.MCPAgentSession) bool {
+	if p.Role == roleAdmin {
+		return true
+	}
+	if team, ok := p.TeamForNamespace(session.Namespace); ok && team.Role == teamRoleOwner {
+		return true
+	}
+	return session.Spec.Subject.HumanID != "" && string(session.Spec.Subject.HumanID) == p.UserID()
 }
 
 func (s *AccessService) accessServerCacheForGrantRefs(ctx context.Context, namespace string, grants []sentinelaccess.MCPAccessGrant) (accessServerCache, error) {
