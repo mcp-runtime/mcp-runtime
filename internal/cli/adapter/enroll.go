@@ -58,12 +58,9 @@ func enrollAdapterCertificate(ctx context.Context, client *platformapi.PlatformC
 	}
 	scope := strings.Join([]string{strings.TrimSpace(os.Getenv(EnvPlatformURL)), cred.SPIFFEID, cred.Session.Namespace, cred.Session.ServerName, cred.Session.AgentID}, "\x00")
 	scopeHash := sha256.Sum256([]byte(scope))
-	dir := filepath.Join(configDir, "certs", hex.EncodeToString(scopeHash[:]))
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("create certificate directory: %w", err)
-	}
-	if err := os.Chmod(dir, 0o700); err != nil {
-		return fmt.Errorf("secure certificate directory: %w", err)
+	dir, err := ensureScopedCertDir(configDir, scopeHash)
+	if err != nil {
+		return err
 	}
 	files := []struct {
 		name string
@@ -84,4 +81,48 @@ func enrollAdapterCertificate(ctx context.Context, client *platformapi.PlatformC
 	_, _ = fmt.Fprintf(out, "use --tls-client-cert %s --tls-client-key %s --tls-ca-bundle %s\n",
 		filepath.Join(dir, "client.crt"), filepath.Join(dir, "client.key"), filepath.Join(dir, "ca.crt"))
 	return nil
+}
+
+// ensureScopedCertDir creates <configDir>/certs/<hex(scopeHash)> confined to the
+// local MCP Runtime config directory. The digest is hex-only and the directory
+// is created via os.Root so path components cannot escape configDir. Mode 0700
+// is required for owner traversal; private key material is written 0600.
+func ensureScopedCertDir(configDir string, scopeHash [sha256.Size]byte) (string, error) {
+	if strings.TrimSpace(configDir) == "" {
+		return "", fmt.Errorf("config directory is empty")
+	}
+	absConfig, err := filepath.Abs(filepath.Clean(configDir))
+	if err != nil {
+		return "", fmt.Errorf("resolve config directory: %w", err)
+	}
+	digest := hex.EncodeToString(scopeHash[:])
+	if len(digest) != sha256.Size*2 || strings.Trim(digest, "0123456789abcdef") != "" {
+		return "", fmt.Errorf("invalid certificate scope digest")
+	}
+
+	// Create the intentional local config root so OpenRoot can confine the rest.
+	// ConfigDir is MCP_RUNTIME_CONFIG_DIR or ~/.mcpruntime — not a remote/untrusted path.
+	if err := os.MkdirAll(absConfig, 0o700); err != nil { // #nosec G703 G302 -- local config root; dir needs owner execute
+		return "", fmt.Errorf("create config directory: %w", err)
+	}
+	root, err := os.OpenRoot(absConfig)
+	if err != nil {
+		return "", fmt.Errorf("open config directory: %w", err)
+	}
+	defer root.Close()
+
+	rel := filepath.Join("certs", digest)
+	// Directory execute bit is required so the owner can open files under certs/.
+	if err := root.MkdirAll(rel, 0o700); err != nil { // #nosec G302 -- directory needs owner execute; files use 0600
+		return "", fmt.Errorf("create certificate directory: %w", err)
+	}
+	if err := root.Chmod(rel, 0o700); err != nil { // #nosec G302 -- directory needs owner execute; files use 0600
+		return "", fmt.Errorf("secure certificate directory: %w", err)
+	}
+
+	dir := filepath.Join(absConfig, rel)
+	if relCheck, err := filepath.Rel(absConfig, dir); err != nil || relCheck == ".." || strings.HasPrefix(relCheck, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("certificate directory escapes config directory")
+	}
+	return dir, nil
 }

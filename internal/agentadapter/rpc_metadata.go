@@ -130,12 +130,6 @@ func sanitizeLogField(value string) string {
 	return value
 }
 
-func closeIfPossible(reader io.Reader) {
-	if closer, ok := reader.(io.Closer); ok {
-		_ = closer.Close()
-	}
-}
-
 // isSessionExpiredBody returns true when the runtime denial body indicates
 // that the caller's session has expired or was not found — signals that the
 // agent should re-initialize rather than retry the current call.
@@ -194,60 +188,4 @@ type rpcErrorForInject struct {
 	Code    int            `json:"code"`
 	Message string         `json:"message"`
 	Data    map[string]any `json:"data,omitempty"`
-}
-
-// protocolVersionFromInitializeResult extracts result.protocolVersion from a
-// runtime initialize response body. Returns "" when the field is absent or the
-// body is not valid JSON-RPC.
-func protocolVersionFromInitializeResult(body []byte) string {
-	if len(body) == 0 {
-		return ""
-	}
-	var response struct {
-		Result struct {
-			ProtocolVersion string `json:"protocolVersion"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal(body, &response); err != nil {
-		return ""
-	}
-	return strings.TrimSpace(response.Result.ProtocolVersion)
-}
-
-// isToolsListChangedNotification reports whether a runtime response body is a
-// JSON-RPC notification announcing that the tools list changed. Agents that
-// see this should invalidate any cached tools/list response.
-func isToolsListChangedNotification(body []byte) bool {
-	if len(body) == 0 {
-		return false
-	}
-	var msg struct {
-		JSONRPC string `json:"jsonrpc"`
-		Method  string `json:"method"`
-	}
-	if err := json.Unmarshal(body, &msg); err != nil {
-		return false
-	}
-	return msg.JSONRPC == "2.0" && msg.Method == "notifications/tools/list_changed"
-}
-
-// rebindResponseID replaces the "id" field of a JSON-RPC response body with the
-// supplied raw ID. Used to serve a cached tools/list response to a caller whose
-// request ID differs from the one captured at cache-store time. Returns nil
-// when rebinding fails (callers fall back to an authoritative upstream call;
-// returning the body with its old id would be a JSON-RPC protocol violation).
-func rebindResponseID(body []byte, id json.RawMessage) []byte {
-	if len(id) == 0 {
-		return body
-	}
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil
-	}
-	raw["id"] = id
-	out, err := json.Marshal(raw)
-	if err != nil {
-		return nil
-	}
-	return out
 }

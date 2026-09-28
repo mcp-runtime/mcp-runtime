@@ -27,6 +27,51 @@ func TestAdapterCommandRegistersProxyAndEnroll(t *testing.T) {
 	}
 }
 
+func TestEnsureScopedCertDirStaysUnderConfig(t *testing.T) {
+	t.Parallel()
+
+	configDir := t.TempDir()
+	var scopeHash [32]byte
+	for i := range scopeHash {
+		scopeHash[i] = byte(i)
+	}
+
+	dir, err := ensureScopedCertDir(configDir, scopeHash)
+	if err != nil {
+		t.Fatalf("ensureScopedCertDir() error = %v", err)
+	}
+	rel, err := filepath.Rel(configDir, dir)
+	if err != nil {
+		t.Fatalf("Rel() error = %v", err)
+	}
+	if !strings.HasPrefix(rel, "certs"+string(filepath.Separator)) {
+		t.Fatalf("cert dir %q is not under %q/certs", dir, configDir)
+	}
+	if strings.Contains(rel, "..") {
+		t.Fatalf("cert dir %q escapes config root", dir)
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("Stat(%q) error = %v", dir, err)
+	}
+	if !info.IsDir() {
+		t.Fatalf("cert path %q is not a directory", dir)
+	}
+	if perm := info.Mode().Perm(); perm&0o700 != 0o700 {
+		t.Fatalf("cert dir mode = %o, want owner rwx", perm)
+	}
+
+	// Nested OpenRoot confinement rejects path components that escape the config root.
+	root, err := os.OpenRoot(configDir)
+	if err != nil {
+		t.Fatalf("OpenRoot() error = %v", err)
+	}
+	defer root.Close()
+	if err := root.MkdirAll(filepath.Join("..", "escape"), 0o700); err == nil {
+		t.Fatal("OpenRoot.MkdirAll allowed path traversal outside configDir")
+	}
+}
+
 func TestWriteCredentialFileUsesOutputRoot(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
