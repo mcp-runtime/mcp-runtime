@@ -1112,9 +1112,16 @@ refresh_mcp_proxy_urls() {
   fi
   MCP_ANON_URL="http://127.0.0.1:${MCP_CURL_ANON_PORT}${MCP_INGRESS_PATH}"
   MCP_IDENTITY_URL="http://127.0.0.1:${MCP_CURL_IDENTITY_PORT}${MCP_INGRESS_PATH}"
-  MCP_SESSION_URL="http://127.0.0.1:${MCP_CURL_SESSION_PORT}${MCP_INGRESS_PATH}"
   MCP_BAD_SESSION_URL="http://127.0.0.1:${MCP_CURL_BAD_SESSION_PORT}${MCP_INGRESS_PATH}"
-  MCP_TRUST_SESSION_URL="http://127.0.0.1:${MCP_SERVICE_SESSION_PORT}${MCP_INGRESS_PATH}"
+  # When the cert trust adapter is already listening, keep session-backed URLs on
+  # that proxy. Header-only local proxies no longer carry X-MCP identity.
+  if [[ -n "${ADAPTER_PROXY_PID:-}" ]] && kill -0 "${ADAPTER_PROXY_PID}" 2>/dev/null; then
+    MCP_TRUST_SESSION_URL="http://127.0.0.1:${MCP_SERVICE_SESSION_PORT}/mcp"
+    MCP_SESSION_URL="${MCP_TRUST_SESSION_URL}"
+  else
+    MCP_SESSION_URL="http://127.0.0.1:${MCP_CURL_SESSION_PORT}${MCP_INGRESS_PATH}"
+    MCP_TRUST_SESSION_URL="http://127.0.0.1:${MCP_SERVICE_SESSION_PORT}${MCP_INGRESS_PATH}"
+  fi
 }
 
 ensure_server_proxy_port_forward() {
@@ -1180,8 +1187,11 @@ recover_ingress_mcp_path() {
 
 prepare_ingress_mcp_path_after_trust() {
   recover_ingress_mcp_path
+  # Traefik recover recycles header proxies; re-attach the cert adapter so
+  # session-backed checks still present SPIFFE identity.
+  ensure_trust_session_proxy
   log_line ingress "warming session-backed ingress route after trust checks"
-  wait_for_mcp_tool_result "${MCP_SESSION_URL}" "aaa-ping" '{}' 200 "pong" 20 "" "" "ingress-warmup"
+  wait_for_mcp_tool_result "${MCP_TRUST_SESSION_URL}" "aaa-ping" '{}' 200 "pong" 20 "" "" "ingress-warmup"
 }
 
 ensure_adapter_proxy_prerequisites() {
@@ -1239,14 +1249,126 @@ start_e2e_adapter_proxy() {
   MCP_SESSION_URL="${MCP_TRUST_SESSION_URL}"
 }
 
+# emit_cert_session_deny_reasons exercises session lifecycle denials through the
+# enrolled adapter certificate so observability still sees session_not_found /
+# session_revoked / session_expired without X-MCP header injection.
+emit_cert_session_deny_reasons() {
+  ensure_trust_session_proxy
+  if [[ -z "${ADAPTER_SESSION_NAME:-}" ]]; then
+    echo "emit_cert_session_deny_reasons requires ADAPTER_SESSION_NAME" >&2
+    exit 1
+  fi
+
+  local expires_backup
+  expires_backup="$(kubectl get mcpagentsession "${ADAPTER_SESSION_NAME}" -n mcp-servers -o jsonpath='{.spec.expiresAt}' 2>/dev/null || true)"
+
+  log_line mcp "emitting session_revoked via adapter certificate"
+  kubectl patch mcpagentsession "${ADAPTER_SESSION_NAME}" -n mcp-servers --type=merge \
+    -p '{"spec":{"revoked":true}}'
+  run_mcp_curl_expect "mcp-curl-cert-session-revoked" "${MCP_TRUST_SESSION_URL}" false "session_revoked" \
+    || run_mcp_curl_expect "mcp-curl-cert-session-revoked-retry" "${MCP_TRUST_SESSION_URL}" false "session_revoked"
+  kubectl patch mcpagentsession "${ADAPTER_SESSION_NAME}" -n mcp-servers --type=merge \
+    -p '{"spec":{"revoked":false}}'
+  wait_for_mcp_tool_result "${MCP_TRUST_SESSION_URL}" "aaa-ping" '{}' 200 "pong" 20 "" "" "cert-session-unrevoke"
+
+  log_line mcp "emitting session_expired via adapter certificate"
+  kubectl patch mcpagentsession "${ADAPTER_SESSION_NAME}" -n mcp-servers --type=merge \
+    -p '{"spec":{"expiresAt":"2000-01-01T00:00:00Z"}}'
+  run_mcp_curl_expect "mcp-curl-cert-session-expired" "${MCP_TRUST_SESSION_URL}" false "session_expired" \
+    || run_mcp_curl_expect "mcp-curl-cert-session-expired-retry" "${MCP_TRUST_SESSION_URL}" false "session_expired"
+  if [[ -n "${expires_backup}" ]]; then
+    kubectl patch mcpagentsession "${ADAPTER_SESSION_NAME}" -n mcp-servers --type=merge \
+      -p "{\"spec\":{\"expiresAt\":\"${expires_backup}\"}}"
+  else
+    kubectl patch mcpagentsession "${ADAPTER_SESSION_NAME}" -n mcp-servers --type=json \
+      -p '[{"op":"remove","path":"/spec/expiresAt"}]' || true
+  fi
+  wait_for_mcp_tool_result "${MCP_TRUST_SESSION_URL}" "aaa-ping" '{}' 200 "pong" 20 "" "" "cert-session-unexpire"
+
+  log_line mcp "emitting session_not_found via adapter certificate"
+  kubectl delete mcpagentsession "${ADAPTER_SESSION_NAME}" -n mcp-servers --wait=true
+  run_mcp_curl_expect "mcp-curl-cert-session-not-found" "${MCP_TRUST_SESSION_URL}" false "session_not_found" \
+    || run_mcp_curl_expect "mcp-curl-cert-session-not-found-retry" "${MCP_TRUST_SESSION_URL}" false "session_not_found"
+  # Recreate the deterministic adapter session and re-enroll a fresh certificate.
+  ensure_trust_adapter_session
+  ensure_trust_session_proxy
+  wait_for_mcp_tool_result "${MCP_TRUST_SESSION_URL}" "aaa-ping" '{}' 200 "pong" 20 "" "" "cert-session-restored"
+}
+
+# ensure_trust_adapter_grant applies the grant that authorizes the cert-backed
+# trust/governance adapter. Trust traffic enrolls as ADAPTER_AGENT_ID, so mutations
+# and checks must target this grant — not the ops-agent ${SERVER_NAME}-grant.
+ensure_trust_adapter_grant() {
+  ensure_adapter_agent_identity
+  if [[ -z "${ADAPTER_AGENT_EXPIRES_AT:-}" ]]; then
+    ADAPTER_AGENT_EXPIRES_AT="$(python3 -c 'from datetime import datetime,timedelta,timezone; print((datetime.now(timezone.utc)+timedelta(hours=1)).replace(microsecond=0).isoformat().replace("+00:00","Z"))')"
+  fi
+  TRUST_GRANT_NAME="${SERVER_NAME}-adapter-grant"
+  cat >"${WORKDIR}/adapter-trust-grant.yaml" <<EOF
+apiVersion: mcpruntime.org/v1alpha1
+kind: MCPAccessGrant
+metadata:
+  name: ${TRUST_GRANT_NAME}
+  namespace: mcp-servers
+spec:
+  serverRef:
+    name: ${SERVER_NAME}
+  subject:
+    teamID: ${ADAPTER_TEAM_ID}
+    agentID: ${ADAPTER_AGENT_ID}
+  expiresAt: ${ADAPTER_AGENT_EXPIRES_AT}
+  maxTrust: high
+  allowedSideEffects: [read]
+  policyVersion: v1
+  toolRules:
+    - name: aaa-ping
+      decision: allow
+    - name: echo
+      decision: allow
+    - name: upper
+      decision: allow
+EOF
+  (cd "${WORKDIR}" && "${PROJECT_ROOT}/bin/mcp-runtime" access --use-kube grant apply --file adapter-trust-grant.yaml)
+  wait_for_policy_text "\"agent_id\": \"${ADAPTER_AGENT_ID}\""
+  run_parallel_grant_tool_rules \
+    -- "${TRUST_GRANT_NAME}" "aaa-ping" "allow" \
+    -- "${TRUST_GRANT_NAME}" "echo" "allow" \
+    -- "${TRUST_GRANT_NAME}" "upper" "allow"
+}
+
+# ensure_trust_adapter_session issues (or reuses) the platform adapter session
+# that the cert trust proxy will enroll against, and captures its name/subject
+# for later consented-trust mutations.
+ensure_trust_adapter_session() {
+  ensure_adapter_agent_identity
+  ensure_gateway_port_forward
+  local session_body session_resp
+  session_body="$(printf '{"serverName":"%s","namespace":"mcp-servers","agentID":"%s"}' "${SERVER_NAME}" "${ADAPTER_AGENT_ID}")"
+  session_resp="$(curl -fsS -X POST \
+    -H "Authorization: Bearer ${ADAPTER_CALLER_TOKEN}" \
+    -H "content-type: application/json" \
+    --data "${session_body}" \
+    "http://127.0.0.1:${SENTINEL_PORT}/api/v1/runtime/adapter/sessions")"
+  ADAPTER_SESSION_NAME="$(printf '%s' "${session_resp}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["name"])')"
+  ADAPTER_HUMAN_ID="$(printf '%s' "${session_resp}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["humanID"])')"
+  if [[ -z "${ADAPTER_TEAM_ID:-}" ]]; then
+    ADAPTER_TEAM_ID="$(printf '%s' "${session_resp}" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("teamID") or "")')"
+  fi
+  TRUST_SESSION_NAME="${ADAPTER_SESSION_NAME}"
+  wait_for_policy_text "\"name\": \"${ADAPTER_SESSION_NAME}\""
+}
+
 # ensure_trust_session_proxy starts a certificate adapter for trust/governance
 # tool checks. Identity comes from the enrolled SPIFFE cert — not X-MCP headers.
 ensure_trust_session_proxy() {
   refresh_mcp_proxy_urls
   ensure_adapter_agent_identity
+  ensure_trust_adapter_grant
+  ensure_trust_adapter_session
   start_e2e_adapter_proxy "${ADAPTER_AGENT_ID}" "${ADAPTER_CALLER_TOKEN}" \
     "${MCP_SERVICE_SESSION_PORT}" "${WORKDIR}/mcp-trust-session-proxy.log"
   MCP_TRUST_SESSION_URL="http://127.0.0.1:${MCP_SERVICE_SESSION_PORT}/mcp"
+  MCP_SESSION_URL="${MCP_TRUST_SESSION_URL}"
 }
 
 ensure_adapter_agent_identity() {
@@ -2642,6 +2764,8 @@ print_gateway_policy_debug() {
   POLICY_JSON="${policy_json}" \
   DEBUG_GRANT_NAME="${SERVER_NAME}-grant" \
   DEBUG_SESSION_NAME="${SESSION_ID}" \
+  DEBUG_ADAPTER_GRANT_NAME="${TRUST_GRANT_NAME:-${SERVER_NAME}-adapter-grant}" \
+  DEBUG_ADAPTER_SESSION_NAME="${TRUST_SESSION_NAME:-${ADAPTER_SESSION_NAME:-}}" \
   python3 <<'PY'
 import json
 import os
@@ -2655,12 +2779,21 @@ except json.JSONDecodeError as exc:
 
 grant_name = os.environ["DEBUG_GRANT_NAME"]
 session_name = os.environ["DEBUG_SESSION_NAME"]
+adapter_grant_name = os.environ.get("DEBUG_ADAPTER_GRANT_NAME", "")
+adapter_session_name = os.environ.get("DEBUG_ADAPTER_SESSION_NAME", "")
+
+def named(items, key, value):
+    if not value:
+        return []
+    return [item for item in items if item.get(key) == value]
 
 summary = {
     "policy": doc.get("policy", {}),
     "session": doc.get("session", {}),
-    "grants": [grant for grant in doc.get("grants", []) if grant.get("name") == grant_name],
-    "sessions": [session for session in doc.get("sessions", []) if session.get("name") == session_name],
+    "grants": named(doc.get("grants", []), "name", grant_name)
+              + named(doc.get("grants", []), "name", adapter_grant_name),
+    "sessions": named(doc.get("sessions", []), "name", session_name)
+                + named(doc.get("sessions", []), "name", adapter_session_name),
     "tools": doc.get("tools", []),
 }
 
@@ -2948,7 +3081,15 @@ restore_policy_server_grant_defaults() {
   if [[ -f "${WORKDIR}/access-session.yaml" ]]; then
     log_line policy "restoring baseline session consented trust after trust checks"
     (cd "${WORKDIR}" && "${PROJECT_ROOT}/bin/mcp-runtime" access --use-kube session apply --file access-session.yaml)
-    wait_for_policy_text "\"consented_trust\": \"low\""
+  fi
+
+  # Cert-backed trust checks use the adapter grant/session, not ops-agent.
+  ensure_trust_adapter_grant
+  if [[ -n "${ADAPTER_SESSION_NAME:-}" ]]; then
+    log_line policy "restoring adapter session consented trust to low"
+    kubectl patch mcpagentsession "${ADAPTER_SESSION_NAME}" -n mcp-servers --type=merge \
+      -p '{"spec":{"consentedTrust":"low"}}'
+    wait_for_policy_text "\"name\": \"${ADAPTER_SESSION_NAME}\""
   fi
 
   # ConfigMap updates can appear in kubectl before the gateway sidecar's mounted
@@ -4370,22 +4511,9 @@ print(json.dumps({"email": os.environ["PLATFORM_ADMIN_EMAIL"], "password": os.en
     wait_for_mcp_tool_result "${MCP_TRUST_SESSION_URL}" "echo" '{"message":"hello"}' 200 "hello"
     wait_for_mcp_tool_result "${MCP_TRUST_SESSION_URL}" "upper" '{"message":"governance"}' 403 "trust_too_low"
 
-    log_line policy "raising consented trust to medium; upper should become allowed while add stays ungranted"
-    cat <<EOF | kubectl apply -f -
-apiVersion: mcpruntime.org/v1alpha1
-kind: MCPAgentSession
-metadata:
-  name: ${SESSION_ID}
-  namespace: mcp-servers
-spec:
-  serverRef:
-    name: ${SERVER_NAME}
-  subject:
-    humanID: ${HUMAN_ID}
-    agentID: ${AGENT_ID}
-  consentedTrust: medium
-  policyVersion: v1
-EOF
+    log_line policy "raising adapter consented trust to medium; upper should become allowed while add stays ungranted"
+    kubectl patch mcpagentsession "${ADAPTER_SESSION_NAME}" -n mcp-servers --type=merge \
+      -p '{"spec":{"consentedTrust":"medium"}}'
 
     wait_for_policy_text "\"consented_trust\": \"medium\""
     print_gateway_policy_debug
@@ -4393,19 +4521,20 @@ EOF
     wait_for_mcp_tool_result "${MCP_TRUST_SESSION_URL}" "upper" '{"message":"governance"}' 200 "GOVERNANCE"
     wait_for_mcp_tool_result "${MCP_TRUST_SESSION_URL}" "add" '{"a":2,"b":3}' 403 "tool_not_granted"
 
-    log_line policy "temporarily expanding grant for deterministic multi-tool MCP checks"
+    log_line policy "temporarily expanding adapter grant for deterministic multi-tool MCP checks"
     cat <<EOF | kubectl apply -f -
 apiVersion: mcpruntime.org/v1alpha1
 kind: MCPAccessGrant
 metadata:
-  name: ${SERVER_NAME}-grant
+  name: ${TRUST_GRANT_NAME}
   namespace: mcp-servers
 spec:
   serverRef:
     name: ${SERVER_NAME}
   subject:
-    humanID: ${HUMAN_ID}
-    agentID: ${AGENT_ID}
+    teamID: ${ADAPTER_TEAM_ID}
+    agentID: ${ADAPTER_AGENT_ID}
+  expiresAt: ${ADAPTER_AGENT_EXPIRES_AT}
   maxTrust: high
   allowedSideEffects: [read]
   policyVersion: v1
@@ -4423,25 +4552,26 @@ spec:
 EOF
     wait_for_policy_text "\"slugify\""
     run_parallel_grant_tool_rules \
-      -- "${SERVER_NAME}-grant" "add" "allow" \
-      -- "${SERVER_NAME}-grant" "slugify" "allow"
+      -- "${TRUST_GRANT_NAME}" "add" "allow" \
+      -- "${TRUST_GRANT_NAME}" "slugify" "allow"
     run_parallel_mcp_tool_checks \
       -- trust-add "${MCP_TRUST_SESSION_URL}" "add" '{"a":41,"b":1}' 200 "42" \
       -- trust-slugify "${MCP_TRUST_SESSION_URL}" "slugify" '{"message":"Hello World"}' 200 "hello-world"
 
-    log_line policy "updating access grant to deny aaa-ping and echo"
+    log_line policy "updating adapter access grant to deny aaa-ping and echo"
     cat >"${WORKDIR}/access-grant-deny.yaml" <<EOF
 apiVersion: mcpruntime.org/v1alpha1
 kind: MCPAccessGrant
 metadata:
-  name: ${SERVER_NAME}-grant
+  name: ${TRUST_GRANT_NAME}
   namespace: mcp-servers
 spec:
   serverRef:
     name: ${SERVER_NAME}
   subject:
-    humanID: ${HUMAN_ID}
-    agentID: ${AGENT_ID}
+    teamID: ${ADAPTER_TEAM_ID}
+    agentID: ${ADAPTER_AGENT_ID}
+  expiresAt: ${ADAPTER_AGENT_EXPIRES_AT}
   maxTrust: high
   allowedSideEffects: [read]
   policyVersion: v1
@@ -4456,8 +4586,8 @@ EOF
     (cd "${WORKDIR}" && "${PROJECT_ROOT}/bin/mcp-runtime" access --use-kube grant apply --file access-grant-deny.yaml)
 
     run_parallel_grant_tool_rules \
-      -- "${SERVER_NAME}-grant" "aaa-ping" "deny" \
-      -- "${SERVER_NAME}-grant" "echo" "deny"
+      -- "${TRUST_GRANT_NAME}" "aaa-ping" "deny" \
+      -- "${TRUST_GRANT_NAME}" "echo" "deny"
     print_gateway_policy_debug
 
     log_line mcp "validating updated access grant denies aaa-ping and echo"
@@ -4652,10 +4782,22 @@ if checkpoint_enabled "oauth"; then
     log_line mcp "running curl-based MCP smoke checks against ingress"
     run_mcp_curl_expect "mcp-curl-missing-identity" "${MCP_ANON_URL}" false "missing_identity" \
       || run_mcp_curl_expect "mcp-curl-missing-identity-retry" "${MCP_ANON_URL}" false "missing_identity"
-    run_mcp_curl_expect "mcp-curl-missing-session" "${MCP_IDENTITY_URL}" false "missing_session" \
-      || run_mcp_curl_expect "mcp-curl-missing-session-retry" "${MCP_IDENTITY_URL}" false "missing_session"
-    run_mcp_curl_expect "mcp-curl-session-not-found" "${MCP_BAD_SESSION_URL}" false "session_not_found" \
-      || run_mcp_curl_expect "mcp-curl-session-not-found-retry" "${MCP_BAD_SESSION_URL}" false "session_not_found"
+    # Without X-MCP governance headers, header-only local proxies cannot mint a
+    # partial identity. Unauthenticated requests all surface as missing_identity;
+    # session_not_found / session_revoked are covered by adapter-certificate probes.
+    if e2e_adapter_certificates_enabled; then
+      run_mcp_curl_expect "mcp-curl-missing-identity-identity-proxy" "${MCP_IDENTITY_URL}" false "missing_identity" \
+        || run_mcp_curl_expect "mcp-curl-missing-identity-identity-proxy-retry" "${MCP_IDENTITY_URL}" false "missing_identity"
+      run_mcp_curl_expect "mcp-curl-missing-identity-bad-session-proxy" "${MCP_BAD_SESSION_URL}" false "missing_identity" \
+        || run_mcp_curl_expect "mcp-curl-missing-identity-bad-session-proxy-retry" "${MCP_BAD_SESSION_URL}" false "missing_identity"
+      ensure_trust_session_proxy
+      emit_cert_session_deny_reasons
+    else
+      run_mcp_curl_expect "mcp-curl-missing-session" "${MCP_IDENTITY_URL}" false "missing_session" \
+        || run_mcp_curl_expect "mcp-curl-missing-session-retry" "${MCP_IDENTITY_URL}" false "missing_session"
+      run_mcp_curl_expect "mcp-curl-session-not-found" "${MCP_BAD_SESSION_URL}" false "session_not_found" \
+        || run_mcp_curl_expect "mcp-curl-session-not-found-retry" "${MCP_BAD_SESSION_URL}" false "session_not_found"
+    fi
     log_line mcp "waiting for session-backed allow policy to reach the gateway"
     wait_for_mcp_tool_result "${MCP_SESSION_URL}" "aaa-ping" '{}' 200
     run_mcp_curl_expect "mcp-curl-allow-aaa-ping" "${MCP_SESSION_URL}" true
@@ -5590,6 +5732,9 @@ fi
 
 if scenario_selected "observability" && checkpoint_enabled "observability"; then
   echo "[observe] validating audit, traces, and logs"
+  if e2e_adapter_certificates_enabled; then
+    ensure_trust_session_proxy
+  fi
   wait_for_mcp_tool_result "${MCP_SESSION_URL}" "aaa-ping" '{}' 200 "pong" 20 "" "metrics-warmup"
   API_BASE="http://127.0.0.1:${SENTINEL_PORT}/api/v1" \
   API_KEY="${API_KEY}" \
@@ -5605,6 +5750,7 @@ if scenario_selected "observability" && checkpoint_enabled "observability"; then
   GRAFANA_ADMIN_USER="${GRAFANA_ADMIN_USER}" \
   GRAFANA_ADMIN_PASSWORD="${GRAFANA_ADMIN_PASSWORD}" \
   LOKI_BASE="http://127.0.0.1:${LOKI_PORT}" \
+  E2E_ADAPTER_CERTIFICATES="$(e2e_adapter_certificates_enabled && echo true || echo false)" \
   python3 <<'PY'
 import base64
 import json
@@ -6067,7 +6213,6 @@ allow_upper = wait_for_json(
 ).get("events", [])
 _required_deny_reasons = [
     "missing_identity",
-    "missing_session",
     "session_not_found",
     "session_revoked",
     "session_expired",
@@ -6076,6 +6221,10 @@ _required_deny_reasons = [
     "tool_not_granted",
     "tool_denied",
 ]
+# missing_session required a partial X-MCP identity without a session id; cert-first
+# identity always binds a session, so that reason is unreachable on Kind QA.
+if os.environ.get("E2E_ADAPTER_CERTIFICATES", "false").lower() != "true":
+    _required_deny_reasons.insert(1, "missing_session")
 all_server_denies = []
 for _deny_reason in _required_deny_reasons:
     _reason_events = wait_for_json(
@@ -6181,17 +6330,7 @@ check(
     "allow payload effective_trust updated to medium",
     f"expected effective_trust=medium after update, got {allow_payload}",
 )
-for reason in (
-    "missing_identity",
-    "missing_session",
-    "session_not_found",
-    "session_revoked",
-    "session_expired",
-    "rpc_inspection_failed",
-    "trust_too_low",
-    "tool_not_granted",
-    "tool_denied",
-):
+for reason in _required_deny_reasons:
     check(
         reason in server_deny_reasons,
         f"server deny reasons include {reason}",
