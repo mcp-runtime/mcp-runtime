@@ -28,6 +28,10 @@ STAGING_DEFAULT_PRODUCTION_DOMAIN="mcpruntime.org"
 # Exit status a stage body uses to report "skipped" rather than pass/fail.
 STAGING_SKIP_RC=77
 
+# Shared enroll credential-dir parser (scoped …/certs/<hash>/ PEMs).
+# shellcheck source=adapter-certificates.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/adapter-certificates.sh"
+
 staging_log() { printf '[%s] %s\n' "${STAGING_LOG_PREFIX}" "$*"; }
 staging_warn() { printf '[%s] WARNING: %s\n' "${STAGING_LOG_PREFIX}" "$*" >&2; }
 staging_err() { printf '[%s] ERROR: %s\n' "${STAGING_LOG_PREFIX}" "$*" >&2; }
@@ -1502,9 +1506,8 @@ staging_adapter_enroll() {
     return 1
   }
   staging_log "$(printf '%s\n' "${out}" | head -1)"
-  credential_dir="$(printf '%s\n' "${out}" | sed -n 's/^saved certificate files in //p' | head -1)"
-  [[ -n "${credential_dir}" ]] || {
-    staging_err "adapter enroll did not report its certificate directory for ${server}"
+  credential_dir="$(parse_adapter_enroll_credential_dir "${out}")" || {
+    staging_err "adapter enroll did not report a usable certificate directory for ${server}"
     return 1
   }
   spiffe="$(printf '%s\n' "${out}" | sed -n 's#.*issued \(spiffe://[^ ]*\).*#\1#p' | head -1)"

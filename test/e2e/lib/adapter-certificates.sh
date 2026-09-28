@@ -1,5 +1,39 @@
 #!/usr/bin/env bash
 
+# Parse `adapter enroll` stdout for the scoped credential directory
+# (<configDir>/certs/<hash>) and require client.crt/client.key to exist there.
+# Prints the directory path on success.
+parse_adapter_enroll_credential_dir() {
+  local enroll_output="$1"
+  local credential_dir
+  credential_dir="$(printf '%s\n' "${enroll_output}" | sed -n 's/^saved certificate files in //p' | head -1)"
+  if [[ -z "${credential_dir}" ]]; then
+    echo "adapter enroll did not report its certificate directory" >&2
+    return 1
+  fi
+  if [[ ! -f "${credential_dir}/client.crt" || ! -f "${credential_dir}/client.key" ]]; then
+    echo "adapter enroll certificate directory is missing PEM files: ${credential_dir}" >&2
+    return 1
+  fi
+  printf '%s' "${credential_dir}"
+}
+
+# Resolve the directory that holds enrolled client.crt/client.key.
+# Prefer ADAPTER_CERT_PATH (scoped …/certs/<hash>); fall back to ADAPTER_CERT_DIR
+# for unit tests that place flat PEMs in a temp dir.
+adapter_certificate_credential_dir() {
+  local cert_dir="${ADAPTER_CERT_PATH:-${ADAPTER_CERT_DIR:-}}"
+  if [[ -z "${cert_dir}" ]]; then
+    echo "adapter certificate: ADAPTER_CERT_PATH or ADAPTER_CERT_DIR is required" >&2
+    return 1
+  fi
+  if [[ ! -f "${cert_dir}/client.crt" || ! -f "${cert_dir}/client.key" ]]; then
+    echo "adapter certificate: missing PEM files under ${cert_dir} (enroll writes under <configDir>/certs/<hash>/)" >&2
+    return 1
+  fi
+  printf '%s' "${cert_dir}"
+}
+
 # Wait for the data plane to apply a session change. ConfigMap contents alone
 # do not prove the mounted policy has been projected and reloaded. By default,
 # retry only the expected previous state: a missing session during enrollment,
@@ -14,13 +48,8 @@ wait_for_adapter_certificate_initialize() {
   if [[ -n "${oauth_token}" ]]; then
     auth_args+=(-H "Authorization: Bearer ${oauth_token}")
   fi
-  # Prefer the scoped enroll directory (…/certs/<hash>); fall back for unit tests
-  # that still export ADAPTER_CERT_DIR with flat client.crt/client.key.
-  local cert_dir="${ADAPTER_CERT_PATH:-${ADAPTER_CERT_DIR:-}}"
-  if [[ -z "${cert_dir}" ]]; then
-    echo "adapter certificate initialize: ADAPTER_CERT_PATH or ADAPTER_CERT_DIR is required" >&2
-    return 1
-  fi
+  local cert_dir
+  cert_dir="$(adapter_certificate_credential_dir)" || return 1
   local deadline=$((SECONDS + ${ADAPTER_CERT_POLICY_WAIT_SECONDS:-180})) status error
   while true; do
     if ! status="$(curl -ksS --max-time 5 \
