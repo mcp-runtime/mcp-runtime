@@ -43,6 +43,12 @@ export function AgentsPanel({ onSignIn, auth, initialTeam, initialAgent, onTeamC
     setCursors([]);
   }, [teams, teamSlug, platformAdmin, teamsQuery.isPending]);
 
+  useEffect(() => {
+    setTeamSlug(initialTeam || (platformAdmin ? "*" : ""));
+    setCursors([]);
+    setAllPage(0);
+  }, [initialTeam, platformAdmin]);
+
   useEffect(() => { setSelectedAgent(initialAgent || ""); }, [initialAgent]);
 
   const cursor = cursors[cursors.length - 1] ?? "";

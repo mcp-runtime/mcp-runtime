@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentsPanel } from "./AgentsPanel";
 import { AppProviders } from "../../providers/AppProviders";
 
-function setup(options: { role?: "admin" | "user"; teamRole?: "owner" | "member"; accessNamespace?: string } = {}) {
+function setup(options: { role?: "admin" | "user"; teamRole?: "owner" | "member"; accessNamespace?: string; initialTeam?: string } = {}) {
   let status = "active";
   const agent = () => ({ id: "agt_01arz3ndektsv4rrffq69g5fav", team_id: "team-acme", team_slug: "acme", name: "Ops Agent", status });
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -33,8 +33,9 @@ function setup(options: { role?: "admin" | "user"; teamRole?: "owner" | "member"
     throw new Error(`unexpected request: ${url} ${init?.method ?? "GET"}`);
   });
   vi.stubGlobal("fetch", fetchMock);
-  render(<AppProviders><AgentsPanel auth={{ authenticated: true, principal: { role: options.role || "admin", subject: "user-one" } }} onSignIn={() => {}} /></AppProviders>);
-  return { fetchMock };
+  const auth = { authenticated: true, principal: { role: options.role || "admin", subject: "user-one" } } as const;
+  const view = render(<AppProviders><AgentsPanel auth={auth} initialTeam={options.initialTeam} onSignIn={() => {}} /></AppProviders>);
+  return { fetchMock, rerender: (initialTeam?: string) => view.rerender(<AppProviders><AgentsPanel auth={auth} initialTeam={initialTeam} onSignIn={() => {}} /></AppProviders>) };
 }
 
 beforeEach(() => { delete window.MCP_API_BASE; });
@@ -88,5 +89,13 @@ describe("AgentsPanel", () => {
     expect(await screen.findByText("agent-grant")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Disable" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Revoke" })).not.toBeInTheDocument();
+  });
+
+  it("follows team changes from browser history", async () => {
+    const { rerender } = setup({ initialTeam: "acme" });
+    await screen.findByTestId("agent-open");
+    expect(screen.getByTestId("agent-team-select")).toHaveValue("acme");
+    rerender("*");
+    await waitFor(() => expect(screen.getByTestId("agent-team-select")).toHaveValue("*"));
   });
 });
