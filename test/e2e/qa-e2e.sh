@@ -2759,6 +2759,11 @@ PY
     if [[ -f "${last_result_file}" ]]; then
       last_init_status="$(mcp_result_initialize_status "${last_result_file}" 2>/dev/null || true)"
       if [[ "${last_init_status}" == "504" || "${last_init_status}" == "502" || "${last_init_status}" == "503" || "${last_init_status}" == "404" ]]; then
+        # The mTLS adapter reaches Traefik through its separate TLS
+        # port-forward. A Traefik reload can close that listener while the
+        # plain HTTP ingress remains healthy, so recovering only HTTP leaves
+        # adapter retries stuck on a refused TLS connection.
+        recover_traefik_tls_port_forward_if_needed || true
         recover_ingress_mcp_path
         sleep 2
         continue
