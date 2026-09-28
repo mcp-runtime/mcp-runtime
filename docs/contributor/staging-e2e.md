@@ -112,14 +112,17 @@ password is generated on first run and persisted in `e2e.env`.
 
 `E2E_MTLS_CLUSTER_ISSUER` defaults to `mcp-runtime-ca`, so setup runs with
 `--mtls-cluster-issuer`. Adapter certificates are an opt-in platform feature
-layered on OAuth MCPServer routes, so the runners also export
+on gateway MCPServer routes (OAuth optional), so the runners also export
 `MCP_ADAPTER_CERTIFICATES=true`, `MCP_TRUST_DOMAIN` (default
 `e2e.mcpruntime.org`; override with `E2E_ADAPTER_TRUST_DOMAIN`), and
 `MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE=mcp-servers` before setup. Path routes
 share `mcp.e2e.mcpruntime.org`, so the operator keeps one Traefik `default`
 TLSOption in that namespace that requests, but never requires, a client
-certificate. Set `E2E_ADAPTER_CERTIFICATES=0`, or `E2E_MTLS_CLUSTER_ISSUER` to
-an empty value, to skip the adapter-enrollment stage.
+certificate. The adapter-enrollment stage always proves cert-only HTTPS
+access (omit `spec.auth`). Set `E2E_MCP_OAUTH_ACCESS_TOKEN` to also exercise
+OAuth + certificate on a second pair of servers. Set
+`E2E_ADAPTER_CERTIFICATES=0`, or `E2E_MTLS_CLUSTER_ISSUER` to an empty value,
+to skip the adapter-enrollment stage.
 
 The connector name is only an E2E configuration choice. MCP Runtime's auth
 server is provider-agnostic; Keycloak gives the test an isolated OIDC issuer
@@ -174,7 +177,7 @@ first; a failed critical stage skips the stages that depend on it.
 | `image-pulls` | Platform workloads pull from the public registry host with `mcp-runtime-registry-pull`; an in-cluster pull with the secret succeeds and one without it is refused |
 | `ui` | Platform UI HTML, `/login`, security headers and plain-HTTP behavior recorded |
 | `oidc` | mcp-auth discovery, authorization-server metadata, JWKS, `auth provider-check`, optional Keycloak test-user token (skipped when `E2E_WITH_MCP_AUTH` is off) |
-| `adapter-enrollment` | On an OAuth MCPServer and a grant, `adapter enroll` issues a session-bound SPIFFE certificate. With `E2E_MCP_OAUTH_ACCESS_TOKEN` for the same managed member and MCP resource, the stage proves OAuth plus certificate access, tool denial, missing-credential denial, wrong-resource token denial, and ungranted-agent refusal. It skips when the OAuth token, enrollment command, or workload issuer is unavailable. On failure, `adapter-enrollment/` holds the redacted routing, certificate, policy, and service diagnostics. |
+| `adapter-enrollment` | On a cert-only gateway MCPServer (omit `spec.auth`) and a grant, `adapter enroll` issues a session-bound SPIFFE certificate; HTTPS calls through `https://mcp.e2e.mcpruntime.org/<server>/mcp` with that client certificate reach the granted tool, while an ungranted tool (403), tools/call without a certificate (401), and the same certificate on another server (401 `session_not_found`) are refused. When `E2E_MCP_OAUTH_ACCESS_TOKEN` is set for the managed Globex member and MCP resource, a second OAuth+cert pair also proves bearer requirement, wrong-audience/`session_not_found` denial, and the same grant/deny matrix. Ungranted agents are refused a session. Skipped when the ref has no `adapter enroll`, no mTLS issuer, or the operator lacks `MCP_ADAPTER_CERTIFICATES=true`. On failure, `adapter-enrollment/` holds the redacted routing, certificate, policy, and service diagnostics. |
 | `multitenancy` | `hack/deploy/mcpruntime-org/multitenancy-test.sh`: teams/users, `server build image` -> `server push` -> `server deploy`, pull-secret checks, grants, adapter tool calls, direct-call denial, server events |
 | `governance` | Granted agent session allowed; ungranted agent and forged-session tool calls denied |
 | `analytics` | Analytics API stats/events and ClickHouse rows for the tenant server |
