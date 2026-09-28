@@ -1252,6 +1252,8 @@ start_e2e_adapter_proxy() {
 # emit_cert_session_deny_reasons exercises session lifecycle denials through the
 # enrolled adapter certificate so observability still sees session_not_found /
 # session_revoked / session_expired without X-MCP header injection.
+# Wait on live initialize (not a one-shot curl): ConfigMap updates can land
+# before the gateway sidecar has reloaded the projected policy.
 emit_cert_session_deny_reasons() {
   ensure_trust_session_proxy
   if [[ -z "${ADAPTER_SESSION_NAME:-}" ]]; then
@@ -1265,17 +1267,16 @@ emit_cert_session_deny_reasons() {
   log_line mcp "emitting session_revoked via adapter certificate"
   kubectl patch mcpagentsession "${ADAPTER_SESSION_NAME}" -n mcp-servers --type=merge \
     -p '{"spec":{"revoked":true}}'
-  run_mcp_curl_expect "mcp-curl-cert-session-revoked" "${MCP_TRUST_SESSION_URL}" false "session_revoked" \
-    || run_mcp_curl_expect "mcp-curl-cert-session-revoked-retry" "${MCP_TRUST_SESSION_URL}" false "session_revoked"
+  wait_for_mcp_initialize_result "${MCP_TRUST_SESSION_URL}" 401 "session_revoked"
   kubectl patch mcpagentsession "${ADAPTER_SESSION_NAME}" -n mcp-servers --type=merge \
     -p '{"spec":{"revoked":false}}'
+  wait_for_mcp_initialize_result "${MCP_TRUST_SESSION_URL}" 200
   wait_for_mcp_tool_result "${MCP_TRUST_SESSION_URL}" "aaa-ping" '{}' 200 "pong" 20 "" "" "cert-session-unrevoke"
 
   log_line mcp "emitting session_expired via adapter certificate"
   kubectl patch mcpagentsession "${ADAPTER_SESSION_NAME}" -n mcp-servers --type=merge \
     -p '{"spec":{"expiresAt":"2000-01-01T00:00:00Z"}}'
-  run_mcp_curl_expect "mcp-curl-cert-session-expired" "${MCP_TRUST_SESSION_URL}" false "session_expired" \
-    || run_mcp_curl_expect "mcp-curl-cert-session-expired-retry" "${MCP_TRUST_SESSION_URL}" false "session_expired"
+  wait_for_mcp_initialize_result "${MCP_TRUST_SESSION_URL}" 401 "session_expired"
   if [[ -n "${expires_backup}" ]]; then
     kubectl patch mcpagentsession "${ADAPTER_SESSION_NAME}" -n mcp-servers --type=merge \
       -p "{\"spec\":{\"expiresAt\":\"${expires_backup}\"}}"
@@ -1283,12 +1284,12 @@ emit_cert_session_deny_reasons() {
     kubectl patch mcpagentsession "${ADAPTER_SESSION_NAME}" -n mcp-servers --type=json \
       -p '[{"op":"remove","path":"/spec/expiresAt"}]' || true
   fi
+  wait_for_mcp_initialize_result "${MCP_TRUST_SESSION_URL}" 200
   wait_for_mcp_tool_result "${MCP_TRUST_SESSION_URL}" "aaa-ping" '{}' 200 "pong" 20 "" "" "cert-session-unexpire"
 
   log_line mcp "emitting session_not_found via adapter certificate"
   kubectl delete mcpagentsession "${ADAPTER_SESSION_NAME}" -n mcp-servers --wait=true
-  run_mcp_curl_expect "mcp-curl-cert-session-not-found" "${MCP_TRUST_SESSION_URL}" false "session_not_found" \
-    || run_mcp_curl_expect "mcp-curl-cert-session-not-found-retry" "${MCP_TRUST_SESSION_URL}" false "session_not_found"
+  wait_for_mcp_initialize_result "${MCP_TRUST_SESSION_URL}" 401 "session_not_found"
   # Recreate the deterministic adapter session and re-enroll a fresh certificate.
   ensure_trust_adapter_session
   ensure_trust_session_proxy
