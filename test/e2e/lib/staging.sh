@@ -1631,7 +1631,7 @@ EOF
   done
   staging_log "OAuth and certificate initialize via ${url}: HTTP 200"
   local failed=0
-  code="$(staging_adapter_mcp_post "${certs}" "${url}" \
+  code="$(staging_adapter_mcp_post "${credential_dir}" "${url}" \
     '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"aaa-ping","arguments":{}}}' "${body}")"
   if [[ "${code}" == "200" ]]; then
     staging_log "granted tool aaa-ping with the adapter certificate: HTTP 200"
@@ -1639,7 +1639,7 @@ EOF
     staging_err "granted tool aaa-ping with the adapter certificate: HTTP ${code}: $(head -c 400 "${body}")"
     failed=1
   fi
-  code="$(staging_adapter_mcp_post "${certs}" "${url}" \
+  code="$(staging_adapter_mcp_post "${credential_dir}" "${url}" \
     '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"upper","arguments":{"text":"x"}}}' "${body}")"
   if [[ "${code}" == "403" ]]; then
     staging_log "ungranted tool upper with the adapter certificate denied: HTTP 403 ($(jq -r '.error // .reason // empty' "${body}" 2>/dev/null))"
@@ -1657,7 +1657,7 @@ EOF
   # Retry only while the other server's route is still being loaded.
   deadline=$((SECONDS + 60))
   while true; do
-    code="$(staging_adapter_mcp_post "${certs}" "${MCP_URL}/${wrong}/mcp" "${init}" "${body}")"
+    code="$(staging_adapter_mcp_post "${credential_dir}" "${MCP_URL}/${wrong}/mcp" "${init}" "${body}")"
     if [[ " 000 404 502 503 " != *" ${code} "* ]] || ((SECONDS >= deadline)); then
       break
     fi

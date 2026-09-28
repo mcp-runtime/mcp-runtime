@@ -80,8 +80,9 @@ type Exchange struct {
 
 	// Set by stage 3 (AuthFilter). Must be complete before stage 4 reads them.
 	Identity identityContext
-	// OAuthToken is retained only for request-scoped auth state. OAuth bearer
-	// tokens are never forwarded to the upstream MCP server.
+	// OAuthToken is the validated bearer retained for the request. On OAuth
+	// servers upstreamFilter forwards it to the upstream MCP resource; on
+	// non-OAuth servers the Authorization header is stripped instead.
 	OAuthToken string
 
 	// Set by stage 4 (AuthzFilter). Policy and Identity must not change after this.

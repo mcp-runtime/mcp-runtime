@@ -1171,6 +1171,55 @@ ensure_adapter_proxy_prerequisites() {
   refresh_mcp_proxy_urls
 }
 
+# start_e2e_adapter_proxy enrolls a session-bound client certificate and serves
+# a local Streamable HTTP listener for cell-2 (cert, no OAuth) traffic. Prefer
+# Traefik TLS when adapter certificates are enabled; otherwise fall back to the
+# in-cluster Service port-forward used by older non-mTLS Kind paths.
+start_e2e_adapter_proxy() {
+  local adapter_agent_id="$1"
+  local platform_token="$2"
+  local adapter_runtime_url listen_port="${3:-${ADAPTER_PROXY_PORT}}"
+  local log_file="${4:-${WORKDIR}/adapter-proxy.log}"
+
+  ensure_adapter_proxy_prerequisites
+  if kubectl -n mcp-runtime get deployment mcp-runtime-operator-controller-manager \
+    -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="MCP_ADAPTER_CERTIFICATES")].value}' 2>/dev/null | grep -qx true; then
+    ensure_traefik_tls_port_forward
+    adapter_runtime_url="https://${SERVER_HOST}:${TRAEFIK_TLS_PORT}${MCP_INGRESS_PATH}"
+  else
+    ensure_server_proxy_port_forward
+    adapter_runtime_url="http://127.0.0.1:${SERVER_PROXY_PORT}${MCP_INGRESS_PATH}"
+  fi
+  stop_listener_on_port "${listen_port}"
+  require_port_available "${listen_port}" "adapter proxy"
+  MCP_PLATFORM_API_URL="http://127.0.0.1:${SENTINEL_PORT}" \
+    MCP_PLATFORM_API_TOKEN="${platform_token}" \
+    ./bin/mcp-runtime adapter proxy \
+      --listen "127.0.0.1:${listen_port}" \
+      --runtime-url "${adapter_runtime_url}" \
+      --host-header "${SERVER_HOST}" \
+      --server "${SERVER_NAME}" \
+      --namespace mcp-servers \
+      --agent "${adapter_agent_id}" \
+      --request-timeout 20s \
+      --log-level info >"${log_file}" 2>&1 &
+  ADAPTER_PROXY_PID="$!"
+  PIDS+=("${ADAPTER_PROXY_PID}")
+  wait_managed_port "${listen_port}" "${ADAPTER_PROXY_PID}" "${log_file}" "adapter proxy"
+  MCP_TRUST_SESSION_URL="http://127.0.0.1:${listen_port}/mcp"
+  MCP_SESSION_URL="${MCP_TRUST_SESSION_URL}"
+}
+
+# ensure_trust_session_proxy starts a certificate adapter for trust/governance
+# tool checks. Identity comes from the enrolled SPIFFE cert — not X-MCP headers.
+ensure_trust_session_proxy() {
+  refresh_mcp_proxy_urls
+  ensure_adapter_agent_identity
+  start_e2e_adapter_proxy "${ADAPTER_AGENT_ID}" "${ADAPTER_CALLER_TOKEN}" \
+    "${MCP_SERVICE_SESSION_PORT}" "${WORKDIR}/mcp-trust-session-proxy.log"
+  MCP_TRUST_SESSION_URL="http://127.0.0.1:${MCP_SERVICE_SESSION_PORT}/mcp"
+}
+
 ensure_adapter_agent_identity() {
   if [[ -n "${ADAPTER_AGENT_ID:-}" && -n "${ADAPTER_CALLER_TOKEN:-}" ]]; then
     return

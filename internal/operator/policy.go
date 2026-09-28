@@ -129,16 +129,30 @@ func (r *MCPServerReconciler) nudgeGatewayPodsForPolicy(ctx context.Context, mcp
 
 // renderPolicyConfigMapData serializes the policy document for the ConfigMap.
 // When the rendered policy content is unchanged (same deterministic revision),
-// the prior payload is preserved verbatim so that refreshing the informational
+// the prior payload is preserved so that refreshing the informational
 // generated_at timestamp does not churn the ConfigMap or trigger needless
-// gateway reloads.
+// gateway reloads. Obsolete fields that are no longer on the typed document
+// (for example legacy governance identity headers) are dropped by
+// round-tripping through the current schema before that preserve decision.
 func renderPolicyConfigMapData(existing string, doc *policy.Document) (string, error) {
 	if existing != "" {
 		var prev policy.Document
 		if err := json.Unmarshal([]byte(existing), &prev); err == nil && prev.Revision != "" && prev.Revision == doc.Revision {
 			recomputed, computeErr := policy.ComputeRevision(&prev)
 			if computeErr == nil && recomputed == prev.Revision {
-				return existing, nil
+				normalized, normErr := json.MarshalIndent(prev, "", "  ")
+				if normErr != nil {
+					return "", normErr
+				}
+				// Same revision and already on the current schema: keep bytes.
+				if string(normalized) == existing {
+					return existing, nil
+				}
+				// Revision matches but the stored JSON still carries removed
+				// fields (header identity, auth.mode, session.header_name).
+				// Rewrite through the typed document so gateways stop seeing
+				// unsupported identity headers, keeping generated_at stable.
+				return string(normalized), nil
 			}
 		}
 	}

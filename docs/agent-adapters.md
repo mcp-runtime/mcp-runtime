@@ -135,5 +135,7 @@ issuer's chain as the bundle.
 
 Non-HTTPS runtime URLs, missing certificates, invalid key pairs, and
 certificate enrollment failures stop the adapter before it begins listening.
-The gateway rejects any MCP request that lacks OAuth or whose OAuth subject does
-not match the certificate's enrolled session.
+When the target enables OAuth, the gateway also rejects requests that lack a
+bearer token or whose OAuth subject does not match the certificate's enrolled
+session. When OAuth is omitted, the verified certificate alone authenticates
+the adapter.

@@ -230,16 +230,39 @@ func TestMCPServerDefaultGatewayAuthTokenHeader(t *testing.T) {
 		Spec: MCPServerSpec{
 			Image:   "example.com/mcp-server",
 			Gateway: &GatewayConfig{Enabled: true},
+			Auth: &AuthConfig{
+				IssuerURL: "https://issuer.example.com",
+				Audience:  "https://mcp.example.com/test-server/mcp",
+			},
 		},
 	}
 
 	server.Default()
 
 	if server.Spec.Auth == nil {
-		t.Fatal("expected auth defaults")
+		t.Fatal("expected explicit auth to be preserved")
 	}
 	if server.Spec.Auth.TokenHeader != defaultAuthTokenHeader {
 		t.Fatalf("expected OAuth token header, got %q", server.Spec.Auth.TokenHeader)
+	}
+}
+
+func TestMCPServerDefaultDoesNotInventAuth(t *testing.T) {
+	server := &MCPServer{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-server"},
+		Spec: MCPServerSpec{
+			Image:   "example.com/mcp-server",
+			Gateway: &GatewayConfig{Enabled: true},
+		},
+	}
+
+	server.Default()
+
+	if server.Spec.Auth != nil {
+		t.Fatalf("gateway defaulting must not invent Spec.Auth; got %#v", server.Spec.Auth)
+	}
+	if server.Spec.Policy == nil || server.Spec.Session == nil {
+		t.Fatal("expected policy and session defaults when gateway is enabled")
 	}
 }
 

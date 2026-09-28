@@ -167,9 +167,9 @@ func (r *MCPServer) DefaultWithOptions(options MCPServerDefaultOptions) {
 	}
 
 	if gatewayEnabled(r.Spec) {
-		if r.Spec.Auth == nil {
-			r.Spec.Auth = &AuthConfig{}
-		}
+		// Do not invent Spec.Auth: omitting auth means OAuth is off.
+		// Callers that want OAuth set Spec.Auth (issuerURL/audience may still
+		// be derived later by ResolveDerivedAuth from platform defaults).
 		if r.Spec.Policy == nil {
 			r.Spec.Policy = &PolicyConfig{}
 		}
