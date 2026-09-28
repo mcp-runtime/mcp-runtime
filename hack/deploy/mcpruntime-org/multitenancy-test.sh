@@ -750,12 +750,14 @@ verify_direct_public_denied() {
       --data '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"aaa-ping","arguments":{"note":"direct-public-deny-check"}}}' \
       "${MCP_URL}/${ACME_SERVER}/mcp"
   )"
-  if [[ "$status" != "401" ]] || ! jq -e '.error == "missing_bearer_token"' "$body" >/dev/null; then
-    echo "expected direct public call without OAuth to fail with missing_bearer_token (401), got HTTP ${status}" >&2
+  # After the cert-first identity model (#494), unauthenticated public calls
+  # fail the identity rung with missing_identity before any OAuth bearer check.
+  if [[ "$status" != "401" ]] || ! jq -e '.error == "missing_identity"' "$body" >/dev/null; then
+    echo "expected direct public call without identity to fail with missing_identity (401), got HTTP ${status}" >&2
     cat "$body" >&2
     exit 1
   fi
-  echo "=== direct public call denied without OAuth token: OK ==="
+  echo "=== direct public call denied without identity: OK ==="
 }
 
 adapter_call_add_for() {
