@@ -78,6 +78,25 @@ the platform-backed CLI request flow.
 present, skips platform setup if the core platform is already ready, and reuses
 image tags already published to the local registry.
 
+### Content-hash GHCR image cache
+
+CI QA E2E (and optional local runs) can skip rebuilding unchanged platform
+images by pulling content-hash tags from GitHub Container Registry:
+
+| Env | Meaning |
+|-----|---------|
+| `E2E_IMAGE_CACHE=1` | Enable pull-or-build in `qa-e2e.sh` via `hack/e2e-image-cache` |
+| `MCP_SETUP_IMAGE_CACHE=1` | Same cache inside `setup --test-mode` image publish |
+| `E2E_GHCR_PUSH=1` | After a cache miss build, push `ghcr.io/<owner>/mcp-runtime/<component>:<hash>` |
+| `E2E_IMAGE_CACHE_REGISTRY` | Override registry prefix (default `ghcr.io/<owner>/mcp-runtime`) |
+| `E2E_IMAGE_CACHE=0` | Force-disable even if setup cache is set |
+
+Hashes cover each component’s Dockerfile plus the source trees it copies (see
+`internal/cli/setup/platform/imagecache`). Cluster tags stay `:latest` in
+test-mode; only GHCR uses the hash tag. Forks without `packages: write` to the
+parent org fall back to a full local build. Bust the cache with
+`E2E_IMAGE_CACHE=0` or by changing a hashed input file.
+
 `E2E_DEEP_REQUEST_FLOWS=1` is for pre-release sweeps, not normal PR feedback.
 It requires `E2E_SCENARIOS=all` and adds broader CLI help, adapter proxy,
 platform API, UI auth, registry authz, team, deployment, and item-level runtime

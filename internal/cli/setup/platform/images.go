@@ -15,6 +15,7 @@ import (
 	"mcp-runtime/internal/cli/registry/config"
 	"mcp-runtime/internal/cli/registry/ref"
 	"mcp-runtime/internal/cli/setup/assetpath"
+	"mcp-runtime/internal/cli/setup/platform/imagecache"
 	"mcp-runtime/pkg/k8sclient"
 )
 
@@ -223,7 +224,9 @@ func prepareOperatorImage(logger *zap.Logger, extRegistry *config.ExternalRegist
 	core.Info(fmt.Sprintf("Operator image: %s", operatorImage))
 
 	core.Info("Building operator image")
-	if err := deps.BuildOperatorImage(operatorImage); err != nil {
+	if err := ensureImageViaCache("operator", operatorImage, func() error {
+		return deps.BuildOperatorImage(operatorImage)
+	}); err != nil {
 		wrappedErr := core.WrapWithSentinelAndContext(
 			core.ErrOperatorImageBuildFailed,
 			err,
@@ -289,7 +292,9 @@ func prepareGatewayProxyImage(logger *zap.Logger, extRegistry *config.ExternalRe
 	core.Info(fmt.Sprintf("Gateway proxy image: %s", gatewayProxyImage))
 
 	core.Info("Building gateway proxy image")
-	if err := deps.BuildGatewayProxyImage(gatewayProxyImage); err != nil {
+	if err := ensureImageViaCache("gateway-proxy", gatewayProxyImage, func() error {
+		return deps.BuildGatewayProxyImage(gatewayProxyImage)
+	}); err != nil {
 		wrappedErr := core.WrapWithSentinelAndContext(
 			core.ErrGatewayProxyImageBuildFailed,
 			err,
@@ -429,7 +434,13 @@ func buildAndPublishAnalyticsComponent(logger *zap.Logger, extRegistry *config.E
 	} else {
 		core.Info(fmt.Sprintf("Building analytics %s image: %s", component.Name, image))
 	}
-	if err := deps.BuildAnalyticsImage(image, component.Dockerfile, component.BuildContext); err != nil {
+	cacheComponent := component.Name
+	if mapped := imagecache.ComponentFromLocalImage(image); mapped != "" {
+		cacheComponent = mapped
+	}
+	if err := ensureImageViaCache(cacheComponent, image, func() error {
+		return deps.BuildAnalyticsImage(image, component.Dockerfile, component.BuildContext)
+	}); err != nil {
 		return "", core.WrapWithSentinelAndContext(
 			core.ErrBuildImageFailed,
 			err,
