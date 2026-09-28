@@ -1021,14 +1021,22 @@ restart_traefik_port_forward_force() {
 start_mcp_ingress_protocol_proxies() {
   # Protocol-only local proxies. Governance identity is never injected as
   # X-MCP-* headers; allow paths use adapter --auth mtls (SPIFFE cert).
+  local upstream_origin="http://127.0.0.1:${TRAEFIK_PORT}"
+  local -a upstream_tls_args=()
+  if [[ "${MCP_ADAPTER_CERTIFICATES:-}" == "true" ]]; then
+    ensure_traefik_tls_port_forward
+    upstream_origin="https://127.0.0.1:${TRAEFIK_TLS_PORT}"
+    upstream_tls_args+=(--insecure-upstream)
+  fi
   restart_traefik_port_forward_force
   stop_listener_on_port "${MCP_CURL_ANON_PORT}"
 
   echo "[proxy] starting local protocol proxy for unauthenticated MCP checks"
   start_header_proxy_bg "${MCP_CURL_ANON_PORT}" \
-    "http://127.0.0.1:${TRAEFIK_PORT}" \
+    "${upstream_origin}" \
     "${WORKDIR}/mcp-curl-anon-proxy.log" \
     --host-header "${SERVER_HOST}" \
+    "${upstream_tls_args[@]}" \
     --header "Mcp-Protocol-Version=${MCP_PROTOCOL_VERSION}"
 }
 
@@ -1418,7 +1426,11 @@ wait_for_tenant_grantee_tool_call() {
     if [[ "${status}" == "${expected_status}" ]] && grep -Fq "${expected_body_text}" "${body_file}"; then
       return 0
     fi
-    recover_traefik_port_forward_if_needed || true
+    if [[ "${url}" == https://* ]]; then
+      recover_traefik_tls_port_forward_if_needed || true
+    else
+      recover_traefik_port_forward_if_needed || true
+    fi
     sleep 2
   done
 
@@ -2434,6 +2446,7 @@ wait_for_mcp_initialize_result() {
 import json
 import http.client
 import os
+import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -2573,7 +2586,10 @@ elif body_mode == "chunked-text":
     if not chunks:
         chunks = [b""]
     connection_class = http.client.HTTPSConnection if scheme == "https" else http.client.HTTPConnection
-    conn = connection_class(host, port, timeout=10)
+    conn_kwargs = {"timeout": 10}
+    if scheme == "https":
+        conn_kwargs["context"] = ssl._create_unverified_context()
+    conn = connection_class(host, port, **conn_kwargs)
     req_headers = dict(headers)
     req_headers["Transfer-Encoding"] = "chunked"
     conn.request(method, path, body=chunks, headers=req_headers, encode_chunked=True)
@@ -2600,7 +2616,10 @@ else:
 
 req = urllib.request.Request(url, data=data, headers=headers, method=method)
 try:
-    resp = urllib.request.urlopen(req, timeout=10)
+    if urllib.parse.urlsplit(url).scheme == "https":
+        resp = urllib.request.urlopen(req, timeout=10, context=ssl._create_unverified_context())
+    else:
+        resp = urllib.request.urlopen(req, timeout=10)
     status = resp.status
     response_headers = dict(resp.headers.items())
     body = resp.read().decode()
@@ -2627,7 +2646,11 @@ PY
       echo "[mcp] observed ${method} ${url} returning ${expected_status}"
       return 0
     fi
-    recover_traefik_port_forward_if_needed || true
+    if [[ "${url}" == https://* ]]; then
+      recover_traefik_tls_port_forward_if_needed || true
+    else
+      recover_traefik_port_forward_if_needed || true
+    fi
     sleep 2
   done
 
@@ -4898,8 +4921,15 @@ EOF
 
   if scenario_selected "smoke-auth"; then
     log_line mcp "validating raw MCP request edge cases"
+    raw_mcp_url="${MCP_DIRECT_URL}"
+    if [[ "${MCP_ADAPTER_CERTIFICATES:-}" == "true" ]]; then
+      # Adapter certificates replace the plain Ingress with a TLS route.
+      # Keep exercising malformed MCP requests through that same route.
+      ensure_traefik_tls_port_forward
+      raw_mcp_url="https://127.0.0.1:${TRAEFIK_TLS_PORT}${MCP_INGRESS_PATH}"
+    fi
     wait_for_http_result \
-      "${MCP_DIRECT_URL}" \
+      "${raw_mcp_url}" \
       POST \
       "$(build_headers_json "Host=${SERVER_HOST}" "content-type=application/json" "accept=application/json, text/event-stream" "Mcp-Protocol-Version=2099-01-01")" \
       text \
@@ -4907,7 +4937,7 @@ EOF
       400 \
       "Unsupported protocol version"
     wait_for_http_result \
-      "${MCP_DIRECT_URL}" \
+      "${raw_mcp_url}" \
       POST \
       "$(build_headers_json "Host=${SERVER_HOST}" "content-type=text/plain" "accept=application/json, text/event-stream" "Mcp-Protocol-Version=${MCP_PROTOCOL_VERSION}")" \
       text \
@@ -4915,7 +4945,7 @@ EOF
       403 \
       "rpc_inspection_failed"
     wait_for_http_result \
-      "${MCP_DIRECT_URL}" \
+      "${raw_mcp_url}" \
       POST \
       "$(build_headers_json "Host=${SERVER_HOST}" "content-type=application/json" "accept=application/json, text/event-stream" "Mcp-Protocol-Version=${MCP_PROTOCOL_VERSION}")" \
       text \
@@ -4923,7 +4953,7 @@ EOF
       403 \
       "rpc_inspection_failed"
     wait_for_http_result \
-      "${MCP_DIRECT_URL}" \
+      "${raw_mcp_url}" \
       POST \
       "$(build_headers_json "Host=${SERVER_HOST}" "content-type=application/json" "accept=application/json, text/event-stream" "Mcp-Protocol-Version=${MCP_PROTOCOL_VERSION}")" \
       text \
@@ -4931,7 +4961,7 @@ EOF
       403 \
       "rpc_inspection_failed"
     wait_for_http_result \
-      "${MCP_DIRECT_URL}" \
+      "${raw_mcp_url}" \
       POST \
       "$(build_headers_json "Host=${SERVER_HOST}" "content-type=application/json" "accept=application/json, text/event-stream" "Mcp-Protocol-Version=${MCP_PROTOCOL_VERSION}")" \
       text \
@@ -4939,21 +4969,21 @@ EOF
       403 \
       "rpc_inspection_failed"
     wait_for_http_result \
-      "${MCP_DIRECT_URL}" \
+      "${raw_mcp_url}" \
       POST \
       "$(build_headers_json "Host=${SERVER_HOST}" "content-type=application/json" "accept=application/json, text/event-stream")" \
       text \
       '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
       200
     wait_for_http_result \
-      "${MCP_DIRECT_URL}" \
+      "${raw_mcp_url}" \
       POST \
       "$(build_headers_json "Host=${SERVER_HOST}" "content-type=application/json" "accept=application/json, text/event-stream" "Mcp-Protocol-Version=${MCP_PROTOCOL_VERSION}")" \
       chunked-text \
       '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
       200
     wait_for_http_result \
-      "${MCP_DIRECT_URL}" \
+      "${raw_mcp_url}" \
       GET \
       "$(build_headers_json "Host=${SERVER_HOST}" "accept=text/event-stream" "Mcp-Protocol-Version=${MCP_PROTOCOL_VERSION}")" \
       none \
@@ -4961,7 +4991,7 @@ EOF
       400 \
       "GET requires an Mcp-Session-Id header"
     wait_for_http_result \
-      "${MCP_DIRECT_URL}" \
+      "${raw_mcp_url}" \
       DELETE \
       "$(build_headers_json "Host=${SERVER_HOST}" "Mcp-Protocol-Version=${MCP_PROTOCOL_VERSION}")" \
       none \
@@ -4974,13 +5004,17 @@ EOF
     run_mcp_curl_expect "mcp-curl-missing-bearer" "${MCP_ANON_URL}" false "missing_bearer_token" \
       || run_mcp_curl_expect "mcp-curl-missing-bearer-retry" "${MCP_ANON_URL}" false "missing_bearer_token"
     # Spoofed governance headers alone must not authenticate.
-    FORGED_STATUS="$(curl -sS -o "${WORKDIR}/mcp-curl-forged-headers.json" -w '%{http_code}' \
+    curl_tls_args=()
+    if [[ "${raw_mcp_url}" == https://* ]]; then
+      curl_tls_args+=(--insecure)
+    fi
+    FORGED_STATUS="$(curl "${curl_tls_args[@]}" -sS -o "${WORKDIR}/mcp-curl-forged-headers.json" -w '%{http_code}' \
       -H "Host: ${SERVER_HOST}" -H 'content-type: application/json' \
       -H 'accept: application/json, text/event-stream' -H "Mcp-Protocol-Version: ${MCP_PROTOCOL_VERSION}" \
       -H "X-MCP-Human-ID: ${HUMAN_ID}" -H "X-MCP-Agent-ID: ${AGENT_ID}" \
       -H "X-MCP-Agent-Session: ${SESSION_ID}" \
       --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
-      "${MCP_DIRECT_URL}" || true)"
+      "${raw_mcp_url}" || true)"
     if [[ "${FORGED_STATUS}" != "401" ]] || ! grep -q 'missing_bearer_token' "${WORKDIR}/mcp-curl-forged-headers.json"; then
       echo "forged X-MCP headers authenticated without cert/bearer (${FORGED_STATUS}): $(cat "${WORKDIR}/mcp-curl-forged-headers.json")" >&2
       exit 1
