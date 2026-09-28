@@ -52,12 +52,7 @@ func TestLoadFromFile(t *testing.T) {
 							UpstreamURL: "http://127.0.0.1:9090",
 						},
 						Auth: &AuthConfig{
-							Mode:            AuthMode("header"),
-							HumanIDHeader:   "X-MCP-Human-ID",
-							AgentIDHeader:   "X-MCP-Agent-ID",
-							TeamIDHeader:    "X-Team-ID",
-							SessionIDHeader: "X-MCP-Agent-Session",
-							TokenHeader:     "Authorization",
+							TokenHeader: "Authorization",
 						},
 						Policy: &PolicyConfig{
 							Mode:            PolicyMode("allow-list"),
@@ -68,7 +63,6 @@ func TestLoadFromFile(t *testing.T) {
 						Session: &SessionConfig{
 							Required:            true,
 							Store:               "kubernetes",
-							HeaderName:          "X-MCP-Agent-Session",
 							MaxLifetime:         "24h",
 							IdleTimeout:         "1h",
 							UpstreamTokenHeader: "Authorization",
@@ -290,12 +284,7 @@ func TestSetDefaults(t *testing.T) {
 					UpstreamURL: "http://127.0.0.1:9090",
 				},
 				Auth: &AuthConfig{
-					Mode:            AuthModeHeader,
-					HumanIDHeader:   "X-MCP-Human-ID",
-					AgentIDHeader:   "X-MCP-Agent-ID",
-					TeamIDHeader:    "X-MCP-Team-ID",
-					SessionIDHeader: "X-MCP-Agent-Session",
-					TokenHeader:     "Authorization",
+					TokenHeader: "Authorization",
 				},
 				Policy: &PolicyConfig{
 					Mode:            PolicyModeAllowList,
@@ -306,7 +295,6 @@ func TestSetDefaults(t *testing.T) {
 				Session: &SessionConfig{
 					Required:            true,
 					Store:               "kubernetes",
-					HeaderName:          "X-MCP-Agent-Session",
 					MaxLifetime:         "24h",
 					IdleTimeout:         "1h",
 					UpstreamTokenHeader: "Authorization",

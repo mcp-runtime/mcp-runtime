@@ -92,10 +92,6 @@ func TestRunStdioShimInjectsHeadersAndMaintainsRuntimeMCPSession(t *testing.T) {
 	if first.Host != "mcp.example.local" {
 		t.Fatalf("first host = %q, want host override", first.Host)
 	}
-	assertHeader(t, first.Headers, HumanIDHeader, "support-lead")
-	assertHeader(t, first.Headers, AgentIDHeader, "ticket-triage-agent")
-	assertHeader(t, first.Headers, TeamIDHeader, "team-acme")
-	assertHeader(t, first.Headers, AgentSessionHeader, "sess-ticket-triage-agent")
 	assertHeader(t, first.Headers, MCPProtocolHeader, "2025-06-18")
 	if got := first.Headers.Get(MCPSessionHeader); got != "" {
 		t.Fatalf("first %s = %q, want empty before initialize response", MCPSessionHeader, got)
@@ -603,12 +599,6 @@ func TestStdioShimAnonymousModeAllowsInitializeWithoutIdentity(t *testing.T) {
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// anonymous: governance headers should be absent
-		if r.Header.Get(AgentSessionHeader) != "" {
-			t.Errorf("X-MCP-Agent-Session should be absent in anonymous mode, got %q", r.Header.Get(AgentSessionHeader))
-		}
-		if r.Header.Get(HumanIDHeader) != "" {
-			t.Errorf("X-MCP-Human-ID should be absent in anonymous mode, got %q", r.Header.Get(HumanIDHeader))
-		}
 		w.Header().Set(MCPSessionHeader, "pub-sess")
 		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18"}}`))
 	}))
@@ -682,34 +672,6 @@ func TestStdioShimAnonymousModeUsesDefaultAllowlistWhenNoneConfigured(t *testing
 	}
 	if s.isMethodAllowed("tools/call") {
 		t.Fatal("isMethodAllowed(tools/call) = true, want false (not in default allowlist)")
-	}
-}
-
-func TestIdentityApplyOmitsEmptyHeaders(t *testing.T) {
-	t.Parallel()
-
-	headers := http.Header{}
-	headers.Set(HumanIDHeader, "spoofed-human")
-	headers.Set(AgentIDHeader, "spoofed-agent")
-	headers.Set(AgentSessionHeader, "spoofed-session")
-
-	// Empty identity (anonymous mode): all governance headers should be deleted, none set.
-	Identity{}.Apply(headers)
-
-	for _, h := range []string{HumanIDHeader, AgentIDHeader, TeamIDHeader, AgentSessionHeader} {
-		if v := headers.Get(h); v != "" {
-			t.Fatalf("header %s = %q, want empty (should be deleted and not re-set)", h, v)
-		}
-	}
-
-	// Non-empty identity: only non-empty fields should be set.
-	headers2 := http.Header{}
-	Identity{HumanID: "h", AgentID: "a"}.Apply(headers2)
-	if headers2.Get(HumanIDHeader) != "h" {
-		t.Fatalf("HumanIDHeader = %q, want h", headers2.Get(HumanIDHeader))
-	}
-	if headers2.Get(AgentSessionHeader) != "" {
-		t.Fatalf("AgentSessionHeader = %q, want empty when SessionID is empty", headers2.Get(AgentSessionHeader))
 	}
 }
 

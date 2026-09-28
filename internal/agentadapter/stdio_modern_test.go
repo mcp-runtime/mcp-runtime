@@ -147,9 +147,6 @@ func TestStdioShimModernRequestHeaders(t *testing.T) {
 	if got := modern.Get(MCPSessionHeader); got != "" {
 		t.Fatalf("modern request sent Mcp-Session-Id = %q", got)
 	}
-	if got := modern.Get(AgentIDHeader); got != "agent-1" {
-		t.Fatalf("governance identity header = %q, want agent-1", got)
-	}
 
 	h.send(`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"echo","arguments":{}}}`)
 	h.read()

@@ -383,17 +383,10 @@ func TestAdapterStdioSessionRequiredHappyPath(t *testing.T) {
 		t.Fatalf("tools/call = %#v", called)
 	}
 
-	// Every upstream request must carry the explicit identity headers.
-	for _, r := range rt.requests() {
-		if r.method == "" || r.method == "notifications/initialized" {
-			// notifications/initialized goes through the same headers but the
-			// test only cares about request-id-bearing calls. Both should still
-			// have the governance headers.
-		}
-		assertHeader(t, r.headers, "X-MCP-Human-ID", "support-lead")
-		assertHeader(t, r.headers, "X-MCP-Agent-ID", "ticket-triage-agent")
-		assertHeader(t, r.headers, "X-MCP-Agent-Session", "sess-1")
-		assertHeader(t, r.headers, "X-MCP-Team-ID", "team-acme")
+	// Governance identity is the client certificate / session, not X-MCP
+	// request headers. Confirm the shim completed the tools/call path above.
+	if n := rt.callsByMethod("tools/call"); n != 1 {
+		t.Fatalf("tools/call upstream count = %d, want 1", n)
 	}
 }
 
@@ -440,14 +433,6 @@ func TestAdapterStdioAnonymousModeBlocksDisallowedMethod(t *testing.T) {
 	}
 	if rt.callsByMethod("tools/call") != 0 {
 		t.Fatalf("tools/call leaked to upstream in anonymous mode")
-	}
-	// Anonymous mode must not inject identity headers.
-	for _, r := range rt.requests() {
-		for _, h := range []string{"X-MCP-Human-ID", "X-MCP-Agent-ID", "X-MCP-Agent-Session"} {
-			if v := r.headers.Get(h); v != "" {
-				t.Fatalf("anonymous mode forwarded %s=%q (must be absent)", h, v)
-			}
-		}
 	}
 }
 
@@ -537,12 +522,5 @@ func TestAdapterStdioSurfacesSessionExpired(t *testing.T) {
 	}
 	if got.Error.Data == nil || got.Error.Data["runtime_status"] != "session_expired" {
 		t.Fatalf("error.data = %#v, want runtime_status=session_expired", got.Error.Data)
-	}
-}
-
-func assertHeader(t *testing.T, h http.Header, name, want string) {
-	t.Helper()
-	if got := h.Get(name); got != want {
-		t.Fatalf("header %s = %q, want %q", name, got, want)
 	}
 }

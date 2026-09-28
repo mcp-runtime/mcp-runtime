@@ -8,9 +8,9 @@
 //
 //	Stage 1 – InspectFilter:   bounded body capture; RPC method and tool name extraction
 //	Stage 2 – PolicyFilter:    atomic policy snapshot acquisition; OAuth metadata early-exit
-//	Stage 3 – AuthFilter:      authentication and identity extraction (header or OAuth JWT)
+//	Stage 3 – AuthFilter:      optional OAuth and adapter-certificate authentication
 //	Stage 4 – AuthzFilter:     authorization and session/grant evaluation
-//	Stage 5 – UpstreamFilter:  identity header rewrite; path rewrite; upstream proxy
+//	Stage 5 – UpstreamFilter:  credential cleanup; path rewrite; upstream proxy
 //	Stage 6 – (orchestrator):  audit/analytics finalization
 //
 // Ordering guarantees:
@@ -80,8 +80,9 @@ type Exchange struct {
 
 	// Set by stage 3 (AuthFilter). Must be complete before stage 4 reads them.
 	Identity identityContext
-	// OAuthToken is retained only for request-scoped auth state. OAuth bearer
-	// tokens are never forwarded to the upstream MCP server.
+	// OAuthToken is the validated bearer retained for the request. On OAuth
+	// servers upstreamFilter forwards it to the upstream MCP resource; on
+	// non-OAuth servers the Authorization header is stripped instead.
 	OAuthToken string
 
 	// Set by stage 4 (AuthzFilter). Policy and Identity must not change after this.

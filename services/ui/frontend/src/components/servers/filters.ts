@@ -40,7 +40,6 @@ export function matchesServerSearch(server: ServerSummary, search: string): bool
     server.status,
     server.image,
     server.endpoint,
-    server.authMode,
   ]).includes(term);
 }
 

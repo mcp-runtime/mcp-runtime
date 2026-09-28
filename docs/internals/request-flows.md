@@ -108,8 +108,7 @@ Primary request paths:
 - `/{server}/mcp`
 - JSON-RPC methods: `initialize`, `tools/list`, `tools/call`,
   `prompts/list`, `prompts/get`, `resources/list`, `resources/read`
-- Governance headers: `X-MCP-Human-ID`, `X-MCP-Agent-ID`,
-  `X-MCP-Team-ID`, `X-MCP-Agent-Session`
+- Optional OAuth bearer authentication; adapters always add a verified client certificate
 - Gateway health: `/health`
 
 OAuth-protected MCP servers add:
@@ -118,37 +117,42 @@ OAuth-protected MCP servers add:
 - `/.well-known/oauth-protected-resource/{server}/mcp`
 - `Authorization: Bearer <token>` validation through issuer metadata and JWKS
 
-## Adapter-Issued Sessions
+## Adapter-Issued Certificates
 
-Adapters let local agents use governed MCP routes without constructing grant and
-session headers manually.
+Adapters enroll a session-bound certificate so local agents can use governed
+MCP routes without constructing identity headers.
 
 ```mermaid
 sequenceDiagram
     participant Agent
-    participant Adapter as local adapter proxy or stdio
+    participant Adapter as local HTTP adapter proxy
     participant API as runtime-api
     participant K8s as Kubernetes API
     participant Operator
+    participant Traefik
     participant Gateway
     participant Server as MCP server
 
-    Agent->>Adapter: MCP request on local HTTP or stdio
+    Agent->>Adapter: Streamable HTTP MCP request
     Adapter->>API: POST /api/v1/runtime/adapter/sessions
     API->>K8s: create or reuse MCPAgentSession
     K8s-->>Operator: session watch event
     Operator->>K8s: render gateway policy ConfigMap
-    API-->>Adapter: session name, humanID, agentID, teamID, expiry
-    Adapter->>Gateway: forward MCP request with governance headers
+    API-->>Adapter: session name and expiry
+    Adapter->>Adapter: generate private key and session-bound CSR
+    Adapter->>API: POST /api/v1/runtime/adapter/certificates
+    API-->>Adapter: signed client certificate and CA bundle
+    Adapter->>Traefik: forward MCP request with client certificate (+ bearer when OAuth is enabled)
+    Traefik->>Gateway: verify certificate and inject trusted SPIFFE identity
+    Gateway->>Gateway: resolve the SPIFFE identity against session and grant policy
     Gateway->>Server: allow and proxy, or deny from policy
 ```
 
 Primary request paths:
 
 - `mcp-runtime adapter proxy --server <name> --agent <id>`
-- `mcp-runtime adapter stdio --server <name> --agent <id>`
-- `POST /api/v1/runtime/adapter/sessions`
-- Local adapter routes: /mcp, /health, /live, /ready, /metrics
+- `POST /api/v1/runtime/adapter/sessions` and `/certificates`
+- Local adapter routes: `/mcp`, `/healthz`, `/livez`, `/readyz`, `/metrics`
 
 ## UI And Platform API
 
@@ -361,11 +365,10 @@ Primary request paths:
 | MCP initialize/list/call | MCP client `/{server}/mcp` | Ingress, Service, gateway sidecar, MCP server | Streamable HTTP, JSON-RPC, MCP session header | `smoke-auth` |
 | Denied MCP call | `tools/call` without matching policy | gateway, policy evaluator, audit pipeline | deny reasons such as `tool_not_granted`, `session_not_found` | `governance`, `trust` |
 | OAuth MCP call | bearer token MCP route | gateway, OIDC discovery/JWKS, policy, MCP server | OAuth protected resource metadata, JWT claims | `oauth` |
-| Adapter proxy | `mcp-runtime adapter proxy` | local adapter, API, K8s session, operator, gateway | adapter session response, governance headers | `adapter-proxy` |
-| Adapter stdio | `mcp-runtime adapter stdio` | stdio shim, API, gateway, MCP server | stdin/stdout JSON-RPC, session state | `adapter-proxy`, unit tests |
+| Adapter proxy | `mcp-runtime adapter proxy` | local adapter, API, K8s session, operator, Traefik, gateway | session-bound SPIFFE certificate, trusted ingress identity | `adapter-proxy` |
 | Create/update grants | UI/CLI/API `/api/v1/runtime/grants` | API, K8s, operator, gateway | grant validation, subject/team binding | `governance`, `api-platform` |
 | Create/update sessions (admin) | UI/CLI/API `POST /api/v1/runtime/sessions` | API, K8s, operator, gateway | admin role required for direct session apply | `governance`, `api-platform` |
-| Adapter-issued sessions | `adapter stdio|proxy`, `POST /api/v1/runtime/adapter/sessions` | adapter, API, K8s, gateway | matching grant, principal identity | `adapter-proxy`, `governance` |
+| Adapter-issued certificates | `adapter proxy`, `POST /api/v1/runtime/adapter/sessions` and `/certificates` | adapter, API, K8s, Traefik, gateway | matching grant, session-bound SPIFFE identity | `adapter-proxy`, `governance` |
 | Revoke/disable access | item action paths | API, K8s, operator, gateway | enable/disable/revoke/unrevoke | `governance`, `api-platform` |
 | Push or pull registry image | Docker `/v2/*` | registry ingress, Traefik forwardAuth, API, registry | scope authz, registry credentials | `api-platform`, `all` |
 | Create registry credential | `/api/v1/user/registry-credentials` | API, Postgres, registry authz | one-time credential, revoke flow | `api-platform` |

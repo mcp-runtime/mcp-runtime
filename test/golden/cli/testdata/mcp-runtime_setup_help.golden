@@ -30,7 +30,7 @@ Flags:
       --mcp-auth-server-image string         Container image for the optional bundled mcp-auth authorization server (default "docker.io/princekrroshan01/mcp-auth-server:latest")
       --mcp-auth-signing-key-secret string   Secret holding the mcp-auth RSA signing key as private-key.pem (required outside --test-mode)
       --mcp-auth-tls-secret string           Override the managed TLS Secret for the bundled mcp-auth ingress (default: mcp-auth-server-tls)
-      --mtls-cluster-issuer string           Enable adapter client-certificate authentication on OAuth-configured server routes using this workload ClusterIssuer (requires --with-tls). Name an enterprise issuer, or the bundled mcp-runtime-ca to have setup provision it. Test mode defaults to mcp-runtime-ca. Production must also set MCP_TRUST_DOMAIN. Overrides env MCP_SETUP_MTLS_CLUSTER_ISSUER
+      --mtls-cluster-issuer string           Enable adapter client-certificate authentication on gateway server routes using this workload ClusterIssuer (requires --with-tls). Name an enterprise issuer, or the bundled mcp-runtime-ca to have setup provision it. Test mode defaults to mcp-runtime-ca. Production must also set MCP_TRUST_DOMAIN. Overrides env MCP_SETUP_MTLS_CLUSTER_ISSUER
       --operator-leader-elect                Override operator leader election when set
       --operator-metrics-addr string         Operator metrics bind address (default: :8080 from manager.yaml)
       --operator-probe-addr string           Operator health probe bind address (default: :8081 from manager.yaml)

@@ -173,40 +173,8 @@ func gatewayDeniedStatus(policy *policypkg.Document, decision policypkg.Decision
 	return http.StatusForbidden
 }
 
-func gatewayDeniedPayload(policy *policypkg.Document, decision policypkg.Decision) map[string]any {
-	payload := map[string]any{"error": decision.Reason}
-	if policypkg.PolicyUsesOAuth(policy) {
-		return payload
-	}
-	switch decision.Reason {
-	case "missing_identity", "missing_session":
-		payload["message"] = "This MCP server uses MCP Runtime header/session governance. Direct clients must connect through the mcp-runtime adapter proxy or stdio adapter, or send an adapter-issued identity/session."
-		payload["adapter_required"] = true
-		payload["required_headers"] = governanceRequiredHeaders(policy)
-	}
-	return payload
-}
-
-func governanceRequiredHeaders(policy *policypkg.Document) []string {
-	humanHeader := defaultHumanHeader
-	agentHeader := defaultAgentHeader
-	teamHeader := defaultTeamHeader
-	sessionHeader := defaultSessionHeader
-	if policy != nil && policy.Auth != nil {
-		if value := strings.TrimSpace(policy.Auth.HumanIDHeader); value != "" {
-			humanHeader = value
-		}
-		if value := strings.TrimSpace(policy.Auth.AgentIDHeader); value != "" {
-			agentHeader = value
-		}
-		if value := strings.TrimSpace(policy.Auth.TeamIDHeader); value != "" {
-			teamHeader = value
-		}
-		if value := strings.TrimSpace(policy.Auth.SessionIDHeader); value != "" {
-			sessionHeader = value
-		}
-	}
-	return []string{humanHeader, agentHeader, teamHeader, sessionHeader}
+func gatewayDeniedPayload(_ *policypkg.Document, decision policypkg.Decision) map[string]any {
+	return map[string]any{"error": decision.Reason}
 }
 
 func (s *gatewayServer) emitAuditEvent(

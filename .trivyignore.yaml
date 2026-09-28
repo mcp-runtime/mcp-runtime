@@ -6,7 +6,7 @@ misconfigurations:
   - id: KSV-0041
     paths:
       - "config/rbac/role.yaml"
-    statement: "The operator reads gateway certificate Secrets and reconciles the per-server mTLS trust-bundle Secret (re-keying the cert-manager CA bundle to the tls.ca key Traefik's TLSOption requires). Secret access is functionally required for auth.mode mtls; the cached controller client also needs list/watch to serve Get."
+    statement: "The operator reads gateway certificate Secrets and reconciles the per-server mTLS trust-bundle Secret (re-keying the cert-manager CA bundle to the tls.ca key Traefik's TLSOption requires). Secret access is functionally required for adapter certificate routes; the cached controller client also needs list/watch to serve Get."
   - id: KSV-0056
     paths:
       - "k8s/08-runtime-api-rbac.yaml"

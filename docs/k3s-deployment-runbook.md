@@ -193,7 +193,7 @@ default. Override the path with `MCP_DEPLOY_ENV=/path/to/other.env`. See
 
 #### MCP OAuth authorization server
 
-Applies to MCP servers with `spec.auth.mode: oauth`. These variables configure
+Applies to MCP servers with `spec.auth`. These variables configure
 the authorization server that MCP clients use. Browser sign-in above configures
 OIDC for the dashboard.
 
@@ -230,10 +230,9 @@ gateway fails closed with 401 when a token's `aud` does not match.
 
 #### Optional bundled MCP authorization server
 
-MCP authorization is optional. Without it, an MCP client connects to a server
-with no bearer token. Enable it when the server needs standards-based user
-login, PKCE, token issuance, and Protected Resource Metadata discovery. The
-bundled `mcp-auth-server` is the OAuth authorization server: it authenticates
+OAuth-enabled MCP Runtime servers require bearer tokens, Protected Resource Metadata,
+and resource audience validation. The bundled `mcp-auth-server` is optional;
+when enabled it authenticates
 users through one external OIDC identity provider such as Keycloak and issues
 MCP access tokens. Runtime governance decisions stay in the gateway.
 

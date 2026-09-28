@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v4"
+
 	policypkg "mcp-runtime/pkg/policy"
 )
 
@@ -45,10 +47,6 @@ func newTestExchange(method, target, body string, headers map[string]string) *Ex
 
 func minimalServer() *gatewayServer {
 	return &gatewayServer{
-		defaultHumanHeader:    defaultHumanHeader,
-		defaultAgentHeader:    defaultAgentHeader,
-		defaultTeamHeader:     defaultTeamHeader,
-		defaultSessionHeader:  defaultSessionHeader,
 		defaultPolicyMode:     defaultPolicyMode,
 		defaultPolicyDecision: defaultPolicyDecision,
 		defaultPolicyVersion:  "test",
@@ -94,7 +92,7 @@ func TestInspectFilterSetsInspection(t *testing.T) {
 func TestPolicyFilterContinuesForNonOAuthPath(t *testing.T) {
 	t.Parallel()
 	s := minimalServer()
-	s.snapshotPolicy(policySnapshot{Policy: headerPolicy()})
+	s.snapshotPolicy(policySnapshot{Policy: testPolicy()})
 	ex := newTestExchange(http.MethodPost, "/mcp", `{}`, map[string]string{"Content-Type": "application/json"})
 
 	if got := s.policyFilter(ex); got != Continue {
@@ -140,7 +138,7 @@ func TestPolicyFilterSetsSkipAuditForOAuthMetadataPath(t *testing.T) {
 func TestPolicyFilterPolicySnapshotIsImmutableForExchange(t *testing.T) {
 	t.Parallel()
 	s := minimalServer()
-	snap := headerPolicy()
+	snap := testPolicy()
 	s.snapshotPolicy(policySnapshot{Policy: snap})
 	ex := newTestExchange(http.MethodPost, "/mcp", "", nil)
 
@@ -156,27 +154,11 @@ func TestPolicyFilterPolicySnapshotIsImmutableForExchange(t *testing.T) {
 
 // ---- stage 3: authFilter ----------------------------------------------------
 
-func TestAuthFilterContinuesForHeaderMode(t *testing.T) {
-	t.Parallel()
-	s := minimalServer()
-	ex := newTestExchange(http.MethodPost, "/mcp", "", map[string]string{
-		defaultHumanHeader: "user-1",
-		defaultAgentHeader: "agent-1",
-	})
-	ex.Policy = headerPolicy()
-
-	if got := s.authFilter(ex); got != Continue {
-		t.Fatalf("authFilter header mode = %v, want Continue", got)
-	}
-	if ex.Identity.HumanID != "user-1" {
-		t.Fatalf("Identity.HumanID = %q, want user-1", ex.Identity.HumanID)
-	}
-}
-
 func TestAuthFilterRejectsOAuthMissingBearer(t *testing.T) {
 	t.Parallel()
 	issuer := newTestJWTIssuer(t)
 	s := minimalServer()
+	s.httpClient = issuer.server.Client()
 	ex := newTestExchange(http.MethodPost, "/mcp", `{}`, map[string]string{"Content-Type": "application/json"})
 	ex.Policy = oauthPolicy(issuer.url)
 
@@ -208,33 +190,111 @@ func verifiedProxyTLS(peerURIs ...string) *tls.ConnectionState {
 	}
 }
 
-func TestAuthFilterMTLSUsesVerifiedHeaderAndIgnoresGovernanceHeaders(t *testing.T) {
+func TestAuthFilterAdapterRequiresMatchingOAuthAndUsesCertificateIdentity(t *testing.T) {
+	t.Parallel()
+	issuer := newTestJWTIssuer(t)
+	s := minimalServer()
+	s.httpClient = issuer.server.Client()
+	ex := newTestExchange(http.MethodPost, "/mcp", `{}`, map[string]string{
+		// Identity comes only from the ingress-injected verified SPIFFE header.
+		defaultVerifiedSPIFFEHeader: "spiffe://example.org/ns/team-a/session/session-1",
+	})
+	ex.R.TLS = verifiedProxyTLS()
+	ex.Policy = oauthPolicy(issuer.url)
+	ex.Policy.Auth.TrustDomain = "example.org"
+	ex.Policy.Sessions = []policypkg.Binding{{
+		Name:      "session-1",
+		Namespace: "team-a",
+		HumanID:   "human-1",
+		AgentID:   "agent-1",
+		TeamID:    "team-1",
+	}}
+	token := issuer.sign(t, jwt.MapClaims{
+		"iss": issuer.url, "aud": "http://proxy.example.com/mcp", "sub": "human-1",
+		"azp": "oauth-client-1", "team_id": "team-1", "sid": "oauth-session-1",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
+	ex.R.Header.Set("Authorization", "Bearer "+token)
+
+	if got := s.authFilter(ex); got != Continue {
+		t.Fatalf("authFilter adapter = %v, want Continue", got)
+	}
+	if ex.Identity.HumanID != "human-1" || ex.Identity.AgentID != "agent-1" || ex.Identity.SessionID != "session-1" {
+		t.Fatalf("identity = %#v, want rendered session identity", ex.Identity)
+	}
+	if ex.OAuthToken != token {
+		t.Fatal("validated OAuth token was not retained for the upstream MCP resource")
+	}
+}
+
+func TestAuthFilterAdapterCertificateOnlyWhenOAuthDisabled(t *testing.T) {
 	t.Parallel()
 	s := minimalServer()
 	ex := newTestExchange(http.MethodPost, "/mcp", `{}`, map[string]string{
-		// Spoofed governance headers must be ignored; identity comes only from
-		// the ingress-injected verified SPIFFE header.
-		defaultHumanHeader:          "spoofed-human",
-		defaultSessionHeader:        "spoofed-session",
 		defaultVerifiedSPIFFEHeader: "spiffe://example.org/ns/team-a/session/session-1",
 	})
 	ex.R.TLS = verifiedProxyTLS()
 	ex.Policy = &policypkg.Document{
-		Auth: &policypkg.Auth{Mode: "oauth", TrustDomain: "example.org"},
+		Auth: &policypkg.Auth{TrustDomain: "example.org"},
 		Sessions: []policypkg.Binding{{
-			Name:      "session-1",
-			Namespace: "team-a",
-			HumanID:   "human-1",
-			AgentID:   "agent-1",
-			TeamID:    "team-1",
+			Name: "session-1", Namespace: "team-a", HumanID: "human-1", AgentID: "agent-1",
 		}},
 	}
-
 	if got := s.authFilter(ex); got != Continue {
-		t.Fatalf("authFilter mtls = %v, want Continue", got)
+		t.Fatalf("authFilter adapter without OAuth = %v, want Continue", got)
 	}
-	if ex.Identity.HumanID != "human-1" || ex.Identity.SessionID != "session-1" {
-		t.Fatalf("identity = %#v, want rendered session identity", ex.Identity)
+	if ex.Identity.HumanID != "human-1" || ex.Identity.AgentID != "agent-1" || ex.Identity.SessionID != "session-1" {
+		t.Fatalf("identity = %#v, want certificate session identity", ex.Identity)
+	}
+}
+
+func TestAuthFilterAdapterRejectsMissingOAuthBearer(t *testing.T) {
+	t.Parallel()
+	s := minimalServer()
+	ex := newTestExchange(http.MethodPost, "/mcp", `{}`, map[string]string{
+		defaultVerifiedSPIFFEHeader: "spiffe://example.org/ns/team-a/session/session-1",
+	})
+	ex.R.TLS = verifiedProxyTLS()
+	ex.Policy = &policypkg.Document{
+		Auth: &policypkg.Auth{
+			TrustDomain: "example.org",
+			IssuerURL:   "https://issuer.example.com",
+			Audience:    "http://proxy.example.com/mcp",
+		},
+		Sessions: []policypkg.Binding{{Name: "session-1", Namespace: "team-a", HumanID: "human-1"}},
+	}
+
+	if got := s.authFilter(ex); got != Reject {
+		t.Fatalf("authFilter = %v, want Reject", got)
+	}
+	if ex.Decision.Reason != "missing_bearer_token" {
+		t.Fatalf("reason = %q, want missing_bearer_token", ex.Decision.Reason)
+	}
+}
+
+func TestAuthFilterAdapterRejectsMismatchedOAuthSubject(t *testing.T) {
+	t.Parallel()
+	issuer := newTestJWTIssuer(t)
+	s := minimalServer()
+	s.httpClient = issuer.server.Client()
+	ex := newTestExchange(http.MethodPost, "/mcp", `{}`, map[string]string{
+		defaultVerifiedSPIFFEHeader: "spiffe://example.org/ns/team-a/session/session-1",
+	})
+	ex.R.TLS = verifiedProxyTLS()
+	ex.Policy = oauthPolicy(issuer.url)
+	ex.Policy.Auth.TrustDomain = "example.org"
+	ex.Policy.Sessions = []policypkg.Binding{{Name: "session-1", Namespace: "team-a", HumanID: "human-1"}}
+	token := issuer.sign(t, jwt.MapClaims{
+		"iss": issuer.url, "aud": "http://proxy.example.com/mcp", "sub": "different-human",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
+	ex.R.Header.Set("Authorization", "Bearer "+token)
+
+	if got := s.authFilter(ex); got != Reject {
+		t.Fatalf("authFilter = %v, want Reject", got)
+	}
+	if ex.Decision.Reason != "certificate_oauth_subject_mismatch" {
+		t.Fatalf("reason = %q, want certificate_oauth_subject_mismatch", ex.Decision.Reason)
 	}
 }
 
@@ -250,7 +310,7 @@ func TestAuthFilterMTLSRejectsForgedHeaderWithoutMTLS(t *testing.T) {
 	})
 	// No ex.R.TLS — plaintext / ingress-bypassing connection.
 	ex.Policy = &policypkg.Document{
-		Auth:     &policypkg.Auth{Mode: "oauth", TrustDomain: "example.org"},
+		Auth:     &policypkg.Auth{TrustDomain: "example.org"},
 		Sessions: []policypkg.Binding{{Name: "session-1", Namespace: "team-a", HumanID: "human-1"}},
 	}
 
@@ -265,20 +325,20 @@ func TestAuthFilterMTLSRejectsForgedHeaderWithoutMTLS(t *testing.T) {
 	}
 }
 
-// Without a verified adapter certificate the request is an ordinary OAuth
-// request: the ingress hop alone must not authenticate it.
-func TestAuthFilterWithoutVerifiedHeaderFallsBackToOAuth(t *testing.T) {
+// A trust-domain-only policy enables adapter certificates without enabling
+// OAuth. A direct request has no adapter identity and proceeds to policy.
+func TestAuthFilterWithoutVerifiedHeaderAllowsDirectWhenOAuthDisabled(t *testing.T) {
 	t.Parallel()
 	s := minimalServer()
 	ex := newTestExchange(http.MethodPost, "/mcp", `{}`, nil)
 	ex.R.TLS = verifiedProxyTLS()
-	ex.Policy = &policypkg.Document{Auth: &policypkg.Auth{Mode: "oauth", TrustDomain: "example.org"}}
+	ex.Policy = &policypkg.Document{Auth: &policypkg.Auth{TrustDomain: "example.org"}}
 
-	if got := s.authFilter(ex); got != Reject {
-		t.Fatalf("authFilter = %v, want Reject", got)
+	if got := s.authFilter(ex); got != Continue {
+		t.Fatalf("authFilter = %v, want Continue", got)
 	}
-	if ex.Decision.Reason != "oauth_issuer_missing" {
-		t.Fatalf("reason = %q, want the OAuth path to reject it (oauth_issuer_missing)", ex.Decision.Reason)
+	if ex.Identity != (identityContext{}) {
+		t.Fatalf("identity = %#v, want empty direct identity", ex.Identity)
 	}
 }
 
@@ -290,7 +350,7 @@ func TestAuthFilterMTLSRejectsWrongTrustDomain(t *testing.T) {
 	})
 	ex.R.TLS = verifiedProxyTLS()
 	ex.Policy = &policypkg.Document{
-		Auth:     &policypkg.Auth{Mode: "oauth", TrustDomain: "example.org"},
+		Auth:     &policypkg.Auth{TrustDomain: "example.org"},
 		Sessions: []policypkg.Binding{{Name: "session-1", Namespace: "team-a"}},
 	}
 
@@ -324,44 +384,21 @@ func TestAuthFilterMTLSTrustedProxyPinning(t *testing.T) {
 			})
 			ex.R.TLS = verifiedProxyTLS(tc.peerURIs...)
 			ex.Policy = &policypkg.Document{
-				Auth:     &policypkg.Auth{Mode: "oauth", TrustDomain: "example.org"},
+				Auth:     &policypkg.Auth{TrustDomain: "example.org"},
 				Sessions: []policypkg.Binding{{Name: "session-1", Namespace: "team-a", HumanID: "human-1"}},
 			}
 
-			got := s.authFilter(ex)
+			_, reason := s.authenticateAdapterCertificate(ex.R, ex.Policy)
 			if tc.wantAllow {
-				if got != Continue {
-					t.Fatalf("authFilter = %v, want Continue", got)
+				if reason != "" {
+					t.Fatalf("authenticateAdapterCertificate reason = %q, want empty", reason)
 				}
 				return
 			}
-			if got != Reject {
-				t.Fatalf("authFilter = %v, want Reject", got)
-			}
-			if ex.Decision.Reason != tc.reason {
-				t.Fatalf("reason = %q, want %q", ex.Decision.Reason, tc.reason)
+			if reason != tc.reason {
+				t.Fatalf("reason = %q, want %q", reason, tc.reason)
 			}
 		})
-	}
-}
-
-// Spoofed governance headers without a certificate or bearer token must not
-// authenticate: the request takes the OAuth path and is rejected there.
-func TestAuthFilterSpoofedHeadersWithoutCertificateUseOAuth(t *testing.T) {
-	t.Parallel()
-	s := minimalServer()
-	ex := newTestExchange(http.MethodPost, "/mcp", `{}`, map[string]string{
-		defaultHumanHeader: "spoofed-human",
-	})
-	ex.Policy = &policypkg.Document{
-		Auth: &policypkg.Auth{Mode: "oauth", TrustDomain: "example.org"},
-	}
-
-	if got := s.authFilter(ex); got != Reject {
-		t.Fatalf("authFilter = %v, want Reject", got)
-	}
-	if ex.Decision.Reason != "oauth_issuer_missing" {
-		t.Fatalf("reason = %q, want the OAuth path to reject it (oauth_issuer_missing)", ex.Decision.Reason)
 	}
 }
 
@@ -399,7 +436,7 @@ func TestAuthFilterMTLSRejectsRevokedOrExpiredSession(t *testing.T) {
 			})
 			ex.R.TLS = verifiedProxyTLS()
 			ex.Policy = &policypkg.Document{
-				Auth:     &policypkg.Auth{Mode: "oauth", TrustDomain: "example.org"},
+				Auth:     &policypkg.Auth{TrustDomain: "example.org"},
 				Sessions: []policypkg.Binding{tc.binding},
 			}
 
@@ -452,7 +489,7 @@ func TestAuthzFilterContinuesForNonToolCall(t *testing.T) {
 	s := minimalServer()
 	ex := newTestExchange(http.MethodPost, "/mcp", `{"method":"tools/list"}`, map[string]string{"Content-Type": "application/json"})
 	s.inspectFilter(ex)
-	ex.Policy = headerPolicy()
+	ex.Policy = testPolicy()
 	ex.Identity = identityContext{HumanID: "human-1", AgentID: "client-1", TeamID: "team-acme"}
 
 	if got := s.authzFilter(ex); got != Continue {
@@ -484,7 +521,7 @@ func TestAuthzFilterSetsExplicitAllowForNonToolCall(t *testing.T) {
 	s := minimalServer()
 	ex := newTestExchange(http.MethodPost, "/mcp", `{"method":"tools/list"}`, map[string]string{"Content-Type": "application/json"})
 	s.inspectFilter(ex)
-	ex.Policy = headerPolicy()
+	ex.Policy = testPolicy()
 
 	if got := s.authzFilter(ex); got != Continue {
 		t.Fatalf("authzFilter tools/list = %v, want Continue", got)
@@ -503,7 +540,7 @@ func TestAuthzFilterRejectsDeniedToolCall(t *testing.T) {
 	// Use a session-optional allow-list policy so an unrecognised identity
 	// reaches grant evaluation and gets no_matching_grant → 403.
 	ex.Policy = &policypkg.Document{
-		Auth: &policypkg.Auth{Mode: "header"},
+		Auth: &policypkg.Auth{},
 		Policy: &policypkg.Config{
 			Mode:            "allow-list",
 			DefaultDecision: "deny",
@@ -560,7 +597,7 @@ func TestAuthzFilterAuthorizationInputsUnchangedAfterDecision(t *testing.T) {
 	body := `{"method":"tools/list"}`
 	ex := newTestExchange(http.MethodPost, "/mcp", body, map[string]string{"Content-Type": "application/json"})
 	s.inspectFilter(ex) // sets ToolCall=false, so authz skips evaluation
-	pol := headerPolicy()
+	pol := testPolicy()
 	ex.Policy = pol
 	ident := identityContext{HumanID: "human-1", AgentID: "client-1", TeamID: "team-acme"}
 	ex.Identity = ident
@@ -618,7 +655,7 @@ func TestUpstreamFilterAlwaysReturnsRespond(t *testing.T) {
 	s := minimalServer()
 	s.proxy = newUpstreamReverseProxy(target)
 	ex := newTestExchange(http.MethodGet, "/mcp", "", nil)
-	ex.Policy = headerPolicy()
+	ex.Policy = testPolicy()
 
 	if got := s.upstreamFilter(ex); got != Respond {
 		t.Fatalf("upstreamFilter = %v, want Respond", got)
@@ -642,13 +679,63 @@ func TestUpstreamFilterStripsVerifiedIdentityHeader(t *testing.T) {
 	ex := newTestExchange(http.MethodGet, "/mcp", "", map[string]string{
 		defaultVerifiedSPIFFEHeader: "spiffe://example.org/ns/team-a/session/forged",
 	})
-	ex.Policy = headerPolicy()
+	ex.Policy = testPolicy()
 
 	if got := s.upstreamFilter(ex); got != Respond {
 		t.Fatalf("upstreamFilter = %v, want Respond", got)
 	}
 	if got, _ := seen.Load().(string); got != "" {
 		t.Fatalf("upstream saw %s = %q, want it stripped", defaultVerifiedSPIFFEHeader, got)
+	}
+}
+
+func TestUpstreamFilterPreservesOAuthBearerForMCPServer(t *testing.T) {
+	t.Parallel()
+	var seen atomic.Value
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen.Store(r.Header.Get("Authorization"))
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+	target, _ := url.Parse(upstream.URL)
+
+	s := minimalServer()
+	s.proxy = newUpstreamReverseProxy(target)
+	ex := newTestExchange(http.MethodGet, "/mcp", "", map[string]string{
+		"Authorization": "Bearer validated-token",
+	})
+	ex.Policy = oauthPolicy("https://issuer.example.com")
+
+	if got := s.upstreamFilter(ex); got != Respond {
+		t.Fatalf("upstreamFilter = %v, want Respond", got)
+	}
+	if got, _ := seen.Load().(string); got != "Bearer validated-token" {
+		t.Fatalf("upstream Authorization = %q, want validated bearer", got)
+	}
+}
+
+func TestUpstreamFilterStripsUnvalidatedBearerWhenOAuthDisabled(t *testing.T) {
+	t.Parallel()
+	var seen atomic.Value
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen.Store(r.Header.Get("Authorization"))
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+	target, _ := url.Parse(upstream.URL)
+
+	s := minimalServer()
+	s.proxy = newUpstreamReverseProxy(target)
+	ex := newTestExchange(http.MethodGet, "/mcp", "", map[string]string{
+		"Authorization": "Bearer unvalidated-token",
+	})
+	ex.Policy = testPolicy()
+
+	if got := s.upstreamFilter(ex); got != Respond {
+		t.Fatalf("upstreamFilter = %v, want Respond", got)
+	}
+	if got, _ := seen.Load().(string); got != "" {
+		t.Fatalf("upstream Authorization = %q, want stripped on non-OAuth server", got)
 	}
 }
 

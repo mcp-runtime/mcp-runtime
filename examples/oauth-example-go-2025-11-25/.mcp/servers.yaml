@@ -45,8 +45,7 @@ servers:
           description: Draft a compact release note from a change summary and impact.
           requiredTrust: low
           sideEffect: read
-      auth:
-        mode: oauth
+      auth: {}
       policy:
         mode: allow-list
         defaultDecision: deny

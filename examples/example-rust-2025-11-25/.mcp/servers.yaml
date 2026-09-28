@@ -21,6 +21,7 @@ servers:
           description: extract_keywords tool
           requiredTrust: low
           sideEffect: read
+      auth: {}
       policy:
         mode: allow-list
         defaultDecision: deny

@@ -69,87 +69,6 @@ func TestHandleProxyOAuthProtectedResourceMetadata(t *testing.T) {
 	}
 }
 
-func TestHandleProxyNonOAuthMetadataExplainsAdapter(t *testing.T) {
-	upstreamCalled := false
-	proxy := newTestGatewayServer(t, headerPolicy(), func(w http.ResponseWriter, _ *http.Request) {
-		upstreamCalled = true
-		w.WriteHeader(http.StatusNoContent)
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "http://proxy.example.com/.well-known/oauth-protected-resource/mcp", nil)
-	recorder := httptest.NewRecorder()
-
-	proxy.handleGateway(recorder, req)
-
-	if recorder.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusNotFound)
-	}
-	if upstreamCalled {
-		t.Fatal("metadata request should not reach upstream")
-	}
-	if got := recorder.Header().Get("Www-Authenticate"); got != "" {
-		t.Fatalf("WWW-Authenticate = %q, want empty for header-mode policy", got)
-	}
-
-	var payload struct {
-		Error           string `json:"error"`
-		Message         string `json:"message"`
-		AdapterRequired bool   `json:"adapter_required"`
-	}
-	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("Unmarshal() error = %v", err)
-	}
-	if payload.Error != "oauth_not_enabled" {
-		t.Fatalf("error = %q, want oauth_not_enabled", payload.Error)
-	}
-	if !payload.AdapterRequired || !strings.Contains(payload.Message, "mcp-runtime adapter") {
-		t.Fatalf("payload = %#v, want adapter guidance", payload)
-	}
-}
-
-func TestHandleProxyHeaderModeMissingIdentityExplainsAdapter(t *testing.T) {
-	upstreamCalled := false
-	proxy := newTestGatewayServer(t, headerPolicy(), func(w http.ResponseWriter, _ *http.Request) {
-		upstreamCalled = true
-		w.WriteHeader(http.StatusNoContent)
-	})
-
-	req := httptest.NewRequest(http.MethodPost, "http://proxy.example.com/mcp", strings.NewReader(`{"method":"tools/call","params":{"name":"echo"}}`))
-	req.Header.Set("Content-Type", "application/json")
-	recorder := httptest.NewRecorder()
-
-	proxy.handleGateway(recorder, req)
-
-	if recorder.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusUnauthorized)
-	}
-	if upstreamCalled {
-		t.Fatal("missing identity request should not reach upstream")
-	}
-	if got := recorder.Header().Get("Www-Authenticate"); got != "" {
-		t.Fatalf("WWW-Authenticate = %q, want empty for header-mode policy", got)
-	}
-
-	var payload struct {
-		Error           string   `json:"error"`
-		Message         string   `json:"message"`
-		AdapterRequired bool     `json:"adapter_required"`
-		RequiredHeaders []string `json:"required_headers"`
-	}
-	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("Unmarshal() error = %v", err)
-	}
-	if payload.Error != "missing_identity" {
-		t.Fatalf("error = %q, want missing_identity", payload.Error)
-	}
-	if !payload.AdapterRequired || !strings.Contains(payload.Message, "mcp-runtime adapter") {
-		t.Fatalf("payload = %#v, want adapter guidance", payload)
-	}
-	if len(payload.RequiredHeaders) != 4 {
-		t.Fatalf("required_headers = %#v, want four governance headers", payload.RequiredHeaders)
-	}
-}
-
 func TestHandleProxyOAuthChallengesWithoutBearer(t *testing.T) {
 	issuer := newTestJWTIssuer(t)
 	upstreamCalled := false
@@ -268,7 +187,7 @@ func TestFetchAuthServerMetadataFallsBackToConfiguredIssuer(t *testing.T) {
 	}
 }
 
-func TestHandleProxyOAuthValidatesJWTAndAppliesIdentityHeaders(t *testing.T) {
+func TestHandleProxyOAuthValidatesJWTAndForwardsBearerToken(t *testing.T) {
 	issuer := newTestJWTIssuer(t)
 
 	var upstreamHeaders http.Header
@@ -301,20 +220,8 @@ func TestHandleProxyOAuthValidatesJWTAndAppliesIdentityHeaders(t *testing.T) {
 	if upstreamHeaders == nil {
 		t.Fatal("expected upstream request")
 	}
-	if got := upstreamHeaders.Get(defaultHumanHeader); got != "human-1" {
-		t.Fatalf("%s = %q, want %q", defaultHumanHeader, got, "human-1")
-	}
-	if got := upstreamHeaders.Get(defaultAgentHeader); got != "client-1" {
-		t.Fatalf("%s = %q, want %q", defaultAgentHeader, got, "client-1")
-	}
-	if got := upstreamHeaders.Get(defaultTeamHeader); got != "team-acme" {
-		t.Fatalf("%s = %q, want %q", defaultTeamHeader, got, "team-acme")
-	}
-	if got := upstreamHeaders.Get(defaultSessionHeader); got != "session-1" {
-		t.Fatalf("%s = %q, want %q", defaultSessionHeader, got, "session-1")
-	}
-	if got := upstreamHeaders.Get("Authorization"); got != "" {
-		t.Fatalf("Authorization = %q, want inbound bearer token stripped", got)
+	if got := upstreamHeaders.Get("Authorization"); got != "Bearer "+token {
+		t.Fatalf("Authorization = %q, want validated inbound bearer token", got)
 	}
 }
 
@@ -347,7 +254,7 @@ func TestHandleProxyOAuthRejectsWrongAudience(t *testing.T) {
 	}
 }
 
-// A policy with auth.mode oauth but no audience is a misconfiguration the
+// An OAuth policy with no audience is a misconfiguration the
 // gateway must not paper over by deriving the audience from the request: a
 // derived audience is only as trustworthy as the forwarded host headers behind
 // it, and it would not match the resource advertised in the metadata document.
@@ -474,74 +381,6 @@ func TestHandleProxyOAuthPolicyDenialOmitsInsufficientScopeChallenge(t *testing.
 	}
 }
 
-func TestApplyIdentityHeadersClearsSpoofedValues(t *testing.T) {
-	t.Parallel()
-
-	proxy := &gatewayServer{
-		defaultHumanHeader:   defaultHumanHeader,
-		defaultAgentHeader:   defaultAgentHeader,
-		defaultTeamHeader:    defaultTeamHeader,
-		defaultSessionHeader: defaultSessionHeader,
-	}
-	req := httptest.NewRequest(http.MethodGet, "http://proxy.example.com/mcp", nil)
-	req.Header.Set(defaultHumanHeader, "spoofed-human")
-	req.Header.Set(defaultAgentHeader, "spoofed-agent")
-	req.Header.Set(defaultTeamHeader, "spoofed-team")
-	req.Header.Set(defaultSessionHeader, "spoofed-session")
-
-	proxy.applyIdentityHeaders(req, oauthPolicy("https://issuer.example.com"), identityContext{
-		HumanID: "human-1",
-		TeamID:  "team-acme",
-	})
-
-	if got := req.Header.Get(defaultHumanHeader); got != "human-1" {
-		t.Fatalf("%s = %q, want %q", defaultHumanHeader, got, "human-1")
-	}
-	if got := req.Header.Get(defaultAgentHeader); got != "" {
-		t.Fatalf("%s = %q, want empty", defaultAgentHeader, got)
-	}
-	if got := req.Header.Get(defaultTeamHeader); got != "team-acme" {
-		t.Fatalf("%s = %q, want %q", defaultTeamHeader, got, "team-acme")
-	}
-	if got := req.Header.Get(defaultSessionHeader); got != "" {
-		t.Fatalf("%s = %q, want empty", defaultSessionHeader, got)
-	}
-}
-
-func TestApplyUpstreamTokenClearsHeaderWhenTokenMissing(t *testing.T) {
-	t.Parallel()
-
-	proxy := &gatewayServer{}
-	req := httptest.NewRequest(http.MethodGet, "http://proxy.example.com/mcp", nil)
-	req.Header.Set("Authorization", "Bearer spoofed-token")
-
-	proxy.applyUpstreamToken(req, oauthPolicy("https://issuer.example.com"), "")
-
-	if got := req.Header.Get("Authorization"); got != "" {
-		t.Fatalf("Authorization = %q, want empty", got)
-	}
-}
-
-func TestApplyUpstreamTokenNeverForwardsOAuthBearer(t *testing.T) {
-	t.Parallel()
-
-	proxy := &gatewayServer{}
-	policy := oauthPolicy("https://issuer.example.com")
-	policy.Session.UpstreamTokenHeader = "X-Upstream-Authorization"
-	req := httptest.NewRequest(http.MethodGet, "http://proxy.example.com/mcp", nil)
-	req.Header.Set("Authorization", "Bearer inbound-token")
-	req.Header.Set("X-Upstream-Authorization", "Bearer spoofed-upstream-token")
-
-	proxy.applyUpstreamToken(req, policy, "inbound-token")
-
-	if got := req.Header.Get("Authorization"); got != "" {
-		t.Fatalf("Authorization = %q, want empty", got)
-	}
-	if got := req.Header.Get("X-Upstream-Authorization"); got != "" {
-		t.Fatalf("X-Upstream-Authorization = %q, want empty", got)
-	}
-}
-
 func TestAuthServerMetadataCandidatesUseMCPPathOrder(t *testing.T) {
 	want := []string{
 		"https://auth.example.com/.well-known/oauth-authorization-server/tenant1",
@@ -567,6 +406,7 @@ func TestAuthServerMetadataCandidatesUseRootOrder(t *testing.T) {
 
 func TestHandleProxyRewritesUpstreamHostAndForwardedHeaders(t *testing.T) {
 	t.Parallel()
+	issuer := newTestJWTIssuer(t)
 
 	var upstreamHost string
 	var upstreamHeaders http.Header
@@ -585,18 +425,21 @@ func TestHandleProxyRewritesUpstreamHostAndForwardedHeaders(t *testing.T) {
 	proxy := &gatewayServer{
 		proxy:                 newUpstreamReverseProxy(target),
 		httpClient:            &http.Client{Timeout: 2 * time.Second},
-		defaultHumanHeader:    defaultHumanHeader,
-		defaultAgentHeader:    defaultAgentHeader,
-		defaultTeamHeader:     defaultTeamHeader,
-		defaultSessionHeader:  defaultSessionHeader,
 		defaultPolicyMode:     defaultPolicyMode,
 		defaultPolicyDecision: defaultPolicyDecision,
 		defaultPolicyVersion:  "test-policy",
 		oauthProviders:        map[string]*oauthProvider{},
 	}
+	proxy.snapshotPolicy(policySnapshot{Policy: oauthPolicy(issuer.url), Ready: true})
 
 	req := httptest.NewRequest(http.MethodGet, "http://policy.example.local/mcp", nil)
 	req.Host = "policy.example.local"
+	req.Header.Set("Authorization", "Bearer "+issuer.sign(t, jwt.MapClaims{
+		"iss": issuer.url,
+		"aud": "http://proxy.example.com/mcp",
+		"sub": "human-1",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	}))
 	recorder := httptest.NewRecorder()
 
 	proxy.handleGateway(recorder, req)
@@ -843,16 +686,12 @@ func TestGatewayMetricsNotExposedOnMainListener(t *testing.T) {
 		proxy:                 newUpstreamReverseProxy(target),
 		metrics:               newGatewayMetrics(registry),
 		httpClient:            &http.Client{Timeout: 2 * time.Second},
-		defaultHumanHeader:    defaultHumanHeader,
-		defaultAgentHeader:    defaultAgentHeader,
-		defaultTeamHeader:     defaultTeamHeader,
-		defaultSessionHeader:  defaultSessionHeader,
 		defaultPolicyMode:     defaultPolicyMode,
 		defaultPolicyDecision: defaultPolicyDecision,
 		defaultPolicyVersion:  "test-policy",
 		oauthProviders:        map[string]*oauthProvider{},
 	}
-	proxy.snapshotPolicy(policySnapshot{Policy: headerPolicy()})
+	proxy.snapshotPolicy(policySnapshot{Policy: testPolicy()})
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", proxy.handleGateway)
@@ -925,68 +764,6 @@ func serviceutilMetricsHandler(registry *prometheus.Registry) http.Handler {
 	return mux
 }
 
-func TestGatewayMetricsRecordRequestsPolicyDecisionsAndBytes(t *testing.T) {
-	t.Parallel()
-
-	registry := prometheus.NewRegistry()
-	policy := &policypkg.Document{
-		Server: policypkg.Server{
-			Name:      "demo",
-			Namespace: "mcp-servers",
-			TeamID:    "team-acme",
-			Cluster:   "kind",
-		},
-		Auth: &policypkg.Auth{
-			Mode:            "header",
-			HumanIDHeader:   defaultHumanHeader,
-			AgentIDHeader:   defaultAgentHeader,
-			TeamIDHeader:    defaultTeamHeader,
-			SessionIDHeader: defaultSessionHeader,
-		},
-		Policy: &policypkg.Config{
-			Mode:            "allow-list",
-			DefaultDecision: "deny",
-			PolicyVersion:   "test-policy",
-		},
-	}
-	proxy := newTestGatewayServer(t, policy, func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
-	})
-	proxy.metrics = newGatewayMetrics(registry)
-
-	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"echo"}}`
-	req := httptest.NewRequest(http.MethodPost, "http://proxy.example.com/mcp", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set(defaultHumanHeader, "human-1")
-	recorder := httptest.NewRecorder()
-
-	proxy.handleGateway(recorder, req)
-
-	if recorder.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusForbidden)
-	}
-
-	requestLabels := []string{"mcp-servers", "demo", "kind", "team-acme", http.MethodPost, "tools/call", "deny", "403"}
-	if got := testutil.ToFloat64(proxy.metrics.requestsTotal.WithLabelValues(requestLabels...)); got != 1 {
-		t.Fatalf("requests total = %v, want 1", got)
-	}
-	if got := testutil.ToFloat64(proxy.metrics.policyDecisionsTotal.WithLabelValues("mcp-servers", "demo", "kind", "team-acme", "deny", "no_matching_grant", "tools/call")); got != 1 {
-		t.Fatalf("policy decisions total = %v, want 1", got)
-	}
-	if got := testutil.ToFloat64(proxy.metrics.requestBytesTotal.WithLabelValues(requestLabels...)); got != float64(len(body)) {
-		t.Fatalf("request bytes total = %v, want %d", got, len(body))
-	}
-	if got := testutil.ToFloat64(proxy.metrics.responseBytesTotal.WithLabelValues(requestLabels...)); got == 0 {
-		t.Fatal("response bytes total = 0, want denied response bytes")
-	}
-	if got := testutil.ToFloat64(proxy.metrics.inflightRequests.WithLabelValues("mcp-servers", "demo", "kind", "team-acme")); got != 0 {
-		t.Fatalf("inflight requests = %v, want 0 after request completion", got)
-	}
-	if metrics := gatherMetricsText(t, registry); !strings.Contains(metrics, "mcp_gateway_request_duration_seconds_bucket") {
-		t.Fatalf("duration histogram was not exposed:\n%s", metrics)
-	}
-}
-
 func TestGatewayMetricsRecordPolicyReloadResults(t *testing.T) {
 	t.Parallel()
 
@@ -995,7 +772,7 @@ func TestGatewayMetricsRecordPolicyReloadResults(t *testing.T) {
 	writeStampedPolicy(t, policyFile, func(doc *policypkg.Document) {
 		doc.Server.TeamID = "team-acme"
 		doc.Server.Cluster = "kind"
-		doc.Auth = &policypkg.Auth{Mode: "header"}
+		doc.Auth = &policypkg.Auth{IssuerURL: "https://issuer.example.com", Audience: "https://mcp.example.com/mcp"}
 		doc.Policy = &policypkg.Config{
 			Mode:            "observe",
 			DefaultDecision: "deny",
@@ -1008,10 +785,6 @@ func TestGatewayMetricsRecordPolicyReloadResults(t *testing.T) {
 		serverName:            "demo",
 		serverNamespace:       "mcp-servers",
 		clusterName:           "kind",
-		defaultHumanHeader:    defaultHumanHeader,
-		defaultAgentHeader:    defaultAgentHeader,
-		defaultTeamHeader:     defaultTeamHeader,
-		defaultSessionHeader:  defaultSessionHeader,
 		defaultPolicyMode:     defaultPolicyMode,
 		defaultPolicyDecision: defaultPolicyDecision,
 		defaultPolicyVersion:  "test-policy",
@@ -1092,10 +865,6 @@ func TestStartPolicyCacheRequiresConfiguredPolicyFile(t *testing.T) {
 
 	proxy := &gatewayServer{
 		policyFile:            filepath.Join(t.TempDir(), "missing-policy.json"),
-		defaultHumanHeader:    defaultHumanHeader,
-		defaultAgentHeader:    defaultAgentHeader,
-		defaultTeamHeader:     defaultTeamHeader,
-		defaultSessionHeader:  defaultSessionHeader,
 		defaultPolicyMode:     defaultPolicyMode,
 		defaultPolicyDecision: defaultPolicyDecision,
 		defaultPolicyVersion:  "test-policy",
@@ -1277,10 +1046,6 @@ func TestHandleGatewayDoesNotAuditNonRPCRequests(t *testing.T) {
 		proxy:                 newUpstreamReverseProxy(target),
 		httpClient:            ingest.Client(),
 		analyticsURL:          ingest.URL,
-		defaultHumanHeader:    defaultHumanHeader,
-		defaultAgentHeader:    defaultAgentHeader,
-		defaultTeamHeader:     defaultTeamHeader,
-		defaultSessionHeader:  defaultSessionHeader,
 		defaultPolicyMode:     defaultPolicyMode,
 		defaultPolicyDecision: defaultPolicyDecision,
 		defaultPolicyVersion:  "test-policy",
@@ -1324,10 +1089,6 @@ func TestHandleGatewayDoesNotAuditDeniedNonRPCRequests(t *testing.T) {
 		proxy:                 newUpstreamReverseProxy(target),
 		httpClient:            ingest.Client(),
 		analyticsURL:          ingest.URL,
-		defaultHumanHeader:    defaultHumanHeader,
-		defaultAgentHeader:    defaultAgentHeader,
-		defaultTeamHeader:     defaultTeamHeader,
-		defaultSessionHeader:  defaultSessionHeader,
 		defaultPolicyMode:     defaultPolicyMode,
 		defaultPolicyDecision: defaultPolicyDecision,
 		defaultPolicyVersion:  "test-policy",
@@ -1375,10 +1136,6 @@ func TestHandleGatewayAuditsDeniedJSONRPCAttempts(t *testing.T) {
 		proxy:                 newUpstreamReverseProxy(target),
 		httpClient:            ingest.Client(),
 		analyticsURL:          ingest.URL,
-		defaultHumanHeader:    defaultHumanHeader,
-		defaultAgentHeader:    defaultAgentHeader,
-		defaultTeamHeader:     defaultTeamHeader,
-		defaultSessionHeader:  defaultSessionHeader,
 		defaultPolicyMode:     defaultPolicyMode,
 		defaultPolicyDecision: defaultPolicyDecision,
 		defaultPolicyVersion:  "test-policy",
@@ -1398,59 +1155,6 @@ func TestHandleGatewayAuditsDeniedJSONRPCAttempts(t *testing.T) {
 
 	if got := atomic.LoadInt32(&analyticsHits); got != 1 {
 		t.Fatalf("analytics events emitted for denied JSON-RPC attempt = %d, want 1", got)
-	}
-}
-
-func TestHandleGatewayDoesNotAuditLiveInventoryRequests(t *testing.T) {
-	t.Parallel()
-
-	var analyticsHits int32
-	ingest := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.Copy(io.Discard, r.Body)
-		atomic.AddInt32(&analyticsHits, 1)
-		w.WriteHeader(http.StatusAccepted)
-	}))
-	t.Cleanup(ingest.Close)
-
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	t.Cleanup(upstream.Close)
-
-	target, err := url.Parse(upstream.URL)
-	if err != nil {
-		t.Fatalf("url.Parse() error = %v", err)
-	}
-
-	proxy := &gatewayServer{
-		proxy:                 newUpstreamReverseProxy(target),
-		httpClient:            ingest.Client(),
-		analyticsURL:          ingest.URL,
-		defaultHumanHeader:    defaultHumanHeader,
-		defaultAgentHeader:    defaultAgentHeader,
-		defaultTeamHeader:     defaultTeamHeader,
-		defaultSessionHeader:  defaultSessionHeader,
-		defaultPolicyMode:     defaultPolicyMode,
-		defaultPolicyDecision: defaultPolicyDecision,
-		defaultPolicyVersion:  "test-policy",
-		oauthProviders:        map[string]*oauthProvider{},
-	}
-	proxy.startAnalyticsDispatcher()
-
-	// A valid JSON-RPC request from the live-inventory probe must NOT emit an
-	// analytics event — it is an internal platform service call, not user traffic.
-	body := `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`
-	req := httptest.NewRequest(http.MethodPost, "http://gateway.example.local/mcp", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set(defaultAgentHeader, "mcp-runtime-live-inventory")
-	req.Header.Set(defaultHumanHeader, "mcp-runtime-api")
-	req.ContentLength = int64(len(body))
-	proxy.handleGateway(httptest.NewRecorder(), req)
-
-	proxy.stopAnalyticsDispatcher()
-
-	if got := atomic.LoadInt32(&analyticsHits); got != 0 {
-		t.Fatalf("analytics events emitted for live-inventory request = %d, want 0", got)
 	}
 }
 
@@ -1479,10 +1183,6 @@ func TestHandleGatewayAuditsRPCRequests(t *testing.T) {
 		proxy:                 newUpstreamReverseProxy(target),
 		httpClient:            ingest.Client(),
 		analyticsURL:          ingest.URL,
-		defaultHumanHeader:    defaultHumanHeader,
-		defaultAgentHeader:    defaultAgentHeader,
-		defaultTeamHeader:     defaultTeamHeader,
-		defaultSessionHeader:  defaultSessionHeader,
 		defaultPolicyMode:     defaultPolicyMode,
 		defaultPolicyDecision: defaultPolicyDecision,
 		defaultPolicyVersion:  "test-policy",
@@ -1567,9 +1267,6 @@ func newTestGatewayServer(t *testing.T, policy *policypkg.Document, upstream htt
 	server := &gatewayServer{
 		proxy:                 reverseProxy,
 		httpClient:            &http.Client{Timeout: 2 * time.Second},
-		defaultHumanHeader:    defaultHumanHeader,
-		defaultAgentHeader:    defaultAgentHeader,
-		defaultSessionHeader:  defaultSessionHeader,
 		defaultPolicyMode:     defaultPolicyMode,
 		defaultPolicyDecision: defaultPolicyDecision,
 		defaultPolicyVersion:  "test-policy",
@@ -1591,14 +1288,9 @@ func gatherMetricsText(t *testing.T, registry *prometheus.Registry) string {
 func oauthPolicy(issuerURL string) *policypkg.Document {
 	return &policypkg.Document{
 		Auth: &policypkg.Auth{
-			Mode:            "oauth",
-			HumanIDHeader:   defaultHumanHeader,
-			AgentIDHeader:   defaultAgentHeader,
-			TeamIDHeader:    defaultTeamHeader,
-			SessionIDHeader: defaultSessionHeader,
-			TokenHeader:     "Authorization",
-			IssuerURL:       issuerURL,
-			Audience:        "http://proxy.example.com/mcp",
+			TokenHeader: "Authorization",
+			IssuerURL:   issuerURL,
+			Audience:    "http://proxy.example.com/mcp",
 		},
 		Policy: &policypkg.Config{
 			Mode:            "allow-list",
@@ -1633,15 +1325,9 @@ func oauthPolicy(issuerURL string) *policypkg.Document {
 	}
 }
 
-func headerPolicy() *policypkg.Document {
+func testPolicy() *policypkg.Document {
 	return &policypkg.Document{
-		Auth: &policypkg.Auth{
-			Mode:            "header",
-			HumanIDHeader:   defaultHumanHeader,
-			AgentIDHeader:   defaultAgentHeader,
-			TeamIDHeader:    defaultTeamHeader,
-			SessionIDHeader: defaultSessionHeader,
-		},
+		Auth: &policypkg.Auth{},
 		Policy: &policypkg.Config{
 			Mode:            "allow-list",
 			DefaultDecision: "deny",

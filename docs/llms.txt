@@ -11,7 +11,7 @@
 ## Developer guide
 
 - Publish an MCP Server: https://docs.mcpruntime.org/publish-mcp-server/ — Write metadata, build and push a Docker image, deploy, verify reconciliation, observe traffic.
-- Agent Adapters: https://docs.mcpruntime.org/agent-adapters/ — HTTP proxy and stdio shim for agents. Session injection, auto-refresh, identity headers, environment variables reference.
+- Agent Adapter: https://docs.mcpruntime.org/agent-adapters/ — Session-bound SPIFFE certificate Streamable HTTP proxy (OAuth optional when the target enables it), enrollment, and environment variables.
 - Multi-Team Isolation: https://docs.mcpruntime.org/multi-team/ — Namespace-per-team, RBAC, NetworkPolicy, team fields on MCPServer/Grant/Session, cross-team access patterns.
 
 ## Learning path (structured modules)
@@ -52,7 +52,7 @@
 - An MCPAccessGrant defines which agent can call which tools on which server, at what trust level, with which side effects.
 - An MCPAgentSession is a time-bounded, revocable token carrying the human's consented trust level.
 - The gateway sidecar enforces grants + sessions on every tool call. No grant = denied. Expired/revoked session = denied.
-- The adapter proxy injects governance headers and creates/refreshes sessions automatically.
+- The adapter proxy adds a session-bound client certificate and refreshes it automatically. It forwards an OAuth bearer only when the target server enables OAuth.
 - Tool names in .mcp/servers.yaml must exactly match the server's registered tool names. Mismatch causes tool_side_effect_unknown.
 - Trust levels: low (read-only) / medium (writes) / high (destructive).
 - Side effects: read / write / destructive.

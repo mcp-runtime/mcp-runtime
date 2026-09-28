@@ -1,9 +1,10 @@
 package main
 
-// upstreamFilter is stage 5 of the gateway pipeline. It rewrites identity
-// headers and the upstream token on the outbound request, strips any configured
-// path prefix, and forwards the request to the upstream MCP server via the
-// reverse proxy.
+import policypkg "mcp-runtime/pkg/policy"
+
+// upstreamFilter is stage 5 of the gateway pipeline. It preserves the OAuth
+// bearer token for validation by the upstream MCP server, strips any configured
+// path prefix, and forwards the request via the reverse proxy.
 //
 // upstreamFilter reads Exchange.Policy, Exchange.Identity, and Exchange.OAuthToken
 // (all set by earlier stages) and must not mutate them. It always returns Respond
@@ -12,9 +13,11 @@ func (s *gatewayServer) upstreamFilter(ex *Exchange) Result {
 	// The verified SPIFFE header is an ingress-to-gateway assertion; the MCP
 	// server must never see it, forged or not.
 	ex.R.Header.Del(s.verifiedSPIFFEHeaderName())
-	s.applyIdentityHeaders(ex.R, ex.Policy, ex.Identity)
-	s.applyUpstreamToken(ex.R, ex.Policy, ex.OAuthToken)
-
+	// A bearer is forwarded only after OAuth validation. On servers without
+	// OAuth, remove an arbitrary client Authorization value before proxying.
+	if !policypkg.PolicyUsesOAuth(ex.Policy) {
+		ex.R.Header.Del(defaultTokenHeader)
+	}
 	if trimmedPath, ok := trimRequestPathPrefix(ex.R.URL.Path, s.stripPrefix); ok {
 		ex.R.URL.Path = trimmedPath
 		// Always clear RawPath when Path was trimmed. If RawPath trims cleanly

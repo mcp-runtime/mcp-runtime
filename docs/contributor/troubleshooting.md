@@ -194,8 +194,8 @@ Use the platform API path first:
 
 Allow a few seconds after apply; the gateway sidecar reloads rendered policy on
 a short polling loop. If policy looks correct but calls still fail, check
-gateway logs and request headers (`Mcp-Session-Id`, `X-MCP-Agent-Session`,
-`X-MCP-Human-ID`, `X-MCP-Agent-ID`).
+gateway logs, the `Mcp-Session-Id` transport header, OAuth claims, and the
+verified adapter SPIFFE identity.
 
 Admin/operator fallback:
 

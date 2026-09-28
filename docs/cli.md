@@ -89,7 +89,7 @@ mcp-runtime auth logout
 | `server` | User / Admin | Scaffold, validate, build, push, deploy, manage | [Publish a server](publish-mcp-server.md) |
 | `registry` | Operator | Inspect or configure a registry | [registry](#registry) |
 | `access` | User / Admin | Grants and sessions for gateway policy | [API reference](api.md) |
-| `adapter` | User | HTTP proxy, stdio shim, and mTLS enrollment for agents | [Agent adapters](agent-adapters.md) |
+| `adapter` | User | Certificate-authenticated HTTP proxy and enrollment for agents | [Agent adapter](agent-adapters.md) |
 | `team` | Admin | Create teams and add password users | [Multi-team](multi-team.md) |
 | `sentinel` | Operator | Inspect and operate the analytics stack | [Sentinel](sentinel.md) |
 | `bootstrap` | Operator | Pre-install cluster checks | [Cluster readiness](cluster-readiness.md) |
@@ -514,79 +514,55 @@ fixed deadline is more appropriate than a duration.
 
 > Full guide: [Agent adapters](agent-adapters.md)
 
-The adapter adds platform session and governance headers to every request
-before it reaches the MCP server. When `--server` is set, the adapter creates
-the session. `--agent` (session name) is required in that case. `--agent-id`
-sets the identity header forwarded to the server.
+The adapter identifies its enrolled session with a client certificate. When the
+target configures OAuth (`spec.auth`), it also forwards the local MCP client's
+bearer token. Use `adapter enroll` to save a certificate under
+`MCP_RUNTIME_CONFIG_DIR/certs` (default `~/.mcpruntime/certs`), or let `proxy`
+enroll one in memory at startup with `--server` and `--agent`. The gateway
+derives session identity from the verified certificate and, on OAuth-enabled
+targets, requires its human identity to match the OAuth subject. Governance
+identity headers are not supported.
 
-The adapter never creates grants. First apply an enabled `MCPAccessGrant` that
-matches the server, the signed-in user, and the agent (`access grant apply`).
-Without it, the platform refuses to issue or refresh the session and the adapter
-exits with a 403.
+The platform issues certificates only when an enabled `MCPAccessGrant` matches the server, signed-in user, and agent. Apply the grant first with `access grant apply`.
 
-`--platform-url` takes scheme and host only, with no `/api` path; it defaults to
-the URL saved by `auth login` or `$MCP_PLATFORM_API_URL`.
+`--platform-url` takes scheme and host only, with no `/api` path. It defaults to the URL saved by `auth login` or `$MCP_PLATFORM_API_URL`.
 
 ```bash
-# Enterprise mTLS enrollment. Generates client.key locally and writes the
-# issued client.crt and ca.crt into the output directory.
+# Enroll and save client.crt, client.key, and ca.crt under ~/.mcpruntime/certs
 mcp-runtime adapter enroll \
   --platform-url https://platform.example.com \
   --server workspace-demo \
   --namespace mcp-servers \
   --agent cursor \
-  --trust-domain mcpruntime.org \
-  --output-dir ~/.config/mcp-runtime/workspace-demo
+  --trust-domain mcpruntime.org
 
-# HTTP proxy. MCP clients connect to http://127.0.0.1:8099
+# Run with an in-memory certificate and refresh it before expiry
 mcp-runtime adapter proxy \
   --runtime-url https://mcp.example.com/workspace-demo/mcp \
-  --server workspace-demo \
-  --agent cursor \
-  --agent-id cursor \
-  --auto-refresh \
-  --listen 127.0.0.1:8099
-
-# stdio shim for Claude Desktop or local agent processes
-mcp-runtime adapter stdio \
-  --runtime-url https://mcp.example.com/workspace-demo/mcp \
-  --server workspace-demo \
-  --agent cursor \
-  --agent-id cursor \
-  --auto-refresh
-```
-
-With the adapter running, point any MCP client at `http://127.0.0.1:8099`.
-The adapter handles session creation and governance headers.
-
-For OAuth-protected servers, an adapter may additionally present a
-session-bound certificate. OAuth authentication is still required. Enroll once
-and pass the files, or let the adapter enroll a certificate in memory with
-`--auth mtls`:
-
-```bash
-# Reuse enroll output
-mcp-runtime adapter proxy \
-  --runtime-url https://mcp.example.com/workspace-demo/mcp \
-  --tls-client-cert ~/.config/mcp-runtime/workspace-demo/client.crt \
-  --tls-client-key  ~/.config/mcp-runtime/workspace-demo/client.key \
-  --tls-ca-bundle   ~/.config/mcp-runtime/workspace-demo/ca.crt
-
-# One-command in-memory enrollment
-mcp-runtime adapter proxy \
-  --auth mtls \
-  --runtime-url https://mcp.example.com/workspace-demo/mcp \
-  --platform-url https://platform.example.com \
   --server workspace-demo \
   --namespace mcp-servers \
   --agent cursor \
-  --auto-refresh
+  --auto-refresh \
+  --listen 127.0.0.1:8099
+
+# Reuse files produced by enroll
+mcp-runtime adapter proxy \
+  --runtime-url https://mcp.example.com/workspace-demo/mcp \
+  --tls-client-cert ~/.mcpruntime/certs/<scope>/client.crt \
+  --tls-client-key ~/.mcpruntime/certs/<scope>/client.key \
+  --tls-ca-bundle ~/.mcpruntime/certs/<scope>/ca.crt
 ```
 
-`--auth mtls` requires an `https` runtime URL. The platform returns its trust
-domain with the adapter session; `--trust-domain` or `MCP_TRUST_DOMAIN` is only
-an optional matching override. See
-[Agent adapters](agent-adapters.md#enterprise-mtls-and-spiffe).
+The enrollment output prints the actual certificate directory and TLS file
+paths. Private keys use mode `0600`; the certificate directory uses mode
+`0700`. Set `MCP_RUNTIME_CONFIG_DIR` to store them under another config root.
+
+The local MCP client normally sends OAuth `Authorization` through the proxy.
+`--auth-header` (or `$MCP_RUNTIME_AUTH_HEADER`) supplies a static value such as
+`Bearer <token>` for clients that cannot attach one. It does not set adapter
+identity. Certificate identity requires an `https` runtime URL.
+
+See [Agent adapters](agent-adapters.md#enterprise-mtls-and-spiffe) for gateway and Traefik certificate setup.
 
 ## agent
 
@@ -909,7 +885,7 @@ KUBECONFIG=~/.kube/config mcp-runtime cluster diagnostics    # post-setup diagno
 |---|---|
 | Build, push, deploy flow | [Publish an MCP Server](publish-mcp-server.md) |
 | MCPServer, MCPAccessGrant, MCPAgentSession fields | [API reference](api.md) |
-| HTTP proxy and stdio adapter | [Agent adapters](agent-adapters.md) |
+| Certificate-authenticated HTTP adapter | [Agent adapter](agent-adapters.md) |
 | Multi-team namespaces and RBAC | [Multi-team isolation](multi-team.md) |
 | Sentinel logs, events, restart | [Sentinel](sentinel.md) |
 | Distro-specific cluster prerequisites | [Cluster readiness](cluster-readiness.md) |

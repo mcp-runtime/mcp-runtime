@@ -13,9 +13,7 @@ servers:
     gateway:
       enabled: true
       image: example.com/mcp-gateway:latest
-    auth:
-      mode: header
-      teamIDHeader: X-Team-ID
+    auth: {}
     policy:
       mode: allow-list
     session:

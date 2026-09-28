@@ -12,8 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"mcp-runtime/pkg/mcpdefaults"
 )
 
 const (
@@ -40,12 +38,8 @@ const (
 	DefaultListenAddr      = "127.0.0.1:8099"
 	DefaultProtocolVersion = "2025-06-18"
 
-	HumanIDHeader      = mcpdefaults.AuthHumanIDHeader
-	AgentIDHeader      = mcpdefaults.AuthAgentIDHeader
-	TeamIDHeader       = mcpdefaults.AuthTeamIDHeader
-	AgentSessionHeader = mcpdefaults.AuthSessionIDHeader
-	MCPProtocolHeader  = "Mcp-Protocol-Version"
-	MCPSessionHeader   = "Mcp-Session-Id"
+	MCPProtocolHeader = "Mcp-Protocol-Version"
+	MCPSessionHeader  = "Mcp-Session-Id"
 )
 
 type envLookup func(string) string

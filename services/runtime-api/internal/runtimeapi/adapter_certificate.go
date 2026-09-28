@@ -108,19 +108,14 @@ func (s *AccessService) HandleAdapterCertificate(w http.ResponseWriter, r *http.
 	if serverNamespace == "" {
 		serverNamespace = req.Namespace
 	}
-	server, err := s.k8sClients.Dynamic.Resource(adapterMCPServerGVR).Namespace(serverNamespace).Get(
+	_, err = s.k8sClients.Dynamic.Resource(adapterMCPServerGVR).Namespace(serverNamespace).Get(
 		r.Context(), serverName, metav1.GetOptions{},
 	)
 	if err != nil {
 		writeAPIError(w, http.StatusServiceUnavailable, "read target MCPServer", err)
 		return
 	}
-	authMode, _, _ := unstructured.NestedString(server.Object, "spec", "auth", "mode")
 	trustDomain := strings.TrimSpace(os.Getenv("MCP_TRUST_DOMAIN"))
-	if authMode != "oauth" {
-		writeAPIError(w, http.StatusBadRequest, "adapter certificates require an OAuth MCPServer")
-		return
-	}
 	if trustDomain == "" {
 		writeAPIError(w, http.StatusServiceUnavailable, "platform SPIFFE trust domain is not configured")
 		return

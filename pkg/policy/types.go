@@ -91,15 +91,10 @@ type Server struct {
 
 // Auth configures authentication settings for the gateway.
 type Auth struct {
-	Mode            string `json:"mode,omitempty"`
-	HumanIDHeader   string `json:"human_id_header,omitempty"`
-	AgentIDHeader   string `json:"agent_id_header,omitempty"`
-	TeamIDHeader    string `json:"team_id_header,omitempty"`
-	SessionIDHeader string `json:"session_id_header,omitempty"`
-	TokenHeader     string `json:"token_header,omitempty"`
-	IssuerURL       string `json:"issuer_url,omitempty"`
-	Audience        string `json:"audience,omitempty"`
-	TrustDomain     string `json:"trust_domain,omitempty"`
+	TokenHeader string `json:"token_header,omitempty"`
+	IssuerURL   string `json:"issuer_url,omitempty"`
+	Audience    string `json:"audience,omitempty"`
+	TrustDomain string `json:"trust_domain,omitempty"`
 }
 
 // Config contains policy enforcement configuration.
@@ -114,7 +109,6 @@ type Config struct {
 type Session struct {
 	Required            bool   `json:"required,omitempty"`
 	Store               string `json:"store,omitempty"`
-	HeaderName          string `json:"header_name,omitempty"`
 	MaxLifetime         string `json:"max_lifetime,omitempty"`
 	IdleTimeout         string `json:"idle_timeout,omitempty"`
 	UpstreamTokenHeader string `json:"upstream_token_header,omitempty"`

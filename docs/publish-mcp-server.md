@@ -167,7 +167,7 @@ server metadata before they reach the cluster. Both `--grant-file` and
 `--metadata-dir` when the metadata lives outside `.mcp`.
 
 Adapter-driven agents should skip manual session apply; use
-`mcp-runtime adapter stdio --server payments --agent cursor --auto-refresh`
+`mcp-runtime adapter proxy --server payments --agent cursor --auto-refresh`
 after the grant exists. See [Agent Adapters](agent-adapters.md).
 
 Example metadata:

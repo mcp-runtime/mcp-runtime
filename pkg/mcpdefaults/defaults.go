@@ -7,11 +7,7 @@ const (
 	MCPGatewayPort      = 8091
 	MCPServersNamespace = "mcp-servers"
 
-	AuthHumanIDHeader   = "X-MCP-Human-ID"
-	AuthAgentIDHeader   = "X-MCP-Agent-ID"
-	AuthTeamIDHeader    = "X-MCP-Team-ID"
-	AuthSessionIDHeader = "X-MCP-Agent-Session"
-	AuthTokenHeader     = "Authorization"
+	AuthTokenHeader = "Authorization"
 
 	// Enum values. Types that mirror these enums reference the value
 	// constants below, never the defaults, so changing a default can never

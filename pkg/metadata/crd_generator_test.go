@@ -148,16 +148,13 @@ func TestGenerateCRD(t *testing.T) {
 					Requests: &ResourceList{CPU: "5m", Memory: "32Mi"},
 				},
 			},
-			Auth: &AuthConfig{
-				Mode: AuthMode("header"),
-			},
+			Auth: &AuthConfig{},
 			Policy: &PolicyConfig{
 				Mode:            PolicyMode("allow-list"),
 				DefaultDecision: PolicyDecision("deny"),
 			},
 			Session: &SessionConfig{
-				Required:   true,
-				HeaderName: "X-MCP-Agent-Session",
+				Required: true,
 			},
 			Tools: []ToolConfig{
 				{Name: "delete_user", Description: "Delete a user from the backing system.", RequiredTrust: TrustLevel("high"), SideEffect: ToolSideEffect("destructive")},
@@ -214,7 +211,9 @@ func TestGenerateCRD(t *testing.T) {
 		assertMapStringValue(t, gatewayRequests, "memory", "32Mi")
 
 		auth := assertMapValue(t, spec, "auth")
-		assertMapStringValue(t, auth, "mode", "header")
+		if _, exists := auth["mode"]; exists {
+			t.Fatal("generated auth contains retired mode field")
+		}
 
 		policy := assertMapValue(t, spec, "policy")
 		assertMapStringValue(t, policy, "mode", "allow-list")

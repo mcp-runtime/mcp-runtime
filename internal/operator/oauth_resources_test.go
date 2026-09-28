@@ -43,7 +43,7 @@ func oauthMCPServer(name, audience string) *mcpv1alpha1.MCPServer {
 		Spec: mcpv1alpha1.MCPServerSpec{
 			Image:            "example.com/" + name,
 			PublicPathPrefix: name,
-			Auth:             &mcpv1alpha1.AuthConfig{Mode: mcpv1alpha1.AuthModeOAuth, IssuerURL: testBundledIssuer, Audience: audience},
+			Auth:             &mcpv1alpha1.AuthConfig{IssuerURL: testBundledIssuer, Audience: audience},
 		},
 	}
 }

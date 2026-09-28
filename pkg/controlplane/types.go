@@ -17,10 +17,7 @@ type ServerInfo struct {
 	Labels         map[string]string           `json:"labels,omitempty"`
 	Age            string                      `json:"age"`
 	Endpoint       string                      `json:"endpoint,omitempty"`
-	AuthMode       mcpv1alpha1.AuthMode        `json:"authMode,omitempty"`
 	GatewayEnabled bool                        `json:"-"`
-	HumanIDHeader  string                      `json:"-"`
-	AgentIDHeader  string                      `json:"-"`
 	ServicePort    int32                       `json:"servicePort,omitempty"`
 	Generation     int64                       `json:"generation,omitempty"`
 	Tools          []mcpv1alpha1.ToolConfig    `json:"tools,omitempty"`

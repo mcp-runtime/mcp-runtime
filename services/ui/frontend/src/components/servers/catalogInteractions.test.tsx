@@ -26,7 +26,6 @@ const SERVERS = {
       description: "Workspace helper",
       endpoint: "http://localhost:18080/oauth-example-go-2025-11-25/mcp",
       image: "registry/workspace-assistant:1.2.0",
-      authMode: "oauth",
       access_json: {
         mcpServers: {
           "workspace-assistant": {
@@ -274,7 +273,7 @@ describe("inspector overlay", () => {
 });
 
 describe("server inspector", () => {
-  it("states the auth mode on the card and explains it in the inspector", async () => {
+  it("states the supported authentication paths on the card and inspector", async () => {
     const user = userEvent.setup();
     stubCatalog();
 
@@ -283,15 +282,13 @@ describe("server inspector", () => {
 
     const cards = screen.getAllByTestId("server-card");
     const oauthCard = cards.find((card) => card.dataset.serverKey === "mcp-servers/workspace-assistant");
-    expect(within(oauthCard as HTMLElement).getByText("OAuth")).toBeInTheDocument();
+    expect(within(oauthCard as HTMLElement).getByText("OAuth optional")).toBeInTheDocument();
 
-    // A server whose runtime-api build did not report a mode must not be
-    // presented as unauthenticated.
     const unknownCard = cards.find((card) => card.dataset.serverKey === "mcp-servers/billing-bridge");
-    expect(within(unknownCard as HTMLElement).getByText("Auth not reported")).toBeInTheDocument();
+    expect(within(unknownCard as HTMLElement).getByText("OAuth optional")).toBeInTheDocument();
 
     await user.click(within(oauthCard as HTMLElement).getByTestId("server-card-details"));
-    expect(await screen.findByTestId("server-detail-auth")).toHaveTextContent("bearer token");
+    expect(await screen.findByTestId("server-detail-auth")).toHaveTextContent("session-bound certificate");
   });
 
   it("offers the full MCP client config, selectable and copyable", async () => {

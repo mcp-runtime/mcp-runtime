@@ -20,14 +20,9 @@ func TestPolicyDocumentRoundTrip(t *testing.T) {
 			Cluster:   "test-cluster",
 		},
 		Auth: &Auth{
-			Mode:            "oauth",
-			HumanIDHeader:   "X-MCP-Human-ID",
-			AgentIDHeader:   "X-MCP-Agent-ID",
-			TeamIDHeader:    "X-MCP-Team-ID",
-			SessionIDHeader: "X-MCP-Session",
-			TokenHeader:     "Authorization",
-			IssuerURL:       "https://auth.example.com",
-			Audience:        "mcp-runtime",
+			TokenHeader: "Authorization",
+			IssuerURL:   "https://auth.example.com",
+			Audience:    "mcp-runtime",
 		},
 		Policy: &Config{
 			Mode:            "allow-list",
@@ -38,7 +33,6 @@ func TestPolicyDocumentRoundTrip(t *testing.T) {
 		Session: &Session{
 			Required:            true,
 			Store:               "kubernetes",
-			HeaderName:          "X-MCP-Session",
 			MaxLifetime:         "24h",
 			IdleTimeout:         "1h",
 			UpstreamTokenHeader: "X-Upstream-Token",
@@ -161,21 +155,6 @@ func verifyAuth(t *testing.T, expected, actual *Auth) {
 		t.Fatalf("Auth nil mismatch: expected %v, got %v", expected == nil, actual == nil)
 		return
 	}
-	if expected.Mode != actual.Mode {
-		t.Errorf("Auth.Mode mismatch: expected %q, got %q", expected.Mode, actual.Mode)
-	}
-	if expected.HumanIDHeader != actual.HumanIDHeader {
-		t.Errorf("Auth.HumanIDHeader mismatch: expected %q, got %q", expected.HumanIDHeader, actual.HumanIDHeader)
-	}
-	if expected.AgentIDHeader != actual.AgentIDHeader {
-		t.Errorf("Auth.AgentIDHeader mismatch: expected %q, got %q", expected.AgentIDHeader, actual.AgentIDHeader)
-	}
-	if expected.TeamIDHeader != actual.TeamIDHeader {
-		t.Errorf("Auth.TeamIDHeader mismatch: expected %q, got %q", expected.TeamIDHeader, actual.TeamIDHeader)
-	}
-	if expected.SessionIDHeader != actual.SessionIDHeader {
-		t.Errorf("Auth.SessionIDHeader mismatch: expected %q, got %q", expected.SessionIDHeader, actual.SessionIDHeader)
-	}
 	if expected.TokenHeader != actual.TokenHeader {
 		t.Errorf("Auth.TokenHeader mismatch: expected %q, got %q", expected.TokenHeader, actual.TokenHeader)
 	}
@@ -222,9 +201,6 @@ func verifySession(t *testing.T, expected, actual *Session) {
 	}
 	if expected.Store != actual.Store {
 		t.Errorf("Session.Store mismatch: expected %q, got %q", expected.Store, actual.Store)
-	}
-	if expected.HeaderName != actual.HeaderName {
-		t.Errorf("Session.HeaderName mismatch: expected %q, got %q", expected.HeaderName, actual.HeaderName)
 	}
 	if expected.MaxLifetime != actual.MaxLifetime {
 		t.Errorf("Session.MaxLifetime mismatch: expected %q, got %q", expected.MaxLifetime, actual.MaxLifetime)
@@ -425,14 +401,11 @@ func TestPolicyHelperFunctions(t *testing.T) {
 	})
 
 	t.Run("PolicyUsesOAuth", func(t *testing.T) {
-		if !PolicyUsesOAuth(&Document{Auth: &Auth{Mode: "oauth"}}) {
-			t.Error("PolicyUsesOAuth with mode 'oauth' should be true")
+		if !PolicyUsesOAuth(&Document{Auth: &Auth{IssuerURL: "https://issuer.example.com", Audience: "https://mcp.example.com/mcp"}}) {
+			t.Error("PolicyUsesOAuth with issuer and audience should be true")
 		}
-		if !PolicyUsesOAuth(&Document{Auth: &Auth{Mode: "OAUTH"}}) {
-			t.Error("PolicyUsesOAuth with mode 'OAUTH' should be true (case insensitive)")
-		}
-		if PolicyUsesOAuth(&Document{Auth: &Auth{Mode: "header"}}) {
-			t.Error("PolicyUsesOAuth with mode 'header' should be false")
+		if PolicyUsesOAuth(&Document{Auth: &Auth{TrustDomain: "example.org"}}) {
+			t.Error("PolicyUsesOAuth with adapter trust domain only should be false")
 		}
 		if PolicyUsesOAuth(nil) {
 			t.Error("PolicyUsesOAuth with nil document should be false")

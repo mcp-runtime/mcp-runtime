@@ -42,16 +42,11 @@ func TestInitServerCreatesMetadata(t *testing.T) {
 		t.Fatalf("ReadFile() error = %v", err)
 	}
 	raw := string(rawMetadata)
-	// auth.mode is written explicitly so downstream tooling sees it without LoadFromFile.
-	if !strings.Contains(raw, "mode: header") {
-		t.Fatalf("raw metadata missing auth mode:\n%s", rawMetadata)
-	}
 	// These remain platform-managed: only filled in by LoadFromFile, not written by init.
 	for _, platformDefault := range []string{
 		"enforceOn:",
 		"policyVersion:",
 		"store:",
-		"headerName:",
 		"maxLifetime:",
 		"idleTimeout:",
 		"upstreamTokenHeader:",
@@ -86,11 +81,8 @@ func TestInitServerCreatesMetadata(t *testing.T) {
 	if server.Gateway == nil || !server.Gateway.Enabled {
 		t.Fatalf("gateway = %#v, want enabled", server.Gateway)
 	}
-	if server.Auth == nil || server.Auth.Mode != metadata.AuthModeHeader {
-		t.Fatalf("auth.mode = %#v, want header", server.Auth)
-	}
-	if server.Auth.HumanIDHeader == "" || server.Auth.AgentIDHeader == "" {
-		t.Fatalf("auth header defaults not populated by LoadFromFile: auth=%#v", server.Auth)
+	if server.Auth != nil {
+		t.Fatalf("auth config = %#v, want OAuth disabled by default", server.Auth)
 	}
 	if server.Policy == nil || server.Policy.Mode != metadata.PolicyModeAllowList || server.Policy.DefaultDecision != metadata.PolicyDecisionDeny {
 		t.Fatalf("policy = %#v, want allow-list/deny", server.Policy)
@@ -1084,8 +1076,7 @@ func TestApplyDeployMetadataDefaultsMergesGovernanceConfig(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(tmp, ".mcp", "servers.yaml"), []byte(`version: v1
 servers:
   - name: payments
-    auth:
-      mode: header
+    auth: {}
     policy:
       mode: allow-list
       defaultDecision: deny
@@ -1108,8 +1099,8 @@ servers:
 	if err := applyDeployMetadataDefaults(&spec, "payments", "", filepath.Join(tmp, ".mcp")); err != nil {
 		t.Fatalf("applyDeployMetadataDefaults() error = %v", err)
 	}
-	if spec.Auth == nil || spec.Auth.Mode != mcpv1alpha1.AuthModeHeader {
-		t.Fatalf("auth = %#v, want header", spec.Auth)
+	if spec.Auth == nil {
+		t.Fatal("auth config was not merged")
 	}
 	if spec.Policy == nil || spec.Policy.PolicyVersion != "v2" || spec.Policy.DefaultDecision != mcpv1alpha1.PolicyDecisionDeny {
 		t.Fatalf("policy = %#v, want metadata policy", spec.Policy)

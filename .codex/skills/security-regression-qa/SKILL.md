@@ -102,15 +102,16 @@ matches `RequireRole` enforcement in each split service `routes.go`.
 
 ## Step 4 — Sub-suite B: Grants & sessions enforce on the gateway
 
-Baseline traffic (should succeed):
+Baseline traffic (should succeed). Start `mcp-runtime adapter proxy` through
+the `access-governance` workflow first; point `BASE` at its local listener.
+The adapter certificate supplies agent/session identity. Add a bearer only
+when the target server enables OAuth.
 
 ```bash
-BASE=http://localhost:18080/oauth-example-go-2025-11-25-gateway/mcp
+BASE=${ADAPTER_URL:-http://127.0.0.1:8099/mcp}
 PROTO=2025-06-18
 H=(-H "content-type: application/json" -H "accept: application/json, text/event-stream"
-   -H "Mcp-Protocol-Version: $PROTO"
-   -H "X-MCP-Human-ID: local-user" -H "X-MCP-Agent-ID: local-agent"
-   -H "X-MCP-Agent-Session: local-session")
+   -H "Mcp-Protocol-Version: $PROTO")
 init() {
   SESSION="$(curl -si "${H[@]}" \
     -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' "$BASE" \
@@ -166,21 +167,10 @@ kubectl patch mcpagentsession local-session -n mcp-servers --type=merge \
 sleep 8
 ```
 
-Cross-tenant scoping — try the call with a different `humanID`/`agentID` that
-has no grant:
-
-```bash
-H2=("${H[@]/X-MCP-Human-ID: local-user/X-MCP-Human-ID: other-user}")
-SESSION_OTHER="$(curl -si "${H2[@]}" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' "$BASE" \
-  | awk -F': ' 'tolower($1)=="mcp-session-id"{print $2}' | tr -d '\r')"
-curl -sS "${H2[@]}" -H "Mcp-Session-Id: $SESSION_OTHER" \
-  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' "$BASE" >/dev/null
-RESP="$(curl -sS "${H2[@]}" -H "Mcp-Session-Id: $SESSION_OTHER" \
-  -d '{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"add","arguments":{"a":1,"b":1}}}' "$BASE")"
-echo "$RESP" | grep -qiE 'denied|forbidden|no.*grant' \
-  || echo "FAIL: ungranted subject allowed"
-```
+Cross-tenant scoping must be tested with a second managed agent and adapter,
+not by changing request headers. Try `adapter proxy --server ... --agent
+<ungranted-agent-id>` as that agent's authenticated owner and require session
+or certificate enrollment to fail. If it enrolls, record a High finding.
 
 ## Step 5 — Sub-suite C: Audit emission for allow + deny
 

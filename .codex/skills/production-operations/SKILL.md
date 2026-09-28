@@ -345,8 +345,8 @@ Gotchas seen on real runs:
 - `adapter-enrollment` needs the opt-in adapter-certificate platform feature:
   the runners export `MCP_ADAPTER_CERTIFICATES=true`, `MCP_TRUST_DOMAIN`, and
   `MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE=mcp-servers` before setup and the
-  stage enrolls on an OAuth MCPServer (per-server `auth.mode: mtls` and
-  `auth.trustDomain` were removed and are rejected). On failure, open the
+  stage enrolls on a gateway-enabled MCPServer. OAuth is optional and is
+  enabled only when `spec.auth` is present; adapter PKI is platform-wide. On failure, open the
   stage's `adapter-enrollment/` evidence directory first.
 - Exit 255 in the on-VM workflow is an SSH drop, not a test failure; the step
   uses keepalives, and the remote runner avoids the long-lived session.

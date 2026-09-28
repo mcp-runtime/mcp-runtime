@@ -1098,15 +1098,28 @@ func ensureTraefikDeploymentWatchesNamespace(ctx context.Context, client kuberne
 			return errors.New("traefik deployment does not expose --providers.kubernetesingress.namespaces")
 		}
 		watched := splitCSV(strings.TrimPrefix(argValue, traefikNamespaceWatchArgPrefix))
+		alreadyWatched := false
 		for _, watchedNamespace := range watched {
 			if watchedNamespace == namespace {
-				return nil
+				alreadyWatched = true
+				break
 			}
 		}
-		watched = append(watched, namespace)
 		updated := deployment.DeepCopy()
-		updated.Spec.Template.Spec.Containers[containerIndex].Args[argIndex] = traefikNamespaceWatchArgPrefix + strings.Join(watched, ",")
-		appendTraefikNamespaceWatch(updated, traefikCRDNamespaceWatchArgPrefix, namespace)
+		if !alreadyWatched {
+			watched = append(watched, namespace)
+			updated.Spec.Template.Spec.Containers[containerIndex].Args[argIndex] = traefikNamespaceWatchArgPrefix + strings.Join(watched, ",")
+			appendTraefikNamespaceWatch(updated, traefikCRDNamespaceWatchArgPrefix, namespace)
+		}
+		// Drop deleted namespaces from both provider watches. Traefik v2.10
+		// stalls the whole CRD provider on a forbidden list/watch (no
+		// traefik-watch Role in a gone namespace), so IngressRoutes 404 and the
+		// Traefik→gateway mTLS hop never runs.
+		if changed, pruneErr := pruneMissingTraefikNamespaceWatches(ctx, client, updated); pruneErr != nil {
+			return pruneErr
+		} else if alreadyWatched && !changed {
+			return nil
+		}
 		_, err = client.AppsV1().Deployments(cfg.namespace).Update(ctx, updated, metav1.UpdateOptions{})
 		if apierrors.IsConflict(err) {
 			return err
@@ -1116,6 +1129,77 @@ func ensureTraefikDeploymentWatchesNamespace(ctx context.Context, client kuberne
 		}
 		return nil
 	})
+}
+
+// removeTraefikDeploymentWatchesNamespace drops a team namespace from both
+// Traefik provider watch args. Best-effort: missing Traefik deployment or
+// watch args are ignored so team delete still succeeds.
+func removeTraefikDeploymentWatchesNamespace(ctx context.Context, client kubernetes.Interface, namespace string, cfg teamTraefikWatchConfig) error {
+	namespace = strings.TrimSpace(namespace)
+	if namespace == "" || client == nil {
+		return nil
+	}
+	if cfg.mode == "disabled" {
+		return nil
+	}
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		deployment, err := client.AppsV1().Deployments(cfg.namespace).Get(ctx, cfg.deployment, metav1.GetOptions{})
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+		updated := deployment.DeepCopy()
+		changed := false
+		for _, prefix := range []string{traefikNamespaceWatchArgPrefix, traefikCRDNamespaceWatchArgPrefix} {
+			if removeTraefikNamespaceWatch(updated, prefix, namespace) {
+				changed = true
+			}
+		}
+		if !changed {
+			return nil
+		}
+		_, err = client.AppsV1().Deployments(cfg.namespace).Update(ctx, updated, metav1.UpdateOptions{})
+		if apierrors.IsConflict(err) {
+			return err
+		}
+		return err
+	})
+}
+
+func pruneMissingTraefikNamespaceWatches(ctx context.Context, client kubernetes.Interface, deployment *appsv1.Deployment) (bool, error) {
+	if deployment == nil || client == nil {
+		return false, nil
+	}
+	changed := false
+	for _, prefix := range []string{traefikNamespaceWatchArgPrefix, traefikCRDNamespaceWatchArgPrefix} {
+		for ci := range deployment.Spec.Template.Spec.Containers {
+			for ai, arg := range deployment.Spec.Template.Spec.Containers[ci].Args {
+				if !strings.HasPrefix(arg, prefix) {
+					continue
+				}
+				watched := splitCSV(strings.TrimPrefix(arg, prefix))
+				kept := make([]string, 0, len(watched))
+				for _, ns := range watched {
+					_, err := client.CoreV1().Namespaces().Get(ctx, ns, metav1.GetOptions{})
+					if apierrors.IsNotFound(err) {
+						changed = true
+						continue
+					}
+					if err != nil {
+						return false, err
+					}
+					kept = append(kept, ns)
+				}
+				if len(kept) != len(watched) {
+					deployment.Spec.Template.Spec.Containers[ci].Args[ai] = prefix + strings.Join(kept, ",")
+					changed = true
+				}
+			}
+		}
+	}
+	return changed, nil
 }
 
 const traefikNamespaceWatchArgPrefix = "--providers.kubernetesingress.namespaces="
@@ -1141,6 +1225,34 @@ func appendTraefikNamespaceWatch(deployment *appsv1.Deployment, prefix, namespac
 			return
 		}
 	}
+}
+
+func removeTraefikNamespaceWatch(deployment *appsv1.Deployment, prefix, namespace string) bool {
+	if deployment == nil || strings.TrimSpace(namespace) == "" {
+		return false
+	}
+	changed := false
+	for ci := range deployment.Spec.Template.Spec.Containers {
+		for ai, arg := range deployment.Spec.Template.Spec.Containers[ci].Args {
+			if !strings.HasPrefix(arg, prefix) {
+				continue
+			}
+			watched := splitCSV(strings.TrimPrefix(arg, prefix))
+			kept := make([]string, 0, len(watched))
+			for _, watchedNamespace := range watched {
+				if watchedNamespace == namespace {
+					changed = true
+					continue
+				}
+				kept = append(kept, watchedNamespace)
+			}
+			if changed {
+				deployment.Spec.Template.Spec.Containers[ci].Args[ai] = prefix + strings.Join(kept, ",")
+			}
+			return changed
+		}
+	}
+	return false
 }
 
 func traefikNamespaceWatchArg(deployment *appsv1.Deployment) (int, int, string, bool) {
