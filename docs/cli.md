@@ -12,7 +12,7 @@ Examples on this page use the example servers in the repository.
 | Create a session manually | `access session init` → `access session apply` |
 | Connect an MCP client | `adapter proxy --server ... --agent ... --auto-refresh` |
 | Find a tool | `catalog tools` · `catalog tool <name>` |
-| Create a team and its users | `team create` → `team user create` |
+| Create a team and assign users | `team create` → `team user create` or `team user add` |
 | Check platform health | `status` |
 | Inspect a running server | `server list` · `server get` · `server policy inspect` |
 | View analytics logs | `sentinel status` · `sentinel logs api` |
@@ -613,7 +613,8 @@ team. The API rejects unknown, malformed, inactive, and wrong-team agent IDs.
 
 ## team
 
-**[Admin]** All `team` commands require the platform API admin role.
+Platform admins create teams. A team owner can add users to their own team
+or update their team role.
 
 > Full guide: [Multi-team isolation](multi-team.md)
 
@@ -624,6 +625,10 @@ MCP_PLATFORM_API_PROFILE=admin mcp-runtime team create acme --name "Acme Corp"
 
 MCP_PLATFORM_API_PROFILE=admin mcp-runtime team user create acme \
   --email alice@acme.com --password '...' --role owner
+
+# Add an existing platform user to a team or update their team role. Use their
+# immutable user ID; their password stays unchanged.
+MCP_PLATFORM_API_PROFILE=admin mcp-runtime team user add acme <user-id> --role member
 
 MCP_PLATFORM_API_PROFILE=admin mcp-runtime team user list acme
 ```
@@ -637,7 +642,9 @@ mcp-runtime auth login \
   --profile alice
 ```
 
-Note: `team init` is deprecated. Use `team create`.
+`team user create` creates a new password-login account. If the email already
+exists, use `team user add` with the existing user's ID. Team owners can manage
+users in their own teams. `team init` is deprecated; use `team create`.
 
 ## sentinel
 

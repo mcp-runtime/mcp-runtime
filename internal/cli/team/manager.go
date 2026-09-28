@@ -103,9 +103,39 @@ func (m *Manager) CreateTeamUser(slug, email, password, role string) error {
 	}
 	member, err := client.CreateTeamUser(context.Background(), slug, email, password, role)
 	if err != nil {
-		return err
+		return explainTeamUserCreateError(err)
 	}
 	core.Success(fmt.Sprintf("Ensured user %s in team %s as %s", member.Email, member.TeamSlug, member.Role))
+	return nil
+}
+
+func explainTeamUserCreateError(err error) error {
+	message := strings.ToLower(err.Error())
+	if strings.Contains(message, "users_email_key") || strings.Contains(message, "duplicate key value") {
+		return errors.New("platform user already exists; find their user ID in the platform UI and run mcp-runtime team user add <team-slug> <user-id> --role member (or --role owner)")
+	}
+	return err
+}
+
+func (m *Manager) AddTeamUser(slug, userID, role string) error {
+	slug = strings.TrimSpace(slug)
+	userID = strings.TrimSpace(userID)
+	role = strings.TrimSpace(role)
+	if slug == "" || userID == "" {
+		return errors.New("team slug and user ID are required")
+	}
+	if role != "member" && role != "owner" {
+		return errors.New("role must be member or owner")
+	}
+	client, err := platformapi.NewPlatformClient()
+	if err != nil {
+		return err
+	}
+	member, err := client.UpsertTeamMember(context.Background(), slug, userID, role)
+	if err != nil {
+		return err
+	}
+	core.Success(fmt.Sprintf("Ensured user %s in team %s as %s", member.UserID, member.TeamSlug, member.Role))
 	return nil
 }
 

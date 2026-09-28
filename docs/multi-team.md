@@ -67,9 +67,9 @@ default missing `subject.teamID` to the owning server team. The platform API
 accepts an explicit foreign `subject.teamID` only after verifying the named
 human or active agent belongs to that team and the grant has a capped expiry.
 
-Use `team user create` as a platform admin when you need a local password-login
-user for a team. The command creates or updates the password identity, adds the
-user to the team as `member` or `owner`, and then the user can sign in with:
+Use `team user create` as a platform admin when you need a new local
+password-login user for a team. The command creates the user, adds them to the
+team as `member` or `owner`, and then the user can sign in with:
 
 ```bash
 mcp-runtime auth login \
@@ -77,6 +77,11 @@ mcp-runtime auth login \
   --username acme-user@example.com \
   --password '...'
 ```
+
+For an existing platform user, find their user ID in the platform UI and run
+`mcp-runtime team user add <team-slug> <user-id> --role member` (or set the role
+to `owner`). This changes only the team membership and does not reset the user's
+password. Platform admins and team owners can manage members in their teams.
 
 `team init` is **deprecated** and rejects at runtime. Use `team create` above
 for the normal platform-backed flow. The managed namespace shape that
