@@ -36,6 +36,7 @@ type identityFlags struct {
 	tlsClientCert string
 	tlsClientKey  string
 	tlsCABundle   string
+	tlsInsecure   bool
 	// proxy-only
 	maxInboundBytes int64
 	// stdio-only
@@ -83,6 +84,8 @@ func bindIdentityFlags(cmd *cobra.Command, f *identityFlags) {
 		"Path to PEM client key for mTLS to the runtime (default: $"+agentadapter.EnvTLSClientKey+")")
 	cmd.Flags().StringVar(&f.tlsCABundle, "tls-ca-bundle", os.Getenv(agentadapter.EnvTLSCABundle),
 		"Path to PEM CA bundle to verify the runtime's TLS certificate (default: $"+agentadapter.EnvTLSCABundle+")")
+	cmd.Flags().BoolVar(&f.tlsInsecure, "tls-insecure", envTruthy(agentadapter.EnvTLSInsecure),
+		"Skip verification of the runtime TLS certificate (local/Kind only; default: $"+agentadapter.EnvTLSInsecure+")")
 }
 
 // resolved holds the validated cross-cutting pieces of an adapter config —
@@ -134,8 +137,8 @@ func (f identityFlags) resolve() (resolved, error) {
 	tlsCert := strings.TrimSpace(f.tlsClientCert)
 	tlsKey := strings.TrimSpace(f.tlsClientKey)
 	tlsCA := strings.TrimSpace(f.tlsCABundle)
-	if tlsCert != "" || tlsKey != "" || tlsCA != "" {
-		tlsCfg, err := agentadapter.BuildTLSConfig(tlsCert, tlsKey, tlsCA)
+	if tlsCert != "" || tlsKey != "" || tlsCA != "" || f.tlsInsecure {
+		tlsCfg, err := agentadapter.BuildTLSConfigWithOptions(tlsCert, tlsKey, tlsCA, f.tlsInsecure)
 		if err != nil {
 			return resolved{}, fmt.Errorf("TLS config: %w", err)
 		}

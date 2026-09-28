@@ -82,12 +82,16 @@ classify_path() {
     internal/cli/adapter/*|internal/agentadapter/*)
       add_scenario "adapter-proxy"
       add_scenario "governance"
+      add_scenario "oauth"
+      add_scenario "adapter-certificates"
       return
       ;;
     internal/cli/access/*|pkg/access/*|pkg/policy/*)
       add_scenario "governance"
       add_scenario "trust"
       add_scenario "adapter-proxy"
+      add_scenario "oauth"
+      add_scenario "adapter-certificates"
       return
       ;;
     internal/cli/team/*|services/platform-api/internal/platformstore/*)
@@ -129,6 +133,7 @@ classify_path() {
       add_scenario "trust"
       add_scenario "oauth"
       add_scenario "adapter-proxy"
+      add_scenario "adapter-certificates"
       add_observability
       return
       ;;

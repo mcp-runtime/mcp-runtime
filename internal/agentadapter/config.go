@@ -34,8 +34,11 @@ const (
 	EnvTLSClientCert    = "MCP_RUNTIME_TLS_CLIENT_CERT"
 	EnvTLSClientKey     = "MCP_RUNTIME_TLS_CLIENT_KEY"
 	EnvTLSCABundle      = "MCP_RUNTIME_TLS_CA_BUNDLE"
-	EnvMaxInboundBytes  = "MCP_RUNTIME_MAX_INBOUND_BYTES"
-	EnvToolsCacheTTL    = "MCP_RUNTIME_TOOLS_CACHE_TTL"
+	// EnvTLSInsecure skips runtime TLS certificate verification. Intended for
+	// local Kind / port-forward only; never enable in production.
+	EnvTLSInsecure     = "MCP_RUNTIME_TLS_INSECURE"
+	EnvMaxInboundBytes = "MCP_RUNTIME_MAX_INBOUND_BYTES"
+	EnvToolsCacheTTL   = "MCP_RUNTIME_TOOLS_CACHE_TTL"
 
 	DefaultListenAddr      = "127.0.0.1:8099"
 	DefaultProtocolVersion = "2025-06-18"
@@ -327,7 +330,13 @@ func NewHTTPTransportWithTLS(cfg *tls.Config) *http.Transport {
 // certFile and keyFile must both be set (or both empty) for mTLS.
 // caFile, when non-empty, replaces the default system CA pool.
 func BuildTLSConfig(certFile, keyFile, caFile string) (*tls.Config, error) {
-	cfg := &tls.Config{}
+	return BuildTLSConfigWithOptions(certFile, keyFile, caFile, false)
+}
+
+// BuildTLSConfigWithOptions is BuildTLSConfig with an explicit insecure-skip
+// toggle for local Kind / port-forward clients.
+func BuildTLSConfigWithOptions(certFile, keyFile, caFile string, insecureSkipVerify bool) (*tls.Config, error) {
+	cfg := &tls.Config{InsecureSkipVerify: insecureSkipVerify} //nolint:gosec // opt-in for local Kind only
 	if certFile != "" || keyFile != "" {
 		if certFile == "" || keyFile == "" {
 			return nil, fmt.Errorf("%s and %s must both be set for mTLS", EnvTLSClientCert, EnvTLSClientKey)

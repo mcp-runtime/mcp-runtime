@@ -210,16 +210,9 @@ check(
 )
 ui_script_path, ui_style_path = check_vite_assets(ui_base, "ui", ui_index)
 
-# Direct MCP proxy and upstream server surfaces.
+# Direct MCP proxy and upstream server surfaces. Governance allow paths use
+# adapter --auth mtls (SPIFFE); this check only proves the services are up.
 expect_status(f"{server_proxy_base}/health", 200, contains="ok")
-expect_mcp_initialize(
-    f"{server_proxy_base}{server_mcp_path}",
-    headers={
-        "X-MCP-Human-ID": human_id,
-        "X-MCP-Agent-ID": agent_id,
-        "X-MCP-Agent-Session": session_id,
-    },
-)
 expect_status(f"{server_upstream_base}/health", 200, contains='"ok":true')
 expect_mcp_initialize(f"{server_upstream_base}{server_mcp_path}")
 

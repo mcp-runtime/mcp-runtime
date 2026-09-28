@@ -35,6 +35,7 @@ Flags:
       --tls-ca-bundle string       Path to PEM CA bundle to verify the runtime's TLS certificate (default: $MCP_RUNTIME_TLS_CA_BUNDLE)
       --tls-client-cert string     Path to PEM client certificate for mTLS to the runtime (default: $MCP_RUNTIME_TLS_CLIENT_CERT)
       --tls-client-key string      Path to PEM client key for mTLS to the runtime (default: $MCP_RUNTIME_TLS_CLIENT_KEY)
+      --tls-insecure               Skip verification of the runtime TLS certificate (local/Kind only; default: $MCP_RUNTIME_TLS_INSECURE)
       --tools-cache-ttl string     Cache tools/list responses for this duration, e.g. 30s. Empty disables the cache. (default: $MCP_RUNTIME_TOOLS_CACHE_TTL)
       --trust-domain string        Optional platform SPIFFE trust domain override for adapter certificate enrollment; default: $MCP_TRUST_DOMAIN
 

@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -68,8 +69,15 @@ func setupMTLS(ctx context.Context, client *platformapi.PlatformClient, flags pl
 	}
 	r.cert.Store(&cert)
 
+	insecure := false
+	if base != nil {
+		if ht, ok := base.Base.(*http.Transport); ok && ht.TLSClientConfig != nil {
+			insecure = ht.TLSClientConfig.InsecureSkipVerify
+		}
+	}
 	tlsCfg := &tls.Config{
-		RootCAs: pool,
+		RootCAs:            pool,
+		InsecureSkipVerify: insecure, //nolint:gosec // inherits opt-in local Kind flag
 		GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
 			return r.cert.Load(), nil
 		},

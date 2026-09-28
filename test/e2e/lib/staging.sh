@@ -1756,7 +1756,7 @@ staging_check_governance() {
     staging_err "ungranted agent session returned HTTP ${code}, want 403"
     failed=1
   fi
-  # Forged governance headers with a session that was never issued.
+  # Forged X-MCP headers must not authenticate; identity comes from certs/Bearer.
   code="$(staging_http_code -X POST -H 'content-type: application/json' \
     -H 'accept: application/json, text/event-stream' \
     -H 'X-MCP-Human-ID: staging-e2e-forged' -H "X-MCP-Agent-ID: ${MT_GLOBEX_AGENT_ID}" \
@@ -1764,9 +1764,9 @@ staging_check_governance() {
     --data '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"add","arguments":{"a":1,"b":2}}}' \
     "${MCP_URL}/${MT_ACME_SERVER}/mcp")"
   if [[ "${code}" == "401" || "${code}" == "403" ]]; then
-    staging_log "forged-session tools/call denied: HTTP ${code}"
+    staging_log "forged-header tools/call denied (cert-first): HTTP ${code}"
   else
-    staging_err "forged-session tools/call returned HTTP ${code}, want 401/403"
+    staging_err "forged-header tools/call returned HTTP ${code}, want 401/403"
     failed=1
   fi
   grep -E '^=== .*(OK|denied)' "${STAGING_ARTIFACT_DIR}/multitenancy.log" || true

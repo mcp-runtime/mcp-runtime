@@ -2227,6 +2227,7 @@ forward MCP traffic to governed MCP Runtime routes.
 - [`Constants`](#agent-adapters-constants)
 - [`Variables`](#agent-adapters-variables)
 - [`func BuildTLSConfig(certFile, keyFile, caFile string) (*tls.Config, error)`](#agent-adapters-func-buildtlsconfig-certfile-keyfile-cafile-string-tls-config-error)
+- [`func BuildTLSConfigWithOptions(certFile, keyFile, caFile string, insecureSkipVerify bool) (*tls.Config, error)`](#agent-adapters-func-buildtlsconfigwithoptions-certfile-keyfile-cafile-string-insecureskipverify-bool-tls-config-error)
 - [`func NewHTTPProxyHandler(cfg ProxyConfig) (http.Handler, error)`](#agent-adapters-func-newhttpproxyhandler-cfg-proxyconfig-http-handler-error)
 - [`func NewHTTPTransportWithTLS(cfg *tls.Config) *http.Transport`](#agent-adapters-func-newhttptransportwithtls-cfg-tls-config-http-transport)
 - [`func RunHTTPProxy(ctx context.Context, cfg ProxyConfig) error`](#agent-adapters-func-runhttpproxy-ctx-context-context-cfg-proxyconfig-error)
@@ -2269,8 +2270,11 @@ const (
 	EnvTLSClientCert    = "MCP_RUNTIME_TLS_CLIENT_CERT"
 	EnvTLSClientKey     = "MCP_RUNTIME_TLS_CLIENT_KEY"
 	EnvTLSCABundle      = "MCP_RUNTIME_TLS_CA_BUNDLE"
-	EnvMaxInboundBytes  = "MCP_RUNTIME_MAX_INBOUND_BYTES"
-	EnvToolsCacheTTL    = "MCP_RUNTIME_TOOLS_CACHE_TTL"
+	// EnvTLSInsecure skips runtime TLS certificate verification. Intended for
+	// local Kind / port-forward only; never enable in production.
+	EnvTLSInsecure     = "MCP_RUNTIME_TLS_INSECURE"
+	EnvMaxInboundBytes = "MCP_RUNTIME_MAX_INBOUND_BYTES"
+	EnvToolsCacheTTL   = "MCP_RUNTIME_TOOLS_CACHE_TTL"
 
 	DefaultListenAddr      = "127.0.0.1:8099"
 	DefaultProtocolVersion = "2025-06-18"
@@ -2332,6 +2336,14 @@ func BuildTLSConfig(certFile, keyFile, caFile string) (*tls.Config, error)
     BuildTLSConfig builds a *tls.Config for outbound runtime connections.
     certFile and keyFile must both be set (or both empty) for mTLS. caFile,
     when non-empty, replaces the default system CA pool.
+
+```
+
+<a id="agent-adapters-func-buildtlsconfigwithoptions-certfile-keyfile-cafile-string-insecureskipverify-bool-tls-config-error"></a>
+```text
+func BuildTLSConfigWithOptions(certFile, keyFile, caFile string, insecureSkipVerify bool) (*tls.Config, error)
+    BuildTLSConfigWithOptions is BuildTLSConfig with an explicit insecure-skip
+    toggle for local Kind / port-forward clients.
 
 ```
 
