@@ -15,7 +15,7 @@ Usage:
   mcp-runtime auth [command]
 
 Available Commands:
-  login          Save a platform API token and optional registry host
+  login          Log in and save platform credentials
   logout         Delete saved platform credentials on this machine
   provider-check Check an OIDC provider before mcp-auth setup
   status         Show whether platform API credentials are configured

@@ -30,6 +30,22 @@ var apiTestHook func(ctx context.Context, apiBaseURL, token string) error
 // httpDoHook, if set, runs HTTP requests instead of the default client (unit tests only).
 var httpDoHook func(req *http.Request) (*http.Response, error)
 
+// passwordPrompt reads a password without echoing it. Tests replace it to
+// exercise the password-login branch without depending on a real terminal.
+var passwordPrompt = func(stderr io.Writer) (string, error) {
+	stdinFD, err := terminalFD(os.Stdin.Fd())
+	if err != nil || !term.IsTerminal(stdinFD) {
+		return "", core.NewWithSentinel(core.ErrAuthTTYRequired, "password login needs a TTY to prompt securely; pass --password for non-interactive login")
+	}
+	fmt.Fprint(stderr, "Enter platform account password: ")
+	password, err := term.ReadPassword(stdinFD)
+	fmt.Fprintln(stderr)
+	if err != nil {
+		return "", core.WrapWithSentinel(core.ErrAuthReadTokenFailed, err, fmt.Sprintf("read password: %v", err))
+	}
+	return string(password), nil
+}
+
 type manager struct {
 	logger *zap.Logger
 }
@@ -82,7 +98,7 @@ func (m *manager) NewLoginCmd() *cobra.Command {
 	var f loginFlags
 	cmd := &cobra.Command{
 		Use:   "login",
-		Short: "Save a platform API token and optional registry host",
+		Short: "Log in and save platform credentials",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return m.runLogin(cmd, f)
 		},
@@ -91,7 +107,7 @@ func (m *manager) NewLoginCmd() *cobra.Command {
 	cmd.Flags().StringVar(&f.apiURL, "api-url", os.Getenv(authfile.EnvAPIURL), "Sentinel API base URL (scheme and host, no /api path)")
 	cmd.Flags().StringVar(&f.email, "email", "", "Platform account email for password login")
 	cmd.Flags().StringVar(&f.username, "username", "", "Alias for --email")
-	cmd.Flags().StringVar(&f.password, "password", "", "Platform account password (prefer interactive prompt or token auth in shared shells)")
+	cmd.Flags().StringVar(&f.password, "password", "", "Platform account password (if omitted with --email, prompt securely in a terminal)")
 	cmd.Flags().StringVar(&f.token, "token", "", "API token (or use --token-stdin, or the interactive prompt)")
 	cmd.Flags().BoolVar(&f.tokenFromStdin, "token-stdin", false, "Read the token from stdin (non-interactive)")
 	cmd.Flags().StringVar(&f.registryHost, "registry-host", "", "Optional host:port for the platform image registry for later use with docker")
@@ -126,10 +142,20 @@ func (m *manager) runLogin(cmd *cobra.Command, f loginFlags) error {
 
 	var token, loginRole string
 	if loginEmail != "" || strings.TrimSpace(f.password) != "" {
-		if loginEmail == "" || strings.TrimSpace(f.password) == "" {
+		if loginEmail == "" {
 			return core.NewWithSentinel(core.ErrAuthEmailPasswordRequired, "email and password are both required for password login")
 		}
-		tok, role, err := loginPlatformPassword(context.Background(), apiURL, loginEmail, f.password)
+		password := f.password
+		if strings.TrimSpace(password) == "" {
+			password, err = passwordPrompt(stderr)
+			if err != nil {
+				return err
+			}
+			if strings.TrimSpace(password) == "" {
+				return core.NewWithSentinel(core.ErrAuthTokenRequired, "password is required")
+			}
+		}
+		tok, role, err := loginPlatformPassword(context.Background(), apiURL, loginEmail, password)
 		if err != nil {
 			return core.WrapWithSentinel(core.ErrAuthPlatformLoginFailed, err, fmt.Sprintf("platform login failed: %v", err))
 		}

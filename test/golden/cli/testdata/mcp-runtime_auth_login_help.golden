@@ -1,4 +1,4 @@
-Save a platform API token and optional registry host
+Log in and save platform credentials
 
 Usage:
   mcp-runtime auth login [flags]
@@ -7,7 +7,7 @@ Flags:
       --api-url string         Sentinel API base URL (scheme and host, no /api path)
       --email string           Platform account email for password login
   -h, --help                   help for login
-      --password string        Platform account password (prefer interactive prompt or token auth in shared shells)
+      --password string        Platform account password (if omitted with --email, prompt securely in a terminal)
       --profile string         Saved credential profile name (defaults to admin, the email local part, or default)
       --registry-host string   Optional host:port for the platform image registry for later use with docker
       --skip-verify            Store credentials without calling the API to validate the token
