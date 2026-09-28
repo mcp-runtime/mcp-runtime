@@ -289,6 +289,14 @@ export type TeamRecord = {
   name: string;
   namespace: string;
   created_at?: string;
+  role?: "owner" | "member";
+};
+
+export type AgentDetail = {
+  agent: AgentRecord;
+  grants: GrantSummary[];
+  sessions: SessionSummary[];
+  can_manage: boolean;
 };
 
 export type TeamMembership = {

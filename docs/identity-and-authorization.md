@@ -97,6 +97,32 @@ made a request. Authentication comes from optional OAuth for direct clients
 and from the session-bound certificate for enrolled adapters. OAuth-enabled
 adapter targets require both.
 
+In the dashboard, open **Agents** from the top navigation. Platform admins can
+search and page across all teams or select one team. Team owners can create,
+rename, deactivate, and reactivate agents in their team. Members see only active
+agents covered by an applicable grant or their own active session. Open an agent to
+see its stable ID, owning team, status, applicable grants, and session history.
+The detail view shows grant subjects and session human IDs where those records
+provide them; agents have no separate user owner. Managers can grant access
+from the detail view with the agent and team already selected, change grants,
+and revoke sessions in namespaces they manage. An inactive agent stays in the
+directory with its history but cannot receive a new grant or session. Team and
+membership views link to the matching
+Agents view.
+
+Access changes require a platform admin or team owner. Members can inspect
+their own applicable access and sessions, but the dashboard has no access
+request submission workflow yet. Ask a team owner outside the dashboard for
+additional access; no request is created by viewing an agent. After a grant,
+sign in with `mcp-runtime auth login --api-url <platform-url>`, then run
+`mcp-runtime adapter proxy --runtime-url <https-mcp-url> --server <server> --namespace <namespace> --agent <agent-id> --auto-refresh`. The proxy requests
+an authorized session and enrolls a certificate in memory. For a saved
+certificate, use `mcp-runtime adapter enroll` with the same server, namespace,
+and agent. The private key stays local; an OAuth-enabled target also needs its
+OAuth bearer token. A grant alone does not establish a connection. See
+[Agent adapters](agent-adapters.md) for the supported CLI steps. Direct MCP
+clients remain governed by their existing gateway policy.
+
 Agent IDs are platform-generated immutable `agt_<26-character lowercase
 ULID>` values. Agent subjects must resolve to an active directory record owned
 by the selected subject team. Unknown, malformed, inactive, or wrong-team IDs

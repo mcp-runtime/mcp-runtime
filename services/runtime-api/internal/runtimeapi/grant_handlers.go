@@ -13,7 +13,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtimeaccess "mcp-runtime-api/internal/runtimeapi/access"
-	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
 	sentinelaccess "mcp-runtime/pkg/access"
 )
 
@@ -107,24 +106,10 @@ func (s *AccessService) handleRuntimeGrantList(w http.ResponseWriter, r *http.Re
 
 	p, filterByPrincipal := principalFromContext(ctx)
 	filterByPrincipal = filterByPrincipal && p.Role != roleAdmin
-	var serverCache accessServerCache
-	if filterByPrincipal {
-		serverCache, err = s.accessServerCacheForGrantRefs(ctx, namespace, grants.Items)
-		if err != nil {
-			log.Printf("runtime grant list: list MCPServers for visibility failed: %v", err)
-			writeAPIError(w, http.StatusInternalServerError, "failed to inspect server references")
-			return
-		}
-	}
 
 	summaries := make([]sentinelaccess.GrantSummary, 0, len(grants.Items))
 	for _, g := range grants.Items {
-		if filterByPrincipal && !runtimeaccess.AccessRefVisibleWithServerCache(g.Namespace, g.Spec.ServerRef, serverCache,
-			func(server mcpv1alpha1.MCPServer) bool { return principalCanAdministerMCPServer(p, server) },
-			func(namespace string, serverLabels map[string]string) bool {
-				return principalCanAdministerServerLabels(p, namespace, serverLabels)
-			},
-		) {
+		if filterByPrincipal && !principalCanReadGrantSubject(p, g) {
 			continue
 		}
 		summaries = append(summaries, sentinelaccess.ToGrantSummary(g))

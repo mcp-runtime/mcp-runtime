@@ -7,6 +7,7 @@ import { ApiKeysWorkspace } from "./components/user/ApiKeysWorkspace";
 import { SignInPanel } from "./components/SignInPanel";
 import { ServersWorkspace } from "./components/servers/ServersWorkspace";
 import { AdminWorkspace } from "./components/admin/AdminWorkspace";
+import { AgentsPanel } from "./components/admin/AgentsPanel";
 import { AccessWorkspace } from "./components/access/AccessWorkspace";
 import { adminSection, type AdminSectionId } from "./components/admin/adminSections";
 import { visibleWorkspaceTabs } from "./components/WorkspaceNavigation";
@@ -173,6 +174,8 @@ export function App() {
         onSectionChange={(section: AdminSectionId) => navigate({ workspace: "admin", section })}
       />
     );
+  } else if (route.workspace === "agents") {
+    content = <AgentsPanel auth={auth} onSignIn={handleSignIn} initialTeam={route.params.team} initialAgent={route.params.agent} onTeamChange={(team) => setParams({ team })} onAgentChange={(agent) => setParams({ agent })} />;
   } else if (route.workspace === "access") {
     content = <AccessWorkspace auth={auth} onSignIn={handleSignIn} />;
   } else if (route.workspace === "activity") {

@@ -2071,8 +2071,7 @@ func TestScopedNamespaceForPrincipal(t *testing.T) {
 	}
 }
 
-func TestRuntimeGrantApplyNonAdminDefaultsToPrincipalNamespace(t *testing.T) {
-	ctx := context.Background()
+func TestRuntimeGrantApplyRejectsNormalUserInPersonalNamespace(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := mcpv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("AddToScheme: %v", err)
@@ -2102,11 +2101,8 @@ func TestRuntimeGrantApplyNonAdminDefaultsToPrincipalNamespace(t *testing.T) {
 		},
 	}))
 	server.Access().handleRuntimeGrantApply(recorder, request)
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d body=%s", recorder.Code, recorder.Body.String())
-	}
-	if _, err := accessMgr.GetGrant(ctx, "grant-user", "user-1"); err != nil {
-		t.Fatalf("expected grant in user namespace: %v", err)
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("status = %d body=%s, want 403", recorder.Code, recorder.Body.String())
 	}
 }
 
@@ -2283,8 +2279,7 @@ func TestRuntimeGrantApplyRejectsTeamMemberForTeamServer(t *testing.T) {
 	}
 }
 
-func TestRuntimeGrantApplyAllowsServerOwnerInTeamNamespace(t *testing.T) {
-	ctx := context.Background()
+func TestRuntimeGrantApplyRejectsTeamMemberServerOwner(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := mcpv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("AddToScheme: %v", err)
@@ -2323,11 +2318,8 @@ func TestRuntimeGrantApplyAllowsServerOwnerInTeamNamespace(t *testing.T) {
 		}},
 	}))
 	server.Access().handleRuntimeGrantApply(recorder, request)
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d body=%s", recorder.Code, recorder.Body.String())
-	}
-	if _, err := accessMgr.GetGrant(ctx, "grant-team", "mcp-team-acme"); err != nil {
-		t.Fatalf("expected grant in team namespace: %v", err)
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("status = %d body=%s, want 403", recorder.Code, recorder.Body.String())
 	}
 }
 
@@ -2531,7 +2523,7 @@ func TestRuntimeGrantListScopesTeamMemberAccessResources(t *testing.T) {
 	}
 }
 
-func TestRuntimeGrantListPrefetchesServersForVisibility(t *testing.T) {
+func TestRuntimeGrantListScopesBySubjectWithoutServerLookup(t *testing.T) {
 	ctx := context.Background()
 	scheme := runtime.NewScheme()
 	if err := mcpv1alpha1.AddToScheme(scheme); err != nil {
@@ -2595,8 +2587,8 @@ func TestRuntimeGrantListPrefetchesServersForVisibility(t *testing.T) {
 	if len(payload.Grants) != 2 {
 		t.Fatalf("grants = %#v, want both grants visible", payload.Grants)
 	}
-	if serverLists != 1 {
-		t.Fatalf("server list calls = %d, want 1", serverLists)
+	if serverLists != 0 {
+		t.Fatalf("server list calls = %d, want 0", serverLists)
 	}
 	if serverGets != 0 {
 		t.Fatalf("server get calls = %d, want 0", serverGets)
@@ -3001,7 +2993,7 @@ func TestRuntimeSessionListScopesTeamMemberAccessResources(t *testing.T) {
 	}
 }
 
-func TestRuntimeSessionListPrefetchesServersForVisibility(t *testing.T) {
+func TestRuntimeSessionListScopesBySubjectWithoutServerLookup(t *testing.T) {
 	ctx := context.Background()
 	scheme := runtime.NewScheme()
 	if err := mcpv1alpha1.AddToScheme(scheme); err != nil {
@@ -3064,8 +3056,8 @@ func TestRuntimeSessionListPrefetchesServersForVisibility(t *testing.T) {
 	if len(payload.Sessions) != 2 {
 		t.Fatalf("sessions = %#v, want both sessions visible", payload.Sessions)
 	}
-	if serverLists != 1 {
-		t.Fatalf("server list calls = %d, want 1", serverLists)
+	if serverLists != 0 {
+		t.Fatalf("server list calls = %d, want 0", serverLists)
 	}
 	if serverGets != 0 {
 		t.Fatalf("server get calls = %d, want 0", serverGets)

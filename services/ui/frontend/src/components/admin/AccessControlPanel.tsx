@@ -28,6 +28,7 @@ type AccessControlPanelProps = {
   onNamespaceChange: (namespace: string) => void;
   onSelect: (selection: AccessSelection) => void;
   onSignIn: () => void;
+  canManage: boolean;
 };
 
 function defaultNamespace(current: string): string {
@@ -105,6 +106,7 @@ export function AccessControlPanel({
   onNamespaceChange,
   onSelect,
   onSignIn,
+  canManage,
 }: AccessControlPanelProps) {
   const [filter, setFilter] = useState("");
   const [busyKey, setBusyKey] = useState("");
@@ -264,7 +266,7 @@ export function AccessControlPanel({
               <StatusBadge tone={grantStatus(grant).tone}>
                 {grantStatus(grant).label}
               </StatusBadge>
-              <Button
+              {canManage ? <Button
                 variant="ghost"
                 size="sm"
                 data-testid="grant-toggle"
@@ -272,8 +274,8 @@ export function AccessControlPanel({
                 onClick={() => askToggleGrant(grant)}
               >
                 {grant.disabled ? "Enable" : "Disable"}
-              </Button>
-              <Button
+              </Button> : null}
+              {canManage ? <Button
                 variant="ghost"
                 size="sm"
                 data-testid="grant-revoke-sessions"
@@ -281,7 +283,7 @@ export function AccessControlPanel({
                 onClick={() => askRevokeGrantSessions(grant)}
               >
                 Revoke sessions
-              </Button>
+              </Button> : null}
             </div>
           ),
         },
@@ -341,7 +343,7 @@ export function AccessControlPanel({
             return (
               <div className="cell-actions">
                 <StatusBadge tone={state.tone}>{state.label}</StatusBadge>
-                <Button
+                {canManage ? <Button
                   variant="ghost"
                   size="sm"
                   data-testid="session-toggle"
@@ -349,7 +351,7 @@ export function AccessControlPanel({
                   onClick={() => askToggleSession(session)}
                 >
                   {session.revoked ? "Restore" : "Revoke"}
-                </Button>
+                </Button> : null}
               </div>
             );
           },
@@ -381,7 +383,7 @@ export function AccessControlPanel({
             <Button variant="secondary" icon="refresh" onClick={reload} data-testid="access-refresh">
               Refresh
             </Button>
-            <Button
+            {canManage ? <Button
               variant="primary"
               icon="plus"
               data-testid="grant-create-toggle"
@@ -391,8 +393,8 @@ export function AccessControlPanel({
               }}
             >
               New grant
-            </Button>
-            <Button
+            </Button> : null}
+            {canManage ? <Button
               variant="secondary"
               icon="plus"
               data-testid="session-create-toggle"
@@ -402,7 +404,7 @@ export function AccessControlPanel({
               }}
             >
               New session
-            </Button>
+            </Button> : null}
           </>
         }
       />

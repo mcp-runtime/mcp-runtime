@@ -9,6 +9,7 @@ import { EmptyState, LoadingState } from "../../ui/States";
 import { listNamespaces } from "../../api/catalog";
 import { isAdmin, type AuthStatus } from "../../api/types";
 import { CATALOG_QUERY_KEY } from "../../hooks/useCatalog";
+import { useTeams } from "../../hooks/useAdminData";
 
 type AccessWorkspaceProps = {
   auth: AuthStatus;
@@ -21,6 +22,8 @@ type AccessWorkspaceProps = {
 export function AccessWorkspace({ auth, onSignIn }: AccessWorkspaceProps) {
   const [namespace, setNamespace] = useState("");
   const [selection, setSelection] = useState<AccessSelection | null>(null);
+  const teamsQuery = useTeams(auth.authenticated);
+  const canManage = isAdmin(auth) || teamsQuery.data?.some((team) => team.namespace === namespace && team.role === "owner") === true;
 
   // Shares ServersWorkspace's query cache/key, so no extra request when that
   // catalog read has already happened this session.
@@ -102,6 +105,7 @@ export function AccessWorkspace({ auth, onSignIn }: AccessWorkspaceProps) {
       onNamespaceChange={setNamespace}
       onSelect={setSelection}
       onSignIn={onSignIn}
+      canManage={canManage}
     />
   );
 }

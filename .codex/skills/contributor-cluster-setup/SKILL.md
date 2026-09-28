@@ -110,6 +110,7 @@ make build
 
 MCP_SETUP_WAIT_TIMEOUT=900 \
   ./bin/mcp-runtime setup --test-mode \
+  --kubeconfig "$TEST_KUBECONFIG" --context test-mcp-runtime \
   --ingress-manifest config/ingress/overlays/http
 ```
 
