@@ -1207,13 +1207,19 @@ start_e2e_adapter_proxy() {
   if kubectl -n mcp-runtime get deployment mcp-runtime-operator-controller-manager \
     -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="MCP_ADAPTER_CERTIFICATES")].value}' 2>/dev/null | grep -qx true; then
     ensure_traefik_tls_port_forward
-    adapter_runtime_url="https://${SERVER_HOST}:${TRAEFIK_TLS_PORT}${MCP_INGRESS_PATH}"
+    adapter_runtime_url="https://127.0.0.1:${TRAEFIK_TLS_PORT}${MCP_INGRESS_PATH}"
   else
     ensure_server_proxy_port_forward
     adapter_runtime_url="http://127.0.0.1:${SERVER_PROXY_PORT}${MCP_INGRESS_PATH}"
   fi
   stop_listener_on_port "${listen_port}"
   require_port_available "${listen_port}" "adapter proxy"
+  local -a tls_insecure_args=()
+  if [[ "${adapter_runtime_url}" == https://* ]]; then
+    # Kind Traefik terminates with its local default cert (SAN is not localhost).
+    # Match curl -k / mcp_header_proxy --insecure-upstream for the port-forward hop.
+    tls_insecure_args=(--tls-insecure-skip-verify)
+  fi
   MCP_PLATFORM_API_URL="http://127.0.0.1:${SENTINEL_PORT}" \
     MCP_PLATFORM_API_TOKEN="${platform_token}" \
     ./bin/mcp-runtime adapter proxy \
@@ -1224,7 +1230,8 @@ start_e2e_adapter_proxy() {
       --namespace mcp-servers \
       --agent "${adapter_agent_id}" \
       --request-timeout 20s \
-      --log-level info >"${log_file}" 2>&1 &
+      --log-level info \
+      ${tls_insecure_args[@]+"${tls_insecure_args[@]}"} >"${log_file}" 2>&1 &
   ADAPTER_PROXY_PID="$!"
   PIDS+=("${ADAPTER_PROXY_PID}")
   wait_managed_port "${listen_port}" "${ADAPTER_PROXY_PID}" "${log_file}" "adapter proxy"
@@ -5286,11 +5293,12 @@ EOF
     require_port_available "${ADAPTER_PROXY_PORT}" "certificate adapter proxy"
     ./bin/mcp-runtime adapter proxy \
       --listen "127.0.0.1:${ADAPTER_PROXY_PORT}" \
-      --runtime-url "https://${OAUTH_SERVER_HOST}:${TRAEFIK_TLS_PORT}${OAUTH_INGRESS_PATH}" \
+      --runtime-url "https://127.0.0.1:${TRAEFIK_TLS_PORT}${OAUTH_INGRESS_PATH}" \
       --host-header "${OAUTH_SERVER_HOST}" \
       --tls-client-cert "${ADAPTER_CERT_PATH}/client.crt" \
       --tls-client-key "${ADAPTER_CERT_PATH}/client.key" \
       --tls-ca-bundle "${ADAPTER_CERT_PATH}/ca.crt" \
+      --tls-insecure-skip-verify \
       --auth-header "Bearer ${ADAPTER_OAUTH_TOKEN}" \
       --request-timeout 20s \
       --log-level info >"${ADAPTER_PROXY_LOG}" 2>&1 &

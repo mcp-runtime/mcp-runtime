@@ -2190,6 +2190,7 @@ forward MCP traffic to governed MCP Runtime routes.
 - [`Constants`](#agent-adapters-constants)
 - [`Variables`](#agent-adapters-variables)
 - [`func BuildTLSConfig(certFile, keyFile, caFile string) (*tls.Config, error)`](#agent-adapters-func-buildtlsconfig-certfile-keyfile-cafile-string-tls-config-error)
+- [`func BuildTLSConfigOptions(certFile, keyFile, caFile string, insecureSkipVerify bool) (*tls.Config, error)`](#agent-adapters-func-buildtlsconfigoptions-certfile-keyfile-cafile-string-insecureskipverify-bool-tls-config-error)
 - [`func NewHTTPProxyHandler(cfg ProxyConfig) (http.Handler, error)`](#agent-adapters-func-newhttpproxyhandler-cfg-proxyconfig-http-handler-error)
 - [`func NewHTTPTransportWithTLS(cfg *tls.Config) *http.Transport`](#agent-adapters-func-newhttptransportwithtls-cfg-tls-config-http-transport)
 - [`func RunHTTPProxy(ctx context.Context, cfg ProxyConfig) error`](#agent-adapters-func-runhttpproxy-ctx-context-context-cfg-proxyconfig-error)
@@ -2231,8 +2232,13 @@ const (
 	EnvTLSClientCert    = "MCP_RUNTIME_TLS_CLIENT_CERT"
 	EnvTLSClientKey     = "MCP_RUNTIME_TLS_CLIENT_KEY"
 	EnvTLSCABundle      = "MCP_RUNTIME_TLS_CA_BUNDLE"
-	EnvMaxInboundBytes  = "MCP_RUNTIME_MAX_INBOUND_BYTES"
-	EnvToolsCacheTTL    = "MCP_RUNTIME_TOOLS_CACHE_TTL"
+	// EnvTLSInsecureSkipVerify skips upstream TLS certificate verification.
+	// Intended for local Kind port-forwards that terminate on Traefik's
+	// default self-signed cert (same role as curl -k). Client certificates
+	// are still presented when configured.
+	EnvTLSInsecureSkipVerify = "MCP_RUNTIME_TLS_INSECURE_SKIP_VERIFY"
+	EnvMaxInboundBytes       = "MCP_RUNTIME_MAX_INBOUND_BYTES"
+	EnvToolsCacheTTL         = "MCP_RUNTIME_TOOLS_CACHE_TTL"
 
 	DefaultListenAddr      = "127.0.0.1:8099"
 	DefaultProtocolVersion = "2025-06-18"
@@ -2289,7 +2295,17 @@ var DefaultAnonymousMethods = []string{
 func BuildTLSConfig(certFile, keyFile, caFile string) (*tls.Config, error)
     BuildTLSConfig builds a *tls.Config for outbound runtime connections.
     certFile and keyFile must both be set (or both empty) for mTLS. caFile,
-    when non-empty, replaces the default system CA pool.
+    when non-empty, replaces the default system CA pool. insecureSkipVerify
+    mirrors curl -k for local Kind Traefik default certs.
+
+```
+
+<a id="agent-adapters-func-buildtlsconfigoptions-certfile-keyfile-cafile-string-insecureskipverify-bool-tls-config-error"></a>
+```text
+func BuildTLSConfigOptions(certFile, keyFile, caFile string, insecureSkipVerify bool) (*tls.Config, error)
+    BuildTLSConfigOptions is BuildTLSConfig with an explicit
+    insecure-skip-verify switch for local development and Kind E2E
+    port-forwards.
 
 ```
 

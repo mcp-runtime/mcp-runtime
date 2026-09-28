@@ -25,11 +25,12 @@ type identityFlags struct {
 	logLevel        string
 	disableXFF      bool
 	// certificate identity / upstream auth
-	trustDomain   string
-	authHeader    string
-	tlsClientCert string
-	tlsClientKey  string
-	tlsCABundle   string
+	trustDomain           string
+	authHeader            string
+	tlsClientCert         string
+	tlsClientKey          string
+	tlsCABundle           string
+	tlsInsecureSkipVerify bool
 	// proxy-only
 	maxInboundBytes int64
 	// stdio-only
@@ -61,6 +62,10 @@ func bindIdentityFlags(cmd *cobra.Command, f *identityFlags) {
 		"Path to PEM client key for mTLS to the runtime (default: $"+agentadapter.EnvTLSClientKey+")")
 	cmd.Flags().StringVar(&f.tlsCABundle, "tls-ca-bundle", os.Getenv(agentadapter.EnvTLSCABundle),
 		"Path to PEM CA bundle to verify the runtime's TLS certificate (default: $"+agentadapter.EnvTLSCABundle+")")
+	cmd.Flags().BoolVar(&f.tlsInsecureSkipVerify, "tls-insecure-skip-verify",
+		parseEnvBoolSimple(agentadapter.EnvTLSInsecureSkipVerify),
+		"Skip verification of the runtime TLS certificate (Kind/Traefik local default cert; same as curl -k). "+
+			"Client certificates are still presented when configured (default: $"+agentadapter.EnvTLSInsecureSkipVerify+")")
 }
 
 // resolved holds the validated cross-cutting pieces of an adapter config —
@@ -105,8 +110,8 @@ func (f identityFlags) resolve() (resolved, error) {
 	tlsCert := strings.TrimSpace(f.tlsClientCert)
 	tlsKey := strings.TrimSpace(f.tlsClientKey)
 	tlsCA := strings.TrimSpace(f.tlsCABundle)
-	if tlsCert != "" || tlsKey != "" || tlsCA != "" {
-		tlsCfg, err := agentadapter.BuildTLSConfig(tlsCert, tlsKey, tlsCA)
+	if tlsCert != "" || tlsKey != "" || tlsCA != "" || f.tlsInsecureSkipVerify {
+		tlsCfg, err := agentadapter.BuildTLSConfigOptions(tlsCert, tlsKey, tlsCA, f.tlsInsecureSkipVerify)
 		if err != nil {
 			return resolved{}, fmt.Errorf("TLS config: %w", err)
 		}

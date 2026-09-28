@@ -43,7 +43,7 @@ type mtlsRefresher struct {
 // the GetClientCertificate-backed TLS config; base supplies any Timeout or
 // AuthHeader the caller already resolved from flags. The returned stop func is
 // always safe to call, even when autoRefresh is false.
-func setupMTLS(ctx context.Context, client *platformapi.PlatformClient, flags platformSessionFlags, trustDomain string, base *agentadapter.RuntimeTransport, autoRefresh bool, sink io.Writer) (*agentadapter.RuntimeTransport, func(), error) {
+func setupMTLS(ctx context.Context, client *platformapi.PlatformClient, flags platformSessionFlags, trustDomain string, base *agentadapter.RuntimeTransport, autoRefresh bool, insecureSkipVerify bool, sink io.Writer) (*agentadapter.RuntimeTransport, func(), error) {
 	cred, err := issueAdapterCredential(ctx, client, flags, trustDomain)
 	if err != nil {
 		return nil, nil, err
@@ -69,7 +69,8 @@ func setupMTLS(ctx context.Context, client *platformapi.PlatformClient, flags pl
 	r.cert.Store(&cert)
 
 	tlsCfg := &tls.Config{
-		RootCAs: pool,
+		RootCAs:            pool,
+		InsecureSkipVerify: insecureSkipVerify,
 		GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
 			return r.cert.Load(), nil
 		},
@@ -206,7 +207,7 @@ func resolveAuth(
 	if err != nil {
 		return nil, noop, fmt.Errorf("platform client: %w", err)
 	}
-	transport, stop, err := setupMTLS(ctx, client, *sessionFlags, trustDomain, baseTransport, sessionFlags.autoRefresh, sink)
+	transport, stop, err := setupMTLS(ctx, client, *sessionFlags, trustDomain, baseTransport, sessionFlags.autoRefresh, idFlags.tlsInsecureSkipVerify, sink)
 	if err != nil {
 		return nil, noop, err
 	}

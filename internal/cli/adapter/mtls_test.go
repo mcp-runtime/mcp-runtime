@@ -222,7 +222,7 @@ func TestMTLSRefresherRotateSwapsCertificate(t *testing.T) {
 	transport, stop, err := setupMTLS(
 		context.Background(), client,
 		platformSessionFlags{server: "demo", agent: "ops-agent"},
-		"mcpruntime.org", nil, false, nil,
+		"mcpruntime.org", nil, false, false, nil,
 	)
 	if err != nil {
 		t.Fatalf("setupMTLS: %v", err)

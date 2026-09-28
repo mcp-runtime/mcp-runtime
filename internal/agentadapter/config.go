@@ -32,8 +32,13 @@ const (
 	EnvTLSClientCert    = "MCP_RUNTIME_TLS_CLIENT_CERT"
 	EnvTLSClientKey     = "MCP_RUNTIME_TLS_CLIENT_KEY"
 	EnvTLSCABundle      = "MCP_RUNTIME_TLS_CA_BUNDLE"
-	EnvMaxInboundBytes  = "MCP_RUNTIME_MAX_INBOUND_BYTES"
-	EnvToolsCacheTTL    = "MCP_RUNTIME_TOOLS_CACHE_TTL"
+	// EnvTLSInsecureSkipVerify skips upstream TLS certificate verification.
+	// Intended for local Kind port-forwards that terminate on Traefik's
+	// default self-signed cert (same role as curl -k). Client certificates
+	// are still presented when configured.
+	EnvTLSInsecureSkipVerify = "MCP_RUNTIME_TLS_INSECURE_SKIP_VERIFY"
+	EnvMaxInboundBytes       = "MCP_RUNTIME_MAX_INBOUND_BYTES"
+	EnvToolsCacheTTL         = "MCP_RUNTIME_TOOLS_CACHE_TTL"
 
 	DefaultListenAddr      = "127.0.0.1:8099"
 	DefaultProtocolVersion = "2025-06-18"
@@ -325,8 +330,16 @@ func parseSharedEnv(lookup envLookup) (sharedEnv, error) {
 	tlsCert := strings.TrimSpace(lookup(EnvTLSClientCert))
 	tlsKey := strings.TrimSpace(lookup(EnvTLSClientKey))
 	tlsCA := strings.TrimSpace(lookup(EnvTLSCABundle))
-	if tlsCert != "" || tlsKey != "" || tlsCA != "" {
-		tlsCfg, err := BuildTLSConfig(tlsCert, tlsKey, tlsCA)
+	insecureSkipVerify := false
+	if raw := strings.TrimSpace(lookup(EnvTLSInsecureSkipVerify)); raw != "" {
+		parsed, err := parseAdapterBool(raw)
+		if err != nil {
+			return sharedEnv{}, fmt.Errorf("%s is invalid: %w", EnvTLSInsecureSkipVerify, err)
+		}
+		insecureSkipVerify = parsed
+	}
+	if tlsCert != "" || tlsKey != "" || tlsCA != "" || insecureSkipVerify {
+		tlsCfg, err := BuildTLSConfigOptions(tlsCert, tlsKey, tlsCA, insecureSkipVerify)
 		if err != nil {
 			return sharedEnv{}, err
 		}
@@ -351,8 +364,15 @@ func NewHTTPTransportWithTLS(cfg *tls.Config) *http.Transport {
 // BuildTLSConfig builds a *tls.Config for outbound runtime connections.
 // certFile and keyFile must both be set (or both empty) for mTLS.
 // caFile, when non-empty, replaces the default system CA pool.
+// insecureSkipVerify mirrors curl -k for local Kind Traefik default certs.
 func BuildTLSConfig(certFile, keyFile, caFile string) (*tls.Config, error) {
-	cfg := &tls.Config{}
+	return BuildTLSConfigOptions(certFile, keyFile, caFile, false)
+}
+
+// BuildTLSConfigOptions is BuildTLSConfig with an explicit insecure-skip-verify
+// switch for local development and Kind E2E port-forwards.
+func BuildTLSConfigOptions(certFile, keyFile, caFile string, insecureSkipVerify bool) (*tls.Config, error) {
+	cfg := &tls.Config{InsecureSkipVerify: insecureSkipVerify}
 	if certFile != "" || keyFile != "" {
 		if certFile == "" || keyFile == "" {
 			return nil, fmt.Errorf("%s and %s must both be set for mTLS", EnvTLSClientCert, EnvTLSClientKey)
