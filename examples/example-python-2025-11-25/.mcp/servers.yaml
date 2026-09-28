@@ -61,6 +61,8 @@ servers:
           description: create_task tool
           requiredTrust: low
           sideEffect: write
+      auth:
+        mode: oauth
       policy:
         mode: allow-list
         defaultDecision: deny

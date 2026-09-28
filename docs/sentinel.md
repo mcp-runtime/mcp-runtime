@@ -362,7 +362,7 @@ The operator renders a per-server policy ConfigMap
 traffic against that policy alone. To verify isolation end-to-end, deploy two
 gateway-enabled servers in `mcp-servers` and grant disjoint subjects on each.
 
-Apply two `MCPServer` resources (same image is fine, different `metadata.name` and `publicPathPrefix`) with `gateway.enabled: true`, `auth.mode: header`, `policy.mode: allow-list`, `session.required: true`, and tool inventory entries that declare `sideEffect`. Then apply two grant + session pairs:
+Apply two `MCPServer` resources (same image is fine, different `metadata.name` and `publicPathPrefix`) with `gateway.enabled: true`, `auth.mode: oauth`, `policy.mode: allow-list`, `session.required: true`, and tool inventory entries that declare `sideEffect`. Then apply two grant + session pairs:
 
 ```yaml
 apiVersion: mcpruntime.org/v1alpha1
@@ -386,9 +386,9 @@ mcp-runtime server policy inspect server-a-mcp --namespace mcp-servers   # alice
 mcp-runtime server policy inspect server-b-mcp --namespace mcp-servers   # bob only
 ```
 
-Drive the cross-server matrix using the configured identity headers
-(`X-MCP-Human-ID`, `X-MCP-Agent-ID`, `X-MCP-Agent-Session`). The expected
-outcomes distinguish the two deny modes:
+Drive the cross-server matrix through the adapter with `--auth mtls` (each
+subject gets its own session-bound SPIFFE cert). The expected outcomes
+distinguish the two deny modes:
 
 | Subject | Target server | Tool | Outcome |
 |---|---|---|---|
@@ -397,7 +397,7 @@ outcomes distinguish the two deny modes:
 | alice | B | any | **401**: gateway has no session/grant for alice on B |
 | bob | B | grant-listed tool | **200** allow |
 | bob | A | any | **401** |
-| no headers / unknown session | any | any | **401** (`reason: session_not_found`) |
+| no cert / unknown session | any | any | **401** (`reason: session_not_found`) |
 
 The 401-vs-403 split is the isolation signal: cross-server traffic is rejected
 at session lookup before tool evaluation; same-server unallowed tools are

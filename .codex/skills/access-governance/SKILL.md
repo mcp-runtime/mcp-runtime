@@ -1,6 +1,6 @@
 ---
 name: access-governance
-description: Apply and debug MCP Runtime access grants, agent sessions, gateway policy, and MCP JSON-RPC traffic with governance headers. Use when working on MCPAccessGrant, MCPAgentSession, adapter proxy/stdio, access CLI, platform API grant/session endpoints, or allow/deny tool calls.
+description: Apply and debug MCP Runtime access grants, agent sessions, gateway policy, and MCP JSON-RPC traffic with session-bound SPIFFE adapter certificates. Use when working on MCPAccessGrant, MCPAgentSession, adapter proxy/stdio, access CLI, platform API grant/session endpoints, or allow/deny tool calls.
 ---
 
 # Access Governance
@@ -11,7 +11,7 @@ description: Apply and debug MCP Runtime access grants, agent sessions, gateway 
 |------|--------|
 | **UI** | Create/apply grants and sessions; toggle enable/revoke |
 | **CLI (default)** | `mcp-runtime auth login --api-url <url>` → `agent create|list|...` and `access grant init` / `access grant apply --file …` |
-| **Adapter (recommended for agents)** | `adapter stdio\|proxy --server <name> --agent <id> [--auto-refresh]` → `POST /api/v1/runtime/adapter/sessions` |
+| **Adapter (recommended for agents)** | `adapter stdio\|proxy --server <name> --agent <id> --auth mtls [--auto-refresh]` → session + SPIFFE client cert |
 | **Explicit Kubernetes test/recovery** | `access … --use-kube` only when that path is explicitly requested; never bypass a failed CLI/UI flow |
 
 Session apply via platform API is **admin-only**. Adapters usually skip manual session apply.

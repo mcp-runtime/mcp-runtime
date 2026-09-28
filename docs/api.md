@@ -62,7 +62,7 @@ flowchart LR
 
 | Enum | Values | Notes |
 |---|---|---|
-| **auth.mode** | `none`, `header`, `oauth` | `header` is the default identity-extraction path. `oauth` enables MCP protected-resource metadata and JWT validation at the gateway. Adapter certificates authenticate adapters on OAuth-configured routes; clients without a certificate use OAuth. |
+| **auth.mode** | `none`, `header`, `oauth` | `oauth` is the supported path: Bearer JWT plus session-bound SPIFFE adapter certificates. `header` is legacy local/dev only. |
 | **policy.mode** | `allow-list`, `observe` | `allow-list` enforces deny-by-default. `observe` skips identity, grant, session, side-effect, and trust enforcement. Calls are forwarded, and audit events still record the tool and risk level. |
 | **trust** | `low`, `medium`, `high` | Used on tools, grants, sessions. Effective trust = min(grant `maxTrust`, session `consentedTrust`); required trust = max(tool `requiredTrust`, matching tool rule `requiredTrust`). |
 | **tool sideEffect** | `read`, `write`, `destructive` | Required on each listed tool. Grants must include the tool's side effect in `allowedSideEffects` before a tool call can pass. |
@@ -93,17 +93,15 @@ metadata:
 spec:
   teamID: 7d0a0b8f-7c25-4761-a632-3cf0108e31d6
   description: Payments MCP server for invoice lookup and refund workflows.
-  image: registry.example.com/payments-mcp
+  image: registry.mcpruntime.org/payments-mcp
   port: 8088
   publicPathPrefix: payments
   gateway:
     enabled: true
   auth:
-    mode: header
-    humanIDHeader: X-MCP-Human-ID
-    agentIDHeader: X-MCP-Agent-ID
-    teamIDHeader: X-MCP-Team-ID
-    sessionIDHeader: X-MCP-Agent-Session
+    mode: oauth
+    issuerURL: https://auth.mcpruntime.org
+    audience: https://mcp.mcpruntime.org/payments/mcp
   policy:
     mode: allow-list
     defaultDecision: deny
@@ -112,7 +110,6 @@ spec:
   session:
     required: true
     store: kubernetes
-    headerName: X-MCP-Agent-Session
     maxLifetime: 24h
     idleTimeout: 1h
   tools:
@@ -233,9 +230,9 @@ in test or production mode, or deploy an equivalent authorization server
 separately. Production mode requires an HTTPS issuer and resource, a selected
 OIDC connector, a TLS Secret, and a persistent signing-key Secret.
 
-When its public issuer is `https://auth.example.com/mcp-auth`, it exposes:
+When its public issuer is `https://auth.mcpruntime.org/mcp-auth`, it exposes:
 
-- `GET https://auth.example.com/.well-known/oauth-authorization-server/mcp-auth`. RFC 8414 inserts the well-known segment before the issuer path, so the discovery document is outside the issuer URL. OIDC discovery compatibility paths are also served.
+- `GET https://auth.mcpruntime.org/.well-known/oauth-authorization-server/mcp-auth`. RFC 8414 inserts the well-known segment before the issuer path, so the discovery document is outside the issuer URL. OIDC discovery compatibility paths are also served.
 - `GET /oauth/jwks.json`
 - `GET, POST /oauth/authorize` with mandatory S256 PKCE
 - `POST /oauth/token` for authorization-code and rotating refresh-token grants
@@ -317,45 +314,37 @@ discover the JWKS URL from the issuer when `OIDC_JWKS_URL` is unset. Set
 public TLS setup fails fast unless one of those browser login configurations
 is present.
 
-## Gateway flow and headers
+## Gateway flow
 
 ```mermaid
 sequenceDiagram
-    participant Client
+    participant Adapter
+    participant Ingress as Traefik
     participant Gateway as mcp-gateway
     participant Server as MCP server
-    Client->>Gateway: POST /payments/mcp tools/call
-    Note right of Gateway: Read X-MCP-Human-ID,<br/>X-MCP-Agent-ID,<br/>X-MCP-Team-ID,<br/>X-MCP-Agent-Session
+    Adapter->>Ingress: POST /payments/mcp tools/call<br/>+ session-bound SPIFFE client cert<br/>+ Bearer (OAuth)
+    Ingress->>Gateway: verified SPIFFE identity
+    Note right of Gateway: Map SPIFFE URI → MCPAgentSession<br/>(humanID, agentID, teamID, sessionID)
     Gateway->>Gateway: Lookup grant + session
     Gateway->>Gateway: Check sideEffect + min(grant.maxTrust, session.consentedTrust)
     alt allowed
         Gateway->>Server: forward
         Server-->>Gateway: response
-        Gateway-->>Client: response
+        Gateway-->>Adapter: response
     else denied
-        Gateway-->>Client: 403 + audit reason
+        Gateway-->>Adapter: 403 + audit reason
     end
     Gateway-->>+Ingest: audit event
 ```
 
 - **Enforcement point:** authorization is evaluated at `call_tool` / `tools/call`, not at discovery time.
+- **Identity:** governance identity is derived from the verified session-bound SPIFFE client certificate (and Bearer JWT claims on OAuth routes). Callers do not supply governance identity as request headers.
 - **Allow-list first:** missing grants deny by default unless the policy explicitly overrides the default decision. Empty `toolRules` means name-unrestricted access, still constrained by `allowedSideEffects` and trust.
 - **Side-effect guard:** `allowedSideEffects` is fail-closed. If it is omitted or empty, no tool side-effect class is allowed by that grant. A tool that the server did not declare in `tools[]` is denied for the same reason: there is no declared side effect to authorize.
 - **Observe mode:** `policy.mode: observe` returns an allow before identity, session, grant, side-effect, and trust checks run. Traffic is still proxied and audited. Use it for visibility only; it enforces nothing.
 - **Audit on allow and deny:** the gateway emits decision, reason, trust levels, required side effect, human, agent, session, server, cluster, and namespace fields.
 
-```text
-X-MCP-Human-ID:    user-123
-X-MCP-Agent-ID:    ops-agent
-X-MCP-Team-ID:     7d0a0b8f-7c25-4761-a632-3cf0108e31d6
-X-MCP-Agent-Session: sess-8f1b9d
-```
-
-On OAuth routes, adapters may also present a session-bound client certificate.
-Traefik verifies it before forwarding; the gateway still requires OAuth and
-binds the token subject to the session encoded by the certificate. Clients
-without a certificate use OAuth normally. Set
-`MCP_ADAPTER_CERTIFICATES=true` with platform-wide `MCP_MTLS_CLUSTER_ISSUER`
+Set `MCP_ADAPTER_CERTIFICATES=true` with platform-wide `MCP_MTLS_CLUSTER_ISSUER`
 and `MCP_TRUST_DOMAIN` to enable adapter enrollment.
 
 ## Dashboard API
@@ -592,7 +581,7 @@ Deployment apply body:
 ```json
 {
   "name": "payments",
-  "image": "registry.example.com/payments-mcp",
+  "image": "registry.mcpruntime.org/payments-mcp",
   "version": "v1.0.0",
   "port": 8088,
   "replicas": 1,

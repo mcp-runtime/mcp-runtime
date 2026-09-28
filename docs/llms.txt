@@ -52,7 +52,7 @@
 - An MCPAccessGrant defines which agent can call which tools on which server, at what trust level, with which side effects.
 - An MCPAgentSession is a time-bounded, revocable token carrying the human's consented trust level.
 - The gateway sidecar enforces grants + sessions on every tool call. No grant = denied. Expired/revoked session = denied.
-- The adapter proxy injects governance headers and creates/refreshes sessions automatically.
+- The adapter creates/refreshes sessions and presents a session-bound SPIFFE client certificate (`--auth mtls`).
 - Tool names in .mcp/servers.yaml must exactly match the server's registered tool names. Mismatch causes tool_side_effect_unknown.
 - Trust levels: low (read-only) / medium (writes) / high (destructive).
 - Side effects: read / write / destructive.

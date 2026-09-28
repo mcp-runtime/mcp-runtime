@@ -108,8 +108,8 @@ Primary request paths:
 - `/{server}/mcp`
 - JSON-RPC methods: `initialize`, `tools/list`, `tools/call`,
   `prompts/list`, `prompts/get`, `resources/list`, `resources/read`
-- Governance headers: `X-MCP-Human-ID`, `X-MCP-Agent-ID`,
-  `X-MCP-Team-ID`, `X-MCP-Agent-Session`
+- Governance identity: session-bound SPIFFE client certificate (mapped to
+  `humanID`, `agentID`, `teamID`, `sessionID` via `MCPAgentSession`)
 - Gateway health: `/health`
 
 OAuth-protected MCP servers add:
@@ -120,8 +120,8 @@ OAuth-protected MCP servers add:
 
 ## Adapter-Issued Sessions
 
-Adapters let local agents use governed MCP routes without constructing grant and
-session headers manually.
+Adapters let local agents use governed MCP routes without managing sessions or
+certificates themselves.
 
 ```mermaid
 sequenceDiagram
@@ -139,14 +139,15 @@ sequenceDiagram
     K8s-->>Operator: session watch event
     Operator->>K8s: render gateway policy ConfigMap
     API-->>Adapter: session name, humanID, agentID, teamID, expiry
-    Adapter->>Gateway: forward MCP request with governance headers
+    Adapter->>API: enroll session-bound SPIFFE client cert
+    Adapter->>Gateway: forward MCP request with client cert (+ Bearer on OAuth)
     Gateway->>Server: allow and proxy, or deny from policy
 ```
 
 Primary request paths:
 
-- `mcp-runtime adapter proxy --server <name> --agent <id>`
-- `mcp-runtime adapter stdio --server <name> --agent <id>`
+- `mcp-runtime adapter proxy --server <name> --agent <id> --auth mtls`
+- `mcp-runtime adapter stdio --server <name> --agent <id> --auth mtls`
 - `POST /api/v1/runtime/adapter/sessions`
 - Local adapter routes: /mcp, /health, /live, /ready, /metrics
 
@@ -361,7 +362,7 @@ Primary request paths:
 | MCP initialize/list/call | MCP client `/{server}/mcp` | Ingress, Service, gateway sidecar, MCP server | Streamable HTTP, JSON-RPC, MCP session header | `smoke-auth` |
 | Denied MCP call | `tools/call` without matching policy | gateway, policy evaluator, audit pipeline | deny reasons such as `tool_not_granted`, `session_not_found` | `governance`, `trust` |
 | OAuth MCP call | bearer token MCP route | gateway, OIDC discovery/JWKS, policy, MCP server | OAuth protected resource metadata, JWT claims | `oauth` |
-| Adapter proxy | `mcp-runtime adapter proxy` | local adapter, API, K8s session, operator, gateway | adapter session response, governance headers | `adapter-proxy` |
+| Adapter proxy | `mcp-runtime adapter proxy` | local adapter, API, K8s session, operator, gateway | adapter session + SPIFFE client cert | `adapter-proxy` |
 | Adapter stdio | `mcp-runtime adapter stdio` | stdio shim, API, gateway, MCP server | stdin/stdout JSON-RPC, session state | `adapter-proxy`, unit tests |
 | Create/update grants | UI/CLI/API `/api/v1/runtime/grants` | API, K8s, operator, gateway | grant validation, subject/team binding | `governance`, `api-platform` |
 | Create/update sessions (admin) | UI/CLI/API `POST /api/v1/runtime/sessions` | API, K8s, operator, gateway | admin role required for direct session apply | `governance`, `api-platform` |

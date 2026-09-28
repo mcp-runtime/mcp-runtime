@@ -29,7 +29,7 @@ gateway which team the agent is acting for.
 
 ```bash
 mcp-runtime auth login \
-  --api-url https://platform.example.com \
+  --api-url https://platform.mcpruntime.org \
   --email admin@example.com --password '...' \
   --profile admin
 
@@ -52,7 +52,7 @@ MCP_PLATFORM_API_PROFILE=admin mcp-runtime team list
 
 ```bash
 mcp-runtime auth login \
-  --api-url https://platform.example.com \
+  --api-url https://platform.mcpruntime.org \
   --email alice@acme.com --password 'alice123' \
   --profile alice
 mcp-runtime auth use alice
@@ -68,7 +68,7 @@ kill $SERVER_PID
 
 mcp-runtime server validate --metadata-dir .mcp
 mcp-runtime server build image payments --tag v1
-mcp-runtime server push --image registry.example.com/acme/payments:v1 --scope tenant
+mcp-runtime server push --image registry.mcpruntime.org/acme/payments:v1 --scope tenant
 mcp-runtime server deploy payments --scope tenant --metadata-dir .mcp
 ```
 
@@ -144,7 +144,7 @@ mcp-runtime access session list
 mcp-runtime auth use bob   # bob@globex.com
 
 mcp-runtime adapter proxy \
-  --runtime-url https://mcp.example.com/payments/mcp \
+  --runtime-url https://mcp.mcpruntime.org/payments/mcp \
   --server payments \
   --agent cursor \
   --agent-id cursor \

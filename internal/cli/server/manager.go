@@ -165,7 +165,7 @@ func (m *ServerManager) InitServer(name, metadataDir, image, imageTag, scope, po
 		Route:            mcpdefaults.DefaultIngressPath(name),
 		Port:             port,
 		Tools:            nil,
-		Auth:             &metadata.AuthConfig{Mode: metadata.AuthModeHeader},
+		Auth:             &metadata.AuthConfig{Mode: metadata.AuthModeOAuth},
 		Policy: &metadata.PolicyConfig{
 			Mode:            metadata.PolicyMode(policyMode),
 			DefaultDecision: metadata.PolicyDecision(defaultDecision),

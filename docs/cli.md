@@ -57,11 +57,11 @@ named profile. Switch with `auth use` or override for a single command with
 
 ```bash
 # Save as the default profile
-mcp-runtime auth login --api-url https://platform.example.com
+mcp-runtime auth login --api-url https://platform.mcpruntime.org
 
 # Save under a named profile
 mcp-runtime auth login \
-  --api-url https://platform.example.com \
+  --api-url https://platform.mcpruntime.org \
   --email alice@acme.com --password '...' \
   --profile alice
 
@@ -110,16 +110,16 @@ may change between releases.
 
 ```bash
 # Interactive
-mcp-runtime auth login --api-url https://platform.example.com
+mcp-runtime auth login --api-url https://platform.mcpruntime.org
 
 # Non-interactive (CI)
 mcp-runtime auth login \
-  --api-url https://platform.example.com \
+  --api-url https://platform.mcpruntime.org \
   --token-stdin < token.txt
 
 # Email + password
 mcp-runtime auth login \
-  --api-url https://platform.example.com \
+  --api-url https://platform.mcpruntime.org \
   --email alice@acme.com --password '...' \
   --profile alice
 
@@ -250,8 +250,8 @@ mcp-runtime server build image workspace-demo --tag v1
 The command prints the exact image ref and the matching push command:
 
 ```
-Built image registry.example.com/acme/workspace-demo:v1
-Push it with: mcp-runtime server push --image registry.example.com/acme/workspace-demo:v1 --scope tenant
+Built image registry.mcpruntime.org/acme/workspace-demo:v1
+Push it with: mcp-runtime server push --image registry.mcpruntime.org/acme/workspace-demo:v1 --scope tenant
 ```
 
 Without `--registry`, the registry host comes from the active `auth login`
@@ -266,7 +266,7 @@ Use the exact ref printed by `server build image`:
 
 ```bash
 mcp-runtime server push \
-  --image registry.example.com/acme/workspace-demo:v1 \
+  --image registry.mcpruntime.org/acme/workspace-demo:v1 \
   --scope tenant
 
 # Other scopes
@@ -304,10 +304,10 @@ mcp-runtime server validate --metadata-dir .mcp
 
 mcp-runtime auth use alice
 mcp-runtime server build image workspace-demo --tag v1
-# prints: registry.example.com/acme/workspace-demo:v1
+# prints: registry.mcpruntime.org/acme/workspace-demo:v1
 
 mcp-runtime server push \
-  --image registry.example.com/acme/workspace-demo:v1 \
+  --image registry.mcpruntime.org/acme/workspace-demo:v1 \
   --scope tenant
 
 mcp-runtime server deploy workspace-demo --scope tenant --metadata-dir .mcp
@@ -366,7 +366,7 @@ mcp-runtime registry status
 mcp-runtime registry info
 
 # Configure an external registry
-mcp-runtime registry provision --url registry.example.com
+mcp-runtime registry provision --url registry.mcpruntime.org
 ```
 
 Publish MCP server images with [`server push`](#server-push). The registry
@@ -514,10 +514,10 @@ fixed deadline is more appropriate than a duration.
 
 > Full guide: [Agent adapters](agent-adapters.md)
 
-The adapter adds platform session and governance headers to every request
-before it reaches the MCP server. When `--server` is set, the adapter creates
-the session. `--agent` (session name) is required in that case. `--agent-id`
-sets the identity header forwarded to the server.
+The adapter obtains a platform session and presents it with a **session-bound
+SPIFFE client certificate** (`--auth mtls` or `adapter enroll`). The gateway
+derives governance identity from that certificate. When `--server` is set, the
+adapter creates the session; `--agent` is required in that case.
 
 The adapter never creates grants. First apply an enabled `MCPAccessGrant` that
 matches the server, the signed-in user, and the agent (`access grant apply`).
@@ -531,7 +531,7 @@ the URL saved by `auth login` or `$MCP_PLATFORM_API_URL`.
 # Enterprise mTLS enrollment. Generates client.key locally and writes the
 # issued client.crt and ca.crt into the output directory.
 mcp-runtime adapter enroll \
-  --platform-url https://platform.example.com \
+  --platform-url https://platform.mcpruntime.org \
   --server workspace-demo \
   --namespace mcp-servers \
   --agent cursor \
@@ -540,34 +540,35 @@ mcp-runtime adapter enroll \
 
 # HTTP proxy. MCP clients connect to http://127.0.0.1:8099
 mcp-runtime adapter proxy \
-  --runtime-url https://mcp.example.com/workspace-demo/mcp \
+  --runtime-url https://mcp.mcpruntime.org/workspace-demo/mcp \
   --server workspace-demo \
   --agent cursor \
   --agent-id cursor \
+  --auth mtls \
   --auto-refresh \
   --listen 127.0.0.1:8099
 
 # stdio shim for Claude Desktop or local agent processes
 mcp-runtime adapter stdio \
-  --runtime-url https://mcp.example.com/workspace-demo/mcp \
+  --runtime-url https://mcp.mcpruntime.org/workspace-demo/mcp \
   --server workspace-demo \
   --agent cursor \
   --agent-id cursor \
+  --auth mtls \
   --auto-refresh
 ```
 
 With the adapter running, point any MCP client at `http://127.0.0.1:8099`.
-The adapter handles session creation and governance headers.
+The adapter handles session creation and the session-bound certificate.
 
-For OAuth-protected servers, an adapter may additionally present a
-session-bound certificate. OAuth authentication is still required. Enroll once
-and pass the files, or let the adapter enroll a certificate in memory with
-`--auth mtls`:
+For OAuth-protected servers, also forward a Bearer token (`--auth-header` or
+the client's token). Enroll once and pass the cert files, or let the adapter
+enroll in memory with `--auth mtls`:
 
 ```bash
 # Reuse enroll output
 mcp-runtime adapter proxy \
-  --runtime-url https://mcp.example.com/workspace-demo/mcp \
+  --runtime-url https://mcp.mcpruntime.org/workspace-demo/mcp \
   --tls-client-cert ~/.config/mcp-runtime/workspace-demo/client.crt \
   --tls-client-key  ~/.config/mcp-runtime/workspace-demo/client.key \
   --tls-ca-bundle   ~/.config/mcp-runtime/workspace-demo/ca.crt
@@ -575,8 +576,8 @@ mcp-runtime adapter proxy \
 # One-command in-memory enrollment
 mcp-runtime adapter proxy \
   --auth mtls \
-  --runtime-url https://mcp.example.com/workspace-demo/mcp \
-  --platform-url https://platform.example.com \
+  --runtime-url https://mcp.mcpruntime.org/workspace-demo/mcp \
+  --platform-url https://platform.mcpruntime.org \
   --server workspace-demo \
   --namespace mcp-servers \
   --agent cursor \
@@ -632,7 +633,7 @@ Team users log in with:
 
 ```bash
 mcp-runtime auth login \
-  --api-url https://platform.example.com \
+  --api-url https://platform.mcpruntime.org \
   --email alice@acme.com --password '...' \
   --profile alice
 ```
@@ -771,7 +772,7 @@ Key env vars for `--env-file` (see `config/deployments/mcpruntime-org.env.exampl
 
 | Env var | Flag |
 |---|---|
-| `MCP_PLATFORM_DOMAIN=example.com` | derives all three ingress hostnames |
+| `MCP_PLATFORM_DOMAIN=mcpruntime.org` | derives all three ingress hostnames |
 | `MCP_SETUP_WITH_TLS=1` | `--with-tls` |
 | `MCP_SETUP_TLS_CLUSTER_ISSUER=letsencrypt-prod` | `--tls-cluster-issuer` |
 | `MCP_SETUP_MTLS_CLUSTER_ISSUER=company-workload-ca` | `--mtls-cluster-issuer` |

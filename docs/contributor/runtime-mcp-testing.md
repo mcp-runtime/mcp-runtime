@@ -58,10 +58,7 @@ servers:
         requiredTrust: low
         sideEffect: read
     auth:
-      mode: header
-      humanIDHeader: X-MCP-Human-ID
-      agentIDHeader: X-MCP-Agent-ID
-      sessionIDHeader: X-MCP-Agent-Session
+      mode: oauth
     policy:
       mode: allow-list
       defaultDecision: deny
@@ -239,9 +236,10 @@ Cross-team delegation is modeled as an access resource in the server owner's
 namespace with an explicit foreign `subject.teamID`. For example, Tenant A can
 create a grant and session in `mcp-team-tenant-a` that point at
 `tenant-a-mcp`, while setting `subject.teamID` to Tenant B's team ID. The
-request must then carry Tenant B's `X-MCP-Team-ID` plus the matching human,
-agent, and session headers. Reusing the same session with Tenant A's team ID
-should fail with `session_not_found` or `no_matching_grant`.
+request must then present Tenant B's session-bound SPIFFE certificate (the
+session binding carries Tenant B's `teamID`). Reusing a Tenant A session
+cert against that grant should fail with `session_not_found` or
+`no_matching_grant`.
 
 Inventory command:
 

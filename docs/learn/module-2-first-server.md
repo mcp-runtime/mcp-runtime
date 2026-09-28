@@ -63,11 +63,11 @@ Validation catches tool name mismatches before the build.
 ```bash
 # Build (from the directory with the Dockerfile)
 mcp-runtime server build image my-server --tag v1
-# Prints: registry.example.com/myteam/my-server:v1
+# Prints: registry.mcpruntime.org/myteam/my-server:v1
 
 # Push using the exact ref printed above
 mcp-runtime server push \
-  --image registry.example.com/myteam/my-server:v1 \
+  --image registry.mcpruntime.org/myteam/my-server:v1 \
   --scope tenant
 
 # Deploy

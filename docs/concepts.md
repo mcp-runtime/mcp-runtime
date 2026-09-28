@@ -242,7 +242,7 @@ what is declared here, and calls to unlisted tools are denied.
 ```yaml
 servers:
   - name: payments
-    image: registry.example.com/acme/payments
+    image: registry.mcpruntime.org/acme/payments
     imageTag: v1
     scope: tenant
     tools:

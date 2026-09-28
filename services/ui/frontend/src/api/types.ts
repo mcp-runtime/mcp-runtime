@@ -199,10 +199,10 @@ export function authModeInfo(mode: string | undefined): AuthModeInfo {
       };
     case "header":
       return {
-        label: "Header identity",
-        tone: "neutral",
+        label: "Legacy header auth",
+        tone: "warning",
         detail:
-          "The gateway reads identity from request headers. There is no token exchange, so the headers must come from a trusted hop.",
+          "Legacy local/dev mode. Prefer OAuth with a session-bound SPIFFE client certificate; governance identity should come from the cert, not request headers.",
       };
     case "none":
       return {

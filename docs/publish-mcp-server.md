@@ -33,7 +33,7 @@ metadata:
   namespace: mcp-servers
 spec:
   description: Payments MCP server for invoice lookup and refund workflows.
-  image: registry.example.com/payments
+  image: registry.mcpruntime.org/payments
   imageTag: v1.0.0
   port: 8088
   publicPathPrefix: payments
@@ -132,7 +132,7 @@ session manifests, `access session init` supports `--trust`,
 `--expires-in`, `--expires-at`, `--revoked`, and upstream-token secret flags.
 
 ```bash
-mcp-runtime auth login --api-url https://platform.example.com
+mcp-runtime auth login --api-url https://platform.mcpruntime.org
 
 ./bin/mcp-runtime access grant init payments-globex-cursor \
   --namespace mcp-team-acme \
@@ -178,7 +178,7 @@ servers:
   - name: payments
     description: Payments MCP server for invoice lookup and refund workflows.
     scope: org
-    image: registry.example.com/org/payments
+    image: registry.mcpruntime.org/org/payments
     imageTag: v1.0.0
     route: /payments
     port: 8088
@@ -291,7 +291,7 @@ operator debugging.
 After this command, push the exact image reference produced by the build output (or read it from the rewritten metadata):
 
 ```bash
-mcp-runtime auth login --api-url https://platform.example.com
+mcp-runtime auth login --api-url https://platform.mcpruntime.org
 ./bin/mcp-runtime server push --scope org --image <exact-image-ref-from-build>
 ```
 
@@ -299,7 +299,7 @@ mcp-runtime auth login --api-url https://platform.example.com
 `MCP_PLATFORM_API_TOKEN` with a saved or explicit `MCP_PLATFORM_API_URL`;
 unauthenticated pushes are
 rejected before Docker or the in-cluster helper starts. `<exact-image-ref-from-build>`
-may be a resolved public registry host such as `registry.example.com/org/payments:v1.0.0`,
+may be a resolved public registry host such as `registry.mcpruntime.org/org/payments:v1.0.0`,
 or a registry Service address when no public registry Ingress is configured.
 Use `--scope public` for public catalog images. Use `--scope tenant` for team
 images; if the image name has no repository prefix, the CLI prefixes it with
@@ -325,7 +325,7 @@ the `MCPServer` for you:
 
 ```bash
 docker build -t payments:v1.0.0 .
-mcp-runtime auth login --api-url https://platform.example.com
+mcp-runtime auth login --api-url https://platform.mcpruntime.org
 ./bin/mcp-runtime server push --scope public --image payments:v1.0.0
 ./bin/mcp-runtime server deploy payments --scope public --image payments --tag v1.0.0
 ```
@@ -357,7 +357,7 @@ admin/operator Kubernetes access. For the normal tenant platform path, use
 
 ```bash
 docker build -t payments:v1.0.0 .
-mcp-runtime auth login --api-url https://platform.example.com
+mcp-runtime auth login --api-url https://platform.mcpruntime.org
 ./bin/mcp-runtime server push --scope tenant --image payments:v1.0.0
 ./bin/mcp-runtime server apply --file payments.yaml --use-kube
 ```
@@ -391,7 +391,7 @@ For the example above, that is:
 Check server state:
 
 ```bash
-mcp-runtime auth login --api-url https://platform.example.com
+mcp-runtime auth login --api-url https://platform.mcpruntime.org
 ./bin/mcp-runtime server status
 ./bin/mcp-runtime server get payments
 ./bin/mcp-runtime status

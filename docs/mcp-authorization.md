@@ -52,7 +52,7 @@ For a public k3s deployment, create DNS A records pointing to the ingress node:
 
 ```text
 keycloak.example.com → <public ingress IP>
-auth.example.com     → <public ingress IP>
+auth.mcpruntime.org     → <public ingress IP>
 ```
 
 Issue certificates for both names with the cluster's ACME issuer. Setup creates
@@ -67,7 +67,7 @@ issued the certificate, Firefox may show a security error or Traefik may serve
 its default certificate. Check these before debugging login:
 
 ```bash
-dig +short platform.example.com
+dig +short platform.mcpruntime.org
 kubectl get ingress -n mcp-sentinel mcp-sentinel-platform-ui
 kubectl get certificate -n mcp-sentinel
 kubectl describe certificate -n mcp-sentinel <platform-certificate>
@@ -96,7 +96,7 @@ Deploy Keycloak separately, then create:
 4. Exact redirect URI:
 
    ```text
-   https://auth.example.com/mcp-auth/identity/callback
+   https://auth.mcpruntime.org/mcp-auth/identity/callback
    ```
 
 The resulting OIDC issuer is:
@@ -154,7 +154,7 @@ export KEYCLOAK_CLIENT_SECRET="$(tr -d '\n' < /secure/keycloak-client-secret)"
     "identity_claims": ["preferred_username"],
     "token_endpoint_auth_method": "client_secret_post",
     "allowed_upstream_callback_uris": [
-      "https://auth.example.com/mcp-auth/identity/callback"
+      "https://auth.mcpruntime.org/mcp-auth/identity/callback"
     ],
     "downstream_token_strategy": "upstream_session"
   }
@@ -178,7 +178,7 @@ spec:
   auth:
     mode: oauth
     # Defaults from the bundled issuer configured on the operator.
-    audience: https://mcp.example.com/my-server/mcp
+    audience: https://mcp.mcpruntime.org/my-server/mcp
 ```
 
 The audience must equal the MCP server's canonical public URL. The operator
@@ -194,8 +194,8 @@ the ingress has the `traefik.ingress.kubernetes.io/router.tls: "true"`
 annotation, then `spec.ingressHost` (or the shared MCP host resolver's
 `MCP_MCP_INGRESS_HOST`, `MCP_DEFAULT_INGRESS_HOST`, or `mcp.<MCP_PLATFORM_DOMAIN>`),
 then `/<publicPathPrefix>/mcp`. A path-based
-server named `my-server` on `mcp.example.com` gets
-`https://mcp.example.com/my-server/mcp`. If no host is known (for example in
+server named `my-server` on `mcp.mcpruntime.org` gets
+`https://mcp.mcpruntime.org/my-server/mcp`. If no host is known (for example in
 local test mode), set `audience` explicitly.
 
 Derived `audience` and `issuerURL` values are computed on every reconcile and
@@ -285,13 +285,13 @@ export MCP_SETUP_MCP_AUTH_CONNECTOR=keycloak
 ## Verify the flow
 
 Check that the authorization server and Keycloak publish metadata. For a
-path-mounted issuer such as `https://auth.example.com/mcp-auth`, RFC 8414
+path-mounted issuer such as `https://auth.mcpruntime.org/mcp-auth`, RFC 8414
 inserts the well-known segment before the issuer path, so discovery is served
-at `https://auth.example.com/.well-known/oauth-authorization-server/mcp-auth`,
+at `https://auth.mcpruntime.org/.well-known/oauth-authorization-server/mcp-auth`,
 not under the issuer URL:
 
 ```bash
-curl -fsS https://auth.example.com/.well-known/oauth-authorization-server/mcp-auth
+curl -fsS https://auth.mcpruntime.org/.well-known/oauth-authorization-server/mcp-auth
 curl -fsS https://keycloak.example.com/realms/mcp-runtime/.well-known/openid-configuration
 kubectl -n mcp-sentinel rollout status deploy/mcp-auth-server
 ```
@@ -352,7 +352,7 @@ and callback settings from that provider's console:
     "identity_claims": ["sub", "email"],
     "token_endpoint_auth_method": "client_secret_post",
     "allowed_upstream_callback_uris": [
-      "https://auth.example.com/mcp-auth/identity/callback"
+      "https://auth.mcpruntime.org/mcp-auth/identity/callback"
     ],
     "downstream_token_strategy": "upstream_session"
   }

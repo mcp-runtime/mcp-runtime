@@ -50,7 +50,7 @@ flowchart LR
 | Request flows | [`request-flows.md`](request-flows.md) | Maps CLI, UI/API, registry, adapter, MCP runtime, policy, analytics, tenancy, and pre-release paths to components and E2E scenarios. |
 | Sentinel API services | [`../sentinel.md`](../sentinel.md) | Three-service split (platform-api, runtime-api, analytics-api): Traefik `/api/v1` routing, RBAC, `/internal/*` contracts, OpenAPI per service. |
 | Generated Go reference | [`go-package-reference.md`](go-package-reference.md) | Captures `go doc` output for the main contributor-facing packages. |
-| Agent adapters | `internal/agentadapter/`, `internal/cli/adapter/` | HTTP proxy and stdio shim behavior for forwarding agent MCP traffic with issued governance headers; exposed via `mcp-runtime adapter proxy/stdio`. |
+| Agent adapters | `internal/agentadapter/`, `internal/cli/adapter/` | HTTP proxy and stdio shim that obtain a session and present a session-bound SPIFFE client certificate; exposed via `mcp-runtime adapter proxy/stdio`. |
 | Operator | [`cmd-operator.md`](cmd-operator.md) | Explains manager startup and reconciliation from desired state to Kubernetes resources. |
 | Control-plane helpers | `pkg/controlplane/` | Shared MCPServer Kubernetes operations and status projection used outside HTTP/CLI glue. |
 | Shared policy and events | `pkg/policy/`, `pkg/events/`, `pkg/clickhouse/` | Gateway policy contracts/evaluation plus Sentinel event envelopes and ClickHouse query/insert helpers. |
@@ -87,7 +87,7 @@ When changing this path, check the relevant CLI command, the `api/v1alpha1` cont
 
 ## Runtime request flow
 
-At request time, clients do not call server pods directly. Traffic flows through the gateway, which checks grants and sessions before forwarding MCP JSON-RPC calls. Optional agent adapters run beside the client when a framework or IDE cannot attach the issued governance headers itself.
+At request time, clients do not call server pods directly. Traffic flows through the gateway, which checks grants and sessions before forwarding MCP JSON-RPC calls. Optional agent adapters run beside the client to obtain a session and present a session-bound SPIFFE client certificate.
 
 ```mermaid
 flowchart TD

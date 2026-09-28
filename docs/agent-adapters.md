@@ -42,10 +42,10 @@ principal, and the agent; without one the session call returns 403 and the
 adapter refuses to start. See [Required grant](#required-grant) below.
 
 ```bash
-mcp-runtime auth login --api-url https://platform.example.com
+mcp-runtime auth login --api-url https://platform.mcpruntime.org
 
 mcp-runtime adapter stdio \
-  --runtime-url https://mcp.example.com/oauth-example-go-2025-11-25-gateway/mcp \
+  --runtime-url https://mcp.mcpruntime.org/oauth-example-go-2025-11-25-gateway/mcp \
   --server oauth-example-go-2025-11-25-gateway \
   --agent ticket-triage-agent \
   --auto-refresh
@@ -154,9 +154,18 @@ use. With `--server`, missing fields are populated from the issued response.
 
 With `--auth mtls`, governance identity is the session-bound client
 certificate (not request headers). Set `MCP_RUNTIME_AUTH_HEADER` when the
-MCP server expects a Bearer token for OAuth. MCP protocol headers
-(`Mcp-Protocol-Version`, `Mcp-Session-Id`, `content-type`, `accept`) are
-preserved on every forward.
+MCP server expects a Bearer token for OAuth.
+
+`adapter proxy` is a reverse proxy: it **forwards the client's request
+headers** to the runtime (including MCP protocol headers such as
+`Mcp-Protocol-Version` and `Mcp-Session-Id`, plus `content-type`, `accept`,
+query string, body, and any other headers the MCP client sent that are
+useful to the gateway or server). Hop-by-hop headers are dropped as usual.
+The only governance-related change is that spoofed identity headers are
+stripped; identity comes from the cert. If you set `--auth-header` /
+`MCP_RUNTIME_AUTH_HEADER`, that value replaces `Authorization` on the
+outbound request. On `tools/call`, header parameters declared in the tool
+schema (`_meta` / modern MCP header bindings) are also applied.
 
 ## Anonymous mode (stdio)
 
@@ -165,7 +174,7 @@ identity. Run the stdio shim anonymously:
 
 ```bash
 mcp-runtime adapter stdio \
-  --runtime-url https://mcp.example.com/public-catalog/mcp \
+  --runtime-url https://mcp.mcpruntime.org/public-catalog/mcp \
   --anonymous \
   --anonymous-methods initialize,notifications/initialized,server/discover,ping,tools/list,resources/list,prompts/list
 ```
@@ -195,7 +204,7 @@ manage sessions or certificates itself.
 
 ```bash
 mcp-runtime adapter proxy \
-  --runtime-url https://mcp.example.com/oauth-example-go-2025-11-25-gateway/mcp \
+  --runtime-url https://mcp.mcpruntime.org/oauth-example-go-2025-11-25-gateway/mcp \
   --server oauth-example-go-2025-11-25-gateway \
   --agent ticket-triage-agent \
   --auth mtls \
@@ -240,13 +249,13 @@ Claude Desktop, similar):
       "command": "/absolute/path/to/bin/mcp-runtime",
       "args": [
         "adapter", "stdio",
-        "--runtime-url", "https://mcp.example.com/oauth-example-go-2025-11-25-gateway/mcp",
+        "--runtime-url", "https://mcp.mcpruntime.org/oauth-example-go-2025-11-25-gateway/mcp",
         "--server", "oauth-example-go-2025-11-25-gateway",
         "--agent", "ticket-triage-agent",
         "--auto-refresh"
       ],
       "env": {
-        "MCP_PLATFORM_API_URL": "https://platform.example.com",
+        "MCP_PLATFORM_API_URL": "https://platform.mcpruntime.org",
         "MCP_PLATFORM_API_TOKEN": "..."
       }
     }
@@ -358,15 +367,15 @@ for certificate-based identity on that same URL.
 
 ```yaml
 spec:
-  ingressHost: mcp.example.com
+  ingressHost: mcp.mcpruntime.org
   publicPathPrefix: workspace-assistant
   ingressClass: traefik
   gateway:
     enabled: true
   auth:
     mode: oauth
-    issuerURL: https://auth.example.com
-    audience: https://mcp.example.com/workspace-assistant/mcp
+    issuerURL: https://auth.mcpruntime.org
+    audience: https://mcp.mcpruntime.org/workspace-assistant/mcp
 ```
 
 **How termination works.** Traefik verifies a presented adapter client
@@ -394,7 +403,7 @@ Enroll an external adapter after signing in to the platform:
 
 ```bash
 mcp-runtime adapter enroll \
-  --platform-url https://platform.example.com \
+  --platform-url https://platform.mcpruntime.org \
   --server workspace-assistant \
   --namespace mcp-servers \
   --agent cursor \
@@ -411,7 +420,7 @@ session-bound, the grant prerequisite above applies here too.
 
 ```bash
 mcp-runtime adapter proxy \
-  --runtime-url https://mcp.example.com/workspace-assistant/mcp \
+  --runtime-url https://mcp.mcpruntime.org/workspace-assistant/mcp \
   --tls-client-cert ~/.config/mcp-runtime/workspace-assistant/client.crt \
   --tls-client-key ~/.config/mcp-runtime/workspace-assistant/client.key \
   --tls-ca-bundle ~/.config/mcp-runtime/workspace-assistant/ca.crt
@@ -426,8 +435,8 @@ written to disk) and feeds it straight to the runtime transport:
 ```bash
 mcp-runtime adapter proxy \
   --auth mtls \
-  --runtime-url https://mcp.example.com/workspace-assistant/mcp \
-  --platform-url https://platform.example.com \
+  --runtime-url https://mcp.mcpruntime.org/workspace-assistant/mcp \
+  --platform-url https://platform.mcpruntime.org \
   --server workspace-assistant \
   --namespace mcp-servers \
   --agent cursor \

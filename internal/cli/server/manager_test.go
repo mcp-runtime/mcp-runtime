@@ -43,7 +43,7 @@ func TestInitServerCreatesMetadata(t *testing.T) {
 	}
 	raw := string(rawMetadata)
 	// auth.mode is written explicitly so downstream tooling sees it without LoadFromFile.
-	if !strings.Contains(raw, "mode: header") {
+	if !strings.Contains(raw, "mode: oauth") {
 		t.Fatalf("raw metadata missing auth mode:\n%s", rawMetadata)
 	}
 	// These remain platform-managed: only filled in by LoadFromFile, not written by init.
@@ -86,8 +86,8 @@ func TestInitServerCreatesMetadata(t *testing.T) {
 	if server.Gateway == nil || !server.Gateway.Enabled {
 		t.Fatalf("gateway = %#v, want enabled", server.Gateway)
 	}
-	if server.Auth == nil || server.Auth.Mode != metadata.AuthModeHeader {
-		t.Fatalf("auth.mode = %#v, want header", server.Auth)
+	if server.Auth == nil || server.Auth.Mode != metadata.AuthModeOAuth {
+		t.Fatalf("auth.mode = %#v, want oauth", server.Auth)
 	}
 	if server.Auth.HumanIDHeader == "" || server.Auth.AgentIDHeader == "" {
 		t.Fatalf("auth header defaults not populated by LoadFromFile: auth=%#v", server.Auth)

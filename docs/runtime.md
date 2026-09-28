@@ -97,16 +97,14 @@ flowchart LR
 | **Side-effect evaluation** | Each listed tool must declare `sideEffect: read`, `write`, or `destructive`. A grant authorizes only tools whose side effect is in `allowedSideEffects`. Omitted or empty `allowedSideEffects` allows no side-effect classes. A tool the server never declared is denied, because it has no side effect to authorize. |
 | **Observe mode** | `policy.mode: observe` allows the call before identity, session, grant, side-effect, and trust checks run. Requests are still proxied and audited, but nothing is enforced. |
 
-### Gateway headers
+### Gateway identity
 
-These header names are defaults; override via `spec.auth.{humanIDHeader,agentIDHeader,teamIDHeader,sessionIDHeader}`.
-
-```text
-X-MCP-Human-ID:    user-123
-X-MCP-Agent-ID:    ops-agent
-X-MCP-Team-ID:     7d0a0b8f-7c25-4761-a632-3cf0108e31d6
-X-MCP-Agent-Session: sess-8f1b9d
-```
+Governance identity (`humanID`, `agentID`, `teamID`, `sessionID`) is derived
+from the verified **session-bound SPIFFE client certificate** the adapter
+presents. Traefik validates the cert; the gateway maps the SPIFFE URI to the
+rendered `MCPAgentSession`. On OAuth routes the caller also presents a Bearer
+JWT for resource authentication. Callers do not inject governance identity as
+request headers.
 
 ### Gateway policy snapshots
 
@@ -144,11 +142,11 @@ To check the applied policy, use the gateway endpoints:
 
 ### Agent adapters
 
-Agent adapters are helper processes for frameworks and IDEs that cannot
-attach governance headers. `mcp-runtime adapter proxy` accepts local
-Streamable HTTP MCP traffic and `mcp-runtime adapter stdio` accepts stdio MCP
-traffic; both forward to the governed runtime route with the issued
-identity/session headers.
+Agent adapters are helper processes for frameworks and IDEs that should not
+manage sessions or certificates themselves. `mcp-runtime adapter proxy`
+accepts local Streamable HTTP MCP traffic and `mcp-runtime adapter stdio`
+accepts stdio MCP traffic; both forward to the governed runtime route with a
+**session-bound SPIFFE client certificate** (`--auth mtls`).
 
 Use **platform-issued sessions**. With `--server <MCPServer name> --agent <id>`,
 the adapter calls `POST /api/v1/runtime/adapter/sessions` at startup. The platform derives `humanID` and
@@ -156,17 +154,14 @@ the adapter calls `POST /api/v1/runtime/adapter/sessions` at startup. The platfo
 `MCPAccessGrant` (highest `MaxTrust`, oldest creation as the tiebreak), and
 writes (or reuses) an `MCPAgentSession` with a deterministic name:
 `adapter-<sha256-prefix(humanID,agentID,teamID,serverName)>`. Adding
-`--auto-refresh` rotates the issued identity ~5 min before expiry without
-restarting the process. Explicit `--human-id` / `--agent-id` / `--session-id`
-flags take precedence over the issued values and survive every refresh.
+`--auto-refresh` renews the session and re-enrolls the certificate ~5 min
+before expiry without restarting the process.
 
-In closed environments without the platform API, set explicit `MCP_RUNTIME_*`
-env vars. Anonymous mode (`--anonymous` on stdio)
-forwards to public/read-only routes with no identity headers and a method
-allowlist.
+Anonymous mode (`--anonymous` on stdio) forwards to public/read-only routes
+with no session certificate and a method allowlist.
 
-The adapters only present headers. The gateway enforces policy, including
-`MCPAccessGrant` and `MCPAgentSession` checks.
+The adapter presents the certificate (and Bearer on OAuth). The gateway
+enforces policy, including `MCPAccessGrant` and `MCPAgentSession` checks.
 
 Operational notes:
 

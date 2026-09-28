@@ -34,7 +34,7 @@ A Kubernetes CRD that describes a running MCP server. You create it with
 ```
 MCPServer
   name: payments
-  image: registry.example.com/acme/payments:v1
+  image: registry.mcpruntime.org/acme/payments:v1
   port: 8088
   gateway.enabled: true   ← enables the policy sidecar
   tools:

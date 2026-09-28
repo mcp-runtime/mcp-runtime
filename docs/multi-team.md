@@ -22,9 +22,9 @@ The source-of-truth data plane is:
 - `MCPAccessGrant.spec.expiresAt` can end a delegation automatically. Any
   session issued from the grant expires no later than the grant, including
   sessions requested by an auto-refreshing adapter.
-- The gateway reads team identity from `spec.auth.teamIDHeader` in header mode,
-  from OAuth `team_id`, `tenant_id`, or `tid` claims in OAuth mode, or from the
-  session named by a verified adapter certificate.
+- The gateway reads team identity from the session named by a verified adapter
+  certificate, or from OAuth `team_id` / `tenant_id` / `tid` claims when a
+  Bearer JWT is presented without an adapter cert.
 
 ## When to use this
 
@@ -49,7 +49,7 @@ Admins create a managed team namespace through the platform API with
 `team create`:
 
 ```bash
-mcp-runtime auth login --api-url https://platform.example.com
+mcp-runtime auth login --api-url https://platform.mcpruntime.org
 mcp-runtime team create acme --name "Acme"
 mcp-runtime team user create acme \
   --username acme-user@example.com \
@@ -73,7 +73,7 @@ user to the team as `member` or `owner`, and then the user can sign in with:
 
 ```bash
 mcp-runtime auth login \
-  --api-url https://platform.example.com \
+  --api-url https://platform.mcpruntime.org \
   --username acme-user@example.com \
   --password '...'
 ```
@@ -127,7 +127,7 @@ metadata:
   namespace: mcp-team-acme
 spec:
   teamID: 7d0a0b8f-7c25-4761-a632-3cf0108e31d6
-  image: registry.example.com/acme/payments:latest
+  image: registry.mcpruntime.org/acme/payments:latest
 ```
 
 Team-wide access:
@@ -155,28 +155,21 @@ subject:
 ```
 
 When more than one subject field is set, every field must match the request
-identity, so a moved user stops matching the old team's grants as soon
-as their trusted `teamID` claim/header changes.
+identity, so a moved user stops matching the old team's grants as soon as
+their trusted `teamID` (from the session binding or OAuth claims) changes.
 
 ## Gateway Identity
 
-Header mode defaults:
+Governance identity is certificate-derived. Traefik verifies the adapter's
+session-bound SPIFFE client certificate; the gateway maps the SPIFFE URI to
+the rendered `MCPAgentSession` and takes `humanID`, `agentID`, `teamID`, and
+`sessionID` from that binding inside the platform trust domain.
 
-| Identity | Header |
-|---|---|
-| `humanID` | `X-MCP-Human-ID` |
-| `agentID` | `X-MCP-Agent-ID` |
-| `teamID` | `X-MCP-Team-ID` |
-| `sessionID` | `X-MCP-Agent-Session` |
-
-Override the team header per server with `spec.auth.teamIDHeader`. In OAuth
-mode, the proxy validates the token and reads team identity from `team_id`,
-`tenant_id`, or `tid`, in that order. Adapter-certificate requests ignore
-caller-supplied identity headers and take `humanID`, `agentID`, and `teamID`
-from the rendered session that the ingress-verified SPIFFE identity resolves
-to, inside the platform trust domain. First-party OAuth tokens with multiple
-memberships use `team_ids`; the gateway selects the policy server's team ID
-when present, or the sole team ID when there is only one.
+On OAuth routes without an adapter certificate, the gateway validates the
+Bearer JWT and reads team identity from `team_id`, `tenant_id`, or `tid`, in
+that order. First-party OAuth tokens with multiple memberships use
+`team_ids`; the gateway selects the policy server's team ID when present, or
+the sole team ID when there is only one.
 
 ## Platform API Enforcement
 
