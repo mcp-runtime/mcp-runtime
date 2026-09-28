@@ -275,3 +275,26 @@ func TestMCPServerGVR(t *testing.T) {
 		t.Fatalf("MCPServerGVR = %#v, want %#v", MCPServerGVR, want)
 	}
 }
+
+func TestServerInfoProjectsGatewayEnabled(t *testing.T) {
+	tests := []struct {
+		name    string
+		gateway *mcpv1alpha1.GatewayConfig
+		want    bool
+	}{
+		{name: "omitted"},
+		{name: "disabled", gateway: &mcpv1alpha1.GatewayConfig{Enabled: false}},
+		{name: "enabled", gateway: &mcpv1alpha1.GatewayConfig{Enabled: true}, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ServerInfoFromMCPServer(mcpv1alpha1.MCPServer{
+				ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "team-demo"},
+				Spec:       mcpv1alpha1.MCPServerSpec{Gateway: tt.gateway},
+			}, ServerDeploymentStatus{})
+			if got.GatewayEnabled != tt.want {
+				t.Fatalf("GatewayEnabled = %t, want %t", got.GatewayEnabled, tt.want)
+			}
+		})
+	}
+}

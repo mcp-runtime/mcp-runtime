@@ -122,10 +122,12 @@ separate Prometheus UI link.
 
 ### Scoped user observability
 
-The Servers workspace links to the provisioned MCP Server Grafana dashboard
-and its Target health, Request rate, Deny rate, and p95 latency panels. The
-links include the selected server's namespace and name. The bundled Grafana
-route is admin-only, so these links are shown to admins by default.
+The Servers workspace links to gateway metrics only for MCP Servers with
+`spec.gateway.enabled: true`. Standalone servers without the gateway have no
+gateway scrape target, so the UI omits their metrics and the runtime API rejects
+gateway observability queries for them. For gateway-enabled servers, links
+include the selected server's namespace and name. The bundled Grafana route is
+admin-only, so these links are shown to admins by default.
 
 The API checks the live `MCPServer` before returning links or querying
 Prometheus. Normal users are limited to their team namespaces or explicitly
