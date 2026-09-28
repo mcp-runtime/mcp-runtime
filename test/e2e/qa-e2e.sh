@@ -4921,13 +4921,11 @@ EOF
 
   if scenario_selected "smoke-auth"; then
     log_line mcp "validating raw MCP request edge cases"
-    raw_mcp_url="${MCP_DIRECT_URL}"
-    if [[ "${MCP_ADAPTER_CERTIFICATES:-}" == "true" ]]; then
-      # Adapter certificates replace the plain Ingress with a TLS route.
-      # Keep exercising malformed MCP requests through that same route.
-      ensure_traefik_tls_port_forward
-      raw_mcp_url="https://127.0.0.1:${TRAEFIK_TLS_PORT}${MCP_INGRESS_PATH}"
-    fi
+    # Send valid edge-case requests through the authenticated mTLS adapter.
+    # Adapter-certificate mode removes the plain HTTP Ingress, and direct
+    # unauthenticated requests are correctly rejected by OAuth before the MCP
+    # protocol checks can run.
+    raw_mcp_url="${MCP_SESSION_URL}"
     wait_for_http_result \
       "${raw_mcp_url}" \
       POST \
@@ -5004,17 +5002,13 @@ EOF
     run_mcp_curl_expect "mcp-curl-missing-bearer" "${MCP_ANON_URL}" false "missing_bearer_token" \
       || run_mcp_curl_expect "mcp-curl-missing-bearer-retry" "${MCP_ANON_URL}" false "missing_bearer_token"
     # Spoofed governance headers alone must not authenticate.
-    curl_tls_args=()
-    if [[ "${raw_mcp_url}" == https://* ]]; then
-      curl_tls_args+=(--insecure)
-    fi
-    FORGED_STATUS="$(curl "${curl_tls_args[@]}" -sS -o "${WORKDIR}/mcp-curl-forged-headers.json" -w '%{http_code}' \
+    FORGED_STATUS="$(curl -sS -o "${WORKDIR}/mcp-curl-forged-headers.json" -w '%{http_code}' \
       -H "Host: ${SERVER_HOST}" -H 'content-type: application/json' \
       -H 'accept: application/json, text/event-stream' -H "Mcp-Protocol-Version: ${MCP_PROTOCOL_VERSION}" \
       -H "X-MCP-Human-ID: ${HUMAN_ID}" -H "X-MCP-Agent-ID: ${AGENT_ID}" \
       -H "X-MCP-Agent-Session: ${SESSION_ID}" \
       --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
-      "${raw_mcp_url}" || true)"
+      "${MCP_ANON_URL}" || true)"
     if [[ "${FORGED_STATUS}" != "401" ]] || ! grep -q 'missing_bearer_token' "${WORKDIR}/mcp-curl-forged-headers.json"; then
       echo "forged X-MCP headers authenticated without cert/bearer (${FORGED_STATUS}): $(cat "${WORKDIR}/mcp-curl-forged-headers.json")" >&2
       exit 1
