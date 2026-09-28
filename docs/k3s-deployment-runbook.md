@@ -11,6 +11,55 @@ selected kubeconfig context with `kubectl get nodes`. The multi-node topology
 in [k3s-on-prem-cluster.md](k3s-on-prem-cluster.md) is a reference design; the
 live example may have a different node count.
 
+## Production observability and debugging
+
+Start incident investigation at
+[production Grafana](https://platform.mcpruntime.org/grafana). Its provisioned
+data sources are Prometheus (metrics), Loki (logs), and Tempo (traces).
+Use the same UTC time range across all three; record the affected workload,
+deployment image, and request/trace IDs. Inspect the affected client's own
+logs too, particularly for OAuth and MCP transport failures.
+
+Read private operator credentials from `~/.mcpruntime/infra.env`:
+`GRAFANA_URL` identifies the endpoint, and the saved Secret entries ending in
+`GRAFANA_ADMIN_USER__BASE64` and `GRAFANA_ADMIN_PASSWORD__BASE64` contain
+Grafana credentials. Browser access also requires a signed-in platform admin
+session. API access needs an accepted platform admin `x-api-key` for the
+ingress gate as well as Grafana authentication. Keep credentials in memory;
+never print them or put them in command arguments, tickets, or Buddy notes.
+
+- **Metrics:** verify target health and freshness, request/error rates,
+  latency, restarts, resource pressure, and collector/exporter failures.
+  Confirm that the affected service actually has a scrape target.
+- **Logs:** discover the actual Loki labels and query auth, ingress/gateway,
+  and MCP server workloads over the incident window. Verify collection from
+  all relevant namespaces and containers. Preserve event timestamps, HTTP
+  status, safe failure reason, request ID, and workload identity.
+- **Traces:** verify spans reach Tempo and follow the failure across
+  instrumented services. Check service identity, operation, duration, error
+  status, and trace/span IDs in related logs. Record missing instrumentation
+  and propagation explicitly; a missing trace does not prove success.
+
+Distinguish missing instrumentation from broken collection or an incorrect
+query/time range. Verify improvements through a real request and its
+resulting telemetry. Use read-only pod logs or authorized datasource reads
+as a documented fallback if Grafana is unavailable. Never capture tokens,
+passwords, or MCP tool payloads merely to improve debugging.
+
+For each concrete maintainability or debuggability gap, search existing
+repository issues before creating a ticket. Include redacted evidence,
+affected components, scope, and acceptance checks; attach the new or existing
+issue to [Maintainability and Debuggability Improvement](https://github.com/orgs/mcp-runtime/projects/1).
+
+For a Grafana 401, distinguish the platform admin gate from Grafana's login.
+A configured `GF_SECURITY_ADMIN_PASSWORD` matching the saved Secret does
+not prove the persisted account accepts it. Before an authorized password
+recovery, back up the persistent database and inspect
+`grafana cli admin reset-admin-password --help`. Use
+`--password-from-stdin`, preserve dashboards/data sources, verify authenticated
+API access afterward, and save the working credential and URL in private
+`infra.env`. Do not reset a persisted account automatically during diagnosis.
+
 ## Obtain and select cluster access
 
 For a provider-managed cluster, use the provider's supported login/configure
