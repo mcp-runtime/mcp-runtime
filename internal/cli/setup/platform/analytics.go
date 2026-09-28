@@ -849,6 +849,18 @@ func renderAnalyticsManifest(content string, images AnalyticsImageSet, imagePull
 	for oldValue, newValue := range replacements {
 		rendered = strings.ReplaceAll(rendered, oldValue, newValue)
 	}
+	// Test-mode setup republishes these services under :latest. An existing
+	// Kind node may already cache that tag, so those workloads must pull it
+	// again when their pod template changes. Keep pinned release images on the
+	// manifest's IfNotPresent policy.
+	for _, image := range []string{images.PlatformAPI, images.RuntimeAPI, images.AnalyticsAPI, images.UI} {
+		if !strings.HasSuffix(strings.TrimSpace(image), ":latest") {
+			continue
+		}
+		oldValue := "image: " + image + "\n          imagePullPolicy: IfNotPresent"
+		newValue := "image: " + image + "\n          imagePullPolicy: Always"
+		rendered = strings.ReplaceAll(rendered, oldValue, newValue)
+	}
 	if strings.TrimSpace(imagePullSecretName) == "" {
 		return rendered, nil
 	}

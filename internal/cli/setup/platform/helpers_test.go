@@ -2158,6 +2158,24 @@ spec:
 	}
 }
 
+func TestRenderAnalyticsManifestPullsRepublishedLatestUI(t *testing.T) {
+	content := "          image: mcp-sentinel-ui:latest\n          imagePullPolicy: IfNotPresent\n"
+	for _, tc := range []struct {
+		image, wantPolicy string
+	}{
+		{"registry.registry.svc.cluster.local:5000/mcp-sentinel-ui:latest", "Always"},
+		{"registry.registry.svc.cluster.local:5000/mcp-sentinel-ui@sha256:abc123", "IfNotPresent"},
+	} {
+		rendered, err := renderAnalyticsManifest(content, AnalyticsImageSet{UI: tc.image}, "", setupplan.PlatformModeTenant)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(rendered, "image: "+tc.image+"\n          imagePullPolicy: "+tc.wantPolicy) {
+			t.Fatalf("image %q rendered with wrong pull policy: %q", tc.image, rendered)
+		}
+	}
+}
+
 func TestRenderAnalyticsManifestUsesConfigurableKubernetesAPIPort(t *testing.T) {
 	original := core.DefaultCLIConfig
 	t.Cleanup(func() { core.DefaultCLIConfig = original })
