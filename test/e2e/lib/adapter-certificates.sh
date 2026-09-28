@@ -14,10 +14,17 @@ wait_for_adapter_certificate_initialize() {
   if [[ -n "${oauth_token}" ]]; then
     auth_args+=(-H "Authorization: Bearer ${oauth_token}")
   fi
+  # Prefer the scoped enroll directory (…/certs/<hash>); fall back for unit tests
+  # that still export ADAPTER_CERT_DIR with flat client.crt/client.key.
+  local cert_dir="${ADAPTER_CERT_PATH:-${ADAPTER_CERT_DIR:-}}"
+  if [[ -z "${cert_dir}" ]]; then
+    echo "adapter certificate initialize: ADAPTER_CERT_PATH or ADAPTER_CERT_DIR is required" >&2
+    return 1
+  fi
   local deadline=$((SECONDS + ${ADAPTER_CERT_POLICY_WAIT_SECONDS:-180})) status error
   while true; do
     if ! status="$(curl -ksS --max-time 5 \
-      --cert "${ADAPTER_CERT_DIR}/client.crt" --key "${ADAPTER_CERT_DIR}/client.key" \
+      --cert "${cert_dir}/client.crt" --key "${cert_dir}/client.key" \
       -D "${headers}" -o "${body}" -w '%{http_code}' \
       -H "Host: ${OAUTH_SERVER_HOST}" -H 'content-type: application/json' \
       -H 'accept: application/json, text/event-stream' -H "Mcp-Protocol-Version: ${MCP_PROTOCOL_VERSION}" \

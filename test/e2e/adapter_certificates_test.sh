@@ -9,7 +9,8 @@ trap 'rm -rf "${TEST_DIR}"' EXIT
 run_case() (
   local name="$1" expected="$2" reason="$3" statuses="$4" want_rc="$5" want_calls="$6"
   local retry_server_errors="${8:-false}"
-  export ADAPTER_CERT_DIR="${TEST_DIR}" OAUTH_SERVER_HOST=localhost MCP_PROTOCOL_VERSION=2025-06-18
+  export ADAPTER_CERT_PATH="${TEST_DIR}" ADAPTER_CERT_DIR="${TEST_DIR}" \
+    OAUTH_SERVER_HOST=localhost MCP_PROTOCOL_VERSION=2025-06-18
   export ADAPTER_CERT_POLICY_WAIT_SECONDS="${7:-180}"
   printf '%s\n' "${statuses}" >"${TEST_DIR}/responses"
   : >"${TEST_DIR}/calls"

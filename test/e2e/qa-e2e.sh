@@ -5405,10 +5405,12 @@ EOF
         --agent "${ADAPTER_CERT_AGENT_ID}")"
     echo "${ADAPTER_CERT_ENROLL_OUTPUT}"
     ADAPTER_CERT_PATH="$(printf '%s\n' "${ADAPTER_CERT_ENROLL_OUTPUT}" | sed -n 's/^saved certificate files in //p' | head -1)"
-    if [[ -z "${ADAPTER_CERT_PATH}" ]]; then
-      echo "adapter enroll did not report its certificate directory" >&2
+    if [[ -z "${ADAPTER_CERT_PATH}" || ! -f "${ADAPTER_CERT_PATH}/client.crt" || ! -f "${ADAPTER_CERT_PATH}/client.key" ]]; then
+      echo "adapter enroll did not report a usable certificate directory (got: ${ADAPTER_CERT_PATH:-<empty>})" >&2
       exit 1
     fi
+    # wait_for_adapter_certificate_initialize prefers ADAPTER_CERT_PATH over ADAPTER_CERT_DIR.
+    export ADAPTER_CERT_PATH
     ADAPTER_CERT_SPIFFE_ID="$(echo "${ADAPTER_CERT_ENROLL_OUTPUT}" | sed -n 's#.*issued \(spiffe://[^ ]*\).*#\1#p')"
     ADAPTER_CERT_SESSION="${ADAPTER_CERT_SPIFFE_ID##*/session/}"
     if [[ -z "${ADAPTER_CERT_SESSION}" || "${ADAPTER_CERT_SESSION}" == "${ADAPTER_CERT_SPIFFE_ID}" ]]; then
