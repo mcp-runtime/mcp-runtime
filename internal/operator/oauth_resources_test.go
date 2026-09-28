@@ -77,7 +77,8 @@ func TestReconcileBundledOAuthResourcesPublishesOnlyServedAudiences(t *testing.T
 	other.Spec.Auth.IssuerURL = "https://login.example.org"
 	objects = append(objects, other)
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
-	r := MCPServerReconciler{Client: c, Scheme: scheme, OAuthIssuerURL: testBundledIssuer, DefaultIngressHost: "mcp.example.com", DefaultIngressTLS: true}
+	r := MCPServerReconciler{
+		GatewayProxyImage: "example.com/mcp-gateway:test", Client: c, Scheme: scheme, OAuthIssuerURL: testBundledIssuer, DefaultIngressHost: "mcp.example.com", DefaultIngressTLS: true}
 
 	if err := r.reconcileBundledOAuthResources(context.Background()); err != nil {
 		t.Fatalf("reconcile: %v", err)
@@ -98,7 +99,8 @@ func TestReconcileBundledOAuthResourcesAcceptsIssuerHostWithoutMCPHost(t *testin
 	server := oauthMCPServer("oauth-example-go-2025-11-25", "http://localhost:18080/oauth-example-go-2025-11-25/mcp")
 	server.Spec.Auth.IssuerURL = issuer
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(bundledAuthDeployment(), server).Build()
-	r := MCPServerReconciler{Client: c, Scheme: scheme, OAuthIssuerURL: issuer}
+	r := MCPServerReconciler{
+		GatewayProxyImage: "example.com/mcp-gateway:test", Client: c, Scheme: scheme, OAuthIssuerURL: issuer}
 
 	if err := r.reconcileBundledOAuthResources(context.Background()); err != nil {
 		t.Fatalf("reconcile: %v", err)
@@ -111,7 +113,8 @@ func TestReconcileBundledOAuthResourcesAcceptsIssuerHostWithoutMCPHost(t *testin
 func TestReconcileBundledOAuthResourcesClearsRemovedServers(t *testing.T) {
 	scheme := bundledOAuthScheme(t)
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(bundledAuthDeployment()).Build()
-	r := MCPServerReconciler{Client: c, Scheme: scheme, OAuthIssuerURL: testBundledIssuer, DefaultIngressHost: "mcp.example.com", DefaultIngressTLS: true}
+	r := MCPServerReconciler{
+		GatewayProxyImage: "example.com/mcp-gateway:test", Client: c, Scheme: scheme, OAuthIssuerURL: testBundledIssuer, DefaultIngressHost: "mcp.example.com", DefaultIngressTLS: true}
 
 	if err := r.reconcileBundledOAuthResources(context.Background()); err != nil {
 		t.Fatalf("reconcile: %v", err)
@@ -128,7 +131,8 @@ func TestReconcileBundledOAuthResourcesClearsRemovedServers(t *testing.T) {
 func TestReconcileBundledOAuthResourcesNoopWithoutBundledIssuer(t *testing.T) {
 	scheme := bundledOAuthScheme(t)
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(bundledAuthDeployment(), oauthMCPServer("buddy", "")).Build()
-	r := MCPServerReconciler{Client: c, Scheme: scheme}
+	r := MCPServerReconciler{
+		GatewayProxyImage: "example.com/mcp-gateway:test", Client: c, Scheme: scheme}
 
 	if err := r.reconcileBundledOAuthResources(context.Background()); err != nil {
 		t.Fatalf("reconcile: %v", err)
@@ -142,7 +146,8 @@ func TestReconcileBundledOAuthResourcesRejectsHTTPAudienceForHTTPSIssuer(t *test
 	scheme := bundledOAuthScheme(t)
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(bundledAuthDeployment(), oauthMCPServer("buddy", "")).Build()
 	// TLS not detected: the derived audience is http:// while the issuer is https.
-	r := MCPServerReconciler{Client: c, Scheme: scheme, OAuthIssuerURL: testBundledIssuer, DefaultIngressHost: "mcp.example.com"}
+	r := MCPServerReconciler{
+		GatewayProxyImage: "example.com/mcp-gateway:test", Client: c, Scheme: scheme, OAuthIssuerURL: testBundledIssuer, DefaultIngressHost: "mcp.example.com"}
 
 	if err := r.reconcileBundledOAuthResources(context.Background()); err != nil {
 		t.Fatalf("reconcile: %v", err)

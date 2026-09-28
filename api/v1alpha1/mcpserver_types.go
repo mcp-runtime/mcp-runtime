@@ -11,7 +11,7 @@ type PolicyMode string
 
 const (
 	PolicyModeAllowList PolicyMode = mcpdefaults.PolicyModeAllowList
-	PolicyModeObserve   PolicyMode = "observe"
+	PolicyModeObserve   PolicyMode = mcpdefaults.PolicyModeObserve
 )
 
 // +kubebuilder:validation:Enum=allow;deny
@@ -132,19 +132,25 @@ type MCPServerSpec struct {
 	// Auth enables optional OAuth authentication at the gateway when present.
 	Auth *AuthConfig `json:"auth,omitempty"`
 
-	// Policy configures gateway-side authorization behavior.
+	// Policy configures gateway-side authorization behavior. When omitted, the
+	// gateway runs in observe mode so metrics and analytics work without
+	// grant/session enforcement. Set this field (for example allow-list + deny)
+	// to require adapter identity and grants.
 	Policy *PolicyConfig `json:"policy,omitempty"`
 
 	// Session configures server-side agent session behavior.
 	Session *SessionConfig `json:"session,omitempty"`
 
-	// Gateway configures an optional MCP proxy sidecar in front of the server container.
+	// Gateway configures the MCP proxy sidecar in front of the server container.
+	// When omitted or left empty, the sidecar is enabled so metrics, traces, and
+	// analytics can run. Set gateway.enabled to false to opt out.
 	Gateway *GatewayConfig `json:"gateway,omitempty"`
 
 	// Analytics configures audit/analytics emission for the gateway sidecar.
-	// Analytics is only applied when Gateway is enabled and this field is set.
-	// If set without an ingest URL, the operator may supply its configured
-	// default ingest URL.
+	// When the gateway is enabled and this field is omitted, analytics emission
+	// is on whenever the operator has a default ingest URL. Set
+	// analytics.disabled to true to opt out. If set without an ingest URL, the
+	// operator may supply its configured default ingest URL.
 	Analytics *AnalyticsConfig `json:"analytics,omitempty"`
 
 	// Rollout configures deployment rollout behavior for this server.
@@ -232,8 +238,9 @@ type SessionConfig struct {
 // GatewayConfig configures an optional MCP proxy sidecar for a server.
 // +kubebuilder:object:generate=true
 type GatewayConfig struct {
-	// Enabled turns on the gateway sidecar for this server.
-	Enabled bool `json:"enabled,omitempty"`
+	// Enabled turns the gateway sidecar on or off. When nil/omitted the sidecar
+	// is enabled (observability by default). Set to false to opt out.
+	Enabled *bool `json:"enabled,omitempty"`
 
 	// Image overrides the proxy container image for this server.
 	Image string `json:"image,omitempty"`

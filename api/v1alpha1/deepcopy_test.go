@@ -249,7 +249,7 @@ func TestMCPServerSpecDeepCopy(t *testing.T) {
 			{Name: "ENV2", Value: "value2"},
 		},
 		Gateway: &GatewayConfig{
-			Enabled:     true,
+			Enabled:     BoolPtr(true),
 			Image:       "example.com/mcp-gateway:latest",
 			Port:        8091,
 			UpstreamURL: "http://127.0.0.1:8088",

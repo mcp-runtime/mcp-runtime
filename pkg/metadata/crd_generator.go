@@ -134,6 +134,9 @@ func GenerateCRD(server *ServerMetadata, outputPath string) error {
 			UpstreamURL: server.Gateway.UpstreamURL,
 			StripPrefix: server.Gateway.StripPrefix,
 		}
+		if mcpServer.Spec.Gateway.Enabled == nil {
+			mcpServer.Spec.Gateway.Enabled = mcpv1alpha1.BoolPtr(true)
+		}
 		if server.Gateway.Resources != nil {
 			mcpServer.Spec.Gateway.Resources = convertResourceRequirements(server.Gateway.Resources)
 		}

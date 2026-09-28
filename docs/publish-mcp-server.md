@@ -68,21 +68,22 @@ but hand-written YAML must state them explicitly.
 - `spec.publicPathPrefix`
   The public route prefix. `payments` becomes `/payments/mcp`.
 - `spec.gateway.enabled`
-  Sends requests through `mcp-gateway` so policy, session checks, and request analytics run before tool calls.
+  Sends requests through `mcp-gateway` for metrics, traces, and request
+  analytics. The sidecar is **on by default** (including `gateway: {}`). Set
+  `enabled: false` to opt out. Policy enforcement is separate: omit
+  `spec.policy` for observe-mode (tool calls allowed, decisions still recorded);
+  set `spec.policy` (for example allow-list + deny) when you want grant/session
+  enforcement with the adapter.
 - `spec.analytics`
-  Analytics emission to the Sentinel stack is on by default whenever the
-  operator has an ingest URL configured (via `MCP_SENTINEL_INGEST_URL` or
-  `spec.analytics.ingestURL`). Set `spec.analytics.disabled: true` to opt
-  this server out. Platform API deploys through `mcp-runtime server deploy`
-  create a namespace-local ingest-key Secret and set
-  `spec.analytics.apiKeySecretRef` automatically when gateway analytics are
-  enabled.
+  Analytics emission is on by default whenever the gateway is on and the
+  operator has an ingest URL (`MCP_SENTINEL_INGEST_URL` or
+  `spec.analytics.ingestURL`). Set `spec.analytics.disabled: true` to opt out.
+  Platform API deploys create a namespace-local ingest-key Secret and set
+  `spec.analytics.apiKeySecretRef` automatically when analytics is not disabled.
 
 `mcp-runtime server deploy` and the platform API (`POST /api/v1/runtime/servers`)
-publish governed servers by default: when the request does not provide
-`spec.gateway`, the platform writes `spec.gateway.enabled: true`. Hand-written
-YAML must set that field explicitly if you want request analytics and governed
-tool calls.
+default the gateway on. Hand-written YAML can omit `gateway` or use
+`gateway: {}`; only `gateway.enabled: false` disables the sidecar.
 
 ### Common edits
 
@@ -461,15 +462,12 @@ Check:
 - `./bin/mcp-runtime sentinel logs processor --follow`
 
 Request analytics only exist for traffic that flows through `mcp-gateway`.
-The adapter is optional for analytics. It helps clients that cannot attach
-identity or session headers directly, or that want platform-issued sessions.
-Hand-written YAML must include `spec.gateway.enabled: true` for request
-analytics. If you apply raw YAML with `kubectl apply` or
-`server apply --use-kube`, also create a
-namespace-local ingest-key Secret and set `spec.analytics.apiKeySecretRef`;
-otherwise the gateway can reach ingest but events will be rejected with 401.
-Analytics is on by default for gateway traffic when the operator has
-`MCP_SENTINEL_INGEST_URL`; opt out with:
+The gateway is on by default; the adapter is optional for analytics and is
+required only when you enforce grants/sessions via `spec.policy`. If you apply
+raw YAML with `kubectl apply` or `server apply --use-kube`, create a
+namespace-local ingest-key Secret and set `spec.analytics.apiKeySecretRef`
+(platform `server deploy` does this for you); otherwise ingest may reject
+events with 401. Opt out of emission with:
 
 ```yaml
 analytics:

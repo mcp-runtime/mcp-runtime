@@ -21,18 +21,20 @@ func mtlsServer() *mcpv1alpha1.MCPServer {
 		Spec: mcpv1alpha1.MCPServerSpec{
 			Image:       "example.com/secure-server",
 			ServicePort: 80,
-			Gateway:     &mcpv1alpha1.GatewayConfig{Enabled: true, Port: 8091, Image: "example.com/gw:latest"},
+			Gateway:     &mcpv1alpha1.GatewayConfig{Enabled: mcpv1alpha1.BoolPtr(true), Port: 8091, Image: "example.com/gw:latest"},
 			Auth:        &mcpv1alpha1.AuthConfig{},
 		},
 	}
 }
 
 func TestTraefikProxySPIFFEID(t *testing.T) {
-	r := MCPServerReconciler{AdapterTrustDomain: "example.org"}
+	r := MCPServerReconciler{
+		GatewayProxyImage: "example.com/mcp-gateway:test", AdapterTrustDomain: "example.org"}
 	if got := r.traefikProxySPIFFEID(mtlsServer()); got != "spiffe://example.org/ns/traefik/sa/traefik" {
 		t.Fatalf("traefikProxySPIFFEID = %q", got)
 	}
-	emptyReconciler := MCPServerReconciler{}
+	emptyReconciler := MCPServerReconciler{
+		GatewayProxyImage: "example.com/mcp-gateway:test"}
 	if got := emptyReconciler.traefikProxySPIFFEID(mtlsServer()); got != "" {
 		t.Fatalf("traefikProxySPIFFEID without trust domain = %q, want empty", got)
 	}
@@ -47,14 +49,16 @@ func TestReconcileTraefikClientCertificateRequiresIssuerAndTrustDomain(t *testin
 	}
 	newClient := func() client.Client { return fake.NewClientBuilder().WithScheme(scheme).Build() }
 	t.Run("missing issuer", func(t *testing.T) {
-		r := MCPServerReconciler{Client: newClient(), AdapterTrustDomain: "example.org"} // no MTLSClusterIssuer
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: newClient(), AdapterTrustDomain: "example.org"} // no MTLSClusterIssuer
 		err := r.reconcileTraefikClientCertificate(context.Background(), mtlsServer())
 		if err != nil {
 			t.Fatalf("without configured platform PKI, expected no-op; got %v", err)
 		}
 	})
 	t.Run("missing trust domain", func(t *testing.T) {
-		r := MCPServerReconciler{Client: newClient(), MTLSClusterIssuer: "mcp-runtime-ca"}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: newClient(), MTLSClusterIssuer: "mcp-runtime-ca"}
 		err := r.reconcileTraefikClientCertificate(context.Background(), mtlsServer())
 		if err != nil {
 			t.Fatalf("without configured platform PKI, expected no-op; got %v", err)
@@ -81,7 +85,8 @@ func TestReconcileMTLSTrustBundle(t *testing.T) {
 	t.Run("materializes bundle from gateway ca.crt", func(t *testing.T) {
 		server := mtlsServer()
 		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(server, gatewaySecret()).Build()
-		r := MCPServerReconciler{Client: client, Scheme: scheme, AdapterCertificatesEnabled: true, AdapterTrustDomain: "example.org", MTLSClusterIssuer: "mcp-runtime-ca"}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme, AdapterCertificatesEnabled: true, AdapterTrustDomain: "example.org", MTLSClusterIssuer: "mcp-runtime-ca"}
 		if err := r.reconcileMTLSTrustBundle(context.Background(), server); err != nil {
 			t.Fatalf("reconcile: %v", err)
 		}
@@ -97,7 +102,8 @@ func TestReconcileMTLSTrustBundle(t *testing.T) {
 	t.Run("skips when gateway certificate not yet issued", func(t *testing.T) {
 		server := mtlsServer()
 		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(server).Build()
-		r := MCPServerReconciler{Client: client, Scheme: scheme, AdapterCertificatesEnabled: true, AdapterTrustDomain: "example.org", MTLSClusterIssuer: "mcp-runtime-ca"}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme, AdapterCertificatesEnabled: true, AdapterTrustDomain: "example.org", MTLSClusterIssuer: "mcp-runtime-ca"}
 		if err := r.reconcileMTLSTrustBundle(context.Background(), server); err != nil {
 			t.Fatalf("reconcile should not error when gateway secret absent: %v", err)
 		}
@@ -110,7 +116,8 @@ func TestReconcileMTLSTrustBundle(t *testing.T) {
 }
 
 func TestGatewaySidecarPinsTrustedProxyForMTLS(t *testing.T) {
-	r := MCPServerReconciler{AdapterCertificatesEnabled: true, AdapterTrustDomain: "example.org", MTLSClusterIssuer: "mcp-runtime-ca"}
+	r := MCPServerReconciler{
+		GatewayProxyImage: "example.com/mcp-gateway:test", AdapterCertificatesEnabled: true, AdapterTrustDomain: "example.org", MTLSClusterIssuer: "mcp-runtime-ca"}
 	container, err := r.buildGatewayContainer(mtlsServer())
 	if err != nil {
 		t.Fatalf("buildGatewayContainer: %v", err)
@@ -131,7 +138,8 @@ func TestGatewaySidecarPinsTrustedProxyForMTLS(t *testing.T) {
 // mTLS gateway hop, so they need the explicit opt-in, Traefik, and a gateway;
 // platform PKI being present (as in test mode) is not enough.
 func TestUsesAdapterCertificatesRequiresOptInTraefikAndGateway(t *testing.T) {
-	pki := MCPServerReconciler{AdapterTrustDomain: "example.org", MTLSClusterIssuer: "mcp-runtime-ca"}
+	pki := MCPServerReconciler{
+		GatewayProxyImage: "example.com/mcp-gateway:test", AdapterTrustDomain: "example.org", MTLSClusterIssuer: "mcp-runtime-ca"}
 	enabled := pki
 	enabled.AdapterCertificatesEnabled = true
 
@@ -152,17 +160,19 @@ func TestUsesAdapterCertificatesRequiresOptInTraefikAndGateway(t *testing.T) {
 		t.Fatal("non-Traefik ingress classes must keep their plain Ingress")
 	}
 	standalone := mtlsServer()
-	standalone.Spec.Gateway.Enabled = false
+	standalone.Spec.Gateway.Enabled = mcpv1alpha1.BoolPtr(false)
 	if enabled.usesAdapterCertificates(standalone) {
 		t.Fatal("a server without a gateway cannot validate the certificate hop")
 	}
 }
 
 func TestAdapterCertificateEntryPointsFollowOperatorDefault(t *testing.T) {
-	if got := (&MCPServerReconciler{}).adapterCertificateEntryPoints(); len(got) != 1 || got[0] != "websecure" {
+	if got := (&MCPServerReconciler{
+		GatewayProxyImage: "example.com/mcp-gateway:test"}).adapterCertificateEntryPoints(); len(got) != 1 || got[0] != "websecure" {
 		t.Fatalf("entryPoints = %v, want [websecure] fallback", got)
 	}
-	got := (&MCPServerReconciler{DefaultIngressEntryPoints: "web, websecure"}).adapterCertificateEntryPoints()
+	got := (&MCPServerReconciler{
+		GatewayProxyImage: "example.com/mcp-gateway:test", DefaultIngressEntryPoints: "web, websecure"}).adapterCertificateEntryPoints()
 	if len(got) != 2 || got[0] != "web" || got[1] != "websecure" {
 		t.Fatalf("entryPoints = %v, want the operator's configured entrypoints", got)
 	}

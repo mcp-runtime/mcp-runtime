@@ -131,7 +131,7 @@ func TestBuildGatewayContainerAppliesDefaultResources(t *testing.T) {
 		},
 		Spec: mcpv1alpha1.MCPServerSpec{
 			Gateway: &mcpv1alpha1.GatewayConfig{
-				Enabled:     true,
+				Enabled:     mcpv1alpha1.BoolPtr(true),
 				Port:        defaultGatewayPort,
 				UpstreamURL: "http://127.0.0.1:8088",
 			},
@@ -166,7 +166,7 @@ func TestBuildGatewayContainerAppliesConfiguredResources(t *testing.T) {
 		},
 		Spec: mcpv1alpha1.MCPServerSpec{
 			Gateway: &mcpv1alpha1.GatewayConfig{
-				Enabled:     true,
+				Enabled:     mcpv1alpha1.BoolPtr(true),
 				Port:        defaultGatewayPort,
 				UpstreamURL: "http://127.0.0.1:8088",
 				Resources: &mcpv1alpha1.ResourceRequirements{
@@ -205,7 +205,8 @@ func TestDefaultedMCPServerForReconcile(t *testing.T) {
 				Namespace: "default",
 			},
 		}
-		r := MCPServerReconciler{Scheme: runtime.NewScheme()}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Scheme: runtime.NewScheme()}
 		mcpServer = *r.defaultedMCPServerForReconcile(&mcpServer)
 
 		assertReplicas(t, mcpServer.Spec.Replicas, 1)
@@ -222,6 +223,7 @@ func TestDefaultedMCPServerForReconcile(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "test-server"},
 		}
 		r := MCPServerReconciler{
+			GatewayProxyImage:  "example.com/mcp-gateway:test",
 			Scheme:             runtime.NewScheme(),
 			DefaultIngressHost: "example.com",
 		}
@@ -238,6 +240,7 @@ func TestDefaultedMCPServerForReconcile(t *testing.T) {
 			},
 		}
 		r := MCPServerReconciler{
+			GatewayProxyImage:  "example.com/mcp-gateway:test",
 			Scheme:             runtime.NewScheme(),
 			DefaultIngressHost: "example.com",
 		}
@@ -258,7 +261,8 @@ func TestDefaultedMCPServerForReconcile(t *testing.T) {
 				IngressClass: "nginx",
 			},
 		}
-		r := MCPServerReconciler{Scheme: runtime.NewScheme()}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Scheme: runtime.NewScheme()}
 		mcpServer = *r.defaultedMCPServerForReconcile(&mcpServer)
 
 		assertReplicas(t, mcpServer.Spec.Replicas, 5)
@@ -276,7 +280,8 @@ func TestDefaultedMCPServerForReconcile(t *testing.T) {
 				Image: "nginx:1.19", // Already has tag
 			},
 		}
-		r := MCPServerReconciler{Scheme: runtime.NewScheme()}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Scheme: runtime.NewScheme()}
 		mcpServer = *r.defaultedMCPServerForReconcile(&mcpServer)
 
 		assertEqual(t, "imageTag", mcpServer.Spec.ImageTag, "")
@@ -289,7 +294,8 @@ func TestDefaultedMCPServerForReconcile(t *testing.T) {
 				Image: "10.43.109.51:5000/example-python-2025-11-25",
 			},
 		}
-		r := MCPServerReconciler{Scheme: runtime.NewScheme()}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Scheme: runtime.NewScheme()}
 		mcpServer = *r.defaultedMCPServerForReconcile(&mcpServer)
 
 		assertEqual(t, "imageTag", mcpServer.Spec.ImageTag, "latest")
@@ -302,7 +308,8 @@ func TestDefaultedMCPServerForReconcile(t *testing.T) {
 				Image: "10.43.109.51:5000/example-python-2025-11-25:52c916f",
 			},
 		}
-		r := MCPServerReconciler{Scheme: runtime.NewScheme()}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Scheme: runtime.NewScheme()}
 		mcpServer = *r.defaultedMCPServerForReconcile(&mcpServer)
 
 		assertEqual(t, "imageTag", mcpServer.Spec.ImageTag, "")
@@ -310,7 +317,8 @@ func TestDefaultedMCPServerForReconcile(t *testing.T) {
 
 	t.Run("skips ingressPath if name is empty", func(t *testing.T) {
 		mcpServer := mcpv1alpha1.MCPServer{} // No name set
-		r := MCPServerReconciler{Scheme: runtime.NewScheme()}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Scheme: runtime.NewScheme()}
 		mcpServer = *r.defaultedMCPServerForReconcile(&mcpServer)
 
 		assertEqual(t, "ingressPath", mcpServer.Spec.IngressPath, "")
@@ -322,7 +330,7 @@ func TestDefaultedMCPServerForReconcile(t *testing.T) {
 			Spec: mcpv1alpha1.MCPServerSpec{
 				Image: "example.com/gateway-server",
 				Gateway: &mcpv1alpha1.GatewayConfig{
-					Enabled: true,
+					Enabled: mcpv1alpha1.BoolPtr(true),
 				},
 				Analytics: &mcpv1alpha1.AnalyticsConfig{
 					IngestURL: "http://analytics.default.svc/api/events",
@@ -330,7 +338,8 @@ func TestDefaultedMCPServerForReconcile(t *testing.T) {
 			},
 		}
 
-		r := MCPServerReconciler{Scheme: runtime.NewScheme()}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Scheme: runtime.NewScheme()}
 		mcpServer = *r.defaultedMCPServerForReconcile(&mcpServer)
 
 		if mcpServer.Spec.Gateway == nil {
@@ -351,13 +360,14 @@ func TestDefaultedMCPServerForReconcile(t *testing.T) {
 			Spec: mcpv1alpha1.MCPServerSpec{
 				Image: "example.com/gateway-server",
 				Gateway: &mcpv1alpha1.GatewayConfig{
-					Enabled: true,
+					Enabled: mcpv1alpha1.BoolPtr(true),
 				},
 				Analytics: &mcpv1alpha1.AnalyticsConfig{},
 			},
 		}
 
 		r := MCPServerReconciler{
+			GatewayProxyImage:         "example.com/mcp-gateway:test",
 			Scheme:                    runtime.NewScheme(),
 			DefaultAnalyticsIngestURL: "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events",
 		}
@@ -401,6 +411,7 @@ func TestReconcileDeploymentLabels(t *testing.T) {
 	reconciler := MCPServerReconciler{
 		Client:              client,
 		Scheme:              scheme,
+		GatewayProxyImage:   "example.com/mcp-gateway:latest",
 		GatewayOTLPEndpoint: "http://otel-collector.mcp-sentinel.svc.cluster.local:4318",
 	}
 
@@ -465,7 +476,7 @@ func TestReconcileDeploymentAddsGatewaySidecar(t *testing.T) {
 			IngressHost: "gateway.example.com",
 			Replicas:    &replicas,
 			Gateway: &mcpv1alpha1.GatewayConfig{
-				Enabled: true,
+				Enabled: mcpv1alpha1.BoolPtr(true),
 				Image:   "example.com/mcp-gateway:latest",
 				Port:    8091,
 			},
@@ -494,6 +505,7 @@ func TestReconcileDeploymentAddsGatewaySidecar(t *testing.T) {
 
 	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mcpServer).Build()
 	reconciler := MCPServerReconciler{
+		GatewayProxyImage:   "example.com/mcp-gateway:test",
 		Client:              client,
 		Scheme:              scheme,
 		GatewayOTLPEndpoint: "http://otel-collector.mcp-sentinel.svc.cluster.local:4318",
@@ -557,7 +569,7 @@ func TestReconcileServiceUsesGatewayPortWhenEnabled(t *testing.T) {
 			ServicePort: 80,
 			Replicas:    &replicas,
 			Gateway: &mcpv1alpha1.GatewayConfig{
-				Enabled: true,
+				Enabled: mcpv1alpha1.BoolPtr(true),
 				Image:   "example.com/mcp-gateway:latest",
 				Port:    8091,
 			},
@@ -574,8 +586,9 @@ func TestReconcileServiceUsesGatewayPortWhenEnabled(t *testing.T) {
 
 	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mcpServer).Build()
 	reconciler := MCPServerReconciler{
-		Client: client,
-		Scheme: scheme,
+		GatewayProxyImage: "example.com/mcp-gateway:test",
+		Client:            client,
+		Scheme:            scheme,
 	}
 
 	if err := reconciler.reconcileService(context.Background(), &mcpServer); err != nil {
@@ -612,7 +625,7 @@ func TestReconcileServicePreservesExistingAnnotations(t *testing.T) {
 			ServicePort: 80,
 			Replicas:    &replicas,
 			Gateway: &mcpv1alpha1.GatewayConfig{
-				Enabled: true,
+				Enabled: mcpv1alpha1.BoolPtr(true),
 				Image:   "example.com/mcp-gateway:latest",
 				Port:    8091,
 			},
@@ -642,8 +655,9 @@ func TestReconcileServicePreservesExistingAnnotations(t *testing.T) {
 
 	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&mcpServer, existingService).Build()
 	reconciler := MCPServerReconciler{
-		Client: client,
-		Scheme: scheme,
+		GatewayProxyImage: "example.com/mcp-gateway:test",
+		Client:            client,
+		Scheme:            scheme,
 	}
 
 	if err := reconciler.reconcileService(context.Background(), &mcpServer); err != nil {
@@ -661,12 +675,13 @@ func TestReconcileServicePreservesExistingAnnotations(t *testing.T) {
 
 func TestResolveGatewayImage(t *testing.T) {
 	t.Run("uses per-server image when set", func(t *testing.T) {
-		reconciler := MCPServerReconciler{}
+		reconciler := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test"}
 		mcpServer := &mcpv1alpha1.MCPServer{
 			ObjectMeta: metav1.ObjectMeta{Name: "gateway"},
 			Spec: mcpv1alpha1.MCPServerSpec{
 				Gateway: &mcpv1alpha1.GatewayConfig{
-					Enabled: true,
+					Enabled: mcpv1alpha1.BoolPtr(true),
 					Image:   "example.com/proxy:latest",
 				},
 			},
@@ -685,7 +700,7 @@ func TestResolveGatewayImage(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "gateway"},
 			Spec: mcpv1alpha1.MCPServerSpec{
 				Gateway: &mcpv1alpha1.GatewayConfig{
-					Enabled: true,
+					Enabled: mcpv1alpha1.BoolPtr(true),
 				},
 			},
 		}
@@ -703,7 +718,7 @@ func TestResolveGatewayImage(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "gateway", Namespace: "default"},
 			Spec: mcpv1alpha1.MCPServerSpec{
 				Gateway: &mcpv1alpha1.GatewayConfig{
-					Enabled: true,
+					Enabled: mcpv1alpha1.BoolPtr(true),
 				},
 			},
 		}
@@ -750,7 +765,8 @@ func TestValidateIngressConfig(t *testing.T) {
 		if err := client.Create(context.Background(), mcpServer); err != nil {
 			t.Fatalf("failed to create MCPServer: %v", err)
 		}
-		r := MCPServerReconciler{Client: client, Scheme: scheme}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 
 		err := r.validateIngressConfig(context.Background(), mcpServer, logr.Discard())
 		if err != nil {
@@ -767,7 +783,8 @@ func TestValidateIngressConfig(t *testing.T) {
 			},
 		}
 		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
-		r := MCPServerReconciler{Client: client, Scheme: scheme}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 
 		err := r.validateIngressConfig(context.Background(), mcpServer, logr.Discard())
 		if err == nil {
@@ -784,7 +801,8 @@ func TestValidateIngressConfig(t *testing.T) {
 			},
 		}
 		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
-		r := MCPServerReconciler{Client: client, Scheme: scheme}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 
 		err := r.validateIngressConfig(context.Background(), mcpServer, logr.Discard())
 		if err != nil {
@@ -802,7 +820,8 @@ func TestValidateIngressConfig(t *testing.T) {
 			},
 		}
 		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
-		r := MCPServerReconciler{Client: client, Scheme: scheme}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 
 		err := r.validateIngressConfig(context.Background(), mcpServer, logr.Discard())
 		if err == nil {
@@ -822,7 +841,8 @@ func TestFetchMCPServer(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "test-server", Namespace: "default"},
 		}
 		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
-		r := MCPServerReconciler{Client: client, Scheme: scheme}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 		got, _, err := r.fetchMCPServer(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "test-server", Namespace: "default"}})
 		if err != nil {
 			t.Fatalf("failed to fetch mcp server: %v", err)
@@ -849,7 +869,8 @@ func TestReconcileResources(t *testing.T) {
 			},
 		}
 		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
-		r := MCPServerReconciler{Client: client, Scheme: scheme}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 		err := r.reconcileResources(context.Background(), mcpServer, logr.Discard())
 		if err != nil {
 			t.Fatalf("failed to reconcile resources: %v", err)
@@ -869,7 +890,8 @@ func TestCheckResourceReadiness(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "test-server", Namespace: "default"},
 		}
 		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
-		r := MCPServerReconciler{Client: client, Scheme: scheme}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 		readiness, err := r.checkResourceReadiness(context.Background(), mcpServer)
 		if err != nil {
 			t.Fatalf("failed to check resource readiness: %v", err)
@@ -893,6 +915,7 @@ func TestDefaultedMCPServerForReconcileDoesNotPersistDefaults(t *testing.T) {
 	}
 	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
 	r := MCPServerReconciler{
+		GatewayProxyImage:         "example.com/mcp-gateway:test",
 		Client:                    client,
 		Scheme:                    scheme,
 		DefaultIngressHost:        "example.com",
@@ -934,7 +957,8 @@ func TestValidateMCPServerSpecRunsAfterDefaulting(t *testing.T) {
 		WithStatusSubresource(server).
 		WithObjects(server.DeepCopy()).
 		Build()
-	reconciler := &MCPServerReconciler{Client: client, Scheme: scheme}
+	reconciler := &MCPServerReconciler{
+		GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 	defaulted := reconciler.defaultedMCPServerForReconcile(server)
 
 	err := reconciler.validateMCPServerSpec(context.Background(), defaulted, logr.Discard())
@@ -957,7 +981,8 @@ func TestRequireSpecField(t *testing.T) {
 			},
 		}
 		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
-		r := MCPServerReconciler{Client: client, Scheme: scheme}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 		err := r.requireSpecField(context.Background(), mcpServer, logr.Discard(), "ingressHost", "example.com", "ingressHost is required")
 		if err != nil {
 			t.Fatalf("failed to require spec field: %v", err)
@@ -982,7 +1007,8 @@ func TestUpdateStatus(t *testing.T) {
 		if err := client.Create(context.Background(), mcpServer); err != nil {
 			t.Fatalf("failed to create MCPServer: %v", err)
 		}
-		r := MCPServerReconciler{Client: client, Scheme: scheme}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 		r.updateStatus(context.Background(), mcpServer, "Ready", "All resources reconciled", resourceReadiness{
 			Deployment: true,
 			Service:    true,
@@ -1014,7 +1040,8 @@ func TestUpdateStatus(t *testing.T) {
 		if err := client.Create(context.Background(), stored); err != nil {
 			t.Fatalf("failed to create MCPServer: %v", err)
 		}
-		r := MCPServerReconciler{Client: client, Scheme: scheme, DefaultIngressHost: "mcp.example.com", DefaultIngressTLS: true}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme, DefaultIngressHost: "mcp.example.com", DefaultIngressTLS: true}
 		r.updateStatus(context.Background(), r.defaultedMCPServerForReconcile(stored), "Ready", "ok", resourceReadiness{})
 		updated := &mcpv1alpha1.MCPServer{}
 		if err := client.Get(context.Background(), types.NamespacedName{Name: "buddy", Namespace: "default"}, updated); err != nil {
@@ -1064,7 +1091,8 @@ func TestCheckDeploymentReady(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "test-server", Namespace: "default"},
 		}
 		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
-		r := MCPServerReconciler{Client: client, Scheme: scheme}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 		ready, err := r.checkDeploymentReady(context.Background(), mcpServer)
 		if err != nil {
 			t.Fatalf("failed to check deployment readiness: %v", err)
@@ -1083,7 +1111,8 @@ func TestCheckServiceReady(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "test-server", Namespace: "default"},
 		}
 		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
-		r := MCPServerReconciler{Client: client, Scheme: scheme}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 		ready, err := r.checkServiceReady(context.Background(), mcpServer)
 		if err != nil {
 			t.Fatalf("failed to check service readiness: %v", err)
@@ -1102,7 +1131,8 @@ func TestCheckIngressReady(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "test-server", Namespace: "default"},
 		}
 		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
-		r := MCPServerReconciler{Client: client, Scheme: scheme}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 		ready, err := r.checkIngressReady(context.Background(), mcpServer)
 		if err != nil {
 			t.Fatalf("failed to check ingress readiness: %v", err)
@@ -1115,7 +1145,8 @@ func TestCheckIngressReady(t *testing.T) {
 		server := mtlsServer()
 		route := crFixture(ingressRouteGVK, server.Name, server.Namespace)
 		client := fake.NewClientBuilder().WithScheme(mtlsScheme).WithObjects(server, route).Build()
-		r := MCPServerReconciler{Client: client, Scheme: mtlsScheme, AdapterCertificatesEnabled: true, AdapterTrustDomain: "example.org", MTLSClusterIssuer: "mcp-runtime-ca"}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: mtlsScheme, AdapterCertificatesEnabled: true, AdapterTrustDomain: "example.org", MTLSClusterIssuer: "mcp-runtime-ca"}
 		ready, err := r.checkIngressReady(context.Background(), server)
 		if err != nil {
 			t.Fatalf("failed to check ingress readiness: %v", err)
@@ -1130,7 +1161,8 @@ func TestCheckIngressReady(t *testing.T) {
 		// re-encrypt model no longer uses it, so the server must not read ready.
 		legacy := crFixture(ingressRouteTCPGVK, server.Name, server.Namespace)
 		client := fake.NewClientBuilder().WithScheme(mtlsScheme).WithObjects(server, legacy).Build()
-		r := MCPServerReconciler{Client: client, Scheme: mtlsScheme, AdapterCertificatesEnabled: true, AdapterTrustDomain: "example.org", MTLSClusterIssuer: "mcp-runtime-ca"}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: mtlsScheme, AdapterCertificatesEnabled: true, AdapterTrustDomain: "example.org", MTLSClusterIssuer: "mcp-runtime-ca"}
 		ready, err := r.checkIngressReady(context.Background(), server)
 		if err != nil {
 			t.Fatalf("failed to check ingress readiness: %v", err)
@@ -1151,7 +1183,8 @@ func TestCheckIngressReady(t *testing.T) {
 			},
 		}
 		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer, ingress).Build()
-		r := MCPServerReconciler{Client: client, Scheme: scheme}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 		ready, err := r.checkIngressReady(context.Background(), mcpServer)
 		if err != nil {
 			t.Fatalf("failed to check ingress readiness: %v", err)
@@ -1186,7 +1219,8 @@ func TestCheckIngressReady(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: ingressClassName},
 		}
 		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer, ingress, class).Build()
-		r := MCPServerReconciler{Client: client, Scheme: scheme}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 		ready, err := r.checkIngressReady(context.Background(), mcpServer)
 		if err != nil {
 			t.Fatalf("failed to check ingress readiness: %v", err)
@@ -1227,7 +1261,8 @@ func TestCheckIngressReady(t *testing.T) {
 		} {
 			t.Run(tt.name, func(t *testing.T) {
 				client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer.DeepCopy(), ingress.DeepCopy()).Build()
-				r := MCPServerReconciler{Client: client, Scheme: scheme, IngressReadinessMode: tt.mode}
+				r := MCPServerReconciler{
+					GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme, IngressReadinessMode: tt.mode}
 				ready, err := r.checkIngressReady(context.Background(), mcpServer)
 				if err != nil {
 					t.Fatalf("failed to check ingress readiness: %v", err)
@@ -1315,7 +1350,8 @@ func TestRenderGatewayPolicyIncludesCrossNamespaceReferences(t *testing.T) {
 		WithScheme(scheme).
 		WithObjects(mcpServer, grant, defaultedGrant, foreignTeamGrant, session, defaultedSession, foreignTeamSession, unrelatedGrant).
 		Build()
-	r := MCPServerReconciler{Client: client, Scheme: scheme}
+	r := MCPServerReconciler{
+		GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 
 	doc, err := r.renderGatewayPolicy(context.Background(), mcpServer)
 	if err != nil {
@@ -1381,7 +1417,8 @@ func TestBuildIngressAnnotations(t *testing.T) {
 				},
 			},
 		}
-		r := MCPServerReconciler{}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test"}
 		annotations := r.buildIngressAnnotations(mcpServer)
 		assertEqual(t, "custom annotation", annotations["custom"], "annotation")
 	})
@@ -1390,7 +1427,8 @@ func TestBuildIngressAnnotations(t *testing.T) {
 		mcpServer := &mcpv1alpha1.MCPServer{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-server", Namespace: "default"},
 		}
-		r := MCPServerReconciler{}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test"}
 		annotations := r.buildIngressAnnotations(mcpServer)
 		// Should include default traefik entrypoints annotation
 		assertEqual(t, "traefik annotation", annotations["traefik.ingress.kubernetes.io/router.entrypoints"], "web")
@@ -1403,7 +1441,8 @@ func TestBuildIngressAnnotations(t *testing.T) {
 				IngressClass: "nginx",
 			},
 		}
-		r := MCPServerReconciler{}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test"}
 		annotations := r.buildIngressAnnotations(mcpServer)
 		if _, exists := annotations["nginx.ingress.kubernetes.io/rewrite-target"]; exists {
 			t.Fatal("nginx rewrite-target should only be set when provided by the user")
@@ -1421,7 +1460,8 @@ func TestBuildIngressAnnotations(t *testing.T) {
 				},
 			},
 		}
-		r := MCPServerReconciler{}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test"}
 		annotations := r.buildIngressAnnotations(mcpServer)
 		assertEqual(t, "nginx rewrite target", annotations["nginx.ingress.kubernetes.io/rewrite-target"], "/$2")
 	})
@@ -1441,7 +1481,8 @@ func TestReconcileDeployment(t *testing.T) {
 			},
 		}
 		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
-		r := MCPServerReconciler{Client: client, Scheme: scheme}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 		err := r.reconcileDeployment(context.Background(), mcpServer)
 		if err != nil {
 			t.Fatalf("failed to reconcile deployment: %v", err)
@@ -1462,7 +1503,8 @@ func TestReconcileService(t *testing.T) {
 			},
 		}
 		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
-		r := MCPServerReconciler{Client: client, Scheme: scheme}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 		err := r.reconcileService(context.Background(), mcpServer)
 		if err != nil {
 			t.Fatalf("failed to reconcile service: %v", err)
@@ -1489,7 +1531,8 @@ func TestReconcileIngress(t *testing.T) {
 			},
 		}
 		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
-		r := MCPServerReconciler{Client: client, Scheme: scheme}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 		err := r.reconcileIngress(context.Background(), mcpServer)
 		if err != nil {
 			t.Fatalf("failed to reconcile ingress: %v", err)
@@ -1517,7 +1560,8 @@ func TestReconcileIngress(t *testing.T) {
 			},
 		}
 		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
-		r := MCPServerReconciler{Client: client, Scheme: scheme}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 		if err := r.reconcileIngress(context.Background(), mcpServer); err != nil {
 			t.Fatalf("failed to reconcile ingress: %v", err)
 		}
@@ -1545,6 +1589,7 @@ func TestReconcileIngress(t *testing.T) {
 		}
 		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
 		r := MCPServerReconciler{
+			GatewayProxyImage:         "example.com/mcp-gateway:test",
 			Client:                    client,
 			Scheme:                    scheme,
 			DefaultIngressEntryPoints: "websecure",
@@ -1579,7 +1624,8 @@ func TestReconcileIngress(t *testing.T) {
 			},
 		}
 		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
-		r := MCPServerReconciler{Client: client, Scheme: scheme}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 		if err := r.reconcileIngress(context.Background(), mcpServer); err != nil {
 			t.Fatalf("failed to reconcile ingress: %v", err)
 		}
@@ -1599,7 +1645,8 @@ func TestReconcileIngress(t *testing.T) {
 
 func TestBuildEnvVars(t *testing.T) {
 	t.Run("converts EnvVars to corev1.EnvVar slice", func(t *testing.T) {
-		r := MCPServerReconciler{}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test"}
 		input := []mcpv1alpha1.EnvVar{
 			{Name: "FOO", Value: "bar"},
 			{Name: "BAZ", Value: "qux"},
@@ -1613,7 +1660,8 @@ func TestBuildEnvVars(t *testing.T) {
 	})
 
 	t.Run("returns empty slice for nil input", func(t *testing.T) {
-		r := MCPServerReconciler{}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test"}
 		envVars := r.buildEnvVars(nil, nil)
 		assertEqual(t, "len", len(envVars), 0)
 	})
@@ -1627,7 +1675,8 @@ func TestBuildImagePullSecrets(t *testing.T) {
 				ImagePullSecrets: []string{"secret1", "secret2"},
 			},
 		}
-		r := MCPServerReconciler{}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test"}
 		pullSecrets := r.buildImagePullSecrets(mcpServer)
 		assertEqual(t, "len", len(pullSecrets), 2)
 		assertEqual(t, "pullSecrets[0]", pullSecrets[0].Name, "secret1")
@@ -1638,7 +1687,8 @@ func TestBuildImagePullSecrets(t *testing.T) {
 		mcpServer := &mcpv1alpha1.MCPServer{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-server", Namespace: "default"},
 		}
-		r := MCPServerReconciler{}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test"}
 		pullSecrets := r.buildImagePullSecrets(mcpServer)
 		assertEqual(t, "len", len(pullSecrets), 0)
 	})
@@ -1652,7 +1702,8 @@ func TestResolveImage(t *testing.T) {
 				Image: "test-image",
 			},
 		}
-		r := MCPServerReconciler{}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test"}
 		image, err := r.resolveImage(context.Background(), mcpServer)
 		if err != nil {
 			t.Fatalf("failed to resolve image: %v", err)
@@ -1667,7 +1718,8 @@ func TestResolveImage(t *testing.T) {
 				ImageTag: "v1.0.0",
 			},
 		}
-		r := MCPServerReconciler{}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test"}
 		image, err := r.resolveImage(context.Background(), mcpServer)
 		if err != nil {
 			t.Fatalf("failed to resolve image: %v", err)
@@ -1682,7 +1734,8 @@ func TestResolveImage(t *testing.T) {
 				ImageTag: "52c916f",
 			},
 		}
-		r := MCPServerReconciler{}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test"}
 		image, err := r.resolveImage(context.Background(), mcpServer)
 		if err != nil {
 			t.Fatalf("failed to resolve image: %v", err)
@@ -1697,7 +1750,8 @@ func TestResolveImage(t *testing.T) {
 				ImageTag: "ignored",
 			},
 		}
-		r := MCPServerReconciler{}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test"}
 		image, err := r.resolveImage(context.Background(), mcpServer)
 		if err != nil {
 			t.Fatalf("failed to resolve image: %v", err)
@@ -1712,7 +1766,8 @@ func TestResolveImage(t *testing.T) {
 				RegistryOverride: "test-registry",
 			},
 		}
-		r := MCPServerReconciler{}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test"}
 		image, err := r.resolveImage(context.Background(), mcpServer)
 		if err != nil {
 			t.Fatalf("failed to resolve image: %v", err)
@@ -1728,7 +1783,8 @@ func TestResolveImage(t *testing.T) {
 				RegistryOverride: "test-registry",
 			},
 		}
-		r := MCPServerReconciler{}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test"}
 		image, err := r.resolveImage(context.Background(), mcpServer)
 		if err != nil {
 			t.Fatalf("failed to resolve image: %v", err)
@@ -1752,7 +1808,8 @@ func TestResolveImage(t *testing.T) {
 				UseProvisionedRegistry: true,
 			},
 		}
-		r := MCPServerReconciler{}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test"}
 		image, err := r.resolveImage(context.Background(), mcpServer)
 		if err != nil {
 			t.Fatalf("failed to resolve image: %v", err)
@@ -1770,7 +1827,8 @@ func TestReconcile(t *testing.T) {
 
 	t.Run("returns not found when MCPServer does not exist", func(t *testing.T) {
 		client := fake.NewClientBuilder().WithScheme(scheme).Build()
-		r := MCPServerReconciler{Client: client, Scheme: scheme}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 
 		result, err := r.Reconcile(context.Background(), ctrl.Request{
 			NamespacedName: types.NamespacedName{Name: "nonexistent", Namespace: "default"},
@@ -1799,7 +1857,8 @@ func TestReconcile(t *testing.T) {
 			},
 		}
 		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
-		r := MCPServerReconciler{Client: client, Scheme: scheme}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 
 		result, err := r.Reconcile(context.Background(), ctrl.Request{
 			NamespacedName: types.NamespacedName{Name: "test-server", Namespace: "default"},
@@ -1822,7 +1881,8 @@ func TestReconcile(t *testing.T) {
 			},
 		}
 		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
-		r := MCPServerReconciler{Client: client, Scheme: scheme}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 
 		result, err := r.Reconcile(context.Background(), ctrl.Request{
 			NamespacedName: types.NamespacedName{Name: "test-server", Namespace: "default"},
@@ -1853,7 +1913,8 @@ func TestSetupWithManager(t *testing.T) {
 		_ = mcpv1alpha1.AddToScheme(scheme)
 
 		r := &MCPServerReconciler{
-			Scheme: scheme,
+			GatewayProxyImage: "example.com/mcp-gateway:test",
+			Scheme:            scheme,
 		}
 
 		// Verify the reconciler has the scheme set (required for SetupWithManager)
@@ -1892,7 +1953,8 @@ func TestGatewayExternalBaseURLSchemeFollowsIngressTLS(t *testing.T) {
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
-			r := MCPServerReconciler{DefaultIngressTLS: testCase.defaultTLS}
+			r := MCPServerReconciler{
+				GatewayProxyImage: "example.com/mcp-gateway:test", DefaultIngressTLS: testCase.defaultTLS}
 			if got := r.gatewayExternalBaseURL(server(testCase.annotations)); got != testCase.want {
 				t.Fatalf("gatewayExternalBaseURL = %q, want %q", got, testCase.want)
 			}
@@ -1901,7 +1963,8 @@ func TestGatewayExternalBaseURLSchemeFollowsIngressTLS(t *testing.T) {
 }
 
 func TestGatewayExternalBaseURLEmptyWithoutAnyHost(t *testing.T) {
-	r := MCPServerReconciler{DefaultIngressTLS: true}
+	r := MCPServerReconciler{
+		GatewayProxyImage: "example.com/mcp-gateway:test", DefaultIngressTLS: true}
 	if got := r.gatewayExternalBaseURL(&mcpv1alpha1.MCPServer{}); got != "" {
 		t.Fatalf("gatewayExternalBaseURL = %q, want empty", got)
 	}
@@ -1911,7 +1974,8 @@ func TestGatewayExternalBaseURLEmptyWithoutAnyHost(t *testing.T) {
 // defaulting in api/v1alpha1, so the gateway must fall back to the
 // operator-wide host or it advertises no public URL at all.
 func TestGatewayExternalBaseURLFallsBackToOperatorDefaultHost(t *testing.T) {
-	r := MCPServerReconciler{DefaultIngressHost: "mcp.example.com", DefaultIngressTLS: true}
+	r := MCPServerReconciler{
+		GatewayProxyImage: "example.com/mcp-gateway:test", DefaultIngressHost: "mcp.example.com", DefaultIngressTLS: true}
 	server := &mcpv1alpha1.MCPServer{
 		Spec: mcpv1alpha1.MCPServerSpec{PublicPathPrefix: "demo"},
 	}
@@ -1921,7 +1985,8 @@ func TestGatewayExternalBaseURLFallsBackToOperatorDefaultHost(t *testing.T) {
 }
 
 func TestGatewayExternalBaseURLPrefersExplicitIngressHost(t *testing.T) {
-	r := MCPServerReconciler{DefaultIngressHost: "fallback.example.com", DefaultIngressTLS: true}
+	r := MCPServerReconciler{
+		GatewayProxyImage: "example.com/mcp-gateway:test", DefaultIngressHost: "fallback.example.com", DefaultIngressTLS: true}
 	server := &mcpv1alpha1.MCPServer{
 		Spec: mcpv1alpha1.MCPServerSpec{IngressHost: "explicit.example.com"},
 	}
@@ -1936,7 +2001,7 @@ func TestBuildServerEnvVarsDerivesOAuthResource(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "buddy"},
 			Spec: mcpv1alpha1.MCPServerSpec{
 				PublicPathPrefix: "buddy",
-				Gateway:          &mcpv1alpha1.GatewayConfig{Enabled: false},
+				Gateway:          &mcpv1alpha1.GatewayConfig{Enabled: mcpv1alpha1.BoolPtr(false)},
 				Auth: &mcpv1alpha1.AuthConfig{
 					IssuerURL: "https://auth.example.com/mcp-auth",
 					Audience:  "https://mcp.example.com/buddy/mcp",
@@ -1955,7 +2020,8 @@ func TestBuildServerEnvVarsDerivesOAuthResource(t *testing.T) {
 		}
 		return result
 	}
-	r := MCPServerReconciler{}
+	r := MCPServerReconciler{
+		GatewayProxyImage: "example.com/mcp-gateway:test"}
 
 	t.Run("standalone oauth server gets the derived resource settings", func(t *testing.T) {
 		got := envMap(r.buildServerEnvVars(standalone()))
@@ -1977,7 +2043,7 @@ func TestBuildServerEnvVarsDerivesOAuthResource(t *testing.T) {
 
 	t.Run("gateway-fronted servers get only the operator-owned path", func(t *testing.T) {
 		server := standalone()
-		server.Spec.Gateway.Enabled = true
+		server.Spec.Gateway.Enabled = mcpv1alpha1.BoolPtr(true)
 		got := envMap(r.buildServerEnvVars(server))
 		assertEqual(t, "MCP_PATH", got["MCP_PATH"], "/buddy/mcp")
 		if _, ok := got["MCP_AUTH_RESOURCE"]; ok {
@@ -1995,7 +2061,7 @@ func TestUpstreamMCPPathFollowsGatewayStripPrefix(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "buddy"},
 			Spec: mcpv1alpha1.MCPServerSpec{
 				PublicPathPrefix: prefix,
-				Gateway:          &mcpv1alpha1.GatewayConfig{Enabled: gateway, StripPrefix: strip},
+				Gateway:          &mcpv1alpha1.GatewayConfig{Enabled: mcpv1alpha1.BoolPtr(gateway), StripPrefix: strip},
 			},
 		}
 	}
@@ -2017,7 +2083,8 @@ func TestUpstreamMCPPathFollowsGatewayStripPrefix(t *testing.T) {
 				t.Fatalf("upstreamMCPPath = %q, want %q", got, testCase.want)
 			}
 			env := map[string]string{}
-			for _, e := range (&MCPServerReconciler{}).buildServerEnvVars(testCase.server) {
+			for _, e := range (&MCPServerReconciler{
+				GatewayProxyImage: "example.com/mcp-gateway:test"}).buildServerEnvVars(testCase.server) {
 				env[e.Name] = e.Value
 			}
 			if env["MCP_PATH"] != testCase.want {

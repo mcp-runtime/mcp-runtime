@@ -13,6 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
+	"mcp-runtime/pkg/mcpdefaults"
 	"mcp-runtime/pkg/policy"
 )
 
@@ -29,7 +30,8 @@ func TestRenderGatewayPolicyStampsAndValidates(t *testing.T) {
 		},
 	}
 	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
-	r := MCPServerReconciler{Client: client, Scheme: scheme}
+	r := MCPServerReconciler{
+		GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 
 	doc, err := r.renderGatewayPolicy(context.Background(), mcpServer)
 	if err != nil {
@@ -62,11 +64,12 @@ func TestRenderGatewayPolicyIncludesAdapterTrustWithoutOAuth(t *testing.T) {
 	mcpServer := &mcpv1alpha1.MCPServer{
 		ObjectMeta: metav1.ObjectMeta{Name: "payments", Namespace: "servers"},
 		Spec: mcpv1alpha1.MCPServerSpec{
-			Gateway: &mcpv1alpha1.GatewayConfig{Enabled: true},
+			Gateway: &mcpv1alpha1.GatewayConfig{Enabled: mcpv1alpha1.BoolPtr(true)},
 		},
 	}
 	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
 	r := MCPServerReconciler{
+		GatewayProxyImage:          "example.com/mcp-gateway:test",
 		Client:                     client,
 		Scheme:                     scheme,
 		AdapterCertificatesEnabled: true,
@@ -269,7 +272,7 @@ func TestReconcilePolicyConfigMapAnnotatesServerPodsOnChange(t *testing.T) {
 	mcpServer := &mcpv1alpha1.MCPServer{
 		ObjectMeta: metav1.ObjectMeta{Name: "workspace-demo", Namespace: namespace, UID: "server-uid"},
 		Spec: mcpv1alpha1.MCPServerSpec{
-			Gateway: &mcpv1alpha1.GatewayConfig{Enabled: true},
+			Gateway: &mcpv1alpha1.GatewayConfig{Enabled: mcpv1alpha1.BoolPtr(true)},
 			Tools: []mcpv1alpha1.ToolConfig{
 				{Name: "echo", SideEffect: mcpv1alpha1.ToolSideEffectRead},
 			},
@@ -296,7 +299,8 @@ func TestReconcilePolicyConfigMapAnnotatesServerPodsOnChange(t *testing.T) {
 
 	kube := fake.NewClientBuilder().WithScheme(scheme).
 		WithObjects(mcpServer, stable, canary, other, terminating).Build()
-	r := MCPServerReconciler{Client: kube, Scheme: scheme}
+	r := MCPServerReconciler{
+		GatewayProxyImage: "example.com/mcp-gateway:test", Client: kube, Scheme: scheme}
 	ctx := context.Background()
 
 	getPod := func(name string) *corev1.Pod {
@@ -361,5 +365,25 @@ func TestReconcilePolicyConfigMapAnnotatesServerPodsOnChange(t *testing.T) {
 	}
 	if after := getPod(stable.Name).ResourceVersion; after != before {
 		t.Fatalf("unchanged policy patched pod: resourceVersion %s -> %s", before, after)
+	}
+}
+
+func TestRenderGatewayPolicyObserveWhenPolicyOmitted(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = mcpv1alpha1.AddToScheme(scheme)
+	server := &mcpv1alpha1.MCPServer{
+		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "mcp-servers"},
+		Spec: mcpv1alpha1.MCPServerSpec{
+			Gateway: &mcpv1alpha1.GatewayConfig{Enabled: mcpv1alpha1.BoolPtr(true)},
+		},
+	}
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(server).Build()
+	r := &MCPServerReconciler{Client: client, Scheme: scheme, ClusterName: "kind"}
+	doc, err := r.renderGatewayPolicy(context.Background(), server)
+	if err != nil {
+		t.Fatalf("renderGatewayPolicy: %v", err)
+	}
+	if doc.Policy == nil || doc.Policy.Mode != mcpdefaults.ObservabilityPolicyMode {
+		t.Fatalf("policy = %#v, want observe-mode default", doc.Policy)
 	}
 }

@@ -784,7 +784,7 @@ func TestRuntimeObservabilityLinksGenerateGrafanaURLAfterAuthorization(t *testin
 		Spec: mcpv1alpha1.MCPServerSpec{
 			Image:   "registry.example.com/acme/team-demo",
 			TeamID:  "team-acme-id",
-			Gateway: &mcpv1alpha1.GatewayConfig{Enabled: true},
+			Gateway: &mcpv1alpha1.GatewayConfig{Enabled: mcpv1alpha1.BoolPtr(true)},
 		},
 	})
 	request := httptest.NewRequest(http.MethodGet, "/api/runtime/observability/links?namespace=mcp-team-acme&server=team-demo", nil)
@@ -1131,7 +1131,7 @@ func TestRuntimeServerApplyDefaultsGatewayAndExplicitAnalyticsSecret(t *testing.
 	if err != nil {
 		t.Fatalf("GetServer: %v", err)
 	}
-	if current.Spec.Gateway == nil || !current.Spec.Gateway.Enabled {
+	if !mcpv1alpha1.GatewayIsEnabled(current.Spec.Gateway) {
 		t.Fatalf("gateway = %#v, want enabled", current.Spec.Gateway)
 	}
 	if current.Spec.Analytics == nil || current.Spec.Analytics.APIKeySecretRef == nil {
@@ -1149,7 +1149,7 @@ func TestRuntimeServerApplyDefaultsGatewayAndExplicitAnalyticsSecret(t *testing.
 	}
 }
 
-func TestRuntimeServerApplyOmitsAnalyticsWhenNotRequested(t *testing.T) {
+func TestRuntimeServerApplyEnablesAnalyticsByDefault(t *testing.T) {
 	t.Setenv("PLATFORM_MODE", "public")
 	t.Setenv("PLATFORM_TEAM_TRAEFIK_WATCH", "disabled")
 	t.Setenv("MCP_SENTINEL_INGEST_URL", "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events")
@@ -1189,14 +1189,14 @@ func TestRuntimeServerApplyOmitsAnalyticsWhenNotRequested(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetServer: %v", err)
 	}
-	if current.Spec.Gateway == nil || !current.Spec.Gateway.Enabled {
+	if !mcpv1alpha1.GatewayIsEnabled(current.Spec.Gateway) {
 		t.Fatalf("gateway = %#v, want enabled", current.Spec.Gateway)
 	}
-	if current.Spec.Analytics != nil {
-		t.Fatalf("analytics = %#v, want nil when not requested", current.Spec.Analytics)
+	if current.Spec.Analytics == nil || current.Spec.Analytics.APIKeySecretRef == nil {
+		t.Fatalf("analytics = %#v, want default api key secret ref", current.Spec.Analytics)
 	}
-	if _, err := server.k8sClients.Clientset.CoreV1().Secrets(defaultPublicCatalogNamespace).Get(context.Background(), "demo-analytics-creds", metav1.GetOptions{}); !apierrors.IsNotFound(err) {
-		t.Fatalf("analytics secret lookup err = %v, want not found", err)
+	if _, err := server.k8sClients.Clientset.CoreV1().Secrets(defaultPublicCatalogNamespace).Get(context.Background(), "demo-analytics-creds", metav1.GetOptions{}); err != nil {
+		t.Fatalf("analytics secret lookup err = %v, want created", err)
 	}
 }
 
@@ -1288,7 +1288,7 @@ func TestRuntimeServerApplyAllowsMissingDefaultAnalyticsSecret(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetServer: %v", err)
 	}
-	if current.Spec.Gateway == nil || !current.Spec.Gateway.Enabled {
+	if !mcpv1alpha1.GatewayIsEnabled(current.Spec.Gateway) {
 		t.Fatalf("gateway = %#v, want enabled", current.Spec.Gateway)
 	}
 	if current.Spec.Analytics != nil && current.Spec.Analytics.APIKeySecretRef != nil {
@@ -1315,7 +1315,7 @@ func TestApplyPublishedServerDefaultsSkipsAnalyticsSecretWhenRBACRestricted(t *t
 		k8sClients: &k8sclient.Clients{Clientset: client},
 	}
 	spec := &mcpv1alpha1.MCPServerSpec{
-		Gateway:   &mcpv1alpha1.GatewayConfig{Enabled: true},
+		Gateway:   &mcpv1alpha1.GatewayConfig{Enabled: mcpv1alpha1.BoolPtr(true)},
 		Analytics: &mcpv1alpha1.AnalyticsConfig{IngestURL: "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events"},
 	}
 
@@ -1370,7 +1370,7 @@ func TestRuntimeServerApplyPreservesExplicitGatewaySettings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetServer: %v", err)
 	}
-	if current.Spec.Gateway == nil || current.Spec.Gateway.Enabled {
+	if mcpv1alpha1.GatewayIsEnabled(current.Spec.Gateway) {
 		t.Fatalf("gateway = %#v, want explicitly disabled", current.Spec.Gateway)
 	}
 	if current.Spec.Analytics != nil && current.Spec.Analytics.APIKeySecretRef != nil {
@@ -1421,7 +1421,7 @@ func TestRuntimeServerApplyPreservesExplicitAnalyticsDisable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetServer: %v", err)
 	}
-	if current.Spec.Gateway == nil || !current.Spec.Gateway.Enabled {
+	if !mcpv1alpha1.GatewayIsEnabled(current.Spec.Gateway) {
 		t.Fatalf("gateway = %#v, want enabled", current.Spec.Gateway)
 	}
 	if current.Spec.Analytics == nil || !current.Spec.Analytics.Disabled {
@@ -2036,7 +2036,7 @@ func ownedTestMCPServer(name, namespace, userID string) *mcpv1alpha1.MCPServer {
 		},
 		Spec: mcpv1alpha1.MCPServerSpec{
 			Image:   "registry.example.com/" + namespace + "/" + name,
-			Gateway: &mcpv1alpha1.GatewayConfig{Enabled: true},
+			Gateway: &mcpv1alpha1.GatewayConfig{Enabled: mcpv1alpha1.BoolPtr(true)},
 		},
 	}
 }

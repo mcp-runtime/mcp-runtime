@@ -46,7 +46,7 @@ func TestLoadFromFile(t *testing.T) {
 						Namespace:   "custom-namespace",
 						TeamID:      "team-custom",
 						Gateway: &GatewayConfig{
-							Enabled:     true,
+							Enabled:     boolPtr(true),
 							Image:       "example.com/mcp-gateway:latest",
 							Port:        8091,
 							UpstreamURL: "http://127.0.0.1:9090",
@@ -247,7 +247,7 @@ func TestSetDefaults(t *testing.T) {
 				Image: "test-image",
 				Port:  9090,
 				Gateway: &GatewayConfig{
-					Enabled: true,
+					Enabled: boolPtr(true),
 				},
 				Auth:   &AuthConfig{},
 				Policy: &PolicyConfig{},
@@ -279,7 +279,7 @@ func TestSetDefaults(t *testing.T) {
 				Replicas:  int32Ptr(1),
 				Namespace: "mcp-servers",
 				Gateway: &GatewayConfig{
-					Enabled:     true,
+					Enabled:     boolPtr(true),
 					Port:        8091,
 					UpstreamURL: "http://127.0.0.1:9090",
 				},
@@ -602,7 +602,7 @@ func gatewayConfigEqual(a, b *GatewayConfig) bool {
 	if a == nil || b == nil {
 		return false
 	}
-	return a.Enabled == b.Enabled &&
+	return GatewayIsEnabled(a) == GatewayIsEnabled(b) &&
 		a.Image == b.Image &&
 		a.Port == b.Port &&
 		a.UpstreamURL == b.UpstreamURL &&

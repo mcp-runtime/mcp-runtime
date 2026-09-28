@@ -149,7 +149,7 @@ func setDefaults(server *ServerMetadata) error {
 			server.Tools[i].RequiredTrust = TrustLevelLow
 		}
 	}
-	if server.Gateway != nil && server.Gateway.Enabled {
+	if server.Gateway != nil && GatewayIsEnabled(server.Gateway) {
 		if server.Gateway.Port == 0 {
 			server.Gateway.Port = mcpdefaults.MCPGatewayPort
 		}

@@ -30,7 +30,7 @@ func TestReconcileMTLSNetworkPolicy(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "secure-server", Namespace: "mcp-servers"},
 			Spec: mcpv1alpha1.MCPServerSpec{
 				Image:   "example.com/secure-server",
-				Gateway: &mcpv1alpha1.GatewayConfig{Enabled: true, Port: 8091},
+				Gateway: &mcpv1alpha1.GatewayConfig{Enabled: mcpv1alpha1.BoolPtr(true), Port: 8091},
 				Auth:    &mcpv1alpha1.AuthConfig{},
 			},
 		}
@@ -40,7 +40,8 @@ func TestReconcileMTLSNetworkPolicy(t *testing.T) {
 	t.Run("created and locks the gateway port to traefik for mtls", func(t *testing.T) {
 		server := newServer()
 		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(server).Build()
-		r := MCPServerReconciler{Client: client, Scheme: scheme, AdapterCertificatesEnabled: true, AdapterTrustDomain: "example.org", MTLSClusterIssuer: "mcp-runtime-ca"}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme, AdapterCertificatesEnabled: true, AdapterTrustDomain: "example.org", MTLSClusterIssuer: "mcp-runtime-ca"}
 
 		if err := r.reconcileMTLSNetworkPolicy(context.Background(), server); err != nil {
 			t.Fatalf("reconcile: %v", err)
@@ -76,7 +77,8 @@ func TestReconcileMTLSNetworkPolicy(t *testing.T) {
 	t.Run("absent when adapter certificates are disabled", func(t *testing.T) {
 		server := newServer()
 		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(server).Build()
-		r := MCPServerReconciler{Client: client, Scheme: scheme}
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 
 		if err := r.reconcileMTLSNetworkPolicy(context.Background(), server); err != nil {
 			t.Fatalf("reconcile: %v", err)

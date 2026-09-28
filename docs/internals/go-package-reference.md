@@ -69,6 +69,8 @@ Package v1alpha1 contains API Schema definitions for the MCP server resource.
 
 - [`Constants`](#api-types-constants)
 - [`Variables`](#api-types-variables)
+- [`func BoolPtr(v bool) *bool`](#api-types-func-boolptr-v-bool-bool)
+- [`func GatewayIsEnabled(gateway *GatewayConfig) bool`](#api-types-func-gatewayisenabled-gateway-gatewayconfig-bool)
 - [`func ProtectedResourceMetadataURL(resource string) string`](#api-types-func-protectedresourcemetadataurl-resource-string-string)
 - [`type AnalyticsConfig struct`](#api-types-type-analyticsconfig-struct)
 - [`func (in *AnalyticsConfig) DeepCopy() *AnalyticsConfig`](#api-types-func-in-analyticsconfig-deepcopy-analyticsconfig)
@@ -233,6 +235,22 @@ var (
 <a id="api-types-functions"></a>
 ### Functions
 
+<a id="api-types-func-boolptr-v-bool-bool"></a>
+```text
+func BoolPtr(v bool) *bool
+    BoolPtr returns a pointer to v for optional CRD boolean fields.
+
+```
+
+<a id="api-types-func-gatewayisenabled-gateway-gatewayconfig-bool"></a>
+```text
+func GatewayIsEnabled(gateway *GatewayConfig) bool
+    GatewayIsEnabled reports whether the MCP gateway sidecar should run. Omitted
+    gateway, empty gateway: {}, and enabled: true all mean on. Only enabled:
+    false opts out.
+
+```
+
 <a id="api-types-func-protectedresourcemetadataurl-resource-string-string"></a>
 ```text
 func ProtectedResourceMetadataURL(resource string) string
@@ -347,8 +365,9 @@ func (in *EnvVar) DeepCopyInto(out *EnvVar)
 <a id="api-types-type-gatewayconfig-struct"></a>
 ```text
 type GatewayConfig struct {
-	// Enabled turns on the gateway sidecar for this server.
-	Enabled bool `json:"enabled,omitempty"`
+	// Enabled turns the gateway sidecar on or off. When nil/omitted the sidecar
+	// is enabled (observability by default). Set to false to opt out.
+	Enabled *bool `json:"enabled,omitempty"`
 
 	// Image overrides the proxy container image for this server.
 	Image string `json:"image,omitempty"`
@@ -1012,19 +1031,25 @@ type MCPServerSpec struct {
 	// Auth enables optional OAuth authentication at the gateway when present.
 	Auth *AuthConfig `json:"auth,omitempty"`
 
-	// Policy configures gateway-side authorization behavior.
+	// Policy configures gateway-side authorization behavior. When omitted, the
+	// gateway runs in observe mode so metrics and analytics work without
+	// grant/session enforcement. Set this field (for example allow-list + deny)
+	// to require adapter identity and grants.
 	Policy *PolicyConfig `json:"policy,omitempty"`
 
 	// Session configures server-side agent session behavior.
 	Session *SessionConfig `json:"session,omitempty"`
 
-	// Gateway configures an optional MCP proxy sidecar in front of the server container.
+	// Gateway configures the MCP proxy sidecar in front of the server container.
+	// When omitted or left empty, the sidecar is enabled so metrics, traces, and
+	// analytics can run. Set gateway.enabled to false to opt out.
 	Gateway *GatewayConfig `json:"gateway,omitempty"`
 
 	// Analytics configures audit/analytics emission for the gateway sidecar.
-	// Analytics is only applied when Gateway is enabled and this field is set.
-	// If set without an ingest URL, the operator may supply its configured
-	// default ingest URL.
+	// When the gateway is enabled and this field is omitted, analytics emission
+	// is on whenever the operator has a default ingest URL. Set
+	// analytics.disabled to true to opt out. If set without an ingest URL, the
+	// operator may supply its configured default ingest URL.
 	Analytics *AnalyticsConfig `json:"analytics,omitempty"`
 
 	// Rollout configures deployment rollout behavior for this server.
@@ -1155,7 +1180,7 @@ type PolicyMode string
 
 const (
 	PolicyModeAllowList PolicyMode = mcpdefaults.PolicyModeAllowList
-	PolicyModeObserve   PolicyMode = "observe"
+	PolicyModeObserve   PolicyMode = mcpdefaults.PolicyModeObserve
 )
 ```
 
@@ -1546,6 +1571,7 @@ _No package overview is documented._
 
 - [`Constants`](#metadata-helpers-constants)
 - [`func DisplayImageReference(image string) string`](#metadata-helpers-func-displayimagereference-image-string-string)
+- [`func GatewayIsEnabled(gateway *GatewayConfig) bool`](#metadata-helpers-func-gatewayisenabled-gateway-gatewayconfig-bool)
 - [`func GenerateCRD(server *ServerMetadata, outputPath string) error`](#metadata-helpers-func-generatecrd-server-servermetadata-outputpath-string-error)
 - [`func GenerateCRDsFromRegistry(registry *RegistryFile, outputDir string) error`](#metadata-helpers-func-generatecrdsfromregistry-registry-registryfile-outputdir-string-error)
 - [`func NormalizePlatformDomain(raw string) string`](#metadata-helpers-func-normalizeplatformdomain-raw-string-string)
@@ -1597,6 +1623,13 @@ func DisplayImageReference(image string) string
     display. It prefers the public registry host when configured, and otherwise
     strips the internal host so cluster-only endpoints do not leak into UI/API
     responses.
+
+```
+
+<a id="metadata-helpers-func-gatewayisenabled-gateway-gatewayconfig-bool"></a>
+```text
+func GatewayIsEnabled(gateway *GatewayConfig) bool
+    GatewayIsEnabled reports whether metadata requests a gateway sidecar.
 
 ```
 
@@ -1724,7 +1757,9 @@ type EnvVar struct {
 <a id="metadata-helpers-type-gatewayconfig-struct"></a>
 ```text
 type GatewayConfig struct {
-	Enabled     bool                  `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	// Enabled turns the gateway sidecar on or off. When nil/omitted the sidecar
+	// is enabled. Set to false to opt out.
+	Enabled     *bool                 `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 	Image       string                `yaml:"image,omitempty" json:"image,omitempty"`
 	Port        int32                 `yaml:"port,omitempty" json:"port,omitempty"`
 	UpstreamURL string                `yaml:"upstreamURL,omitempty" json:"upstreamURL,omitempty"`
