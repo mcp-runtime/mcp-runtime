@@ -15,22 +15,16 @@ import (
 	"mcp-runtime/internal/agentadapter"
 )
 
-// identityFlags binds flags shared by every adapter subcommand. Flag values
-// default to the matching environment variable so existing
-// MCP_RUNTIME_* deployments keep working.
+// identityFlags binds transport and certificate flags shared by every adapter
+// subcommand. Values default to their matching environment variables.
 type identityFlags struct {
 	runtimeURL      string
-	humanID         string
-	agentID         string
-	teamID          string
-	sessionID       string
 	hostHeader      string
 	protocolVersion string
 	requestTimeout  string
 	logLevel        string
 	disableXFF      bool
-	// upstream auth / TLS
-	authMode      string
+	// certificate identity / upstream auth
 	trustDomain   string
 	authHeader    string
 	tlsClientCert string
@@ -44,22 +38,9 @@ type identityFlags struct {
 	toolsCacheTTL    string
 }
 
-// mtlsEnabled reports whether --auth selected certificate-based identity.
-func (f identityFlags) mtlsEnabled() bool {
-	return strings.EqualFold(strings.TrimSpace(f.authMode), "mtls")
-}
-
 func bindIdentityFlags(cmd *cobra.Command, f *identityFlags) {
 	cmd.Flags().StringVar(&f.runtimeURL, "runtime-url", os.Getenv(agentadapter.EnvRuntimeURL),
 		"Platform-issued absolute MCP runtime URL (default: $"+agentadapter.EnvRuntimeURL+")")
-	cmd.Flags().StringVar(&f.humanID, "human-id", os.Getenv(agentadapter.EnvHumanID),
-		"Issued human identity (default: $"+agentadapter.EnvHumanID+")")
-	cmd.Flags().StringVar(&f.agentID, "agent-id", os.Getenv(agentadapter.EnvAgentID),
-		"Issued agent identity (default: $"+agentadapter.EnvAgentID+")")
-	cmd.Flags().StringVar(&f.teamID, "team-id", os.Getenv(agentadapter.EnvTeamID),
-		"Issued team identity for team-scoped grants (default: $"+agentadapter.EnvTeamID+")")
-	cmd.Flags().StringVar(&f.sessionID, "session-id", os.Getenv(agentadapter.EnvSessionID),
-		"Issued agent session identity (default: $"+agentadapter.EnvSessionID+")")
 	cmd.Flags().StringVar(&f.hostHeader, "host-header", os.Getenv(agentadapter.EnvHostHeader),
 		"Override the Host header sent to the runtime (default: $"+agentadapter.EnvHostHeader+")")
 	cmd.Flags().StringVar(&f.protocolVersion, "protocol-version", os.Getenv(agentadapter.EnvProtocolVersion),
@@ -70,14 +51,10 @@ func bindIdentityFlags(cmd *cobra.Command, f *identityFlags) {
 		"Do not set X-Forwarded-* headers when forwarding to the runtime")
 	cmd.Flags().StringVar(&f.requestTimeout, "request-timeout", os.Getenv(agentadapter.EnvRequestTimeout),
 		"HTTP request timeout for adapter→runtime calls, e.g. 30s (default: $"+agentadapter.EnvRequestTimeout+")")
-	cmd.Flags().StringVar(&f.authMode, "auth", envOrDefault(EnvAdapterAuthMode, "header"),
-		"Adapter auth mode: header (forward issued governance headers) or mtls "+
-			"(auto-enroll a session-bound client certificate and let the gateway derive identity from it); "+
-			"default: $"+EnvAdapterAuthMode+" or header")
 	cmd.Flags().StringVar(&f.trustDomain, "trust-domain", os.Getenv(EnvMTLSTrustDomain),
 		"Optional platform SPIFFE trust domain override for adapter certificate enrollment; default: $"+EnvMTLSTrustDomain)
 	cmd.Flags().StringVar(&f.authHeader, "auth-header", os.Getenv(agentadapter.EnvAuthHeader),
-		"Static Authorization header value for runtime requests, e.g. \"Bearer <token>\" (default: $"+agentadapter.EnvAuthHeader+")")
+		"Static OAuth Authorization value when the local MCP client does not send one, e.g. \"Bearer <token>\" (default: $"+agentadapter.EnvAuthHeader+")")
 	cmd.Flags().StringVar(&f.tlsClientCert, "tls-client-cert", os.Getenv(agentadapter.EnvTLSClientCert),
 		"Path to PEM client certificate for mTLS to the runtime (default: $"+agentadapter.EnvTLSClientCert+")")
 	cmd.Flags().StringVar(&f.tlsClientKey, "tls-client-key", os.Getenv(agentadapter.EnvTLSClientKey),
@@ -87,11 +64,10 @@ func bindIdentityFlags(cmd *cobra.Command, f *identityFlags) {
 }
 
 // resolved holds the validated cross-cutting pieces of an adapter config —
-// identity, runtime URL, transport, and the shared display fields — that
+// runtime URL, transport, and shared display fields — that
 // every subcommand needs before building its transport-specific config.
 type resolved struct {
 	runtimeURL      *url.URL
-	identity        agentadapter.Identity
 	transport       *agentadapter.RuntimeTransport
 	hostHeader      string
 	protocolVersion string
@@ -102,12 +78,6 @@ type resolved struct {
 // error messages reference the user-facing flag name instead of the env var.
 func (f identityFlags) resolve() (resolved, error) {
 	out := resolved{
-		identity: agentadapter.Identity{
-			HumanID:   strings.TrimSpace(f.humanID),
-			AgentID:   strings.TrimSpace(f.agentID),
-			TeamID:    strings.TrimSpace(f.teamID),
-			SessionID: strings.TrimSpace(f.sessionID),
-		},
 		hostHeader:      strings.TrimSpace(f.hostHeader),
 		protocolVersion: strings.TrimSpace(f.protocolVersion),
 		logLevel:        strings.TrimSpace(f.logLevel),
@@ -175,7 +145,6 @@ func (f identityFlags) toProxyConfig(listenAddr string) (agentadapter.ProxyConfi
 	}
 	return agentadapter.ProxyConfig{
 		RuntimeURL:        r.runtimeURL,
-		Identity:          r.identity,
 		Transport:         r.transport,
 		HostHeader:        r.hostHeader,
 		ListenAddr:        listen,
@@ -195,7 +164,6 @@ func (f identityFlags) toShimConfig() (agentadapter.ShimConfig, error) {
 	}
 	cfg := agentadapter.ShimConfig{
 		RuntimeURL:      r.runtimeURL,
-		Identity:        r.identity,
 		Transport:       r.transport,
 		HostHeader:      r.hostHeader,
 		ProtocolVersion: r.protocolVersion,
@@ -222,7 +190,7 @@ func (f identityFlags) toShimConfig() (agentadapter.ShimConfig, error) {
 func bindStdioFlags(cmd *cobra.Command, f *identityFlags) {
 	cmd.Flags().BoolVar(&f.anonymous, "anonymous",
 		parseEnvBoolSimple(agentadapter.EnvAnonymous),
-		"Forward to the runtime without a session or issued identity (public/read-only routes); "+
+		"Forward to the runtime without a client certificate (public/read-only routes); "+
 			"only methods in --anonymous-methods are forwarded (default: $"+agentadapter.EnvAnonymous+")")
 	cmd.Flags().StringVar(&f.anonymousMethods, "anonymous-methods",
 		os.Getenv(agentadapter.EnvAnonymousMethods),
@@ -266,15 +234,6 @@ func parseEnvBool(name string, def bool) bool {
 		return true
 	default:
 		return def
-	}
-}
-
-func parseEnvBoolSimple(name string) bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(name))) {
-	case "1", "t", "true", "y", "yes", "on":
-		return true
-	default:
-		return false
 	}
 }
 

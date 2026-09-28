@@ -52,10 +52,11 @@ func startStdioShim(t *testing.T, handler http.Handler, timeout time.Duration) *
 	go func() {
 		defer stdout.Close()
 		h.done <- RunStdioShim(ctx, ShimConfig{
-			RuntimeURL: runtimeURL,
-			Identity:   Identity{HumanID: "human-1", AgentID: "agent-1", SessionID: "session-1"},
-			Transport:  &RuntimeTransport{Base: upstream.Client().Transport, Timeout: timeout},
-			LogWriter:  lockedWriter{mu: h.logsMu, w: h.logs},
+			CertificateIdentity: true,
+			RuntimeURL:          runtimeURL,
+			Identity:            Identity{HumanID: "human-1", AgentID: "agent-1", SessionID: "session-1"},
+			Transport:           &RuntimeTransport{Base: upstream.Client().Transport, Timeout: timeout},
+			LogWriter:           lockedWriter{mu: h.logsMu, w: h.logs},
 		}, StdioOptions{Stdin: stdin, Stdout: stdout})
 	}()
 	t.Cleanup(h.stop)

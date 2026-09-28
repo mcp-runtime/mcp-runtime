@@ -47,15 +47,21 @@ type envLookup func(string) string
 // ProxyConfig configures the local HTTP reverse-proxy adapter that exposes
 // Streamable HTTP MCP to an agent SDK.
 type ProxyConfig struct {
-	RuntimeURL        *url.URL
-	Identity          Identity
-	Transport         *RuntimeTransport
-	HostHeader        string
-	ListenAddr        string
-	ProtocolVersion   string
-	LogLevel          string
-	LogWriter         io.Writer
-	DisableXForwarded bool
+	RuntimeURL *url.URL
+	// Identity is optional local metadata (tools-cache keys). Runtime
+	// governance identity is the TLS client certificate, not headers.
+	Identity  Identity
+	Transport *RuntimeTransport
+	// CertificateIdentity confirms that Transport presents a TLS client
+	// certificate. The CLI sets it only after loading or enrolling a usable
+	// keypair. OAuth-enabled targets additionally require a bearer token.
+	CertificateIdentity bool
+	HostHeader          string
+	ListenAddr          string
+	ProtocolVersion     string
+	LogLevel            string
+	LogWriter           io.Writer
+	DisableXForwarded   bool
 	// MaxInboundBytes caps the size of JSON-RPC request bodies the proxy
 	// buffers when capturing metadata. Zero (or negative) means use
 	// DefaultMaxInboundBytes (16 MiB). Over-cap requests respond with 413.
@@ -64,24 +70,28 @@ type ProxyConfig struct {
 	// Prometheus exporter wired to the OTel MeterProvider that backs
 	// RuntimeTransport.Meter. Nil → /metrics returns 404.
 	MetricsHandler http.Handler
-	// IdentityProvider overrides Identity per-request when set. Used by
-	// callers that rotate identity at runtime (e.g. auto-refreshed
-	// platform-issued adapter sessions). Nil → static Identity is used.
+	// IdentityProvider overrides Identity per-request when set. Used for
+	// local concerns such as tools-cache keys when identity rotates.
 	IdentityProvider IdentityProvider
 }
 
 // ShimConfig configures the stdio adapter that bridges newline-delimited
 // JSON-RPC MCP traffic to the runtime over HTTP.
 type ShimConfig struct {
-	RuntimeURL      *url.URL
-	Identity        Identity
-	Transport       *RuntimeTransport
-	HostHeader      string
-	ProtocolVersion string
-	LogLevel        string
-	LogWriter       io.Writer
+	RuntimeURL *url.URL
+	// Identity is optional local metadata (tools-cache keys). Runtime
+	// governance identity is the TLS client certificate, not headers.
+	Identity  Identity
+	Transport *RuntimeTransport
+	// CertificateIdentity confirms that Transport presents a TLS client
+	// certificate. Required unless Anonymous is true.
+	CertificateIdentity bool
+	HostHeader          string
+	ProtocolVersion     string
+	LogLevel            string
+	LogWriter           io.Writer
 	// Anonymous, when true, relaxes identity validation so the shim can forward
-	// to public/read-only runtime routes without a session or human/agent ID.
+	// to public/read-only runtime routes without a client certificate.
 	// Only methods in AnonymousMethods are forwarded; all others are rejected
 	// with a JSON-RPC error before reaching the runtime.
 	Anonymous bool
@@ -94,7 +104,6 @@ type ShimConfig struct {
 	// tools/list_changed notification or when the TTL expires.
 	ToolsCacheTTL time.Duration
 	// IdentityProvider overrides Identity per-request when set.
-	// See ProxyConfig.IdentityProvider for the contract.
 	IdentityProvider IdentityProvider
 }
 
@@ -151,8 +160,11 @@ func loadProxyConfig(lookup envLookup) (ProxyConfig, error) {
 		}
 		cfg.MaxInboundBytes = n
 	}
-	if err := cfg.Validate(); err != nil {
+	if err := validateRuntimeURL(cfg.RuntimeURL); err != nil {
 		return ProxyConfig{}, err
+	}
+	if strings.TrimSpace(lookup(EnvTLSClientCert)) != "" && strings.TrimSpace(lookup(EnvTLSClientKey)) != "" {
+		cfg.CertificateIdentity = true
 	}
 	return cfg, nil
 }
@@ -187,8 +199,11 @@ func loadShimConfig(lookup envLookup) (ShimConfig, error) {
 		}
 		cfg.ToolsCacheTTL = ttl
 	}
-	if err := cfg.Validate(); err != nil {
+	if err := validateRuntimeURL(cfg.RuntimeURL); err != nil {
 		return ShimConfig{}, err
+	}
+	if !cfg.Anonymous && strings.TrimSpace(lookup(EnvTLSClientCert)) != "" && strings.TrimSpace(lookup(EnvTLSClientKey)) != "" {
+		cfg.CertificateIdentity = true
 	}
 	return cfg, nil
 }
@@ -207,21 +222,37 @@ func parseNonNegativeBytes(s string) (int64, error) {
 	return n, nil
 }
 
-// Validate enforces the runtime identity invariants for the HTTP proxy.
+// Validate requires a runtime URL and a TLS client certificate.
 func (cfg ProxyConfig) Validate() error {
-	return validateRequiredIdentity(cfg.RuntimeURL, cfg.Identity)
+	if err := validateRuntimeURL(cfg.RuntimeURL); err != nil {
+		return err
+	}
+	if !cfg.CertificateIdentity {
+		return fmt.Errorf("TLS client certificate is required (%s and %s)", EnvTLSClientCert, EnvTLSClientKey)
+	}
+	return nil
 }
 
-// Validate enforces the runtime identity invariants for the stdio shim.
-// In anonymous mode only the runtime URL is required.
+// Validate requires a runtime URL. Non-anonymous mode also requires a TLS
+// client certificate; identity headers are not used for governance.
 func (cfg ShimConfig) Validate() error {
+	if err := validateRuntimeURL(cfg.RuntimeURL); err != nil {
+		return err
+	}
 	if cfg.Anonymous {
-		if cfg.RuntimeURL == nil {
-			return fmt.Errorf("missing required environment variable: %s", EnvRuntimeURL)
-		}
 		return nil
 	}
-	return validateRequiredIdentity(cfg.RuntimeURL, cfg.Identity)
+	if !cfg.CertificateIdentity {
+		return fmt.Errorf("TLS client certificate is required (%s and %s)", EnvTLSClientCert, EnvTLSClientKey)
+	}
+	return nil
+}
+
+func validateRuntimeURL(runtimeURL *url.URL) error {
+	if runtimeURL == nil {
+		return fmt.Errorf("missing required environment variable: %s", EnvRuntimeURL)
+	}
+	return nil
 }
 
 // transportOrDefault returns the configured transport, allocating a default
@@ -372,26 +403,6 @@ func readRegularFile(path string) ([]byte, error) {
 	defer file.Close()
 
 	return io.ReadAll(file)
-}
-
-func validateRequiredIdentity(runtimeURL *url.URL, id Identity) error {
-	var missing []string
-	if runtimeURL == nil {
-		missing = append(missing, EnvRuntimeURL)
-	}
-	if strings.TrimSpace(id.HumanID) == "" {
-		missing = append(missing, EnvHumanID)
-	}
-	if strings.TrimSpace(id.AgentID) == "" {
-		missing = append(missing, EnvAgentID)
-	}
-	if strings.TrimSpace(id.SessionID) == "" {
-		missing = append(missing, EnvSessionID)
-	}
-	if len(missing) > 0 {
-		return fmt.Errorf("missing required environment variables: %s", strings.Join(missing, ", "))
-	}
-	return nil
 }
 
 func parseAdapterBool(value string) (bool, error) {

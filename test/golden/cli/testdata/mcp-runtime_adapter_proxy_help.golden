@@ -11,24 +11,25 @@ Usage:
   mcp-runtime adapter proxy [flags]
 
 Flags:
-      --agent string             Agent identifier to associate with the certificate identity (default: $MCP_RUNTIME_ADAPTER_AGENT)
-      --auth-header string       Static OAuth Authorization value when the local MCP client does not send one, e.g. "Bearer <token>" (default: $MCP_RUNTIME_AUTH_HEADER)
-      --auto-refresh             Renew the in-memory adapter certificate a few minutes before expiry (default: $MCP_RUNTIME_ADAPTER_AUTO_REFRESH)
-  -h, --help                     help for proxy
-      --host-header string       Override the Host header sent to the runtime (default: $MCP_RUNTIME_HOST_HEADER)
-      --listen string            Local listen address (default: $MCP_RUNTIME_LISTEN_ADDR or 127.0.0.1:8099)
-      --log-level string         Adapter log level: info logs runtime denials (default: $MCP_RUNTIME_LOG_LEVEL)
-      --max-inbound-bytes int    Maximum inbound JSON-RPC body bytes the proxy buffers before responding with 413 (default: $MCP_RUNTIME_MAX_INBOUND_BYTES or 16777216)
-      --namespace string         Namespace of the target MCPServer; defaults to the principal's primary namespace (default: $MCP_RUNTIME_ADAPTER_NAMESPACE)
-      --no-xforwarded            Do not set X-Forwarded-* headers when forwarding to the runtime
-      --platform-url string      Platform API base URL; overrides the URL stored by mcp-runtime auth login (default: $MCP_PLATFORM_API_URL)
-      --request-timeout string   HTTP request timeout for adapter→runtime calls, e.g. 30s (default: $MCP_RUNTIME_REQUEST_TIMEOUT)
-      --runtime-url string       Platform-issued absolute MCP runtime URL (default: $MCP_RUNTIME_URL)
-      --server string            MCPServer name to enroll a session-bound adapter certificate for (default: $MCP_RUNTIME_ADAPTER_SERVER)
-      --tls-ca-bundle string     Path to PEM CA bundle to verify the runtime's TLS certificate (default: $MCP_RUNTIME_TLS_CA_BUNDLE)
-      --tls-client-cert string   Path to PEM client certificate for mTLS to the runtime (default: $MCP_RUNTIME_TLS_CLIENT_CERT)
-      --tls-client-key string    Path to PEM client key for mTLS to the runtime (default: $MCP_RUNTIME_TLS_CLIENT_KEY)
-      --trust-domain string      Optional platform SPIFFE trust domain override for adapter certificate enrollment; default: $MCP_TRUST_DOMAIN
+      --agent string              Agent identifier to associate with the certificate identity (default: $MCP_RUNTIME_ADAPTER_AGENT)
+      --auth-header string        Static OAuth Authorization value when the local MCP client does not send one, e.g. "Bearer <token>" (default: $MCP_RUNTIME_AUTH_HEADER)
+      --auto-refresh              Renew the in-memory adapter certificate a few minutes before expiry (default: $MCP_RUNTIME_ADAPTER_AUTO_REFRESH)
+  -h, --help                      help for proxy
+      --host-header string        Override the Host header sent to the runtime (default: $MCP_RUNTIME_HOST_HEADER)
+      --listen string             Local listen address (default: $MCP_RUNTIME_LISTEN_ADDR or 127.0.0.1:8099)
+      --log-level string          Adapter log level: info logs runtime denials (default: $MCP_RUNTIME_LOG_LEVEL)
+      --max-inbound-bytes int     Maximum inbound JSON-RPC body bytes the proxy buffers before responding with 413 (default: $MCP_RUNTIME_MAX_INBOUND_BYTES or 16777216)
+      --namespace string          Namespace of the target MCPServer; defaults to the principal's primary namespace (default: $MCP_RUNTIME_ADAPTER_NAMESPACE)
+      --no-xforwarded             Do not set X-Forwarded-* headers when forwarding to the runtime
+      --platform-url string       Platform API base URL; overrides the URL stored by mcp-runtime auth login (default: $MCP_PLATFORM_API_URL)
+      --protocol-version string   MCP protocol version header the stdio adapter sends for legacy (initialize-based) requests; requests that declare a version in params._meta use that version, and the HTTP proxy forwards the client's own header (default: $MCP_RUNTIME_PROTOCOL_VERSION or 2025-06-18)
+      --request-timeout string    HTTP request timeout for adapter→runtime calls, e.g. 30s (default: $MCP_RUNTIME_REQUEST_TIMEOUT)
+      --runtime-url string        Platform-issued absolute MCP runtime URL (default: $MCP_RUNTIME_URL)
+      --server string             MCPServer name to enroll a session-bound adapter certificate for (default: $MCP_RUNTIME_ADAPTER_SERVER)
+      --tls-ca-bundle string      Path to PEM CA bundle to verify the runtime's TLS certificate (default: $MCP_RUNTIME_TLS_CA_BUNDLE)
+      --tls-client-cert string    Path to PEM client certificate for mTLS to the runtime (default: $MCP_RUNTIME_TLS_CLIENT_CERT)
+      --tls-client-key string     Path to PEM client key for mTLS to the runtime (default: $MCP_RUNTIME_TLS_CLIENT_KEY)
+      --trust-domain string       Optional platform SPIFFE trust domain override for adapter certificate enrollment; default: $MCP_TRUST_DOMAIN
 
 Global Flags:
       --debug   Enable debug mode with structured error logging

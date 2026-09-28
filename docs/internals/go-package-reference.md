@@ -2364,15 +2364,21 @@ type IdentityProvider func() Identity
 <a id="agent-adapters-type-proxyconfig-struct"></a>
 ```text
 type ProxyConfig struct {
-	RuntimeURL        *url.URL
-	Identity          Identity
-	Transport         *RuntimeTransport
-	HostHeader        string
-	ListenAddr        string
-	ProtocolVersion   string
-	LogLevel          string
-	LogWriter         io.Writer
-	DisableXForwarded bool
+	RuntimeURL *url.URL
+	// Identity is optional local metadata (tools-cache keys). Runtime
+	// governance identity is the TLS client certificate, not headers.
+	Identity  Identity
+	Transport *RuntimeTransport
+	// CertificateIdentity confirms that Transport presents a TLS client
+	// certificate. The CLI sets it only after loading or enrolling a usable
+	// keypair. OAuth-enabled targets additionally require a bearer token.
+	CertificateIdentity bool
+	HostHeader          string
+	ListenAddr          string
+	ProtocolVersion     string
+	LogLevel            string
+	LogWriter           io.Writer
+	DisableXForwarded   bool
 	// MaxInboundBytes caps the size of JSON-RPC request bodies the proxy
 	// buffers when capturing metadata. Zero (or negative) means use
 	// DefaultMaxInboundBytes (16 MiB). Over-cap requests respond with 413.
@@ -2381,9 +2387,8 @@ type ProxyConfig struct {
 	// Prometheus exporter wired to the OTel MeterProvider that backs
 	// RuntimeTransport.Meter. Nil → /metrics returns 404.
 	MetricsHandler http.Handler
-	// IdentityProvider overrides Identity per-request when set. Used by
-	// callers that rotate identity at runtime (e.g. auto-refreshed
-	// platform-issued adapter sessions). Nil → static Identity is used.
+	// IdentityProvider overrides Identity per-request when set. Used for
+	// local concerns such as tools-cache keys when identity rotates.
 	IdentityProvider IdentityProvider
 }
     ProxyConfig configures the local HTTP reverse-proxy adapter that exposes
@@ -2402,7 +2407,7 @@ func LoadProxyConfigFromEnv() (ProxyConfig, error)
 <a id="agent-adapters-func-cfg-proxyconfig-validate-error"></a>
 ```text
 func (cfg ProxyConfig) Validate() error
-    Validate enforces the runtime identity invariants for the HTTP proxy.
+    Validate requires a runtime URL and a TLS client certificate.
 
 ```
 
@@ -2466,15 +2471,20 @@ func (t *RuntimeTransport) RoundTrip(req *http.Request) (*http.Response, error)
 <a id="agent-adapters-type-shimconfig-struct"></a>
 ```text
 type ShimConfig struct {
-	RuntimeURL      *url.URL
-	Identity        Identity
-	Transport       *RuntimeTransport
-	HostHeader      string
-	ProtocolVersion string
-	LogLevel        string
-	LogWriter       io.Writer
+	RuntimeURL *url.URL
+	// Identity is optional local metadata (tools-cache keys). Runtime
+	// governance identity is the TLS client certificate, not headers.
+	Identity  Identity
+	Transport *RuntimeTransport
+	// CertificateIdentity confirms that Transport presents a TLS client
+	// certificate. Required unless Anonymous is true.
+	CertificateIdentity bool
+	HostHeader          string
+	ProtocolVersion     string
+	LogLevel            string
+	LogWriter           io.Writer
 	// Anonymous, when true, relaxes identity validation so the shim can forward
-	// to public/read-only runtime routes without a session or human/agent ID.
+	// to public/read-only runtime routes without a client certificate.
 	// Only methods in AnonymousMethods are forwarded; all others are rejected
 	// with a JSON-RPC error before reaching the runtime.
 	Anonymous bool
@@ -2487,7 +2497,6 @@ type ShimConfig struct {
 	// tools/list_changed notification or when the TTL expires.
 	ToolsCacheTTL time.Duration
 	// IdentityProvider overrides Identity per-request when set.
-	// See ProxyConfig.IdentityProvider for the contract.
 	IdentityProvider IdentityProvider
 }
     ShimConfig configures the stdio adapter that bridges newline-delimited
@@ -2506,8 +2515,8 @@ func LoadShimConfigFromEnv() (ShimConfig, error)
 <a id="agent-adapters-func-cfg-shimconfig-validate-error"></a>
 ```text
 func (cfg ShimConfig) Validate() error
-    Validate enforces the runtime identity invariants for the stdio shim.
-    In anonymous mode only the runtime URL is required.
+    Validate requires a runtime URL. Non-anonymous mode also requires a TLS
+    client certificate; identity headers are not used for governance.
 
 ```
 

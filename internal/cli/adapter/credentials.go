@@ -15,7 +15,7 @@ import (
 // (spiffe://<trustDomain>/ns/<namespace>/session/<name>), so the gateway maps
 // the verified cert straight to the session binding — no governance headers
 // are involved. It is produced both by `adapter enroll` (written to disk) and
-// by `--auth mtls` (kept in memory and rotated before expiry).
+// by automatic certificate enrollment (kept in memory and rotated before expiry).
 type issuedCredential struct {
 	CertPEM   []byte
 	KeyPEM    []byte

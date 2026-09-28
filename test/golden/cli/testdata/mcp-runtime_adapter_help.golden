@@ -1,9 +1,14 @@
-Adapter commands forward Streamable HTTP MCP traffic to a configured platform-issued
+Adapter commands forward agent MCP traffic to a configured platform-issued
 runtime route. The adapter always presents a session-bound client certificate.
 When the target server enables OAuth, it also forwards the bearer token and the
 gateway binds the certificate identity to the OAuth subject.
 
-  mcp-runtime adapter proxy   Local Streamable HTTP listener.
+Two transports are available:
+
+  mcp-runtime adapter proxy   Local Streamable HTTP listener (for SDKs that
+                              speak MCP over HTTP).
+  mcp-runtime adapter stdio   Stdio bridge for IDE-style clients that launch an
+                              MCP server as a subprocess.
   mcp-runtime adapter enroll  Enroll and save a client certificate.
 
 The adapter enrolls a session and certificate through the platform API when
@@ -16,6 +21,7 @@ Usage:
 Available Commands:
   enroll      Issue platform-managed mTLS files for an external adapter
   proxy       Run a local Streamable HTTP MCP proxy that forwards to the runtime
+  stdio       Bridge stdio MCP traffic to the configured runtime route
 
 Flags:
   -h, --help   help for adapter

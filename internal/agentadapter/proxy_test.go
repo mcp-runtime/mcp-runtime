@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-func TestHTTPProxyInjectsGovernanceHeadersAndPreservesMCPHeaders(t *testing.T) {
+func TestHTTPProxyForwardsMCPHeadersWithoutGovernanceIdentityHeaders(t *testing.T) {
 	t.Parallel()
 
 	var upstreamHost string
@@ -37,7 +37,8 @@ func TestHTTPProxyInjectsGovernanceHeadersAndPreservesMCPHeaders(t *testing.T) {
 		t.Fatalf("url.Parse() error = %v", err)
 	}
 	handler, err := NewHTTPProxyHandler(ProxyConfig{
-		RuntimeURL: target,
+		CertificateIdentity: true,
+		RuntimeURL:          target,
 		Identity: Identity{
 			HumanID:   "support-lead",
 			AgentID:   "ticket-triage-agent",
@@ -496,7 +497,8 @@ func TestHTTPProxyMetricsEndpointReturns404WhenUnconfigured(t *testing.T) {
 
 func testConfig(runtimeURL *url.URL) ProxyConfig {
 	return ProxyConfig{
-		RuntimeURL: runtimeURL,
+		CertificateIdentity: true,
+		RuntimeURL:          runtimeURL,
 		Identity: Identity{
 			HumanID:   "human-1",
 			AgentID:   "agent-1",

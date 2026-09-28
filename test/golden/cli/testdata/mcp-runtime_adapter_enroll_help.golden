@@ -1,0 +1,15 @@
+Issue platform-managed mTLS files for an external adapter
+
+Usage:
+  mcp-runtime adapter enroll [flags]
+
+Flags:
+      --agent string          Agent identifier to associate with the certificate identity (default: $MCP_RUNTIME_ADAPTER_AGENT)
+  -h, --help                  help for enroll
+      --namespace string      Namespace of the target MCPServer; defaults to the principal's primary namespace (default: $MCP_RUNTIME_ADAPTER_NAMESPACE)
+      --platform-url string   Platform API base URL; overrides the URL stored by mcp-runtime auth login (default: $MCP_PLATFORM_API_URL)
+      --server string         MCPServer name to enroll a session-bound adapter certificate for (default: $MCP_RUNTIME_ADAPTER_SERVER)
+      --trust-domain string   Optional platform SPIFFE trust domain override; defaults to the domain returned by the platform
+
+Global Flags:
+      --debug   Enable debug mode with structured error logging

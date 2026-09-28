@@ -5,6 +5,7 @@ import (
 	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,17 +13,36 @@ import (
 	"time"
 )
 
-func TestLoadProxyConfigRequiresRuntimeIdentityAndSession(t *testing.T) {
+func TestLoadProxyConfigRequiresRuntimeURL(t *testing.T) {
 	t.Parallel()
 
 	_, err := loadProxyConfig(func(string) string { return "" })
 	if err == nil {
 		t.Fatal("loadProxyConfig() error = nil, want missing environment error")
 	}
-	for _, name := range []string{EnvRuntimeURL, EnvHumanID, EnvAgentID, EnvSessionID} {
-		if !strings.Contains(err.Error(), name) {
-			t.Fatalf("loadProxyConfig() error = %q, missing %s", err, name)
-		}
+	if !strings.Contains(err.Error(), EnvRuntimeURL) {
+		t.Fatalf("loadProxyConfig() error = %q, missing %s", err, EnvRuntimeURL)
+	}
+}
+
+func TestProxyConfigRequiresClientCertificate(t *testing.T) {
+	t.Parallel()
+
+	cfg := ProxyConfig{}
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), EnvRuntimeURL) {
+		t.Fatalf("Validate() error = %v, want missing runtime URL", err)
+	}
+	runtimeURL, err := url.Parse("https://runtime.example/mcp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.RuntimeURL = runtimeURL
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "TLS client certificate") {
+		t.Fatalf("Validate() error = %v, want missing certificate", err)
+	}
+	cfg.CertificateIdentity = true
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v, want certificate config accepted", err)
 	}
 }
 

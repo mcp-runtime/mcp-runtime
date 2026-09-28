@@ -3,25 +3,23 @@ configured platform runtime route over Streamable HTTP, and write the JSON-RPC
 responses back to stdout. Designed for IDE-style MCP clients (e.g. Cursor,
 Claude Desktop) that launch an MCP server as a subprocess.
 
-Configure identity via flags or the matching MCP_RUNTIME_* environment
-variables. Flags win when both are set. With --server, the shim fetches an
-issued session from the platform API before reading stdin; identity flags
-override the result.
+Use certificate files or provide --server and --agent to enroll a certificate at startup.
+When the target server enables OAuth, the local MCP client must send Authorization
+or --auth-header must provide it. The gateway then binds the verified certificate
+identity to the OAuth subject. Anonymous mode skips the client certificate for
+public/read-only discovery routes.
 
 Usage:
   mcp-runtime adapter stdio [flags]
 
 Flags:
-      --agent string               Agent identifier to associate with the issued session (default: $MCP_RUNTIME_ADAPTER_AGENT)
-      --agent-id string            Issued agent identity (default: $MCP_RUNTIME_AGENT_ID)
-      --anonymous                  Forward to the runtime without a session or issued identity (public/read-only routes); only methods in --anonymous-methods are forwarded (default: $MCP_RUNTIME_ANONYMOUS)
+      --agent string               Agent identifier to associate with the certificate identity (default: $MCP_RUNTIME_ADAPTER_AGENT)
+      --anonymous                  Forward to the runtime without a client certificate (public/read-only routes); only methods in --anonymous-methods are forwarded (default: $MCP_RUNTIME_ANONYMOUS)
       --anonymous-methods string   Comma-separated list of MCP methods allowed in anonymous mode (default: $MCP_RUNTIME_ANONYMOUS_METHODS or initialize,notifications/initialized,server/discover,ping,tools/list,resources/list,prompts/list)
-      --auth string                Adapter auth mode: header (forward issued governance headers) or mtls (auto-enroll a session-bound client certificate and let the gateway derive identity from it); default: $MCP_RUNTIME_AUTH_MODE or header (default "header")
-      --auth-header string         Static Authorization header value for runtime requests, e.g. "Bearer <token>" (default: $MCP_RUNTIME_AUTH_HEADER)
-      --auto-refresh               Refresh the issued adapter session a few minutes before expiry (default: $MCP_RUNTIME_ADAPTER_AUTO_REFRESH)
+      --auth-header string         Static OAuth Authorization value when the local MCP client does not send one, e.g. "Bearer <token>" (default: $MCP_RUNTIME_AUTH_HEADER)
+      --auto-refresh               Renew the in-memory adapter certificate a few minutes before expiry (default: $MCP_RUNTIME_ADAPTER_AUTO_REFRESH)
   -h, --help                       help for stdio
       --host-header string         Override the Host header sent to the runtime (default: $MCP_RUNTIME_HOST_HEADER)
-      --human-id string            Issued human identity (default: $MCP_RUNTIME_HUMAN_ID)
       --log-level string           Adapter log level: info logs runtime denials (default: $MCP_RUNTIME_LOG_LEVEL)
       --namespace string           Namespace of the target MCPServer; defaults to the principal's primary namespace (default: $MCP_RUNTIME_ADAPTER_NAMESPACE)
       --no-xforwarded              Do not set X-Forwarded-* headers when forwarding to the runtime
@@ -29,9 +27,7 @@ Flags:
       --protocol-version string    MCP protocol version header the stdio adapter sends for legacy (initialize-based) requests; requests that declare a version in params._meta use that version, and the HTTP proxy forwards the client's own header (default: $MCP_RUNTIME_PROTOCOL_VERSION or 2025-06-18)
       --request-timeout string     HTTP request timeout for adapter→runtime calls, e.g. 30s (default: $MCP_RUNTIME_REQUEST_TIMEOUT)
       --runtime-url string         Platform-issued absolute MCP runtime URL (default: $MCP_RUNTIME_URL)
-      --server string              MCPServer name to fetch an issued adapter session for (enables platform-issued sessions; default: $MCP_RUNTIME_ADAPTER_SERVER)
-      --session-id string          Issued agent session identity (default: $MCP_RUNTIME_SESSION_ID)
-      --team-id string             Issued team identity for team-scoped grants (default: $MCP_RUNTIME_TEAM_ID)
+      --server string              MCPServer name to enroll a session-bound adapter certificate for (default: $MCP_RUNTIME_ADAPTER_SERVER)
       --tls-ca-bundle string       Path to PEM CA bundle to verify the runtime's TLS certificate (default: $MCP_RUNTIME_TLS_CA_BUNDLE)
       --tls-client-cert string     Path to PEM client certificate for mTLS to the runtime (default: $MCP_RUNTIME_TLS_CLIENT_CERT)
       --tls-client-key string      Path to PEM client key for mTLS to the runtime (default: $MCP_RUNTIME_TLS_CLIENT_KEY)

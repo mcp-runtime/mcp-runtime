@@ -126,10 +126,3 @@ func ensureScopedCertDir(configDir string, scopeHash [sha256.Size]byte) (string,
 	}
 	return dir, nil
 }
-
-func envOrDefault(name, fallback string) string {
-	if value := strings.TrimSpace(os.Getenv(name)); value != "" {
-		return value
-	}
-	return fallback
-}
