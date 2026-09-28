@@ -1025,31 +1025,41 @@ start_mcp_ingress_header_proxies() {
     "${MCP_CURL_SESSION_PORT}"
     "${MCP_CURL_BAD_SESSION_PORT}"
   )
-  local port
+  local port upstream_origin="http://127.0.0.1:${TRAEFIK_PORT}"
+  local -a insecure_args=()
+  if e2e_adapter_certificates_enabled; then
+    ensure_traefik_tls_port_forward
+    upstream_origin="https://127.0.0.1:${TRAEFIK_TLS_PORT}"
+    insecure_args=(--insecure-upstream)
+  fi
   for port in "${proxy_ports[@]}"; do
     stop_listener_on_port "${port}"
   done
 
-  echo "[proxy] starting local ingress proxies for curl MCP checks"
+  echo "[proxy] starting local ingress proxies for curl MCP checks (${upstream_origin})"
   start_header_proxy_bg "${MCP_CURL_ANON_PORT}" \
-    "http://127.0.0.1:${TRAEFIK_PORT}" \
+    "${upstream_origin}" \
     "${WORKDIR}/mcp-curl-anon-proxy.log" \
     --host-header "${SERVER_HOST}" \
+    ${insecure_args[@]+"${insecure_args[@]}"} \
     --header "Mcp-Protocol-Version=${MCP_PROTOCOL_VERSION}"
   start_header_proxy_bg "${MCP_CURL_IDENTITY_PORT}" \
-    "http://127.0.0.1:${TRAEFIK_PORT}" \
+    "${upstream_origin}" \
     "${WORKDIR}/mcp-curl-identity-proxy.log" \
     --host-header "${SERVER_HOST}" \
+    ${insecure_args[@]+"${insecure_args[@]}"} \
     --header "Mcp-Protocol-Version=${MCP_PROTOCOL_VERSION}"
   start_header_proxy_bg "${MCP_CURL_SESSION_PORT}" \
-    "http://127.0.0.1:${TRAEFIK_PORT}" \
+    "${upstream_origin}" \
     "${WORKDIR}/mcp-curl-session-proxy.log" \
     --host-header "${SERVER_HOST}" \
+    ${insecure_args[@]+"${insecure_args[@]}"} \
     --header "Mcp-Protocol-Version=${MCP_PROTOCOL_VERSION}"
   start_header_proxy_bg "${MCP_CURL_BAD_SESSION_PORT}" \
-    "http://127.0.0.1:${TRAEFIK_PORT}" \
+    "${upstream_origin}" \
     "${WORKDIR}/mcp-curl-bad-session-proxy.log" \
     --host-header "${SERVER_HOST}" \
+    ${insecure_args[@]+"${insecure_args[@]}"} \
     --header "Mcp-Protocol-Version=${MCP_PROTOCOL_VERSION}"
 }
 
@@ -1085,9 +1095,21 @@ source "${PROJECT_ROOT}/test/e2e/lib/adapter-certificates.sh"
 # shellcheck source=scenarios/platform-update.sh
 source "${PROJECT_ROOT}/test/e2e/scenarios/platform-update.sh"
 
+# Adapter-certificate IngressRoutes terminate on Traefik websecure only, so
+# direct MCP probes must use the TLS port-forward rather than plain :18080.
+e2e_adapter_certificates_enabled() {
+  kubectl -n mcp-runtime get deployment mcp-runtime-operator-controller-manager \
+    -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="MCP_ADAPTER_CERTIFICATES")].value}' 2>/dev/null | grep -qx true
+}
+
 refresh_mcp_proxy_urls() {
   MCP_INGRESS_PATH="/${SERVER_NAME}/mcp"
-  MCP_DIRECT_URL="http://127.0.0.1:${TRAEFIK_PORT}${MCP_INGRESS_PATH}"
+  if e2e_adapter_certificates_enabled; then
+    ensure_traefik_tls_port_forward
+    MCP_DIRECT_URL="https://127.0.0.1:${TRAEFIK_TLS_PORT}${MCP_INGRESS_PATH}"
+  else
+    MCP_DIRECT_URL="http://127.0.0.1:${TRAEFIK_PORT}${MCP_INGRESS_PATH}"
+  fi
   MCP_ANON_URL="http://127.0.0.1:${MCP_CURL_ANON_PORT}${MCP_INGRESS_PATH}"
   MCP_IDENTITY_URL="http://127.0.0.1:${MCP_CURL_IDENTITY_PORT}${MCP_INGRESS_PATH}"
   MCP_SESSION_URL="http://127.0.0.1:${MCP_CURL_SESSION_PORT}${MCP_INGRESS_PATH}"
@@ -2208,6 +2230,7 @@ wait_for_http_result() {
 import json
 import http.client
 import os
+import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -2240,8 +2263,10 @@ elif body_mode == "chunked-text":
     chunks = [chunk_body[i:i + chunk_size] for i in range(0, len(chunk_body), chunk_size)]
     if not chunks:
         chunks = [b""]
-    connection_class = http.client.HTTPSConnection if scheme == "https" else http.client.HTTPConnection
-    conn = connection_class(host, port, timeout=10)
+    if scheme == "https":
+        conn = http.client.HTTPSConnection(host, port, timeout=10, context=ssl._create_unverified_context())
+    else:
+        conn = http.client.HTTPConnection(host, port, timeout=10)
     req_headers = dict(headers)
     req_headers["Transfer-Encoding"] = "chunked"
     conn.request(method, path, body=chunks, headers=req_headers, encode_chunked=True)
@@ -2267,8 +2292,11 @@ else:
     raise SystemExit(f"unknown body_mode: {body_mode!r}")
 
 req = urllib.request.Request(url, data=data, headers=headers, method=method)
+ssl_context = None
+if urllib.parse.urlsplit(url).scheme == "https":
+    ssl_context = ssl._create_unverified_context()
 try:
-    resp = urllib.request.urlopen(req, timeout=10)
+    resp = urllib.request.urlopen(req, timeout=10, context=ssl_context)
     status = resp.status
     response_headers = dict(resp.headers.items())
     body = resp.read().decode()
@@ -3943,7 +3971,9 @@ servers:
       - name: slugify
         requiredTrust: low
         sideEffect: read
-    auth: {}
+    # Omit auth: OAuth is off. Session-bound SPIFFE client certificates
+    # (adapter-certificates) supply governance identity. An empty auth: {}
+    # would enable OAuth with a derived issuer and break smoke-auth edge cases.
     policy:
       mode: allow-list
       defaultDecision: deny
