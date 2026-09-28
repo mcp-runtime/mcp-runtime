@@ -42,7 +42,13 @@ func BenchmarkReconcile(b *testing.B) {
 	}
 
 	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
-	reconciler := &operator.MCPServerReconciler{Client: client, Scheme: scheme}
+	// Gateway defaults on when Spec.Gateway is omitted; the reconciler needs a
+	// proxy image the same way production sets MCP_GATEWAY_PROXY_IMAGE.
+	reconciler := &operator.MCPServerReconciler{
+		Client:            client,
+		Scheme:            scheme,
+		GatewayProxyImage: "example.com/mcp-gateway:bench",
+	}
 	ctx := log.IntoContext(context.Background(), logr.Discard())
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "bench-server", Namespace: "default"}}
 
