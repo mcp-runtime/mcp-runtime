@@ -97,6 +97,56 @@ func TestAuthLoginSavesAndVerifies(t *testing.T) {
 	}
 }
 
+func TestAuthLoginPromptsForPasswordWhenEmailIsProvided(t *testing.T) {
+	d := t.TempDir()
+	t.Setenv("MCP_RUNTIME_CONFIG_DIR", d)
+
+	previousPrompt := passwordPrompt
+	passwordPrompt = func(stderr io.Writer) (string, error) {
+		io.WriteString(stderr, "Enter platform account password: ")
+		return "private-test-password", nil
+	}
+	defer func() { passwordPrompt = previousPrompt }()
+
+	previousHTTPHook := httpDoHook
+	httpDoHook = func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path != "/api/v1/auth/login" {
+			t.Errorf("path = %q, want password login", r.URL.Path)
+		}
+		var payload map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload["email"] != "publisher@example.test" || payload["password"] != "private-test-password" {
+			t.Errorf("login payload had unexpected credentials")
+		}
+		body := `{"access_token":"saved-token","user":{"role":"user"}}`
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBufferString(body))}, nil
+	}
+	defer func() { httpDoHook = previousHTTPHook }()
+
+	cmd := New(core.NewRuntime(zap.NewNop()))
+	var stderr bytes.Buffer
+	cmd.SetErr(&stderr)
+	cmd.SetArgs([]string{"login", "--api-url", "https://platform.example.com", "--email", "publisher@example.test"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !bytes.Contains(stderr.Bytes(), []byte("Enter platform account password:")) {
+		t.Fatalf("stderr missing password prompt: %q", stderr.String())
+	}
+	if bytes.Contains(stderr.Bytes(), []byte("private-test-password")) {
+		t.Fatal("password was echoed to stderr")
+	}
+	creds, err := authfile.Load(filepath.Join(d, "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if creds.Token != "saved-token" {
+		t.Fatalf("saved token = %q, want saved-token", creds.Token)
+	}
+}
+
 func TestAuthLoginNormalizesTrailingAPIPath(t *testing.T) {
 	d := t.TempDir()
 	t.Setenv("MCP_RUNTIME_CONFIG_DIR", d)
