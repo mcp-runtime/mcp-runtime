@@ -164,6 +164,20 @@ func TestAgentDirectoryTeamAuthorization(t *testing.T) {
 	}
 }
 
+func TestTeamListIncludesMembershipRoleForAgentControls(t *testing.T) {
+	server := &RuntimeServer{identity: &agentIdentityStub{}}
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/runtime/teams", nil)
+	request = request.WithContext(withPrincipal(request.Context(), principal{
+		Role: roleUser, Subject: "member-id",
+		Teams: []principalTeam{{ID: "team-id", Slug: "core", Namespace: "mcp-team-core", Role: teamRoleOwner}},
+	}))
+	recorder := httptest.NewRecorder()
+	server.HandleRuntimeTeams(recorder, request)
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"role":"owner"`) {
+		t.Fatalf("team list status=%d body=%s, want owner role", recorder.Code, recorder.Body.String())
+	}
+}
+
 func TestAgentDirectoryTeamMemberCanList(t *testing.T) {
 	listKinds := map[schema.GroupVersionResource]string{
 		{Group: sentinelaccess.APIGroup, Version: sentinelaccess.APIVersion, Resource: sentinelaccess.AccessGrantResource}:   "MCPAccessGrantList",
