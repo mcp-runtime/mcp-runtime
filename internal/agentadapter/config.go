@@ -336,7 +336,7 @@ func BuildTLSConfig(certFile, keyFile, caFile string) (*tls.Config, error) {
 // BuildTLSConfigWithOptions is BuildTLSConfig with an explicit insecure-skip
 // toggle for local Kind / port-forward clients.
 func BuildTLSConfigWithOptions(certFile, keyFile, caFile string, insecureSkipVerify bool) (*tls.Config, error) {
-	cfg := &tls.Config{InsecureSkipVerify: insecureSkipVerify} //nolint:gosec // opt-in for local Kind only
+	cfg := &tls.Config{InsecureSkipVerify: insecureSkipVerify} // #nosec G402 -- adapter CLI limits this opt-in to loopback runtimes
 	if certFile != "" || keyFile != "" {
 		if certFile == "" || keyFile == "" {
 			return nil, fmt.Errorf("%s and %s must both be set for mTLS", EnvTLSClientCert, EnvTLSClientKey)

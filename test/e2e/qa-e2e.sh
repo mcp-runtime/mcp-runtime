@@ -2978,6 +2978,10 @@ wait_for_deployment_exists() {
   done
   echo "timed out waiting for deployment ${name} in namespace ${namespace}" >&2
   kubectl get deployment -n "${namespace}" || true
+  kubectl get mcpserver "${name}" -n "${namespace}" -o yaml || true
+  kubectl describe mcpserver "${name}" -n "${namespace}" || true
+  kubectl get events -n "${namespace}" --field-selector "involvedObject.name=${name}" --sort-by=.lastTimestamp || true
+  kubectl logs -n mcp-runtime deploy/mcp-runtime-operator-controller-manager --all-containers=true --tail=120 || true
   return 1
 }
 
@@ -4282,6 +4286,10 @@ servers:
         sideEffect: read
     auth:
       mode: oauth
+      # Test-only issuer metadata: this server only exercises fail-closed
+      # behavior for unauthenticated/spoofed headers; no OAuth login is used.
+      issuerURL: https://issuer.invalid/mcp-auth
+      audience: "http://${SERVER_HOST}:${TRAEFIK_PORT}/${SERVER_NAME}/mcp"
     policy:
       mode: allow-list
       defaultDecision: deny
@@ -7050,8 +7058,6 @@ PY
     parallel_start 2 "delete ${MT_TENANT_B}" delete_mcp_server_and_wait "${MT_TENANT_B}" "${MT_NS}" 60s
     parallel_wait_all
   fi
-fi
-
 fi
 
 fi

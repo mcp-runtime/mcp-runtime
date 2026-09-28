@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"bytes"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -137,6 +138,42 @@ func TestIdentityFlagsToConfigRejectsBadTimeout(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), "request-timeout") || !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("toProxyConfig() error = %q, want request-timeout/%s", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestIdentityFlagsTLSInsecureRequiresLoopbackRuntime(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		runtimeURL string
+		wantErr    bool
+	}{
+		{name: "localhost", runtimeURL: "https://localhost:18080/mcp"},
+		{name: "ipv4 loopback", runtimeURL: "https://127.0.0.1:18080/mcp"},
+		{name: "ipv6 loopback", runtimeURL: "https://[::1]:18080/mcp"},
+		{name: "remote host", runtimeURL: "https://platform.mcpruntime.org/mcp", wantErr: true},
+		{name: "missing URL", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			flags := identityFlags{runtimeURL: tt.runtimeURL, tlsInsecure: true}
+			cfg, err := flags.toProxyConfig("")
+			if tt.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "restricted to loopback") {
+					t.Fatalf("toProxyConfig() error = %v, want loopback restriction", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("toProxyConfig() error = %v", err)
+			}
+			transport, ok := cfg.Transport.Base.(*http.Transport)
+			if !ok || transport.TLSClientConfig == nil || !transport.TLSClientConfig.InsecureSkipVerify {
+				t.Fatalf("Transport TLS config = %#v, want loopback TLS verification opt-out", cfg.Transport)
 			}
 		})
 	}
