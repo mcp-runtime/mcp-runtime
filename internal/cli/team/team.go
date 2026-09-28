@@ -46,7 +46,7 @@ func NewWithManager(mgr *Manager) *cobra.Command {
 	}
 	userCreateCmd := &cobra.Command{
 		Use:   "create [team-slug]",
-		Short: "Create or update a password-login user and add them to a team",
+		Short: "Create a password-login user and add them to a team",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			email, err := core.ResolveEmailAlias(userEmail, userUsername)
@@ -61,6 +61,17 @@ func NewWithManager(mgr *Manager) *cobra.Command {
 	userCreateCmd.Flags().StringVar(&userPassword, "password", "", "Platform account password (prefer a private shell or environment-managed invocation)")
 	userCreateCmd.Flags().StringVar(&userRole, "role", "member", "Team role for the user: member or owner")
 
+	var existingRole string
+	userAddCmd := &cobra.Command{
+		Use:   "add [team-slug] [user-id]",
+		Short: "Add an existing platform user to a team or update their team role",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return mgr.AddTeamUser(args[0], args[1], existingRole)
+		},
+	}
+	userAddCmd.Flags().StringVar(&existingRole, "role", "member", "Team role for the user: member or owner")
+
 	userListCmd := &cobra.Command{
 		Use:   "list [team-slug]",
 		Short: "List users in a team",
@@ -69,7 +80,7 @@ func NewWithManager(mgr *Manager) *cobra.Command {
 			return mgr.ListTeamUsers(args[0])
 		},
 	}
-	userCmd.AddCommand(userCreateCmd, userListCmd)
+	userCmd.AddCommand(userCreateCmd, userAddCmd, userListCmd)
 
 	initCmd := &cobra.Command{
 		Use:   "init [slug]",
