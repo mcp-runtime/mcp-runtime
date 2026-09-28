@@ -8,9 +8,9 @@
 //
 //	Stage 1 – InspectFilter:   bounded body capture; RPC method and tool name extraction
 //	Stage 2 – PolicyFilter:    atomic policy snapshot acquisition; OAuth metadata early-exit
-//	Stage 3 – AuthFilter:      authentication and identity extraction (header or OAuth JWT)
+//	Stage 3 – AuthFilter:      optional OAuth and adapter-certificate authentication
 //	Stage 4 – AuthzFilter:     authorization and session/grant evaluation
-//	Stage 5 – UpstreamFilter:  identity header rewrite; path rewrite; upstream proxy
+//	Stage 5 – UpstreamFilter:  credential cleanup; path rewrite; upstream proxy
 //	Stage 6 – (orchestrator):  audit/analytics finalization
 //
 // Ordering guarantees:

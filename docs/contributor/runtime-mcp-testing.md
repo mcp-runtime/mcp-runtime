@@ -58,10 +58,8 @@ servers:
         requiredTrust: low
         sideEffect: read
     auth:
-      mode: header
-      humanIDHeader: X-MCP-Human-ID
-      agentIDHeader: X-MCP-Agent-ID
-      sessionIDHeader: X-MCP-Agent-Session
+      issuerURL: http://localhost:18080/oauth
+      audience: http://localhost:18080/demo/mcp
     policy:
       mode: allow-list
       defaultDecision: deny
@@ -239,8 +237,8 @@ Cross-team delegation is modeled as an access resource in the server owner's
 namespace with an explicit foreign `subject.teamID`. For example, Tenant A can
 create a grant and session in `mcp-team-tenant-a` that point at
 `tenant-a-mcp`, while setting `subject.teamID` to Tenant B's team ID. The
-request must then carry Tenant B's `X-MCP-Team-ID` plus the matching human,
-agent, and session headers. Reusing the same session with Tenant A's team ID
+request must then carry an OAuth token containing Tenant B's team, human,
+agent, and session claims. Reusing the same session with Tenant A's team claim
 should fail with `session_not_found` or `no_matching_grant`.
 
 Inventory command:

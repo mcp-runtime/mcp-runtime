@@ -135,7 +135,7 @@ preparation.
 <a class="docs-card" href="agent-adapters/">
   <span class="docs-card-kicker">Connect</span>
   <strong>Agent adapters</strong>
-  <span>HTTP and stdio adapters that inject issued identity and session headers into agent requests.</span>
+  <span>A Streamable HTTP adapter that forwards OAuth and adds session-bound certificate identity.</span>
 </a>
 
 <a class="docs-card" href="multi-team/">

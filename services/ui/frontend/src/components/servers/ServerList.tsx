@@ -7,7 +7,7 @@ import { Icon } from "../../ui/Icon";
 import { EmptyState } from "../../ui/States";
 import { formatAbsolute, formatAge } from "../../lib/format";
 import {
-  authModeInfo,
+  serverAuthInfo,
   isServerReady,
   serverKey,
   serverPromptDetails,
@@ -117,7 +117,7 @@ export function ServerList({
           const prompts = serverPromptDetails(server);
           const resources = serverResourceDetails(server);
           const tasks = serverTaskDetails(server);
-          const auth = authModeInfo(server.authMode);
+          const auth = serverAuthInfo();
           const hasConnectConfig = Boolean(
             server.access_json && Object.keys(server.access_json).length
           );

@@ -84,7 +84,7 @@ flowchart LR
 | Configure ingress + registry | `cluster config --ingress traefik`, `registry provision` |
 | Describe servers | `server init`, hand-written `MCPServer` YAML, or metadata in `.mcp/` |
 | Publish + deploy | `auth login`, `server build image`, `server push`, `server deploy`, `server generate` for GitOps YAML |
-| Grant access | `auth login`, `access grant init`, `access grant apply`; sessions via `adapter stdio|proxy --server … --agent …` or admin `access session init/apply` |
+| Grant access | `auth login`, `access grant init`, `access grant apply`; sessions via `adapter proxy --server … --agent …` or admin `access session init/apply` |
 | Observe | `status`, platform UI/API; admin: `sentinel status`, `sentinel port-forward ui` |
 
 ## Traffic and enforcement model
@@ -96,17 +96,6 @@ flowchart LR
 | **Trust evaluation** | At tool-call time, effective trust is `min(grant.maxTrust, session.consentedTrust)` and must meet the required trust, which is the higher of the tool's `requiredTrust` and the matching tool rule's `requiredTrust`. |
 | **Side-effect evaluation** | Each listed tool must declare `sideEffect: read`, `write`, or `destructive`. A grant authorizes only tools whose side effect is in `allowedSideEffects`. Omitted or empty `allowedSideEffects` allows no side-effect classes. A tool the server never declared is denied, because it has no side effect to authorize. |
 | **Observe mode** | `policy.mode: observe` allows the call before identity, session, grant, side-effect, and trust checks run. Requests are still proxied and audited, but nothing is enforced. |
-
-### Gateway headers
-
-These header names are defaults; override via `spec.auth.{humanIDHeader,agentIDHeader,teamIDHeader,sessionIDHeader}`.
-
-```text
-X-MCP-Human-ID:    user-123
-X-MCP-Agent-ID:    ops-agent
-X-MCP-Team-ID:     7d0a0b8f-7c25-4761-a632-3cf0108e31d6
-X-MCP-Agent-Session: sess-8f1b9d
-```
 
 ### Gateway policy snapshots
 
@@ -124,7 +113,7 @@ rendered document carries this metadata, separate from the authorization
 Both sides share `pkg/policy.Validate`: the operator validates a rendered
 document **before** replacing the ConfigMap, and the gateway validates a decoded
 document **before** activating it. Validation fails closed. It rejects unknown
-trust, side-effect, decision, auth-mode, or policy-mode values, duplicate names,
+trust, side-effect, decision, or policy-mode values, duplicate names,
 and OAuth without an issuer.
 
 Activation is **last-known-good**: a malformed, unsupported, or invalid update
@@ -144,29 +133,20 @@ To check the applied policy, use the gateway endpoints:
 
 ### Agent adapters
 
-Agent adapters are helper processes for frameworks and IDEs that cannot
-attach governance headers. `mcp-runtime adapter proxy` accepts local
-Streamable HTTP MCP traffic and `mcp-runtime adapter stdio` accepts stdio MCP
-traffic; both forward to the governed runtime route with the issued
-identity/session headers.
+The agent adapter is a helper process for frameworks and IDEs. `mcp-runtime
+adapter proxy` accepts local Streamable HTTP MCP traffic and authenticates to
+the governed runtime route with OAuth plus a session-bound client certificate.
+The gateway validates the bearer token, derives the enrolled session identity
+from the certificate, and requires the human identities to match.
 
-Use **platform-issued sessions**. With `--server <MCPServer name> --agent <id>`,
-the adapter calls `POST /api/v1/runtime/adapter/sessions` at startup. The platform derives `humanID` and
-`teamID` from the logged-in principal, picks a matching enabled
-`MCPAccessGrant` (highest `MaxTrust`, oldest creation as the tiebreak), and
-writes (or reuses) an `MCPAgentSession` with a deterministic name:
-`adapter-<sha256-prefix(humanID,agentID,teamID,serverName)>`. Adding
-`--auto-refresh` rotates the issued identity ~5 min before expiry without
-restarting the process. Explicit `--human-id` / `--agent-id` / `--session-id`
-flags take precedence over the issued values and survive every refresh.
-
-In closed environments without the platform API, set explicit `MCP_RUNTIME_*`
-env vars. Anonymous mode (`--anonymous` on stdio)
-forwards to public/read-only routes with no identity headers and a method
-allowlist.
-
-The adapters only present headers. The gateway enforces policy, including
-`MCPAccessGrant` and `MCPAgentSession` checks.
+With `--server <MCPServer name> --agent <id>`, the adapter creates or reuses an
+`MCPAgentSession` through `POST /api/v1/runtime/adapter/sessions`, then submits
+a CSR for a certificate whose SPIFFE URI identifies that session. The
+platform issues the session only when a matching enabled `MCPAccessGrant`
+allows it. `--auto-refresh` enrolls a replacement certificate before expiry
+and rotates the TLS transport without restarting the process. `adapter enroll`
+saves the PEM files under `MCP_RUNTIME_CONFIG_DIR/certs` (normally
+`~/.mcpruntime/certs`).
 
 Operational notes:
 
@@ -174,10 +154,7 @@ Operational notes:
   `/metrics` endpoint when wired with `ProxyConfig.MetricsHandler`.
 - Idempotent reads (`tools/list`, `resources/list`, `prompts/list`, `ping`)
   retry on `502`/`504`/connection-reset; `tools/call` does not retry.
-- The stdio shim caches `tools/list` for `--tools-cache-ttl`, invalidates on
-  `notifications/tools/list_changed`, and keys the cache off the live
-  governance identity so `--auto-refresh` rotations start fresh.
-- Set `MCP_RUNTIME_LOG_LEVEL=info` on either adapter to print runtime 4xx
+- Set `MCP_RUNTIME_LOG_LEVEL=info` on the adapter to print runtime 4xx
   denials to stderr.
 
 See [Agent Adapters](agent-adapters.md) for build commands and full
@@ -204,9 +181,10 @@ Implemented and stable enough to evaluate:
 - Grants, sessions, gateway policy generation.
 - Trust evaluation and audit-event flow.
 - Multi-ingress class support (Traefik, NGINX, Istio, generic).
-- OAuth: with `spec.auth.mode: oauth` the gateway acts as an MCP protected
+- OAuth: when `spec.auth` is configured, the gateway acts as an MCP protected
   resource. It publishes protected-resource metadata, validates the token
-  issuer and resource audience, and strips the bearer token before forwarding.
+  issuer and resource audience, and forwards the validated bearer to the MCP
+  application server for validation against the same issuer and audience.
   Tokens come either from the opt-in bundled `mcp-auth-server`
   (`setup --with-mcp-auth-server`, authorization code with S256 PKCE, refresh
   rotation, CIMD or DCR client registration) or from an external authorization
@@ -215,9 +193,11 @@ Implemented and stable enough to evaluate:
   decisions stay in the gateway. See
   [MCP authorization](mcp-authorization.md).
 - Adapter certificates: optional session-bound certificates are verified at
-  ingress on OAuth server routes. The gateway derives the adapter session
-  identity from the verified certificate and applies grant/session policy.
-  Clients without a certificate use OAuth. Set
+  ingress on gateway routes. The gateway derives the adapter session identity
+  from the verified certificate and applies grant/session policy. Direct
+  clients use OAuth only when `spec.auth` is present. Adapters always use the
+  certificate and add OAuth for an OAuth-enabled target; the gateway then
+  binds the certificate identity to the OAuth subject. Set
   `MCP_ADAPTER_CERTIFICATES=true` with platform `MCP_MTLS_CLUSTER_ISSUER` and
   `MCP_TRUST_DOMAIN` to enable enrollment.
 

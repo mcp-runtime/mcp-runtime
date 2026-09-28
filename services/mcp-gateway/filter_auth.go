@@ -9,24 +9,20 @@ import (
 	policypkg "mcp-runtime/pkg/policy"
 )
 
-// authFilter is stage 3 of the gateway pipeline. It extracts the caller
-// identity and, when the policy uses OAuth, validates the bearer JWT.
-//
-// For header-mode policies, identity is read directly from the governance
-// headers; no further validation is performed here — authzFilter (stage 4)
-// enforces grant and session policy.
-//
-// For OAuth policies, the JWT is verified against the issuer's JWKS. On any
-// authentication failure, authFilter writes a denial response and returns
-// Reject; it never falls through to stage 4 with an unauthenticated identity.
+// authFilter is stage 3 of the gateway pipeline. When OAuth is configured it
+// authenticates the bearer token. Adapter requests additionally present a
+// verified certificate; on OAuth servers its enrolled session must match the
+// OAuth principal. On any authentication failure, authFilter writes a denial
+// response and returns Reject.
 //
 // authFilter always runs after policyFilter (stage 2) has set Exchange.Policy
 // and always completes before authzFilter (stage 4) reads Exchange.Identity.
 func (s *gatewayServer) authFilter(ex *Exchange) Result {
-	// A presented adapter certificate is a complete adapter authentication
-	// method. Its session-bound identity proceeds to authorization; requests
-	// without a certificate use the ordinary OAuth flow below.
-	if policypkg.PolicyUsesOAuth(ex.Policy) && ex.Policy.Auth != nil && strings.TrimSpace(ex.Policy.Auth.TrustDomain) != "" &&
+	var certificateIdentity *identityContext
+	// A presented adapter certificate proves the enrolled agent session. The
+	// request must also carry OAuth below because the upstream MCP server is
+	// part of the protected resource and validates the bearer token itself.
+	if ex.Policy.Auth != nil && strings.TrimSpace(ex.Policy.Auth.TrustDomain) != "" &&
 		strings.TrimSpace(ex.R.Header.Get(s.verifiedSPIFFEHeaderName())) != "" {
 		verifiedIdentity, reason := s.authenticateAdapterCertificate(ex.R, ex.Policy)
 		if reason != "" {
@@ -38,21 +34,16 @@ func (s *gatewayServer) authFilter(ex *Exchange) Result {
 			s.writeDeniedResponse(ex)
 			return Reject
 		}
-		ex.Identity = verifiedIdentity
-		return Continue
+		certificateIdentity = &verifiedIdentity
 	}
-
-	// Extract identity from governance headers; for OAuth this populates at
-	// least the session header before JWT validation overwrites the rest.
-	ex.Identity = s.extractIdentity(ex.R, ex.Policy)
-
 	if !policypkg.PolicyUsesOAuth(ex.Policy) {
+		if certificateIdentity != nil {
+			ex.Identity = *certificateIdentity
+		}
 		return Continue
 	}
 
 	oauthResult := s.authenticateOAuth(ex.R, ex.Policy)
-	// OAuth result replaces the header-extracted identity; the session header
-	// value from header extraction is merged inside authenticateOAuth.
 	ex.Identity = oauthResult.Identity
 	ex.OAuthToken = oauthResult.Token
 
@@ -65,13 +56,34 @@ func (s *gatewayServer) authFilter(ex *Exchange) Result {
 		s.writeDeniedResponse(ex)
 		return Reject
 	}
-	ex.Identity = oauthResult.Identity
+	if certificateIdentity != nil {
+		if reason := certificateOAuthMismatch(*certificateIdentity, oauthResult.Identity); reason != "" {
+			ex.Decision = policypkg.Deny(
+				http.StatusUnauthorized,
+				reason,
+				policypkg.ChoosePolicyVersion(policypkg.PolicyVersion(ex.Policy), s.defaultPolicyVersion),
+			)
+			s.writeDeniedResponse(ex)
+			return Reject
+		}
+		ex.Identity = *certificateIdentity
+	}
 	return Continue
 }
 
+func certificateOAuthMismatch(certificateIdentity, oauthIdentity identityContext) string {
+	if strings.TrimSpace(oauthIdentity.HumanID) == "" || oauthIdentity.HumanID != certificateIdentity.HumanID {
+		return "certificate_oauth_subject_mismatch"
+	}
+	if oauthIdentity.TeamID != "" && certificateIdentity.TeamID != "" && oauthIdentity.TeamID != certificateIdentity.TeamID {
+		return "certificate_oauth_team_mismatch"
+	}
+	return ""
+}
+
 // authenticateAdapterCertificate validates the verified ingress assertion for
-// a session-bound adapter certificate. Requests with a verified adapter
-// certificate use its session identity; requests without one follow OAuth.
+// a session-bound adapter certificate. On an OAuth-configured server, OAuth
+// validation also runs and binds the token subject to this session identity.
 //
 // TLS is terminated at the ingress (Traefik), which verifies the caller's
 // client certificate against the identity CA and injects the caller's SPIFFE

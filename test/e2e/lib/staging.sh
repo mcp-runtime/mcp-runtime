@@ -1285,9 +1285,8 @@ staging_check_oidc() {
   fi
 }
 
-# Adapter certificates are an opt-in platform feature: since the per-server
-# auth.mode=mtls contract was removed, the operator layers optional client
-# certificates onto OAuth MCPServer routes when MCP_ADAPTER_CERTIFICATES=true,
+# Adapter certificates are an opt-in platform feature. The operator layers
+# optional client certificates onto OAuth MCPServer routes when MCP_ADAPTER_CERTIFICATES=true,
 # signing them with the platform-wide workload issuer (--mtls-cluster-issuer)
 # under the platform-wide MCP_TRUST_DOMAIN. Path-based servers share the public
 # MCP host, so every route uses one Traefik "default" TLSOption that the
@@ -1325,8 +1324,12 @@ staging_operator_env() {
 # CERT_DIR empty sends no client certificate.
 staging_adapter_mcp_post() {
   local cert_dir="$1" url="$2" body="$3" out="$4" args=()
+  local oauth_token="${5:-${STAGING_ADAPTER_OAUTH_TOKEN:-}}"
   if [[ -n "${cert_dir}" ]]; then
     args+=(--cert "${cert_dir}/client.crt" --key "${cert_dir}/client.key")
+  fi
+  if [[ -n "${oauth_token}" && "${oauth_token}" != "-" ]]; then
+    args+=(-H "Authorization: Bearer ${oauth_token}")
   fi
   curl --silent --show-error --max-time 15 ${args[@]+"${args[@]}"} -o "${out}" --write-out '%{http_code}' \
     -H 'content-type: application/json' -H 'accept: application/json, text/event-stream' \
@@ -1380,8 +1383,8 @@ staging_adapter_cleanup() {
   rm -rf "${certs}" "${session_file}"
 }
 
-# Adapter certificate enrollment on an OAuth MCPServer route, then a
-# certificate-authenticated MCP call through the public MCP ingress.
+# Adapter certificate enrollment on an OAuth MCPServer route, then an OAuth
+# and certificate authenticated MCP call through the public MCP ingress.
 staging_check_adapter_enrollment() {
   if [[ "$(staging_stage_status multitenancy)" != "passed" ]]; then
     staging_skip "adapter enrollment uses the managed Globex team and agents created by the multitenancy stage"
@@ -1436,6 +1439,10 @@ staging_check_adapter_enrollment() {
   grant_expires_at="$(python3 -c 'from datetime import datetime,timedelta,timezone; print((datetime.now(timezone.utc)+timedelta(minutes=30)).replace(microsecond=0).isoformat().replace("+00:00","Z"))')"
   local certs="${WORK_DIR}/adapter-certs" session_file="${WORK_DIR}/adapter-session"
   local oauth_issuer="${E2E_MCP_AUTH_ISSUER_URL:-${AUTH_URL}}"
+  STAGING_ADAPTER_OAUTH_TOKEN="${E2E_MCP_OAUTH_ACCESS_TOKEN:-}"
+  if [[ -z "${STAGING_ADAPTER_OAUTH_TOKEN}" ]]; then
+    staging_skip "adapter enrollment requires E2E_MCP_OAUTH_ACCESS_TOKEN for the managed Globex member and target MCP resource"
+  fi
   rm -rf "${certs}" "${session_file}"
   # shellcheck disable=SC2064 # expand the names now; the trap runs after they go out of scope
   trap "staging_adapter_cleanup \$? '${ns}' '${tls_ns}' '${grant}' '${pull}' '${certs}' '${session_file}' '${server}' '${wrong}'" EXIT
@@ -1449,10 +1456,8 @@ staging_check_adapter_enrollment() {
     kubectl apply -f - >/dev/null
 
   # Two OAuth servers with the platform's doctor-smoke image as upstream (it
-  # answers 200 to any request), so a 200 proves the gateway authenticated the
-  # certificate and authorized the tool. The OAuth issuer is only consulted
-  # for bearer tokens, which this stage never sends. The second server proves
-  # a session certificate does not authorize a different server.
+  # answers 200 to any request), so a 200 proves the gateway validated OAuth,
+  # authenticated the certificate, and authorized the tool.
   local name
   for name in "${server}" "${wrong}"; do
     kubectl apply -f - <<EOF
@@ -1482,7 +1487,6 @@ spec:
       requiredTrust: low
       sideEffect: read
   auth:
-    mode: oauth
     issuerURL: ${oauth_issuer}
     audience: ${MCP_URL}/${name}/mcp
   policy:
@@ -1544,7 +1548,7 @@ EOF
     }
     sleep 3
   done
-  staging_log "OAuth routes are on Traefik IngressRoutes with the ${tls_ns}/default client-auth TLSOption"
+  staging_log "Gateway routes are on Traefik IngressRoutes with the ${tls_ns}/default client-auth TLSOption"
 
   # The caller must belong to the managed agent's owning team. The Globex
   # member profile created by the multitenancy stage carries that identity.
@@ -1557,9 +1561,9 @@ EOF
   local out="" attempt
   mkdir -p "${certs}"
   for attempt in 1 2 3 4 5 6; do
-    if out="$(MCP_PLATFORM_API_TOKEN="${human_token}" "${BIN}" adapter enroll --platform-url "${PLATFORM_URL}" \
+    if out="$(MCP_RUNTIME_CONFIG_DIR="${certs}" MCP_PLATFORM_API_TOKEN="${human_token}" "${BIN}" adapter enroll --platform-url "${PLATFORM_URL}" \
       --server "${server}" --namespace "${ns}" --agent "${agent}" --trust-domain "${trust}" \
-      --output-dir "${certs}" 2>&1)"; then
+      2>&1)"; then
       break
     fi
     staging_log "enroll attempt ${attempt} failed: ${out}"
@@ -1571,7 +1575,12 @@ EOF
     return 1
   }
   printf '%s\n' "${out}" | head -1
-  local spiffe session
+  local credential_dir spiffe session
+  credential_dir="$(printf '%s\n' "${out}" | sed -n 's/^saved certificate files in //p' | head -1)"
+  [[ -n "${credential_dir}" ]] || {
+    staging_err "adapter enroll did not report its certificate directory"
+    return 1
+  }
   spiffe="$(printf '%s\n' "${out}" | sed -n 's#.*issued \(spiffe://[^ ]*\).*#\1#p' | head -1)"
   session="${spiffe##*/session/}"
   [[ "${spiffe}" == "spiffe://${trust}/ns/${ns}/session/"* && -n "${session}" && "${session}" != */* ]] || {
@@ -1579,9 +1588,9 @@ EOF
     return 1
   }
   printf '%s' "${session}" >"${session_file}"
-  openssl verify -CAfile "${certs}/ca.crt" "${certs}/client.crt"
-  openssl x509 -in "${certs}/client.crt" -noout -subject -issuer -dates -ext subjectAltName
-  openssl x509 -in "${certs}/client.crt" -noout -ext subjectAltName | grep -qF "URI:${spiffe}" || {
+  openssl verify -CAfile "${credential_dir}/ca.crt" "${credential_dir}/client.crt"
+  openssl x509 -in "${credential_dir}/client.crt" -noout -subject -issuer -dates -ext subjectAltName
+  openssl x509 -in "${credential_dir}/client.crt" -noout -ext subjectAltName | grep -qF "URI:${spiffe}" || {
     staging_err "client certificate does not carry the session-bound URI SAN ${spiffe}"
     return 1
   }
@@ -1594,7 +1603,7 @@ EOF
   staging_log "MCPAgentSession ${ns}/${session} binds ${agent} to ${server}"
 
   # Session creation is asynchronous with policy reconciliation; wait for this
-  # exact binding before the first certificate-authenticated call.
+  # exact binding before the first OAuth and certificate authenticated call.
   deadline=$((SECONDS + 120))
   until kubectl -n "${ns}" get configmap "${server}-gateway-policy" -o jsonpath='{.data.policy\.json}' 2>/dev/null |
     jq -e --arg s "${session}" '[.sessions[]?.name] | index($s) != null' >/dev/null 2>&1; do
@@ -1612,15 +1621,15 @@ EOF
   # and Traefik picks up new routes asynchronously. Retry only initialize.
   deadline=$((SECONDS + ${STAGING_ADAPTER_POLICY_WAIT_SECONDS:-240}))
   while true; do
-    code="$(staging_adapter_mcp_post "${certs}" "${url}" "${init}" "${body}")"
+    code="$(staging_adapter_mcp_post "${credential_dir}" "${url}" "${init}" "${body}")"
     [[ "${code}" == "200" ]] && break
     if ((SECONDS >= deadline)); then
-      staging_err "certificate-authenticated initialize via ${url}: HTTP ${code}: $(head -c 400 "${body}" 2>/dev/null)"
+      staging_err "OAuth and certificate initialize via ${url}: HTTP ${code}: $(head -c 400 "${body}" 2>/dev/null)"
       return 1
     fi
     sleep 3
   done
-  staging_log "certificate-authenticated initialize via ${url}: HTTP 200"
+  staging_log "OAuth and certificate initialize via ${url}: HTTP 200"
   local failed=0
   code="$(staging_adapter_mcp_post "${certs}" "${url}" \
     '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"aaa-ping","arguments":{}}}' "${body}")"
@@ -1638,7 +1647,7 @@ EOF
     staging_err "ungranted tool upper with the adapter certificate: HTTP ${code}, want 403: $(head -c 400 "${body}")"
     failed=1
   fi
-  code="$(staging_adapter_mcp_post "" "${url}" "${init}" "${body}")"
+  code="$(staging_adapter_mcp_post "" "${url}" "${init}" "${body}" -)"
   if [[ "${code}" == "401" ]]; then
     staging_log "initialize without a certificate or token denied: HTTP 401"
   else
@@ -1654,10 +1663,10 @@ EOF
     fi
     sleep 3
   done
-  if [[ "${code}" == "401" ]] && grep -q session_not_found "${body}"; then
-    staging_log "adapter certificate for ${server} refused by ${wrong}: HTTP 401 session_not_found"
+  if [[ "${code}" == "401" ]] && grep -q invalid_token "${body}"; then
+    staging_log "token for ${server} refused by ${wrong}: HTTP 401 invalid_token"
   else
-    staging_err "adapter certificate for ${server} on ${wrong}: HTTP ${code}, want 401 session_not_found: $(head -c 400 "${body}")"
+    staging_err "token for ${server} on ${wrong}: HTTP ${code}, want 401 invalid_token: $(head -c 400 "${body}")"
     failed=1
   fi
 
@@ -1754,19 +1763,6 @@ staging_check_governance() {
     staging_log "ungranted agent session denied: HTTP 403"
   else
     staging_err "ungranted agent session returned HTTP ${code}, want 403"
-    failed=1
-  fi
-  # Forged governance headers with a session that was never issued.
-  code="$(staging_http_code -X POST -H 'content-type: application/json' \
-    -H 'accept: application/json, text/event-stream' \
-    -H 'X-MCP-Human-ID: staging-e2e-forged' -H "X-MCP-Agent-ID: ${MT_GLOBEX_AGENT_ID}" \
-    -H 'X-MCP-Agent-Session: staging-e2e-forged-session' \
-    --data '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"add","arguments":{"a":1,"b":2}}}' \
-    "${MCP_URL}/${MT_ACME_SERVER}/mcp")"
-  if [[ "${code}" == "401" || "${code}" == "403" ]]; then
-    staging_log "forged-session tools/call denied: HTTP ${code}"
-  else
-    staging_err "forged-session tools/call returned HTTP ${code}, want 401/403"
     failed=1
   fi
   grep -E '^=== .*(OK|denied)' "${STAGING_ARTIFACT_DIR}/multitenancy.log" || true

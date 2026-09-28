@@ -135,23 +135,24 @@ mcp-runtime server validate --metadata-dir .mcp --grant-file grant.yaml
 mcp-runtime access grant apply --file grant.yaml
 ```
 
-With that grant applied, start the adapter proxy. It requests and refreshes the
-agent session for you. The platform issues a session only when an enabled
-grant matches the server, the signed-in user, and the agent, so the grant has to
-exist first:
+With that grant applied, start the adapter proxy. It enrolls a session-bound
+client certificate and refreshes it before expiry. The platform issues the
+session only when an enabled grant matches the server, the signed-in user, and
+the agent, so the grant has to exist first:
 
 ```bash
 mcp-runtime adapter proxy \
   --runtime-url https://mcp.mcpruntime.org/workspace-demo/mcp \
   --server workspace-demo \
   --agent cursor \
-  --agent-id cursor \
   --auto-refresh \
   --listen 127.0.0.1:8099
 ```
 
 Point **Claude Desktop**, **Cursor**, or any MCP client at `http://127.0.0.1:8099`.
-Call the `echo` or `add` tool. The gateway checks the grant on every call.
+The client completes the server's OAuth flow and sends its bearer through the
+adapter; the certificate adds the enrolled agent session. Call the `echo` or
+`add` tool. The gateway checks the grant on every call.
 
 ## 5. See it in the analytics
 

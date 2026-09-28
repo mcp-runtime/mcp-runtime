@@ -54,7 +54,7 @@ flowchart LR
     API --> Graf[Grafana]
 ```
 
-1. **Gateway evaluates the request.** Reads identity headers, loads policy from the operator-rendered ConfigMap, and calls the shared `pkg/policy` evaluator for allow / deny at `tools/call` time. The evaluator checks both trust and the tool's declared side-effect class.
+1. **Gateway evaluates the request.** Authenticates optional OAuth or a verified adapter certificate, loads policy from the operator-rendered ConfigMap, and calls the shared `pkg/policy` evaluator for allow / deny at `tools/call` time. The evaluator checks both trust and the tool's declared side-effect class.
 2. **Ingest receives the event** on `/events`, validates the shared `pkg/events` envelope, and writes into Kafka topic `mcp.events`.
 3. **Processor batches to ClickHouse.** Reads Kafka envelopes and uses `pkg/clickhouse` storage helpers to write to the event table.
 4. **API exposes query surfaces.** Recent events, stats, sources, types, and filtered audit views use `pkg/clickhouse` query helpers.
@@ -302,7 +302,7 @@ emits audit events to `ANALYTICS_INGEST_URL` when configured.
 | `GET` | `/ready` | Readiness. Fails until a valid policy snapshot is activated. |
 | `GET` | `/config/status` | Sanitized applied-policy metadata: `schema_version`, `revision`, `loaded_at`, `last_reload_error`. Never the policy body. |
 | `GET` | `/metrics` | Prometheus metrics, including policy reload and active revision. |
-| `GET`, `HEAD` | `/.well-known/oauth-protected-resource...` | OAuth protected-resource metadata when the rendered policy uses OAuth. Returns `404` when OAuth is not enabled for the server. |
+| `GET`, `HEAD` | `/.well-known/oauth-protected-resource...` | OAuth protected-resource metadata for the server's configured issuer and audience. |
 | any | `/*` | Reverse proxy to the MCP server. `POST` JSON-RPC `tools/call` requests are inspected and authorized before forwarding. |
 
 The sidecar emits audit events on allowed and denied tool calls. Denied calls do
@@ -317,7 +317,8 @@ fixtures and separately deployed MCP environments. It issues tokens; Runtime
 governance and policy remain in the gateway.
 
 The official MCP SDK provides MCP transport and client-side OAuth helpers.
-The gateway is the policy-aware protected resource. The separate OAuth service
+The gateway and upstream MCP application form the policy-aware protected
+resource and both validate the same bearer audience. The separate OAuth service
 is the token issuer and resource-owner login boundary.
 
 ## Governance UI walkthrough
@@ -342,7 +343,7 @@ refund_invoice:allow:high
 CLI parity: `mcp-runtime access grant init|apply` covers grant CRUD for
 authorized principals. `access session init|apply` matches the UI for
 **admin** session writes; agents and normal users should use
-`POST /api/v1/runtime/adapter/sessions` via `adapter stdio|proxy --server …
+`POST /api/v1/runtime/adapter/sessions` via `adapter proxy --server …
 --agent …`. CRs are the source of truth; the UI edits them.
 
 For platform API writes, grants and sessions must reference a server in the same
@@ -364,7 +365,7 @@ The operator renders a per-server policy ConfigMap
 traffic against that policy alone. To verify isolation end-to-end, deploy two
 gateway-enabled servers in `mcp-servers` and grant disjoint subjects on each.
 
-Apply two `MCPServer` resources (same image is fine, different `metadata.name` and `publicPathPrefix`) with `gateway.enabled: true`, `auth.mode: header`, `policy.mode: allow-list`, `session.required: true`, and tool inventory entries that declare `sideEffect`. Then apply two grant + session pairs:
+Apply two `MCPServer` resources (same image is fine, different `metadata.name` and `publicPathPrefix`) with `gateway.enabled: true`, OAuth settings under `auth`, `policy.mode: allow-list`, `session.required: true`, and tool inventory entries that declare `sideEffect`. Then apply two grant + session pairs:
 
 ```yaml
 apiVersion: mcpruntime.org/v1alpha1
@@ -388,8 +389,8 @@ mcp-runtime server policy inspect server-a-mcp --namespace mcp-servers   # alice
 mcp-runtime server policy inspect server-b-mcp --namespace mcp-servers   # bob only
 ```
 
-Drive the cross-server matrix using the configured identity headers
-(`X-MCP-Human-ID`, `X-MCP-Agent-ID`, `X-MCP-Agent-Session`). The expected
+Drive the cross-server matrix using OAuth tokens carrying the matching subject,
+client, team, and session claims. The expected
 outcomes distinguish the two deny modes:
 
 | Subject | Target server | Tool | Outcome |

@@ -414,7 +414,6 @@ verify_metadata_governance() {
   for pattern in \
     "sideEffect: read" \
     "requiredTrust: low" \
-    "mode: header" \
     "defaultDecision: deny" \
     "required: true" \
     "enabled: true"; do
@@ -751,19 +750,12 @@ verify_direct_public_denied() {
       --data '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"aaa-ping","arguments":{"note":"direct-public-deny-check"}}}' \
       "${MCP_URL}/${ACME_SERVER}/mcp"
   )"
-  if [[ "$status" != "401" && "$status" != "403" ]] || ! jq -e '
-    .adapter_required == true and
-    ((.message // "") | contains("mcp-runtime adapter proxy or stdio adapter")) and
-    ((.required_headers // []) | index("X-MCP-Human-ID")) and
-    ((.required_headers // []) | index("X-MCP-Agent-ID")) and
-    ((.required_headers // []) | index("X-MCP-Team-ID")) and
-    ((.required_headers // []) | index("X-MCP-Agent-Session"))
-  ' "$body" >/dev/null; then
-    echo "expected direct public call to fail with adapter_required message and governance headers (401 or 403), got HTTP ${status}" >&2
+  if [[ "$status" != "401" ]] || ! jq -e '.error == "missing_bearer_token"' "$body" >/dev/null; then
+    echo "expected direct public call without OAuth to fail with missing_bearer_token (401), got HTTP ${status}" >&2
     cat "$body" >&2
     exit 1
   fi
-  echo "=== direct public call denied with adapter-required message: OK ==="
+  echo "=== direct public call denied without OAuth token: OK ==="
 }
 
 adapter_call_add_for() {

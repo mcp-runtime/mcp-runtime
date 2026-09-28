@@ -201,23 +201,6 @@ func TestMCPServerDefault(t *testing.T) {
 	}
 }
 
-func TestMCPServerRejectsRemovedMTLSAuthMode(t *testing.T) {
-	server := &MCPServer{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-server"},
-		Spec: MCPServerSpec{
-			Image: "example.com/mcp-server",
-			Auth:  &AuthConfig{Mode: AuthMode("mtls")},
-			Gateway: &GatewayConfig{
-				Enabled: true,
-			},
-		},
-	}
-
-	if err := server.validate(); err == nil || !strings.Contains(err.Error(), "auth.mode mtls was removed") {
-		t.Fatalf("validate error = %v, want removed auth.mode migration error", err)
-	}
-}
-
 func TestMCPServerDefaultWithOptions(t *testing.T) {
 	server := &MCPServer{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-server"},
@@ -241,7 +224,7 @@ func TestMCPServerDefaultWithOptions(t *testing.T) {
 	}
 }
 
-func TestMCPServerDefaultGatewayAuthTeamHeader(t *testing.T) {
+func TestMCPServerDefaultGatewayAuthTokenHeader(t *testing.T) {
 	server := &MCPServer{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-server"},
 		Spec: MCPServerSpec{
@@ -255,8 +238,8 @@ func TestMCPServerDefaultGatewayAuthTeamHeader(t *testing.T) {
 	if server.Spec.Auth == nil {
 		t.Fatal("expected auth defaults")
 	}
-	if server.Spec.Auth.TeamIDHeader != defaultAuthTeamIDHeader {
-		t.Fatalf("expected teamIDHeader default, got %q", server.Spec.Auth.TeamIDHeader)
+	if server.Spec.Auth.TokenHeader != defaultAuthTokenHeader {
+		t.Fatalf("expected OAuth token header, got %q", server.Spec.Auth.TokenHeader)
 	}
 }
 
@@ -322,7 +305,7 @@ func TestMCPServerValidateOAuthIssuer(t *testing.T) {
 		Spec: MCPServerSpec{
 			Image:   "example.com/server",
 			Gateway: &GatewayConfig{Enabled: true},
-			Auth:    &AuthConfig{Mode: AuthModeOAuth},
+			Auth:    &AuthConfig{},
 		},
 	}
 
@@ -393,7 +376,7 @@ func TestMCPServerValidateAllowsStandaloneOAuthServer(t *testing.T) {
 			Image:            "example.com/server",
 			PublicPathPrefix: "server",
 			Gateway:          &GatewayConfig{Enabled: false},
-			Auth:             &AuthConfig{Mode: AuthModeOAuth, IssuerURL: "https://auth.example.com/mcp-auth", Audience: "https://mcp.example.com/server/mcp"},
+			Auth:             &AuthConfig{IssuerURL: "https://auth.example.com/mcp-auth", Audience: "https://mcp.example.com/server/mcp"},
 		},
 	}
 	if err := server.validate(); err != nil {

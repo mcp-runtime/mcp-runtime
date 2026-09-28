@@ -12,7 +12,7 @@ import (
 	"mcp-runtime/pkg/certauth"
 )
 
-func TestAdapterCommandRegistersProxyAndStdio(t *testing.T) {
+func TestAdapterCommandRegistersProxyAndEnroll(t *testing.T) {
 	t.Parallel()
 
 	cmd := New(core.NewRuntime(nil))
@@ -20,7 +20,7 @@ func TestAdapterCommandRegistersProxyAndStdio(t *testing.T) {
 	for _, child := range cmd.Commands() {
 		subs[child.Use] = true
 	}
-	for _, want := range []string{"proxy", "stdio"} {
+	for _, want := range []string{"proxy", "enroll"} {
 		if !subs[want] {
 			t.Fatalf("adapter command missing %q subcommand; got %v", want, subs)
 		}
@@ -45,11 +45,11 @@ func TestWriteCredentialFileUsesOutputRoot(t *testing.T) {
 	}
 }
 
-func TestProxyCommandValidatesIdentity(t *testing.T) {
+func TestProxyCommandRequiresCertificateEnrollment(t *testing.T) {
 	t.Parallel()
 
 	cmd := New(core.NewRuntime(nil))
-	cmd.SetArgs([]string{"proxy", "--runtime-url", "http://localhost:18080/demo/mcp", "--human-id", "h", "--agent-id", "a"})
+	cmd.SetArgs([]string{"proxy", "--runtime-url", "https://localhost:18080/demo/mcp"})
 	var stderr bytes.Buffer
 	cmd.SetErr(&stderr)
 	cmd.SetOut(&stderr)
@@ -58,8 +58,8 @@ func TestProxyCommandValidatesIdentity(t *testing.T) {
 	if err == nil {
 		t.Fatal("Execute() error = nil, want missing session error")
 	}
-	if !strings.Contains(err.Error(), "MCP_RUNTIME_SESSION_ID") {
-		t.Fatalf("Execute() error = %q, want session validation error", err)
+	if !strings.Contains(err.Error(), "MCP_RUNTIME_ADAPTER_SERVER") {
+		t.Fatalf("Execute() error = %q, want certificate enrollment error", err)
 	}
 }
 
@@ -67,7 +67,7 @@ func TestProxyCommandRejectsBadRuntimeURL(t *testing.T) {
 	t.Parallel()
 
 	cmd := New(core.NewRuntime(nil))
-	cmd.SetArgs([]string{"proxy", "--runtime-url", "file:///etc/passwd", "--human-id", "h", "--agent-id", "a", "--session-id", "s"})
+	cmd.SetArgs([]string{"proxy", "--runtime-url", "file:///etc/passwd"})
 	var stderr bytes.Buffer
 	cmd.SetErr(&stderr)
 	cmd.SetOut(&stderr)
@@ -81,23 +81,16 @@ func TestProxyCommandRejectsBadRuntimeURL(t *testing.T) {
 	}
 }
 
-func TestIdentityFlagsToProxyConfigParsesTeamAndTimeout(t *testing.T) {
+func TestIdentityFlagsToProxyConfigParsesTimeout(t *testing.T) {
 	t.Parallel()
 
 	flags := identityFlags{
 		runtimeURL:     "http://localhost:18080/demo/mcp",
-		humanID:        "human-1",
-		agentID:        "agent-1",
-		teamID:         "team-acme",
-		sessionID:      "sess-1",
 		requestTimeout: "45s",
 	}
 	cfg, err := flags.toProxyConfig("")
 	if err != nil {
 		t.Fatalf("toProxyConfig() error = %v", err)
-	}
-	if cfg.Identity.TeamID != "team-acme" {
-		t.Fatalf("Identity.TeamID = %q, want team-acme", cfg.Identity.TeamID)
 	}
 	if cfg.Transport == nil || cfg.Transport.Timeout != 45*time.Second {
 		t.Fatalf("Transport = %v, want timeout 45s", cfg.Transport)
@@ -126,9 +119,6 @@ func TestIdentityFlagsToConfigRejectsBadTimeout(t *testing.T) {
 			t.Parallel()
 			flags := identityFlags{
 				runtimeURL:     "http://localhost:18080/demo/mcp",
-				humanID:        "h",
-				agentID:        "a",
-				sessionID:      "s",
 				requestTimeout: tt.value,
 			}
 			_, err := flags.toProxyConfig("")

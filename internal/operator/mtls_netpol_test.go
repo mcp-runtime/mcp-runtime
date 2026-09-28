@@ -25,20 +25,20 @@ func TestReconcileMTLSNetworkPolicy(t *testing.T) {
 		}
 	}
 
-	newServer := func(mode mcpv1alpha1.AuthMode) *mcpv1alpha1.MCPServer {
+	newServer := func() *mcpv1alpha1.MCPServer {
 		return &mcpv1alpha1.MCPServer{
 			ObjectMeta: metav1.ObjectMeta{Name: "secure-server", Namespace: "mcp-servers"},
 			Spec: mcpv1alpha1.MCPServerSpec{
 				Image:   "example.com/secure-server",
 				Gateway: &mcpv1alpha1.GatewayConfig{Enabled: true, Port: 8091},
-				Auth:    &mcpv1alpha1.AuthConfig{Mode: mode},
+				Auth:    &mcpv1alpha1.AuthConfig{},
 			},
 		}
 	}
 	key := types.NamespacedName{Name: "secure-server-mtls-gateway", Namespace: "mcp-servers"}
 
 	t.Run("created and locks the gateway port to traefik for mtls", func(t *testing.T) {
-		server := newServer(mcpv1alpha1.AuthModeOAuth)
+		server := newServer()
 		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(server).Build()
 		r := MCPServerReconciler{Client: client, Scheme: scheme, AdapterCertificatesEnabled: true, AdapterTrustDomain: "example.org", MTLSClusterIssuer: "mcp-runtime-ca"}
 
@@ -73,8 +73,8 @@ func TestReconcileMTLSNetworkPolicy(t *testing.T) {
 		}
 	})
 
-	t.Run("absent for non-mtls servers", func(t *testing.T) {
-		server := newServer(mcpv1alpha1.AuthModeHeader)
+	t.Run("absent when adapter certificates are disabled", func(t *testing.T) {
+		server := newServer()
 		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(server).Build()
 		r := MCPServerReconciler{Client: client, Scheme: scheme}
 
@@ -83,32 +83,7 @@ func TestReconcileMTLSNetworkPolicy(t *testing.T) {
 		}
 		var np networkingv1.NetworkPolicy
 		if err := client.Get(context.Background(), key, &np); !apierrors.IsNotFound(err) {
-			t.Fatalf("expected NotFound for non-mtls server, got %v", err)
+			t.Fatalf("expected NotFound with adapter certificates disabled, got %v", err)
 		}
 	})
-}
-
-// A stored auth.mode mtls server is refused, but its old gateway pods keep
-// running until it is migrated, so cleanup must keep the NetworkPolicy that
-// isolates them while removing the route material.
-func TestCleanupRemovedMTLSResourcesKeepsNetworkPolicy(t *testing.T) {
-	scheme := traefikScheme(t)
-	if err := networkingv1.AddToScheme(scheme); err != nil {
-		t.Fatalf("scheme: %v", err)
-	}
-	server := mtlsServer()
-	policy := &networkingv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: mtlsNetworkPolicyName(server), Namespace: server.Namespace}}
-	bundle := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: mtlsTrustBundleSecretName(server), Namespace: server.Namespace}}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(server, policy, bundle).Build()
-	r := MCPServerReconciler{Client: c, Scheme: scheme}
-
-	if err := r.cleanupRemovedMTLSResources(context.Background(), server); err != nil {
-		t.Fatalf("cleanup: %v", err)
-	}
-	if err := c.Get(context.Background(), types.NamespacedName{Name: policy.Name, Namespace: policy.Namespace}, &networkingv1.NetworkPolicy{}); err != nil {
-		t.Fatalf("NetworkPolicy should be kept until migration, got %v", err)
-	}
-	if err := c.Get(context.Background(), types.NamespacedName{Name: bundle.Name, Namespace: bundle.Namespace}, &corev1.Secret{}); !apierrors.IsNotFound(err) {
-		t.Fatalf("trust bundle should be removed, got %v", err)
-	}
 }

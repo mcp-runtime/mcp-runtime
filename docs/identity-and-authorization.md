@@ -84,16 +84,18 @@ teamID    the stable team whose server and policy are in use
 sessionID the active MCPAgentSession resource
 ```
 
-The adapter obtains this identity from the platform and writes it to the
-configured governance headers on every request. It removes caller-supplied
-identity headers before applying the issued values.
+The adapter obtains a session-bound certificate from the platform. Traefik
+verifies it and the gateway resolves its SPIFFE URI to the rendered
+`MCPAgentSession`. Caller-supplied identity headers are never accepted as
+authentication.
 
 The platform agent directory gives each managed `AgentID` a stable record
 owned by one team. Its display name and active status help administrators
 select and govern agents in grants and sessions. The directory is governance
 metadata; the ID alone does not authenticate a runtime or prove which software
-made a request. Authentication continues to come from the configured OAuth
-flow or, for enrolled adapters, the session-bound certificate.
+made a request. Authentication comes from optional OAuth for direct clients
+and from the session-bound certificate for enrolled adapters. OAuth-enabled
+adapter targets require both.
 
 Agent IDs are platform-generated immutable `agt_<26-character lowercase
 ULID>` values. Agent subjects must resolve to an active directory record owned
@@ -116,21 +118,16 @@ server, MCP method/tool, decision, and request trace ID. MCP's OAuth roles and
 emerging workload identity guidance provide useful context; an OAuth client
 registration or `client_id` does not automatically create a managed agent.
 
-In the default header mode, the gateway reads these headers. Therefore, the
-adapter, ingress path, and gateway form a trust boundary: untrusted clients
-should not be able to bypass the adapter and inject governance headers directly.
-On OAuth-configured servers, clients without an adapter certificate
-authenticate with a bearer token at the gateway.
-
-Clients without an adapter certificate use OAuth. An adapter can instead
-authenticate with its session-bound client certificate; Traefik verifies it and
-the gateway resolves its session identity for grant/session authorization.
+Direct clients use OAuth only when the target server configures `spec.auth`.
+An adapter always uses its session-bound client certificate; Traefik verifies
+the certificate and the gateway resolves its session identity for
+grant/session authorization. On an OAuth-enabled target, the adapter also
+forwards the bearer and its subject must match the session human identity.
 Adapter certificates are opt-in (`MCP_ADAPTER_CERTIFICATES=true`) and
 require the platform-wide `MCP_MTLS_CLUSTER_ISSUER` and `MCP_TRUST_DOMAIN`
-settings. Persisted `auth.mode: mtls` resources must be
-migrated to OAuth; that per-server mode was removed.
+settings.
 
-Further reading: [MCP authorization](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization),
+Further reading: [MCP authorization](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization),
 [WIMSE Agent Identity Management Services draft](https://datatracker.ietf.org/doc/draft-ietf-wimse-aims/00/)
 (work in progress), [AUDIT delegation and interaction traceability proposal](https://datatracker.ietf.org/doc/bofreq-kuhlewind-audit-agent-use-of-delegation-and-interaction-traceability/),
 and [SPIFFE SVIDs](https://spiffe.io/docs/latest/deploying/svids/).
@@ -222,7 +219,7 @@ For the normal adapter flow:
 3. The platform selects a matching enabled grant.
 4. Requested trust is capped by the grant's `maxTrust`.
 5. The platform creates or reuses an `MCPAgentSession`.
-6. The adapter injects the returned identity and session ID into MCP requests.
+6. The adapter presents the certificate and, when the target enables OAuth, forwards the bearer token.
 
 The session controls expiry, revocation, and consented trust. It does **not**
 contain tool rules or `allowedSideEffects`; those remain grant policy.
@@ -340,7 +337,7 @@ from platform roles and gateway policy.
 |---|---|
 | Who is operating the platform? | Authenticated platform principal |
 | Which tenant resources can they manage? | Role, team membership, namespace scope, and ownership |
-| Which human and agent are making the tool call? | Grant/session subject and governance identity headers |
+| Which human and agent are making the tool call? | OAuth claims and/or the certificate-bound grant/session subject |
 | Is that delegated access active now? | Session expiry and revocation |
 | Which tools can be called? | Grant tool rules |
 | Which classes of effects are permitted? | Grant `allowedSideEffects` |

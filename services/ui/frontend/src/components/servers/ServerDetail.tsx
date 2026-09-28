@@ -7,7 +7,7 @@ import { CopyButton } from "../../ui/CopyButton";
 import { DetailSheet } from "../../ui/DetailSheet";
 import { formatAbsolute, formatAge } from "../../lib/format";
 import {
-  authModeInfo,
+  serverAuthInfo,
   isServerReady,
   serverPromptDetails,
   serverResourceDetails,
@@ -82,7 +82,7 @@ function InventoryGroup({ title, items, selectedInventory }: { title: string; it
 export function ServerDetail({ server, tools, onClose, onShowTools, onSelectTool, selectedInventory }: ServerDetailProps) {
   const [configTab, setConfigTab] = useState<"claude" | "cursor" | "vscode" | "raw">("claude");
   const ready = isServerReady(server);
-  const auth = authModeInfo(server.authMode);
+  const auth = serverAuthInfo();
   const prompts = serverPromptDetails(server);
   const resources = serverResourceDetails(server);
   const tasks = serverTaskDetails(server);

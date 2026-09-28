@@ -26,7 +26,8 @@ const (
 type rpcRequestMetadataContextKey struct{}
 
 // NewHTTPProxyHandler returns a reverse proxy that forwards MCP HTTP traffic to
-// the configured runtime route and injects issued governance identity headers.
+// the configured runtime route. It preserves the local client's Authorization
+// header while the TLS client certificate carries the enrolled session identity.
 func NewHTTPProxyHandler(cfg ProxyConfig) (http.Handler, error) {
 	h, _, err := newProxyHandlerAndTracker(cfg)
 	return h, err
@@ -41,8 +42,6 @@ func newProxyHandlerAndTracker(cfg ProxyConfig) (http.Handler, *requestTracker, 
 	}
 	target := cloneURL(cfg.RuntimeURL)
 	transport := cfg.transportOrDefault()
-	identity := cfg.Identity
-	identityProvider := cfg.IdentityProvider
 	logLevel := cfg.LogLevel
 	logWriter := cfg.LogWriter
 	hostHeader := cfg.HostHeader
@@ -60,11 +59,6 @@ func newProxyHandlerAndTracker(cfg ProxyConfig) (http.Handler, *requestTracker, 
 			if !disableXFF {
 				req.SetXForwarded()
 			}
-			current := identity
-			if identityProvider != nil {
-				current = identityProvider()
-			}
-			current.Apply(req.Out.Header)
 		},
 		ModifyResponse: func(resp *http.Response) error {
 			if resp.StatusCode < http.StatusBadRequest || resp.StatusCode >= http.StatusInternalServerError {

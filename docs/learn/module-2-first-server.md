@@ -115,14 +115,13 @@ returns `tool_side_effect_unknown` and denies the call.
 
 ## Step 8: Connect via the adapter
 
-Start the adapter proxy. It creates the agent session:
+Start the adapter proxy. It creates the agent session and enrolls a certificate:
 
 ```bash
 mcp-runtime adapter proxy \
   --runtime-url https://mcp.mcpruntime.org/my-server/mcp \
   --server my-server \
   --agent cursor \
-  --agent-id cursor \
   --auto-refresh \
   --listen 127.0.0.1:8099
 ```

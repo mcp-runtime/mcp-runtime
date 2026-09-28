@@ -28,10 +28,9 @@ func (s *gatewayServer) handleOAuthProtectedResource(w http.ResponseWriter, r *h
 		w.Header().Set("content-type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
 		if r.Method != http.MethodHead {
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"error":            "oauth_not_enabled",
-				"message":          "This MCP server uses MCP Runtime header/session governance. Connect through the mcp-runtime adapter proxy or stdio adapter instead of OAuth discovery.",
-				"adapter_required": true,
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error":   "oauth_not_enabled",
+				"message": "This MCP server has no OAuth configuration.",
 			})
 		}
 		return true
@@ -57,7 +56,7 @@ func (s *gatewayServer) handleOAuthProtectedResource(w http.ResponseWriter, r *h
 		if r.Method != http.MethodHead {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"error":   "oauth_audience_missing",
-				"message": "This MCP server has auth.mode oauth but no auth.audience. Set spec.auth.audience to the canonical resource URI.",
+				"message": "This MCP server has no auth.audience. Set spec.auth.audience to the canonical resource URI.",
 			})
 		}
 		return true
@@ -78,15 +77,10 @@ func (s *gatewayServer) handleOAuthProtectedResource(w http.ResponseWriter, r *h
 }
 
 func (s *gatewayServer) authenticateOAuth(r *http.Request, policy *policypkg.Document) oauthAuthResult {
-	headerIdentity := s.extractIdentity(r, policy)
 	result := oauthAuthResult{
 		Allowed:  true,
 		Status:   http.StatusOK,
-		Identity: identityContext{SessionID: headerIdentity.SessionID},
-	}
-	if !policypkg.PolicyUsesOAuth(policy) {
-		result.Identity = headerIdentity
-		return result
+		Identity: identityContext{},
 	}
 
 	if policy.Auth == nil {
@@ -152,7 +146,7 @@ func (s *gatewayServer) authenticateOAuth(r *http.Request, policy *policypkg.Doc
 			HumanID:   claims.Subject,
 			AgentID:   policypkg.FirstNonEmpty(stringClaim(claims.Raw, "azp"), stringClaim(claims.Raw, "client_id")),
 			TeamID:    oauthTeamID(jwt.MapClaims(claims.Raw), policy),
-			SessionID: policypkg.FirstNonEmpty(stringClaim(claims.Raw, "sid"), headerIdentity.SessionID),
+			SessionID: stringClaim(claims.Raw, "sid"),
 		},
 	}
 }
@@ -313,82 +307,6 @@ func rewriteOAuthEndpoint(endpoint, publicIssuer, internalIssuer string) (string
 		return "", fmt.Errorf("OAuth endpoint %q is not under issuer %q", endpoint, publicIssuer)
 	}
 	return internalBase + strings.TrimPrefix(endpoint, publicBase), nil
-}
-
-func (s *gatewayServer) applyIdentityHeaders(r *http.Request, policy *policypkg.Document, identity identityContext) {
-	humanHeader, agentHeader, teamHeader, sessionHeader := s.identityHeaderNames(policy)
-	if humanHeader != "" {
-		r.Header.Del(humanHeader)
-		if identity.HumanID != "" {
-			r.Header.Set(humanHeader, identity.HumanID)
-		}
-	}
-	if agentHeader != "" {
-		r.Header.Del(agentHeader)
-		if identity.AgentID != "" {
-			r.Header.Set(agentHeader, identity.AgentID)
-		}
-	}
-	if teamHeader != "" {
-		r.Header.Del(teamHeader)
-		if identity.TeamID != "" {
-			r.Header.Set(teamHeader, identity.TeamID)
-		}
-	}
-	if sessionHeader != "" {
-		r.Header.Del(sessionHeader)
-		if identity.SessionID != "" {
-			r.Header.Set(sessionHeader, identity.SessionID)
-		}
-	}
-}
-
-func (s *gatewayServer) applyUpstreamToken(r *http.Request, policy *policypkg.Document, token string) {
-	if policypkg.PolicyUsesOAuth(policy) {
-		// The token authenticated to this MCP resource is never an upstream API
-		// credential. MCP's authorization spec explicitly forbids a resource
-		// server from accepting or transiting unrelated bearer tokens.
-		r.Header.Del(defaultTokenHeader)
-		r.Header.Del(oauthTokenHeader(policy))
-		if policy.Session != nil {
-			r.Header.Del(strings.TrimSpace(policy.Session.UpstreamTokenHeader))
-		}
-		return
-	}
-	if policy == nil || policy.Session == nil {
-		return
-	}
-	headerName := strings.TrimSpace(policy.Session.UpstreamTokenHeader)
-	if headerName == "" {
-		return
-	}
-	r.Header.Del(headerName)
-	if token == "" {
-		return
-	}
-	r.Header.Set(headerName, serviceutil.FormatTokenHeaderValue(headerName, token))
-}
-
-func (s *gatewayServer) identityHeaderNames(policy *policypkg.Document) (string, string, string, string) {
-	humanHeader := s.defaultHumanHeader
-	agentHeader := s.defaultAgentHeader
-	teamHeader := s.defaultTeamHeader
-	sessionHeader := s.defaultSessionHeader
-	if policy != nil && policy.Auth != nil {
-		if policy.Auth.HumanIDHeader != "" {
-			humanHeader = policy.Auth.HumanIDHeader
-		}
-		if policy.Auth.AgentIDHeader != "" {
-			agentHeader = policy.Auth.AgentIDHeader
-		}
-		if policy.Auth.TeamIDHeader != "" {
-			teamHeader = policy.Auth.TeamIDHeader
-		}
-		if policy.Auth.SessionIDHeader != "" {
-			sessionHeader = policy.Auth.SessionIDHeader
-		}
-	}
-	return humanHeader, agentHeader, teamHeader, sessionHeader
 }
 
 func isOAuthProtectedMetadataPath(value string) bool {

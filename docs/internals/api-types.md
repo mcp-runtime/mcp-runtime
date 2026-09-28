@@ -100,7 +100,6 @@ Shared enums include:
 
 - `PolicyDecision`: `allow`, `deny`
 - `TrustLevel`: `low`, `medium`, `high`
-- `AuthMode`: `none`, `header`, `oauth`
 - `PolicyMode`: `allow-list`, `observe`
 - `RolloutStrategy`: `RollingUpdate`, `Recreate`, `Canary`
 

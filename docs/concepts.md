@@ -21,7 +21,7 @@ tools and admits visiting agents:
 | Today's visitor badge, expiring at 6pm | **`MCPAgentSession`** | Time-boxed, human-consented, instantly revocable. |
 | Clearance printed on the badge | **Trust level** (`low` / `medium` / `high`) | A ceiling, never a grant of power on its own. |
 | "May look" vs "may edit" vs "may shred" | **Side effect** (`read` / `write` / `destructive`) | What the tool does to data, authorized separately from trust. |
-| The escort who carries your badge and renews it | **Adapter** | Local proxy that mints and refreshes sessions and injects identity headers. |
+| The badge carrier who presents your certificate | **Adapter** | Local proxy that enrolls and refreshes a session-bound client certificate. |
 | Cameras and the logbook | **Sentinel** | Audit events, analytics, dashboards. |
 
 ## MCPServer
@@ -167,9 +167,8 @@ reaches your server.
 
 On each tool call the gateway:
 
-1. Reads the `X-MCP-Human-ID`, `X-MCP-Agent-ID`, `X-MCP-Team-ID`, and
-   `X-MCP-Agent-Session` headers (in `oauth` mode it uses the validated token;
-   an optional verified adapter certificate additionally supplies session identity)
+1. Authenticates the OAuth bearer token and, for an adapter, resolves its
+   session identity from the verified client certificate
 2. Looks up the active `MCPAgentSession` and `MCPAccessGrant` for that agent+server pair
 3. Checks trust level, side-effect class, and per-tool allow/deny rules
 4. Either forwards the call to your server or returns a denial with a reason code
@@ -188,11 +187,10 @@ Your server code needs no changes to support the gateway.
 The adapter is a local proxy that runs on the developer's machine (or inside an
 agent process). It:
 
-- Calls the platform API to create a session for the agent
-- Injects the correct governance headers (`X-MCP-Human-ID`, `X-MCP-Agent-ID`,
-  `X-MCP-Team-ID`, `X-MCP-Agent-Session`) on every outbound request to the MCP
-  server, replacing any caller-supplied values
-- Refreshes the session automatically before it expires (`--auto-refresh`)
+- Calls the platform API to create or reuse an authorized session
+- Presents a certificate whose SPIFFE identity is bound to that session
+- Forwards the local MCP client's OAuth bearer token to the protected resource
+- Refreshes the certificate automatically before it expires (`--auto-refresh`)
 
 The adapter does not make authorization decisions; the gateway does.
 

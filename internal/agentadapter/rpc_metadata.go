@@ -10,7 +10,10 @@ import (
 	"strings"
 )
 
-const maxLogFieldBytes = 120
+const (
+	maxLogFieldBytes       = 120
+	metaProtocolVersionKey = "io.modelcontextprotocol/protocolVersion"
+)
 
 type rpcMethodContextKey struct{}
 
@@ -23,6 +26,27 @@ func withRPCMethod(ctx context.Context, method string) context.Context {
 func rpcMethodFromContext(ctx context.Context) string {
 	m, _ := ctx.Value(rpcMethodContextKey{}).(string)
 	return m
+}
+
+func requestProtocolVersion(params json.RawMessage) string {
+	if len(params) == 0 {
+		return ""
+	}
+	var decoded struct {
+		Meta map[string]json.RawMessage `json:"_meta"`
+	}
+	if err := json.Unmarshal(params, &decoded); err != nil {
+		return ""
+	}
+	raw, ok := decoded.Meta[metaProtocolVersionKey]
+	if !ok {
+		return ""
+	}
+	var version string
+	if err := json.Unmarshal(raw, &version); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(version)
 }
 
 type rpcRequestMetadata struct {

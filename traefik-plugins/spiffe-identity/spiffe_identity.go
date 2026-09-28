@@ -1,7 +1,6 @@
 // Package spiffe_identity is a Traefik local (Yaegi) middleware that turns a
 // verified client certificate into a trusted identity header for the MCP
-// gateway, and strips any client-supplied identity headers so they can never be
-// spoofed.
+// gateway, and strips configured client-supplied headers before injection.
 //
 // It runs at the TLS-terminating ingress for optional adapter certificates.
 // Because Traefik
@@ -40,12 +39,6 @@ type Config struct {
 func CreateConfig() *Config {
 	return &Config{
 		VerifiedHeader: "X-MCP-Verified-SPIFFE-ID",
-		StripHeaders: []string{
-			"X-MCP-Human-ID",
-			"X-MCP-Agent-ID",
-			"X-MCP-Team-ID",
-			"X-MCP-Agent-Session",
-		},
 	}
 }
 
@@ -84,9 +77,8 @@ type Middleware struct {
 
 func (m *Middleware) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	// Always remove the internal assertion header. For a verified adapter
-	// certificate, also remove caller-supplied governance identity before
-	// injecting the session-bound SPIFFE identity. No-certificate OAuth
-	// requests retain their normal governance headers.
+	// certificate, also remove any configured headers before injecting the
+	// session-bound SPIFFE identity.
 	req.Header.Del(m.verified)
 	if id := verifiedSPIFFEID(req, m.trustDomain); id != "" {
 		for _, h := range m.stripHeaders {

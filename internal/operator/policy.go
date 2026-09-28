@@ -161,17 +161,12 @@ func (r *MCPServerReconciler) renderGatewayPolicy(ctx context.Context, mcpServer
 		},
 	}
 
-	if mcpServer.Spec.Auth != nil {
-		doc.Auth = &policy.Auth{
-			Mode:            string(mcpServer.Spec.Auth.Mode),
-			HumanIDHeader:   mcpServer.Spec.Auth.HumanIDHeader,
-			AgentIDHeader:   mcpServer.Spec.Auth.AgentIDHeader,
-			TeamIDHeader:    mcpServer.Spec.Auth.TeamIDHeader,
-			SessionIDHeader: mcpServer.Spec.Auth.SessionIDHeader,
-			TokenHeader:     mcpServer.Spec.Auth.TokenHeader,
-			IssuerURL:       mcpServer.Spec.Auth.IssuerURL,
-			Audience:        mcpServer.Spec.Auth.Audience,
-			TrustDomain:     strings.TrimSpace(r.AdapterTrustDomain),
+	if mcpServer.Spec.Auth != nil || r.usesAdapterCertificates(mcpServer) {
+		doc.Auth = &policy.Auth{TrustDomain: strings.TrimSpace(r.AdapterTrustDomain)}
+		if mcpServer.Spec.Auth != nil {
+			doc.Auth.TokenHeader = mcpServer.Spec.Auth.TokenHeader
+			doc.Auth.IssuerURL = mcpServer.Spec.Auth.IssuerURL
+			doc.Auth.Audience = mcpServer.Spec.Auth.Audience
 		}
 	}
 	if mcpServer.Spec.Policy != nil {
@@ -186,7 +181,6 @@ func (r *MCPServerReconciler) renderGatewayPolicy(ctx context.Context, mcpServer
 		doc.Session = &policy.Session{
 			Required:            mcpServer.Spec.Session.Required,
 			Store:               mcpServer.Spec.Session.Store,
-			HeaderName:          mcpServer.Spec.Session.HeaderName,
 			MaxLifetime:         mcpServer.Spec.Session.MaxLifetime,
 			IdleTimeout:         mcpServer.Spec.Session.IdleTimeout,
 			UpstreamTokenHeader: mcpServer.Spec.Session.UpstreamTokenHeader,

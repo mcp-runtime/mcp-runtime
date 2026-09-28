@@ -62,13 +62,13 @@ const spiffeIdentityPluginName = "spiffe-identity"
 const verifiedSPIFFEHeader = "X-MCP-Verified-SPIFFE-ID"
 
 // usesAdapterCertificates enables optional adapter client-certificate
-// validation on an OAuth server's route. It moves the route from a plain
+// validation on a gateway-enabled server route. It moves the route from a plain
 // Ingress to a Traefik IngressRoute and puts the gateway behind an mTLS hop,
 // so it must be switched on explicitly (MCP_ADAPTER_CERTIFICATES) rather than
 // implied by workload PKI being present, and it only applies to servers that
 // route through Traefik and have a gateway to validate the hop.
 func (r *MCPServerReconciler) usesAdapterCertificates(mcpServer *mcpv1alpha1.MCPServer) bool {
-	if !r.AdapterCertificatesEnabled || !serverUsesOAuth(mcpServer) || !gatewayEnabled(mcpServer) {
+	if !r.AdapterCertificatesEnabled || !gatewayEnabled(mcpServer) {
 		return false
 	}
 	ingressClass := strings.TrimSpace(mcpServer.Spec.IngressClass)
@@ -400,43 +400,10 @@ func (r *MCPServerReconciler) deleteMTLSIngress(ctx context.Context, mcpServer *
 	return nil
 }
 
-// cleanupRemovedMTLSResources removes resources owned by the deleted
-// per-server auth.mode=mtls implementation before validation reports the
-// migration error. This prevents an old public route from remaining active.
-func (r *MCPServerReconciler) cleanupRemovedMTLSResources(ctx context.Context, mcpServer *mcpv1alpha1.MCPServer) error {
-	if err := r.deleteMTLSIngress(ctx, mcpServer); err != nil {
-		return err
-	}
-	// The mtls NetworkPolicy is kept: the old gateway pods keep running until
-	// the server is migrated, and the policy is what keeps other pods from
-	// reaching them. The normal reconcile removes it once the server is no
-	// longer on the adapter-certificate path.
-	for _, obj := range []client.Object{
-		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: mtlsTrustBundleSecretName(mcpServer), Namespace: mcpServer.Namespace}},
-		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: gatewayTLSSecretName(mcpServer), Namespace: mcpServer.Namespace}},
-		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: traefikClientCertSecretName(mcpServer), Namespace: mcpServer.Namespace}},
-	} {
-		if err := r.Delete(ctx, obj); err != nil && !apierrors.IsNotFound(err) {
-			return err
-		}
-	}
-	for _, name := range []string{gatewayTLSSecretName(mcpServer), traefikClientCertSecretName(mcpServer)} {
-		cert := &unstructured.Unstructured{}
-		cert.SetGroupVersionKind(certificateGVK)
-		cert.SetName(name)
-		cert.SetNamespace(mcpServer.Namespace)
-		if err := r.Delete(ctx, cert); err != nil && !apierrors.IsNotFound(err) && !meta.IsNoMatchError(err) {
-			return err
-		}
-	}
-	return nil
-}
-
-// reconcileMTLSIngress generates the Traefik resources for OAuth routes with
+// reconcileMTLSIngress generates the Traefik resources for gateway routes with
 // optional adapter client certificates. Traefik validates a certificate when
-// presented. The middleware preserves governance headers on ordinary OAuth
-// requests and replaces them with the verified session identity when an
-// adapter certificate is present.
+// presented. The middleware forwards only the verified adapter SPIFFE identity
+// for certificate-authenticated requests.
 func (r *MCPServerReconciler) reconcileMTLSIngress(ctx context.Context, mcpServer *mcpv1alpha1.MCPServer) error {
 	// Drop the legacy passthrough route from the previous (gateway-terminates) model.
 	if err := r.deleteUnstructured(ctx, ingressRouteTCPGVK, mcpServer.Name, mcpServer.Namespace); err != nil {

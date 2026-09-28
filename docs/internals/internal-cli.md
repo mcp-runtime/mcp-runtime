@@ -179,18 +179,16 @@ Tests: `access/manager_test.go` and `access/validation_test.go`.
 
 ## Adapter
 
-`internal/cli/adapter/` provides `adapter enroll`, `adapter proxy`, and `adapter stdio`
-commands. The CLI layer resolves shared flags, optional platform-issued adapter
-sessions from `POST /api/v1/runtime/adapter/sessions`, and explicit
-`MCP_RUNTIME_*` identity values, then delegates HTTP proxy and stdio transport
-behavior to `internal/agentadapter`.
+`internal/cli/adapter/` provides `adapter enroll` and `adapter proxy`. The CLI
+layer resolves certificate and transport flags and platform-issued sessions
+from `POST /api/v1/runtime/adapter/sessions`, then delegates HTTP proxy behavior
+to `internal/agentadapter`.
 
 Keep the boundary clear: command parsing, platform-session bootstrap, and
 auto-refresh scheduling live in `internal/cli/adapter`; request forwarding,
-header injection, TLS transport, stdio bridging, and anonymous stdio method
-filtering live in `internal/agentadapter`.
+governance-header stripping, and TLS transport live in `internal/agentadapter`.
 
-Tests: `adapter/adapter_test.go`, `adapter/platformsession_test.go`, and
+Tests: `adapter/adapter_test.go`, `adapter/mtls_test.go`, and
 `internal/agentadapter` tests.
 
 ## Team

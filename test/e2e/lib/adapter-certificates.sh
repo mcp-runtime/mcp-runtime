@@ -9,6 +9,11 @@
 wait_for_adapter_certificate_initialize() {
   local url="$1" expected_status="$2" expected_error="$3" headers="$4" body="$5"
   local retry_transient_server_errors="${6:-false}"
+  local oauth_token="${7:-${ADAPTER_OAUTH_TOKEN:-}}"
+  local -a auth_args=()
+  if [[ -n "${oauth_token}" ]]; then
+    auth_args+=(-H "Authorization: Bearer ${oauth_token}")
+  fi
   local deadline=$((SECONDS + ${ADAPTER_CERT_POLICY_WAIT_SECONDS:-180})) status error
   while true; do
     if ! status="$(curl -ksS --max-time 5 \
@@ -16,6 +21,7 @@ wait_for_adapter_certificate_initialize() {
       -D "${headers}" -o "${body}" -w '%{http_code}' \
       -H "Host: ${OAUTH_SERVER_HOST}" -H 'content-type: application/json' \
       -H 'accept: application/json, text/event-stream' -H "Mcp-Protocol-Version: ${MCP_PROTOCOL_VERSION}" \
+      ${auth_args[@]+"${auth_args[@]}"} \
       --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' "${url}")"; then
       if [[ "${retry_transient_server_errors}" != "true" ]] || (( SECONDS >= deadline )); then
         return 1

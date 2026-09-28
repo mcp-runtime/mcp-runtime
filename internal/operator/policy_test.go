@@ -56,6 +56,35 @@ func TestRenderGatewayPolicyStampsAndValidates(t *testing.T) {
 	}
 }
 
+func TestRenderGatewayPolicyIncludesAdapterTrustWithoutOAuth(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = mcpv1alpha1.AddToScheme(scheme)
+	mcpServer := &mcpv1alpha1.MCPServer{
+		ObjectMeta: metav1.ObjectMeta{Name: "payments", Namespace: "servers"},
+		Spec: mcpv1alpha1.MCPServerSpec{
+			Gateway: &mcpv1alpha1.GatewayConfig{Enabled: true},
+		},
+	}
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
+	r := MCPServerReconciler{
+		Client:                     client,
+		Scheme:                     scheme,
+		AdapterCertificatesEnabled: true,
+		AdapterTrustDomain:         "example.org",
+		MTLSClusterIssuer:          "mcp-runtime-ca",
+	}
+	doc, err := r.renderGatewayPolicy(context.Background(), mcpServer)
+	if err != nil {
+		t.Fatalf("renderGatewayPolicy() error = %v", err)
+	}
+	if doc.Auth == nil || doc.Auth.TrustDomain != "example.org" {
+		t.Fatalf("Auth = %#v, want adapter trust domain", doc.Auth)
+	}
+	if policy.PolicyUsesOAuth(doc) {
+		t.Fatal("adapter trust-only policy must not enable OAuth")
+	}
+}
+
 func TestRenderPolicyConfigMapDataPreservesUnchangedRevision(t *testing.T) {
 	doc := &policy.Document{Server: policy.Server{Name: "demo"}}
 	if err := policy.Stamp(doc, ""); err != nil {

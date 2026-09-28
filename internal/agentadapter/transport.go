@@ -21,10 +21,9 @@ const (
 	retryMaxDelay    = 1 * time.Second
 )
 
-// RuntimeTransport is the shared outbound HTTP transport used by both the
-// reverse proxy and the stdio shim when forwarding to the runtime. It owns
-// every production gate — auth, OTel instrumentation, and method-keyed retry —
-// so both adapters behave identically with a single implementation.
+// RuntimeTransport is the outbound HTTP transport used by the reverse proxy
+// when forwarding to the runtime. It owns auth, OTel instrumentation, and
+// method-keyed retry.
 type RuntimeTransport struct {
 	// Base is the underlying round-tripper. nil means http.DefaultTransport.
 	// Tests swap in a mock by setting this field.

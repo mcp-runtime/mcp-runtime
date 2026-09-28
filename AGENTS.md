@@ -22,7 +22,7 @@ This file is the **onboarding index** for the MCP Runtime repo. It complements `
 | Area | Path | Notes |
 |------|------|--------|
 | User-facing CLI | `cmd/mcp-runtime/`, `internal/cli/root/`, `internal/cli/<command>/`, `internal/cli/core/` | Cobra routing; `setup`, `status`, `registry`, `server`, `access`, … |
-| Agent adapters | `internal/cli/adapter/`, `internal/agentadapter/`, `services/runtime-api/internal/runtimeapi/adapter*.go` | `adapter proxy/stdio` use issued sessions; `adapter enroll` submits a local-key CSR for enterprise mTLS |
+| Agent adapter | `internal/cli/adapter/`, `internal/agentadapter/`, `services/runtime-api/internal/runtimeapi/adapter*.go` | `adapter proxy` adds session-bound certificate identity and forwards OAuth when required; `adapter enroll` submits a local-key CSR |
 | Operator | `cmd/operator/`, `internal/operator/` | `MCPServer` reconciliation, ingress (`ingressClass` default **traefik**), gateway |
 | API & CRD types | `api/v1alpha1/`, `config/crd/bases/` | Source of truth for object shapes |
 | Access and policy | `pkg/access/`, `pkg/policy/` | Grant/session helpers; gateway policy contract |
@@ -193,7 +193,7 @@ When exploring component structure, imports, hooks, or file relationships, start
 
 - `graphify query "MCPServerReconciler ingress routes"`
 - `graphify query "ResolveRegistryEndpoint callers"`
-- `graphify query "agent adapter stdio transport implementation"`
+- `graphify query "agent adapter proxy transport implementation"`
 
 If the graph misses a symbol or relationship that exists in the code, run `graphify update .` and query again. Use grep or file searches after confirming the graph does not contain the information.
 

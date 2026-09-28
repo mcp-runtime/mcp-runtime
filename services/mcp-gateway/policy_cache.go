@@ -5,9 +5,7 @@ import (
 	"errors"
 	"log"
 	"math/rand/v2"
-	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	policypkg "mcp-runtime/pkg/policy"
@@ -150,12 +148,9 @@ func (s *gatewayServer) loadPolicy() (*policypkg.Document, error) {
 }
 
 // applyPolicyDefaults fills server identity and auth/policy defaults on a
-// decoded or empty document, initializing the Auth and Policy sub-documents
-// when absent so callers never dereference a nil pointer.
+// decoded document. A missing Auth block remains missing so the gateway fails
+// MCP traffic closed until the operator publishes an OAuth policy.
 func (s *gatewayServer) applyPolicyDefaults(doc *policypkg.Document) {
-	if doc.Auth == nil {
-		doc.Auth = &policypkg.Auth{}
-	}
 	if doc.Policy == nil {
 		doc.Policy = &policypkg.Config{}
 	}
@@ -168,23 +163,10 @@ func (s *gatewayServer) applyPolicyDefaults(doc *policypkg.Document) {
 	if doc.Server.Cluster == "" {
 		doc.Server.Cluster = s.clusterName
 	}
-	if doc.Auth.Mode == "" {
-		doc.Auth.Mode = "header"
-	}
-	if doc.Auth.HumanIDHeader == "" {
-		doc.Auth.HumanIDHeader = s.defaultHumanHeader
-	}
-	if doc.Auth.AgentIDHeader == "" {
-		doc.Auth.AgentIDHeader = s.defaultAgentHeader
-	}
-	if doc.Auth.TeamIDHeader == "" {
-		doc.Auth.TeamIDHeader = s.defaultTeamHeader
-	}
-	if doc.Auth.SessionIDHeader == "" {
-		doc.Auth.SessionIDHeader = s.defaultSessionHeader
-	}
-	if strings.EqualFold(doc.Auth.Mode, "oauth") && doc.Auth.TokenHeader == "" {
-		doc.Auth.TokenHeader = defaultTokenHeader
+	if doc.Auth != nil {
+		if doc.Auth.TokenHeader == "" {
+			doc.Auth.TokenHeader = defaultTokenHeader
+		}
 	}
 	if doc.Policy.Mode == "" {
 		doc.Policy.Mode = s.defaultPolicyMode
@@ -194,16 +176,6 @@ func (s *gatewayServer) applyPolicyDefaults(doc *policypkg.Document) {
 	}
 	if doc.Policy.PolicyVersion == "" {
 		doc.Policy.PolicyVersion = s.defaultPolicyVersion
-	}
-}
-
-func (s *gatewayServer) extractIdentity(r *http.Request, policy *policypkg.Document) identityContext {
-	humanHeader, agentHeader, teamHeader, sessionHeader := s.identityHeaderNames(policy)
-	return identityContext{
-		HumanID:   strings.TrimSpace(r.Header.Get(humanHeader)),
-		AgentID:   strings.TrimSpace(r.Header.Get(agentHeader)),
-		TeamID:    strings.TrimSpace(r.Header.Get(teamHeader)),
-		SessionID: strings.TrimSpace(r.Header.Get(sessionHeader)),
 	}
 }
 
@@ -222,14 +194,6 @@ func (s *gatewayServer) defaultPolicyDocument() *policypkg.Document {
 			Name:      policypkg.ServerName(s.serverName),
 			Namespace: policypkg.Namespace(s.serverNamespace),
 			Cluster:   s.clusterName,
-		},
-		Auth: &policypkg.Auth{
-			Mode:            "header",
-			HumanIDHeader:   s.defaultHumanHeader,
-			AgentIDHeader:   s.defaultAgentHeader,
-			TeamIDHeader:    s.defaultTeamHeader,
-			SessionIDHeader: s.defaultSessionHeader,
-			TokenHeader:     defaultTokenHeader,
 		},
 		Policy: &policypkg.Config{
 			Mode:            s.defaultPolicyMode,

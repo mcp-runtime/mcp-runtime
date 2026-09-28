@@ -1574,7 +1574,6 @@ func TestReconcileIngress(t *testing.T) {
 				IngressHost: "example.com",
 				IngressPath: "/oauth-server/mcp",
 				Auth: &mcpv1alpha1.AuthConfig{
-					Mode:     mcpv1alpha1.AuthModeOAuth,
 					Audience: "https://example.com/custom/resource",
 				},
 			},
@@ -1939,7 +1938,6 @@ func TestBuildServerEnvVarsDerivesOAuthResource(t *testing.T) {
 				PublicPathPrefix: "buddy",
 				Gateway:          &mcpv1alpha1.GatewayConfig{Enabled: false},
 				Auth: &mcpv1alpha1.AuthConfig{
-					Mode:      mcpv1alpha1.AuthModeOAuth,
 					IssuerURL: "https://auth.example.com/mcp-auth",
 					Audience:  "https://mcp.example.com/buddy/mcp",
 				},
@@ -1987,14 +1985,6 @@ func TestBuildServerEnvVarsDerivesOAuthResource(t *testing.T) {
 		}
 	})
 
-	t.Run("non-oauth servers still get the operator-owned path", func(t *testing.T) {
-		server := standalone()
-		server.Spec.Auth.Mode = mcpv1alpha1.AuthModeHeader
-		got := envMap(r.buildServerEnvVars(server))
-		if len(got) != 1 || got["MCP_PATH"] != "/buddy/mcp" {
-			t.Fatalf("non-oauth server env = %v, want only MCP_PATH=/buddy/mcp", got)
-		}
-	})
 }
 
 // A gateway with stripPrefix forwards the shortened path, so MCP_PATH must be

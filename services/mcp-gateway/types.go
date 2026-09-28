@@ -90,10 +90,6 @@ type gatewayServer struct {
 	serverName             string
 	serverNamespace        string
 	clusterName            string
-	defaultHumanHeader     string
-	defaultAgentHeader     string
-	defaultTeamHeader      string
-	defaultSessionHeader   string
 	verifiedSPIFFEHeader   string
 	trustedProxySPIFFE     string
 	defaultPolicyMode      string
@@ -120,10 +116,6 @@ const (
 	analyticsQueueSize   = 256
 	analyticsWorkerCount = 4
 	analyticsEmitTimeout = 5
-	defaultHumanHeader   = mcpdefaults.AuthHumanIDHeader
-	defaultAgentHeader   = mcpdefaults.AuthAgentIDHeader
-	defaultTeamHeader    = mcpdefaults.AuthTeamIDHeader
-	defaultSessionHeader = mcpdefaults.AuthSessionIDHeader
 	// defaultVerifiedSPIFFEHeader carries an optional adapter's SPIFFE identity
 	// extracted and injected by the TLS-terminating ingress (Traefik). It is
 	// trusted only on an ingress-authenticated mTLS hop.

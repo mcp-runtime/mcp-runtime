@@ -165,7 +165,7 @@ func (m *ServerManager) InitServer(name, metadataDir, image, imageTag, scope, po
 		Route:            mcpdefaults.DefaultIngressPath(name),
 		Port:             port,
 		Tools:            nil,
-		Auth:             &metadata.AuthConfig{Mode: metadata.AuthModeHeader},
+		Auth:             nil,
 		Policy: &metadata.PolicyConfig{
 			Mode:            metadata.PolicyMode(policyMode),
 			DefaultDecision: metadata.PolicyDecision(defaultDecision),
@@ -1005,14 +1005,9 @@ func mergeDeployMetadata(spec *mcpv1alpha1.MCPServerSpec, src *metadata.ServerMe
 	}
 	if src.Auth != nil {
 		spec.Auth = &mcpv1alpha1.AuthConfig{
-			Mode:            mcpv1alpha1.AuthMode(src.Auth.Mode),
-			HumanIDHeader:   src.Auth.HumanIDHeader,
-			AgentIDHeader:   src.Auth.AgentIDHeader,
-			TeamIDHeader:    src.Auth.TeamIDHeader,
-			SessionIDHeader: src.Auth.SessionIDHeader,
-			TokenHeader:     src.Auth.TokenHeader,
-			IssuerURL:       src.Auth.IssuerURL,
-			Audience:        src.Auth.Audience,
+			TokenHeader: src.Auth.TokenHeader,
+			IssuerURL:   src.Auth.IssuerURL,
+			Audience:    src.Auth.Audience,
 		}
 	}
 	if src.Policy != nil {
@@ -1027,7 +1022,6 @@ func mergeDeployMetadata(spec *mcpv1alpha1.MCPServerSpec, src *metadata.ServerMe
 		spec.Session = &mcpv1alpha1.SessionConfig{
 			Required:            src.Session.Required,
 			Store:               src.Session.Store,
-			HeaderName:          src.Session.HeaderName,
 			MaxLifetime:         src.Session.MaxLifetime,
 			IdleTimeout:         src.Session.IdleTimeout,
 			UpstreamTokenHeader: src.Session.UpstreamTokenHeader,

@@ -146,27 +146,21 @@ func TestResolveAuthMTLSValidation(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name:    "anonymous conflicts",
-			idFlags: identityFlags{authMode: "mtls", trustDomain: "mcpruntime.org", anonymous: true},
-			session: platformSessionFlags{server: "demo", agent: "ops"},
-			wantErr: "--anonymous",
-		},
-		{
 			name:    "server required",
-			idFlags: identityFlags{authMode: "mtls", trustDomain: "mcpruntime.org"},
+			idFlags: identityFlags{trustDomain: "mcpruntime.org"},
 			session: platformSessionFlags{agent: "ops"},
 			wantErr: "--server",
 		},
 		{
 			name:    "agent required",
-			idFlags: identityFlags{authMode: "mtls", trustDomain: "mcpruntime.org"},
+			idFlags: identityFlags{trustDomain: "mcpruntime.org"},
 			session: platformSessionFlags{server: "demo"},
 			wantErr: "--agent",
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, _, _, stop, err := resolveAuth(context.Background(), tc.idFlags, &tc.session, agentadapter.Identity{}, nil, nil)
+			_, stop, err := resolveAuth(context.Background(), tc.idFlags, &tc.session, nil, nil)
 			if stop != nil {
 				stop()
 			}
@@ -184,7 +178,7 @@ func TestResolveAuthMTLSUsesPlatformTrustDomain(t *testing.T) {
 	fakeMTLSServer(t, time.Now().Add(time.Hour), &certCalls)
 	session := platformSessionFlags{server: "demo", agent: "ops-agent"}
 
-	_, _, _, stop, err := resolveAuth(context.Background(), identityFlags{authMode: "mtls"}, &session, agentadapter.Identity{}, nil, nil)
+	_, stop, err := resolveAuth(context.Background(), identityFlags{}, &session, nil, nil)
 	if err != nil {
 		t.Fatalf("resolveAuth without --trust-domain: %v", err)
 	}
@@ -193,7 +187,7 @@ func TestResolveAuthMTLSUsesPlatformTrustDomain(t *testing.T) {
 		t.Fatalf("certCalls = %d, want 1 enrollment using the platform trust domain", atomic.LoadInt32(&certCalls))
 	}
 
-	_, _, _, stop, err = resolveAuth(context.Background(), identityFlags{authMode: "mtls", trustDomain: "other.example"}, &session, agentadapter.Identity{}, nil, nil)
+	_, stop, err = resolveAuth(context.Background(), identityFlags{trustDomain: "other.example"}, &session, nil, nil)
 	if stop != nil {
 		stop()
 	}
@@ -202,26 +196,18 @@ func TestResolveAuthMTLSUsesPlatformTrustDomain(t *testing.T) {
 	}
 }
 
-func TestResolveAuthMTLSEnrollsAndSuppressesHeaders(t *testing.T) {
+func TestResolveAuthMTLSEnrollsCertificate(t *testing.T) {
 	var certCalls int32
 	fakeMTLSServer(t, time.Now().Add(time.Hour), &certCalls)
-	idFlags := identityFlags{authMode: "mtls", trustDomain: "mcpruntime.org"}
+	idFlags := identityFlags{trustDomain: "mcpruntime.org"}
 	session := platformSessionFlags{server: "demo", agent: "ops-agent"}
-	// A flag identity that must be discarded in mtls mode.
-	base := agentadapter.Identity{HumanID: "should-not-leak", AgentID: "should-not-leak"}
 
-	id, provider, transport, stop, err := resolveAuth(context.Background(), idFlags, &session, base, nil, nil)
+	transport, stop, err := resolveAuth(context.Background(), idFlags, &session, nil, nil)
 	if err != nil {
 		t.Fatalf("resolveAuth: %v", err)
 	}
 	defer stop()
 
-	if id != (agentadapter.Identity{}) {
-		t.Fatalf("identity = %#v, want empty (headers suppressed in mtls mode)", id)
-	}
-	if provider != nil {
-		t.Fatal("provider must be nil in mtls mode")
-	}
 	if transport == nil || transport.Base == nil {
 		t.Fatal("mtls transport must carry a TLS-configured base round-tripper")
 	}
