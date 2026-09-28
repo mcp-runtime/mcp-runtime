@@ -2446,7 +2446,6 @@ wait_for_mcp_initialize_result() {
 import json
 import http.client
 import os
-import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -2553,6 +2552,7 @@ wait_for_http_result() {
 import json
 import http.client
 import os
+import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
