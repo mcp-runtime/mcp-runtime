@@ -65,7 +65,7 @@ One-line north star:
 
 ## How this shows up in MCP Runtime
 
-- **Gateway** already embodies *fail-closed*, *deny by default*, *separation of concerns* (inspect → policy → auth → authz → upstream filters), and *don't trust client input* (governance headers ignored in mTLS mode).
+- **Gateway** already embodies *fail-closed*, *deny by default*, *separation of concerns* (inspect → policy → auth → authz → upstream filters), and *don't trust client input* (adapter identity comes only from the verified certificate assertion).
 - **CRDs / CLI flags** should follow *good defaults* and *explicit over implicit*: a feature's common path needs no magic strings (e.g. enabling the mTLS path defaults to the managed CA), and prod-affecting side effects are an explicit opt-in.
 - **Policy contract** (`pkg/policy`) is *stable-contract* / *backward-compatible* by design — bump `SchemaVersion` only on a real shape change, add optional fields rather than breaking old consumers.
 - **Operator** reconciliation favors *idempotency* (Server-Side Apply over read-diff-write) and *minimized blast radius* (NetworkPolicies, scoped certs, per-namespace resources).

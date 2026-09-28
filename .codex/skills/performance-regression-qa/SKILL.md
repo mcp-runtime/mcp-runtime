@@ -76,17 +76,17 @@ or stored under `~/.cache/mcp-runtime-perf/` per branch.
 ## Step 4 — Scenario S1: tools/call latency (p50/p95/p99)
 
 Sequential single-session calls. Measures gateway + proxy + app overhead
-without contention.
+without contention. Before running it, start the certificate-authenticated
+HTTP adapter from `access-governance` on `127.0.0.1:8099`; add OAuth to that
+adapter only when the target MCPServer includes `spec.auth`.
 
 ```bash
 python3 - <<'PY' "$PERF_OUT_DIR" "$PERF_SAMPLES"
 import json, time, urllib.request, sys
 out_dir, n = sys.argv[1], int(sys.argv[2])
-BASE="http://localhost:18080/oauth-example-go-2025-11-25-gateway/mcp"; PROTO="2025-06-18"
+BASE="http://127.0.0.1:8099/mcp"; PROTO="2025-06-18"
 H={"content-type":"application/json","accept":"application/json, text/event-stream",
-   "Mcp-Protocol-Version":PROTO,
-   "X-MCP-Human-ID":"local-user","X-MCP-Agent-ID":"local-agent",
-   "X-MCP-Agent-Session":"local-session"}
+   "Mcp-Protocol-Version":PROTO}
 def post(p, sess=None):
     h=dict(H);
     if sess: h["Mcp-Session-Id"]=sess
@@ -116,11 +116,9 @@ latency under contention.
 python3 - <<'PY' "$PERF_OUT_DIR" "$PERF_SAMPLES" "$PERF_CONCURRENCY"
 import json, time, threading, urllib.request, sys
 out_dir, n, c = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
-BASE="http://localhost:18080/oauth-example-go-2025-11-25-gateway/mcp"; PROTO="2025-06-18"
+BASE="http://127.0.0.1:8099/mcp"; PROTO="2025-06-18"
 H={"content-type":"application/json","accept":"application/json, text/event-stream",
-   "Mcp-Protocol-Version":PROTO,
-   "X-MCP-Human-ID":"local-user","X-MCP-Agent-ID":"local-agent",
-   "X-MCP-Agent-Session":"local-session"}
+   "Mcp-Protocol-Version":PROTO}
 def post(p, sess=None):
     h=dict(H);
     if sess: h["Mcp-Session-Id"]=sess
