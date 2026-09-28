@@ -13,6 +13,7 @@ import (
 
 	"mcp-runtime/internal/cli/setup/assetpath"
 	"mcp-runtime/internal/cli/setup/platform/imagecache"
+	"mcp-runtime/internal/platformrelease"
 )
 
 func main() {
@@ -132,7 +133,15 @@ func cmdEnsure(args []string) error {
 }
 
 func buildLocal(repoRoot, component, image, dockerfile, contextDir string, useMake bool) error {
+	ref, err := platformrelease.ParseImageRef(image)
+	if err != nil || ref.String() != image {
+		if err == nil {
+			err = fmt.Errorf("reference is not canonical")
+		}
+		return fmt.Errorf("invalid image reference %q: %w", image, err)
+	}
 	if useMake || component == "operator" {
+		// #nosec G204 -- image is validated above and exec passes fixed args without a shell.
 		cmd := exec.Command("make", "-f", "Makefile.operator", "docker-build-operator-no-test", "IMG="+image)
 		cmd.Dir = repoRoot
 		cmd.Stdout = os.Stdout
@@ -148,6 +157,7 @@ func buildLocal(repoRoot, component, image, dockerfile, contextDir string, useMa
 		ctx = filepath.Join(repoRoot, filepath.FromSlash(ctx))
 	}
 	fmt.Fprintf(os.Stderr, "[image] building %s\n", image)
+	// #nosec G204 -- image is validated above and exec passes fixed args without a shell.
 	cmd := exec.Command("docker", "build", "-t", image, "-f", df, ctx)
 	cmd.Dir = repoRoot
 	cmd.Stdout = os.Stdout

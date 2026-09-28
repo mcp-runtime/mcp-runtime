@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"mcp-runtime/internal/platformrelease"
 )
 
 const (
@@ -98,6 +100,9 @@ func EnsureLocalImage(ctx context.Context, repoRoot, component, localImage strin
 	if _, ok := Specs[component]; !ok {
 		return Result{}, fmt.Errorf("unknown image cache component %q", component)
 	}
+	if err := validateImageReference("local image", localImage); err != nil {
+		return Result{}, err
+	}
 	progress := opts.Progress
 	if progress == nil {
 		progress = func(string) {}
@@ -111,6 +116,9 @@ func EnsureLocalImage(ctx context.Context, repoRoot, component, localImage strin
 		registry = DefaultRegistry()
 	}
 	cacheRef := CacheRef(registry, component, hash)
+	if err := validateImageReference("cache image", cacheRef); err != nil {
+		return Result{}, err
+	}
 	result := Result{Hash: hash, CacheRef: cacheRef, LocalImage: localImage}
 
 	existsFn := opts.ManifestExists
@@ -167,6 +175,7 @@ func EnsureLocalImage(ctx context.Context, repoRoot, component, localImage strin
 }
 
 func dockerManifestExists(ctx context.Context, image string) (bool, error) {
+	// #nosec G204 -- image references are parsed and validated before reaching Docker; no shell is used.
 	cmd := exec.CommandContext(ctx, "docker", "manifest", "inspect", image)
 	output, err := cmd.CombinedOutput()
 	if err == nil {
@@ -180,6 +189,7 @@ func dockerManifestExists(ctx context.Context, image string) (bool, error) {
 }
 
 func dockerPull(ctx context.Context, image string) error {
+	// #nosec G204 -- image references are parsed and validated before reaching Docker; no shell is used.
 	cmd := exec.CommandContext(ctx, "docker", "pull", image)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("docker pull %s: %w\n%s", image, err, strings.TrimSpace(string(out)))
@@ -188,6 +198,7 @@ func dockerPull(ctx context.Context, image string) error {
 }
 
 func dockerTag(ctx context.Context, source, target string) error {
+	// #nosec G204 -- both image references are parsed and validated before reaching Docker; no shell is used.
 	cmd := exec.CommandContext(ctx, "docker", "tag", source, target)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("docker tag %s %s: %w\n%s", source, target, err, strings.TrimSpace(string(out)))
@@ -196,9 +207,21 @@ func dockerTag(ctx context.Context, source, target string) error {
 }
 
 func dockerPush(ctx context.Context, image string) error {
+	// #nosec G204 -- image references are parsed and validated before reaching Docker; no shell is used.
 	cmd := exec.CommandContext(ctx, "docker", "push", image)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("docker push %s: %w\n%s", image, err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func validateImageReference(label, image string) error {
+	ref, err := platformrelease.ParseImageRef(image)
+	if err != nil || ref.String() != image {
+		if err == nil {
+			err = fmt.Errorf("reference is not canonical")
+		}
+		return fmt.Errorf("invalid %s %q: %w", label, image, err)
 	}
 	return nil
 }

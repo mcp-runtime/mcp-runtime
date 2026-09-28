@@ -121,6 +121,28 @@ func TestEnsureLocalImageReuseAndBuild(t *testing.T) {
 	}
 }
 
+func TestEnsureLocalImageRejectsInvalidReferencesBeforeCallingDocker(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "test", "e2e", "registry.Dockerfile"), "FROM registry:2.8.3\n")
+	for _, image := range []string{"-v", "mcp-runtime-registry:latest;echo bad", " mcp-runtime-registry:latest"} {
+		t.Run(image, func(t *testing.T) {
+			called := false
+			_, err := EnsureLocalImage(context.Background(), root, "e2e-registry", image, Options{
+				ManifestExists: func(context.Context, string) (bool, error) {
+					called = true
+					return false, nil
+				},
+			}, func() error { called = true; return nil })
+			if err == nil {
+				t.Fatal("expected invalid image reference to fail")
+			}
+			if called {
+				t.Fatal("docker/build callback called for invalid image reference")
+			}
+		})
+	}
+}
+
 func TestEnabledAndRegistry(t *testing.T) {
 	t.Setenv(envImageCache, "")
 	t.Setenv(envSetupImageCache, "")

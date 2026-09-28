@@ -30,17 +30,21 @@ func ContentHash(repoRoot, component string) (string, error) {
 	if len(files) == 0 {
 		return "", fmt.Errorf("component %q: no hash inputs under %v", component, spec.HashPaths)
 	}
+	rootFS, err := os.OpenRoot(root)
+	if err != nil {
+		return "", err
+	}
+	defer rootFS.Close()
 	h := sha256.New()
 	for _, rel := range files {
-		abs := filepath.Join(root, filepath.FromSlash(rel))
-		info, err := os.Stat(abs)
+		info, err := rootFS.Stat(filepath.FromSlash(rel))
 		if err != nil {
 			return "", err
 		}
 		if _, err := fmt.Fprintf(h, "%s\x00%d\x00", rel, info.Size()); err != nil {
 			return "", err
 		}
-		f, err := os.Open(abs)
+		f, err := rootFS.Open(filepath.FromSlash(rel))
 		if err != nil {
 			return "", err
 		}
@@ -76,6 +80,9 @@ func collectHashFiles(repoRoot string, paths []string) ([]string, error) {
 			continue
 		}
 		if !info.IsDir() {
+			if info.Mode()&os.ModeSymlink != 0 {
+				continue
+			}
 			rel, err := filepath.Rel(repoRoot, abs)
 			if err != nil {
 				return nil, err
@@ -90,6 +97,9 @@ func collectHashFiles(repoRoot string, paths []string) ([]string, error) {
 		err = filepath.WalkDir(abs, func(path string, d os.DirEntry, walkErr error) error {
 			if walkErr != nil {
 				return walkErr
+			}
+			if d.Type()&os.ModeSymlink != 0 {
+				return nil
 			}
 			name := d.Name()
 			if d.IsDir() {
