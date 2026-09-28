@@ -755,7 +755,12 @@ func TestEnsureDefaultDenyNetworkPolicyIdempotent(t *testing.T) {
 func TestEnsureTeamNamespaceConfiguresTraefikIngressWatch(t *testing.T) {
 	t.Setenv("PLATFORM_TEAM_TRAEFIK_WATCH", "required")
 	clearRegistryPullSecretEnv(t)
+	// Seed the namespaces already listed on Traefik so pruneMissingTraefikNamespaceWatches
+	// keeps them when appending the new team namespace.
 	client := kubernetesfake.NewSimpleClientset(
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "registry"}},
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "mcp-sentinel"}},
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "mcp-servers"}},
 		&appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{Name: "traefik", Namespace: "traefik"},
 			Spec: appsv1.DeploymentSpec{
