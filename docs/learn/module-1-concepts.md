@@ -96,7 +96,8 @@ when you need explicit control over expiry or revocation.
 A sidecar container injected next to your MCP server when `gateway.enabled: true`.
 Every request passes through it. On each tool call it:
 
-1. Reads `X-MCP-Agent-ID`, `X-MCP-Team-ID`, `X-MCP-Agent-Session` headers
+1. Derives caller identity from the session-bound SPIFFE client certificate
+   (OAuth also validates the Bearer JWT)
 2. Looks up the active grant and session
 3. Checks trust level, side-effect class, and per-tool rules
 4. Forwards or denies
@@ -113,15 +114,14 @@ MCP client → gateway sidecar (port 8091) → your server (port 8088)
 A local proxy that runs on your machine or inside an agent process. It:
 
 - Calls the platform API to create a session
-- Injects the right governance headers on every outbound request
-- Refreshes the session before it expires (`--auto-refresh`)
+- Presents a session-bound SPIFFE client certificate (`--auth mtls`)
+- Refreshes the session (and cert) before expiry (`--auto-refresh`)
 
 ```
 MCP client → adapter proxy (localhost:8099) → gateway → server
 ```
 
-Your MCP client does not need to manage platform sessions or governance
-headers.
+Your MCP client does not need to manage platform sessions or certificates.
 
 ## The decision table
 

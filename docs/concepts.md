@@ -21,7 +21,7 @@ tools and admits visiting agents:
 | Today's visitor badge, expiring at 6pm | **`MCPAgentSession`** | Time-boxed, human-consented, instantly revocable. |
 | Clearance printed on the badge | **Trust level** (`low` / `medium` / `high`) | A ceiling, never a grant of power on its own. |
 | "May look" vs "may edit" vs "may shred" | **Side effect** (`read` / `write` / `destructive`) | What the tool does to data, authorized separately from trust. |
-| The escort who carries your badge and renews it | **Adapter** | Local proxy that mints and refreshes sessions and injects identity headers. |
+| The escort who carries your badge and renews it | **Adapter** | Local proxy that obtains a session and presents a session-bound SPIFFE client certificate (plus Bearer for OAuth servers). |
 | Cameras and the logbook | **Sentinel** | Audit events, analytics, dashboards. |
 
 ## MCPServer
@@ -165,11 +165,16 @@ The gateway, `mcp-gateway`, is a sidecar container in each MCP server pod (when
 pod; `mcp-gateway` makes the authorization decision there before the request
 reaches your server.
 
+Governance identity comes from a **verified session-bound SPIFFE client
+certificate** (Traefik validates the cert and the gateway maps the SPIFFE URI
+to an `MCPAgentSession`). On OAuth servers the caller also presents a **Bearer
+JWT** for resource authentication; human/agent/team may come from token claims,
+but the platform session binding for grants is the certificate.
+
 On each tool call the gateway:
 
-1. Reads the `X-MCP-Human-ID`, `X-MCP-Agent-ID`, `X-MCP-Team-ID`, and
-   `X-MCP-Agent-Session` headers (in `oauth` mode it uses the validated token;
-   an optional verified adapter certificate additionally supplies session identity)
+1. Authenticates the caller (Bearer JWT on OAuth routes; SPIFFE cert for the
+   adapter session)
 2. Looks up the active `MCPAgentSession` and `MCPAccessGrant` for that agent+server pair
 3. Checks trust level, side-effect class, and per-tool allow/deny rules
 4. Either forwards the call to your server or returns a denial with a reason code
@@ -188,11 +193,11 @@ Your server code needs no changes to support the gateway.
 The adapter is a local proxy that runs on the developer's machine (or inside an
 agent process). It:
 
-- Calls the platform API to create a session for the agent
-- Injects the correct governance headers (`X-MCP-Human-ID`, `X-MCP-Agent-ID`,
-  `X-MCP-Team-ID`, `X-MCP-Agent-Session`) on every outbound request to the MCP
-  server, replacing any caller-supplied values
-- Refreshes the session automatically before it expires (`--auto-refresh`)
+- Calls the platform API to create or refresh an `MCPAgentSession`
+- Presents that session with a **session-bound SPIFFE client certificate**
+  (`--auth mtls` / `adapter enroll`)
+- Forwards the **Bearer** token when the MCP server uses OAuth
+- Refreshes the session (and re-enrolls the cert) before expiry (`--auto-refresh`)
 
 The adapter does not make authorization decisions; the gateway does.
 

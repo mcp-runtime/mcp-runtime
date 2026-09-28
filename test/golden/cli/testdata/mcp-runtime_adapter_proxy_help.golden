@@ -13,7 +13,7 @@ Usage:
 Flags:
       --agent string              Agent identifier to associate with the issued session (default: $MCP_RUNTIME_ADAPTER_AGENT)
       --agent-id string           Issued agent identity (default: $MCP_RUNTIME_AGENT_ID)
-      --auth string               Adapter auth mode: header (forward issued governance headers) or mtls (auto-enroll a session-bound client certificate and let the gateway derive identity from it); default: $MCP_RUNTIME_AUTH_MODE or header (default "header")
+      --auth string               Adapter auth mode: mtls (session-bound SPIFFE client certificate; recommended) or header (legacy local/dev only); default: $MCP_RUNTIME_AUTH_MODE or header (default "header")
       --auth-header string        Static Authorization header value for runtime requests, e.g. "Bearer <token>" (default: $MCP_RUNTIME_AUTH_HEADER)
       --auto-refresh              Refresh the issued adapter session a few minutes before expiry (default: $MCP_RUNTIME_ADAPTER_AUTO_REFRESH)
   -h, --help                      help for proxy

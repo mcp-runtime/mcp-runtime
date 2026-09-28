@@ -30,7 +30,7 @@ func (s *gatewayServer) handleOAuthProtectedResource(w http.ResponseWriter, r *h
 		if r.Method != http.MethodHead {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"error":            "oauth_not_enabled",
-				"message":          "This MCP server uses MCP Runtime header/session governance. Connect through the mcp-runtime adapter proxy or stdio adapter instead of OAuth discovery.",
+				"message":          "This MCP server is not configured for OAuth. Connect through the mcp-runtime adapter (proxy or stdio) with a session-bound client certificate.",
 				"adapter_required": true,
 			})
 		}
@@ -78,31 +78,28 @@ func (s *gatewayServer) handleOAuthProtectedResource(w http.ResponseWriter, r *h
 }
 
 func (s *gatewayServer) authenticateOAuth(r *http.Request, policy *policypkg.Document) oauthAuthResult {
-	headerIdentity := s.extractIdentity(r, policy)
 	result := oauthAuthResult{
-		Allowed:  true,
-		Status:   http.StatusOK,
-		Identity: identityContext{SessionID: headerIdentity.SessionID},
+		Allowed: true,
+		Status:  http.StatusOK,
 	}
 	if !policypkg.PolicyUsesOAuth(policy) {
-		result.Identity = headerIdentity
+		// Non-OAuth callers should use extractIdentity / header mode instead.
+		result.Identity = s.extractIdentity(r, policy)
 		return result
 	}
 
 	if policy.Auth == nil {
 		return oauthAuthResult{
-			Status:   http.StatusServiceUnavailable,
-			Reason:   "oauth_config_missing",
-			Identity: result.Identity,
+			Status: http.StatusServiceUnavailable,
+			Reason: "oauth_config_missing",
 		}
 	}
 
 	issuerURL := strings.TrimSpace(policy.Auth.IssuerURL)
 	if issuerURL == "" {
 		return oauthAuthResult{
-			Status:   http.StatusServiceUnavailable,
-			Reason:   "oauth_issuer_missing",
-			Identity: result.Identity,
+			Status: http.StatusServiceUnavailable,
+			Reason: "oauth_issuer_missing",
 		}
 	}
 
@@ -110,9 +107,8 @@ func (s *gatewayServer) authenticateOAuth(r *http.Request, policy *policypkg.Doc
 	token := extractToken(tokenHeader, r.Header.Get(tokenHeader))
 	if token == "" {
 		return oauthAuthResult{
-			Status:   http.StatusUnauthorized,
-			Reason:   "missing_bearer_token",
-			Identity: result.Identity,
+			Status: http.StatusUnauthorized,
+			Reason: "missing_bearer_token",
 		}
 	}
 
@@ -122,15 +118,14 @@ func (s *gatewayServer) authenticateOAuth(r *http.Request, policy *policypkg.Doc
 	// resource metadata above.
 	audience := strings.TrimSpace(policy.Auth.Audience)
 	if audience == "" {
-		return oauthAuthResult{Status: http.StatusServiceUnavailable, Reason: "oauth_audience_missing", Identity: result.Identity}
+		return oauthAuthResult{Status: http.StatusServiceUnavailable, Reason: "oauth_audience_missing"}
 	}
 	provider, err := s.oauthProviderForIssuer(r.Context(), issuerURL, audience)
 	if err != nil {
 		log.Printf("oauth provider lookup failed for %s: %v", issuerURL, err)
 		return oauthAuthResult{
-			Status:   http.StatusServiceUnavailable,
-			Reason:   "oauth_provider_unavailable",
-			Identity: result.Identity,
+			Status: http.StatusServiceUnavailable,
+			Reason: "oauth_provider_unavailable",
 		}
 	}
 
@@ -139,11 +134,13 @@ func (s *gatewayServer) authenticateOAuth(r *http.Request, policy *policypkg.Doc
 	claims, err := provider.verifier.VerifyContext(r.Context(), token)
 	if err != nil {
 		return oauthAuthResult{
-			Status:   http.StatusUnauthorized,
-			Reason:   "invalid_token",
-			Identity: result.Identity,
+			Status: http.StatusUnauthorized,
+			Reason: "invalid_token",
 		}
 	}
+	// OAuth identity comes only from verified JWT claims. Adapters on OAuth
+	// routes should present a session-bound SPIFFE cert (handled before this
+	// path); client-supplied governance identity is never consulted here.
 	return oauthAuthResult{
 		Allowed: true,
 		Status:  http.StatusOK,
@@ -152,7 +149,7 @@ func (s *gatewayServer) authenticateOAuth(r *http.Request, policy *policypkg.Doc
 			HumanID:   claims.Subject,
 			AgentID:   policypkg.FirstNonEmpty(stringClaim(claims.Raw, "azp"), stringClaim(claims.Raw, "client_id")),
 			TeamID:    oauthTeamID(jwt.MapClaims(claims.Raw), policy),
-			SessionID: policypkg.FirstNonEmpty(stringClaim(claims.Raw, "sid"), headerIdentity.SessionID),
+			SessionID: stringClaim(claims.Raw, "sid"),
 		},
 	}
 }

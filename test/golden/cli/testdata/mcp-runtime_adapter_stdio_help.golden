@@ -16,7 +16,7 @@ Flags:
       --agent-id string            Issued agent identity (default: $MCP_RUNTIME_AGENT_ID)
       --anonymous                  Forward to the runtime without a session or issued identity (public/read-only routes); only methods in --anonymous-methods are forwarded (default: $MCP_RUNTIME_ANONYMOUS)
       --anonymous-methods string   Comma-separated list of MCP methods allowed in anonymous mode (default: $MCP_RUNTIME_ANONYMOUS_METHODS or initialize,notifications/initialized,server/discover,ping,tools/list,resources/list,prompts/list)
-      --auth string                Adapter auth mode: header (forward issued governance headers) or mtls (auto-enroll a session-bound client certificate and let the gateway derive identity from it); default: $MCP_RUNTIME_AUTH_MODE or header (default "header")
+      --auth string                Adapter auth mode: mtls (session-bound SPIFFE client certificate; recommended) or header (legacy local/dev only); default: $MCP_RUNTIME_AUTH_MODE or header (default "header")
       --auth-header string         Static Authorization header value for runtime requests, e.g. "Bearer <token>" (default: $MCP_RUNTIME_AUTH_HEADER)
       --auto-refresh               Refresh the issued adapter session a few minutes before expiry (default: $MCP_RUNTIME_ADAPTER_AUTO_REFRESH)
   -h, --help                       help for stdio

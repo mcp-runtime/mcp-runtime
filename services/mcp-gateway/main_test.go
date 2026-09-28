@@ -508,6 +508,78 @@ func TestApplyIdentityHeadersClearsSpoofedValues(t *testing.T) {
 	}
 }
 
+func TestAuthenticateOAuthIgnoresClientGovernanceHeaders(t *testing.T) {
+	issuer := newTestJWTIssuer(t)
+	proxy := newTestGatewayServer(t, oauthPolicy(issuer.url), func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get(defaultSessionHeader); got != "session-1" {
+			t.Fatalf("upstream %s = %q, want session-1 from JWT sid (not client spoof)", defaultSessionHeader, got)
+		}
+		if got := r.Header.Get(defaultHumanHeader); got != "human-1" {
+			t.Fatalf("upstream %s = %q, want human-1", defaultHumanHeader, got)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	token := issuer.sign(t, jwt.MapClaims{
+		"iss":     issuer.url,
+		"aud":     "http://proxy.example.com/mcp",
+		"sub":     "human-1",
+		"azp":     "client-1",
+		"team_id": "team-acme",
+		"sid":     "session-1",
+		"exp":     time.Now().Add(time.Hour).Unix(),
+		"nbf":     time.Now().Add(-time.Minute).Unix(),
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "http://proxy.example.com/mcp", strings.NewReader(`{"method":"tools/call","params":{"name":"echo"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set(defaultHumanHeader, "spoofed-human")
+	req.Header.Set(defaultAgentHeader, "spoofed-agent")
+	req.Header.Set(defaultTeamHeader, "spoofed-team")
+	req.Header.Set(defaultSessionHeader, "spoofed-session")
+
+	recorder := httptest.NewRecorder()
+	proxy.handleGateway(recorder, req)
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("status = %d body=%s, want %d", recorder.Code, recorder.Body.String(), http.StatusNoContent)
+	}
+}
+
+func TestAuthenticateOAuthDoesNotTakeSessionFromHeadersWithoutSID(t *testing.T) {
+	issuer := newTestJWTIssuer(t)
+	policy := oauthPolicy(issuer.url)
+	policy.Session.Required = false
+	var gotSession string
+	proxy := newTestGatewayServer(t, policy, func(w http.ResponseWriter, r *http.Request) {
+		gotSession = r.Header.Get(defaultSessionHeader)
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	token := issuer.sign(t, jwt.MapClaims{
+		"iss": issuer.url,
+		"aud": "http://proxy.example.com/mcp",
+		"sub": "human-1",
+		"azp": "client-1",
+		"exp": time.Now().Add(time.Hour).Unix(),
+		"nbf": time.Now().Add(-time.Minute).Unix(),
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "http://proxy.example.com/mcp", strings.NewReader(`{"method":"tools/call","params":{"name":"echo"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set(defaultSessionHeader, "spoofed-session-only")
+
+	recorder := httptest.NewRecorder()
+	proxy.handleGateway(recorder, req)
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("status = %d body=%s, want %d", recorder.Code, recorder.Body.String(), http.StatusNoContent)
+	}
+	if gotSession != "" {
+		t.Fatalf("session reached upstream as %q; OAuth must not use client governance headers", gotSession)
+	}
+}
+
 func TestApplyUpstreamTokenClearsHeaderWhenTokenMissing(t *testing.T) {
 	t.Parallel()
 

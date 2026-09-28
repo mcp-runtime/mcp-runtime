@@ -84,16 +84,17 @@ teamID    the stable team whose server and policy are in use
 sessionID the active MCPAgentSession resource
 ```
 
-The adapter obtains this identity from the platform and writes it to the
-configured governance headers on every request. It removes caller-supplied
-identity headers before applying the issued values.
+Adapters present that identity with a **session-bound SPIFFE client
+certificate** (`adapter enroll` / `--auth mtls`). Traefik verifies the cert;
+the gateway maps the SPIFFE URI to the rendered `MCPAgentSession`. On OAuth
+servers the adapter also forwards a **Bearer JWT** for resource authentication.
+Governance is certificate-derived, not header-injected.
 
 The platform agent directory gives each managed `AgentID` a stable record
 owned by one team. Its display name and active status help administrators
 select and govern agents in grants and sessions. The directory is governance
 metadata; the ID alone does not authenticate a runtime or prove which software
-made a request. Authentication continues to come from the configured OAuth
-flow or, for enrolled adapters, the session-bound certificate.
+made a request.
 
 Agent IDs are platform-generated immutable `agt_<26-character lowercase
 ULID>` values. Agent subjects must resolve to an active directory record owned
@@ -116,19 +117,10 @@ server, MCP method/tool, decision, and request trace ID. MCP's OAuth roles and
 emerging workload identity guidance provide useful context; an OAuth client
 registration or `client_id` does not automatically create a managed agent.
 
-In the default header mode, the gateway reads these headers. Therefore, the
-adapter, ingress path, and gateway form a trust boundary: untrusted clients
-should not be able to bypass the adapter and inject governance headers directly.
-On OAuth-configured servers, clients without an adapter certificate
-authenticate with a bearer token at the gateway.
-
-Clients without an adapter certificate use OAuth. An adapter can instead
-authenticate with its session-bound client certificate; Traefik verifies it and
-the gateway resolves its session identity for grant/session authorization.
-Adapter certificates are opt-in (`MCP_ADAPTER_CERTIFICATES=true`) and
-require the platform-wide `MCP_MTLS_CLUSTER_ISSUER` and `MCP_TRUST_DOMAIN`
-settings. Persisted `auth.mode: mtls` resources must be
-migrated to OAuth; that per-server mode was removed.
+Adapter certificates on OAuth routes are enabled with
+`MCP_ADAPTER_CERTIFICATES=true` and require platform-wide
+`MCP_MTLS_CLUSTER_ISSUER` and `MCP_TRUST_DOMAIN`. Persisted `auth.mode: mtls`
+resources must be migrated to OAuth; that per-server mode was removed.
 
 Further reading: [MCP authorization](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization),
 [WIMSE Agent Identity Management Services draft](https://datatracker.ietf.org/doc/draft-ietf-wimse-aims/00/)

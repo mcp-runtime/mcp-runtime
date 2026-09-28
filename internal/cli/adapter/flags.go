@@ -71,9 +71,8 @@ func bindIdentityFlags(cmd *cobra.Command, f *identityFlags) {
 	cmd.Flags().StringVar(&f.requestTimeout, "request-timeout", os.Getenv(agentadapter.EnvRequestTimeout),
 		"HTTP request timeout for adapter→runtime calls, e.g. 30s (default: $"+agentadapter.EnvRequestTimeout+")")
 	cmd.Flags().StringVar(&f.authMode, "auth", envOrDefault(EnvAdapterAuthMode, "header"),
-		"Adapter auth mode: header (forward issued governance headers) or mtls "+
-			"(auto-enroll a session-bound client certificate and let the gateway derive identity from it); "+
-			"default: $"+EnvAdapterAuthMode+" or header")
+		"Adapter auth mode: mtls (session-bound SPIFFE client certificate; recommended) or header "+
+			"(legacy local/dev only); default: $"+EnvAdapterAuthMode+" or header")
 	cmd.Flags().StringVar(&f.trustDomain, "trust-domain", os.Getenv(EnvMTLSTrustDomain),
 		"Optional platform SPIFFE trust domain override for adapter certificate enrollment; default: $"+EnvMTLSTrustDomain)
 	cmd.Flags().StringVar(&f.authHeader, "auth-header", os.Getenv(agentadapter.EnvAuthHeader),

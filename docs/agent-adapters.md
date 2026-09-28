@@ -9,38 +9,30 @@ policy:
 - `mcp-runtime adapter stdio` exposes a stdio MCP server process and forwards
   each JSON-RPC message to the same MCP Runtime HTTP route.
 
-Both adapters only **present** issued identity values; all traffic still goes
-through the gateway, which enforces policy. Platform admins author
-`MCPAccessGrant` resources first (scaffold them with
-`mcp-runtime access grant init`), and the platform API issues `MCPAgentSession`
+Both adapters only **present** issued identity; the gateway enforces policy.
+Platform admins author `MCPAccessGrant` resources first (scaffold them with
+`mcp-runtime access grant init`). The platform API issues `MCPAgentSession`
 values through `POST /api/v1/runtime/adapter/sessions` when the adapter starts
 with `--server` and `--agent`.
 
 The adapters support stdio and Streamable HTTP, the two standard MCP
 transports. There is no separate legacy HTTP+SSE adapter.
 
-## How the adapter gets its identity
+## How the adapter presents identity
 
-There are three supported ways to give an adapter its `humanID`, `agentID`,
-`teamID`, and `sessionID`:
+Governance identity is carried by a **session-bound SPIFFE client
+certificate**. Use `--auth mtls` (or `adapter enroll` then pass the cert
+files). The gateway derives the `MCPAgentSession` from the verified SPIFFE
+URI. On OAuth MCP servers, also forward a **Bearer** token for resource
+authentication (`--auth-header` or the client's token).
 
-1. **Platform-issued session (recommended).** The adapter calls
-   `POST /api/v1/runtime/adapter/sessions`. The platform derives the principal
-   from your `mcp-runtime auth login` token, picks a matching enabled
-   `MCPAccessGrant`, writes (or reuses) an `MCPAgentSession`, and returns the
-   identity values. Optional `--auto-refresh` renews the session before
-   expiry without restarting the adapter.
-2. **Explicit flags / environment.** `--human-id`, `--agent-id`,
-   `--session-id`, `--team-id` (or the matching `MCP_RUNTIME_*` env vars).
-   Useful for testing and for inheriting an externally-managed session.
-3. **Anonymous mode** (stdio only): `--anonymous` skips identity entirely so
-   the adapter can target public/read-only runtime routes. Only the methods
-   listed in `--anonymous-methods` are forwarded.
-
-Mixed configurations are supported: identity flags always override values
-returned by the platform-issued session, so a caller can pin a specific field
-(e.g. a long-lived `--session-id` for a test) while letting the platform fill
-in the rest. The override survives every auto-refresh tick.
+1. **Platform-issued session + SPIFFE (recommended).**
+   `POST /api/v1/runtime/adapter/sessions` issues a session; `--auth mtls`
+   enrolls a session-bound client certificate. Optional `--auto-refresh`
+   renews both before expiry.
+2. **Anonymous mode** (stdio only): `--anonymous` skips identity for
+   public/read-only routes. Only methods in `--anonymous-methods` are
+   forwarded.
 
 ## Platform-issued sessions: quickstart
 
@@ -78,13 +70,14 @@ What this does on each invocation:
    reused. Otherwise a fresh `MCPAgentSession` is applied with a 1 h TTL
    (capped at 24 h).
 5. The response carries `name`, `humanID`, `agentID`, `teamID`,
-   `consentedTrust`, `policyVersion`, and absolute `expiresAt`. The adapter
-   uses `name` as `X-MCP-Agent-Session` on every outbound request.
+   `consentedTrust`, `policyVersion`, and absolute `expiresAt`. With
+   `--auth mtls`, that session name is bound into the SPIFFE client
+   certificate the adapter presents.
 6. With `--auto-refresh`, a background goroutine renews the session ~5 min
-   before `expiresAt` and atomically rotates the identity. In-flight requests
-   continue with the previous identity; subsequent requests pick up the new
-   one without a restart. Transient platform errors are logged to stderr; the
-   previous identity stays in place until a refresh succeeds.
+   before `expiresAt` and re-enrolls the certificate. In-flight requests
+   continue with the previous cert; subsequent requests pick up the new one
+   without a restart. Transient platform errors are logged to stderr; the
+   previous cert stays in place until a refresh succeeds.
 
 ### Required grant
 
@@ -138,10 +131,10 @@ mcp-runtime adapter proxy
 | Environment variable | Required | Purpose |
 |---|---:|---|
 | `MCP_RUNTIME_URL` | yes | Absolute Streamable HTTP MCP route. |
-| `MCP_RUNTIME_HUMAN_ID` | yes¹ | Human identity (`X-MCP-Human-ID`). |
-| `MCP_RUNTIME_AGENT_ID` | yes¹ | Agent identity (`X-MCP-Agent-ID`). |
-| `MCP_RUNTIME_TEAM_ID` | no | Team identity (`X-MCP-Team-ID`) for team-scoped grants. |
-| `MCP_RUNTIME_SESSION_ID` | yes¹ | `MCPAgentSession` name (`X-MCP-Agent-Session`). |
+| `MCP_RUNTIME_HUMAN_ID` | yes¹ | Human identity bound into the session / SPIFFE cert. |
+| `MCP_RUNTIME_AGENT_ID` | yes¹ | Agent identity bound into the session / SPIFFE cert. |
+| `MCP_RUNTIME_TEAM_ID` | no | Team identity for team-scoped grants. |
+| `MCP_RUNTIME_SESSION_ID` | yes¹ | `MCPAgentSession` name bound into the SPIFFE cert. |
 | `MCP_RUNTIME_HOST_HEADER` | no | Override the `Host` header for host-based ingress. |
 | `MCP_RUNTIME_LISTEN_ADDR` | proxy | Local listener; defaults to `127.0.0.1:8099`. |
 | `MCP_RUNTIME_PROTOCOL_VERSION` | stdio | `MCP-Protocol-Version` header the stdio adapter sends for legacy (`initialize`-based) requests. Defaults to `2025-06-18`; the negotiated `result.protocolVersion` from the runtime's `initialize` response overrides it for the rest of the process. Requests that declare a version in `params._meta` use that version. The HTTP proxy forwards the client's own header. |
@@ -159,19 +152,11 @@ mcp-runtime adapter proxy
 ¹ Required unless `--server` (platform-issued session) or `--anonymous` is in
 use. With `--server`, missing fields are populated from the issued response.
 
-The adapters inject these headers on every forwarded request:
-
-```text
-X-MCP-Human-ID:      <humanID>
-X-MCP-Agent-ID:      <agentID>
-X-MCP-Team-ID:       <teamID>            (omitted when empty)
-X-MCP-Agent-Session: <sessionID>
-Authorization:       <MCP_RUNTIME_AUTH_HEADER>   (when set)
-```
-
-Incoming spoofed values for the four governance headers are stripped before
-the upstream call. MCP protocol headers (`Mcp-Protocol-Version`,
-`Mcp-Session-Id`, `content-type`, `accept`) are preserved.
+With `--auth mtls`, governance identity is the session-bound client
+certificate (not request headers). Set `MCP_RUNTIME_AUTH_HEADER` when the
+MCP server expects a Bearer token for OAuth. MCP protocol headers
+(`Mcp-Protocol-Version`, `Mcp-Session-Id`, `content-type`, `accept`) are
+preserved on every forward.
 
 ## Anonymous mode (stdio)
 
@@ -197,73 +182,23 @@ publicly, and there is no safe shared cache key.
 
 ## Direct HTTP clients
 
-When the agent framework supports Streamable HTTP MCP and custom headers,
-you can call the runtime directly without the adapter. Mint a session with
-the platform API once, then attach the returned identity on every request.
-Use a platform login token or user API key for this call; service-only setup
-keys do not carry a human subject and cannot mint adapter sessions.
-
-```python
-import asyncio
-import os
-import httpx
-
-from agents import Agent, Runner
-from agents.mcp import MCPServerStreamableHttp
-
-async def main() -> None:
-    platform_token = os.environ["MCP_PLATFORM_API_TOKEN"]
-    async with httpx.AsyncClient() as http:
-        resp = await http.post(
-            os.environ["MCP_PLATFORM_API_URL"].rstrip("/")
-            + "/api/v1/runtime/adapter/sessions",
-            json={
-                "serverName": "oauth-example-go-2025-11-25-gateway",
-                "agentID": "ticket-triage-agent",
-            },
-            headers={
-                "Authorization": f"Bearer {platform_token}",
-            },
-        )
-        resp.raise_for_status()
-        session = resp.json()
-
-    async with MCPServerStreamableHttp(
-        name="oauth-example-go-2025-11-25-gateway",
-        params={
-            "url": os.environ["MCP_RUNTIME_URL"],
-            "headers": {
-                "X-MCP-Human-ID": session["humanID"],
-                "X-MCP-Agent-ID": session["agentID"],
-                "X-MCP-Team-ID": session.get("teamID", ""),
-                "X-MCP-Agent-Session": session["name"],
-            },
-        },
-    ) as server:
-        agent = Agent(
-            name="Governed Agent",
-            instructions="Use MCP tools when they help.",
-            mcp_servers=[server],
-        )
-        print((await Runner.run(agent, "Add 2 and 3.")).final_output)
-
-asyncio.run(main())
-```
-
-This is the only path where the consumer calls the platform API itself. For
-framework code that cannot attach headers, use the proxy or stdio adapter
-below.
+Do not mint a session and invent governance identity in application code.
+Use the proxy or stdio adapter with `--auth mtls` so the platform issues a
+session and the adapter presents the session-bound SPIFFE client certificate.
+Service-only setup keys cannot mint adapter sessions; use a platform login
+token or user API key when the adapter calls the platform.
 
 ## HTTP proxy adapter
 
-Use the proxy when a framework can speak Streamable HTTP MCP but cannot
-attach the governance headers itself.
+Use the proxy when a framework can speak Streamable HTTP MCP but should not
+manage sessions or certificates itself.
 
 ```bash
 mcp-runtime adapter proxy \
   --runtime-url https://mcp.example.com/oauth-example-go-2025-11-25-gateway/mcp \
   --server oauth-example-go-2025-11-25-gateway \
   --agent ticket-triage-agent \
+  --auth mtls \
   --auto-refresh
 ```
 
@@ -434,18 +369,16 @@ spec:
     audience: https://mcp.example.com/workspace-assistant/mcp
 ```
 
-**How termination works.** Traefik optionally verifies a presented client
-certificate against the platform workload CA, injects the verified SPIFFE
-identity as a trusted header (`X-MCP-Verified-SPIFFE-ID`), and re-encrypts to
-the gateway over a second mTLS hop. Without a client certificate, OAuth clients
-continue through the normal route. The operator generates the Traefik
-`TLSOption` (`VerifyClientCertIfGiven`), the `spiffe-identity` middleware
-(preserves governance headers for OAuth requests without a certificate; strips
-them and injects verified session identity for adapter certificates), a
-`ServersTransport` (the re-encrypted hop with a pinned ingress certificate), and
-a path-based `IngressRoute`. A `NetworkPolicy` restricts the gateway port to the
-ingress so the trusted header cannot be forged by another pod, and the gateway
-requires the connection to be a verified mTLS hop before trusting the header.
+**How termination works.** Traefik verifies a presented adapter client
+certificate against the platform workload CA, asserts the verified SPIFFE
+identity to the gateway, and re-encrypts over a second mTLS hop. Ordinary
+OAuth clients without a client certificate continue with Bearer only. The
+operator generates the Traefik `TLSOption` (`VerifyClientCertIfGiven`), the
+`spiffe-identity` middleware, a `ServersTransport` (re-encrypted hop with a
+pinned ingress certificate), and a path-based `IngressRoute`. A
+`NetworkPolicy` restricts the gateway port to the ingress so the SPIFFE
+assertion cannot be forged by another pod, and the gateway requires a
+verified mTLS hop before trusting that assertion.
 
 The caller-facing server certificate for the OAuth route is
 published as Traefik's **default certificate** via a single `TLSStore` named
@@ -507,20 +440,17 @@ mcp-runtime adapter proxy \
 the issued session). With `--auto-refresh`, the adapter re-enrolls a fresh
 certificate a few minutes before the session expires and drains idle
 connections so subsequent requests renegotiate with it. Long-running adapters
-keep working without restarts. Governance identity headers are suppressed in
-this mode. To reuse `enroll` output instead of in-memory enrollment, pass
-`--auth mtls` together with the `--tls-client-cert`/`-key`/`-ca-bundle` files.
+keep working without restarts. To reuse `enroll` output instead of in-memory
+enrollment, pass `--auth mtls` together with the
+`--tls-client-cert`/`-key`/`-ca-bundle` files.
 
-Clients without an adapter certificate use OAuth. An adapter can authenticate
-with its session-bound certificate; grant and session policy then authorize its
-identity. Existing MCPServer resources using the removed `auth.mode: mtls` must
-be changed to `auth.mode: oauth` and configured with `issuerURL` and `audience`.
-The operator rejects old stored values and removes their obsolete per-server
-certificate and ingress resources. Set platform-wide `MCP_TRUST_DOMAIN` and
+Adapters authenticate with the session-bound certificate; grant and session
+policy authorize that identity. Ordinary OAuth clients without an adapter
+certificate use Bearer only. Existing MCPServer resources using the removed
+`auth.mode: mtls` must be changed to `auth.mode: oauth` with `issuerURL` and
+`audience`. Set platform-wide `MCP_TRUST_DOMAIN` and
 `MCP_MTLS_CLUSTER_ISSUER` to enable adapter enrollment; test-mode defaults the
 issuer to `mcp-runtime-ca`.
 
-For adapter-certificate requests, the gateway ignores caller-supplied `X-MCP-*`
-identity headers and derives identity from the verified SPIFFE URI and the
-operator-rendered session binding. OAuth clients without a certificate retain
-the normal OAuth and session-header flow.
+The gateway derives adapter governance identity from the verified SPIFFE URI
+and the operator-rendered session binding.
