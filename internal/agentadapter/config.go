@@ -372,7 +372,9 @@ func BuildTLSConfig(certFile, keyFile, caFile string) (*tls.Config, error) {
 // BuildTLSConfigOptions is BuildTLSConfig with an explicit insecure-skip-verify
 // switch for local development and Kind E2E port-forwards.
 func BuildTLSConfigOptions(certFile, keyFile, caFile string, insecureSkipVerify bool) (*tls.Config, error) {
-	cfg := &tls.Config{InsecureSkipVerify: insecureSkipVerify}
+	// Kind Traefik port-forwards terminate with a local default cert whose SAN
+	// is not localhost; only set when callers pass --tls-insecure-skip-verify.
+	cfg := &tls.Config{InsecureSkipVerify: insecureSkipVerify} // #nosec G402 -- explicit Kind/local Traefik default-cert skip; client certs still presented
 	if certFile != "" || keyFile != "" {
 		if certFile == "" || keyFile == "" {
 			return nil, fmt.Errorf("%s and %s must both be set for mTLS", EnvTLSClientCert, EnvTLSClientKey)

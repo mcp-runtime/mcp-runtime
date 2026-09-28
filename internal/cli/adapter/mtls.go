@@ -69,8 +69,10 @@ func setupMTLS(ctx context.Context, client *platformapi.PlatformClient, flags pl
 	r.cert.Store(&cert)
 
 	tlsCfg := &tls.Config{
-		RootCAs:            pool,
-		InsecureSkipVerify: insecureSkipVerify,
+		RootCAs: pool,
+		// Kind Traefik port-forwards terminate with a local default cert whose
+		// SAN is not localhost; opt-in only via --tls-insecure-skip-verify.
+		InsecureSkipVerify: insecureSkipVerify, // #nosec G402 -- explicit Kind/local Traefik default-cert skip; client certs still presented
 		GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
 			return r.cert.Load(), nil
 		},
