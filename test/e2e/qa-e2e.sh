@@ -327,6 +327,14 @@ scenario_requested() {
 if scenario_requested "adapter-proxy"; then
   scenario_requested "adapter-certificates" || E2E_SCENARIO_LIST+=("adapter-certificates")
 fi
+# Cert-first Kind paths (trust/smoke-auth/governance) need Traefik TLS + adapter
+# certificates even when the dedicated adapter-certificates OAuth scenario is off.
+if scenario_requested "trust" || scenario_requested "smoke-auth" || scenario_requested "governance"; then
+  export MCP_ADAPTER_CERTIFICATES="${MCP_ADAPTER_CERTIFICATES:-true}"
+  export MCP_SETUP_MTLS_CLUSTER_ISSUER="${MCP_SETUP_MTLS_CLUSTER_ISSUER:-mcp-runtime-ca}"
+  export MCP_TRUST_DOMAIN="${MCP_TRUST_DOMAIN:-cluster.local}"
+  export MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE="${MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE:-mcp-servers}"
+fi
 if scenario_requested "adapter-certificates"; then
   scenario_requested "oauth" || E2E_SCENARIO_LIST+=("oauth")
 fi
@@ -3848,7 +3856,7 @@ if deep_request_flows_enabled || scenario_selected "cli-platform"; then
 fi
 run_logged_stage "server init governed defaults" verify_server_init_governed_defaults
 
-if scenario_selected "adapter-certificates"; then
+if scenario_selected "adapter-certificates" || [[ "${MCP_ADAPTER_CERTIFICATES:-}" == "true" ]]; then
   export MCP_ADAPTER_CERTIFICATES=true
   export MCP_SETUP_MTLS_CLUSTER_ISSUER="${MCP_SETUP_MTLS_CLUSTER_ISSUER:-mcp-runtime-ca}"
   export MCP_TRUST_DOMAIN="${MCP_TRUST_DOMAIN:-cluster.local}"
@@ -3861,13 +3869,13 @@ PLATFORM_CACHE_READY=0
 if platform_cache_ready; then
   PLATFORM_CACHE_READY=1
   echo "[cache] reusing ready platform in cluster ${CLUSTER_NAME}"
-  if scenario_selected "adapter-certificates" && ! kubectl -n mcp-runtime get deployment mcp-runtime-operator-controller-manager \
+  if [[ "${MCP_ADAPTER_CERTIFICATES:-}" == "true" ]] && ! kubectl -n mcp-runtime get deployment mcp-runtime-operator-controller-manager \
     -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="MCP_ADAPTER_CERTIFICATES")].value}' \
     | grep -qx true; then
     echo "[cache] adapter certificate feature is not enabled; setup will reconfigure the platform"
     PLATFORM_CACHE_READY=0
   fi
-  if scenario_selected "adapter-certificates" && ! kubectl -n mcp-runtime get deployment mcp-runtime-operator-controller-manager \
+  if [[ "${MCP_ADAPTER_CERTIFICATES:-}" == "true" ]] && ! kubectl -n mcp-runtime get deployment mcp-runtime-operator-controller-manager \
     -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE")].value}' \
     | grep -qx "${MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE}"; then
     echo "[cache] adapter certificate TLS namespace is not configured; setup will reconfigure the platform"
