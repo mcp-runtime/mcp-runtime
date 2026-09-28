@@ -782,8 +782,9 @@ func TestRuntimeObservabilityLinksGenerateGrafanaURLAfterAuthorization(t *testin
 			Namespace: "mcp-team-acme",
 		},
 		Spec: mcpv1alpha1.MCPServerSpec{
-			Image:  "registry.example.com/acme/team-demo",
-			TeamID: "team-acme-id",
+			Image:   "registry.example.com/acme/team-demo",
+			TeamID:  "team-acme-id",
+			Gateway: &mcpv1alpha1.GatewayConfig{Enabled: true},
 		},
 	})
 	request := httptest.NewRequest(http.MethodGet, "/api/runtime/observability/links?namespace=mcp-team-acme&server=team-demo", nil)
@@ -2034,7 +2035,8 @@ func ownedTestMCPServer(name, namespace, userID string) *mcpv1alpha1.MCPServer {
 			},
 		},
 		Spec: mcpv1alpha1.MCPServerSpec{
-			Image: "registry.example.com/" + namespace + "/" + name,
+			Image:   "registry.example.com/" + namespace + "/" + name,
+			Gateway: &mcpv1alpha1.GatewayConfig{Enabled: true},
 		},
 	}
 }
