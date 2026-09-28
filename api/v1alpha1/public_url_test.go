@@ -16,7 +16,7 @@ func TestMCPServerDefaultDerivesOAuthAudience(t *testing.T) {
 	}{
 		{
 			name:    "path-based server on the operator default host over tls",
-			spec:    MCPServerSpec{Auth: &AuthConfig{Mode: AuthModeOAuth}},
+			spec:    MCPServerSpec{Auth: &AuthConfig{}},
 			options: MCPServerDefaultOptions{DefaultIngressHost: "mcp.example.com", DefaultIngressTLS: true},
 			want:    "https://mcp.example.com/buddy/mcp",
 		},
@@ -24,7 +24,7 @@ func TestMCPServerDefaultDerivesOAuthAudience(t *testing.T) {
 			name: "custom public path prefix",
 			spec: MCPServerSpec{
 				PublicPathPrefix: "/tools/buddy/",
-				Auth:             &AuthConfig{Mode: AuthModeOAuth},
+				Auth:             &AuthConfig{},
 			},
 			options: MCPServerDefaultOptions{DefaultIngressHost: "mcp.example.com", DefaultIngressTLS: true},
 			want:    "https://mcp.example.com/tools/buddy/mcp",
@@ -34,35 +34,28 @@ func TestMCPServerDefaultDerivesOAuthAudience(t *testing.T) {
 			spec: MCPServerSpec{
 				IngressHost:        "buddy.example.com",
 				IngressAnnotations: map[string]string{traefikRouterTLSAnnotation: "true"},
-				Auth:               &AuthConfig{Mode: AuthModeOAuth},
+				Auth:               &AuthConfig{},
 			},
 			options: MCPServerDefaultOptions{DefaultIngressHost: "mcp.example.com"},
 			want:    "https://buddy.example.com/buddy/mcp",
 		},
 		{
 			name:    "plain http without tls",
-			spec:    MCPServerSpec{Auth: &AuthConfig{Mode: AuthModeOAuth}},
+			spec:    MCPServerSpec{Auth: &AuthConfig{}},
 			options: MCPServerDefaultOptions{DefaultIngressHost: "localhost:18080"},
 			want:    "http://localhost:18080/buddy/mcp",
 		},
 		{
 			name: "explicit audience is kept",
 			spec: MCPServerSpec{Auth: &AuthConfig{
-				Mode:     AuthModeOAuth,
 				Audience: "https://canonical.example.com/buddy/mcp",
 			}},
 			options: MCPServerDefaultOptions{DefaultIngressHost: "mcp.example.com", DefaultIngressTLS: true},
 			want:    "https://canonical.example.com/buddy/mcp",
 		},
 		{
-			name:    "non-oauth modes get no audience",
-			spec:    MCPServerSpec{Auth: &AuthConfig{Mode: AuthModeHeader}},
-			options: MCPServerDefaultOptions{DefaultIngressHost: "mcp.example.com", DefaultIngressTLS: true},
-			want:    "",
-		},
-		{
 			name:    "no known host leaves audience unset",
-			spec:    MCPServerSpec{Auth: &AuthConfig{Mode: AuthModeOAuth}},
+			spec:    MCPServerSpec{Auth: &AuthConfig{}},
 			options: MCPServerDefaultOptions{DefaultIngressTLS: true},
 			want:    "",
 		},
@@ -84,7 +77,7 @@ func TestMCPServerDefaultDerivesOAuthAudience(t *testing.T) {
 func TestMCPServerDefaultDoesNotPersistDerivedAuth(t *testing.T) {
 	server := &MCPServer{
 		ObjectMeta: metav1.ObjectMeta{Name: "buddy"},
-		Spec:       MCPServerSpec{Image: "example.com/buddy", Auth: &AuthConfig{Mode: AuthModeOAuth}},
+		Spec:       MCPServerSpec{Image: "example.com/buddy", Auth: &AuthConfig{}},
 	}
 	server.DefaultWithOptions(MCPServerDefaultOptions{
 		DefaultIngressHost:    "mcp.example.com",
@@ -104,7 +97,7 @@ func TestMCPServerValidateUnderivableOAuthAudience(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "buddy"},
 		Spec: MCPServerSpec{
 			Image: "example.com/buddy",
-			Auth:  &AuthConfig{Mode: AuthModeOAuth, IssuerURL: "https://auth.example.com/mcp-auth"},
+			Auth:  &AuthConfig{IssuerURL: "https://auth.example.com/mcp-auth"},
 		},
 	}
 	server.DefaultWithOptions(MCPServerDefaultOptions{})

@@ -476,15 +476,6 @@ func (r *MCPServerReconciler) buildGatewayContainer(mcpServer *mcpv1alpha1.MCPSe
 			corev1.EnvVar{Name: "POLICY_VERSION", Value: mcpServer.Spec.Policy.PolicyVersion},
 		)
 	}
-	if mcpServer.Spec.Auth != nil {
-		envVars = append(envVars,
-			corev1.EnvVar{Name: "HUMAN_ID_HEADER", Value: mcpServer.Spec.Auth.HumanIDHeader},
-			corev1.EnvVar{Name: "AGENT_ID_HEADER", Value: mcpServer.Spec.Auth.AgentIDHeader},
-			corev1.EnvVar{Name: "TEAM_ID_HEADER", Value: mcpServer.Spec.Auth.TeamIDHeader},
-			corev1.EnvVar{Name: "SESSION_ID_HEADER", Value: mcpServer.Spec.Auth.SessionIDHeader},
-			corev1.EnvVar{Name: "AUTH_MODE", Value: string(mcpServer.Spec.Auth.Mode)},
-		)
-	}
 	if r.usesAdapterCertificates(mcpServer) {
 		envVars = append(envVars,
 			corev1.EnvVar{Name: "TLS_CERT_FILE", Value: gatewayTLSMountDir + "/tls.crt"},
@@ -799,7 +790,7 @@ func gatewayEnabled(mcpServer *mcpv1alpha1.MCPServer) bool {
 }
 
 func serverUsesOAuth(mcpServer *mcpv1alpha1.MCPServer) bool {
-	return mcpServer != nil && mcpServer.Spec.Auth != nil && mcpServer.Spec.Auth.Mode == mcpv1alpha1.AuthModeOAuth
+	return mcpServer != nil && mcpServer.Spec.Auth != nil
 }
 
 func (r *MCPServerReconciler) oauthInternalIssuerURL() string {

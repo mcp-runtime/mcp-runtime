@@ -3,8 +3,8 @@
 // wire-format drift between the shim and a "fake MCP runtime" without spinning
 // up Kubernetes — envtest is not involved here. The test compiles the CLI
 // binary once and then runs scenario flows that exercise the production gates
-// added through phases 3–6: anonymous mode, session-required flow, idempotent
-// retry, session-expiry signaling, and team isolation via header inspection.
+// added through phases 3–6: anonymous mode, certificate-authenticated flow,
+// idempotent retry, and session-expiry signaling.
 //
 // Run with:
 //
@@ -14,9 +14,16 @@ package integration
 import (
 	"bufio"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -263,7 +270,7 @@ func (w *testWriter) disable() {
 }
 
 // fakeRuntime is the in-test stand-in for an mcp-runtime gateway. It captures
-// every inbound request so tests can assert governance headers and trigger
+// every inbound request so tests can assert method routing and trigger
 // scenario-specific responses by tweaking the handler.
 type fakeRuntime struct {
 	server  *httptest.Server
@@ -279,9 +286,13 @@ type capturedRequest struct {
 }
 
 func newFakeRuntime(t *testing.T, handler func(w http.ResponseWriter, r *http.Request)) *fakeRuntime {
+	return newFakeRuntimeTLS(t, false, handler)
+}
+
+func newFakeRuntimeTLS(t *testing.T, useTLS bool, handler func(w http.ResponseWriter, r *http.Request)) *fakeRuntime {
 	t.Helper()
 	rt := &fakeRuntime{handler: handler}
-	rt.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		var envelope struct {
 			Method string `json:"method"`
@@ -296,9 +307,63 @@ func newFakeRuntime(t *testing.T, handler func(w http.ResponseWriter, r *http.Re
 		rt.mu.Unlock()
 		r.Body = io.NopCloser(strings.NewReader(string(body)))
 		rt.handler(w, r)
-	}))
+	})
+	if useTLS {
+		rt.server = httptest.NewTLSServer(h)
+	} else {
+		rt.server = httptest.NewServer(h)
+	}
 	t.Cleanup(rt.server.Close)
 	return rt
+}
+
+// adapterCertificateArgs writes a throwaway client certificate plus the fake
+// runtime CA bundle and returns the TLS flags the cert-first adapter needs.
+func adapterCertificateArgs(t *testing.T, rt *fakeRuntime) []string {
+	t.Helper()
+	if rt.server.Certificate() == nil {
+		t.Fatal("adapterCertificateArgs requires a TLS fake runtime")
+	}
+	dir := t.TempDir()
+	caPath := filepath.Join(dir, "ca.crt")
+	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: rt.server.Certificate().Raw})
+	if err := os.WriteFile(caPath, caPEM, 0o644); err != nil {
+		t.Fatalf("write CA bundle: %v", err)
+	}
+
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate client key: %v", err)
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "adapter-integration-test"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("create client cert: %v", err)
+	}
+	certPath := filepath.Join(dir, "client.crt")
+	keyPath := filepath.Join(dir, "client.key")
+	if err := os.WriteFile(certPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600); err != nil {
+		t.Fatalf("write client cert: %v", err)
+	}
+	keyDER, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		t.Fatalf("marshal client key: %v", err)
+	}
+	if err := os.WriteFile(keyPath, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}), 0o600); err != nil {
+		t.Fatalf("write client key: %v", err)
+	}
+	return []string{
+		"--tls-client-cert", certPath,
+		"--tls-client-key", keyPath,
+		"--tls-ca-bundle", caPath,
+	}
 }
 
 func (rt *fakeRuntime) URL() string {
@@ -326,14 +391,14 @@ func (rt *fakeRuntime) callsByMethod(method string) int {
 // ---- scenarios ----
 
 // TestAdapterStdioSessionRequiredHappyPath drives the full handshake +
-// tool/list + tool/call sequence with explicit-identity flags and verifies
-// governance headers reach the runtime exactly as configured.
+// tool/list + tool/call sequence with a session-bound client certificate
+// against an HTTPS fake runtime.
 func TestAdapterStdioSessionRequiredHappyPath(t *testing.T) {
 	if testing.Short() {
 		t.Skip("subprocess test; skipped in -short")
 	}
 
-	rt := newFakeRuntime(t, func(w http.ResponseWriter, r *http.Request) {
+	rt := newFakeRuntimeTLS(t, true, func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		var env struct {
 			ID     json.RawMessage `json:"id"`
@@ -356,12 +421,7 @@ func TestAdapterStdioSessionRequiredHappyPath(t *testing.T) {
 		}
 	})
 
-	d := startAdapter(t, rt.URL(), nil, map[string]string{
-		"MCP_RUNTIME_HUMAN_ID":   "support-lead",
-		"MCP_RUNTIME_AGENT_ID":   "ticket-triage-agent",
-		"MCP_RUNTIME_SESSION_ID": "sess-1",
-		"MCP_RUNTIME_TEAM_ID":    "team-acme",
-	})
+	d := startAdapter(t, rt.URL(), adapterCertificateArgs(t, rt), nil)
 
 	d.send(t, jsonRPCRequest{JSONRPC: "2.0", ID: 1, Method: "initialize", Params: map[string]any{}})
 	if got := d.recv(t, 5*time.Second); got.Error != nil {
@@ -383,17 +443,9 @@ func TestAdapterStdioSessionRequiredHappyPath(t *testing.T) {
 		t.Fatalf("tools/call = %#v", called)
 	}
 
-	// Every upstream request must carry the explicit identity headers.
-	for _, r := range rt.requests() {
-		if r.method == "" || r.method == "notifications/initialized" {
-			// notifications/initialized goes through the same headers but the
-			// test only cares about request-id-bearing calls. Both should still
-			// have the governance headers.
-		}
-		assertHeader(t, r.headers, "X-MCP-Human-ID", "support-lead")
-		assertHeader(t, r.headers, "X-MCP-Agent-ID", "ticket-triage-agent")
-		assertHeader(t, r.headers, "X-MCP-Agent-Session", "sess-1")
-		assertHeader(t, r.headers, "X-MCP-Team-ID", "team-acme")
+	// Governance identity is the client certificate, not X-MCP headers.
+	if n := rt.callsByMethod("tools/call"); n != 1 {
+		t.Fatalf("tools/call upstream count = %d, want 1", n)
 	}
 }
 
@@ -441,14 +493,6 @@ func TestAdapterStdioAnonymousModeBlocksDisallowedMethod(t *testing.T) {
 	if rt.callsByMethod("tools/call") != 0 {
 		t.Fatalf("tools/call leaked to upstream in anonymous mode")
 	}
-	// Anonymous mode must not inject identity headers.
-	for _, r := range rt.requests() {
-		for _, h := range []string{"X-MCP-Human-ID", "X-MCP-Agent-ID", "X-MCP-Agent-Session"} {
-			if v := r.headers.Get(h); v != "" {
-				t.Fatalf("anonymous mode forwarded %s=%q (must be absent)", h, v)
-			}
-		}
-	}
 }
 
 // TestAdapterStdioRetriesIdempotentMethodOnBadGateway exercises the
@@ -459,7 +503,7 @@ func TestAdapterStdioRetriesIdempotentMethodOnBadGateway(t *testing.T) {
 		t.Skip("subprocess test; skipped in -short")
 	}
 	var listAttempts int32
-	rt := newFakeRuntime(t, func(w http.ResponseWriter, r *http.Request) {
+	rt := newFakeRuntimeTLS(t, true, func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		var env struct {
 			ID     json.RawMessage `json:"id"`
@@ -479,11 +523,7 @@ func TestAdapterStdioRetriesIdempotentMethodOnBadGateway(t *testing.T) {
 			fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"tools":[]}}`, env.ID)
 		}
 	})
-	d := startAdapter(t, rt.URL(), nil, map[string]string{
-		"MCP_RUNTIME_HUMAN_ID":   "h",
-		"MCP_RUNTIME_AGENT_ID":   "a",
-		"MCP_RUNTIME_SESSION_ID": "s",
-	})
+	d := startAdapter(t, rt.URL(), adapterCertificateArgs(t, rt), nil)
 
 	d.send(t, jsonRPCRequest{JSONRPC: "2.0", ID: 1, Method: "initialize", Params: map[string]any{}})
 	_ = d.recv(t, 5*time.Second)
@@ -505,7 +545,7 @@ func TestAdapterStdioSurfacesSessionExpired(t *testing.T) {
 	if testing.Short() {
 		t.Skip("subprocess test; skipped in -short")
 	}
-	rt := newFakeRuntime(t, func(w http.ResponseWriter, r *http.Request) {
+	rt := newFakeRuntimeTLS(t, true, func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		var env struct {
 			ID     json.RawMessage `json:"id"`
@@ -521,11 +561,7 @@ func TestAdapterStdioSurfacesSessionExpired(t *testing.T) {
 			_, _ = w.Write([]byte(`{"error":"session_not_found"}`))
 		}
 	})
-	d := startAdapter(t, rt.URL(), nil, map[string]string{
-		"MCP_RUNTIME_HUMAN_ID":   "h",
-		"MCP_RUNTIME_AGENT_ID":   "a",
-		"MCP_RUNTIME_SESSION_ID": "s",
-	})
+	d := startAdapter(t, rt.URL(), adapterCertificateArgs(t, rt), nil)
 
 	d.send(t, jsonRPCRequest{JSONRPC: "2.0", ID: 1, Method: "initialize", Params: map[string]any{}})
 	_ = d.recv(t, 5*time.Second)
@@ -537,12 +573,5 @@ func TestAdapterStdioSurfacesSessionExpired(t *testing.T) {
 	}
 	if got.Error.Data == nil || got.Error.Data["runtime_status"] != "session_expired" {
 		t.Fatalf("error.data = %#v, want runtime_status=session_expired", got.Error.Data)
-	}
-}
-
-func assertHeader(t *testing.T, h http.Header, name, want string) {
-	t.Helper()
-	if got := h.Get(name); got != want {
-		t.Fatalf("header %s = %q, want %q", name, got, want)
 	}
 }

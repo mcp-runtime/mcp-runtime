@@ -996,7 +996,7 @@ func operatorEnvOverrides(gatewayProxyImage, existingGatewayOTLPEndpoint string)
 	if issuer := strings.TrimSpace(os.Getenv("MCP_MTLS_CLUSTER_ISSUER")); issuer != "" {
 		envVars = append(envVars, operatorEnvVar{Name: "MCP_MTLS_CLUSTER_ISSUER", Value: issuer})
 	}
-	// Adapter certificates on OAuth routes are opt-in: enabling them moves
+	// Adapter certificates on gateway routes are opt-in: enabling them moves
 	// every OAuth server to a Traefik IngressRoute behind an mTLS gateway hop.
 	if enabled := strings.TrimSpace(os.Getenv("MCP_ADAPTER_CERTIFICATES")); enabled != "" {
 		envVars = append(envVars, operatorEnvVar{Name: "MCP_ADAPTER_CERTIFICATES", Value: enabled})

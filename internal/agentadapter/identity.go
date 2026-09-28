@@ -1,10 +1,9 @@
 package agentadapter
 
-import "net/http"
-
-// Identity is the issued governance identity that adapters attach to every
-// runtime request. The platform issues these values out-of-band (or through
-// the platform adapter-session endpoint); the adapter only forwards them.
+// Identity is the adapter's session subject (human, agent, team, session).
+// It is used for local concerns such as tools-cache keys. Runtime governance
+// identity is the session-bound client certificate (and OAuth bearer when the
+// target enables it), not request headers.
 type Identity struct {
 	HumanID   string
 	AgentID   string
@@ -12,33 +11,8 @@ type Identity struct {
 	SessionID string
 }
 
-// IdentityProvider returns the current governance identity. Adapters call it
-// before each outbound request so callers that rotate identity at runtime
-// (for example, platform-issued sessions refreshed before expiry) get the
-// new values applied without restarting the adapter process. When non-nil
-// on ProxyConfig / ShimConfig it takes precedence over the static Identity.
+// IdentityProvider returns the current identity. Adapters call it when a
+// caller rotates session identity at runtime without restarting the process.
+// When non-nil on ProxyConfig / ShimConfig it takes precedence over the
+// static Identity.
 type IdentityProvider func() Identity
-
-// Apply writes the governance identity onto an outbound request's headers,
-// replacing any caller-supplied values. Headers are always deleted first to
-// strip spoofed inbound values. A header is only re-set when its value is
-// non-empty, so anonymous-mode adapters with partial identity naturally omit
-// the missing headers rather than forwarding empty strings.
-func (id Identity) Apply(headers http.Header) {
-	headers.Del(HumanIDHeader)
-	headers.Del(AgentIDHeader)
-	headers.Del(TeamIDHeader)
-	headers.Del(AgentSessionHeader)
-	if id.HumanID != "" {
-		headers.Set(HumanIDHeader, id.HumanID)
-	}
-	if id.AgentID != "" {
-		headers.Set(AgentIDHeader, id.AgentID)
-	}
-	if id.TeamID != "" {
-		headers.Set(TeamIDHeader, id.TeamID)
-	}
-	if id.SessionID != "" {
-		headers.Set(AgentSessionHeader, id.SessionID)
-	}
-}

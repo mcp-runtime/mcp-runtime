@@ -63,7 +63,7 @@ type adapterSessionResponse struct {
 // HandleAdapterSession issues (or reuses) an MCPAgentSession for an adapter
 // call. The platform — not the adapter — picks the matching grant, caps the
 // trust at the grant's ceiling, and writes the session resource. The adapter
-// then attaches the returned identity fields as governance headers on every
+// then uses the returned session to enroll a certificate for every
 // request to the runtime gateway.
 //
 // Errors:

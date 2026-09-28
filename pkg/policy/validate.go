@@ -13,7 +13,7 @@ import (
 // after decoding and before activating a snapshot).
 //
 // Validation is strict and fails closed: unknown trust, side-effect, decision,
-// auth-mode, or policy-mode values are rejected rather than silently normalized,
+// auth or policy values are rejected rather than silently normalized,
 // and incomplete combinations (such as OAuth without an issuer) are errors. A
 // document that does not validate must never replace a known-good policy.
 func Validate(doc *Document) error {
@@ -59,22 +59,20 @@ func validateAuth(auth *Auth) error {
 	if auth == nil {
 		return nil
 	}
-	mode := strings.ToLower(strings.TrimSpace(auth.Mode))
-	switch mode {
-	case "", "none", "header", "oauth":
-	default:
-		return fmt.Errorf("policy: invalid auth mode %q", auth.Mode)
-	}
-	if mode == "oauth" && strings.TrimSpace(auth.IssuerURL) == "" {
-		return fmt.Errorf("policy: auth mode %q requires issuer_url", auth.Mode)
-	}
-	if mode == "oauth" {
-		if strings.TrimSpace(auth.Audience) == "" {
-			return fmt.Errorf("policy: auth mode %q requires audience", auth.Mode)
+	if strings.TrimSpace(auth.IssuerURL) == "" && strings.TrimSpace(auth.Audience) == "" {
+		if strings.TrimSpace(auth.TrustDomain) != "" {
+			return nil
 		}
-		if err := validateResourceURI(auth.Audience); err != nil {
-			return fmt.Errorf("policy: auth audience: %w", err)
-		}
+		return fmt.Errorf("policy: auth requires OAuth issuer/audience or adapter trust_domain")
+	}
+	if strings.TrimSpace(auth.IssuerURL) == "" {
+		return fmt.Errorf("policy: OAuth auth requires issuer_url")
+	}
+	if strings.TrimSpace(auth.Audience) == "" {
+		return fmt.Errorf("policy: OAuth auth requires audience")
+	}
+	if err := validateResourceURI(auth.Audience); err != nil {
+		return fmt.Errorf("policy: auth audience: %w", err)
 	}
 	return nil
 }

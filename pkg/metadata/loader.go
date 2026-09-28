@@ -112,21 +112,6 @@ func setDefaults(server *ServerMetadata) error {
 		}
 	}
 	if server.Auth != nil {
-		if server.Auth.Mode == "" {
-			server.Auth.Mode = AuthModeHeader
-		}
-		if server.Auth.HumanIDHeader == "" {
-			server.Auth.HumanIDHeader = mcpdefaults.AuthHumanIDHeader
-		}
-		if server.Auth.AgentIDHeader == "" {
-			server.Auth.AgentIDHeader = mcpdefaults.AuthAgentIDHeader
-		}
-		if server.Auth.TeamIDHeader == "" {
-			server.Auth.TeamIDHeader = mcpdefaults.AuthTeamIDHeader
-		}
-		if server.Auth.SessionIDHeader == "" {
-			server.Auth.SessionIDHeader = mcpdefaults.AuthSessionIDHeader
-		}
 		if server.Auth.TokenHeader == "" {
 			server.Auth.TokenHeader = mcpdefaults.AuthTokenHeader
 		}
@@ -148,9 +133,6 @@ func setDefaults(server *ServerMetadata) error {
 	if server.Session != nil {
 		if server.Session.Store == "" {
 			server.Session.Store = mcpdefaults.SessionStore
-		}
-		if server.Session.HeaderName == "" {
-			server.Session.HeaderName = mcpdefaults.AuthSessionIDHeader
 		}
 		if server.Session.MaxLifetime == "" {
 			server.Session.MaxLifetime = mcpdefaults.SessionMaxLife

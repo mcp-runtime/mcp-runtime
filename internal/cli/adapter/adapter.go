@@ -1,5 +1,5 @@
-// Package adapter routes the adapter top-level command for the agent-side
-// HTTP proxy and stdio shim that inject issued governance identity headers.
+// Package adapter routes the adapter top-level command for the certificate-
+// authenticated HTTP proxy and stdio shim.
 package adapter
 
 import (
@@ -12,10 +12,11 @@ import (
 func New(runtime *core.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "adapter",
-		Short: "Run agent-side adapters that inject issued MCP governance headers",
+		Short: "Run the certificate authenticated agent adapter",
 		Long: `Adapter commands forward agent MCP traffic to a configured platform-issued
-runtime route while attaching the human, agent, team, and session identity
-headers the gateway enforces.
+runtime route. The adapter always presents a session-bound client certificate.
+When the target server enables OAuth, it also forwards the bearer token and the
+gateway binds the certificate identity to the OAuth subject.
 
 Two transports are available:
 
@@ -23,11 +24,11 @@ Two transports are available:
                               speak MCP over HTTP).
   mcp-runtime adapter stdio   Stdio bridge for IDE-style clients that launch an
                               MCP server as a subprocess.
+  mcp-runtime adapter enroll  Enroll and save a client certificate.
 
-The adapter does not create grants or sessions. Issue them first with
-` + "`mcp-runtime access grant apply`" + ` / ` + "`mcp-runtime access session apply`" + ` (or
-through the platform UI/API), then point the adapter at the runtime route with
-the returned identity values.`,
+The adapter enrolls a session and certificate through the platform API when
+` + "`--server`" + ` and ` + "`--agent`" + ` are supplied. An existing certificate can be
+provided with the TLS client flags.`,
 	}
 	cmd.AddCommand(newProxyCmd(runtime))
 	cmd.AddCommand(newStdioCmd(runtime))

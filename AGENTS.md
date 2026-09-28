@@ -130,7 +130,7 @@ go build -o bin/mcp-runtime ./cmd/mcp-runtime
 ./bin/mcp-runtime bootstrap
 MCP_SETUP_WAIT_TIMEOUT=900 ./bin/mcp-runtime setup --test-mode --ingress-manifest config/ingress/overlays/http
 ./bin/mcp-runtime cluster doctor
-kubectl port-forward -n traefik svc/traefik 18080:8000
+kubectl port-forward -n traefik svc/traefik 18080:8000 18443:8443
 ```
 
 `setup --test-mode` builds and pushes images to the bundled registry (`registry.registry.svc.cluster.local:5000` in Kind) and provisions the local `mcp-runtime-ca` workload issuer for mTLS/SPIFFE validation. Prefer existing `kind-mcp-runtime` when healthy. Contributor runbook: `docs/contributor/README.md`.
@@ -193,7 +193,7 @@ When exploring component structure, imports, hooks, or file relationships, start
 
 - `graphify query "MCPServerReconciler ingress routes"`
 - `graphify query "ResolveRegistryEndpoint callers"`
-- `graphify query "agent adapter stdio transport implementation"`
+- `graphify query "agent adapter proxy transport implementation"`
 
 If the graph misses a symbol or relationship that exists in the code, run `graphify update .` and query again. Use grep or file searches after confirming the graph does not contain the information.
 

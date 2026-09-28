@@ -113,6 +113,11 @@ MCP_SETUP_WAIT_TIMEOUT=900 \
   --ingress-manifest config/ingress/overlays/http
 ```
 
+CI QA E2E can skip rebuilding unchanged platform images via content-hash
+tags on GHCR (`E2E_IMAGE_CACHE=1`, `MCP_SETUP_IMAGE_CACHE=1`,
+`E2E_GHCR_PUSH=1`). Local bring-up leaves those unset and builds as usual.
+See `docs/internals/tests.md` (Content-hash GHCR image cache).
+
 In **reuse** mode, skip `kind create`; still run `make build` (CLI may be
 stale) and `bootstrap`. Skip `setup` only if `cluster doctor` already
 reports a healthy install; otherwise rerun setup so manifests catch up to
@@ -167,10 +172,12 @@ the deployment image to the same ref, and wait for rollout.
 
 ```bash
 pgrep -f 'port-forward.*svc/traefik' >/dev/null \
-  || kubectl port-forward -n traefik svc/traefik 18080:8000 \
+  || kubectl port-forward -n traefik svc/traefik 18080:8000 18443:8443 \
        >/tmp/mcp-runtime-traefik-pf.log 2>&1 &
 
 curl -fsS -o /dev/null http://localhost:18080/ && echo "dashboard reachable"
+# Adapter-certificate MCP routes (when MCP_ADAPTER_CERTIFICATES=true):
+#   https://127.0.0.1:18443/<publicPathPrefix>/mcp  (use -k for local default cert)
 ```
 
 ## Step 7 — Deploy the bundled Go MCP example
@@ -191,11 +198,6 @@ servers:
     tools:
       - { name: add,   requiredTrust: low, sideEffect: read }
       - { name: upper, requiredTrust: medium, sideEffect: read }
-    auth:
-      mode: header
-      humanIDHeader: X-MCP-Human-ID
-      agentIDHeader: X-MCP-Agent-ID
-      sessionIDHeader: X-MCP-Agent-Session
     policy:
       mode: allow-list
       defaultDecision: deny
@@ -232,68 +234,27 @@ rm -rf /tmp/oauth-example-go-2025-11-25-gateway-manifests
 kubectl rollout status deploy/oauth-example-go-2025-11-25-gateway -n mcp-servers --timeout=180s
 ```
 
-## Step 8 — Apply baseline grant + session
+## Step 8 — Apply access and run real certificate-authenticated MCP traffic
+
+Use the maintained QA journey so access is created through the supported CLI,
+the agent comes from the platform directory, and traffic goes through
+`adapter proxy` with a session-bound certificate. The server above omits
+`auth`, so this path intentionally proves certificate-only adapter traffic.
 
 ```bash
-cat > /tmp/workspace-assistant-access.yaml <<'EOF'
-apiVersion: mcpruntime.org/v1alpha1
-kind: MCPAccessGrant
-metadata: { name: workspace-assistant-local, namespace: mcp-servers }
-spec:
-  serverRef: { name: oauth-example-go-2025-11-25-gateway }
-  subject: { humanID: local-user, agentID: local-agent }
-  maxTrust: high
-  allowedSideEffects: [read]
-  policyVersion: v1
-  toolRules:
-    - { name: add,   decision: allow }
-    - { name: upper, decision: allow }
----
-apiVersion: mcpruntime.org/v1alpha1
-kind: MCPAgentSession
-metadata: { name: local-session, namespace: mcp-servers }
-spec:
-  serverRef: { name: oauth-example-go-2025-11-25-gateway }
-  subject: { humanID: local-user, agentID: local-agent }
-  consentedTrust: high
-  policyVersion: v1
-EOF
-kubectl apply -f /tmp/workspace-assistant-access.yaml
-
-until ./bin/mcp-runtime server policy inspect oauth-example-go-2025-11-25-gateway --namespace mcp-servers \
-  | grep -q local-session; do sleep 2; done
-sleep 6   # proxy sidecar polls; do not skip this wait
+KUBECONFIG="$KIND_KUBECONFIG" \
+CLUSTER_NAME=mcp-runtime \
+E2E_CACHE_MODE=1 \
+E2E_KEEP_CLUSTER=1 \
+E2E_SCENARIOS=smoke-auth,adapter-certificates \
+bash test/e2e/qa-e2e.sh
 ```
 
 ## Step 9 — Real MCP traffic gate
 
-Bring-up is only "done" once a real `tools/call` returns `5`. This catches
-the regressions that unit tests miss (Traefik routing, gateway policy
-materialization, proxy reload, auth headers, analytics path).
-
-```bash
-BASE=http://localhost:18080/oauth-example-go-2025-11-25-gateway/mcp
-PROTO=2025-06-18
-H=(-H "content-type: application/json"
-   -H "accept: application/json, text/event-stream"
-   -H "Mcp-Protocol-Version: $PROTO"
-   -H "X-MCP-Human-ID: local-user"
-   -H "X-MCP-Agent-ID: local-agent"
-   -H "X-MCP-Agent-Session: local-session")
-
-SESSION="$(curl -si "${H[@]}" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' "$BASE" \
-  | awk -F': ' 'tolower($1)=="mcp-session-id"{print $2}' | tr -d '\r')"
-[ -n "$SESSION" ] || { echo "FAIL: no session id"; exit 1; }
-
-curl -sS "${H[@]}" -H "Mcp-Session-Id: $SESSION" \
-  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' "$BASE" >/dev/null
-
-RESP="$(curl -sS "${H[@]}" -H "Mcp-Session-Id: $SESSION" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"add","arguments":{"a":2,"b":3}}}' "$BASE")"
-echo "$RESP" | jq -e '.. | .text? // empty' | grep -q '"5"' \
-  || { echo "FAIL: tools/call did not return 5: $RESP"; exit 1; }
-```
+Bring-up is complete only when the QA journey reports a successful
+certificate-backed `tools/call`. For an OAuth-enabled target the same adapter
+also carries a bearer token; the OAuth scenario covers that combined path.
 
 If this fails, do not declare bring-up successful. Capture
 `kubectl logs -n mcp-servers <pod> -c mcp-gateway --tail=120` and

@@ -3,8 +3,9 @@
 Use this reference only for Step 5 of `mcp-protocol-compliance`, after the static
 schema checks have identified `SPEC_REV`, `SCHEMA`, `JV`, and `SPEC_CACHE`.
 
-Precondition: `contributor-cluster-setup` has run, port-forward is up, and a demo
-server is deployed with a valid grant/session.
+Precondition: `contributor-cluster-setup` has run, a demo server has a valid
+grant/session, and the certificate-authenticated HTTP adapter from
+`access-governance` is listening on `127.0.0.1:8099`.
 
 ```bash
 TEST_KUBECONFIG="${TEST_KUBECONFIG:-$HOME/.kube/test-mcp-runtime-config}"
@@ -12,14 +13,11 @@ kubectl --kubeconfig "$TEST_KUBECONFIG" config current-context \
   | grep -qx test-mcp-runtime \
   || { echo "Run contributor-cluster-setup first"; exit 1; }
 export KUBECONFIG="$TEST_KUBECONFIG"
-BASE=http://localhost:18080/go-example-mcp/mcp
+BASE=http://127.0.0.1:8099/mcp
 PROTO="$SPEC_REV"
 H=(-H "content-type: application/json"
    -H "accept: application/json, text/event-stream"
-   -H "Mcp-Protocol-Version: $PROTO"
-   -H "X-MCP-Human-ID: local-user"
-   -H "X-MCP-Agent-ID: local-agent"
-   -H "X-MCP-Agent-Session: local-session")
+   -H "Mcp-Protocol-Version: $PROTO")
 MCP_SPEC_TMP="${MCP_SPEC_TMP:-$(mktemp -d)}"
 trap 'rm -rf "$MCP_SPEC_TMP"' EXIT
 ```

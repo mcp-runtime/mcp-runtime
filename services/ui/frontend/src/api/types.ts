@@ -85,9 +85,6 @@ export type ServerSummary = {
   status: string;
   age?: string;
   endpoint?: string;
-  // spec.auth.mode: "oauth" | "header" | "none". Omitted by runtime-api
-  // builds older than the ServerInfoFromMCPServer projection.
-  authMode?: string;
   // The server's declared tools, with the governance metadata the gateway
   // enforces. Same shape as the catalog rows, scoped to this server.
   tools?: Array<{
@@ -180,44 +177,19 @@ function mergedInventoryDetails(
   return [...items.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export type AuthModeInfo = {
+export type ServerAuthInfo = {
   label: string;
   tone: "info" | "warning" | "neutral" | "unknown";
   detail: string;
 };
 
-// What a client has to present to reach this server. Unset means the runtime
-// API did not report a mode, which is not the same as "no auth required".
-export function authModeInfo(mode: string | undefined): AuthModeInfo {
-  switch ((mode || "").trim().toLowerCase()) {
-    case "oauth":
-      return {
-        label: "OAuth",
-        tone: "info",
-        detail:
-          "Clients use a bearer token from the server's configured issuer. Adapters may authenticate with a session-bound workload certificate.",
-      };
-    case "header":
-      return {
-        label: "Header identity",
-        tone: "neutral",
-        detail:
-          "The gateway reads identity from request headers. There is no token exchange, so the headers must come from a trusted hop.",
-      };
-    case "none":
-      return {
-        label: "No auth",
-        tone: "warning",
-        detail: "The gateway does not authenticate callers for this server.",
-      };
-    default:
-      return {
-        label: "Auth not reported",
-        tone: "unknown",
-        detail:
-          "This runtime-api build did not report an auth mode for the server. Check the MCPServer spec.auth.mode directly.",
-      };
-  }
+export function serverAuthInfo(): ServerAuthInfo {
+  return {
+    label: "OAuth optional",
+    tone: "info",
+    detail:
+      "Direct clients use OAuth when configured. Adapters always present a session-bound certificate and add OAuth only when the server requires it.",
+  };
 }
 
 export function serverPrompts(server: ServerSummary): string[] {

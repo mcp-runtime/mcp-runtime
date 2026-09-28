@@ -56,6 +56,35 @@ func TestRenderGatewayPolicyStampsAndValidates(t *testing.T) {
 	}
 }
 
+func TestRenderGatewayPolicyIncludesAdapterTrustWithoutOAuth(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = mcpv1alpha1.AddToScheme(scheme)
+	mcpServer := &mcpv1alpha1.MCPServer{
+		ObjectMeta: metav1.ObjectMeta{Name: "payments", Namespace: "servers"},
+		Spec: mcpv1alpha1.MCPServerSpec{
+			Gateway: &mcpv1alpha1.GatewayConfig{Enabled: true},
+		},
+	}
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
+	r := MCPServerReconciler{
+		Client:                     client,
+		Scheme:                     scheme,
+		AdapterCertificatesEnabled: true,
+		AdapterTrustDomain:         "example.org",
+		MTLSClusterIssuer:          "mcp-runtime-ca",
+	}
+	doc, err := r.renderGatewayPolicy(context.Background(), mcpServer)
+	if err != nil {
+		t.Fatalf("renderGatewayPolicy() error = %v", err)
+	}
+	if doc.Auth == nil || doc.Auth.TrustDomain != "example.org" {
+		t.Fatalf("Auth = %#v, want adapter trust domain", doc.Auth)
+	}
+	if policy.PolicyUsesOAuth(doc) {
+		t.Fatal("adapter trust-only policy must not enable OAuth")
+	}
+}
+
 func TestRenderPolicyConfigMapDataPreservesUnchangedRevision(t *testing.T) {
 	doc := &policy.Document{Server: policy.Server{Name: "demo"}}
 	if err := policy.Stamp(doc, ""); err != nil {
@@ -87,6 +116,74 @@ func TestRenderPolicyConfigMapDataPreservesUnchangedRevision(t *testing.T) {
 	}
 	if out != first {
 		t.Fatalf("unchanged revision rewrote payload:\n old=%s\n new=%s", first, out)
+	}
+}
+
+func TestRenderPolicyConfigMapDataDropsLegacyHeaderIdentityFields(t *testing.T) {
+	doc := &policy.Document{
+		Server: policy.Server{Name: "demo"},
+		Auth: &policy.Auth{
+			TrustDomain: "example.org",
+			IssuerURL:   "https://issuer.example.com",
+			Audience:    "https://mcp.example.com/demo/mcp",
+			TokenHeader: "Authorization",
+		},
+	}
+	if err := policy.Stamp(doc, ""); err != nil {
+		t.Fatalf("Stamp() error = %v", err)
+	}
+	canonical, err := renderPolicyConfigMapData("", doc)
+	if err != nil {
+		t.Fatalf("renderPolicyConfigMapData() error = %v", err)
+	}
+
+	// Simulate a ConfigMap still carrying removed governance-header identity
+	// fields from an older operator. Revision matches, but the bytes must not
+	// be preserved verbatim.
+	var stored map[string]any
+	if err := json.Unmarshal([]byte(canonical), &stored); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	auth, _ := stored["auth"].(map[string]any)
+	auth["mode"] = "header"
+	auth["human_id_header"] = "X-MCP-Human-ID"
+	auth["agent_id_header"] = "X-MCP-Agent-ID"
+	auth["team_id_header"] = "X-MCP-Team-ID"
+	auth["session_id_header"] = "X-MCP-Agent-Session"
+	stored["auth"] = auth
+	legacy, err := json.MarshalIndent(stored, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent() error = %v", err)
+	}
+
+	next := &policy.Document{
+		Server: policy.Server{Name: "demo"},
+		Auth: &policy.Auth{
+			TrustDomain: "example.org",
+			IssuerURL:   "https://issuer.example.com",
+			Audience:    "https://mcp.example.com/demo/mcp",
+			TokenHeader: "Authorization",
+		},
+	}
+	if err := policy.Stamp(next, ""); err != nil {
+		t.Fatalf("Stamp() error = %v", err)
+	}
+	out, err := renderPolicyConfigMapData(string(legacy), next)
+	if err != nil {
+		t.Fatalf("renderPolicyConfigMapData() error = %v", err)
+	}
+	if strings.Contains(out, "human_id_header") || strings.Contains(out, `"mode"`) {
+		t.Fatalf("legacy header identity fields were preserved:\n%s", out)
+	}
+	var cleaned policy.Document
+	if err := json.Unmarshal([]byte(out), &cleaned); err != nil {
+		t.Fatalf("Unmarshal(cleaned) error = %v", err)
+	}
+	if cleaned.Auth == nil || cleaned.Auth.TrustDomain != "example.org" {
+		t.Fatalf("cleaned Auth = %#v", cleaned.Auth)
+	}
+	if cleaned.GeneratedAt == "" {
+		t.Fatal("expected generated_at to stay set after schema cleanup")
 	}
 }
 

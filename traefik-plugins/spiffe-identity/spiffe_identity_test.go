@@ -30,7 +30,9 @@ func verifiedTLS(uris ...*url.URL) *tls.ConnectionState {
 func TestStripsSpoofedHeadersAndInjectsVerifiedIdentity(t *testing.T) {
 	var seen *http.Request
 	next := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { seen = r })
-	h, err := New(context.Background(), next, CreateConfig(), "test")
+	cfg := CreateConfig()
+	cfg.StripHeaders = []string{"X-Untrusted-Identity"}
+	h, err := New(context.Background(), next, cfg, "test")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -38,7 +40,7 @@ func TestStripsSpoofedHeadersAndInjectsVerifiedIdentity(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 	// Client tries to smuggle identity headers, including the verified one.
 	req.Header.Set("X-MCP-Verified-SPIFFE-ID", "spiffe://example.org/ns/admin/session/victim")
-	req.Header.Set("X-MCP-Human-ID", "attacker")
+	req.Header.Set("X-Untrusted-Identity", "attacker")
 	req.TLS = verifiedTLS(mustURL(t, "spiffe://example.org/ns/team-a/session/session-1"))
 
 	h.ServeHTTP(httptest.NewRecorder(), req)
@@ -49,8 +51,8 @@ func TestStripsSpoofedHeadersAndInjectsVerifiedIdentity(t *testing.T) {
 	if got := seen.Header.Get("X-MCP-Verified-SPIFFE-ID"); got != "spiffe://example.org/ns/team-a/session/session-1" {
 		t.Fatalf("verified header = %q, want the cert-derived identity (spoof must be overwritten)", got)
 	}
-	if got := seen.Header.Get("X-MCP-Human-ID"); got != "" {
-		t.Fatalf("X-MCP-Human-ID = %q, want stripped", got)
+	if got := seen.Header.Get("X-Untrusted-Identity"); got != "" {
+		t.Fatalf("X-Untrusted-Identity = %q, want stripped", got)
 	}
 }
 
@@ -144,13 +146,13 @@ func TestNoCertificateKeepsGovernanceHeaders(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 	req.Header.Set("X-MCP-Verified-SPIFFE-ID", "spiffe://example.org/ns/admin/session/victim")
-	req.Header.Set("X-MCP-Agent-Session", "session-1")
+	req.Header.Set("X-Application-Context", "context-1")
 	h.ServeHTTP(httptest.NewRecorder(), req)
 
 	if got := seen.Header.Get("X-MCP-Verified-SPIFFE-ID"); got != "" {
 		t.Fatalf("verified header = %q, want stripped", got)
 	}
-	if got := seen.Header.Get("X-MCP-Agent-Session"); got != "session-1" {
-		t.Fatalf("X-MCP-Agent-Session = %q, want preserved for the OAuth path", got)
+	if got := seen.Header.Get("X-Application-Context"); got != "context-1" {
+		t.Fatalf("X-Application-Context = %q, want preserved", got)
 	}
 }

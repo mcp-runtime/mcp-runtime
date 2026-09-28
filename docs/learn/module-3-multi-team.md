@@ -147,7 +147,6 @@ mcp-runtime adapter proxy \
   --runtime-url https://mcp.example.com/payments/mcp \
   --server payments \
   --agent cursor \
-  --agent-id cursor \
   --auto-refresh \
   --listen 127.0.0.1:8099 &
 ```

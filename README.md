@@ -39,7 +39,7 @@ A public preview runs at [platform.mcpruntime.org](https://platform.mcpruntime.o
 - `MCPServer`, `MCPAccessGrant`, and `MCPAgentSession` are namespaced CRDs, so servers, access, and sessions are visible and reviewable with `kubectl`.
 - The `mcp-gateway` sidecar applies deny-by-default tool rules, trust ceilings, side-effect limits, session expiry, and revocation on every `tools/call`.
 - Every allow and deny decision is recorded with the identity, tool, reason, and policy version, and is queryable through the Sentinel API and dashboards.
-- `adapter proxy` (HTTP) and `adapter stdio` let IDEs, agent frameworks, and scripts connect with platform-issued identity and automatic session refresh.
+- `adapter proxy` gives IDEs, agent frameworks, and scripts a local Streamable HTTP endpoint that adds a session-bound client certificate with automatic refresh and forwards OAuth when the target requires it.
 - Team namespaces, RBAC, and `teamID` subject matching let several teams publish and govern servers on one cluster, with private, org-wide, or public catalogs.
 - Setup, registry and image-pull wiring, ingress, rollout readiness, `cluster doctor`, `cluster diagnostics`, and status commands are included.
 - Documented install paths cover Kind, k3s, self-managed clusters, and managed Kubernetes with external registries.
@@ -47,11 +47,10 @@ A public preview runs at [platform.mcpruntime.org](https://platform.mcpruntime.o
 ## What ships
 
 - `mcp-runtime` CLI for `auth`, `bootstrap`, `setup`, `status`, `registry`, `server`, `catalog`, `cluster`, `access`, `team`, and `sentinel`
-- `mcp-runtime adapter proxy` and `mcp-runtime adapter stdio` subcommands for
-  governed HTTP and stdio agent integrations. Both can fetch identity from
-  the platform with `--server <name> --agent <id> [--auto-refresh]` once an
-  enabled grant exists for that server and agent, or accept explicit
-  `MCP_RUNTIME_*` env vars (see [Agent Adapters](docs/agent-adapters.md))
+- `mcp-runtime adapter proxy` for governed Streamable HTTP agent integrations.
+  It enrolls a session-bound client certificate with
+  `--server <name> --agent <id>` once an enabled grant exists; `--auto-refresh`
+  renews the certificate (see [Agent Adapter](docs/agent-adapters.md))
 - Platform UI for authenticated MCP catalog browsing, platform state, and web operations
 - `MCPServer`, `MCPAccessGrant`, and `MCPAgentSession` CRDs
 - Kubernetes operator for `Deployment`, `Service`, `Ingress`, and policy materialization

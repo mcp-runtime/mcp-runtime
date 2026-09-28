@@ -26,7 +26,6 @@ func TestRuntimeServerApplyDoesNotPersistDerivedOAuthAudience(t *testing.T) {
 		Spec: mcpv1alpha1.MCPServerSpec{
 			Image: "registry.example.com/acme/buddy",
 			Auth: &mcpv1alpha1.AuthConfig{
-				Mode:      mcpv1alpha1.AuthModeOAuth,
 				Audience:  "https://mcp.example.com/buddy/mcp",
 				IssuerURL: "https://auth.example.com/mcp-auth",
 			},
@@ -38,7 +37,7 @@ func TestRuntimeServerApplyDoesNotPersistDerivedOAuthAudience(t *testing.T) {
 		"name": "buddy",
 		"namespace": "mcp-servers",
 		"update": true,
-		"spec": {"image":"registry.example.com/acme/buddy","auth":{"mode":"oauth"}}
+		"spec": {"image":"registry.example.com/acme/buddy","auth":{}}
 	}`)))
 	request = request.WithContext(withPrincipal(request.Context(), principal{Role: roleAdmin, Subject: "admin-1"}))
 	recorder := httptest.NewRecorder()
@@ -51,8 +50,8 @@ func TestRuntimeServerApplyDoesNotPersistDerivedOAuthAudience(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetServer: %v", err)
 	}
-	if persisted.Spec.Auth == nil || persisted.Spec.Auth.Mode != mcpv1alpha1.AuthModeOAuth {
-		t.Fatalf("auth = %+v, want oauth mode kept", persisted.Spec.Auth)
+	if persisted.Spec.Auth == nil {
+		t.Fatal("auth config was not persisted")
 	}
 	if persisted.Spec.Auth.Audience != "" || persisted.Spec.Auth.IssuerURL != "" {
 		t.Fatalf("persisted auth = %+v, want audience and issuer left for reconcile-time derivation", persisted.Spec.Auth)

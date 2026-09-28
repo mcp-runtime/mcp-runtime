@@ -6,15 +6,6 @@ import (
 	"mcp-runtime/pkg/mcpdefaults"
 )
 
-// +kubebuilder:validation:Enum=none;header;oauth
-type AuthMode string
-
-const (
-	AuthModeNone   AuthMode = "none"
-	AuthModeHeader AuthMode = "header"
-	AuthModeOAuth  AuthMode = "oauth"
-)
-
 // +kubebuilder:validation:Enum=allow-list;observe
 type PolicyMode string
 
@@ -138,7 +129,7 @@ type MCPServerSpec struct {
 	// Tasks describes task templates or workflows exposed by the server.
 	Tasks []InventoryItem `json:"tasks,omitempty"`
 
-	// Auth configures how the gateway extracts human, agent, and session identity.
+	// Auth enables optional OAuth authentication at the gateway when present.
 	Auth *AuthConfig `json:"auth,omitempty"`
 
 	// Policy configures gateway-side authorization behavior.
@@ -207,18 +198,13 @@ type InventoryItem struct {
 	Labels      map[string]string `json:"labels,omitempty"`
 }
 
-// AuthConfig configures how identities are extracted at the gateway.
+// AuthConfig configures OAuth authentication at the gateway.
 // +kubebuilder:object:generate=true
 type AuthConfig struct {
-	Mode            AuthMode `json:"mode,omitempty"`
-	HumanIDHeader   string   `json:"humanIDHeader,omitempty"`
-	AgentIDHeader   string   `json:"agentIDHeader,omitempty"`
-	TeamIDHeader    string   `json:"teamIDHeader,omitempty"`
-	SessionIDHeader string   `json:"sessionIDHeader,omitempty"`
-	TokenHeader     string   `json:"tokenHeader,omitempty"`
-	IssuerURL       string   `json:"issuerURL,omitempty"`
+	TokenHeader string `json:"tokenHeader,omitempty"`
+	IssuerURL   string `json:"issuerURL,omitempty"`
 	// Audience is the OAuth resource identifier tokens must be issued for and
-	// that protected-resource metadata advertises. When auth.mode is oauth and
+	// that protected-resource metadata advertises. When
 	// this is unset, it defaults to the public MCP URL built from the ingress
 	// host (or MCP_DEFAULT_INGRESS_HOST on the operator), TLS setting, and path.
 	Audience string `json:"audience,omitempty"`
@@ -238,7 +224,6 @@ type PolicyConfig struct {
 type SessionConfig struct {
 	Required            bool   `json:"required,omitempty"`
 	Store               string `json:"store,omitempty"`
-	HeaderName          string `json:"headerName,omitempty"`
 	MaxLifetime         string `json:"maxLifetime,omitempty"`
 	IdleTimeout         string `json:"idleTimeout,omitempty"`
 	UpstreamTokenHeader string `json:"upstreamTokenHeader,omitempty"`

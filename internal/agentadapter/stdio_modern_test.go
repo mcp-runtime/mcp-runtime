@@ -52,10 +52,11 @@ func startStdioShim(t *testing.T, handler http.Handler, timeout time.Duration) *
 	go func() {
 		defer stdout.Close()
 		h.done <- RunStdioShim(ctx, ShimConfig{
-			RuntimeURL: runtimeURL,
-			Identity:   Identity{HumanID: "human-1", AgentID: "agent-1", SessionID: "session-1"},
-			Transport:  &RuntimeTransport{Base: upstream.Client().Transport, Timeout: timeout},
-			LogWriter:  lockedWriter{mu: h.logsMu, w: h.logs},
+			CertificateIdentity: true,
+			RuntimeURL:          runtimeURL,
+			Identity:            Identity{HumanID: "human-1", AgentID: "agent-1", SessionID: "session-1"},
+			Transport:           &RuntimeTransport{Base: upstream.Client().Transport, Timeout: timeout},
+			LogWriter:           lockedWriter{mu: h.logsMu, w: h.logs},
 		}, StdioOptions{Stdin: stdin, Stdout: stdout})
 	}()
 	t.Cleanup(h.stop)
@@ -146,9 +147,6 @@ func TestStdioShimModernRequestHeaders(t *testing.T) {
 	}
 	if got := modern.Get(MCPSessionHeader); got != "" {
 		t.Fatalf("modern request sent Mcp-Session-Id = %q", got)
-	}
-	if got := modern.Get(AgentIDHeader); got != "agent-1" {
-		t.Fatalf("governance identity header = %q, want agent-1", got)
 	}
 
 	h.send(`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"echo","arguments":{}}}`)

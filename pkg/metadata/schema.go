@@ -2,15 +2,7 @@ package metadata
 
 import "mcp-runtime/pkg/mcpdefaults"
 
-// +kubebuilder:validation:Enum=none;header;oauth
-type AuthMode string
-
-const (
-	AuthModeNone   AuthMode = "none"
-	AuthModeHeader AuthMode = "header"
-	AuthModeOAuth  AuthMode = "oauth"
-)
-
+// +kubebuilder:validation:Enum=oauth
 // +kubebuilder:validation:Enum=allow-list;observe
 type PolicyMode string
 
@@ -190,16 +182,11 @@ type InventoryItem struct {
 	Labels      map[string]string `yaml:"labels,omitempty" json:"labels,omitempty"`
 }
 
-// AuthConfig configures how identities are extracted at the gateway.
+// AuthConfig enables optional OAuth authentication at the gateway.
 type AuthConfig struct {
-	Mode            AuthMode `yaml:"mode,omitempty" json:"mode,omitempty"`
-	HumanIDHeader   string   `yaml:"humanIDHeader,omitempty" json:"humanIDHeader,omitempty"`
-	AgentIDHeader   string   `yaml:"agentIDHeader,omitempty" json:"agentIDHeader,omitempty"`
-	TeamIDHeader    string   `yaml:"teamIDHeader,omitempty" json:"teamIDHeader,omitempty"`
-	SessionIDHeader string   `yaml:"sessionIDHeader,omitempty" json:"sessionIDHeader,omitempty"`
-	TokenHeader     string   `yaml:"tokenHeader,omitempty" json:"tokenHeader,omitempty"`
-	IssuerURL       string   `yaml:"issuerURL,omitempty" json:"issuerURL,omitempty"`
-	Audience        string   `yaml:"audience,omitempty" json:"audience,omitempty"`
+	TokenHeader string `yaml:"tokenHeader,omitempty" json:"tokenHeader,omitempty"`
+	IssuerURL   string `yaml:"issuerURL,omitempty" json:"issuerURL,omitempty"`
+	Audience    string `yaml:"audience,omitempty" json:"audience,omitempty"`
 }
 
 // PolicyConfig configures authorization behavior at the gateway.
@@ -214,7 +201,6 @@ type PolicyConfig struct {
 type SessionConfig struct {
 	Required            bool   `yaml:"required,omitempty" json:"required,omitempty"`
 	Store               string `yaml:"store,omitempty" json:"store,omitempty"`
-	HeaderName          string `yaml:"headerName,omitempty" json:"headerName,omitempty"`
 	MaxLifetime         string `yaml:"maxLifetime,omitempty" json:"maxLifetime,omitempty"`
 	IdleTimeout         string `yaml:"idleTimeout,omitempty" json:"idleTimeout,omitempty"`
 	UpstreamTokenHeader string `yaml:"upstreamTokenHeader,omitempty" json:"upstreamTokenHeader,omitempty"`

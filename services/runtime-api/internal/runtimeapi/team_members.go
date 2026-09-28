@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -69,6 +70,15 @@ func (s *RuntimeServer) handleRuntimeTeamDelete(w http.ResponseWriter, r *http.R
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
+	team, ok, err := s.identity.GetTeamBySlug(ctx, teamSlug)
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "failed to look up team")
+		return
+	}
+	if !ok {
+		writeAPIError(w, http.StatusNotFound, "team not found")
+		return
+	}
 	if err := s.identity.DeleteTeamBySlug(ctx, teamSlug); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			writeAPIError(w, http.StatusNotFound, "team not found")
@@ -76,6 +86,14 @@ func (s *RuntimeServer) handleRuntimeTeamDelete(w http.ResponseWriter, r *http.R
 		}
 		writeAPIError(w, http.StatusInternalServerError, "failed to delete team")
 		return
+	}
+	// Best-effort: drop the team namespace from Traefik watches so a later
+	// namespace delete cannot stall the CRD provider (IngressRoute 404s).
+	if deployments := s.Deployments(); deployments != nil && deployments.k8sClients != nil {
+		cfg := platformTeamTraefikWatchConfig()
+		if err := removeTraefikDeploymentWatchesNamespace(ctx, deployments.k8sClients.Clientset, team.Namespace, cfg); err != nil {
+			log.Printf("remove Traefik watch for deleted team %s namespace %s: %v", teamSlug, team.Namespace, err)
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

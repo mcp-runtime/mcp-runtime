@@ -62,7 +62,6 @@ flowchart LR
 
 | Enum | Values | Notes |
 |---|---|---|
-| **auth.mode** | `none`, `header`, `oauth` | `header` is the default identity-extraction path. `oauth` enables MCP protected-resource metadata and JWT validation at the gateway. Adapter certificates authenticate adapters on OAuth-configured routes; clients without a certificate use OAuth. |
 | **policy.mode** | `allow-list`, `observe` | `allow-list` enforces deny-by-default. `observe` skips identity, grant, session, side-effect, and trust enforcement. Calls are forwarded, and audit events still record the tool and risk level. |
 | **trust** | `low`, `medium`, `high` | Used on tools, grants, sessions. Effective trust = min(grant `maxTrust`, session `consentedTrust`); required trust = max(tool `requiredTrust`, matching tool rule `requiredTrust`). |
 | **tool sideEffect** | `read`, `write`, `destructive` | Required on each listed tool. Grants must include the tool's side effect in `allowedSideEffects` before a tool call can pass. |
@@ -75,8 +74,7 @@ flowchart LR
 - `gateway.port` must differ from `spec.port`.
 - Every listed `tools[]` entry must declare `sideEffect`. A tool called at runtime that the server never declared has no side effect to check, so the gateway fails closed with `403 tool_side_effect_unknown`.
 - Canary rollouts require positive `canaryReplicas` strictly less than total replicas.
-- Persisted `auth.mode: mtls` values are rejected; migrate the MCPServer to `auth.mode: oauth` with `gateway.enabled: true`, `issuerURL`, and `audience`.
-- `auth.mode: oauth` derives an unset `auth.audience` from the canonical public MCP URL. An explicit audience must be an absolute URI without a fragment. `auth.issuerURL` is defaulted from the configured bundled issuer when available; otherwise it is required with the gateway enabled.
+- An unset `auth.audience` is derived from the canonical public MCP URL. An explicit audience must be an absolute URI without a fragment. `auth.issuerURL` is defaulted from the configured bundled issuer when available; otherwise it is required with the gateway enabled.
 
 ### Status
 
@@ -99,11 +97,8 @@ spec:
   gateway:
     enabled: true
   auth:
-    mode: header
-    humanIDHeader: X-MCP-Human-ID
-    agentIDHeader: X-MCP-Agent-ID
-    teamIDHeader: X-MCP-Team-ID
-    sessionIDHeader: X-MCP-Agent-Session
+    issuerURL: https://auth.example.com
+    audience: https://mcp.example.com/payments/mcp
   policy:
     mode: allow-list
     defaultDecision: deny
@@ -112,7 +107,6 @@ spec:
   session:
     required: true
     store: kubernetes
-    headerName: X-MCP-Agent-Session
     maxLifetime: 24h
     idleTimeout: 1h
   tools:
@@ -220,9 +214,8 @@ spec:
 
 ### Implemented today
 
-- **Header-based identity** at the gateway (default path).
 - **Optional bearer-token validation** against JWKS / issuer / audience on the split Sentinel API services (`platform-api`, `runtime-api`, `analytics-api`) and on ingest.
-- `spec.auth.mode: oauth` enables the gateway as an MCP OAuth protected resource. It publishes Protected Resource Metadata, validates issuer and audience/resource binding (against the configured `auth.audience`), and strips the client bearer token before forwarding upstream.
+- When an MCP server includes `spec.auth`, it is an OAuth protected resource. The gateway publishes Protected Resource Metadata and validates issuer and audience/resource binding against `auth.audience`. It forwards the validated bearer to the same logical upstream MCP application, which validates the same issuer and audience. Adapter requests always require a verified session certificate and add the bearer only for OAuth-enabled targets.
 - OAuth authentication failures return `401` with an authorization challenge. Authenticated OAuth policy denials return `403` without an `insufficient_scope` challenge because Runtime policy decisions are not OAuth scope negotiation. See the [MCP Authorization specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization).
 
 ### Optional bundled authorization server
@@ -247,19 +240,20 @@ pre-registered. Clients that cannot use CIMD fall back to DCR at
 `/oauth/register`. Redirect URIs are exact-match, except that native loopback
 clients may select an ephemeral port. All other URI components must match, and
 non-loopback redirects must use HTTPS. Access tokens are RS256 JWTs
-with the MCP `resource` as their audience; the gateway validates that audience
-and never forwards the bearer token to an upstream MCP server.
+with the MCP `resource` as their audience. The gateway and upstream MCP
+application validate that same audience. The application must not forward the
+token to another API.
 
 ### MCP SDK boundary
 
 Use the official MCP SDK in an application service for Streamable HTTP,
 JSON-RPC, tool/resource dispatch, and client-side OAuth flows. The SDK's
 server authorization middleware verifies tokens; it does not issue them. MCP
-Runtime terminates OAuth at the gateway, which applies resource audience checks,
-grants, agent sessions, scopes, and token stripping before forwarding a request
-to the SDK-backed application. Do not add a
-second bearer-token gate to the upstream application unless that application
-is intentionally exposed outside the gateway.
+Runtime validates OAuth at the gateway, which applies resource audience checks,
+grants, agent sessions, and scopes before forwarding the bearer to the
+SDK-backed MCP application for its own validation. Both components form one
+logical protected resource and must use the same issuer and audience. The
+application must not pass that token to downstream APIs.
 
 Configure the MCP server's external `auth.issuerURL` and `auth.audience` to
 match the authorization server and canonical MCP resource. The operator can
@@ -284,7 +278,7 @@ service when its opt-in fixture is enabled.
 
 ### Practical model
 
-- Use the **gateway** for human, agent, and session identity headers.
+- Use the **gateway** to resolve OAuth claims and certificate-bound agent sessions.
 - Use **MCPAccessGrant + MCPAgentSession** for side-effect permissions, trust, and revocation.
 - Use **OIDC-issued bearer tokens** only where Sentinel services validate them.
 
@@ -325,11 +319,11 @@ sequenceDiagram
     participant Gateway as mcp-gateway
     participant Server as MCP server
     Client->>Gateway: POST /payments/mcp tools/call
-    Note right of Gateway: Read X-MCP-Human-ID,<br/>X-MCP-Agent-ID,<br/>X-MCP-Team-ID,<br/>X-MCP-Agent-Session
+    Note right of Gateway: Verify OAuth token; verify adapter certificate when present
     Gateway->>Gateway: Lookup grant + session
     Gateway->>Gateway: Check sideEffect + min(grant.maxTrust, session.consentedTrust)
     alt allowed
-        Gateway->>Server: forward
+        Gateway->>Server: forward with validated bearer
         Server-->>Gateway: response
         Gateway-->>Client: response
     else denied
@@ -344,19 +338,14 @@ sequenceDiagram
 - **Observe mode:** `policy.mode: observe` returns an allow before identity, session, grant, side-effect, and trust checks run. Traffic is still proxied and audited. Use it for visibility only; it enforces nothing.
 - **Audit on allow and deny:** the gateway emits decision, reason, trust levels, required side effect, human, agent, session, server, cluster, and namespace fields.
 
-```text
-X-MCP-Human-ID:    user-123
-X-MCP-Agent-ID:    ops-agent
-X-MCP-Team-ID:     7d0a0b8f-7c25-4761-a632-3cf0108e31d6
-X-MCP-Agent-Session: sess-8f1b9d
-```
-
-On OAuth routes, adapters may also present a session-bound client certificate.
-Traefik verifies it before forwarding; the gateway still requires OAuth and
-binds the token subject to the session encoded by the certificate. Clients
-without a certificate use OAuth normally. Set
-`MCP_ADAPTER_CERTIFICATES=true` with platform-wide `MCP_MTLS_CLUSTER_ISSUER`
-and `MCP_TRUST_DOMAIN` to enable adapter enrollment.
+Adapters must also present a session-bound client certificate. Traefik verifies
+it before forwarding; the gateway resolves the certificate's SPIFFE identity
+to the rendered agent session. On OAuth-enabled targets it also binds the
+session human to the OAuth subject. Direct clients use OAuth without a
+certificate only when the server configures `spec.auth`; omit `spec.auth` for
+cert-only governed routes. Set `MCP_ADAPTER_CERTIFICATES=true` with
+platform-wide `MCP_MTLS_CLUSTER_ISSUER` and `MCP_TRUST_DOMAIN` to enable
+adapter enrollment.
 
 ## Dashboard API
 
@@ -484,10 +473,8 @@ Server list/get responses keep CRD `tools`, `prompts`, `resources`, and
 `tasks` as governance metadata and add `liveInventory` from the running MCP
 server when runtime-api's short-TTL gateway probe has completed. On a cold
 cache miss or probe failure, `liveInventory` is `null` and
-`liveInventoryError` contains a short reason. For HTTP identity-authenticated
-servers, probes use the server's configured `spec.auth.humanIDHeader` and
-`spec.auth.agentIDHeader`; mTLS probes authenticate with their client
-certificate. The Servers workspace combines declared and probed prompts and
+`liveInventoryError` contains a short reason. The Servers workspace combines
+declared and probed prompts and
 resources by name, then shows their descriptions, prompt arguments, resource
 URIs, media types, and labels in expandable server details. Tasks use declared
 metadata only. `DELETE /api/v1/runtime/servers/{namespace}/{name}` retires a server and frees one

@@ -67,7 +67,8 @@ func PolicyVersion(policy *Document) string {
 
 // PolicyUsesOAuth returns true if the policy uses OAuth authentication.
 func PolicyUsesOAuth(policy *Document) bool {
-	return policy != nil && policy.Auth != nil && strings.EqualFold(policy.Auth.Mode, "oauth")
+	return policy != nil && policy.Auth != nil &&
+		(strings.TrimSpace(policy.Auth.IssuerURL) != "" || strings.TrimSpace(policy.Auth.Audience) != "")
 }
 
 // ChoosePolicyVersion returns the first non-empty policy version from the provided values,

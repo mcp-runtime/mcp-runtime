@@ -43,7 +43,7 @@ type mtlsRefresher struct {
 // the GetClientCertificate-backed TLS config; base supplies any Timeout or
 // AuthHeader the caller already resolved from flags. The returned stop func is
 // always safe to call, even when autoRefresh is false.
-func setupMTLS(ctx context.Context, client *platformapi.PlatformClient, flags platformSessionFlags, trustDomain string, base *agentadapter.RuntimeTransport, autoRefresh bool, sink io.Writer) (*agentadapter.RuntimeTransport, func(), error) {
+func setupMTLS(ctx context.Context, client *platformapi.PlatformClient, flags platformSessionFlags, trustDomain string, base *agentadapter.RuntimeTransport, autoRefresh bool, insecureSkipVerify bool, sink io.Writer) (*agentadapter.RuntimeTransport, func(), error) {
 	cred, err := issueAdapterCredential(ctx, client, flags, trustDomain)
 	if err != nil {
 		return nil, nil, err
@@ -70,6 +70,9 @@ func setupMTLS(ctx context.Context, client *platformapi.PlatformClient, flags pl
 
 	tlsCfg := &tls.Config{
 		RootCAs: pool,
+		// Kind Traefik port-forwards terminate with a local default cert whose
+		// SAN is not localhost; opt-in only via --tls-insecure-skip-verify.
+		InsecureSkipVerify: insecureSkipVerify, // #nosec G402 -- explicit Kind/local Traefik default-cert skip; client certs still presented
 		GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
 			return r.cert.Load(), nil
 		},
@@ -167,66 +170,48 @@ func (r *mtlsRefresher) rotate(ctx context.Context) error {
 	return nil
 }
 
-// resolveAuth applies the adapter's auth mode after the shared config has been
-// built. In header mode it delegates to applyPlatformSession (issued-session
-// identity headers, or the static flag identity). In mtls mode it auto-enrolls
-// a session-bound client certificate, returns a transport wired for mTLS, and
-// suppresses governance headers: the gateway derives identity from the verified
-// certificate SAN, not from headers (see services/mcp-gateway/filter_auth.go).
-//
-// The returned transport replaces the caller's; stop is always safe to call.
+// resolveAuth configures the adapter's additional certificate identity. OAuth
+// remains required on each MCP request and passes through from the local client
+// or AuthHeader. Explicit
+// client certificate files bypass enrollment; otherwise the adapter enrolls
+// in memory and optionally renews the certificate before expiry. The gateway
+// derives identity from the verified certificate.
 func resolveAuth(
 	ctx context.Context,
 	idFlags identityFlags,
 	sessionFlags *platformSessionFlags,
-	baseIdentity agentadapter.Identity,
 	baseTransport *agentadapter.RuntimeTransport,
 	sink io.Writer,
-) (agentadapter.Identity, agentadapter.IdentityProvider, *agentadapter.RuntimeTransport, func(), error) {
+) (*agentadapter.RuntimeTransport, func(), error) {
 	noop := func() {}
-	if !idFlags.mtlsEnabled() {
-		id, provider, refresher, err := applyPlatformSession(ctx, sessionFlags, baseIdentity, sink)
-		if err != nil {
-			return agentadapter.Identity{}, nil, nil, noop, err
+	// Explicit certificate files are useful for externally managed credentials
+	// and do not require a platform API session at adapter startup.
+	if strings.TrimSpace(idFlags.tlsClientCert) != "" {
+		if sessionFlags != nil && sessionFlags.autoRefresh {
+			return nil, noop, fmt.Errorf("--auto-refresh applies only to certificates enrolled in memory; remove the TLS client certificate flags")
 		}
-		stop := noop
-		if refresher != nil {
-			stop = refresher.Stop
-		}
-		return id, provider, baseTransport, stop, nil
+		return baseTransport, noop, nil
 	}
-
-	if idFlags.anonymous {
-		return agentadapter.Identity{}, nil, nil, noop, fmt.Errorf("--anonymous cannot be combined with --auth mtls")
-	}
-	if !sessionFlags.enabled() {
-		return agentadapter.Identity{}, nil, nil, noop, fmt.Errorf("--server (or $%s) is required when --auth mtls", EnvAdapterServer)
+	if sessionFlags == nil || !sessionFlags.enabled() {
+		return nil, noop, fmt.Errorf("--server (or $%s) is required to enroll a certificate", EnvAdapterServer)
 	}
 	if strings.TrimSpace(sessionFlags.agent) == "" {
-		return agentadapter.Identity{}, nil, nil, noop, fmt.Errorf("--agent (or $%s) is required when --auth mtls", EnvAdapterAgent)
+		return nil, noop, fmt.Errorf("--agent (or $%s) is required to enroll a certificate", EnvAdapterAgent)
 	}
 	trustDomain := strings.TrimSpace(idFlags.trustDomain)
 
-	// Bring-your-own certificate: explicit --tls-client-cert files win, so
-	// `enroll` output can be reused directly without re-enrolling. resolve()
-	// already built baseTransport's TLS config from the files; we only need to
-	// suppress headers here.
-	if strings.TrimSpace(idFlags.tlsClientCert) != "" {
-		return agentadapter.Identity{}, nil, baseTransport, noop, nil
-	}
-
 	if u := strings.TrimSpace(sessionFlags.platformURL); u != "" {
 		if err := os.Setenv(EnvPlatformURL, u); err != nil {
-			return agentadapter.Identity{}, nil, nil, noop, fmt.Errorf("set %s: %w", EnvPlatformURL, err)
+			return nil, noop, fmt.Errorf("set %s: %w", EnvPlatformURL, err)
 		}
 	}
 	client, err := platformapi.NewPlatformClient()
 	if err != nil {
-		return agentadapter.Identity{}, nil, nil, noop, fmt.Errorf("platform client: %w", err)
+		return nil, noop, fmt.Errorf("platform client: %w", err)
 	}
-	transport, stop, err := setupMTLS(ctx, client, *sessionFlags, trustDomain, baseTransport, sessionFlags.autoRefresh, sink)
+	transport, stop, err := setupMTLS(ctx, client, *sessionFlags, trustDomain, baseTransport, sessionFlags.autoRefresh, idFlags.tlsInsecureSkipVerify, sink)
 	if err != nil {
-		return agentadapter.Identity{}, nil, nil, noop, err
+		return nil, noop, err
 	}
-	return agentadapter.Identity{}, nil, transport, stop, nil
+	return transport, stop, nil
 }

@@ -1,6 +1,6 @@
 ---
 name: access-governance
-description: Apply and debug MCP Runtime access grants, agent sessions, gateway policy, and MCP JSON-RPC traffic with governance headers. Use when working on MCPAccessGrant, MCPAgentSession, adapter proxy/stdio, access CLI, platform API grant/session endpoints, or allow/deny tool calls.
+description: Apply and debug MCP Runtime access grants, agent sessions, gateway policy, and MCP JSON-RPC traffic with session-bound SPIFFE adapter certificates. Use when working on MCPAccessGrant, MCPAgentSession, adapter proxy/stdio, access CLI, platform API grant/session endpoints, or allow/deny tool calls.
 ---
 
 # Access Governance
@@ -11,7 +11,7 @@ description: Apply and debug MCP Runtime access grants, agent sessions, gateway 
 |------|--------|
 | **UI** | Create/apply grants and sessions; toggle enable/revoke |
 | **CLI (default)** | `mcp-runtime auth login --api-url <url>` → `agent create|list|...` and `access grant init` / `access grant apply --file …` |
-| **Adapter (recommended for agents)** | `adapter stdio\|proxy --server <name> --agent <id> [--auto-refresh]` → `POST /api/v1/runtime/adapter/sessions` |
+| **Adapter (recommended for agents)** | `adapter proxy --server <name> --agent <id> [--auto-refresh]` → certificate-backed `MCPAgentSession`; add OAuth only when the server configures it |
 | **Explicit Kubernetes test/recovery** | `access … --use-kube` only when that path is explicitly requested; never bypass a failed CLI/UI flow |
 
 Session apply via platform API is **admin-only**. Adapters usually skip manual session apply.
@@ -25,6 +25,9 @@ Session apply via platform API is **admin-only**. Adapters usually skip manual s
 - Agent subjects must use an active directory ID owned by the selected subject team. Unknown, malformed, inactive, and wrong-team IDs fail closed; the access forms do not accept free-text agent IDs.
 - A cross-team grant names the subject's `teamID` and must expire; its TTL is capped by the runtime API. Audit fields distinguish the subject/actor team from the server/resource authority team.
 - `server policy inspect` shows rendered policy; the operator stamps the policy revision on server pods so the gateway sees new grants/sessions within ~10s. Wait that long before assuming `session_not_found`.
+- OAuth is optional and is enabled by `MCPServer.spec.auth`. Direct clients use a bearer only on OAuth-enabled servers. An adapter always presents its enrolled certificate and adds a bearer only when the target enables OAuth.
+- When an adapter calls an OAuth-enabled server, the gateway requires the token subject to equal the session human and forwards the validated bearer to the same logical MCP resource server.
+- The upstream MCP application validates the same issuer and audience and must never forward this token to a third-party API.
 
 ## Example manifests
 
@@ -62,16 +65,32 @@ spec:
 - `POST /api/v1/runtime/grants/{ns}/{name}/revoke-sessions` — revoke every linked session and retain the grant; `mcp-runtime access grant revoke-sessions` is the CLI entry point
 - `POST .../grants/{ns}/{name}/enable|disable` and `POST .../sessions/{ns}/{name}/revoke|unrevoke` still work but are marked legacy in the handler comments (`services/runtime-api/internal/runtimeapi/grants.go`, `sessions.go`) — prefer PATCH for new callers
 
-## MCP JSON-RPC (local Kind, port-forward 18080)
+## MCP JSON-RPC (local Kind)
+
+Port-forward both Traefik ports: `18080:8000` (HTTP / plain Ingress) and
+`18443:8443` (HTTPS / adapter-certificate IngressRoute). Cert-capable gateway
+routes are websecure-only; HTTP `:18080` will not reach them.
 
 ```bash
 PROTO=2025-06-18
+# Plain Ingress + OAuth bearer (samples that still publish Ingress):
 BASE=http://localhost:18080/oauth-example-go-2025-11-25-gateway/mcp
 curl -sS -H "content-type: application/json" \
   -H "accept: application/json, text/event-stream" \
+  -H "Authorization: Bearer $MCP_ACCESS_TOKEN" \
   -H "Mcp-Protocol-Version: $PROTO" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' -D - -o /dev/null "$BASE"
 # Capture Mcp-Session-Id from response headers, then notifications/initialized and tools/call with -H "Mcp-Session-Id: <session>"
+
+# Adapter-certificate route (omit spec.auth on the MCPServer for cert-only):
+CERT_BASE=https://127.0.0.1:18443/<publicPathPrefix>/mcp
+curl -skS --cert ~/.mcpruntime/certs/<scope>/client.crt \
+  --key ~/.mcpruntime/certs/<scope>/client.key \
+  --cacert ~/.mcpruntime/certs/<scope>/ca.crt \
+  -H "content-type: application/json" \
+  -H "accept: application/json, text/event-stream" \
+  -H "Mcp-Protocol-Version: $PROTO" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' -D - -o /dev/null "$CERT_BASE"
 ```
 
 QA E2E applies generated access YAML and exercises allow/deny over real MCP

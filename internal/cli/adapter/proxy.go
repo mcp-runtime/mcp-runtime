@@ -21,33 +21,32 @@ func newProxyCmd(_ *core.Runtime) *cobra.Command {
 		Use:   "proxy",
 		Short: "Run a local Streamable HTTP MCP proxy that forwards to the runtime",
 		Long: `Start a local HTTP listener that accepts Streamable HTTP MCP traffic from an
-agent SDK and forwards each request to the configured platform runtime route,
-injecting the issued governance identity headers.
+agent SDK and forwards each request to the configured platform runtime route
+with a platform-issued client certificate for the enrolled agent session.
 
-Configure identity via flags or the matching MCP_RUNTIME_* environment
-variables. Flags win when both are set. With --server, the adapter fetches
-an issued session from the platform API before listening; identity flags
-override the result.`,
+Use certificate files or provide --server and --agent to enroll a certificate at startup.
+When the target server enables OAuth, the local MCP client must send Authorization
+or --auth-header must provide it. The gateway then binds the verified certificate
+identity to the OAuth subject.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := flags.toProxyConfig(listenAddr)
 			if err != nil {
 				return err
 			}
-			if flags.mtlsEnabled() && (cfg.RuntimeURL == nil || cfg.RuntimeURL.Scheme != "https") {
-				return fmt.Errorf("--auth mtls requires an https --runtime-url (or $%s)", agentadapter.EnvRuntimeURL)
+			if cfg.RuntimeURL == nil || cfg.RuntimeURL.Scheme != "https" {
+				return fmt.Errorf("certificate identity requires an https --runtime-url (or $%s)", agentadapter.EnvRuntimeURL)
 			}
 
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 
-			effective, provider, transport, stopAuth, err := resolveAuth(ctx, flags, &sessionFlags, cfg.Identity, cfg.Transport, cmd.ErrOrStderr())
+			transport, stopAuth, err := resolveAuth(ctx, flags, &sessionFlags, cfg.Transport, cmd.ErrOrStderr())
 			if err != nil {
 				return err
 			}
 			defer stopAuth()
-			cfg.Identity = effective
-			cfg.IdentityProvider = provider
 			cfg.Transport = transport
+			cfg.CertificateIdentity = true
 			if err := cfg.Validate(); err != nil {
 				return err
 			}

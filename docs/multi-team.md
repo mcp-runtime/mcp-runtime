@@ -22,8 +22,8 @@ The source-of-truth data plane is:
 - `MCPAccessGrant.spec.expiresAt` can end a delegation automatically. Any
   session issued from the grant expires no later than the grant, including
   sessions requested by an auto-refreshing adapter.
-- The gateway reads team identity from `spec.auth.teamIDHeader` in header mode,
-  from OAuth `team_id`, `tenant_id`, or `tid` claims in OAuth mode, or from the
+- The gateway reads team identity from OAuth `team_id`, `tenant_id`, or `tid`
+  claims, or from the
   session named by a verified adapter certificate.
 
 ## When to use this
@@ -156,25 +156,16 @@ subject:
 
 When more than one subject field is set, every field must match the request
 identity, so a moved user stops matching the old team's grants as soon
-as their trusted `teamID` claim/header changes.
+as their trusted `teamID` claim or certificate-backed session changes.
 
 ## Gateway Identity
 
-Header mode defaults:
-
-| Identity | Header |
-|---|---|
-| `humanID` | `X-MCP-Human-ID` |
-| `agentID` | `X-MCP-Agent-ID` |
-| `teamID` | `X-MCP-Team-ID` |
-| `sessionID` | `X-MCP-Agent-Session` |
-
-Override the team header per server with `spec.auth.teamIDHeader`. In OAuth
-mode, the proxy validates the token and reads team identity from `team_id`,
-`tenant_id`, or `tid`, in that order. Adapter-certificate requests ignore
-caller-supplied identity headers and take `humanID`, `agentID`, and `teamID`
+The gateway validates the OAuth token and reads team identity from `team_id`,
+`tenant_id`, or `tid`, in that order. Adapter-certificate requests take
+`humanID`, `agentID`, and `teamID`
 from the rendered session that the ingress-verified SPIFFE identity resolves
-to, inside the platform trust domain. First-party OAuth tokens with multiple
+to, inside the platform trust domain; their OAuth subject must match that
+session's `humanID`. First-party OAuth tokens with multiple
 memberships use `team_ids`; the gateway selects the policy server's team ID
 when present, or the sole team ID when there is only one.
 
@@ -274,7 +265,7 @@ Keep identifiers stable:
 `mcp-runtime access grant init` and `access session init` scaffold local YAML on
 the workstation only. `access grant apply` uses the platform API by default after
 `mcp-runtime auth login --api-url <platform-url>`; `access session apply` is
-admin-only on the platform API (agents use `adapter stdio|proxy --server …
+admin-only on the platform API (agents use `adapter proxy --server …
 --agent … --auto-refresh`). Add `--use-kube` only for admin/operator
 direct Kubernetes writes. Before applying manifests, the apply commands warn
 about obvious `humanID` shape problems, such as whitespace, malformed

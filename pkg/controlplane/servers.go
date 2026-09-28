@@ -267,15 +267,6 @@ func ServerInfoFromMCPServer(mcpServer mcpv1alpha1.MCPServer, deploymentStatus S
 			deploymentStatus.Status = "Unknown"
 		}
 	}
-	authMode := mcpv1alpha1.AuthModeHeader
-	humanIDHeader, agentIDHeader := "", ""
-	if mcpServer.Spec.Auth != nil {
-		if mode := mcpServer.Spec.Auth.Mode; mode != "" {
-			authMode = mode
-		}
-		humanIDHeader = strings.TrimSpace(mcpServer.Spec.Auth.HumanIDHeader)
-		agentIDHeader = strings.TrimSpace(mcpServer.Spec.Auth.AgentIDHeader)
-	}
 	return ServerInfo{
 		Name:           mcpServer.Name,
 		Namespace:      mcpServer.Namespace,
@@ -289,10 +280,7 @@ func ServerInfoFromMCPServer(mcpServer mcpv1alpha1.MCPServer, deploymentStatus S
 		Labels:         mcpServer.Labels,
 		Age:            mcpServer.CreationTimestamp.Format("2006-01-02T15:04:05Z"),
 		Endpoint:       PublicMCPEndpoint(mcpServer),
-		AuthMode:       authMode,
 		GatewayEnabled: mcpServer.Spec.Gateway != nil && mcpServer.Spec.Gateway.Enabled,
-		HumanIDHeader:  humanIDHeader,
-		AgentIDHeader:  agentIDHeader,
 		ServicePort:    mcpServer.Spec.ServicePort,
 		Generation:     mcpServer.Generation,
 		Tools:          mcpServer.Spec.Tools,

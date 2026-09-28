@@ -368,7 +368,6 @@ func (s *stdioShim) forward(ctx context.Context, payload []byte, emit stdioRespo
 	if modern {
 		applyModernRequestHeaders(req.Header, meta.Method, envelope.Params, s.toolHeaders)
 	}
-	s.currentIdentity().Apply(req.Header)
 	if s.cfg.HostHeader != "" {
 		req.Host = s.cfg.HostHeader
 	}

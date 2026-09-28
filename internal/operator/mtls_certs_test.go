@@ -22,7 +22,7 @@ func mtlsServer() *mcpv1alpha1.MCPServer {
 			Image:       "example.com/secure-server",
 			ServicePort: 80,
 			Gateway:     &mcpv1alpha1.GatewayConfig{Enabled: true, Port: 8091, Image: "example.com/gw:latest"},
-			Auth:        &mcpv1alpha1.AuthConfig{Mode: mcpv1alpha1.AuthModeOAuth},
+			Auth:        &mcpv1alpha1.AuthConfig{},
 		},
 	}
 }
@@ -107,20 +107,6 @@ func TestReconcileMTLSTrustBundle(t *testing.T) {
 		}
 	})
 
-	t.Run("deleted for non-mtls", func(t *testing.T) {
-		server := mtlsServer()
-		server.Spec.Auth.Mode = mcpv1alpha1.AuthModeHeader
-		existing := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "secure-server-mtls-ca", Namespace: "mcp-servers"}}
-		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(server, existing).Build()
-		r := MCPServerReconciler{Client: client, Scheme: scheme, AdapterCertificatesEnabled: true, AdapterTrustDomain: "example.org", MTLSClusterIssuer: "mcp-runtime-ca"}
-		if err := r.reconcileMTLSTrustBundle(context.Background(), server); err != nil {
-			t.Fatalf("reconcile: %v", err)
-		}
-		var bundle corev1.Secret
-		if err := client.Get(context.Background(), bundleKey, &bundle); !apierrors.IsNotFound(err) {
-			t.Fatalf("expected bundle deleted for non-mtls, got %v", err)
-		}
-	})
 }
 
 func TestGatewaySidecarPinsTrustedProxyForMTLS(t *testing.T) {
@@ -141,7 +127,7 @@ func TestGatewaySidecarPinsTrustedProxyForMTLS(t *testing.T) {
 	}
 }
 
-// Adapter certificates reroute an OAuth server through an IngressRoute and an
+// Adapter certificates reroute a gateway server through an IngressRoute and an
 // mTLS gateway hop, so they need the explicit opt-in, Traefik, and a gateway;
 // platform PKI being present (as in test mode) is not enough.
 func TestUsesAdapterCertificatesRequiresOptInTraefikAndGateway(t *testing.T) {
@@ -153,7 +139,12 @@ func TestUsesAdapterCertificatesRequiresOptInTraefikAndGateway(t *testing.T) {
 		t.Fatal("platform PKI alone must not enable adapter certificates")
 	}
 	if !enabled.usesAdapterCertificates(mtlsServer()) {
-		t.Fatal("opt-in with platform PKI should enable adapter certificates for a Traefik OAuth server")
+		t.Fatal("opt-in with platform PKI should enable adapter certificates for a Traefik gateway server")
+	}
+	withoutOAuth := mtlsServer()
+	withoutOAuth.Spec.Auth = nil
+	if !enabled.usesAdapterCertificates(withoutOAuth) {
+		t.Fatal("adapter certificates must remain available when OAuth is disabled")
 	}
 	nginx := mtlsServer()
 	nginx.Spec.IngressClass = "nginx"

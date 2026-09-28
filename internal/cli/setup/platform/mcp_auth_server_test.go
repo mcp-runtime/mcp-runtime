@@ -186,7 +186,6 @@ func TestTestModeResourcesMatchBundledExampleAudiences(t *testing.T) {
 			Servers []struct {
 				Route string `json:"route"`
 				Auth  struct {
-					Mode     string `json:"mode"`
 					Audience string `json:"audience"`
 				} `json:"auth"`
 			} `json:"servers"`
@@ -198,10 +197,6 @@ func TestTestModeResourcesMatchBundledExampleAudiences(t *testing.T) {
 			t.Fatalf("%s has no servers", name)
 		}
 		for _, server := range document.Servers {
-			if server.Auth.Mode != "oauth" {
-				t.Errorf("%s must exercise OAuth", name)
-				continue
-			}
 			audience := server.Auth.Audience
 			if audience == "" {
 				if server.Route == "" || !strings.HasPrefix(server.Route, "/") {

@@ -1,9 +1,9 @@
 # MCP authorization with the optional mcp-auth server
 
-MCP authorization is optional. MCP clients and servers can communicate without
-OAuth when a deployment does not require user identity or bearer-token
-protection. Enable authorization when clients need standards-based login, PKCE,
-token issuance, and protected-resource discovery.
+MCP OAuth authorization is optional. An MCP server enables it by including
+`spec.auth`; omitting `spec.auth` leaves OAuth disabled. The bundled
+`mcp-auth-server` is also optional because a deployment may use an external
+OAuth authorization server instead.
 
 ## What each component does
 
@@ -171,12 +171,12 @@ auth server; an internal HTTP shortcut is test-only.
 
 ## Configure the MCPServer resource
 
-Set OAuth on the governed MCPServer and choose one canonical resource URI:
+To enable OAuth on a governed MCPServer, add `spec.auth` and choose one
+canonical resource URI:
 
 ```yaml
 spec:
   auth:
-    mode: oauth
     # Defaults from the bundled issuer configured on the operator.
     audience: https://mcp.example.com/my-server/mcp
 ```
@@ -185,8 +185,9 @@ The audience must equal the MCP server's canonical public URL. The operator
 keeps the bundled mcp-auth resource list aligned with OAuth MCPServer
 audiences. An optional `--mcp-auth-resource-url` is an initial bootstrap value
 and must exactly match the corresponding `spec.auth.audience`. The
-gateway rejects tokens with a different issuer or audience and strips the
-client bearer token before forwarding upstream.
+gateway rejects tokens with a different issuer or audience, then forwards the
+validated bearer to the MCP application server. The application validates the
+same issuer and audience and must not pass the token to another API.
 
 You can omit `audience`. The operator then derives it from the server's public
 URL: `https://` when the operator runs with `MCP_DEFAULT_INGRESS_TLS=true` or
@@ -466,10 +467,10 @@ The SDK runs at the application boundary, outside Runtime governance:
 - A standalone MCP resource server can use the SDK's `JWTVerifier` to validate
   issuer, JWKS signature, audience, expiry, and required scopes before invoking
   tools.
-- A governed MCP server normally lets the Runtime gateway terminate the bearer
-  token, apply grants/sessions/policy, and strip the token before forwarding.
-  Add SDK verification in the upstream server only when it is intentionally
-  independently exposed or defense-in-depth is required.
+- A governed MCP server validates the bearer in both the Runtime gateway and
+  the SDK-backed application. They are one logical protected resource and use
+  the same issuer and audience. Runtime applies grants, sessions, and policy;
+  the application must not pass the token to downstream APIs.
 
 The SDK consumes provider-neutral MCP authorization metadata and JWTs. Switching
 from Keycloak to Okta or PingOne changes the connector and IdP client

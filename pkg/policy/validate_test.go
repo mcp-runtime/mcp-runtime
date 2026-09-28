@@ -9,7 +9,7 @@ func TestValidateAcceptsWellFormedDocument(t *testing.T) {
 	doc := &Document{
 		SchemaVersion: SchemaVersion,
 		Server:        Server{Name: "demo", Namespace: "mcp-servers"},
-		Auth:          &Auth{Mode: "oauth", IssuerURL: "https://issuer.example.com", Audience: "https://resource.example.com/mcp"},
+		Auth:          &Auth{IssuerURL: "https://issuer.example.com", Audience: "https://resource.example.com/mcp"},
 		Policy:        &Config{Mode: "allow-list", DefaultDecision: "deny"},
 		Tools: []Tool{
 			{Name: "read-file", RequiredTrust: "low", SideEffect: "read"},
@@ -51,16 +51,15 @@ func TestValidateRejects(t *testing.T) {
 		// Body-level checks: restamp after mutation so revision matches the mutated
 		// body and the specific field error is what fires.
 		{"missing server name", func(d *Document) { d.Server.Name = "" }, true, "server.name"},
-		{"invalid auth mode", func(d *Document) { d.Auth = &Auth{Mode: "saml"} }, true, "auth mode"},
-		{"oauth without issuer", func(d *Document) { d.Auth = &Auth{Mode: "oauth"} }, true, "issuer_url"},
+		{"auth without OAuth or adapter trust", func(d *Document) { d.Auth = &Auth{} }, true, "OAuth issuer/audience or adapter trust_domain"},
 		{"oauth without audience", func(d *Document) {
-			d.Auth = &Auth{Mode: "oauth", IssuerURL: "https://issuer.example.com"}
+			d.Auth = &Auth{IssuerURL: "https://issuer.example.com"}
 		}, true, "audience"},
 		{"oauth audience not a URI", func(d *Document) {
-			d.Auth = &Auth{Mode: "oauth", IssuerURL: "https://issuer.example.com", Audience: "mcp-runtime"}
+			d.Auth = &Auth{IssuerURL: "https://issuer.example.com", Audience: "mcp-runtime"}
 		}, true, "absolute URI"},
 		{"oauth audience with fragment", func(d *Document) {
-			d.Auth = &Auth{Mode: "oauth", IssuerURL: "https://issuer.example.com", Audience: "https://mcp.example.com/mcp#frag"}
+			d.Auth = &Auth{IssuerURL: "https://issuer.example.com", Audience: "https://mcp.example.com/mcp#frag"}
 		}, true, "fragment"},
 		{"invalid policy mode", func(d *Document) { d.Policy = &Config{Mode: "deny-everything"} }, true, "policy mode"},
 		{"invalid default decision", func(d *Document) { d.Policy = &Config{DefaultDecision: "maybe"} }, true, "default decision"},
@@ -108,6 +107,19 @@ func TestValidateRejects(t *testing.T) {
 				t.Fatalf("Validate() error = %q, want substring %q", err.Error(), tc.wantSub)
 			}
 		})
+	}
+}
+
+func TestValidateAcceptsAdapterTrustWithoutOAuth(t *testing.T) {
+	doc := &Document{
+		Server: Server{Name: "demo", Namespace: "mcp-servers"},
+		Auth:   &Auth{TrustDomain: "example.org"},
+	}
+	if err := Stamp(doc, ""); err != nil {
+		t.Fatalf("Stamp() error = %v", err)
+	}
+	if err := Validate(doc); err != nil {
+		t.Fatalf("Validate() error = %v, want nil", err)
 	}
 }
 

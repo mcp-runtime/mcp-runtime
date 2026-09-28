@@ -101,14 +101,9 @@ func GenerateCRD(server *ServerMetadata, outputPath string) error {
 
 	if server.Auth != nil {
 		mcpServer.Spec.Auth = &mcpv1alpha1.AuthConfig{
-			Mode:            mcpv1alpha1.AuthMode(server.Auth.Mode),
-			HumanIDHeader:   server.Auth.HumanIDHeader,
-			AgentIDHeader:   server.Auth.AgentIDHeader,
-			TeamIDHeader:    server.Auth.TeamIDHeader,
-			SessionIDHeader: server.Auth.SessionIDHeader,
-			TokenHeader:     server.Auth.TokenHeader,
-			IssuerURL:       server.Auth.IssuerURL,
-			Audience:        server.Auth.Audience,
+			TokenHeader: server.Auth.TokenHeader,
+			IssuerURL:   server.Auth.IssuerURL,
+			Audience:    server.Auth.Audience,
 		}
 	}
 
@@ -125,7 +120,6 @@ func GenerateCRD(server *ServerMetadata, outputPath string) error {
 		mcpServer.Spec.Session = &mcpv1alpha1.SessionConfig{
 			Required:            server.Session.Required,
 			Store:               server.Session.Store,
-			HeaderName:          server.Session.HeaderName,
 			MaxLifetime:         server.Session.MaxLifetime,
 			IdleTimeout:         server.Session.IdleTimeout,
 			UpstreamTokenHeader: server.Session.UpstreamTokenHeader,

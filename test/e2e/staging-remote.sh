@@ -468,7 +468,7 @@ fi
 load_vm_env
 : "${E2E_ACME_EMAIL:?set E2E_ACME_EMAIL, or record it in ${VM_BACKUP_DIR}/e2e.env on the VM}"
 export E2E_MTLS_CLUSTER_ISSUER="${E2E_MTLS_CLUSTER_ISSUER-mcp-runtime-ca}"
-# Adapter certificates on OAuth routes are an opt-in platform feature; setup
+# Adapter certificates on gateway routes are an opt-in platform feature; setup
 # reads MCP_ADAPTER_CERTIFICATES, MCP_TRUST_DOMAIN and
 # MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE from the environment.
 staging_configure_adapter_certificates
