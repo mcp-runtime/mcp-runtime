@@ -109,12 +109,24 @@ func deployMCPAuthServer(image, configuredIssuer string, configuredResources []s
 	if err := applyManifestYAML(manifest, "", os.Stdout); err != nil {
 		return fmt.Errorf("apply mcp-auth authorization server: %w", err)
 	}
-	cmd, err := core.DefaultKubectlClient().CommandArgs([]string{
+	// Kind/port-forward only: auto-wire the in-cluster issuer backchannel under
+	// --test-mode (or an explicit OAUTH_INTERNAL_ISSUER_URL). Production keeps
+	// gateways on public HTTPS JWKS — see issue #528.
+	operatorEnvArgs := []string{
 		"set", "env", "deployment/mcp-runtime-operator-controller-manager",
 		"-n", core.NamespaceMCPRuntime,
-		"OAUTH_INTERNAL_ISSUER_URL=" + mcpAuthInternalIssuerURLForCluster(),
 		"MCP_AUTH_ISSUER_URL=" + opts.IssuerURL,
-	})
+	}
+	if explicitInternal := strings.TrimSpace(os.Getenv("OAUTH_INTERNAL_ISSUER_URL")); explicitInternal != "" {
+		operatorEnvArgs = append(operatorEnvArgs, "OAUTH_INTERNAL_ISSUER_URL="+explicitInternal)
+	} else if opts.TestMode {
+		operatorEnvArgs = append(operatorEnvArgs, "OAUTH_INTERNAL_ISSUER_URL="+mcpAuthInternalIssuerURLForCluster())
+	} else {
+		// Clear a leftover Kind backchannel so prod setup reruns do not keep
+		// breaking gateway OAuth after a prior test-mode or buggy install.
+		operatorEnvArgs = append(operatorEnvArgs, "OAUTH_INTERNAL_ISSUER_URL-")
+	}
+	cmd, err := core.DefaultKubectlClient().CommandArgs(operatorEnvArgs)
 	if err != nil {
 		return fmt.Errorf("prepare operator OAuth issuer update: %w", err)
 	}

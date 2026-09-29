@@ -147,6 +147,10 @@ type deployOperatorStepCmd struct{}
 
 func (s deployOperatorStepCmd) Name() string { return "operator-deploy" }
 func (s deployOperatorStepCmd) Run(logger *zap.Logger, deps SetupDeps, ctx *SetupContext) error {
+	prevTestMode := operatorSetupTestMode
+	testMode := ctx != nil && ctx.Plan.TestMode
+	operatorSetupTestMode = func() bool { return testMode }
+	defer func() { operatorSetupTestMode = prevTestMode }()
 	return deployOperatorStep(
 		logger,
 		ctx.OperatorImage,

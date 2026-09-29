@@ -274,11 +274,14 @@ This allow-lists Cursor's native `cursor://anysphere.cursor-mcp/oauth/callback`
 redirect. Other custom URI schemes are rejected. Leave the setting empty in
 production.
 
-Gateway pods use `OAUTH_INTERNAL_ISSUER_URL` for authorization-server
+Gateway pods may use `OAUTH_INTERNAL_ISSUER_URL` for authorization-server
 discovery and JWKS retrieval when the public issuer is reachable only through a
-workstation port-forward. The public issuer remains unchanged for JWT issuer
-validation. Setup sets this backchannel to the in-cluster `mcp-auth-server`
-service when its opt-in fixture is enabled.
+workstation port-forward (typical Kind `--test-mode` installs). The public
+issuer remains unchanged for JWT issuer validation. Setup auto-injects that
+in-cluster backchannel **only** under `--test-mode` when the bundled
+`mcp-auth-server` Service exists, or when `OAUTH_INTERNAL_ISSUER_URL` is set
+explicitly. Production/public TLS setups leave it unset so gateways fetch JWKS
+over the public HTTPS issuer.
 
 ### Practical model
 
