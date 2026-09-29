@@ -17,8 +17,9 @@ type networkPolicyDoc struct {
 		Namespace string `yaml:"namespace"`
 	} `yaml:"metadata"`
 	Spec struct {
-		Ingress []networkPolicyIngressRule `yaml:"ingress"`
-		Egress  []networkPolicyEgressRule  `yaml:"egress"`
+		PodSelector networkPolicySelector      `yaml:"podSelector"`
+		Ingress     []networkPolicyIngressRule `yaml:"ingress"`
+		Egress      []networkPolicyEgressRule  `yaml:"egress"`
 	} `yaml:"spec"`
 }
 
@@ -44,6 +45,42 @@ type networkPolicySelector struct {
 type networkPolicyPort struct {
 	Protocol string `yaml:"protocol"`
 	Port     int    `yaml:"port"`
+}
+
+func TestRegistryACMEPolicyOnlyAllowsTraefikToSolverPort(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "config", "registry", "base", "acme-networkpolicy.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var policy networkPolicyDoc
+	if err := yaml.Unmarshal(raw, &policy); err != nil {
+		t.Fatal(err)
+	}
+	if policy.Spec.PodSelector.MatchLabels["acme.cert-manager.io/http01-solver"] != "true" || len(policy.Spec.PodSelector.MatchLabels) != 1 {
+		t.Fatal("ACME ingress must select only HTTP-01 solver pods")
+	}
+	if policy.Metadata.Namespace != "registry" || len(policy.Spec.Egress) != 0 || len(policy.Spec.Ingress) != 1 {
+		t.Fatal("ACME policy must only add one registry ingress rule")
+	}
+	rule := policy.Spec.Ingress[0]
+	if len(rule.Ports) != 1 || !networkPolicyPortsInclude(rule.Ports, "TCP", 8089) || len(rule.From) != 2 {
+		t.Fatal("ACME policy must allow only solver TCP 8089 from the two Traefik installations")
+	}
+	want := map[string]string{"traefik": "app", "kube-system": "app.kubernetes.io/name"}
+	for _, peer := range rule.From {
+		if peer.NamespaceSelector == nil || peer.PodSelector == nil {
+			t.Fatal("ACME source must constrain both namespace and Traefik pod labels")
+		}
+		ns := peer.NamespaceSelector.MatchLabels["kubernetes.io/metadata.name"]
+		label, ok := want[ns]
+		if !ok || peer.PodSelector.MatchLabels[label] != "traefik" {
+			t.Fatalf("unexpected ACME ingress source: %+v", peer)
+		}
+		delete(want, ns)
+	}
+	if len(want) != 0 {
+		t.Fatal("missing a supported Traefik ingress source")
+	}
 }
 
 func TestRegistryNetworkPolicyAllowsHelperPushOnlyToRegistry(t *testing.T) {

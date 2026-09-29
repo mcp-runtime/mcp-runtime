@@ -245,6 +245,11 @@ func setupTLSLetsEncryptClientGo(logger *zap.Logger, plan setupplan.Plan) error 
 	if err := ensureNamespaceWithLabels(core.NamespaceRegistry, nil); err != nil {
 		return wrapRegistryNamespaceError(err, logger)
 	}
+	// Existing registries already deny ingress by default. Permit only Traefik
+	// to reach HTTP-01 solver pods before requesting or renewing certificates.
+	if err := applyManifestFile("config/registry/base/acme-networkpolicy.yaml", "", os.Stdout); err != nil {
+		return fmt.Errorf("allow registry ACME HTTP-01 solver traffic: %w", err)
+	}
 	if err := ensureRegistryCertificateOwnershipClientGo(logger); err != nil {
 		return err
 	}
@@ -292,6 +297,9 @@ func setupTLSWithExistingClusterIssuerClientGo(logger *zap.Logger, plan setuppla
 	}
 	if err := ensureNamespaceWithLabels(core.NamespaceRegistry, nil); err != nil {
 		return wrapRegistryNamespaceError(err, logger)
+	}
+	if err := applyManifestFile("config/registry/base/acme-networkpolicy.yaml", "", os.Stdout); err != nil {
+		return fmt.Errorf("allow registry ACME HTTP-01 solver traffic: %w", err)
 	}
 	if err := ensureRegistryCertificateOwnershipClientGo(logger); err != nil {
 		return err
@@ -969,6 +977,9 @@ func setupTLSLetsEncrypt(kubectl core.KubectlRunner, logger *zap.Logger, plan se
 	if err := ensureRegistryCertificateOwnership(kubectl, logger); err != nil {
 		return err
 	}
+	if err := kube.ApplyManifestFromFile(kubectl.CommandArgs, "config/registry/base/acme-networkpolicy.yaml", os.Stdout, os.Stderr); err != nil {
+		return fmt.Errorf("allow registry ACME HTTP-01 solver traffic: %w", err)
+	}
 
 	issuerName := certmanager.ClusterIssuerNameForACME(plan.ACMEStaging)
 	dnsNames := certmanager.ACMETLSDNSNames()
@@ -1054,6 +1065,9 @@ func setupTLSWithExistingClusterIssuer(kubectl core.KubectlRunner, logger *zap.L
 	}
 	if err := ensureRegistryCertificateOwnership(kubectl, logger); err != nil {
 		return err
+	}
+	if err := kube.ApplyManifestFromFile(kubectl.CommandArgs, "config/registry/base/acme-networkpolicy.yaml", os.Stdout, os.Stderr); err != nil {
+		return fmt.Errorf("allow registry ACME HTTP-01 solver traffic: %w", err)
 	}
 
 	dnsNames, ipAddresses := registryCertificateSANs(plan)
