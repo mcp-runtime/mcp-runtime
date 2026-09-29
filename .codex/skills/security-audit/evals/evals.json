@@ -1,0 +1,24 @@
+{
+  "skill_name": "security-audit",
+  "evals": [
+    {
+      "id": "pr-mode-routing",
+      "prompt": "Review this PR that touches gateway policy and a Dockerfile for security risks.",
+      "expected_output": "Uses security-audit mode pr plus supply-chain when images change, and prefers CI/pre-release scanners for deterministic checks.",
+      "assertions": [
+        "Selects pr mode",
+        "Mentions supply-chain or image scanning when Dockerfile changes",
+        "Prefers CI/pre-release deterministic scanners"
+      ]
+    },
+    {
+      "id": "k8s-hardening-lane",
+      "prompt": "Audit NetworkPolicies and RBAC for the operator and sentinel namespaces.",
+      "expected_output": "Loads security-audit mode k8s and reports RBAC/PSS/NetworkPolicy findings.",
+      "assertions": [
+        "Selects k8s mode",
+        "Covers RBAC or NetworkPolicy"
+      ]
+    }
+  ]
+}

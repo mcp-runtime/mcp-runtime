@@ -3,7 +3,7 @@
 Use this reference only for Step 5 of `mcp-protocol-compliance`, after the static
 schema checks have identified `SPEC_REV`, `SCHEMA`, `JV`, and `SPEC_CACHE`.
 
-Precondition: `contributor-cluster-setup` has run, a demo server has a valid
+Precondition: `contributor-cluster` has run, a demo server has a valid
 grant/session, and the certificate-authenticated HTTP adapter from
 `access-governance` is listening on `127.0.0.1:8099`.
 
@@ -11,7 +11,7 @@ grant/session, and the certificate-authenticated HTTP adapter from
 TEST_KUBECONFIG="${TEST_KUBECONFIG:-$HOME/.kube/test-mcp-runtime-config}"
 kubectl --kubeconfig "$TEST_KUBECONFIG" config current-context \
   | grep -qx test-mcp-runtime \
-  || { echo "Run contributor-cluster-setup first"; exit 1; }
+  || { echo "Run contributor-cluster first"; exit 1; }
 export KUBECONFIG="$TEST_KUBECONFIG"
 BASE=http://127.0.0.1:8099/mcp
 PROTO="$SPEC_REV"

@@ -1,0 +1,25 @@
+{
+  "skill_name": "contributor-cluster",
+  "evals": [
+    {
+      "id": "recover-existing-kind-cluster",
+      "prompt": "Prepare the contributor Kind cluster for e2e QA. Reuse the existing mcp-runtime cluster if it is healthy.",
+      "expected_output": "A bring-up or recovery flow that uses the isolated test-mcp-runtime kubeconfig, verifies platform health, and gates on a real MCP tools/call before sharing local URLs/keys.",
+      "assertions": [
+        "Does not delete an existing cluster without explicit approval",
+        "Runs the real MCP traffic gate before declaring success",
+        "Can point at local-development reference for URLs and test logins"
+      ]
+    },
+    {
+      "id": "local-endpoints-after-setup",
+      "prompt": "Cluster is up. I need the test-mode UI URL, API key lookup, and seeded logins for localhost port-forward.",
+      "expected_output": "Uses contributor-cluster local-development guidance: port-forward 18080/18443, UI/API URLs, secret-backed API keys without printing secrets, and seeded test@/admin@ logins.",
+      "assertions": [
+        "Mentions localhost:18080 and adapter path on 18443",
+        "Does not print secret values into the report",
+        "References test-mode seeded logins"
+      ]
+    }
+  ]
+}

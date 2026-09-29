@@ -1,4 +1,0 @@
-interface:
-  display_name: "Security Regression QA"
-  short_description: "Real-cluster security regression: auth, grants, audit, headers, secret leaks"
-  default_prompt: "Use $security-regression-qa to fire real requests at the live Kind cluster and verify auth, grant/session policy, gateway deny paths, audit emission, UI security headers, login/lockout, and that no secret leaks into pod logs (contributor-cluster-setup must have run)."

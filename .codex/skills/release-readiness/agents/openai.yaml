@@ -1,4 +1,0 @@
-interface:
-  display_name: "Release Readiness"
-  short_description: "Coordinate ship, canary, and release gates"
-  default_prompt: "Use $release-readiness to coordinate MCP Runtime merge, ship, canary, or release readiness across CI parity, live cluster QA, security, UI, protocol, performance, docs, and deployment evidence."

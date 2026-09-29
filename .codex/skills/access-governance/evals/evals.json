@@ -13,7 +13,7 @@
     {
       "id": "local-url",
       "prompt": "What is the local Kind API URL and test admin login?",
-      "expected_output": "Route to local-development for endpoint and credential details.",
+      "expected_output": "Route to contributor-cluster for endpoint and credential details.",
       "assertions": [
         "Does not invent credentials or endpoint values.",
         "Routes to local-dev rather than governance."

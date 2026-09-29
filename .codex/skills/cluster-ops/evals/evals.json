@@ -1,0 +1,23 @@
+{
+  "skill_name": "cluster-ops",
+  "evals": [
+    {
+      "id": "ops-mode-after-operator-change",
+      "prompt": "I changed the MCPServer reconciler. What live Kind checks should I run?",
+      "expected_output": "Selects cluster-ops mode ops (and optionally security), assumes contributor-cluster is healthy, and prefers CI/QA E2E evidence when already green.",
+      "assertions": [
+        "Chooses ops mode",
+        "Does not claim CI parity must be re-run entirely by the agent"
+      ]
+    },
+    {
+      "id": "troubleshoot-imagepull",
+      "prompt": "MCPServer pods are ImagePullBackOff on Kind and the UI returns 401 intermittently.",
+      "expected_output": "Uses cluster-ops troubleshoot mode / checklist for registry pull and auth symptoms.",
+      "assertions": [
+        "Uses troubleshoot mode or checklist",
+        "Mentions registry or auth diagnostics"
+      ]
+    }
+  ]
+}

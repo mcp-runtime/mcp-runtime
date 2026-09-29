@@ -1,0 +1,17 @@
+{
+  "skill_name": "cluster-ops",
+  "queries": [
+    {
+      "query": "Kind ingress is 404 after a registry change",
+      "should_trigger": true
+    },
+    {
+      "query": "check gateway p95 latency against baseline",
+      "should_trigger": true
+    },
+    {
+      "query": "create a new React button style",
+      "should_trigger": false
+    }
+  ]
+}

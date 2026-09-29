@@ -1,0 +1,17 @@
+{
+  "skill_name": "contributor-cluster",
+  "queries": [
+    {
+      "query": "stand up the Kind test-mode cluster for QA",
+      "should_trigger": true
+    },
+    {
+      "query": "what is the local UI URL and test login after setup",
+      "should_trigger": true
+    },
+    {
+      "query": "write a unit test for pkg/errx only",
+      "should_trigger": false
+    }
+  ]
+}

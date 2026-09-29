@@ -1,6 +1,6 @@
 ---
 name: dashboard-browser-qa
-description: Browser-first real-cluster Sentinel UI/dashboard QA - role-based navigation, auth flows, every tab, forms, filters, destructive actions, rendered data, network/API evidence, console evidence, responsive/accessibility checks, cleanup, static assets, and public-host defenses. Use when Codex is asked to QA UI changes, dashboard regressions, login/admin/tenant flows, browser-visible API behavior, copyable MCP connect config, or backend analytics/observability changes that must be validated through UI controls. Complements security-regression-qa with feature-correctness and browser interaction checks. Assumes contributor-cluster-setup has run.
+description: Browser-first real-cluster Sentinel UI/dashboard QA - role-based navigation, auth flows, every tab, forms, filters, destructive actions, rendered data, network/API evidence, console evidence, responsive/accessibility checks, cleanup, static assets, and public-host defenses. Use when Codex is asked to QA UI changes, dashboard regressions, login/admin/tenant flows, browser-visible API behavior, copyable MCP connect config, or backend analytics/observability changes that must be validated through UI controls. Complements cluster-ops with feature-correctness and browser interaction checks. Assumes contributor-cluster has run.
 ---
 
 # Dashboard Browser QA
@@ -23,7 +23,7 @@ browser-visible workflows: role-gated navigation, session transitions, forms,
 filters, tables, modals, copy controls, destructive actions, public-host
 defenses, and whether rendered UI data matches backend truth.
 
-Header / CSP / lockout / secret-leak checks live in `security-regression-qa`; do not
+Header / CSP / lockout / secret-leak checks live in `cluster-ops`; do not
 duplicate them here unless the symptom is visible in the UI.
 
 Regression evidence contract: a UI pass needs browser evidence, not only curl
@@ -47,7 +47,7 @@ cluster is the source of truth.
 TEST_KUBECONFIG="${TEST_KUBECONFIG:-$HOME/.kube/test-mcp-runtime-config}"
 kubectl --kubeconfig "$TEST_KUBECONFIG" config current-context \
   | grep -qx test-mcp-runtime \
-  || { echo "Run contributor-cluster-setup first"; exit 1; }
+  || { echo "Run contributor-cluster first"; exit 1; }
 export KUBECONFIG="$TEST_KUBECONFIG"
 
 curl -fsS -o /dev/null http://localhost:18080/ \
@@ -420,6 +420,6 @@ Final report sections:
    behavior, form validation, destructive-action safety,
    responsive/accessibility, and automated regression tests.
 
-Cross-link to `security-regression-qa` for header/lockout findings, to
-`cluster-operations-qa` for rollout/ingress findings, and to `performance-regression-qa` when a
+Cross-link to `cluster-ops` for header/lockout findings, to
+`cluster-ops` for rollout/ingress findings, and to `cluster-ops` when a
 UI complaint is really a latency complaint.

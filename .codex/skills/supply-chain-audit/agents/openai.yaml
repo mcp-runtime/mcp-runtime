@@ -1,4 +1,0 @@
-interface:
-  display_name: "Supply Chain Audit"
-  short_description: "Audit Go deps, images, SBOMs, signatures, and Actions"
-  default_prompt: "Use $supply-chain-audit to audit MCP Runtime supply chain — Go modules, container images, SBOMs, signatures, and GitHub Actions — for vulnerabilities, weak pinning, and pwn-request exposure."
