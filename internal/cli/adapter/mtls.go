@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -52,9 +53,25 @@ func setupMTLS(ctx context.Context, client *platformapi.PlatformClient, flags pl
 	if err != nil {
 		return nil, nil, fmt.Errorf("assemble client certificate: %w", err)
 	}
-	// RootCAs is fixed from the first enrollment: the bundle is the cluster's
-	// stable CA, not the rotating leaf. A CA rotation would require a restart.
-	pool := x509.NewCertPool()
+	// Enrollment provides a client identity CA. Public ingress certificates may
+	// use a different issuer, so retain the caller's HTTPS trust and TLS settings.
+	tlsCfg := &tls.Config{}
+	if base != nil {
+		if transport, ok := base.Base.(*http.Transport); ok && transport.TLSClientConfig != nil {
+			tlsCfg = transport.TLSClientConfig.Clone()
+		}
+	}
+	var pool *x509.CertPool
+	if tlsCfg.RootCAs != nil {
+		pool = tlsCfg.RootCAs.Clone()
+	} else {
+		pool, err = x509.SystemCertPool()
+		if err != nil {
+			return nil, nil, fmt.Errorf("load system HTTPS trust roots: %w", err)
+		}
+	}
+	// The bundle is the cluster's stable CA, not the rotating leaf. A CA
+	// rotation would require a restart. Do not mutate a caller-owned root pool.
 	if !pool.AppendCertsFromPEM(cred.CABundle) {
 		return nil, nil, fmt.Errorf("issued CA bundle contains no valid certificates")
 	}
@@ -68,14 +85,13 @@ func setupMTLS(ctx context.Context, client *platformapi.PlatformClient, flags pl
 	}
 	r.cert.Store(&cert)
 
-	tlsCfg := &tls.Config{
-		RootCAs: pool,
-		// Kind Traefik port-forwards terminate with a local default cert whose
-		// SAN is not localhost; opt-in only via --tls-insecure-skip-verify.
-		InsecureSkipVerify: insecureSkipVerify, // #nosec G402 -- explicit Kind/local Traefik default-cert skip; client certs still presented
-		GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
-			return r.cert.Load(), nil
-		},
+	tlsCfg.RootCAs = pool
+	// Kind Traefik port-forwards terminate with a local default cert whose
+	// SAN is not localhost; opt-in only via --tls-insecure-skip-verify.
+	tlsCfg.InsecureSkipVerify = insecureSkipVerify // #nosec G402 -- explicit Kind/local Traefik default-cert skip; client certs still presented
+	tlsCfg.Certificates = nil
+	tlsCfg.GetClientCertificate = func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+		return r.cert.Load(), nil
 	}
 	transport := base
 	if transport == nil {

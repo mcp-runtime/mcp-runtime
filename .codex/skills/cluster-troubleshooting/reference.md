@@ -119,6 +119,13 @@ by a manual/scripted flow using the `cursor://` redirect URI, not by Cursor itse
 
 ### Symptom → cause
 
+- **Enrolled adapter returns HTTP 502 with `x509: certificate signed by unknown authority`:**
+  the public ingress server certificate can use a different CA from the
+  session-bound client certificate. Enrollment must preserve system HTTPS
+  roots (including staging roots installed on the VM) or the explicitly
+  configured `--tls-ca-bundle`, then add the enrollment CA. Check
+  `internal/cli/adapter/mtls.go` before blaming Traefik or disabling server
+  verification. Re-run the original adapter CLI flow after rebuilding it.
 - **`Error POSTing to endpoint: 404 page not found`, then `SSE error: Non-200 status code (404)`:**
   the SSE line is a red herring — Cursor falls back to the deprecated SSE transport after
   Streamable HTTP fails. Diagnose the **first** 404. Common cause: the authorization server
