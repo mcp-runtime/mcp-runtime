@@ -71,23 +71,6 @@ servers:
 EOF
 ```
 
-If you add an `analytics.ingestURL` block and apply raw YAML with `kubectl`,
-create the analytics Secret yourself. The platform-backed
-`mcp-runtime server deploy` path creates the per-server Secret automatically
-when analytics is configured and `analytics.apiKeySecretRef` is empty.
-
-```bash
-API_KEY="$(
-  kubectl get secret mcp-sentinel-secrets -n mcp-sentinel \
-    -o jsonpath='{.data.INGEST_API_KEYS}' | base64 -d | cut -d, -f1
-)"
-
-kubectl create secret generic oauth-example-go-2025-11-25-gateway-analytics-creds \
-  -n mcp-servers \
-  --from-literal=api-key="$API_KEY" \
-  --dry-run=client -o yaml | kubectl apply -f -
-```
-
 Build, push, and deploy:
 
 ```bash
@@ -164,14 +147,19 @@ kubectl logs -n "$NAMESPACE" "$POD" -c mcp-gateway
 
 ## Grants and Sessions
 
+The example below is a contributor-only runtime policy test. It uses synthetic
+identity values and the explicit `--use-kube` path to test the gateway's CRD
+policy behavior in a disposable cluster. It does not test managed-agent
+directory checks or platform-issued sessions. For a platform-backed access
+flow, use the [Quickstart](../quickstart.md) or the [staging E2E guide](staging-e2e.md).
+
 Gateway policy requires both an access grant and an agent session when the
 server has `spec.session.required=true`.
 
-Use `init` to scaffold manifests. Apply the grant through the platform API
-after `auth login`. Platform API **session apply requires an admin role**, so use
-admin login (`admin@mcpruntime.org` in test mode), `--use-kube`, or `kubectl
-apply` for explicit curl sessions. For agent testing, prefer the adapter path
-documented below.
+Use `init` to scaffold manifests. In this test, apply both resources with
+`--use-kube`; this intentionally bypasses platform API identity validation.
+Platform API session apply requires an admin role. For normal agent use, prefer
+the adapter path described in the user docs.
 
 ```bash
 ./bin/mcp-runtime auth login --api-url http://localhost:18080 \
@@ -194,13 +182,6 @@ documented below.
   --trust high \
   --output /tmp/session.yaml
 
-./bin/mcp-runtime access grant apply --file /tmp/grant.yaml
-./bin/mcp-runtime access session apply --file /tmp/session.yaml
-```
-
-Admin/operator direct Kubernetes fallback:
-
-```bash
 ./bin/mcp-runtime access grant apply --file /tmp/grant.yaml --use-kube
 ./bin/mcp-runtime access session apply --file /tmp/session.yaml --use-kube
 ```

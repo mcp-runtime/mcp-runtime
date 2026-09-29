@@ -1,60 +1,61 @@
-# MCP Runtime Documentation
-> Open-source, Kubernetes-native platform for deploying, governing, and brokering MCP servers. Policy enforcement per tool call, multi-team isolation, and a full audit trail — no YAML required.
+# MCP Runtime documentation
+> Open-source Kubernetes control plane for deploying and governing MCP servers. The CLI generates Kubernetes resources; allow-list policy checks tool calls through the gateway and records decisions. Observe mode records calls without enforcing policy.
 
-## Getting started
+## Start here
 
-- Quickstart: https://docs.mcpruntime.org/quickstart/ — Deploy a governed server in 10 minutes using the live platform. No cluster needed. Includes binary install, server init with tool discovery, grant, adapter proxy.
-- Getting Started (self-host): https://docs.mcpruntime.org/getting-started/ — Install MCP Runtime on your own Kubernetes cluster. Binary install, cluster readiness, setup, health check.
-- Concepts: https://docs.mcpruntime.org/concepts/ — Core abstractions: MCPServer, MCPAccessGrant, MCPAgentSession, gateway, adapter, trust levels, side effects, platform mode, scopes, .mcp/servers.yaml.
-- Identity and authorization: https://docs.mcpruntime.org/identity-and-authorization/ — Platform principals, team and server ownership, agent identities, grants, sessions, gateway tool-call decisions, and Kubernetes workload identity.
+- Quickstart: https://docs.mcpruntime.org/quickstart/ — Deploy a sample server on the hosted platform, grant an active managed agent access, and connect through the adapter.
+- Getting Started: https://docs.mcpruntime.org/getting-started/ — Install MCP Runtime on your own Kubernetes cluster.
+- Concepts: https://docs.mcpruntime.org/concepts/ — MCPServer, grants, sessions, trust levels, tool effects, the gateway, and the adapter.
+- Identity and authorization: https://docs.mcpruntime.org/identity-and-authorization/ — Platform principals, managed agents, grants, sessions, gateway decisions, and Kubernetes workload identity.
+- Architecture: https://docs.mcpruntime.org/architecture/ — Control, runtime, policy, and observability planes.
 
-## Developer guide
+## Develop and connect
 
-- Publish an MCP Server: https://docs.mcpruntime.org/publish-mcp-server/ — Write metadata, build and push a Docker image, deploy, verify reconciliation, observe traffic.
-- Agent Adapter: https://docs.mcpruntime.org/agent-adapters/ — Session-bound SPIFFE certificate Streamable HTTP proxy (OAuth optional when the target enables it), enrollment, and environment variables.
-- Multi-Team Isolation: https://docs.mcpruntime.org/multi-team/ — Namespace-per-team, RBAC, NetworkPolicy, team fields on MCPServer/Grant/Session, cross-team access patterns.
+- Publish an MCP server: https://docs.mcpruntime.org/publish-mcp-server/ — Generate metadata, build and push an image, deploy, and verify the server.
+- Agent adapters: https://docs.mcpruntime.org/agent-adapters/ — Enroll a session-bound certificate, configure the local HTTP proxy, and pass OAuth tokens when the target uses OAuth.
+- MCP authorization: https://docs.mcpruntime.org/mcp-authorization/ — Configure the optional authorization server and OAuth resource settings.
+- Multi-team isolation: https://docs.mcpruntime.org/multi-team/ — Team namespaces, RBAC, NetworkPolicy, and cross-team grants.
+- Learn overview: https://docs.mcpruntime.org/learn/ — Guided path from core concepts through a first server and multi-team setup.
+- Module 1: https://docs.mcpruntime.org/learn/module-1-concepts/
+- Module 2: https://docs.mcpruntime.org/learn/module-2-first-server/
+- Module 3: https://docs.mcpruntime.org/learn/module-3-multi-team/
 
-## Learning path (structured modules)
+## Operate
 
-- Learn overview: https://docs.mcpruntime.org/learn/ — Three-module structured path: Concepts → First server → Multi-team.
-- Module 1 — Core concepts: https://docs.mcpruntime.org/learn/module-1-concepts/ — MCPServer, Grant, Session, Gateway, Adapter explained with decision tables and check-your-understanding.
-- Module 2 — First governed server: https://docs.mcpruntime.org/learn/module-2-first-server/ — End-to-end hands-on: init, validate, build, push, deploy, grant, adapter, analytics. Includes break-it exercises.
-- Module 3 — Multi-team setup: https://docs.mcpruntime.org/learn/module-3-multi-team/ — Two teams, cross-team grants, session management, production checklist.
-
-## Operator guide
-
-- Deployment Targets: https://docs.mcpruntime.org/deployment-targets/ — Choose the right install shape for k3s, EKS, GKE, AKS, and other distributions.
-- Cluster Readiness: https://docs.mcpruntime.org/cluster-readiness/ — Distribution-specific prerequisites: registry trust, DNS, TLS, storage, ingress, MetalLB.
-- k3s On-Prem Cluster: https://docs.mcpruntime.org/k3s-on-prem-cluster/ — Four-node k3s cluster topology, networking, and node configuration for a production-style setup.
-- k3s Deployment Runbook: https://docs.mcpruntime.org/k3s-deployment-runbook/ — Environment variables, deploy/redeploy/cleanup scripts, rollout operations for k3s.
-- Runtime: https://docs.mcpruntime.org/runtime/ — Operator reconciliation, CRD lifecycle, Deployment/Service/Ingress outputs, traffic model, gateway sidecar, rollout settings.
-- Sentinel: https://docs.mcpruntime.org/sentinel/ — Gateway policy enforcement, grant/session evaluation, analytics ingest pipeline, ClickHouse, observability stack, CLI operations.
-- Troubleshooting: https://docs.mcpruntime.org/troubleshooting/ — Common errors and fixes: tool_side_effect_unknown, 401 registry, ImagePullBackOff, session expired, Kafka topic missing, stale Certificate, namespace Terminating.
+- Deployment targets: https://docs.mcpruntime.org/deployment-targets/ — Choose an install shape for k3s, EKS, GKE, AKS, or another distribution.
+- Cluster readiness: https://docs.mcpruntime.org/cluster-readiness/ — Check registry trust, DNS, TLS, storage, and ingress prerequisites.
+- k3s on-prem cluster: https://docs.mcpruntime.org/k3s-on-prem-cluster/ — Plan and configure a multi-node k3s installation.
+- k3s deployment runbook: https://docs.mcpruntime.org/k3s-deployment-runbook/ — Deploy and operate MCP Runtime on k3s.
+- Runtime: https://docs.mcpruntime.org/runtime/ — CRDs, reconciliation, image resolution, ingress, and rollouts.
+- Sentinel: https://docs.mcpruntime.org/sentinel/ — Gateway policy, audit events, analytics, and observability.
+- Troubleshooting: https://docs.mcpruntime.org/troubleshooting/ — Diagnose deployment, access, registry, analytics, and cluster issues.
 
 ## Reference
 
-- CLI reference: https://docs.mcpruntime.org/cli/ — Every command: auth, server, registry, access, adapter, team, sentinel, setup, cluster, bootstrap. Flags, defaults, examples.
-- API and CRDs: https://docs.mcpruntime.org/api/ — MCPServer, MCPAccessGrant, MCPAgentSession field reference, gateway headers, HTTP endpoints (`/api/v1/*`).
-- Architecture: https://docs.mcpruntime.org/architecture/ — System design: control plane, registry, broker, operator, Sentinel services, request flow.
+- CLI: https://docs.mcpruntime.org/cli/ — Commands, flags, defaults, and examples.
+- API and CRDs: https://docs.mcpruntime.org/api/ — Resource fields and HTTP endpoints.
+- API authorization matrix: https://docs.mcpruntime.org/security/authz-matrix/ — Authentication and authorization by endpoint.
 
-## Contributor guide
+## Contribute
 
-- Contributor overview: https://docs.mcpruntime.org/contributor/ — How to contribute, repo structure, PR process.
-- Local Kind and Test Mode: https://docs.mcpruntime.org/contributor/local-kind/ — Kind cluster setup, test-mode install, local registry, port-forward.
-- MCP authorization: https://docs.mcpruntime.org/mcp-authorization/ — Optional bundled authorization server, Keycloak/OIDC connector setup, DNS/TLS, setup flags, and end-to-end verification.
-- Service Iteration: https://docs.mcpruntime.org/contributor/service-iteration/ — Iterating on API/UI/gateway services without full rebuild.
-- Runtime MCP Testing: https://docs.mcpruntime.org/contributor/runtime-mcp-testing/ — Smoke tests and governed-access verification on a local cluster.
-- Troubleshooting (contributor): https://docs.mcpruntime.org/contributor/troubleshooting/ — Development-environment specific issues.
+- Contributor overview: https://docs.mcpruntime.org/contributor/ — Repository structure and contribution workflow.
+- Local Kind: https://docs.mcpruntime.org/contributor/local-kind/ — Contributor cluster setup and test mode.
+- Service iteration: https://docs.mcpruntime.org/contributor/service-iteration/ — Iterate on services without rebuilding the full platform.
+- Runtime MCP testing: https://docs.mcpruntime.org/contributor/runtime-mcp-testing/ — Test deployment, catalog, and gateway behavior locally.
+- Staging E2E: https://docs.mcpruntime.org/contributor/staging-e2e/ — Run and inspect the disposable VM test suite.
+- Contributor troubleshooting: https://docs.mcpruntime.org/contributor/troubleshooting/ — Fix common development environment failures.
+- Internals: https://docs.mcpruntime.org/internals/ — Source-oriented guides for the API types, request flows, packages, CLI, operator, config, and tests.
 
-## Key concepts for AI assistants
+## Key concepts
 
-- An MCPServer CRD describes a running MCP server. The operator creates Deployment, Service, and Ingress automatically.
-- An MCPAccessGrant defines which agent can call which tools on which server, at what trust level, with which side effects.
-- An MCPAgentSession is a time-bounded, revocable token carrying the human's consented trust level.
-- The gateway sidecar enforces grants + sessions on every tool call. No grant = denied. Expired/revoked session = denied.
-- The adapter proxy adds a session-bound client certificate and refreshes it automatically. It forwards an OAuth bearer only when the target server enables OAuth.
-- Tool names in .mcp/servers.yaml must exactly match the server's registered tool names. Mismatch causes tool_side_effect_unknown.
-- Trust levels: low (read-only) / medium (writes) / high (destructive).
-- Side effects: read / write / destructive.
-- Platform modes: tenant (per-team) / org (org-wide) / public (anonymous).
-- Scopes for deploy/push: tenant / org / public.
+- `MCPServer` describes a server and declares its tool metadata. The operator creates the workload and route; the gateway can evaluate policy before requests reach the server.
+- `MCPAccessGrant` is standing policy for a server and human, agent, or team. It sets tool rules, allowed side effects, and a maximum trust level.
+- `MCPAgentSession` is a Kubernetes resource for a time-bounded delegated identity, consented trust, expiry, and revocation. It is not an OAuth token.
+- The gateway requires a matching grant under allow-list policy. A session is required when `session.required: true`; `server init` enables this by default. The default allow-list decision is `deny`.
+- `policy.mode: observe` records decisions but does not enforce grant, session, trust, or side-effect checks.
+- Managed agent IDs are generated by the platform agent directory. Use an active `agt_<26-character lowercase ULID>`; a display name is not an ID.
+- The adapter presents its certificate during the HTTPS handshake. OAuth, when enabled for the target, is a separate bearer token on each HTTP request. For adapter calls, the token subject must match the session human.
+- The adapter's default local listener is `127.0.0.1:8099` and does not authenticate local clients. Share it only with clients using the same Runtime agent identity.
+- The gateway evaluates declared tool metadata; it does not inspect the server implementation. Tool names and side-effect declarations must match the actual server tools.
+- Trust levels: `low`, `medium`, `high`. Side effects: `read`, `write`, `destructive`.
+- Platform modes and publish scopes: `tenant`, `org`, `public`.

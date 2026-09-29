@@ -101,11 +101,16 @@ mcp-runtime server push --image ...
 The adapter auto-refreshes sessions when started with `--auto-refresh`. If you are
 using manual sessions:
 
+Use the active managed agent ID and team ID for this server. The sample ID
+below only shows the format; replace it with an ID from the team's agent
+directory.
+
 ```bash
 # Create a new session
 mcp-runtime access session init new-session \
   --server <name> --namespace mcp-team-<slug> \
-  --agent-id cursor --trust low --expires-in 4h \
+  --human-id <user-id> --team-id <team-id> \
+  --agent-id agt_01arz3ndektsv4rrffq69g5fav --trust low --expires-in 4h \
   --output session.yaml
 
 MCP_PLATFORM_API_PROFILE=admin \

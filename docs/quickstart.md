@@ -120,13 +120,25 @@ mcp-runtime server list
 ## 4. Grant access and connect
 
 Create a grant that allows an agent to call `echo` and `add`. Replace `myteam`
-with your actual team slug:
+with your actual team slug. First choose an active agent ID from your team's
+directory:
+
+```bash
+mcp-runtime agent list myteam --status active
+# If your team has no suitable agent, ask a team owner to create one.
+AGENT_ID=agt_01arz3ndektsv4rrffq69g5fav # replace with the ID from the list
+```
+
+Agent display names such as `Cursor` are not IDs. Use the immutable ID returned
+by `mcp-runtime agent create` or shown by `mcp-runtime agent list`. Members see
+only agents covered by an applicable grant or their own active session; ask a
+team owner for an ID if the list is empty.
 
 ```bash
 mcp-runtime access grant init workspace-cursor \
   --server workspace-demo \
   --namespace mcp-team-myteam \
-  --agent-id cursor \
+  --agent-id "$AGENT_ID" \
   --tool echo \
   --tool add \
   --output grant.yaml
@@ -144,15 +156,17 @@ the agent, so the grant has to exist first:
 mcp-runtime adapter proxy \
   --runtime-url https://mcp.mcpruntime.org/workspace-demo/mcp \
   --server workspace-demo \
-  --agent cursor \
+  --agent "$AGENT_ID" \
   --auto-refresh \
   --listen 127.0.0.1:8099
 ```
 
 Point **Claude Desktop**, **Cursor**, or any MCP client at `http://127.0.0.1:8099`.
-The client completes the server's OAuth flow and sends its bearer through the
-adapter; the certificate adds the enrolled agent session. Call the `echo` or
-`add` tool. The gateway checks the grant on every call.
+This quickstart does not configure `spec.auth`, so the route uses the adapter
+certificate without an OAuth bearer. Call the `echo` or `add` tool. The
+allow-list policy created by `server init` checks the grant and required session
+on each tool call. If you enable OAuth for the server, the client must send its
+bearer through the adapter; see [Agent adapters](agent-adapters.md).
 
 ## 5. See it in the analytics
 

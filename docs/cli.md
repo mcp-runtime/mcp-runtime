@@ -1,6 +1,11 @@
 # CLI reference
 
 Examples on this page use the example servers in the repository.
+Access and adapter examples show a sample managed agent ID
+(`agt_01arz3ndektsv4rrffq69g5fav`). For live commands, replace it with an
+active ID from `mcp-runtime agent list <team-slug> --status active`; display
+names such as `cursor` are not IDs. A team owner or admin can create an agent
+with `mcp-runtime agent create <team-slug> --name <name>`.
 
 ## Quick reference
 
@@ -27,7 +32,7 @@ Examples on this page use the example servers in the repository.
 | `oauth-example-go-2025-11-25-gateway` | Go | `go run .` | `whoami`, `aaa-ping`, `echo`, `add`, `upper`, `lower`, `slugify`, `create_task`, `draft_release_note` |
 | `example-python-2025-11-25-gateway` | Python | `python app.py` | `echo`, `add`, `multiply`, `upper`, `lower`, `ping`, `reverse` |
 | `example-rust-2025-11-25-gateway` | Rust | `cargo run` | `repeat`, `word_count`, `extract_keywords` |
-| `oauth-example-typescript-2025-06-18-standalone` | TypeScript | See [the example README](../examples/oauth-example-typescript-2025-06-18/README-oauth-example-typescript-2025-06-18.md) | `whoami` (server-side OAuth) |
+| `oauth-example-typescript-2025-06-18-standalone` | TypeScript | See [the example README](https://github.com/mcp-runtime/mcp-runtime/blob/main/examples/oauth-example-typescript-2025-06-18/README-oauth-example-typescript-2025-06-18.md) | `whoami` (server-side OAuth) |
 
 The Go, Python, and Rust examples listen on `http://localhost:8088/mcp` by
 default. The Go server validates OAuth tokens directly when OAuth settings are
@@ -391,7 +396,7 @@ that cause `tool_side_effect_unknown` at the gateway.
 mcp-runtime access grant init workspace-ops \
   --server workspace-demo \
   --namespace mcp-team-acme \
-  --agent-id cursor \
+  --agent-id agt_01arz3ndektsv4rrffq69g5fav \
   --tool echo \
   --tool add \
   --tool upper \
@@ -401,7 +406,7 @@ mcp-runtime access grant init workspace-ops \
 mcp-runtime access grant init workspace-ops \
   --server workspace-demo \
   --namespace mcp-team-acme \
-  --agent-id cursor \
+  --agent-id agt_01arz3ndektsv4rrffq69g5fav \
   --tool-rule echo:allow:low \
   --tool-rule add:allow:low \
   --tool-rule create_task:deny:medium \
@@ -435,7 +440,7 @@ Agents normally get sessions from `adapter --auto-refresh`. Use
 mcp-runtime access session init cursor-session \
   --server workspace-demo \
   --namespace mcp-team-acme \
-  --agent-id cursor \
+  --agent-id agt_01arz3ndektsv4rrffq69g5fav \
   --trust low \
   --expires-in 4h \
   --output session.yaml
@@ -481,7 +486,7 @@ mcp-runtime access grant init workspace-to-globex \
   --server workspace-demo \
   --namespace mcp-team-acme \
   --team-id <globex-team-uuid> \
-  --agent-id cursor \
+  --agent-id agt_01arz3ndektsv4rrffq69g5fav \
   --expires-in 4h \
   --tool echo \
   --tool add \
@@ -493,7 +498,7 @@ MCP_PLATFORM_API_PROFILE=admin \
     --server workspace-demo \
     --namespace mcp-team-acme \
     --team-id <globex-team-uuid> \
-    --agent-id cursor \
+    --agent-id agt_01arz3ndektsv4rrffq69g5fav \
     --trust low \
     --expires-in 4h \
     --output session-cross.yaml
@@ -532,16 +537,16 @@ The platform issues certificates only when an enabled `MCPAccessGrant` matches t
 mcp-runtime adapter enroll \
   --platform-url https://platform.example.com \
   --server workspace-demo \
-  --namespace mcp-servers \
-  --agent cursor \
+  --namespace mcp-team-acme \
+  --agent agt_01arz3ndektsv4rrffq69g5fav \
   --trust-domain mcpruntime.org
 
 # Run with an in-memory certificate and refresh it before expiry
 mcp-runtime adapter proxy \
   --runtime-url https://mcp.example.com/workspace-demo/mcp \
   --server workspace-demo \
-  --namespace mcp-servers \
-  --agent cursor \
+  --namespace mcp-team-acme \
+  --agent agt_01arz3ndektsv4rrffq69g5fav \
   --auto-refresh \
   --listen 127.0.0.1:8099
 
@@ -582,7 +587,8 @@ Agent IDs are platform-generated and immutable. Names are unique per team;
 inactive agents remain in the directory for history but cannot be selected for
 new grants or sessions. Deactivation revokes active sessions. Admins can
 manage all teams; team owners manage their own agents; team members can list
-and view their team's agents. The administration workspace includes an
+and view active agents covered by an applicable grant or their own active
+session. The administration workspace includes an
 **Agents** directory page.
 Agent subjects must be selected from the active directory for the subject's
 team. The API rejects unknown, malformed, inactive, and wrong-team agent IDs.

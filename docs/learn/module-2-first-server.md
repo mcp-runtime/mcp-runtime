@@ -48,7 +48,9 @@ kill $SERVER_PID
 ```
 
 Open the generated `.mcp/servers.yaml`. Every tool has a `sideEffect` and
-`requiredTrust`; the gateway enforces both.
+`requiredTrust`; the generated allow-list policy enforces both. This example
+does not configure `spec.auth`, so the adapter certificate authenticates the
+session without an OAuth bearer.
 
 ## Step 4: Validate before building
 
@@ -92,13 +94,19 @@ its trust level, and its side-effect class.
 
 ## Step 7: Create a grant
 
-Grant your cursor agent access to `echo` and `add`:
+Grant an active managed agent access to `echo` and `add`. List the agents in
+your team and use an active agent ID:
+
+```bash
+mcp-runtime agent list myteam --status active
+AGENT_ID=agt_01arz3ndektsv4rrffq69g5fav # replace with an ID from the list
+```
 
 ```bash
 mcp-runtime access grant init my-grant \
   --server my-server \
   --namespace mcp-team-myteam \
-  --agent-id cursor \
+  --agent-id "$AGENT_ID" \
   --tool echo \
   --tool add \
   --output grant.yaml
@@ -121,7 +129,7 @@ Start the adapter proxy. It creates the agent session and enrolls a certificate:
 mcp-runtime adapter proxy \
   --runtime-url https://mcp.mcpruntime.org/my-server/mcp \
   --server my-server \
-  --agent cursor \
+  --agent "$AGENT_ID" \
   --auto-refresh \
   --listen 127.0.0.1:8099
 ```
@@ -129,7 +137,8 @@ mcp-runtime adapter proxy \
 Point Claude Desktop, Cursor, or any MCP client at `http://127.0.0.1:8099`.
 
 Call the `echo` tool; it succeeds. Call `create_task`; the gateway denies it
-because it is not in the grant.
+because it is not in the grant. If you configure OAuth on the server, the MCP
+client must also send its bearer token through the adapter.
 
 ## Step 9: See it in analytics
 
@@ -139,7 +148,7 @@ You should see rows like:
 
 | Server | Tool | User | Team | Agent | Calls | Denied |
 |---|---|---|---|---|---|---|
-| my-server | echo | you@example.com | myteam | cursor | 3 | 0 |
+| my-server | echo | you@example.com | myteam | `$AGENT_ID` | 3 | 0 |
 
 Each call is recorded with its user, team, and agent. A denied call shows
 `Denied: 1`.

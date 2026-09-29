@@ -17,9 +17,10 @@ it for real workloads.
 
 ```
 Team Acme owns:   payments server  (namespace: mcp-team-acme)
-Team Globex owns: workspace server (namespace: mcp-team-globex)
+Team Globex owns: a managed agent  (team namespace: mcp-team-globex)
 
-Acme grants Globex's cursor agent access to payments/list_invoices
+Acme grants a managed agent in Globex access to the payments server's `echo`
+and `add` tools.
 ```
 
 Servers live in team namespaces. Grants carry the team ID, which tells the
@@ -40,7 +41,14 @@ MCP_PLATFORM_API_PROFILE=admin mcp-runtime team user create acme \
 MCP_PLATFORM_API_PROFILE=admin mcp-runtime team create globex --name "Globex Corp"
 MCP_PLATFORM_API_PROFILE=admin mcp-runtime team user create globex \
   --username bob@globex.com --password 'bob456' --role member
+
+MCP_PLATFORM_API_PROFILE=admin mcp-runtime agent create globex \
+  --name "Cursor assistant"
 ```
+
+Record the `agt_...` ID printed for the new Globex agent. This walkthrough uses
+that managed agent ID in the grant and adapter commands. Agent display names
+are not IDs.
 
 Verify:
 
@@ -80,18 +88,23 @@ mcp-runtime server list
 # payments  mcp-team-acme  1/1     Ready
 ```
 
-## Step 3: Get Globex's team UUID
+## Step 3: Get Globex's team ID and agent ID
 
-Cross-team grants need the team UUID; the slug does not work. Get it from the admin API:
+Cross-team grants need Globex's stable team ID; the slug does not work. Copy
+the ID from **Teams → Globex** in the platform dashboard. `mcp-runtime team
+list` shows the slug, display name, and namespace, but not the team ID. The
+agent ID is the one printed by `agent create` above; you can list active agents
+with:
 
 ```bash
-# List teams as admin to find the UUID
-MCP_PLATFORM_API_PROFILE=admin mcp-runtime team list
-# Shows: globex  Globex Corp  mcp-team-globex
+MCP_PLATFORM_API_PROFILE=admin mcp-runtime agent list globex --status active
+```
 
-# The UUID comes from server get or is shown in access grant list output
-# For now note it from: platform dashboard → Teams → Globex → copy UUID
-# Or: mcp-runtime access session list will show teamID in output
+Set the following values to the IDs returned by the platform:
+
+```bash
+GLOBEX_TEAM_ID=replace-with-globex-team-id
+AGENT_ID=agt_01arz3ndektsv4rrffq69g5fav # replace with the Globex agent ID
 ```
 
 ## Step 4: Alice grants Globex access to payments
@@ -102,8 +115,9 @@ mcp-runtime auth use alice
 mcp-runtime access grant init payments-to-globex \
   --server payments \
   --namespace mcp-team-acme \
-  --team-id <globex-team-uuid> \
-  --agent-id cursor \
+  --team-id "$GLOBEX_TEAM_ID" \
+  --agent-id "$AGENT_ID" \
+  --expires-in 4h \
   --tool echo \
   --tool add \
   --output grant-cross.yaml
@@ -118,27 +132,10 @@ mcp-runtime access grant list --namespace mcp-team-acme
 The grant lives in Acme's namespace, next to the server, and is scoped to
 Globex's team ID. Only Globex's agents can use it.
 
-## Step 5: Admin creates a session for Globex's agent
+## Step 5: Bob connects through the adapter (Globex)
 
-Session apply requires admin role:
-
-```bash
-mcp-runtime auth use admin
-
-mcp-runtime access session init globex-payments-session \
-  --server payments \
-  --namespace mcp-team-acme \
-  --team-id <globex-team-uuid> \
-  --agent-id cursor \
-  --trust low \
-  --expires-in 4h \
-  --output session-cross.yaml
-
-mcp-runtime access session apply --file session-cross.yaml
-mcp-runtime access session list
-```
-
-## Step 6: Bob connects via the adapter (Globex)
+The adapter asks the platform to create or reuse Bob's session for the granted
+agent. You do not need a separate session manifest for this flow.
 
 ```bash
 mcp-runtime auth use bob   # bob@globex.com
@@ -146,7 +143,7 @@ mcp-runtime auth use bob   # bob@globex.com
 mcp-runtime adapter proxy \
   --runtime-url https://mcp.example.com/payments/mcp \
   --server payments \
-  --agent cursor \
+  --agent "$AGENT_ID" \
   --auto-refresh \
   --listen 127.0.0.1:8099 &
 ```
@@ -155,7 +152,7 @@ Connect Claude Desktop or any MCP client to `http://127.0.0.1:8099`.
 Bob can call `echo` and `add` on Acme's payments server; the gateway
 enforces the cross-team grant.
 
-## Step 7: Verify isolation
+## Step 6: Verify isolation
 
 Alice's payments server denies callers without a grant. To confirm:
 
@@ -163,20 +160,21 @@ Alice's payments server denies callers without a grant. To confirm:
    ```bash
    mcp-runtime access grant delete payments-to-globex --namespace mcp-team-acme
    ```
-2. Bob's next tool call is denied.
+2. Wait about 10 seconds for the gateway to load the updated policy, then Bob's
+   next tool call is denied.
 3. Re-apply the grant to restore access.
 
 Namespace isolation gives Bob no Kubernetes RBAC access to Acme's namespace.
 The gateway enforces the grant; network policy alone does not.
 
-## Step 8: See cross-team traffic in analytics
+## Step 7: See cross-team traffic in analytics
 
 Open the platform dashboard → **Analytics → Tools**.
 
 The rows show:
 - User: `bob@globex.com`
 - Team: `globex`
-- Agent: `cursor`
+- Agent: `$AGENT_ID` (the directory also shows its display name)
 - Server: `payments` (Acme's server)
 
 Every call shows which team made it, which server it hit, and whether it was
@@ -186,7 +184,7 @@ allowed.
 
 - Two isolated team namespaces with RBAC and NetworkPolicy
 - A server owned by one team, accessed by another via an explicit grant
-- A revocable, time-limited session carrying the consuming team's identity
+- A revocable, time-limited session that records the consuming team's identity
 - A full audit trail of cross-team tool calls
 
 ## Production checklist before going live

@@ -17,7 +17,10 @@ The runtime runs on top of your ingress and networking layer and handles MCP-spe
 ## Core resources
 
 Three CRDs form the runtime surface: `MCPServer`, `MCPAccessGrant`, and `MCPAgentSession`.
-Many grants and sessions can reference one `MCPServer`. The gateway policy layer evaluates the grant and session together on every tool call.
+Many grants and sessions can reference one `MCPServer`. With allow-list policy,
+the gateway evaluates the matching grant and, when `session.required: true`,
+the session on each tool call. Observe mode records calls without enforcing
+those checks.
 
 See the [API reference](api.md) for full field definitions and examples.
 

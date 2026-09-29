@@ -154,6 +154,10 @@ matches every non-empty subject field exactly.
 
 ### MCPAccessGrant
 
+For platform API and adapter flows, `agentID` must be an active ID from the
+platform agent directory. The sample ID below shows the format; use an ID from
+`mcp-runtime agent list <team-slug> --status active` in your own resources.
+
 `allowedSideEffects` and `toolRules` are independent. Tool rules select names;
 side-effect allowances select risk kind. A call must pass both. The
 Runtime Governance API and UI require at least one `allowedSideEffects` entry
@@ -171,7 +175,7 @@ spec:
     name: payments
   subject:
     humanID: user-123
-    agentID: ops-agent
+    agentID: agt_01arz3ndektsv4rrffq69g5fav
     teamID: 7d0a0b8f-7c25-4761-a632-3cf0108e31d6
   maxTrust: high
   expiresAt: "2030-12-31T23:59:00Z"
@@ -201,10 +205,10 @@ spec:
     name: payments
   subject:
     humanID: user-123
-    agentID: ops-agent
+    agentID: agt_01arz3ndektsv4rrffq69g5fav
     teamID: 7d0a0b8f-7c25-4761-a632-3cf0108e31d6
   consentedTrust: medium
-  expiresAt: "2026-03-26T12:00:00Z"
+  expiresAt: "2030-03-26T12:00:00Z"
   upstreamTokenSecretRef:
     name: payments-upstream-token
     key: access-token
@@ -495,7 +499,7 @@ identify the human principal that should own the `MCPAgentSession`.
   "name": "payments-ops-agent",
   "namespace": "mcp-servers",
   "serverRef": {"name": "payments", "namespace": "mcp-servers"},
-  "subject": {"humanID": "user-123", "agentID": "ops-agent"},
+  "subject": {"humanID": "user-123", "agentID": "agt_01arz3ndektsv4rrffq69g5fav"},
   "maxTrust": "high",
   "allowedSideEffects": ["read", "destructive"],
   "policyVersion": "v1",
@@ -513,7 +517,7 @@ identify the human principal that should own the `MCPAgentSession`.
   "name": "sess-8f1b9d",
   "namespace": "mcp-servers",
   "serverRef": {"name": "payments", "namespace": "mcp-servers"},
-  "subject": {"humanID": "user-123", "agentID": "ops-agent"},
+  "subject": {"humanID": "user-123", "agentID": "agt_01arz3ndektsv4rrffq69g5fav"},
   "consentedTrust": "medium",
   "policyVersion": "v1",
   "expiresAt": "2030-12-31T23:59:00Z"
@@ -615,7 +619,7 @@ GET /api/v1/sources                   # admin only
 GET /api/v1/event-types               # admin only
 GET /api/v1/analytics/usage?limit=10  # admin only
 GET /api/v1/user/analytics/usage      # any authenticated user, team-scoped
-GET /api/v1/events?trace_id=<trace>&server=payments&decision=deny&agent_id=ops-agent&limit=50
+GET /api/v1/events?trace_id=<trace>&server=payments&decision=deny&agent_id=agt_01arz3ndektsv4rrffq69g5fav&limit=50
 ```
 
 | Group | Fields |

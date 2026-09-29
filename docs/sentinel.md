@@ -330,7 +330,7 @@ The UI's **Governance** tab creates and operates the same `MCPAccessGrant` and `
 | **Create grant** | `Create Grant` button. Required: name, namespace, server, at least one of human, agent, or team ID, and the allowed side-effect classes. Tool rules use one rule per line: `tool:allow` or `tool:allow:trust`. |
 | **Create session** | `Create Session`. Pick a consented trust level and optional expiry. The gateway looks it up at `tools/call` time alongside the grant. |
 | **Disable / enable grant** | Single-action row. Disable sets `spec.disabled=true`. The grant is kept for audit, and the gateway treats it as denying. |
-| **Revoke / unrevoke session** | Same row pattern toggles `spec.revoked`. Revoked sessions deny subsequent tool calls immediately. |
+| **Revoke / unrevoke session** | Same row pattern toggles `spec.revoked`. Gateways deny later calls after they load the updated policy, usually within about 10 seconds. Calls already in progress are not recalled. |
 | **Filter** | Search box on each table filters by server, human ID, agent ID, or team ID. Filters only the loaded set; refresh first if cluster state has changed. |
 
 Tool-rule example:
@@ -373,7 +373,7 @@ kind: MCPAccessGrant
 metadata: {name: alice-server-a, namespace: mcp-servers}
 spec:
   serverRef: {name: server-a-mcp}
-  subject:   {humanID: alice, agentID: alice-agent}
+  subject:   {humanID: alice, agentID: agt_01arz3ndektsv4rrffq69g5fav}
   maxTrust: high
   allowedSideEffects: [read]
   toolRules: [{name: add, decision: allow, requiredTrust: low}]

@@ -145,13 +145,18 @@ emerging workload identity guidance provide useful context; an OAuth client
 registration or `client_id` does not automatically create a managed agent.
 
 Direct clients use OAuth only when the target server configures `spec.auth`.
-An adapter always uses its session-bound client certificate; Traefik verifies
-the certificate and the gateway resolves its session identity for
-grant/session authorization. On an OAuth-enabled target, the adapter also
-forwards the bearer and its subject must match the session human identity.
+An adapter presents its session-bound client certificate during the HTTPS
+handshake; Traefik verifies the certificate and the gateway resolves its
+session identity for grant/session authorization. On an OAuth-enabled target,
+the adapter also forwards a bearer on each HTTP request, and its subject must
+match the session human identity. Certificate identity and OAuth are separate
+credentials.
 Adapter certificates are opt-in (`MCP_ADAPTER_CERTIFICATES=true`) and
 require the platform-wide `MCP_MTLS_CLUSTER_ISSUER` and `MCP_TRUST_DOMAIN`
 settings.
+For the adapter request flow, including how one certificate can accompany
+different per-request OAuth tokens, see
+[Certificate identity and OAuth tokens](agent-adapters.md#certificate-identity-and-oauth-tokens).
 
 Further reading: [MCP authorization](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization),
 [WIMSE Agent Identity Management Services draft](https://datatracker.ietf.org/doc/draft-ietf-wimse-aims/00/)
@@ -231,10 +236,10 @@ spec:
     namespace: mcp-team-finance
   subject:
     humanID: user-123
-    agentID: coding-agent
+    agentID: agt_01arz3ndektsv4rrffq69g5fav
     teamID: team-finance-id
   consentedTrust: low
-  expiresAt: 2026-06-12T12:00:00Z
+  expiresAt: 2030-06-12T12:00:00Z
   revoked: false
 ```
 

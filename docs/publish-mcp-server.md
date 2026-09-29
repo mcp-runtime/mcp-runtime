@@ -1,5 +1,10 @@
 # Publish an MCP Server
 
+For the supported platform workflow, start with `.mcp` metadata: initialize it
+with `mcp-runtime server init`, then build, push, deploy, and verify the server.
+Use a hand-written `MCPServer` manifest only for an admin/operator or GitOps
+workflow.
+
 Publishing an MCP server takes five steps:
 
 1. write an `MCPServer` manifest or `.mcp` metadata
@@ -21,7 +26,7 @@ You can describe a server in two ways:
 
 Either way, the operator reconciles a server deployment, service, route, and optional governed request path.
 
-## Option A: write an `MCPServer` manifest
+## Admin and GitOps workflow: write an `MCPServer` manifest
 
 Start with a minimal manifest:
 
@@ -104,7 +109,7 @@ namespace. For normal platform workflows, use the platform-backed
 ./bin/mcp-runtime server status --use-kube   # pod detail; omit --use-kube for platform API summary
 ```
 
-## Option B: initialize or write `.mcp` metadata
+## Recommended workflow: initialize or edit `.mcp` metadata
 
 The metadata-driven server flow uses YAML files under `.mcp`. `server deploy`
 publishes directly from that metadata, while `server generate` renders
@@ -131,6 +136,9 @@ For grant manifests, `access grant init --tool` is shorthand for
 when a grant needs mixed per-tool decisions or trust levels. For explicit
 session manifests, `access session init` supports `--trust`,
 `--expires-in`, `--expires-at`, `--revoked`, and upstream-token secret flags.
+For platform-backed access, use an active managed agent ID owned by the subject
+team. The cross-team example uses a format sample; replace it with an ID from
+`mcp-runtime agent list globex --status active`.
 
 ```bash
 mcp-runtime auth login --api-url https://platform.example.com
@@ -139,17 +147,19 @@ mcp-runtime auth login --api-url https://platform.example.com
   --namespace mcp-team-acme \
   --server payments \
   --team-id <globex-team-id> \
-  --agent-id cursor \
+  --agent-id agt_01arz3ndektsv4rrffq69g5fav \
   --tool list_invoices \
   --tool-rule refund_invoice:allow:high \
   --side-effect read \
+  --side-effect destructive \
   --output grant.yaml
 
 ./bin/mcp-runtime access session init cursor-session \
   --namespace mcp-team-acme \
   --server payments \
   --human-id <user-id> \
-  --agent-id cursor \
+  --team-id <globex-team-id> \
+  --agent-id agt_01arz3ndektsv4rrffq69g5fav \
   --trust medium \
   --expires-in 1h \
   --output session.yaml
@@ -167,9 +177,10 @@ server metadata before they reach the cluster. Both `--grant-file` and
 `--session-file` are repeatable, and `--metadata-file <path>` replaces
 `--metadata-dir` when the metadata lives outside `.mcp`.
 
-Adapter-driven agents should skip manual session apply; use
-`mcp-runtime adapter proxy --server payments --agent cursor --auto-refresh`
-after the grant exists. See [Agent Adapters](agent-adapters.md).
+Adapter-driven agents should skip manual session apply; after the grant exists,
+use `mcp-runtime adapter proxy --server payments --namespace mcp-team-acme
+--agent agt_01arz3ndektsv4rrffq69g5fav --auto-refresh`, replacing the sample
+ID with the active agent's ID. See [Agent Adapters](agent-adapters.md).
 
 Example metadata:
 

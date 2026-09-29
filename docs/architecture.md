@@ -31,6 +31,8 @@ flowchart TB
     subgraph data [Data and policy]
         Grant[MCPAccessGrant]
         Session[MCPAgentSession]
+        AgentDir[Managed agent directory]
+        Policy[Per-server policy ConfigMap]
         Reg[Container registry]
     end
 
@@ -45,6 +47,7 @@ flowchart TB
     UI --> PlatAPI
     UI --> RunAPI
     UI --> AnaAPI
+    PlatAPI --> AgentDir
     Agent --> Ing
     MCP --> Ing
     RunAPI --> K8s
@@ -52,9 +55,9 @@ flowchart TB
     Op --> Srv
     Op --> Grant
     Op --> Session
+    Op --> Policy
     Ing --> GW --> Srv
-    GW --> Grant
-    GW --> Session
+    GW --> Policy
     CLI --> Reg
     PlatAPI --> Reg
     GW --> Ingest --> CH

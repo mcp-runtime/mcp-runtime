@@ -1,8 +1,9 @@
 # Concepts
 
-MCP Runtime has three resources (`MCPServer`, `MCPAccessGrant`,
-`MCPAgentSession`) and two runtime components (the gateway and the adapter).
-For the full authorization model, see
+MCP Runtime has three Kubernetes resources (`MCPServer`, `MCPAccessGrant`,
+`MCPAgentSession`), a managed agent directory in the platform API, and two
+runtime components (the gateway and the adapter). For the full authorization
+model, see
 [Identity and authorization](identity-and-authorization.md).
 
 ## The whole thing, as a building
@@ -12,17 +13,95 @@ tools and admits visiting agents:
 
 | In the building | In MCP Runtime | What that means |
 |---|---|---|
-| A floor rented to one company | **Namespace** (`mcp-team-acme`) | Hard boundary: one team's servers, secrets, and grants. |
+| A floor assigned to one company | **Namespace** (`mcp-team-acme`) | Groups a team's servers, grants, and secrets. Kubernetes RBAC, network policy, and platform API checks enforce the boundary. |
 | The signed lease describing the suite | **`MCPServer`** | Declarative description: image, port, route, tools, policy, gateway on/off. |
 | Facilities, who reads the lease and builds the room | **Operator** | Turns one `MCPServer` into a Deployment, Service, Ingress, and policy ConfigMap. |
-| Lobby reception, pointing visitors to the right floor | **Traefik ingress** | Routes `/<server>/mcp` to the right Service. It routes; it does not authorize. |
-| The guard at the suite's own door | **`mcp-gateway` sidecar** | Makes the allow/deny decision on every tool call, inside the pod. |
+| Lobby reception, pointing visitors to the right floor | **Traefik ingress** | Routes `/<server>/mcp` to the right Service and can verify adapter certificates. Per-tool authorization happens in the gateway. |
+| The guard at the suite's own door | **`mcp-gateway` sidecar** | Evaluates configured policy for tool calls before forwarding them to the server. |
 | The standing rule in the security handbook | **`MCPAccessGrant`** | Long-lived policy: which tools, up to what trust, with which side effects. |
-| Today's visitor badge, expiring at 6pm | **`MCPAgentSession`** | Time-boxed, human-consented, instantly revocable. |
+| Today's visitor badge, expiring at 6pm | **`MCPAgentSession`** | Time-bounded record of delegated identity and consent; revocation reaches gateways after policy refresh, usually within about 10 seconds. |
 | Clearance printed on the badge | **Trust level** (`low` / `medium` / `high`) | A ceiling, never a grant of power on its own. |
 | "May look" vs "may edit" vs "may shred" | **Side effect** (`read` / `write` / `destructive`) | What the tool does to data, authorized separately from trust. |
 | The badge carrier who presents your certificate | **Adapter** | Local proxy that enrolls and refreshes a session-bound client certificate. |
 | Cameras and the logbook | **Sentinel** | Audit events, analytics, dashboards. |
+
+## Platform trust model
+
+MCP Runtime does not treat a caller as globally trusted because it has one valid
+credential. A request crosses three separate identity and authorization planes:
+
+1. **Platform control:** a user or service principal authenticates to the
+   platform APIs. Its role, team membership, namespace scope, and resource
+   ownership determine whether it can manage servers, grants, and sessions.
+2. **MCP tool access:** a human delegates an agent's access through a grant.
+   The platform issues a time-bound session for an authorized agent. The adapter
+   proves that session with a certificate; on an OAuth-enabled server, the MCP
+   request also carries a bearer token whose subject must match the session's
+   human. The gateway checks the identity, session, grant, tool rules, declared
+   side effect, and trust requirement on each tool call.
+3. **Kubernetes operations:** the operator and other workloads use their own
+   ServiceAccounts and RBAC to manage cluster resources. This authority is
+   separate from both platform-user roles and agent access.
+
+```mermaid
+flowchart LR
+    subgraph Platform[Platform control plane]
+        Human[Human or service principal] -->|platform credential| APIs[Platform APIs]
+        APIs -->|role, team, namespace, ownership checks| Actions[Authorized control-plane actions]
+        Actions --> Grant[MCPAccessGrant]
+        Actions --> Session[MCPAgentSession]
+    end
+
+    subgraph Requests[MCP request path]
+        Client[Claude, Cursor, Codex, or another MCP client]
+        Adapter[Adapter proxy]
+        Ingress[Traefik ingress]
+        Gateway[mcp-gateway]
+        Server[MCP server]
+        Audit[Audit event]
+        Metadata[MCPServer tool metadata]
+
+        Client -->|MCP request + OAuth bearer when configured| Adapter
+        Adapter -->|request authorized session| APIs
+        Adapter -->|TLS handshake: session-bound certificate| Ingress
+        Adapter -->|HTTP request + per-request bearer when configured| Ingress
+        Ingress -->|verified certificate identity| Gateway
+        Grant --> Gateway
+        Session --> Gateway
+        Metadata --> Gateway
+        Gateway -->|all checks pass| Server
+        Gateway -->|denied or allowed decision| Audit
+    end
+
+    subgraph Cluster[Kubernetes operations]
+        Operator[Operator] -->|ServiceAccount + RBAC| KubeAPI[Kubernetes API]
+        KubeAPI -->|reconciles workloads and policy| Server
+    end
+```
+
+The adapter certificate proves **which delegated Runtime session is calling**;
+it does not grant tools by itself and does not contain an OAuth token. When the
+server enables OAuth, the client supplies a bearer on each HTTP request. Several
+clients can use one adapter with different tokens only when each token is valid
+for the same MCP resource and identifies the same human as the certificate-bound
+session. If a token includes a team claim, it must also match the session's team.
+Different Runtime agent identities need separate sessions and certificates. See
+[Certificate identity and OAuth tokens](agent-adapters.md#certificate-identity-and-oauth-tokens)
+for the request sequence.
+
+The gateway is the tool-call enforcement point when the server uses allow-list
+policy. An enabled grant and, when `session.required: true`, an active session
+must match the caller and server. The grant must allow the tool and its
+side-effect class, and effective trust must meet the tool's required level.
+`server init` creates an allow-list policy with `defaultDecision: deny`, so
+unmatched calls are rejected by default.
+`policy.mode: observe` is an explicit exception: it permits calls without
+enforcing those checks, while still recording decisions. A server with the
+gateway disabled also has no gateway policy enforcement.
+
+The rest of this guide breaks these checks down by resource. The detailed
+identity fields, decision order, and denial reasons are in
+[Identity and authorization](identity-and-authorization.md).
 
 ## MCPServer
 
@@ -41,22 +120,59 @@ Service     → exposes it inside the cluster
 Ingress     → routes /<server-name>/mcp to the Service
 ```
 
-The `MCPServer` also carries policy settings: which tools are governed, what trust
-levels they require, and whether a gateway sidecar enforces policy on every call.
+The `MCPServer` also carries policy settings: which tools are governed, what
+trust levels they require, whether allow-list checks are enabled, and whether
+the gateway runs in enforcement or observe mode.
+
+## Managed agents
+
+A managed agent is a platform directory record for a logical agent identity. It
+is separate from the human who delegates access, the MCP client process that
+sends a request, and any OAuth `client_id` used by that client.
+
+Each record belongs to one team and has an immutable ID such as
+`agt_01arz3ndektsv4rrffq69g5fav`, a changeable display name, and an active or
+inactive status. The stable ID lets grants, sessions, audit events, and the
+agent directory refer to the same identity even when the name or client changes.
+Team ownership lets the platform check that an agent is being granted access by
+and for the right team. The directory is governance metadata; the ID alone does
+not authenticate a process or prove what software made a request.
+
+Create or list records through the platform API using the CLI:
+
+```bash
+mcp-runtime agent create acme --name "Release assistant"
+mcp-runtime agent list acme --status active
+```
+
+The create command prints the generated ID. Use that ID in `MCPAccessGrant`
+subjects and in `mcp-runtime adapter proxy --agent <agent-id>`. A team owner or
+platform administrator can create and manage records. Team members see active
+agents only when an applicable grant or their own active session gives them
+access; ask a team owner for an ID if the list is empty.
+
+When an agent is deactivated, the platform marks the record inactive, refuses
+new platform-backed grants, sessions, and certificate enrollments for it, and
+revokes its active sessions across namespaces. The grants remain available for
+history and must be disabled separately if you also need to remove standing
+policy. Gateways apply session revocation after they load the updated policy,
+usually within about 10 seconds. Direct Kubernetes writes bypass the directory
+checks; use the platform API for managed agent access.
 
 ## MCPAccessGrant
 
 A grant is a policy document that says: **"Agent X, acting for Team Y, is allowed
 to call these tools on server Z, up to this trust level, with these side effects."**
 
-Grants are per-agent and per-server. An agent that has no grant for a server cannot
-call any tools; the gateway denies by default.
+Grants are scoped to a server and match a human, agent, team, or combination of
+those identities. With allow-list policy and the default deny decision, a
+caller without a matching grant cannot call tools.
 
 ```
 MCPAccessGrant
   serverRef: payments          ← which server
   subject:
-    agentID: cursor            ← which agent
+    agentID: agt_01arz3ndektsv4rrffq69g5fav  ← managed agent ID
     teamID: <globex-uuid>      ← which team (optional)
   maxTrust: low
   allowedSideEffects: [read]
@@ -73,44 +189,50 @@ Grants are created with `mcp-runtime access grant init` and applied with
 
 ## MCPAgentSession
 
-A session ties an agent identity to a grant for a fixed period of time. It carries:
+A session records a human, agent, and team identity for one server and a fixed
+period. The grant is separate standing policy; an adapter-issued session is
+created only when the platform finds a matching enabled grant. A session carries:
 
 - `consentedTrust`: the trust ceiling the user consented to
 - `expiresAt`: when the session ends (the agent must renew)
-- `revoked`: set to `true` to block the agent immediately
+- `revoked`: set to `true` to block later calls after the gateway loads the updated policy, usually within about 10 seconds
 
-The gateway checks the session on every tool call. If there is no valid session, or
-the session is revoked, the call is denied regardless of the grant.
+When `session.required: true`, the gateway checks for a matching active session
+on each tool call. A missing, expired, or revoked required session denies the
+call. When sessions are optional, trust falls back to the grant's `maxTrust`.
 
 ```
 MCPAgentSession
   serverRef: payments
   subject:
-    agentID: cursor
+    agentID: agt_01arz3ndektsv4rrffq69g5fav
     teamID: <globex-uuid>
   consentedTrust: low          ← human approved this level
-  expiresAt: 2026-06-02T12:00Z
+  expiresAt: 2030-06-02T12:00Z
   revoked: false
 ```
 
-In normal use, sessions are created automatically by the adapter when you run
-`adapter proxy --server ... --auto-refresh`. You only create them manually when you
-need explicit control over expiry, trust ceiling, or revocation.
+The adapter creates or reuses a session when it starts with `--server` and
+`--agent`. `--auto-refresh` renews the adapter certificate before it expires; it
+does not refresh the OAuth token. Create sessions manually only when an
+administrator needs explicit control over expiry, trust ceiling, or revocation.
 
 !!! tip "Why there are two resources"
     A grant is standing policy, like a rule in a security handbook. A session is
-    today's visitor badge. A call needs both. Revoking a badge is instant and
-    local; changing the handbook is a deliberate policy change.
+    today's visitor badge. A call needs both when the server requires sessions.
+    Revocation changes policy for subsequent calls after gateways load the new
+    revision; calls already in progress are not recalled.
 
 ## Grant or session: which one do I need?
 
 | Scenario | Grant needed? | Session needed? |
 |---|---|---|
-| Agent calling tools on a server | Yes | Yes |
+| Agent calling tools on a server with allow-list policy | Yes | Yes when `session.required: true` |
+| Agent calling tools on a server with optional sessions | Yes | No; trust falls back to the grant's `maxTrust` |
 | Block an agent from a specific tool | Yes (deny rule) | — |
 | Limit trust to `low` regardless of what the agent requests | Yes (`maxTrust`) | — |
 | Time-limit an agent's access | — | Yes (`expiresAt`) |
-| Instantly revoke an agent mid-flight | — | Yes (`revoked: true`) |
+| Revoke an agent's later calls | — | Yes (`revoked: true`; allow time for policy refresh) |
 | Share one server between two teams | Yes (with `teamID`) | Yes (with `teamID`) |
 
 ## Trust levels
@@ -158,6 +280,45 @@ allow list. Trust and side effect are checked independently; both must pass.
     server never declared is denied too (`tool_side_effect_unknown`): with no
     declared side effect, there is nothing for a grant to authorize.
 
+## Policy engine
+
+The policy engine is the `mcp-gateway` decision logic plus the per-server
+policy document that the operator renders for it. It is not another CRD. The
+operator combines the server's policy settings and tool metadata with matching
+grants and sessions, then writes the result to a policy ConfigMap beside that
+server.
+
+For each MCP `tools/call`, the gateway identifies the caller, finds the named
+tool in the server's declared tool inventory, and evaluates the applicable
+policy:
+
+```mermaid
+flowchart LR
+    Server[MCPServer policy and tool metadata] --> Render[Operator renders per-server policy]
+    Grant[MCPAccessGrant rules, trust, and side effects] --> Render
+    Session[MCPAgentSession identity and consent] --> Render
+    Render --> Config[Policy ConfigMap]
+    Call[MCP tools/call] --> Gateway[mcp-gateway]
+    Config --> Gateway
+    Gateway -->|allowed| MCP[MCP server]
+    Gateway -->|allowed or denied| Audit[Audit event]
+```
+
+In allow-list mode, the gateway checks identity, any required session, an
+enabled matching grant, the tool rule, the declared side effect, and trust
+before forwarding the call. The result is that server owners can change
+permissions without changing server code, platform operators can keep the same
+checks across servers, and each decision records a reason for later review.
+`server init` scaffolds allow-list mode with a default deny decision. Use
+`policy.mode: observe` to record what the policy would decide while allowing
+calls during a rollout.
+
+The engine evaluates the metadata it receives; it does not inspect a tool's
+implementation or infer its real-world effects. Keep the declared tool names,
+trust levels, and side effects aligned with the running server. Policy checks
+apply only when the gateway is enabled and the server is using allow-list mode;
+observe mode records decisions without blocking calls.
+
 ## The gateway
 
 The gateway, `mcp-gateway`, is a sidecar container in each MCP server pod (when
@@ -170,7 +331,7 @@ On each tool call the gateway:
 1. Authenticates identity: OAuth bearer when `spec.auth` is set; for an adapter,
    resolves session identity from the verified client certificate (and binds the
    bearer subject to the session human when OAuth is also enabled)
-2. Looks up the active `MCPAgentSession` and `MCPAccessGrant` for that agent+server pair
+2. Looks up the matching `MCPAccessGrant` and, when `session.required: true`, an active `MCPAgentSession` for that agent and server
 3. Checks trust level, side-effect class, and per-tool allow/deny rules
 4. Either forwards the call to your server or returns a denial with a reason code
 5. Emits an analytics event with the decision

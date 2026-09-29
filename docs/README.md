@@ -1,9 +1,10 @@
 # MCP Runtime
 
-MCP Runtime is a Kubernetes control plane for MCP servers. It deploys servers
-into your cluster, enforces per-tool access policy on every call through a
-gateway sidecar, and records each decision for audit. It is open source and
-self-hosted.
+MCP Runtime is an open-source Kubernetes control plane for MCP servers. It
+deploys servers into your cluster and can route tool calls through a gateway
+sidecar for policy checks and audit. Use allow-list policy to enforce grants,
+sessions, and per-tool rules; observe mode records decisions without enforcing
+them.
 
 <div class="docs-home">
 <p class="docs-brand-banner"><img src="assets/brand/mcp-runtime-banner.png" alt="MCP Runtime: deploy, govern, and broker MCP servers using a Kubernetes-native control plane" /></p>
@@ -34,13 +35,14 @@ OAuth setup and identity-provider configuration: [MCP authorization](mcp-authori
 - An `MCPAccessGrant` says which agent or team may call which tools, up to what
   trust level. An `MCPAgentSession` carries the trust a person consented to, an
   expiry, and a revoke switch.
-- The `mcp-gateway` sidecar in each server pod checks every `tools/call` against
-  the grant and session before forwarding it, and emits an audit event with the
-  decision.
+- With allow-list policy enabled, the `mcp-gateway` sidecar checks each
+  `tools/call` against the grant, any required session, and the tool metadata
+  before forwarding it. It emits an audit event with the decision. Observe mode
+  forwards calls without enforcing policy.
 
 See [Concepts](concepts.md) for details.
 
-## Deploy a governed MCP server in 5 commands
+## Deploy an MCP server in 5 commands
 
 ```bash
 mcp-runtime auth login --api-url https://platform.mcpruntime.org
@@ -63,7 +65,7 @@ uses for grant and session checks (and forwards OAuth when the target enables it
 | **Platform engineer** | Operator, registry, and ingress wiring generated from one resource |
 | **Security team** | Per-tool audit trail, trust levels, session revocation, deny rules, compliance evidence |
 | **Team lead** | Isolated namespace per team, grants scoped to teams, cross-team access without sharing credentials |
-| **Developer** | One CLI to deploy and one adapter to connect; no Kubernetes knowledge needed |
+| **Developer** | Use the hosted platform to deploy with the CLI and connect through the adapter, without managing Kubernetes |
 
 ## Why I built this
 
@@ -85,10 +87,11 @@ the [README](https://github.com/mcp-runtime/mcp-runtime#comparison).
 
 ## Governance, audit, and compliance
 
-The gateway evaluates `MCPAccessGrant` and
-`MCPAgentSession` policy before tool calls reach a server, including tool-level
-allow/deny rules, side-effect allowances, trust requirements, consented trust,
-expiry, and revocation.
+With allow-list policy enabled, the gateway evaluates `MCPAccessGrant` and any
+required `MCPAgentSession` before tool calls reach a server. Checks include
+tool-level allow/deny rules, side-effect allowances, trust requirements,
+consented trust, expiry, and revocation. Observe mode records decisions but
+does not enforce these checks.
 
 Each decision can emit audit and analytics events with the server, namespace,
 team ID, human ID, agent ID, session ID, tool name, policy version, decision,

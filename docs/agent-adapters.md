@@ -4,12 +4,21 @@ MCP Runtime provides one agent-side adapter: `mcp-runtime adapter proxy`. It
 exposes a local Streamable HTTP MCP endpoint and forwards requests to a
 platform route over HTTPS.
 
-Every adapter request carries a session-bound SPIFFE client certificate. When
-the target MCP server configures OAuth, the request also carries an OAuth
-bearer token. The gateway derives the human, agent, team, and session identity
-from the verified certificate and, for OAuth targets, requires the token
-subject to match the session human. It never accepts governance identity
-headers as a fallback.
+The adapter presents a session-bound SPIFFE client certificate when it
+establishes its HTTPS connection to the runtime. When the target MCP server
+configures OAuth, the adapter also forwards the local client's bearer token on
+each HTTP request. The gateway derives the human, agent, team, and session
+identity from the verified certificate. For OAuth targets, it requires the
+token subject to match the session's human and checks any team claim against
+the session. It never accepts caller-supplied governance identity headers.
+
+Use an active managed agent from the team's agent directory. List agents with
+`mcp-runtime agent list <team-slug> --status active`; a team owner or platform
+admin can create one with `mcp-runtime agent create <team-slug> --name <name>`.
+Members see only agents covered by an applicable grant or their own active
+session, so ask a team owner for an ID if the list is empty. Use the immutable
+`agt_...` ID returned by the directory in the grant and adapter commands below.
+A display name such as `Cursor` is not an agent ID.
 
 ## Required grant
 
@@ -22,12 +31,12 @@ apiVersion: mcpruntime.org/v1alpha1
 kind: MCPAccessGrant
 metadata:
   name: triage-grant
-  namespace: mcp-servers
+  namespace: mcp-team-acme
 spec:
   serverRef:
     name: workspace-assistant
   subject:
-    agentID: ticket-triage-agent
+    agentID: agt_01arz3ndektsv4rrffq69g5fav # replace with your active agent ID
   maxTrust: high
   allowedSideEffects: [read]
   policyVersion: v1
@@ -46,15 +55,17 @@ mcp-runtime auth login --api-url https://platform.example.com
 mcp-runtime adapter proxy \
   --runtime-url https://mcp.example.com/workspace-assistant/mcp \
   --server workspace-assistant \
-  --namespace mcp-servers \
-  --agent ticket-triage-agent \
+  --namespace mcp-team-acme \
+  --agent agt_01arz3ndektsv4rrffq69g5fav \
   --auto-refresh
 ```
 
 For an OAuth-enabled target, the local MCP client normally completes OAuth and
-sends `Authorization` to the adapter. The proxy preserves it. For clients that
-cannot attach the header, set `--auth-header "Bearer <access-token>"` as a
-static override. Omit it when the target has no OAuth configuration.
+sends `Authorization` to the adapter. The proxy preserves it for each request.
+For a client that cannot attach the header, set `--auth-header "Bearer
+<access-token>"`; this static value is used for every request. Omit it when the
+target has no OAuth configuration or when clients need to send different
+tokens.
 
 The adapter:
 
@@ -62,10 +73,68 @@ The adapter:
 2. Generates the private key and CSR locally.
 3. Sends the CSR to the platform certificate endpoint.
 4. Receives the signed leaf certificate and CA bundle.
-5. Connects to the HTTPS route with the client certificate and, when required by the target, the OAuth bearer.
-6. Renews the certificate before expiry when `--auto-refresh` is enabled.
+5. Presents the certificate during the HTTPS handshake and forwards each
+   request's OAuth bearer when the target requires one.
+6. Renews the certificate before it expires when `--auto-refresh` is enabled.
 
 The private key never leaves the adapter process.
+
+### Certificate identity and OAuth tokens
+
+The adapter certificate identifies one `MCPAgentSession`; it does not identify
+an individual MCP protocol session or contain an OAuth token. The certificate
+is presented during the HTTPS handshake. The local MCP client sends its OAuth
+bearer on each HTTP request, and the proxy forwards that request's
+`Authorization` header over the authenticated connection. The gateway checks
+the certificate identity and, when OAuth is enabled, requires the token subject
+to match the session's human and any team claim to match the session's team.
+
+```mermaid
+sequenceDiagram
+    participant C1 as Claude / MCP client A
+    participant C2 as Cursor / MCP client B
+    participant A as One adapter proxy
+    participant P as Platform API
+    participant T as Traefik
+    participant G as MCP gateway
+    participant S as MCP server
+
+    A->>P: Authenticate; issue or reuse authorized session
+    P-->>A: Session-bound certificate
+    A->>T: Establish HTTPS; present certificate in TLS handshake
+    Note over A,T: The certificate represents one MCPAgentSession
+    C1->>A: MCP request + bearer token A
+    A->>T: Forward request + token A on authenticated connection
+    T->>G: Request + verified certificate identity + token A
+    G->>G: Resolve session; validate token and subject
+    G->>S: Authorized request + token A
+    S-->>C1: MCP response
+
+    C2->>A: MCP request + bearer token B
+    A->>T: Forward request + token B on authenticated connection
+    T->>G: Request + same certificate identity + token B
+    G->>G: Resolve same session; validate token and subject
+    G->>S: Authorized request + token B
+    S-->>C2: MCP response
+```
+
+This works when both OAuth tokens are valid for the target MCP resource and
+identify the same human as the certificate-bound session. A token for another
+human is rejected. Both clients' calls are attributed to the same Runtime
+agent and session. If clients need distinct Runtime agent identities or
+session-level audit attribution, run a separate adapter proxy with its own
+certificate for each identity.
+
+The default listener is `127.0.0.1:8099` and does not authenticate local
+clients. Any process that can connect to it can make calls using that adapter
+session. Keep it on loopback and share it only among clients intended to act as
+the same Runtime agent and human.
+
+Do not set `--auth-header` when clients need different OAuth tokens. It is a
+static override applied to every outbound request, so it replaces each
+client's per-request bearer. Let each client send its own `Authorization`
+header instead. `--auto-refresh` refreshes the adapter certificate; each MCP
+client remains responsible for obtaining and refreshing its OAuth token.
 
 ## Save a certificate
 
@@ -74,8 +143,8 @@ Use `adapter enroll` when another process manages the proxy lifecycle:
 ```bash
 mcp-runtime adapter enroll \
   --server workspace-assistant \
-  --namespace mcp-servers \
-  --agent ticket-triage-agent
+  --namespace mcp-team-acme \
+  --agent agt_01arz3ndektsv4rrffq69g5fav
 ```
 
 The command saves credentials below
@@ -98,7 +167,9 @@ mcp-runtime adapter proxy \
 ```
 
 For an OAuth-enabled target, the local MCP request must still carry
-`Authorization`, or the proxy must be started with `--auth-header`.
+`Authorization`, or the proxy must be started with `--auth-header`. The
+certificate files identify the enrolled Runtime session; the OAuth bearer is
+still a separate per-request credential.
 
 ## CA bundle and CSR flow
 
@@ -126,7 +197,7 @@ issuer's chain as the bundle.
 | `MCP_TRUST_DOMAIN` | Optional SPIFFE trust domain check. |
 | `MCP_RUNTIME_TLS_CLIENT_CERT` / `_KEY` | Externally managed PEM client certificate and key. |
 | `MCP_RUNTIME_TLS_CA_BUNDLE` | PEM CA bundle used to verify the runtime. |
-| `MCP_RUNTIME_AUTH_HEADER` | Static OAuth `Authorization` override when the local MCP client does not send one; it does not set adapter identity. |
+| `MCP_RUNTIME_AUTH_HEADER` | Static OAuth `Authorization` override when the local MCP client does not send one; it does not set adapter identity and is used for every request. |
 | `MCP_RUNTIME_HOST_HEADER` | Override the HTTP Host header for ingress routing. |
 | `MCP_RUNTIME_LISTEN_ADDR` | Local proxy listener; defaults to `127.0.0.1:8099`. |
 | `MCP_RUNTIME_REQUEST_TIMEOUT` | Timeout for adapter to runtime requests. |
@@ -237,8 +308,8 @@ Enroll an external adapter after signing in to the platform:
 mcp-runtime adapter enroll \
   --platform-url https://platform.mcpruntime.org \
   --server workspace-assistant \
-  --namespace mcp-servers \
-  --agent cursor \
+  --namespace mcp-team-acme \
+  --agent agt_01arz3ndektsv4rrffq69g5fav \
   --trust-domain mcpruntime.org
 ```
 
@@ -269,16 +340,16 @@ mcp-runtime adapter proxy \
   --runtime-url https://mcp.mcpruntime.org/workspace-assistant/mcp \
   --platform-url https://platform.mcpruntime.org \
   --server workspace-assistant \
-  --namespace mcp-servers \
-  --agent cursor \
+  --namespace mcp-team-acme \
+  --agent agt_01arz3ndektsv4rrffq69g5fav \
   --trust-domain mcpruntime.org \
   --auto-refresh
 ```
 
 In-memory enrollment requires an `https` `--runtime-url` and the same
 `--server`/`--agent` inputs as `enroll` (the certificate's SPIFFE URI encodes
-the issued session). With `--auto-refresh`, the adapter re-enrolls a fresh
-certificate a few minutes before the session expires and drains idle
+the issued session). With `--auto-refresh`, the adapter enrolls a replacement
+certificate before the current certificate expires and drains idle
 connections so subsequent requests renegotiate with it. Long-running adapters
 keep working without restarts. To reuse `enroll` output instead of in-memory
 enrollment, pass the `--tls-client-cert`/`-key`/`-ca-bundle` files.

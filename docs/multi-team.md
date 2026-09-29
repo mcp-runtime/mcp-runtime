@@ -155,7 +155,7 @@ Specific human or agent inside a team:
 ```yaml
 subject:
   humanID: alice@example.com
-  agentID: acme-cron-bot
+  agentID: agt_01arz3ndektsv4rrffq69g5fav
   teamID: 7d0a0b8f-7c25-4761-a632-3cf0108e31d6
 ```
 
