@@ -552,22 +552,23 @@ wait_for_rollout() {
   local token
   token="$(profile_token "$profile")"
   echo "=== waiting for rollout: ${server} in ${namespace} (profile ${profile}) ==="
-  local deadline=$(( $(date +%s) + 240 ))
+  local deadline=$(( $(date +%s) + 300 ))
   while true; do
     local body
     body="$(curl -fsS \
       -H "x-api-key: ${token}" \
-    -H "authorization: Bearer ${token}" \
+      -H "authorization: Bearer ${token}" \
       "${PLATFORM_URL}/api/v1/runtime/servers/${namespace}/${server}" 2>/dev/null || echo '{}')"
-    local ready_str status
+    local ready_str status status_lc
     ready_str="$(echo "$body" | jq -r '.server.ready // "0/0"' 2>/dev/null || echo "0/0")"
     status="$(echo "$body" | jq -r '.server.status // empty' 2>/dev/null || true)"
+    status_lc="$(printf '%s' "$status" | tr '[:upper:]' '[:lower:]')"
     local ready_count total_count
     ready_count="${ready_str%%/*}"
     total_count="${ready_str##*/}"
     # Require both replica readiness and operator Status=Ready. After gateway
     # default-on, pods can be 1/1 while Traefik mTLS Secrets are still issuing.
-    if [[ "$ready_count" =~ ^[0-9]+$ && "$total_count" =~ ^[0-9]+$ && "$total_count" -ge 1 && "$ready_count" -ge "$total_count" && "${status,,}" == "ready" ]]; then
+    if [[ "$ready_count" =~ ^[0-9]+$ && "$total_count" =~ ^[0-9]+$ && "$total_count" -ge 1 && "$ready_count" -ge "$total_count" && "$status_lc" == "ready" ]]; then
       echo "rollout complete: ${server}"
       return 0
     fi
@@ -749,15 +750,17 @@ precreate_adapter_session() {
 wait_for_public_mcp_route() {
   local body="$WORK_DIR/public-route-wait.body"
   local status=""
-  local deadline=$(( $(date +%s) + 180 ))
+  local deadline=$(( $(date +%s) + 240 ))
   echo "=== waiting for public MCP route: ${MCP_URL}/${ACME_SERVER}/mcp ==="
   while true; do
+    : >"$body"
     status="$(
       curl -ksS -o "$body" -w '%{http_code}' \
         -H "content-type: application/json" \
         --data '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"aaa-ping","arguments":{"note":"public-route-ready-check"}}}' \
-        "${MCP_URL}/${ACME_SERVER}/mcp" 2>/dev/null || echo "000"
+        "${MCP_URL}/${ACME_SERVER}/mcp" 2>/dev/null || true
     )"
+    [[ "$status" =~ ^[0-9]{3}$ ]] || status="000"
     if [[ "$status" == "401" ]] && jq -e '.error == "missing_identity"' "$body" >/dev/null 2>&1; then
       echo "public MCP route ready (missing_identity)"
       return 0
@@ -818,21 +821,24 @@ adapter_call_add_for() {
 
   wait_for_adapter_proxy "$listen" "$log_file"
 
-  local init_deadline=$(( $(date +%s) + 180 ))
+  local init_deadline=$(( $(date +%s) + 240 ))
   local init_status=""
   while true; do
+    : >"$headers_file"
+    : >"$init_body"
     init_status="$(
       curl -sS -D "$headers_file" -o "$init_body" -w '%{http_code}' \
         -H "content-type: application/json" \
         --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"multitenancytest","version":"0.1"}}}' \
-        "$adapter_url" 2>/dev/null || echo "000"
+        "$adapter_url" 2>/dev/null || true
     )"
+    [[ "$init_status" =~ ^[0-9]{3}$ ]] || init_status="000"
     if [[ "$init_status" == "200" ]]; then
       break
     fi
-    # 502/503 commonly means Traefik has the route but mTLS transport Secrets
-    # are still loading; keep trying until the public route is usable.
-    if [[ "$init_status" != "502" && "$init_status" != "503" && "$init_status" != "000" ]]; then
+    # Match staging adapter matrix: retry Traefik/route settle codes only.
+    # Permanent auth/policy failures must fail fast.
+    if [[ " 000 404 502 503 " != *" ${init_status} "* ]]; then
       echo "initialize returned HTTP ${init_status} for profile ${profile}" >&2
       cat "$init_body" >&2
       kill "$proxy_pid" >/dev/null 2>&1 || true

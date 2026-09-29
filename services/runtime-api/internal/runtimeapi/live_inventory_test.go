@@ -261,6 +261,9 @@ func TestRuntimeServerGetReturnsSingleServerShape(t *testing.T) {
 	srv := &mcpv1alpha1.MCPServer{
 		ObjectMeta: metav1.ObjectMeta{Name: "demo-one", Namespace: "mcp-servers"},
 		Spec:       mcpv1alpha1.MCPServerSpec{Image: "demo:latest", ServicePort: 80},
+		// Gateway defaults on; control-plane Status stays non-Ready until the
+		// operator phase is Ready (mTLS IngressRoute/Secrets included).
+		Status: mcpv1alpha1.MCPServerStatus{Phase: "Ready"},
 	}
 	replicas := int32(2)
 	deployment := &appsv1.Deployment{
