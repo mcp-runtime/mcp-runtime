@@ -63,7 +63,8 @@ func TestCheckPublicRouteOwnershipRefusesLaterClaimant(t *testing.T) {
 	loser := routedServer("team-b", "foo", "foo", "", t0.Add(time.Hour))
 	staleIngress := &networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "team-b"}}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&owner, &loser, staleIngress).Build()
-	r := MCPServerReconciler{Client: c, Scheme: scheme}
+	r := MCPServerReconciler{
+		GatewayProxyImage: "example.com/mcp-gateway:test", Client: c, Scheme: scheme}
 
 	if err := r.checkPublicRouteOwnership(context.Background(), &owner); err != nil {
 		t.Fatalf("owner refused: %v", err)
@@ -88,7 +89,8 @@ func TestReconcileBundledOAuthResourcesSkipsRouteConflicts(t *testing.T) {
 	loser.CreationTimestamp = metav1.NewTime(t0.Add(time.Hour))
 	loser.Namespace = "team-b"
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(bundledAuthDeployment(), owner, loser).Build()
-	r := MCPServerReconciler{Client: c, Scheme: scheme, OAuthIssuerURL: testBundledIssuer, DefaultIngressHost: "mcp.example.com", DefaultIngressTLS: true}
+	r := MCPServerReconciler{
+		GatewayProxyImage: "example.com/mcp-gateway:test", Client: c, Scheme: scheme, OAuthIssuerURL: testBundledIssuer, DefaultIngressHost: "mcp.example.com", DefaultIngressTLS: true}
 
 	if err := r.reconcileBundledOAuthResources(context.Background()); err != nil {
 		t.Fatalf("reconcile: %v", err)

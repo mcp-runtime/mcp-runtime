@@ -73,7 +73,7 @@ func imageHasTagOrDigest(image string) bool {
 }
 
 func gatewayEnabled(spec MCPServerSpec) bool {
-	return spec.Gateway != nil && spec.Gateway.Enabled
+	return GatewayIsEnabled(spec.Gateway)
 }
 
 // MCPServerDefaultOptions holds operator-scoped values that the admission
@@ -166,16 +166,14 @@ func (r *MCPServer) DefaultWithOptions(options MCPServerDefaultOptions) {
 		r.Spec.IngressHost = strings.TrimSpace(options.DefaultIngressHost)
 	}
 
-	if gatewayEnabled(r.Spec) {
-		// Do not invent Spec.Auth: omitting auth means OAuth is off.
-		// Callers that want OAuth set Spec.Auth (issuerURL/audience may still
-		// be derived later by ResolveDerivedAuth from platform defaults).
-		if r.Spec.Policy == nil {
-			r.Spec.Policy = &PolicyConfig{}
-		}
-		if r.Spec.Session == nil {
-			r.Spec.Session = &SessionConfig{}
-		}
+	// Gateway is on by default for metrics/traces/analytics. Opt out with
+	// enabled: false. Do not invent Spec.Policy: omitting policy means observe
+	// mode at the gateway so tool calls are not deny-by-default.
+	if r.Spec.Gateway == nil {
+		r.Spec.Gateway = &GatewayConfig{}
+	}
+	if r.Spec.Gateway.Enabled == nil {
+		r.Spec.Gateway.Enabled = BoolPtr(true)
 	}
 
 	if r.Spec.Auth != nil {
@@ -226,6 +224,14 @@ func (r *MCPServer) DefaultWithOptions(options MCPServerDefaultOptions) {
 		}
 		if strings.TrimSpace(r.Spec.Gateway.UpstreamURL) == "" {
 			r.Spec.Gateway.UpstreamURL = fmt.Sprintf("http://127.0.0.1:%d", r.Spec.Port)
+		}
+		// Analytics on by default when the gateway is on and an ingest URL is
+		// available (operator default or already set). Opt out with
+		// analytics.disabled: true. Do not invent an empty analytics block when
+		// no ingest URL can be filled — the operator still emits when its
+		// DefaultAnalyticsIngestURL is configured.
+		if r.Spec.Analytics == nil && strings.TrimSpace(options.DefaultAnalyticsIngestURL) != "" {
+			r.Spec.Analytics = &AnalyticsConfig{}
 		}
 	}
 
@@ -324,7 +330,7 @@ func (r *MCPServer) validate() error {
 			allErrs = append(allErrs, field.Required(specPath.Child("ingressHost"), "ingressHost is required when publicPathPrefix is not set; set spec.ingressHost or MCP_DEFAULT_INGRESS_HOST on the operator, or use spec.publicPathPrefix for hostless routing"))
 		}
 	}
-	if r.Spec.Gateway != nil && r.Spec.Gateway.Enabled && r.Spec.Gateway.Port == r.Spec.Port {
+	if gatewayEnabled(r.Spec) && r.Spec.Gateway != nil && r.Spec.Gateway.Port == r.Spec.Port {
 		allErrs = append(allErrs, field.Invalid(specPath.Child("gateway", "port"), r.Spec.Gateway.Port, "gateway.port must differ from spec.port"))
 	}
 	if r.Spec.Auth != nil {
@@ -338,7 +344,7 @@ func (r *MCPServer) validate() error {
 			}
 		}
 	}
-	if r.Spec.Gateway == nil || !r.Spec.Gateway.Enabled {
+	if !gatewayEnabled(r.Spec) {
 		if r.Spec.Analytics != nil && !r.Spec.Analytics.Disabled &&
 			(strings.TrimSpace(r.Spec.Analytics.IngestURL) != "" ||
 				strings.TrimSpace(r.Spec.Analytics.Source) != "" ||

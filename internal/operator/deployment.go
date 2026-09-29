@@ -20,10 +20,12 @@ import (
 
 	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
 	"mcp-runtime/pkg/kubeworkload"
+	"mcp-runtime/pkg/mcpdefaults"
 )
 
 func (r *MCPServerReconciler) reconcileDeployment(ctx context.Context, mcpServer *mcpv1alpha1.MCPServer) error {
 	logger := log.FromContext(ctx)
+	ensureGatewaySpec(mcpServer)
 
 	image, err := r.resolveImage(ctx, mcpServer)
 	if err != nil {
@@ -407,7 +409,10 @@ func (r *MCPServerReconciler) resolveGatewayImage(mcpServer *mcpv1alpha1.MCPServ
 		return "", nil
 	}
 
-	image := strings.TrimSpace(mcpServer.Spec.Gateway.Image)
+	image := ""
+	if mcpServer.Spec.Gateway != nil {
+		image = strings.TrimSpace(mcpServer.Spec.Gateway.Image)
+	}
 	if image == "" {
 		image = strings.TrimSpace(r.GatewayProxyImage)
 	}
@@ -420,6 +425,30 @@ func (r *MCPServerReconciler) resolveGatewayImage(mcpServer *mcpv1alpha1.MCPServ
 		"namespace": mcpServer.Namespace,
 	}
 	return "", newOperatorError("gateway.image is required when gateway.enabled is true (set spec.gateway.image or MCP_GATEWAY_PROXY_IMAGE on the operator)", contextMap)
+}
+
+// ensureGatewaySpec fills nil/empty gateway fields so reconcile paths that skip
+// admission defaulting still get a usable sidecar config when the gateway is on.
+func ensureGatewaySpec(mcpServer *mcpv1alpha1.MCPServer) {
+	if mcpServer == nil || !gatewayEnabled(mcpServer) {
+		return
+	}
+	if mcpServer.Spec.Gateway == nil {
+		mcpServer.Spec.Gateway = &mcpv1alpha1.GatewayConfig{Enabled: mcpv1alpha1.BoolPtr(true)}
+	}
+	if mcpServer.Spec.Gateway.Enabled == nil {
+		mcpServer.Spec.Gateway.Enabled = mcpv1alpha1.BoolPtr(true)
+	}
+	if mcpServer.Spec.Gateway.Port == 0 {
+		mcpServer.Spec.Gateway.Port = mcpdefaults.MCPGatewayPort
+	}
+	if strings.TrimSpace(mcpServer.Spec.Gateway.UpstreamURL) == "" {
+		port := mcpServer.Spec.Port
+		if port == 0 {
+			port = mcpdefaults.MCPServerPort
+		}
+		mcpServer.Spec.Gateway.UpstreamURL = fmt.Sprintf("http://127.0.0.1:%d", port)
+	}
 }
 
 // gatewayExternalBaseURL builds the public base URL the gateway advertises in
@@ -440,6 +469,7 @@ func (r *MCPServerReconciler) publicURLOptions() mcpv1alpha1.PublicURLOptions {
 }
 
 func (r *MCPServerReconciler) buildGatewayContainer(mcpServer *mcpv1alpha1.MCPServer) (corev1.Container, error) {
+	ensureGatewaySpec(mcpServer)
 	image, err := r.resolveGatewayImage(mcpServer)
 	if err != nil {
 		return corev1.Container{}, err
@@ -474,6 +504,12 @@ func (r *MCPServerReconciler) buildGatewayContainer(mcpServer *mcpv1alpha1.MCPSe
 			corev1.EnvVar{Name: "POLICY_MODE", Value: string(mcpServer.Spec.Policy.Mode)},
 			corev1.EnvVar{Name: "POLICY_DEFAULT_DECISION", Value: string(mcpServer.Spec.Policy.DefaultDecision)},
 			corev1.EnvVar{Name: "POLICY_VERSION", Value: mcpServer.Spec.Policy.PolicyVersion},
+		)
+	} else {
+		envVars = append(envVars,
+			corev1.EnvVar{Name: "POLICY_MODE", Value: mcpdefaults.ObservabilityPolicyMode},
+			corev1.EnvVar{Name: "POLICY_DEFAULT_DECISION", Value: mcpdefaults.ObservabilityPolicyDecision},
+			corev1.EnvVar{Name: "POLICY_VERSION", Value: mcpdefaults.PolicyVersion},
 		)
 	}
 	if r.usesAdapterCertificates(mcpServer) {
@@ -736,7 +772,7 @@ func (r *MCPServerReconciler) buildServerEnvVars(mcpServer *mcpv1alpha1.MCPServe
 // listens exactly where the gateway sends requests.
 func upstreamMCPPath(mcpServer *mcpv1alpha1.MCPServer) string {
 	publicPath := strings.TrimSpace(mcpServer.EffectivePublicPath())
-	if publicPath == "" || !gatewayEnabled(mcpServer) {
+	if publicPath == "" || !gatewayEnabled(mcpServer) || mcpServer.Spec.Gateway == nil {
 		return publicPath
 	}
 	prefix := strings.TrimRight(strings.TrimSpace(mcpServer.Spec.Gateway.StripPrefix), "/")
@@ -786,7 +822,10 @@ func (r *MCPServerReconciler) buildEnvVars(envVars []mcpv1alpha1.EnvVar, secretE
 	return result
 }
 func gatewayEnabled(mcpServer *mcpv1alpha1.MCPServer) bool {
-	return mcpServer != nil && mcpServer.Spec.Gateway != nil && mcpServer.Spec.Gateway.Enabled
+	if mcpServer == nil {
+		return false
+	}
+	return mcpv1alpha1.GatewayIsEnabled(mcpServer.Spec.Gateway)
 }
 
 func serverUsesOAuth(mcpServer *mcpv1alpha1.MCPServer) bool {
@@ -798,16 +837,20 @@ func (r *MCPServerReconciler) oauthInternalIssuerURL() string {
 }
 
 // analyticsEnabled reports whether the gateway sidecar should emit analytics
-// for this MCPServer. Analytics is opt-in per server; the operator-level
-// default only supplies the endpoint after the server requests analytics.
+// for this MCPServer. Emission is on by default when the gateway is on and an
+// ingest URL is available (spec or operator default). Opt out with
+// analytics.disabled.
 func (r *MCPServerReconciler) analyticsEnabled(mcpServer *mcpv1alpha1.MCPServer) bool {
-	if mcpServer == nil {
+	if mcpServer == nil || !gatewayEnabled(mcpServer) {
 		return false
 	}
-	if mcpServer.Spec.Analytics == nil || mcpServer.Spec.Analytics.Disabled {
+	if mcpServer.Spec.Analytics != nil && mcpServer.Spec.Analytics.Disabled {
 		return false
 	}
-	url := strings.TrimSpace(mcpServer.Spec.Analytics.IngestURL)
+	url := ""
+	if mcpServer.Spec.Analytics != nil {
+		url = strings.TrimSpace(mcpServer.Spec.Analytics.IngestURL)
+	}
 	if url == "" {
 		url = strings.TrimSpace(r.DefaultAnalyticsIngestURL)
 	}

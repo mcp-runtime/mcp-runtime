@@ -206,7 +206,7 @@ func TestMCPServerDefaultWithOptions(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "test-server"},
 		Spec: MCPServerSpec{
 			Image:     "example.com/mcp-server",
-			Gateway:   &GatewayConfig{Enabled: true},
+			Gateway:   &GatewayConfig{Enabled: BoolPtr(true)},
 			Analytics: &AnalyticsConfig{},
 		},
 	}
@@ -229,7 +229,7 @@ func TestMCPServerDefaultGatewayAuthTokenHeader(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "test-server"},
 		Spec: MCPServerSpec{
 			Image:   "example.com/mcp-server",
-			Gateway: &GatewayConfig{Enabled: true},
+			Gateway: &GatewayConfig{Enabled: BoolPtr(true)},
 			Auth: &AuthConfig{
 				IssuerURL: "https://issuer.example.com",
 				Audience:  "https://mcp.example.com/test-server/mcp",
@@ -252,7 +252,7 @@ func TestMCPServerDefaultDoesNotInventAuth(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "test-server"},
 		Spec: MCPServerSpec{
 			Image:   "example.com/mcp-server",
-			Gateway: &GatewayConfig{Enabled: true},
+			Gateway: &GatewayConfig{Enabled: BoolPtr(true)},
 		},
 	}
 
@@ -261,8 +261,52 @@ func TestMCPServerDefaultDoesNotInventAuth(t *testing.T) {
 	if server.Spec.Auth != nil {
 		t.Fatalf("gateway defaulting must not invent Spec.Auth; got %#v", server.Spec.Auth)
 	}
-	if server.Spec.Policy == nil || server.Spec.Session == nil {
-		t.Fatal("expected policy and session defaults when gateway is enabled")
+	if server.Spec.Policy != nil || server.Spec.Session != nil {
+		t.Fatalf("gateway defaulting must not invent policy/session; got policy=%#v session=%#v", server.Spec.Policy, server.Spec.Session)
+	}
+	if server.Spec.Analytics != nil {
+		t.Fatalf("without an ingest URL default, analytics must stay unset; got %#v", server.Spec.Analytics)
+	}
+}
+
+func TestMCPServerDefaultAnalyticsWhenIngestURLConfigured(t *testing.T) {
+	server := &MCPServer{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-server"},
+		Spec: MCPServerSpec{
+			Image:   "example.com/mcp-server",
+			Gateway: &GatewayConfig{Enabled: BoolPtr(true)},
+		},
+	}
+	server.DefaultWithOptions(MCPServerDefaultOptions{
+		DefaultAnalyticsIngestURL: "http://ingest.example/events",
+	})
+	if server.Spec.Analytics == nil || server.Spec.Analytics.IngestURL != "http://ingest.example/events" {
+		t.Fatalf("expected analytics ingest URL from options; got %#v", server.Spec.Analytics)
+	}
+}
+
+func TestMCPServerDefaultGatewayEmptyMeansEnabled(t *testing.T) {
+	server := &MCPServer{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-server"},
+		Spec: MCPServerSpec{
+			Image:   "example.com/mcp-server",
+			Gateway: &GatewayConfig{},
+		},
+	}
+	server.Default()
+	if !GatewayIsEnabled(server.Spec.Gateway) {
+		t.Fatalf("gateway: {} should default to enabled; got %#v", server.Spec.Gateway)
+	}
+}
+
+func TestMCPServerDefaultGatewayOmittedMeansEnabled(t *testing.T) {
+	server := &MCPServer{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-server"},
+		Spec:       MCPServerSpec{Image: "example.com/mcp-server"},
+	}
+	server.Default()
+	if !GatewayIsEnabled(server.Spec.Gateway) {
+		t.Fatalf("omitted gateway should default to enabled; got %#v", server.Spec.Gateway)
 	}
 }
 
@@ -327,7 +371,7 @@ func TestMCPServerValidateOAuthIssuer(t *testing.T) {
 	server := &MCPServer{
 		Spec: MCPServerSpec{
 			Image:   "example.com/server",
-			Gateway: &GatewayConfig{Enabled: true},
+			Gateway: &GatewayConfig{Enabled: BoolPtr(true)},
 			Auth:    &AuthConfig{},
 		},
 	}
@@ -398,7 +442,7 @@ func TestMCPServerValidateAllowsStandaloneOAuthServer(t *testing.T) {
 		Spec: MCPServerSpec{
 			Image:            "example.com/server",
 			PublicPathPrefix: "server",
-			Gateway:          &GatewayConfig{Enabled: false},
+			Gateway:          &GatewayConfig{Enabled: BoolPtr(false)},
 			Auth:             &AuthConfig{IssuerURL: "https://auth.example.com/mcp-auth", Audience: "https://mcp.example.com/server/mcp"},
 		},
 	}

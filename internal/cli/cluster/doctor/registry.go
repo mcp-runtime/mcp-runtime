@@ -927,6 +927,7 @@ spec:
 		_ = kubectl.Run([]string{"delete", "deploy", name, "-n", namespace, "--ignore-not-found"})
 		_ = kubectl.Run([]string{"delete", "svc", name, "-n", namespace, "--ignore-not-found"})
 		_ = kubectl.Run([]string{"delete", "ingress", name, "-n", namespace, "--ignore-not-found"})
+		_ = kubectl.Run([]string{"delete", "ingressroute.traefik.io", name, "-n", namespace, "--ignore-not-found"})
 	}
 	defer cleanup()
 
@@ -985,24 +986,30 @@ spec:
 			Remedy: "inspect operator service reconciliation",
 		}
 	}
+	// Gateway-on servers with adapter certificates use a Traefik IngressRoute
+	// instead of a plain Ingress; accept either so smoke tracks the real route.
+	routeKind := "ingress"
 	if err := waitForDoctorResource(kubectl, "ingress", name, namespace, 150*time.Second); err != nil {
-		return DoctorCheck{
-			Name:   "MCPServer reconcile smoke",
-			OK:     false,
-			Detail: fmt.Sprintf("ingress not created for smoke MCPServer: %v", err),
-			Remedy: "inspect operator ingress reconciliation",
+		if routeErr := waitForDoctorResource(kubectl, "ingressroute.traefik.io", name, namespace, 30*time.Second); routeErr != nil {
+			return DoctorCheck{
+				Name:   "MCPServer reconcile smoke",
+				OK:     false,
+				Detail: fmt.Sprintf("ingress/IngressRoute not created for smoke MCPServer: ingress=%v ingressroute=%v", err, routeErr),
+				Remedy: "inspect operator ingress reconciliation",
+			}
 		}
+		routeKind = "IngressRoute"
 	}
 	if target.WaitForReady {
 		return DoctorCheck{
 			Name:   "MCPServer reconcile smoke",
 			OK:     true,
-			Detail: fmt.Sprintf("temporary MCPServer %s reconciled ready deployment/service/ingress using %s", name, target.Source),
+			Detail: fmt.Sprintf("temporary MCPServer %s reconciled ready deployment/service/%s using %s", name, routeKind, target.Source),
 		}
 	}
 	return DoctorCheck{
 		Name:   "MCPServer reconcile smoke",
 		OK:     true,
-		Detail: fmt.Sprintf("temporary MCPServer %s reconciled deployment/service/ingress using %s; skipped readiness because the fallback image does not expose the MCP port", name, target.Source),
+		Detail: fmt.Sprintf("temporary MCPServer %s reconciled deployment/service/%s using %s; skipped readiness because the fallback image does not expose the MCP port", name, routeKind, target.Source),
 	}
 }

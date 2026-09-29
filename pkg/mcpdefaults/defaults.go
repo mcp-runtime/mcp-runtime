@@ -13,14 +13,20 @@ const (
 	// constants below, never the defaults, so changing a default can never
 	// change what "deny" or "allow-list" means.
 	PolicyModeAllowList = "allow-list"
+	PolicyModeObserve   = "observe"
 	PolicyDecisionDeny  = "deny"
 	PolicyDecisionAllow = "allow"
 
-	// Defaults, expressed in terms of the enum values.
+	// Defaults for an explicitly configured policy block (server init / grants).
 	PolicyMode      = PolicyModeAllowList
 	PolicyDecision  = PolicyDecisionDeny
 	PolicyEnforceOn = "call_tool"
 	PolicyVersion   = "v1"
+
+	// Defaults when the gateway is on but spec.policy is omitted: observe tool
+	// calls so metrics/analytics work without adapter grants.
+	ObservabilityPolicyMode     = PolicyModeObserve
+	ObservabilityPolicyDecision = PolicyDecisionAllow
 
 	SessionStore    = "kubernetes"
 	SessionMaxLife  = "24h"

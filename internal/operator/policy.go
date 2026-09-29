@@ -190,6 +190,16 @@ func (r *MCPServerReconciler) renderGatewayPolicy(ctx context.Context, mcpServer
 			EnforceOn:       mcpServer.Spec.Policy.EnforceOn,
 			PolicyVersion:   mcpServer.Spec.Policy.PolicyVersion,
 		}
+	} else {
+		// Gateway without an explicit policy block stays in observe mode so
+		// metrics/analytics work without adapter grants. Set spec.policy to
+		// enforce allow-list/deny.
+		doc.Policy = &policy.Config{
+			Mode:            mcpdefaults.ObservabilityPolicyMode,
+			DefaultDecision: mcpdefaults.ObservabilityPolicyDecision,
+			EnforceOn:       mcpdefaults.PolicyEnforceOn,
+			PolicyVersion:   mcpdefaults.PolicyVersion,
+		}
 	}
 	if mcpServer.Spec.Session != nil {
 		doc.Session = &policy.Session{

@@ -357,7 +357,7 @@ func grafanaScopedUserAccessEnabled() bool {
 }
 
 func mcpServerObservableByPrincipal(server mcpv1alpha1.MCPServer, p principal) bool {
-	if server.Spec.Gateway == nil || !server.Spec.Gateway.Enabled {
+	if !mcpv1alpha1.GatewayIsEnabled(server.Spec.Gateway) {
 		return false
 	}
 	if p.Role == roleAdmin {

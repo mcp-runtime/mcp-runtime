@@ -282,9 +282,10 @@ func TestServerInfoProjectsGatewayEnabled(t *testing.T) {
 		gateway *mcpv1alpha1.GatewayConfig
 		want    bool
 	}{
-		{name: "omitted"},
-		{name: "disabled", gateway: &mcpv1alpha1.GatewayConfig{Enabled: false}},
-		{name: "enabled", gateway: &mcpv1alpha1.GatewayConfig{Enabled: true}, want: true},
+		{name: "omitted", want: true},
+		{name: "empty", gateway: &mcpv1alpha1.GatewayConfig{}, want: true},
+		{name: "disabled", gateway: &mcpv1alpha1.GatewayConfig{Enabled: mcpv1alpha1.BoolPtr(false)}},
+		{name: "enabled", gateway: &mcpv1alpha1.GatewayConfig{Enabled: mcpv1alpha1.BoolPtr(true)}, want: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

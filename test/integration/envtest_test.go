@@ -111,8 +111,9 @@ func testSetupWithManager(t *testing.T, cfg *rest.Config, scheme *runtime.Scheme
 	}
 
 	reconciler := &operator.MCPServerReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:            mgr.GetClient(),
+		Scheme:            mgr.GetScheme(),
+		GatewayProxyImage: "example.com/mcp-gateway:test",
 	}
 
 	if err := reconciler.SetupWithManager(mgr); err != nil {
@@ -302,8 +303,9 @@ func startManager(t *testing.T, cfg *rest.Config, scheme *runtime.Scheme) (ctrl.
 	}
 
 	reconciler := &operator.MCPServerReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:            mgr.GetClient(),
+		Scheme:            mgr.GetScheme(),
+		GatewayProxyImage: "example.com/mcp-gateway:test",
 	}
 
 	if err := reconciler.SetupWithManager(mgr); err != nil {

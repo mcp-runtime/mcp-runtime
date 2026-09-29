@@ -348,12 +348,17 @@ func (s *RuntimeServer) applyPublishedServerDefaults(ctx context.Context, namesp
 		return nil
 	}
 	if spec.Gateway == nil {
-		spec.Gateway = &mcpv1alpha1.GatewayConfig{Enabled: true}
+		spec.Gateway = &mcpv1alpha1.GatewayConfig{Enabled: mcpv1alpha1.BoolPtr(true)}
+	} else if spec.Gateway.Enabled == nil {
+		spec.Gateway.Enabled = mcpv1alpha1.BoolPtr(true)
 	}
-	if !spec.Gateway.Enabled || analyticsDisabled(spec.Analytics) || !analyticsConfigured(spec) {
+	if !mcpv1alpha1.GatewayIsEnabled(spec.Gateway) || analyticsDisabled(spec.Analytics) {
 		return nil
 	}
-	if spec.Analytics != nil && spec.Analytics.APIKeySecretRef != nil {
+	if spec.Analytics == nil {
+		spec.Analytics = &mcpv1alpha1.AnalyticsConfig{}
+	}
+	if spec.Analytics.APIKeySecretRef != nil {
 		return nil
 	}
 
@@ -368,25 +373,12 @@ func (s *RuntimeServer) applyPublishedServerDefaults(ctx context.Context, namesp
 	if ref == nil {
 		return nil
 	}
-	if spec.Analytics == nil {
-		spec.Analytics = &mcpv1alpha1.AnalyticsConfig{}
-	}
 	spec.Analytics.APIKeySecretRef = ref
 	return nil
 }
 
 func analyticsDisabled(cfg *mcpv1alpha1.AnalyticsConfig) bool {
 	return cfg != nil && cfg.Disabled
-}
-
-func analyticsConfigured(spec *mcpv1alpha1.MCPServerSpec) bool {
-	if spec == nil || analyticsDisabled(spec.Analytics) {
-		return false
-	}
-	if spec.Analytics != nil && strings.TrimSpace(spec.Analytics.IngestURL) != "" {
-		return true
-	}
-	return false
 }
 
 func publishedServerAnalyticsSecretName(name string) string {

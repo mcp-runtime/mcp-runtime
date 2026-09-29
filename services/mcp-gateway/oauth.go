@@ -264,6 +264,16 @@ func (s *gatewayServer) fetchAuthServerMetadataForIssuer(ctx context.Context, lo
 			lastErr = err
 			continue
 		}
+		// mcp-auth rejects discovery on the in-cluster URL without the public
+		// Host / forwarded proto (TRUST_PROXY_TLS). When looking up via the
+		// internal issuer, present the expected public issuer identity.
+		if expectedIssuerURL != "" && lookupIssuerURL != expectedIssuerURL {
+			if u, err := url.Parse(expectedIssuerURL); err == nil && u.Host != "" {
+				req.Host = u.Host
+				req.Header.Set("X-Forwarded-Host", u.Host)
+				req.Header.Set("X-Forwarded-Proto", "https")
+			}
+		}
 		resp, err := s.httpClient.Do(req)
 		if err != nil {
 			lastErr = err

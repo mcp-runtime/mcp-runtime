@@ -139,7 +139,7 @@ func TestGenerateCRD(t *testing.T) {
 			Image:     "my-image",
 			Namespace: "default",
 			Gateway: &GatewayConfig{
-				Enabled:     true,
+				Enabled:     boolPtr(true),
 				Image:       "example.com/mcp-gateway:latest",
 				Port:        8091,
 				UpstreamURL: "http://127.0.0.1:8088",

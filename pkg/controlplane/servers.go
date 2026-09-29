@@ -280,7 +280,7 @@ func ServerInfoFromMCPServer(mcpServer mcpv1alpha1.MCPServer, deploymentStatus S
 		Labels:         mcpServer.Labels,
 		Age:            mcpServer.CreationTimestamp.Format("2006-01-02T15:04:05Z"),
 		Endpoint:       PublicMCPEndpoint(mcpServer),
-		GatewayEnabled: mcpServer.Spec.Gateway != nil && mcpServer.Spec.Gateway.Enabled,
+		GatewayEnabled: mcpv1alpha1.GatewayIsEnabled(mcpServer.Spec.Gateway),
 		ServicePort:    mcpServer.Spec.ServicePort,
 		Generation:     mcpServer.Generation,
 		Tools:          mcpServer.Spec.Tools,

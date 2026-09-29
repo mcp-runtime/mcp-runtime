@@ -78,7 +78,7 @@ func TestInitServerCreatesMetadata(t *testing.T) {
 	if server.Tools[2].Name != "refund_invoice" || server.Tools[2].RequiredTrust != metadata.TrustLevelHigh || server.Tools[2].SideEffect != metadata.ToolSideEffectDestructive {
 		t.Fatalf("tool spec = %#v, want refund_invoice/high/destructive", server.Tools[2])
 	}
-	if server.Gateway == nil || !server.Gateway.Enabled {
+	if !metadata.GatewayIsEnabled(server.Gateway) {
 		t.Fatalf("gateway = %#v, want enabled", server.Gateway)
 	}
 	if server.Auth != nil {
@@ -978,7 +978,7 @@ func envVarValue(envVars []mcpv1alpha1.EnvVar, name string) string {
 
 func TestBuildDeployServerSpecEnablesGateway(t *testing.T) {
 	spec := buildDeployServerSpec("demo", "registry.example.com/team/demo", "v1.0.0", 2, 8088, 80)
-	if spec.Gateway == nil || !spec.Gateway.Enabled {
+	if !mcpv1alpha1.GatewayIsEnabled(spec.Gateway) {
 		t.Fatalf("gateway = %#v, want enabled", spec.Gateway)
 	}
 	if spec.IngressPath != "/demo/mcp" {
@@ -1108,7 +1108,7 @@ servers:
 	if spec.Session == nil || !spec.Session.Required {
 		t.Fatalf("session = %#v, want required", spec.Session)
 	}
-	if spec.Gateway == nil || !spec.Gateway.Enabled || spec.Gateway.UpstreamURL != "http://127.0.0.1:9090" {
+	if !mcpv1alpha1.GatewayIsEnabled(spec.Gateway) || spec.Gateway.UpstreamURL != "http://127.0.0.1:9090" {
 		t.Fatalf("gateway = %#v, want metadata gateway", spec.Gateway)
 	}
 	if got := envVarValue(spec.EnvVars, "FEATURE_FLAG"); got != "enabled" {

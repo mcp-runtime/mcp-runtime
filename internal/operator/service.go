@@ -16,6 +16,7 @@ import (
 
 func (r *MCPServerReconciler) reconcileService(ctx context.Context, mcpServer *mcpv1alpha1.MCPServer) error {
 	logger := log.FromContext(ctx)
+	ensureGatewaySpec(mcpServer)
 	targetPort := mcpServer.Spec.Port
 	if gatewayEnabled(mcpServer) {
 		targetPort = mcpServer.Spec.Gateway.Port

@@ -172,7 +172,7 @@ func (m *ServerManager) InitServer(name, metadataDir, image, imageTag, scope, po
 		},
 		Session: session,
 		Gateway: &metadata.GatewayConfig{
-			Enabled: true,
+			Enabled: boolPtr(true),
 		},
 	}
 	toolMetadata, err := initToolMetadata(tools, toolSpecs, toolRisk)
@@ -875,7 +875,7 @@ func buildDeployServerSpec(name, image, imageTag string, replicas, port, service
 		ServicePort:      servicePort,
 		PublicPathPrefix: name,
 		IngressPath:      "/" + name + "/mcp",
-		Gateway:          &mcpv1alpha1.GatewayConfig{Enabled: true},
+		Gateway:          &mcpv1alpha1.GatewayConfig{Enabled: mcpv1alpha1.BoolPtr(true)},
 	}
 }
 
@@ -1034,6 +1034,9 @@ func mergeDeployMetadata(spec *mcpv1alpha1.MCPServerSpec, src *metadata.ServerMe
 			Port:        src.Gateway.Port,
 			UpstreamURL: src.Gateway.UpstreamURL,
 			StripPrefix: src.Gateway.StripPrefix,
+		}
+		if spec.Gateway.Enabled == nil {
+			spec.Gateway.Enabled = mcpv1alpha1.BoolPtr(true)
 		}
 		if src.Gateway.Resources != nil {
 			resources := convertDeployResources(src.Gateway.Resources)
