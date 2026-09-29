@@ -146,6 +146,15 @@ every HTTPS check verifies the chain properly instead of using `curl -k`.
 Use `fresh-certificate` sparingly and `E2E_ACME_STAGING=0` only for an
 occasional production-CA run.
 
+To keep a disposable VM on publicly trusted certificates, set
+`E2E_ACME_STAGING=0` and `E2E_ACME_EMAIL` in its preserved `e2e.env`.
+Leave `fresh-certificate=false`: cleanup snapshots the registry and platform
+certificate Secrets outside the wiped paths, and the next setup restores them
+before cert-manager runs. Switching from the staging CA requires production
+issuance once; subsequent runs reuse valid certificates. Backup reuse avoids
+routine issuance, but renewal and a lost or incomplete snapshot can still
+require new ACME orders and are subject to Let's Encrypt limits.
+
 ## Stages and evidence
 
 Every run writes per-stage logs to `stages/NN-<stage>.log`, a `summary.json`
