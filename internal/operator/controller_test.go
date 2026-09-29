@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
@@ -1140,7 +1141,22 @@ func TestCheckIngressReady(t *testing.T) {
 		assertEqual(t, "ready", ready, false)
 	})
 
-	t.Run("mtls server is ready when its IngressRoute exists", func(t *testing.T) {
+	t.Run("mtls server is ready when its IngressRoute and backend secrets exist", func(t *testing.T) {
+		mtlsScheme := traefikScheme(t)
+		server := mtlsServer()
+		route := crFixture(ingressRouteGVK, server.Name, server.Namespace)
+		objs := append([]client.Object{server, route}, mtlsBackendSecretObjects(server)...)
+		client := fake.NewClientBuilder().WithScheme(mtlsScheme).WithObjects(objs...).Build()
+		r := MCPServerReconciler{
+			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: mtlsScheme, AdapterCertificatesEnabled: true, AdapterTrustDomain: "example.org", MTLSClusterIssuer: "mcp-runtime-ca"}
+		ready, err := r.checkIngressReady(context.Background(), server)
+		if err != nil {
+			t.Fatalf("failed to check ingress readiness: %v", err)
+		}
+		assertEqual(t, "ready", ready, true)
+	})
+
+	t.Run("mtls server is not ready when IngressRoute exists without backend secrets", func(t *testing.T) {
 		mtlsScheme := traefikScheme(t)
 		server := mtlsServer()
 		route := crFixture(ingressRouteGVK, server.Name, server.Namespace)
@@ -1151,7 +1167,7 @@ func TestCheckIngressReady(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to check ingress readiness: %v", err)
 		}
-		assertEqual(t, "ready", ready, true)
+		assertEqual(t, "ready", ready, false)
 	})
 
 	t.Run("mtls server is not ready without an IngressRoute", func(t *testing.T) {
@@ -1160,7 +1176,8 @@ func TestCheckIngressReady(t *testing.T) {
 		// Only the legacy passthrough IngressRouteTCP exists; the terminate-and-
 		// re-encrypt model no longer uses it, so the server must not read ready.
 		legacy := crFixture(ingressRouteTCPGVK, server.Name, server.Namespace)
-		client := fake.NewClientBuilder().WithScheme(mtlsScheme).WithObjects(server, legacy).Build()
+		objs := append([]client.Object{server, legacy}, mtlsBackendSecretObjects(server)...)
+		client := fake.NewClientBuilder().WithScheme(mtlsScheme).WithObjects(objs...).Build()
 		r := MCPServerReconciler{
 			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: mtlsScheme, AdapterCertificatesEnabled: true, AdapterTrustDomain: "example.org", MTLSClusterIssuer: "mcp-runtime-ca"}
 		ready, err := r.checkIngressReady(context.Background(), server)

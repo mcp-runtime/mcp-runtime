@@ -1472,7 +1472,23 @@ staging_adapter_wait_route() {
   done
   kubectl -n "${ns}" rollout status "deploy/${name}" --timeout=300s
   kubectl -n "${ns}" wait --for=condition=Ready "certificate/${name}-gateway-mtls" --timeout=120s
-  kubectl -n "${ns}" get "ingressroute.traefik.io/${name}" >/dev/null
+  kubectl -n "${ns}" wait --for=condition=Ready "certificate/${name}-traefik-client-mtls" --timeout=120s
+  deadline=$((SECONDS + 120))
+  until kubectl -n "${ns}" get "secret/${name}-mtls-ca" -o jsonpath='{.data.ca\.crt}' 2>/dev/null | grep -q .; do
+    ((SECONDS < deadline)) || {
+      staging_err "operator never created secret/${name}-mtls-ca with ca.crt"
+      return 1
+    }
+    sleep 3
+  done
+  deadline=$((SECONDS + 120))
+  until kubectl -n "${ns}" get "ingressroute.traefik.io/${name}" >/dev/null 2>&1; do
+    ((SECONDS < deadline)) || {
+      staging_err "operator never created ingressroute/${name} after mTLS secrets were ready"
+      return 1
+    }
+    sleep 3
+  done
   deadline=$((SECONDS + 120))
   until [[ "$(kubectl -n "${tls_ns}" get tlsoption.traefik.io default -o jsonpath='{.spec.clientAuth.clientAuthType}' 2>/dev/null || true)" == "VerifyClientCertIfGiven" ]]; do
     ((SECONDS < deadline)) || {

@@ -741,6 +741,33 @@ precreate_adapter_session() {
   jq -er '.name' <<<"$body" >/dev/null
 }
 
+# Wait until the public MCP route serves gateway identity denials instead of
+# Traefik 502/404 while mTLS backend Secrets and IngressRoute are still forming.
+wait_for_public_mcp_route() {
+  local body="$WORK_DIR/public-route-wait.body"
+  local status=""
+  local deadline=$(( $(date +%s) + 180 ))
+  echo "=== waiting for public MCP route: ${MCP_URL}/${ACME_SERVER}/mcp ==="
+  while true; do
+    status="$(
+      curl -ksS -o "$body" -w '%{http_code}' \
+        -H "content-type: application/json" \
+        --data '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"aaa-ping","arguments":{"note":"public-route-ready-check"}}}' \
+        "${MCP_URL}/${ACME_SERVER}/mcp" 2>/dev/null || echo "000"
+    )"
+    if [[ "$status" == "401" ]] && jq -e '.error == "missing_identity"' "$body" >/dev/null 2>&1; then
+      echo "public MCP route ready (missing_identity)"
+      return 0
+    fi
+    if [[ $(date +%s) -gt $deadline ]]; then
+      echo "timeout waiting for public MCP route to return missing_identity (401); last HTTP ${status}" >&2
+      cat "$body" >&2 || true
+      return 1
+    fi
+    sleep 3
+  done
+}
+
 verify_direct_public_denied() {
   local body="$WORK_DIR/direct-public.body"
   local status
@@ -788,10 +815,37 @@ adapter_call_add_for() {
 
   wait_for_adapter_proxy "$listen" "$log_file"
 
-  curl -fsS -D "$headers_file" -o "$init_body" \
-    -H "content-type: application/json" \
-    --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"multitenancytest","version":"0.1"}}}' \
-    "$adapter_url"
+  local init_deadline=$(( $(date +%s) + 180 ))
+  local init_status=""
+  while true; do
+    init_status="$(
+      curl -sS -D "$headers_file" -o "$init_body" -w '%{http_code}' \
+        -H "content-type: application/json" \
+        --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"multitenancytest","version":"0.1"}}}' \
+        "$adapter_url" 2>/dev/null || echo "000"
+    )"
+    if [[ "$init_status" == "200" ]]; then
+      break
+    fi
+    # 502/503 commonly means Traefik has the route but mTLS transport Secrets
+    # are still loading; keep trying until the public route is usable.
+    if [[ "$init_status" != "502" && "$init_status" != "503" && "$init_status" != "000" ]]; then
+      echo "initialize returned HTTP ${init_status} for profile ${profile}" >&2
+      cat "$init_body" >&2
+      kill "$proxy_pid" >/dev/null 2>&1 || true
+      stop_listen_port "$listen"
+      return 1
+    fi
+    if [[ $(date +%s) -gt $init_deadline ]]; then
+      echo "initialize timed out waiting for gateway route for profile ${profile}; last HTTP ${init_status}" >&2
+      cat "$init_body" >&2
+      kill "$proxy_pid" >/dev/null 2>&1 || true
+      stop_listen_port "$listen"
+      return 1
+    fi
+    echo "waiting for adapter initialize (HTTP ${init_status}) for profile ${profile}"
+    sleep 3
+  done
 
   local mcp_session_id
   mcp_session_id="$(awk 'BEGIN{IGNORECASE=1} /^Mcp-Session-Id:/ {gsub(/\r/,"",$2); print $2}' "$headers_file")"
@@ -1004,6 +1058,7 @@ verify_no_kubeconfig_ops
 
 delete_all_sessions "$ACME_PROFILE" "$ACME_NS"
 
+wait_for_public_mcp_route
 verify_direct_public_denied
 
 echo "=== verify: ${GLOBEX_SLUG} adapter call to ${ACME_SLUG}/${ACME_SERVER} ==="
