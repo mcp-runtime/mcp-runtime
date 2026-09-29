@@ -97,7 +97,9 @@ func TestReconcileMTLSIngressDefersUntilBackendSecretsExist(t *testing.T) {
 	scheme := traefikScheme(t)
 	server := mtlsServer()
 	legacy := crFixture(ingressRouteTCPGVK, server.Name, server.Namespace)
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(server, legacy).Build()
+	existingRoute := crFixture(ingressRouteGVK, server.Name, server.Namespace)
+	existingTransport := crFixture(serversTransportGVK, mtlsServersTransportName(server), server.Namespace)
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(server, legacy, existingRoute, existingTransport).Build()
 	r := MCPServerReconciler{
 		GatewayProxyImage: "example.com/mcp-gateway:test", Client: c, Scheme: scheme, AdapterCertificatesEnabled: true, AdapterTrustDomain: "example.org", MTLSClusterIssuer: "mcp-runtime-ca"}
 
@@ -109,15 +111,19 @@ func TestReconcileMTLSIngressDefersUntilBackendSecretsExist(t *testing.T) {
 	if err := c.Get(context.Background(), types.NamespacedName{Name: server.Name, Namespace: server.Namespace}, leftover); !apierrors.IsNotFound(err) {
 		t.Fatalf("legacy IngressRouteTCP should be deleted, got %v", err)
 	}
+	// Existing live routes must survive a temporary secret gap (cert rotation).
+	getCR(t, c, ingressRouteGVK, server.Name, server.Namespace)
+	getCR(t, c, serversTransportGVK, mtlsServersTransportName(server), server.Namespace)
+
+	fresh := fake.NewClientBuilder().WithScheme(scheme).WithObjects(server).Build()
+	r.Client = fresh
+	if err := r.reconcileMTLSIngress(context.Background(), server); err != nil {
+		t.Fatalf("reconcileMTLSIngress without secrets: %v", err)
+	}
 	route := &unstructured.Unstructured{}
 	route.SetGroupVersionKind(ingressRouteGVK)
-	if err := c.Get(context.Background(), types.NamespacedName{Name: server.Name, Namespace: server.Namespace}, route); !apierrors.IsNotFound(err) {
-		t.Fatalf("IngressRoute must wait for mTLS backend secrets, got %v", err)
-	}
-	st := &unstructured.Unstructured{}
-	st.SetGroupVersionKind(serversTransportGVK)
-	if err := c.Get(context.Background(), types.NamespacedName{Name: mtlsServersTransportName(server), Namespace: server.Namespace}, st); !apierrors.IsNotFound(err) {
-		t.Fatalf("ServersTransport must wait for mTLS backend secrets, got %v", err)
+	if err := fresh.Get(context.Background(), types.NamespacedName{Name: server.Name, Namespace: server.Namespace}, route); !apierrors.IsNotFound(err) {
+		t.Fatalf("IngressRoute must not be created before mTLS backend secrets, got %v", err)
 	}
 }
 

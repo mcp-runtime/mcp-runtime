@@ -267,6 +267,21 @@ func ServerInfoFromMCPServer(mcpServer mcpv1alpha1.MCPServer, deploymentStatus S
 			deploymentStatus.Status = "Unknown"
 		}
 	}
+	status := deploymentStatus.Status
+	// Replica readiness alone is not enough for gateway servers: pods can be
+	// Ready while Traefik mTLS Secrets/IngressRoute are still forming. Do not
+	// claim Ready until the operator phase is Ready so CLI deploy waits and
+	// the UI does not advertise an unusable public route.
+	if status == "Ready" && mcpv1alpha1.GatewayIsEnabled(mcpServer.Spec.Gateway) {
+		switch phase := strings.TrimSpace(mcpServer.Status.Phase); phase {
+		case "Ready":
+			// keep Ready
+		case "":
+			status = "Pending"
+		default:
+			status = phase
+		}
+	}
 	return ServerInfo{
 		Name:           mcpServer.Name,
 		Namespace:      mcpServer.Namespace,
@@ -276,7 +291,7 @@ func ServerInfoFromMCPServer(mcpServer mcpv1alpha1.MCPServer, deploymentStatus S
 		ImageTag:       strings.TrimSpace(mcpServer.Spec.ImageTag),
 		Description:    mcpServer.Spec.Description,
 		Ready:          deploymentStatus.Ready,
-		Status:         deploymentStatus.Status,
+		Status:         status,
 		Labels:         mcpServer.Labels,
 		Age:            mcpServer.CreationTimestamp.Format("2006-01-02T15:04:05Z"),
 		Endpoint:       PublicMCPEndpoint(mcpServer),

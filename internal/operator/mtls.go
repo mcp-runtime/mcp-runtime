@@ -438,23 +438,14 @@ func (r *MCPServerReconciler) reconcileMTLSIngress(ctx context.Context, mcpServe
 
 	// Do not publish ServersTransport/IngressRoute until Traefik can load the
 	// referenced Secrets. Creating them early makes Traefik return 502 until
-	// cert-manager finishes issuing, and Ready must stay false until then.
+	// cert-manager finishes issuing. Skip create/update only — never delete an
+	// existing route here, or cert rotation / brief Secret gaps would take a
+	// live server offline.
 	secretsReady, err := r.mtlsBackendSecretsReady(ctx, mcpServer)
 	if err != nil {
 		return err
 	}
 	if !secretsReady {
-		for _, target := range []struct {
-			gvk  schema.GroupVersionKind
-			name string
-		}{
-			{ingressRouteGVK, mcpServer.Name},
-			{serversTransportGVK, mtlsServersTransportName(mcpServer)},
-		} {
-			if err := r.deleteUnstructured(ctx, target.gvk, target.name, mcpServer.Namespace); err != nil {
-				return err
-			}
-		}
 		return nil
 	}
 

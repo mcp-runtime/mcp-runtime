@@ -552,24 +552,27 @@ wait_for_rollout() {
   local token
   token="$(profile_token "$profile")"
   echo "=== waiting for rollout: ${server} in ${namespace} (profile ${profile}) ==="
-  local deadline=$(( $(date +%s) + 180 ))
+  local deadline=$(( $(date +%s) + 240 ))
   while true; do
     local body
     body="$(curl -fsS \
       -H "x-api-key: ${token}" \
     -H "authorization: Bearer ${token}" \
       "${PLATFORM_URL}/api/v1/runtime/servers/${namespace}/${server}" 2>/dev/null || echo '{}')"
-    local ready_str
+    local ready_str status
     ready_str="$(echo "$body" | jq -r '.server.ready // "0/0"' 2>/dev/null || echo "0/0")"
+    status="$(echo "$body" | jq -r '.server.status // empty' 2>/dev/null || true)"
     local ready_count total_count
     ready_count="${ready_str%%/*}"
     total_count="${ready_str##*/}"
-    if [[ "$ready_count" =~ ^[0-9]+$ && "$total_count" =~ ^[0-9]+$ && "$total_count" -ge 1 && "$ready_count" -ge "$total_count" ]]; then
+    # Require both replica readiness and operator Status=Ready. After gateway
+    # default-on, pods can be 1/1 while Traefik mTLS Secrets are still issuing.
+    if [[ "$ready_count" =~ ^[0-9]+$ && "$total_count" =~ ^[0-9]+$ && "$total_count" -ge 1 && "$ready_count" -ge "$total_count" && "${status,,}" == "ready" ]]; then
       echo "rollout complete: ${server}"
       return 0
     fi
     if [[ $(date +%s) -gt $deadline ]]; then
-      echo "timeout waiting for rollout: ${server}" >&2
+      echo "timeout waiting for rollout: ${server} (ready=${ready_str} status=${status})" >&2
       echo "last response: $body" >&2
       return 1
     fi
