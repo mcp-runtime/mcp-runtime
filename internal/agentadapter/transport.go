@@ -22,7 +22,7 @@ const (
 )
 
 // RuntimeTransport is the shared outbound HTTP transport used by both the
-// reverse proxy and the stdio shim when forwarding to the runtime. It owns
+// reverse proxy when forwarding to the runtime. It owns
 // every production gate — auth, OTel instrumentation, and method-keyed retry —
 // so both adapters behave identically with a single implementation.
 type RuntimeTransport struct {

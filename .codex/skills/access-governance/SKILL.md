@@ -1,6 +1,6 @@
 ---
 name: access-governance
-description: Apply and debug MCP Runtime access grants, agent sessions, gateway policy, and MCP JSON-RPC traffic with session-bound SPIFFE adapter certificates. Use when working on MCPAccessGrant, MCPAgentSession, adapter proxy/stdio, access CLI, platform API grant/session endpoints, or allow/deny tool calls.
+description: Apply and debug MCP Runtime access grants, agent sessions, gateway policy, and MCP JSON-RPC traffic with session-bound SPIFFE adapter certificates. Use when working on MCPAccessGrant, MCPAgentSession, adapter proxy, access CLI, platform API grant/session endpoints, or allow/deny tool calls.
 ---
 
 # Access Governance

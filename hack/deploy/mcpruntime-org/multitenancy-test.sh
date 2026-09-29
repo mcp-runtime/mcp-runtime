@@ -975,40 +975,9 @@ verify_events() {
 }
 
 print_cursor_config() {
-  local bin_json platform_json runtime_json profile_json server_json ns_json agent_json
-  bin_json="$(json_escape "$BIN")"
-  platform_json="$(json_escape "$PLATFORM_URL")"
-  runtime_json="$(json_escape "${MCP_URL}/${ACME_SERVER}/mcp")"
-  profile_json="$(json_escape "$GLOBEX_PROFILE")"
-  server_json="$(json_escape "$ACME_SERVER")"
-  ns_json="$(json_escape "$ACME_NS")"
-  agent_json="$(json_escape "$GLOBEX_AGENT_ID")"
-
   cat <<JSON
 
-Cursor stdio config:
-{
-  "mcpServers": {
-    "${ACME_SERVER}": {
-      "command": ${bin_json},
-      "args": [
-        "adapter",
-        "stdio",
-        "--platform-url", ${platform_json},
-        "--runtime-url", ${runtime_json},
-        "--server", ${server_json},
-        "--namespace", ${ns_json},
-        "--agent", ${agent_json},
-        "--auto-refresh"
-      ],
-      "env": {
-        "MCP_PLATFORM_API_PROFILE": ${profile_json}
-      }
-    }
-  }
-}
-
-HTTP adapter alternative:
+HTTP adapter config:
 MCP_PLATFORM_API_PROFILE=${GLOBEX_PROFILE} ${BIN} adapter proxy \\
   --platform-url ${PLATFORM_URL} \\
   --runtime-url ${MCP_URL}/${ACME_SERVER}/mcp \\

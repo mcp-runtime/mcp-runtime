@@ -46,7 +46,7 @@ Do not create duplicate roadmap items for these capabilities.
 | Observability | Gateway metrics, audit events, ClickHouse analytics, OpenTelemetry traces, logs, Grafana, and scoped dashboards exist. |
 | Multi-tenancy | Platform roles, teams, namespaces, catalog modes, ownership, user keys, and registry authorization exist. |
 | Rollout primitives | Rolling, recreate, and canary deployment strategies exist. |
-| Adapter reliability | Idempotent reads retry selected transient failures; stdio caches `tools/list`. |
+| Adapter reliability | Idempotent reads retry selected transient failures through the HTTP proxy. |
 | Operations UI | Server catalog, governance, activity, platform operations, components, analytics, and observability views exist. |
 
 ## Highest-value missing capabilities

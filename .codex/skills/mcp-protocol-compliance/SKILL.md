@@ -112,8 +112,8 @@ sed -n '1,$p' services/mcp-gateway/rpc.go services/mcp-gateway/proxy.go \
   services/mcp-gateway/types.go 2>/dev/null | grep -nE \
   'jsonrpc|method|Mcp-Session-Id|content-type|text/event-stream|application/json|notifications/initialized|tools/(list|call)|initialize'
 
-# Agent adapter (stdio <-> HTTP shim) protocol surface.
-sed -n '1,$p' internal/agentadapter/proxy.go internal/agentadapter/stdio.go \
+# Agent HTTP adapter protocol surface.
+sed -n '1,$p' internal/agentadapter/proxy.go \
   internal/agentadapter/config.go internal/agentadapter/rpc_metadata.go \
   2>/dev/null | grep -nE 'Header\.Set\|Mcp-|protocolVersion|jsonrpc|initialize'
 ```

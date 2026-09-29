@@ -33,10 +33,6 @@ type identityFlags struct {
 	tlsInsecureSkipVerify bool
 	// proxy-only
 	maxInboundBytes int64
-	// stdio-only
-	anonymous        bool
-	anonymousMethods string
-	toolsCacheTTL    string
 }
 
 func bindIdentityFlags(cmd *cobra.Command, f *identityFlags) {
@@ -45,7 +41,7 @@ func bindIdentityFlags(cmd *cobra.Command, f *identityFlags) {
 	cmd.Flags().StringVar(&f.hostHeader, "host-header", os.Getenv(agentadapter.EnvHostHeader),
 		"Override the Host header sent to the runtime (default: $"+agentadapter.EnvHostHeader+")")
 	cmd.Flags().StringVar(&f.protocolVersion, "protocol-version", os.Getenv(agentadapter.EnvProtocolVersion),
-		"MCP protocol version header the stdio adapter sends for legacy (initialize-based) requests; requests that declare a version in params._meta use that version, and the HTTP proxy forwards the client's own header (default: $"+agentadapter.EnvProtocolVersion+" or "+agentadapter.DefaultProtocolVersion+")")
+		"Default MCP protocol version; the HTTP proxy forwards the client's own header (default: $"+agentadapter.EnvProtocolVersion+" or "+agentadapter.DefaultProtocolVersion+")")
 	cmd.Flags().StringVar(&f.logLevel, "log-level", os.Getenv(agentadapter.EnvLogLevel),
 		"Adapter log level: info logs runtime denials (default: $"+agentadapter.EnvLogLevel+")")
 	cmd.Flags().BoolVar(&f.disableXFF, "no-xforwarded", parseEnvBool(agentadapter.EnvSetXForwarded, false),
@@ -158,53 +154,6 @@ func (f identityFlags) toProxyConfig(listenAddr string) (agentadapter.ProxyConfi
 		DisableXForwarded: f.disableXFF,
 		MaxInboundBytes:   f.maxInboundBytes,
 	}, nil
-}
-
-// toShimConfig produces an agentadapter.ShimConfig from the resolved shared
-// fields plus stdio-only anonymous settings.
-func (f identityFlags) toShimConfig() (agentadapter.ShimConfig, error) {
-	r, err := f.resolve()
-	if err != nil {
-		return agentadapter.ShimConfig{}, err
-	}
-	cfg := agentadapter.ShimConfig{
-		RuntimeURL:      r.runtimeURL,
-		Transport:       r.transport,
-		HostHeader:      r.hostHeader,
-		ProtocolVersion: r.protocolVersion,
-		LogLevel:        r.logLevel,
-		Anonymous:       f.anonymous,
-	}
-	if f.anonymous && strings.TrimSpace(f.anonymousMethods) != "" {
-		cfg.AnonymousMethods = agentadapter.SplitTrimmed(f.anonymousMethods, ",")
-	}
-	if raw := strings.TrimSpace(f.toolsCacheTTL); raw != "" {
-		ttl, err := time.ParseDuration(raw)
-		if err != nil {
-			return agentadapter.ShimConfig{}, fmt.Errorf("--tools-cache-ttl (or $%s) is invalid: %w", agentadapter.EnvToolsCacheTTL, err)
-		}
-		if ttl < 0 {
-			return agentadapter.ShimConfig{}, fmt.Errorf("--tools-cache-ttl (or $%s) must be zero or positive", agentadapter.EnvToolsCacheTTL)
-		}
-		cfg.ToolsCacheTTL = ttl
-	}
-	return cfg, nil
-}
-
-// bindStdioFlags adds stdio-specific flags on top of the shared identity flags.
-func bindStdioFlags(cmd *cobra.Command, f *identityFlags) {
-	cmd.Flags().BoolVar(&f.anonymous, "anonymous",
-		parseEnvBoolSimple(agentadapter.EnvAnonymous),
-		"Forward to the runtime without a client certificate (public/read-only routes); "+
-			"only methods in --anonymous-methods are forwarded (default: $"+agentadapter.EnvAnonymous+")")
-	cmd.Flags().StringVar(&f.anonymousMethods, "anonymous-methods",
-		os.Getenv(agentadapter.EnvAnonymousMethods),
-		"Comma-separated list of MCP methods allowed in anonymous mode "+
-			"(default: $"+agentadapter.EnvAnonymousMethods+" or "+strings.Join(agentadapter.DefaultAnonymousMethods, ",")+")")
-	cmd.Flags().StringVar(&f.toolsCacheTTL, "tools-cache-ttl",
-		os.Getenv(agentadapter.EnvToolsCacheTTL),
-		"Cache tools/list responses for this duration, e.g. 30s. Empty disables the cache. "+
-			"(default: $"+agentadapter.EnvToolsCacheTTL+")")
 }
 
 // bindProxyFlags adds proxy-specific flags on top of the shared identity flags.

@@ -114,6 +114,6 @@ component-level paths, and E2E scenario mapping.
 
 - [Getting Started](getting-started.md): install and first server
 - [Publish an MCP Server](publish-mcp-server.md): metadata, build, push, deploy
-- [Agent Adapters](agent-adapters.md): stdio and HTTP proxy shims
+- [Agent Adapters](agent-adapters.md): HTTP proxy
 - [CLI](cli.md): command reference
 - [Cluster Readiness](cluster-readiness.md): registry, DNS, TLS, node trust checks

@@ -7,7 +7,7 @@ import (
 
 // requestTracker tracks per-request context cancel functions so a graceful
 // shutdown can abort all in-flight runtime calls before the HTTP server drains
-// or the stdio shim's WaitGroup resolves.
+// finishes.
 type requestTracker struct {
 	mu      sync.Mutex
 	cancels map[uint64]context.CancelCauseFunc

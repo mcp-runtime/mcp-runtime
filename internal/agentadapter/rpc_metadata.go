@@ -106,12 +106,6 @@ func sanitizeLogField(value string) string {
 	return value
 }
 
-func closeIfPossible(reader io.Reader) {
-	if closer, ok := reader.(io.Closer); ok {
-		_ = closer.Close()
-	}
-}
-
 // isSessionExpiredBody returns true when the runtime denial body indicates
 // that the caller's session has expired or was not found — signals that the
 // agent should re-initialize rather than retry the current call.
@@ -172,58 +166,110 @@ type rpcErrorForInject struct {
 	Data    map[string]any `json:"data,omitempty"`
 }
 
-// protocolVersionFromInitializeResult extracts result.protocolVersion from a
-// runtime initialize response body. Returns "" when the field is absent or the
-// body is not valid JSON-RPC.
-func protocolVersionFromInitializeResult(body []byte) string {
-	if len(body) == 0 {
-		return ""
+type rpcRequestEnvelope struct {
+	ID     json.RawMessage `json:"id"`
+	Method string          `json:"method"`
+	Params json.RawMessage `json:"params"`
+}
+
+type rpcErrorResponse struct {
+	JSONRPC string          `json:"jsonrpc"`
+	ID      json.RawMessage `json:"id"`
+	Error   rpcError        `json:"error"`
+}
+
+type rpcError struct {
+	Code    int            `json:"code"`
+	Message string         `json:"message"`
+	Data    map[string]any `json:"data,omitempty"`
+}
+
+func parseRPCEnvelope(payload []byte) (rpcRequestEnvelope, bool, error) {
+	var envelope rpcRequestEnvelope
+	if err := json.Unmarshal(payload, &envelope); err != nil {
+		return envelope, false, err
 	}
+	return envelope, len(envelope.ID) > 0, nil
+}
+
+func looksLikeJSONRPCError(payload []byte) bool {
 	var response struct {
-		Result struct {
-			ProtocolVersion string `json:"protocolVersion"`
-		} `json:"result"`
+		JSONRPC string          `json:"jsonrpc"`
+		Error   json.RawMessage `json:"error"`
 	}
-	if err := json.Unmarshal(body, &response); err != nil {
-		return ""
-	}
-	return strings.TrimSpace(response.Result.ProtocolVersion)
-}
-
-// isToolsListChangedNotification reports whether a runtime response body is a
-// JSON-RPC notification announcing that the tools list changed. Agents that
-// see this should invalidate any cached tools/list response.
-func isToolsListChangedNotification(body []byte) bool {
-	if len(body) == 0 {
+	if err := json.Unmarshal(payload, &response); err != nil {
 		return false
 	}
-	var msg struct {
-		JSONRPC string `json:"jsonrpc"`
-		Method  string `json:"method"`
-	}
-	if err := json.Unmarshal(body, &msg); err != nil {
-		return false
-	}
-	return msg.JSONRPC == "2.0" && msg.Method == "notifications/tools/list_changed"
+	return response.JSONRPC == "2.0" && len(response.Error) > 0
 }
 
-// rebindResponseID replaces the "id" field of a JSON-RPC response body with the
-// supplied raw ID. Used to serve a cached tools/list response to a caller whose
-// request ID differs from the one captured at cache-store time. Returns nil
-// when rebinding fails (callers fall back to an authoritative upstream call;
-// returning the body with its old id would be a JSON-RPC protocol violation).
-func rebindResponseID(body []byte, id json.RawMessage) []byte {
-	if len(id) == 0 {
-		return body
+func extractHTTPErrorMessage(status int, payload []byte) string {
+	if len(payload) > 0 {
+		var object struct {
+			Error any `json:"error"`
+		}
+		if err := json.Unmarshal(payload, &object); err == nil {
+			switch value := object.Error.(type) {
+			case string:
+				if strings.TrimSpace(value) != "" {
+					return value
+				}
+			case map[string]any:
+				if message, ok := value["message"].(string); ok && strings.TrimSpace(message) != "" {
+					return message
+				}
+			}
+		}
+		if text := strings.TrimSpace(string(payload)); text != "" {
+			if len(text) > 240 {
+				return text[:240]
+			}
+			return text
+		}
 	}
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil
+	if text := http.StatusText(status); text != "" {
+		return text
 	}
-	raw["id"] = id
-	out, err := json.Marshal(raw)
+	return fmt.Sprintf("upstream HTTP %d", status)
+}
+
+func jsonRPCHTTPError(id json.RawMessage, status int, message string, payload []byte) []byte {
+	response := rpcErrorResponse{
+		JSONRPC: "2.0",
+		ID:      id,
+		Error: rpcError{
+			Code:    -32000,
+			Message: message,
+			Data: map[string]any{
+				"http_status": status,
+			},
+		},
+	}
+	if len(payload) > 0 && len(payload) <= 4096 {
+		response.Error.Data["upstream_body"] = string(payload)
+	}
+	encoded, err := json.Marshal(response)
 	if err != nil {
-		return nil
+		return []byte(`{"jsonrpc":"2.0","id":null,"error":{"code":-32000,"message":"upstream error"}}`)
 	}
-	return out
+	return encoded
+}
+
+func jsonRPCParseError(detail string) []byte {
+	response := rpcErrorResponse{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage("null"),
+		Error: rpcError{
+			Code:    -32700,
+			Message: "parse error",
+			Data: map[string]any{
+				"detail": detail,
+			},
+		},
+	}
+	encoded, err := json.Marshal(response)
+	if err != nil {
+		return []byte(`{"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"parse error"}}`)
+	}
+	return encoded
 }

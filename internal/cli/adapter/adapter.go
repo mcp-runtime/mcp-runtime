@@ -1,5 +1,5 @@
 // Package adapter routes the adapter top-level command for the certificate-
-// authenticated HTTP proxy and stdio shim.
+// authenticated HTTP proxy.
 package adapter
 
 import (
@@ -18,12 +18,10 @@ runtime route. The adapter always presents a session-bound client certificate.
 When the target server enables OAuth, it also forwards the bearer token and the
 gateway binds the certificate identity to the OAuth subject.
 
-Two transports are available:
+Available commands:
 
   mcp-runtime adapter proxy   Local Streamable HTTP listener (for SDKs that
                               speak MCP over HTTP).
-  mcp-runtime adapter stdio   Stdio bridge for IDE-style clients that launch an
-                              MCP server as a subprocess.
   mcp-runtime adapter enroll  Enroll and save a client certificate.
 
 The adapter enrolls a session and certificate through the platform API when
@@ -31,7 +29,6 @@ The adapter enrolls a session and certificate through the platform API when
 provided with the TLS client flags.`,
 	}
 	cmd.AddCommand(newProxyCmd(runtime))
-	cmd.AddCommand(newStdioCmd(runtime))
 	cmd.AddCommand(newEnrollCmd(runtime))
 	return cmd
 }
