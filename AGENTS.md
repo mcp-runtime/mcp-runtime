@@ -4,18 +4,19 @@ This file is the **onboarding index** for the MCP Runtime repo. It complements `
 
 **Operational detail** lives in `.codex/skills/` (symlinked from `.claude/skills`). Load the skill that matches your task instead of re-reading long checklists here.
 
-| Task | Skill |
+| Task | Skill / gate |
 |------|--------|
-| Kind contributor cluster bring-up | `contributor-cluster-setup` |
-| Local URLs, API keys, test logins | `local-development` |
+| Kind bring-up + local URLs/keys/logins | `contributor-cluster` |
 | Grants, sessions, MCP JSON-RPC | `access-governance` |
-| Cluster failures (401, ingress, registry, pulls) | `cluster-troubleshooting` |
-| Public domain, TLS, ACME, prod hostnames | `public-platform-configuration` |
-| Production Kubernetes operations | `production-operations` |
-| Real-cluster QA sweeps | `cluster-operations-qa`, `security-regression-qa`, `dashboard-browser-qa`, … |
-| Release / ship readiness | `release-readiness` |
-| API / CRD / CLI design review | Use the focused skill for the change surface; consult `.codex/skills/_shared/design-principles.md` for contract or system design choices |
-| Codebase navigation | `graphify` (when `graphify-out/` exists) |
+| Live Kind ops / security / perf QA + cluster failure debug | `cluster-ops` (modes: `ops`, `security`, `perf`, `troubleshoot`) |
+| Public TLS/DNS + production k3s ops | `production-platform` |
+| Browser / Sentinel UI QA | `dashboard-browser-qa` |
+| MCP protocol version bump / spec audit | `mcp-protocol-compliance` (thin; not routine PRs) |
+| Security review (PR / platform / k8s / supply-chain) | `security-audit` |
+| Merge / ship / tag | CI green + Staging E2E (`docs/contributor/staging-e2e.md`); then the focused skill for the diff |
+| API / CRD / CLI design review | Focused skill for the surface; `.codex/skills/_shared/design-principles.md` for contract choices |
+| Docs / AGENTS / golden help drift | Update nearest docs when behavior changes; golden/docs CI is the deterministic check (no docs-sync skill) |
+| Codebase navigation | `graphify query` / `path` / `explain` when `graphify-out/graph.json` exists (CLI, not a skill) |
 
 ## Repository map (where to look)
 
@@ -57,22 +58,27 @@ a workaround. For server examples, generate `.mcp/servers.yaml` with
 
 ## Agent workflow passes
 
-Use repo-local skills as the source of truth for review, QA, security, release,
-and design passes. External agent frameworks such as gstack can inspire process,
+Use repo-local skills as the source of truth for review, QA, security, and
+design passes. External agent frameworks such as gstack can inspire process,
 but do not make them required or let them override MCP Runtime-specific skills
 unless their workflow has been adapted into `.codex/skills/`.
 
-- **Code review:** use the default code-review stance for ordinary PR review;
-  add `change-security-audit`, `kubernetes-hardening-audit`, or `supply-chain-audit` when the
-  diff crosses those trust boundaries.
-- **Browser/UI QA and design critique:** use `dashboard-browser-qa` for dashboard
-  workflows, role-gating, responsive checks, console/network evidence, and
-  visual/design regressions.
-- **DevEx review:** for CLI, docs, setup, contributor, and golden-help changes,
-  combine `documentation-sync` with the relevant targeted tests.
-- **Ship/canary/release:** use `release-readiness` to compose CI parity,
-  real-cluster operations, security, UI, protocol, performance, docs, and
-  deployment/canary evidence before tagging or promoting a release.
+- **Code review:** default PR review; add `security-audit` (modes `pr`, and
+  `k8s` / `supply-chain` when those surfaces change). Prefer CI /
+  `pre-release-regression.yaml` scanners for deterministic gitleaks/gosec/Trivy/SBOM.
+- **Live cluster:** prefer scripts first —
+  `hack/cluster-ops/security-regression.sh`,
+  `hack/cluster-ops/perf-regression.sh`,
+  `hack/cluster-ops/k8s-hardening-check.sh` — then `cluster-ops` for judgment /
+  troubleshooting. Prefer QA E2E / Staging E2E when already green for the commit.
+- **Browser/UI QA:** `dashboard-browser-qa` for role-gating, tabs, console/network,
+  and visual regressions.
+- **Docs / DevEx:** when CLI, setup, or user-facing behavior changes, update the
+  nearest guide and AGENTS.md; copy CLI wording from `./bin/mcp-runtime … --help`;
+  rely on golden help and docs CI for drift.
+- **Merge / ship / tag:** CI green + Staging E2E green (or run it for the change
+  surface; see `docs/contributor/staging-e2e.md` and `production-platform`).
+  Then load the focused skill for the diff. No release-orchestrator skill.
 
 ## Build, test, and quality (before you push)
 
@@ -119,14 +125,15 @@ failed platform API flow and re-run the CLI/UI journey before accepting it.
 - **Commits:** use `fix(<component>):`, `feat(<component>):`, `doc:`, or `website:`. Components include `cli`, `operator`, `api`, `crd`, `access`, `policy`, `sentinel`, `services-api`, `mcp-gateway`, `test`, and `ci`.
 - **Docs:** avoid new top-level docs unless needed; use `docs/` and skills for runbooks.
 - **Secrets:** this is an alpha repo, so do not add real credentials to the tree.
-- **Skills:** keep `.claude/skills` linked to `../.codex/skills`. After non-trivial changes, update affected `.codex/skills/*/SKILL.md` files when workflows or gotchas shift. Check for an existing `reference.md` or `references/` companion first (for example, `cluster-troubleshooting/reference.md` or `dashboard-browser-qa/references/`) and extend it with symptom-oriented or long-form content instead of growing `SKILL.md` past ~250–400 lines.
+- **Skills:** keep `.claude/skills` linked to `../.codex/skills`. After non-trivial changes, update affected `.codex/skills/*/SKILL.md` files when workflows or gotchas shift. Prefer extending `references/` (for example `cluster-ops/references/` or `dashboard-browser-qa/references/`) instead of growing `SKILL.md` past ~250–400 lines.
+
 ## Local dev (short)
 
 Prereqs: Docker, Kind, `kubectl`, `curl`, `jq`, Python 3, Go.
 
 ```bash
 go build -o bin/mcp-runtime ./cmd/mcp-runtime
-# Full Kind + test-mode path: see .codex/skills/contributor-cluster-setup/SKILL.md
+# Full Kind + test-mode path: see .codex/skills/contributor-cluster/SKILL.md
 ./bin/mcp-runtime bootstrap
 MCP_SETUP_WAIT_TIMEOUT=900 ./bin/mcp-runtime setup --test-mode --ingress-manifest config/ingress/overlays/http
 ./bin/mcp-runtime cluster doctor
@@ -135,13 +142,13 @@ kubectl port-forward -n traefik svc/traefik 18080:8000 18443:8443
 
 `setup --test-mode` builds and pushes images to the bundled registry (`registry.registry.svc.cluster.local:5000` in Kind) and provisions the local `mcp-runtime-ca` workload issuer for mTLS/SPIFFE validation. Prefer existing `kind-mcp-runtime` when healthy. Contributor runbook: `docs/contributor/README.md`.
 
-Endpoints, API keys, test logins: **`local-development`** skill.
+Endpoints, API keys, test logins: **`contributor-cluster`** (local-development reference).
 
 ## Debugging and production ops
 
-Do not inline the full failure checklist here. Use **`cluster-troubleshooting`**, and **`public-platform-configuration`** for TLS/DNS.
-
-Production Kubernetes operations: **`production-operations`** + `docs/k3s-deployment-runbook.md`.
+Do not inline the full failure checklist here. Use **`cluster-ops`** mode
+`troubleshoot`, and **`production-platform`** for public TLS/DNS and k3s ops
+(`docs/k3s-deployment-runbook.md`).
 
 ## Prod guardrails
 
@@ -151,7 +158,7 @@ Tests and scripts that fall back to the current kube context have written to a p
 - **Isolate unit tests and commits.** Before `go test`, `pre-commit`, or `git commit` (the hooks run the Go test suite), run `export KUBECONFIG=$(mktemp)` in that shell so no test can reach a real cluster. Unit tests must use fakes; a test that needs a live cluster is an integration/E2E test and belongs under `test/`.
 - **QA E2E runs only against `kind-*` contexts.** Pass the Kind kubeconfig explicitly; never let `test/e2e/qa-e2e.sh` or any script default to the ambient context.
 - **Staging E2E never targets production.** The disposable-VM suites (`test/e2e/staging-*.sh`) must pass their target guard; never set the `E2E_GUARD_ALLOW_*` escape hatches.
-- **Production changes are deliberate.** Follow the `production-operations` non-negotiables: confirm the ref and the mcp-auth choice, snapshot state before mutating, preserve certificates, and prefer targeted rollouts. Don't run `setup`, `cluster doctor --fix`, `kubectl apply/patch/delete`, or cleanup scripts against production as a side effect of testing.
+- **Production changes are deliberate.** Follow the `production-platform` non-negotiables: confirm the ref and the mcp-auth choice, snapshot state before mutating, preserve certificates, and prefer targeted rollouts. Don't run `setup`, `cluster doctor --fix`, `kubectl apply/patch/delete`, or cleanup scripts against production as a side effect of testing.
 - **Verify prod after any suspected leak.** Check `kubectl get <kind> -o json --show-managed-fields` for recent `mcp-runtime`-manager updates (for example the registry Ingress host and the operator Deployment image), then roll back from the prior ReplicaSet or snapshot.
 
 ## Governance (short)
@@ -185,7 +192,7 @@ Grafana: dev ingress `/grafana` or `https://platform.<domain>/grafana` (admin). 
 
 ## graphify
 
-When `graphify-out/graph.json` exists: `graphify query`, `graphify path`, `graphify explain` before broad grep; `graphify update .` after code changes. See `.codex/skills/graphify/SKILL.md`.
+When `graphify-out/graph.json` exists: `graphify query`, `graphify path`, `graphify explain` before broad grep; `graphify update .` after code changes. There is no repo graphify skill — use the CLI.
 
 ### Component discovery
 
@@ -207,19 +214,13 @@ The `PreToolUse` hook injects this reminder whenever a Bash command contains `gr
 
 ### Third-party development tools
 
-For Graphify's bundled skill and CLI, check upstream before changing the local
-integration and record the reviewed release/date in
-`.codex/skills/graphify/references/upstream-maintenance.md`. Compare the latest
-Graphify release and PyPI package (`graphifyy`) with `graphify --version`; review
-the upstream Codex skill and referenced docs for behavior changes. Preserve
-MCP Runtime-specific safety rules and examples. Update the local skill and its
-evals when needed, then validate skill manifests and reference links. Do not
-upgrade the installed CLI as part of a documentation review; upgrade it only
-when explicitly requested.
+For the Graphify CLI, check upstream before upgrading and record the reviewed
+release/date in contributor notes when the local integration changes. Compare
+the latest Graphify release and PyPI package (`graphifyy`) with
+`graphify --version`. Do not upgrade the installed CLI as part of a
+documentation review; upgrade it only when explicitly requested.
 
 When changing or documenting a development tool used by this repo, update the
 tool's authoritative version/source and install or upgrade instructions in
-the relevant `AGENTS.md`, skill, or focused developer guide. Prefer the tool's
-official release source over remembered versions. Keep this index short: put
-long setup steps and troubleshooting in the owning skill/reference, and update
-that material when tool versions or workflows change.
+`AGENTS.md` or the focused developer guide. Prefer the tool's official release
+source over remembered versions.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Contributor Cluster"
+  short_description: "Kind+test-mode bring-up and local endpoints"
+  default_prompt: "Use $contributor-cluster to stand up or recover the Kind+test-mode MCP Runtime cluster and share local URLs/keys for live QA."

@@ -1,0 +1,17 @@
+{
+  "skill_name": "security-audit",
+  "queries": [
+    {
+      "query": "security review this auth PR",
+      "should_trigger": true
+    },
+    {
+      "query": "audit Actions pinning and image SBOMs",
+      "should_trigger": true
+    },
+    {
+      "query": "port-forward traefik for local UI",
+      "should_trigger": false
+    }
+  ]
+}

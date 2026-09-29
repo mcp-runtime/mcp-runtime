@@ -1,4 +1,0 @@
-interface:
-  display_name: "Cluster Operations QA"
-  short_description: "Real-cluster operator/CLI/setup/rollout regression checks"
-  default_prompt: "Use $cluster-operations-qa to validate MCP Runtime operator, CLI, setup, registry, ingress, and rollout behavior against the live Kind contributor cluster (contributor-cluster-setup must have run)."

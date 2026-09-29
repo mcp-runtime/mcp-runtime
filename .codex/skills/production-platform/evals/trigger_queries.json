@@ -1,0 +1,17 @@
+{
+  "skill_name": "production-platform",
+  "queries": [
+    {
+      "query": "debug Let's Encrypt for platform.example.com",
+      "should_trigger": true
+    },
+    {
+      "query": "roll out a new operator image on the public k3s cluster",
+      "should_trigger": true
+    },
+    {
+      "query": "run Kind smoke-auth only",
+      "should_trigger": false
+    }
+  ]
+}

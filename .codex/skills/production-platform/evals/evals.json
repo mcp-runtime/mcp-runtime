@@ -1,0 +1,23 @@
+{
+  "skill_name": "production-platform",
+  "evals": [
+    {
+      "id": "tls-hostname-model",
+      "prompt": "Explain the public hostname model and how to run setup --with-tls for example.com.",
+      "expected_output": "Covers registry/mcp/platform hosts under MCP_PLATFORM_DOMAIN and setup --with-tls/--acme-email without using Kind test-mode.",
+      "assertions": [
+        "Names registry, mcp, and platform host pattern",
+        "Does not recommend Kind test-mode for public TLS"
+      ]
+    },
+    {
+      "id": "staging-e2e-gate",
+      "prompt": "Before shipping a strict-prod install change, what gate should we trust?",
+      "expected_output": "Points at Staging E2E on the disposable VM and production-platform operations guidance, not a release-orchestrator skill.",
+      "assertions": [
+        "Mentions Staging E2E or docs/contributor/staging-e2e.md",
+        "Keeps production kubeconfig isolated"
+      ]
+    }
+  ]
+}
