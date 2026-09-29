@@ -947,14 +947,23 @@ var bundledMCPAuthServicePresent = func() bool {
 	return err == nil
 }
 
+// operatorSetupTestMode reports whether the current setup run is --test-mode.
+// deployOperatorStepCmd sets this from Plan.TestMode before rendering operator
+// env. Overridable in unit tests.
+var operatorSetupTestMode = func() bool { return false }
+
 // operatorInternalOAuthIssuerURL returns the in-cluster issuer URL the
-// operator hands to gateway sidecars. An explicit OAUTH_INTERNAL_ISSUER_URL
-// wins; otherwise it is derived from cluster state, so a setup rerun that
-// skips the mcp-auth step still keeps the value while the bundled mcp-auth
-// Service exists instead of dropping it from the re-rendered operator.
+// operator hands to gateway sidecars for Kind/port-forward installs.
+// An explicit OAUTH_INTERNAL_ISSUER_URL always wins. Otherwise the value is
+// derived only in --test-mode when the bundled mcp-auth Service exists —
+// production/public TLS setups must use the public issuer JWKS path
+// (see https://github.com/mcp-runtime/mcp-runtime/issues/528).
 func operatorInternalOAuthIssuerURL() string {
 	if issuer := strings.TrimSpace(os.Getenv("OAUTH_INTERNAL_ISSUER_URL")); issuer != "" {
 		return issuer
+	}
+	if !operatorSetupTestMode() {
+		return ""
 	}
 	if bundledMCPAuthServicePresent() {
 		return mcpAuthInternalIssuerURLForCluster()

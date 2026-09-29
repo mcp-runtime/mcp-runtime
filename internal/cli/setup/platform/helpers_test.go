@@ -659,12 +659,33 @@ func TestOperatorEnvOverrides(t *testing.T) {
 	bundledMCPAuthServicePresent = func() bool { return false }
 	t.Cleanup(func() { bundledMCPAuthServicePresent = origAuthPresent })
 
-	t.Run("derives internal OAuth issuer from bundled mcp-auth Service when the mcp-auth step is skipped", func(t *testing.T) {
+	t.Run("derives internal OAuth issuer from bundled mcp-auth Service in test mode", func(t *testing.T) {
 		bundledMCPAuthServicePresent = func() bool { return true }
-		t.Cleanup(func() { bundledMCPAuthServicePresent = func() bool { return false } })
+		prevTestMode := operatorSetupTestMode
+		operatorSetupTestMode = func() bool { return true }
+		t.Cleanup(func() {
+			bundledMCPAuthServicePresent = func() bool { return false }
+			operatorSetupTestMode = prevTestMode
+		})
 		core.DefaultCLIConfig = &core.CLIConfig{}
 		got := operatorEnvOverrides("", "")
 		requireOperatorEnvVar(t, got, "OAUTH_INTERNAL_ISSUER_URL", mcpAuthInternalIssuerURLForCluster())
+	})
+
+	t.Run("omits derived internal OAuth issuer outside test mode even when mcp-auth Service exists", func(t *testing.T) {
+		bundledMCPAuthServicePresent = func() bool { return true }
+		prevTestMode := operatorSetupTestMode
+		operatorSetupTestMode = func() bool { return false }
+		t.Cleanup(func() {
+			bundledMCPAuthServicePresent = func() bool { return false }
+			operatorSetupTestMode = prevTestMode
+		})
+		core.DefaultCLIConfig = &core.CLIConfig{}
+		for _, envVar := range operatorEnvOverrides("", "") {
+			if envVar.Name == "OAUTH_INTERNAL_ISSUER_URL" {
+				t.Fatalf("OAUTH_INTERNAL_ISSUER_URL = %q, want unset outside --test-mode", envVar.Value)
+			}
+		}
 	})
 
 	t.Run("omits internal OAuth issuer without bundled mcp-auth or explicit env", func(t *testing.T) {
@@ -676,8 +697,11 @@ func TestOperatorEnvOverrides(t *testing.T) {
 		}
 	})
 
-	t.Run("includes explicit internal OAuth issuer", func(t *testing.T) {
+	t.Run("includes explicit internal OAuth issuer outside test mode", func(t *testing.T) {
 		t.Setenv("OAUTH_INTERNAL_ISSUER_URL", "http://mcp-auth-server.mcp-sentinel.svc.cluster.local:8080")
+		prevTestMode := operatorSetupTestMode
+		operatorSetupTestMode = func() bool { return false }
+		t.Cleanup(func() { operatorSetupTestMode = prevTestMode })
 		core.DefaultCLIConfig = &core.CLIConfig{}
 		got := operatorEnvOverrides("", "")
 		requireOperatorEnvVar(t, got, "OAUTH_INTERNAL_ISSUER_URL", "http://mcp-auth-server.mcp-sentinel.svc.cluster.local:8080")
