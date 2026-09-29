@@ -72,7 +72,12 @@ func (r *MCPServerReconciler) checkIngressReady(ctx context.Context, mcpServer *
 	if r.usesAdapterCertificates(mcpServer) {
 		// Optional adapter certificate verification serves traffic through a
 		// path-based Traefik IngressRoute (the legacy passthrough IngressRouteTCP
-		// is deleted during reconcile), so readiness must track the IngressRoute.
+		// is deleted during reconcile), so readiness must track the IngressRoute
+		// and the Secrets Traefik needs for the re-encrypted hop.
+		ready, err := r.mtlsBackendSecretsReady(ctx, mcpServer)
+		if err != nil || !ready {
+			return ready, err
+		}
 		route := &unstructured.Unstructured{}
 		route.SetGroupVersionKind(ingressRouteGVK)
 		if err := r.Get(ctx, types.NamespacedName{Name: mcpServer.Name, Namespace: mcpServer.Namespace}, route); err != nil {

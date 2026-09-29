@@ -1462,7 +1462,7 @@ EOF
 
 staging_adapter_wait_route() {
   local ns="$1" name="$2" tls_ns="$3"
-  local deadline=$((SECONDS + 120))
+  local deadline=$((SECONDS + 180))
   until kubectl -n "${ns}" get deploy "${name}" >/dev/null 2>&1; do
     ((SECONDS < deadline)) || {
       staging_err "operator never created deploy/${name}; see adapter-enrollment/operator.log"
@@ -1471,12 +1471,50 @@ staging_adapter_wait_route() {
     sleep 3
   done
   kubectl -n "${ns}" rollout status "deploy/${name}" --timeout=300s
-  kubectl -n "${ns}" wait --for=condition=Ready "certificate/${name}-gateway-mtls" --timeout=120s
-  kubectl -n "${ns}" get "ingressroute.traefik.io/${name}" >/dev/null
-  deadline=$((SECONDS + 120))
+  kubectl -n "${ns}" wait --for=condition=Ready "certificate/${name}-gateway-mtls" --timeout=180s
+  kubectl -n "${ns}" wait --for=condition=Ready "certificate/${name}-traefik-client-mtls" --timeout=180s
+  # Operator copies ca.crt into *-mtls-ca only after the gateway TLS Secret exists;
+  # IngressRoute/ServersTransport are deferred until that CA Secret is present.
+  deadline=$((SECONDS + 180))
+  until kubectl -n "${ns}" get "secret/${name}-mtls-ca" -o jsonpath='{.data.ca\.crt}' 2>/dev/null | grep -q .; do
+    ((SECONDS < deadline)) || {
+      staging_err "operator never created secret/${name}-mtls-ca with ca.crt"
+      return 1
+    }
+    sleep 3
+  done
+  deadline=$((SECONDS + 180))
+  until kubectl -n "${ns}" get "secret/${name}-traefik-client-mtls" -o jsonpath='{.data.tls\.crt}' 2>/dev/null | grep -q .; do
+    ((SECONDS < deadline)) || {
+      staging_err "certificate Ready but secret/${name}-traefik-client-mtls has no tls.crt yet"
+      return 1
+    }
+    sleep 3
+  done
+  deadline=$((SECONDS + 180))
+  until kubectl -n "${ns}" get "ingressroutes.traefik.io/${name}" >/dev/null 2>&1 &&
+    kubectl -n "${ns}" get "serverstransports.traefik.io/${name}-gateway" >/dev/null 2>&1; do
+    ((SECONDS < deadline)) || {
+      staging_err "operator never created ingressroute/${name} + serverstransport/${name}-gateway after mTLS secrets were ready"
+      return 1
+    }
+    sleep 3
+  done
+  deadline=$((SECONDS + 180))
   until [[ "$(kubectl -n "${tls_ns}" get tlsoption.traefik.io default -o jsonpath='{.spec.clientAuth.clientAuthType}' 2>/dev/null || true)" == "VerifyClientCertIfGiven" ]]; do
     ((SECONDS < deadline)) || {
       staging_err "operator never created the client-auth TLSOption ${tls_ns}/default"
+      return 1
+    }
+    sleep 3
+  done
+  # Authoritative product gate: IngressReady requires Secrets + IngressRoute.
+  deadline=$((SECONDS + 180))
+  until [[ "$(kubectl -n "${ns}" get mcpserver "${name}" -o jsonpath='{.status.phase}' 2>/dev/null || true)" == "Ready" &&
+    "$(kubectl -n "${ns}" get mcpserver "${name}" -o jsonpath='{.status.ingressReady}' 2>/dev/null || true)" == "true" ]]; do
+    ((SECONDS < deadline)) || {
+      staging_err "MCPServer ${ns}/${name} never reached phase Ready with ingressReady=true"
+      kubectl -n "${ns}" get mcpserver "${name}" -o yaml >&2 || true
       return 1
     }
     sleep 3

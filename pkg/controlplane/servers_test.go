@@ -299,3 +299,33 @@ func TestServerInfoProjectsGatewayEnabled(t *testing.T) {
 		})
 	}
 }
+
+func TestServerInfoStatusWaitsForOperatorPhaseWhenGatewayEnabled(t *testing.T) {
+	deploymentReady := ServerDeploymentStatus{Ready: "1/1", Status: "Ready"}
+	tests := []struct {
+		name    string
+		gateway *mcpv1alpha1.GatewayConfig
+		phase   string
+		want    string
+	}{
+		{name: "gateway on, phase Ready", gateway: &mcpv1alpha1.GatewayConfig{}, phase: "Ready", want: "Ready"},
+		{name: "gateway on, phase PartiallyReady", gateway: &mcpv1alpha1.GatewayConfig{}, phase: "PartiallyReady", want: "PartiallyReady"},
+		{name: "gateway on, phase empty", gateway: &mcpv1alpha1.GatewayConfig{}, phase: "", want: "Pending"},
+		{name: "gateway off, phase empty", gateway: &mcpv1alpha1.GatewayConfig{Enabled: mcpv1alpha1.BoolPtr(false)}, phase: "", want: "Ready"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ServerInfoFromMCPServer(mcpv1alpha1.MCPServer{
+				ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "team-demo"},
+				Spec:       mcpv1alpha1.MCPServerSpec{Gateway: tt.gateway},
+				Status:     mcpv1alpha1.MCPServerStatus{Phase: tt.phase},
+			}, deploymentReady)
+			if got.Status != tt.want {
+				t.Fatalf("Status = %q, want %q", got.Status, tt.want)
+			}
+			if got.Ready != "1/1" {
+				t.Fatalf("Ready = %q, want 1/1", got.Ready)
+			}
+		})
+	}
+}

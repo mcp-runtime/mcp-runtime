@@ -552,24 +552,28 @@ wait_for_rollout() {
   local token
   token="$(profile_token "$profile")"
   echo "=== waiting for rollout: ${server} in ${namespace} (profile ${profile}) ==="
-  local deadline=$(( $(date +%s) + 180 ))
+  local deadline=$(( $(date +%s) + 300 ))
   while true; do
     local body
     body="$(curl -fsS \
       -H "x-api-key: ${token}" \
-    -H "authorization: Bearer ${token}" \
+      -H "authorization: Bearer ${token}" \
       "${PLATFORM_URL}/api/v1/runtime/servers/${namespace}/${server}" 2>/dev/null || echo '{}')"
-    local ready_str
+    local ready_str status status_lc
     ready_str="$(echo "$body" | jq -r '.server.ready // "0/0"' 2>/dev/null || echo "0/0")"
+    status="$(echo "$body" | jq -r '.server.status // empty' 2>/dev/null || true)"
+    status_lc="$(printf '%s' "$status" | tr '[:upper:]' '[:lower:]')"
     local ready_count total_count
     ready_count="${ready_str%%/*}"
     total_count="${ready_str##*/}"
-    if [[ "$ready_count" =~ ^[0-9]+$ && "$total_count" =~ ^[0-9]+$ && "$total_count" -ge 1 && "$ready_count" -ge "$total_count" ]]; then
+    # Require both replica readiness and operator Status=Ready. After gateway
+    # default-on, pods can be 1/1 while Traefik mTLS Secrets are still issuing.
+    if [[ "$ready_count" =~ ^[0-9]+$ && "$total_count" =~ ^[0-9]+$ && "$total_count" -ge 1 && "$ready_count" -ge "$total_count" && "$status_lc" == "ready" ]]; then
       echo "rollout complete: ${server}"
       return 0
     fi
     if [[ $(date +%s) -gt $deadline ]]; then
-      echo "timeout waiting for rollout: ${server}" >&2
+      echo "timeout waiting for rollout: ${server} (ready=${ready_str} status=${status})" >&2
       echo "last response: $body" >&2
       return 1
     fi
@@ -741,6 +745,35 @@ precreate_adapter_session() {
   jq -er '.name' <<<"$body" >/dev/null
 }
 
+# Wait until the public MCP route serves gateway identity denials instead of
+# Traefik 502/404 while mTLS backend Secrets and IngressRoute are still forming.
+wait_for_public_mcp_route() {
+  local body="$WORK_DIR/public-route-wait.body"
+  local status=""
+  local deadline=$(( $(date +%s) + 240 ))
+  echo "=== waiting for public MCP route: ${MCP_URL}/${ACME_SERVER}/mcp ==="
+  while true; do
+    : >"$body"
+    status="$(
+      curl -ksS -o "$body" -w '%{http_code}' \
+        -H "content-type: application/json" \
+        --data '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"aaa-ping","arguments":{"note":"public-route-ready-check"}}}' \
+        "${MCP_URL}/${ACME_SERVER}/mcp" 2>/dev/null || true
+    )"
+    [[ "$status" =~ ^[0-9]{3}$ ]] || status="000"
+    if [[ "$status" == "401" ]] && jq -e '.error == "missing_identity"' "$body" >/dev/null 2>&1; then
+      echo "public MCP route ready (missing_identity)"
+      return 0
+    fi
+    if [[ $(date +%s) -gt $deadline ]]; then
+      echo "timeout waiting for public MCP route to return missing_identity (401); last HTTP ${status}" >&2
+      cat "$body" >&2 || true
+      return 1
+    fi
+    sleep 3
+  done
+}
+
 verify_direct_public_denied() {
   local body="$WORK_DIR/direct-public.body"
   local status
@@ -788,10 +821,40 @@ adapter_call_add_for() {
 
   wait_for_adapter_proxy "$listen" "$log_file"
 
-  curl -fsS -D "$headers_file" -o "$init_body" \
-    -H "content-type: application/json" \
-    --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"multitenancytest","version":"0.1"}}}' \
-    "$adapter_url"
+  local init_deadline=$(( $(date +%s) + 240 ))
+  local init_status=""
+  while true; do
+    : >"$headers_file"
+    : >"$init_body"
+    init_status="$(
+      curl -sS -D "$headers_file" -o "$init_body" -w '%{http_code}' \
+        -H "content-type: application/json" \
+        --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"multitenancytest","version":"0.1"}}}' \
+        "$adapter_url" 2>/dev/null || true
+    )"
+    [[ "$init_status" =~ ^[0-9]{3}$ ]] || init_status="000"
+    if [[ "$init_status" == "200" ]]; then
+      break
+    fi
+    # Match staging adapter matrix: retry Traefik/route settle codes only.
+    # Permanent auth/policy failures must fail fast.
+    if [[ " 000 404 502 503 " != *" ${init_status} "* ]]; then
+      echo "initialize returned HTTP ${init_status} for profile ${profile}" >&2
+      cat "$init_body" >&2
+      kill "$proxy_pid" >/dev/null 2>&1 || true
+      stop_listen_port "$listen"
+      return 1
+    fi
+    if [[ $(date +%s) -gt $init_deadline ]]; then
+      echo "initialize timed out waiting for gateway route for profile ${profile}; last HTTP ${init_status}" >&2
+      cat "$init_body" >&2
+      kill "$proxy_pid" >/dev/null 2>&1 || true
+      stop_listen_port "$listen"
+      return 1
+    fi
+    echo "waiting for adapter initialize (HTTP ${init_status}) for profile ${profile}"
+    sleep 3
+  done
 
   local mcp_session_id
   mcp_session_id="$(awk 'BEGIN{IGNORECASE=1} /^Mcp-Session-Id:/ {gsub(/\r/,"",$2); print $2}' "$headers_file")"
@@ -1004,6 +1067,7 @@ verify_no_kubeconfig_ops
 
 delete_all_sessions "$ACME_PROFILE" "$ACME_NS"
 
+wait_for_public_mcp_route
 verify_direct_public_denied
 
 echo "=== verify: ${GLOBEX_SLUG} adapter call to ${ACME_SLUG}/${ACME_SERVER} ==="

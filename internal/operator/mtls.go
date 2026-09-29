@@ -90,6 +90,32 @@ func mtlsTrustBundleSecretName(mcpServer *mcpv1alpha1.MCPServer) string {
 	return mcpServer.Name + "-mtls-ca"
 }
 
+// mtlsBackendSecretsReady reports whether Traefik can load the re-encrypt hop
+// Secrets referenced by ServersTransport (client cert + trust CA).
+func (r *MCPServerReconciler) mtlsBackendSecretsReady(ctx context.Context, mcpServer *mcpv1alpha1.MCPServer) (bool, error) {
+	var clientSecret corev1.Secret
+	if err := r.Get(ctx, types.NamespacedName{Name: traefikClientCertSecretName(mcpServer), Namespace: mcpServer.Namespace}, &clientSecret); err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	if len(clientSecret.Data["tls.crt"]) == 0 || len(clientSecret.Data["tls.key"]) == 0 {
+		return false, nil
+	}
+	var caSecret corev1.Secret
+	if err := r.Get(ctx, types.NamespacedName{Name: mtlsTrustBundleSecretName(mcpServer), Namespace: mcpServer.Namespace}, &caSecret); err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	if len(caSecret.Data["tls.ca"]) == 0 && len(caSecret.Data["ca.crt"]) == 0 {
+		return false, nil
+	}
+	return true, nil
+}
+
 // traefikProxySPIFFEID is the identity the ingress presents to the gateway over
 // the re-encrypted hop. The gateway pins this via TRUSTED_PROXY_SPIFFE_ID so a
 // non-ingress holder of an identity-CA cert cannot impersonate the ingress.
@@ -253,8 +279,8 @@ func (r *MCPServerReconciler) reconcileTraefikClientCertificate(ctx context.Cont
 // The CA is sourced from the gateway certificate's ca.crt, which is
 // issuer-agnostic: cert-manager populates ca.crt regardless of which
 // ClusterIssuer signed the certificate. When the gateway certificate has not
-// been issued yet, the bundle is skipped and a later reconcile (driven by the
-// existing gateway readiness check) materializes it.
+// been issued yet, the bundle is skipped and a later reconcile (driven by
+// Deployment/ingress readiness waiting on the gateway TLS Secret) materializes it.
 func (r *MCPServerReconciler) reconcileMTLSTrustBundle(ctx context.Context, mcpServer *mcpv1alpha1.MCPServer) error {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -408,6 +434,19 @@ func (r *MCPServerReconciler) reconcileMTLSIngress(ctx context.Context, mcpServe
 	// Drop the legacy passthrough route from the previous (gateway-terminates) model.
 	if err := r.deleteUnstructured(ctx, ingressRouteTCPGVK, mcpServer.Name, mcpServer.Namespace); err != nil {
 		return err
+	}
+
+	// Do not publish ServersTransport/IngressRoute until Traefik can load the
+	// referenced Secrets. Creating them early makes Traefik return 502 until
+	// cert-manager finishes issuing. Skip create/update only — never delete an
+	// existing route here, or cert rotation / brief Secret gaps would take a
+	// live server offline.
+	secretsReady, err := r.mtlsBackendSecretsReady(ctx, mcpServer)
+	if err != nil {
+		return err
+	}
+	if !secretsReady {
+		return nil
 	}
 
 	clientAuthType := "VerifyClientCertIfGiven"

@@ -45,7 +45,8 @@ func TestReconcileIngressReplacesPlainIngressWithAdapterCertificateRoute(t *test
 	server := mtlsServer()
 	server.Spec.PublicPathPrefix = "oauth-server"
 	plainIngress := &networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{Name: server.Name, Namespace: server.Namespace}}
-	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(server, plainIngress).Build()
+	objs := append([]client.Object{server, plainIngress}, mtlsBackendSecretObjects(server)...)
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
 	r := MCPServerReconciler{
 		GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme, AdapterCertificatesEnabled: true, AdapterTrustDomain: "example.org", MTLSClusterIssuer: "mcp-runtime-ca"}
 
@@ -77,6 +78,55 @@ func crFixture(gvk schema.GroupVersionKind, name, ns string) *unstructured.Unstr
 	return o
 }
 
+func mtlsBackendSecretObjects(server *mcpv1alpha1.MCPServer) []client.Object {
+	return []client.Object{
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: traefikClientCertSecretName(server), Namespace: server.Namespace},
+			Type:       corev1.SecretTypeTLS,
+			Data:       map[string][]byte{"tls.crt": []byte("crt"), "tls.key": []byte("key")},
+		},
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: mtlsTrustBundleSecretName(server), Namespace: server.Namespace},
+			Type:       corev1.SecretTypeOpaque,
+			Data:       map[string][]byte{"tls.ca": []byte("ca"), "ca.crt": []byte("ca")},
+		},
+	}
+}
+
+func TestReconcileMTLSIngressDefersUntilBackendSecretsExist(t *testing.T) {
+	scheme := traefikScheme(t)
+	server := mtlsServer()
+	legacy := crFixture(ingressRouteTCPGVK, server.Name, server.Namespace)
+	existingRoute := crFixture(ingressRouteGVK, server.Name, server.Namespace)
+	existingTransport := crFixture(serversTransportGVK, mtlsServersTransportName(server), server.Namespace)
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(server, legacy, existingRoute, existingTransport).Build()
+	r := MCPServerReconciler{
+		GatewayProxyImage: "example.com/mcp-gateway:test", Client: c, Scheme: scheme, AdapterCertificatesEnabled: true, AdapterTrustDomain: "example.org", MTLSClusterIssuer: "mcp-runtime-ca"}
+
+	if err := r.reconcileMTLSIngress(context.Background(), server); err != nil {
+		t.Fatalf("reconcileMTLSIngress: %v", err)
+	}
+	leftover := &unstructured.Unstructured{}
+	leftover.SetGroupVersionKind(ingressRouteTCPGVK)
+	if err := c.Get(context.Background(), types.NamespacedName{Name: server.Name, Namespace: server.Namespace}, leftover); !apierrors.IsNotFound(err) {
+		t.Fatalf("legacy IngressRouteTCP should be deleted, got %v", err)
+	}
+	// Existing live routes must survive a temporary secret gap (cert rotation).
+	getCR(t, c, ingressRouteGVK, server.Name, server.Namespace)
+	getCR(t, c, serversTransportGVK, mtlsServersTransportName(server), server.Namespace)
+
+	fresh := fake.NewClientBuilder().WithScheme(scheme).WithObjects(server).Build()
+	r.Client = fresh
+	if err := r.reconcileMTLSIngress(context.Background(), server); err != nil {
+		t.Fatalf("reconcileMTLSIngress without secrets: %v", err)
+	}
+	route := &unstructured.Unstructured{}
+	route.SetGroupVersionKind(ingressRouteGVK)
+	if err := fresh.Get(context.Background(), types.NamespacedName{Name: server.Name, Namespace: server.Namespace}, route); !apierrors.IsNotFound(err) {
+		t.Fatalf("IngressRoute must not be created before mTLS backend secrets, got %v", err)
+	}
+}
+
 func TestReconcileMTLSIngressGeneratesTraefikResources(t *testing.T) {
 	scheme := traefikScheme(t)
 	server := mtlsServer()
@@ -85,7 +135,8 @@ func TestReconcileMTLSIngressGeneratesTraefikResources(t *testing.T) {
 
 	// A leftover passthrough route from the old model must be removed.
 	legacy := crFixture(ingressRouteTCPGVK, server.Name, server.Namespace)
-	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(server, legacy).Build()
+	objs := append([]client.Object{server, legacy}, mtlsBackendSecretObjects(server)...)
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
 	r := MCPServerReconciler{
 		GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme, AdapterCertificatesEnabled: true, AdapterTrustDomain: "example.org", MTLSClusterIssuer: "mcp-runtime-ca"}
 
@@ -167,7 +218,8 @@ func TestReconcileMTLSIngressNeverSetsPerRouteSecretName(t *testing.T) {
 	server.Spec.IngressHost = "mcp.example.com"
 	server.Spec.PublicPathPrefix = "secure-demo"
 
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(server).Build()
+	objs := append([]client.Object{server}, mtlsBackendSecretObjects(server)...)
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
 	r := MCPServerReconciler{
 		GatewayProxyImage: "example.com/mcp-gateway:test", Client: c, Scheme: scheme, DefaultIngressTLSSecret: "platform-host-tls", DefaultIngressTLSSecretNamespace: "mcp-servers", AdapterCertificatesEnabled: true, AdapterTrustDomain: "example.org", MTLSClusterIssuer: "mcp-runtime-ca"}
 	if err := r.reconcileMTLSIngress(context.Background(), server); err != nil {

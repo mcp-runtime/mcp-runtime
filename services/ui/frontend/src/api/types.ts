@@ -237,8 +237,14 @@ export function formatPublishQuota(policy: PublishPolicy | null | undefined): st
   return `${count}/${limit}`;
 }
 
-// A server is "ready" when its readiness string reports every replica up.
+// A server is "ready" when every replica is up and the control-plane status
+// (operator phase) is Ready. Replica counts alone can be true while Traefik
+// mTLS Secrets/IngressRoute are still forming.
 export function isServerReady(server: ServerSummary): boolean {
+  const status = (server.status || "").trim().toLowerCase();
+  if (status && status !== "ready") {
+    return false;
+  }
   const ready = (server.ready || "").trim();
   const [current, desired] = ready.split("/");
   if (!desired) {
