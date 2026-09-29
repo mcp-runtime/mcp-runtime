@@ -41,6 +41,8 @@ if [[ -z "$ROOT_DIR" ]]; then
   ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 fi
 BIN="${BIN:-$ROOT_DIR/bin/mcp-runtime}"
+# shellcheck source=hack/deploy/mcpruntime-org/lib/adapter-readiness.sh
+source "$ROOT_DIR/hack/deploy/mcpruntime-org/lib/adapter-readiness.sh"
 
 # A dotenv is a convenience for local runs, not an override. Sourcing it under
 # `set -a` replaced values the caller had already exported, so a run explicitly
@@ -836,9 +838,9 @@ adapter_call_add_for() {
     if [[ "$init_status" == "200" ]]; then
       break
     fi
-    # Match staging adapter matrix: retry Traefik/route settle codes only.
-    # Permanent auth/policy failures must fail fast.
-    if [[ " 000 404 502 503 " != *" ${init_status} "* ]]; then
+    # Enrollment precedes operator reconciliation and the gateway's policy
+    # reload. Wait for this new session, while other auth failures fail fast.
+    if ! mcpruntime_adapter_initialize_pending "$init_status" "$init_body"; then
       echo "initialize returned HTTP ${init_status} for profile ${profile}" >&2
       cat "$init_body" >&2
       kill "$proxy_pid" >/dev/null 2>&1 || true
@@ -852,7 +854,7 @@ adapter_call_add_for() {
       stop_listen_port "$listen"
       return 1
     fi
-    echo "waiting for adapter initialize (HTTP ${init_status}) for profile ${profile}"
+    echo "waiting for adapter route/session policy (HTTP ${init_status}) for profile ${profile}"
     sleep 3
   done
 

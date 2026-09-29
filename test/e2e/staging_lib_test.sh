@@ -7,6 +7,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=test/e2e/lib/staging.sh
 source "${SCRIPT_DIR}/lib/staging.sh"
+# shellcheck source=hack/deploy/mcpruntime-org/lib/adapter-readiness.sh
+source "${SCRIPT_DIR}/../../hack/deploy/mcpruntime-org/lib/adapter-readiness.sh"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "${TMP}"' EXIT
@@ -38,6 +40,20 @@ expect_eq() {
 }
 
 # --- flags and URL parsing --------------------------------------------------
+printf '%s\n' '{"error":"session_not_found"}' >"${TMP}/session-pending.json"
+printf '%s\n' '{"error":"invalid_token"}' >"${TMP}/invalid-token.json"
+printf '%s\n' '{"error":"missing_identity","detail":"session_not_found"}' >"${TMP}/missing-identity.json"
+printf '%s\n' 'not json session_not_found' >"${TMP}/invalid-json.txt"
+expect_ok "initialize waits for a newly enrolled session" mcpruntime_adapter_initialize_pending 401 "${TMP}/session-pending.json"
+expect_fail "initialize rejects invalid token immediately" mcpruntime_adapter_initialize_pending 401 "${TMP}/invalid-token.json"
+expect_fail "initialize rejects missing identity despite matching detail" mcpruntime_adapter_initialize_pending 401 "${TMP}/missing-identity.json"
+expect_fail "initialize rejects malformed auth error" mcpruntime_adapter_initialize_pending 401 "${TMP}/invalid-json.txt"
+expect_fail "initialize rejects a policy denial" mcpruntime_adapter_initialize_pending 403 "${TMP}/session-pending.json"
+expect_fail "initialize does not retry success" mcpruntime_adapter_initialize_pending 200 "${TMP}/session-pending.json"
+for status in 000 404 502 503; do
+  expect_ok "initialize waits for route HTTP ${status}" mcpruntime_adapter_initialize_pending "${status}" "${TMP}/session-pending.json"
+done
+
 expect_ok "flag true" staging_flag_enabled true
 expect_ok "flag 1" staging_flag_enabled 1
 expect_ok "flag YES" staging_flag_enabled YES
