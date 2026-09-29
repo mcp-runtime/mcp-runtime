@@ -22,7 +22,7 @@ Flags:
       --namespace string           Namespace of the target MCPServer; defaults to the principal's primary namespace (default: $MCP_RUNTIME_ADAPTER_NAMESPACE)
       --no-xforwarded              Do not set X-Forwarded-* headers when forwarding to the runtime
       --platform-url string        Platform API base URL; overrides the URL stored by mcp-runtime auth login (default: $MCP_PLATFORM_API_URL)
-      --protocol-version string    MCP protocol version header the stdio adapter sends for legacy (initialize-based) requests; requests that declare a version in params._meta use that version, and the HTTP proxy forwards the client's own header (default: $MCP_RUNTIME_PROTOCOL_VERSION or 2025-06-18)
+      --protocol-version string    Default MCP protocol version; the HTTP proxy forwards the client's own header (default: $MCP_RUNTIME_PROTOCOL_VERSION or 2025-06-18)
       --request-timeout string     HTTP request timeout for adapter→runtime calls, e.g. 30s (default: $MCP_RUNTIME_REQUEST_TIMEOUT)
       --runtime-url string         Platform-issued absolute MCP runtime URL (default: $MCP_RUNTIME_URL)
       --server string              MCPServer name to enroll a session-bound adapter certificate for (default: $MCP_RUNTIME_ADAPTER_SERVER)

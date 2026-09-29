@@ -41,6 +41,8 @@ if [[ -z "$ROOT_DIR" ]]; then
   ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 fi
 BIN="${BIN:-$ROOT_DIR/bin/mcp-runtime}"
+# shellcheck source=hack/deploy/mcpruntime-org/lib/adapter-readiness.sh
+source "$ROOT_DIR/hack/deploy/mcpruntime-org/lib/adapter-readiness.sh"
 
 # A dotenv is a convenience for local runs, not an override. Sourcing it under
 # `set -a` replaced values the caller had already exported, so a run explicitly
@@ -836,9 +838,9 @@ adapter_call_add_for() {
     if [[ "$init_status" == "200" ]]; then
       break
     fi
-    # Match staging adapter matrix: retry Traefik/route settle codes only.
-    # Permanent auth/policy failures must fail fast.
-    if [[ " 000 404 502 503 " != *" ${init_status} "* ]]; then
+    # Enrollment precedes operator reconciliation and the gateway's policy
+    # reload. Wait for this new session, while other auth failures fail fast.
+    if ! mcpruntime_adapter_initialize_pending "$init_status" "$init_body"; then
       echo "initialize returned HTTP ${init_status} for profile ${profile}" >&2
       cat "$init_body" >&2
       kill "$proxy_pid" >/dev/null 2>&1 || true
@@ -852,7 +854,7 @@ adapter_call_add_for() {
       stop_listen_port "$listen"
       return 1
     fi
-    echo "waiting for adapter initialize (HTTP ${init_status}) for profile ${profile}"
+    echo "waiting for adapter route/session policy (HTTP ${init_status}) for profile ${profile}"
     sleep 3
   done
 
@@ -975,40 +977,9 @@ verify_events() {
 }
 
 print_cursor_config() {
-  local bin_json platform_json runtime_json profile_json server_json ns_json agent_json
-  bin_json="$(json_escape "$BIN")"
-  platform_json="$(json_escape "$PLATFORM_URL")"
-  runtime_json="$(json_escape "${MCP_URL}/${ACME_SERVER}/mcp")"
-  profile_json="$(json_escape "$GLOBEX_PROFILE")"
-  server_json="$(json_escape "$ACME_SERVER")"
-  ns_json="$(json_escape "$ACME_NS")"
-  agent_json="$(json_escape "$GLOBEX_AGENT_ID")"
-
   cat <<JSON
 
-Cursor stdio config:
-{
-  "mcpServers": {
-    "${ACME_SERVER}": {
-      "command": ${bin_json},
-      "args": [
-        "adapter",
-        "stdio",
-        "--platform-url", ${platform_json},
-        "--runtime-url", ${runtime_json},
-        "--server", ${server_json},
-        "--namespace", ${ns_json},
-        "--agent", ${agent_json},
-        "--auto-refresh"
-      ],
-      "env": {
-        "MCP_PLATFORM_API_PROFILE": ${profile_json}
-      }
-    }
-  }
-}
-
-HTTP adapter alternative:
+HTTP adapter config:
 MCP_PLATFORM_API_PROFILE=${GLOBEX_PROFILE} ${BIN} adapter proxy \\
   --platform-url ${PLATFORM_URL} \\
   --runtime-url ${MCP_URL}/${ACME_SERVER}/mcp \\

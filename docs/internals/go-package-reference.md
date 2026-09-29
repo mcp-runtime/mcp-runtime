@@ -2207,15 +2207,14 @@ go doc -all ./internal/agentadapter
 <a id="agent-adapters-overview"></a>
 ### Overview
 
-Package agentadapter implements optional agent-side HTTP and stdio adapters that
-forward MCP traffic to governed MCP Runtime routes.
+Package agentadapter implements optional agent-side HTTP adapters that forward
+MCP traffic to governed MCP Runtime routes.
 
 ### Jump To
 
 - [Overview](#agent-adapters-overview)
 - [Index](#agent-adapters-index)
 - [Constants](#agent-adapters-constants)
-- [Variables](#agent-adapters-variables)
 - [Functions](#agent-adapters-functions)
 - [Types](#agent-adapters-types)
 
@@ -2223,16 +2222,12 @@ forward MCP traffic to governed MCP Runtime routes.
 ### Index
 
 - [`Constants`](#agent-adapters-constants)
-- [`Variables`](#agent-adapters-variables)
 - [`func BuildTLSConfig(certFile, keyFile, caFile string) (*tls.Config, error)`](#agent-adapters-func-buildtlsconfig-certfile-keyfile-cafile-string-tls-config-error)
 - [`func BuildTLSConfigOptions(certFile, keyFile, caFile string, insecureSkipVerify bool) (*tls.Config, error)`](#agent-adapters-func-buildtlsconfigoptions-certfile-keyfile-cafile-string-insecureskipverify-bool-tls-config-error)
 - [`func NewHTTPProxyHandler(cfg ProxyConfig) (http.Handler, error)`](#agent-adapters-func-newhttpproxyhandler-cfg-proxyconfig-http-handler-error)
 - [`func NewHTTPTransportWithTLS(cfg *tls.Config) *http.Transport`](#agent-adapters-func-newhttptransportwithtls-cfg-tls-config-http-transport)
 - [`func RunHTTPProxy(ctx context.Context, cfg ProxyConfig) error`](#agent-adapters-func-runhttpproxy-ctx-context-context-cfg-proxyconfig-error)
-- [`func RunStdioShim(ctx context.Context, cfg ShimConfig, opts StdioOptions) error`](#agent-adapters-func-runstdioshim-ctx-context-context-cfg-shimconfig-opts-stdiooptions-error)
-- [`func SplitTrimmed(s, sep string) []string`](#agent-adapters-func-splittrimmed-s-sep-string-string)
 - [`type Identity struct`](#agent-adapters-type-identity-struct)
-- [`type IdentityProvider func() Identity`](#agent-adapters-type-identityprovider-func-identity)
 - [`type ProxyConfig struct`](#agent-adapters-type-proxyconfig-struct)
 - [`func LoadProxyConfigFromEnv() (ProxyConfig, error)`](#agent-adapters-func-loadproxyconfigfromenv-proxyconfig-error)
 - [`func (cfg ProxyConfig) Validate() error`](#agent-adapters-func-cfg-proxyconfig-validate-error)
@@ -2240,40 +2235,33 @@ forward MCP traffic to governed MCP Runtime routes.
 - [`func (t *RuntimeTransport) Client() *http.Client`](#agent-adapters-func-t-runtimetransport-client-http-client)
 - [`func (t *RuntimeTransport) CloseIdleConnections()`](#agent-adapters-func-t-runtimetransport-closeidleconnections)
 - [`func (t *RuntimeTransport) RoundTrip(req *http.Request) (*http.Response, error)`](#agent-adapters-func-t-runtimetransport-roundtrip-req-http-request-http-response-error)
-- [`type ShimConfig struct`](#agent-adapters-type-shimconfig-struct)
-- [`func LoadShimConfigFromEnv() (ShimConfig, error)`](#agent-adapters-func-loadshimconfigfromenv-shimconfig-error)
-- [`func (cfg ShimConfig) Validate() error`](#agent-adapters-func-cfg-shimconfig-validate-error)
-- [`type StdioOptions struct`](#agent-adapters-type-stdiooptions-struct)
 
 <a id="agent-adapters-constants"></a>
 ### Constants
 
 ```text
 const (
-	EnvRuntimeURL       = "MCP_RUNTIME_URL"
-	EnvHumanID          = "MCP_RUNTIME_HUMAN_ID"
-	EnvAgentID          = "MCP_RUNTIME_AGENT_ID"
-	EnvTeamID           = "MCP_RUNTIME_TEAM_ID"
-	EnvSessionID        = "MCP_RUNTIME_SESSION_ID"
-	EnvHostHeader       = "MCP_RUNTIME_HOST_HEADER"
-	EnvListenAddr       = "MCP_RUNTIME_LISTEN_ADDR"
-	EnvProtocolVersion  = "MCP_RUNTIME_PROTOCOL_VERSION"
-	EnvSetXForwarded    = "MCP_RUNTIME_SET_XFF"
-	EnvRequestTimeout   = "MCP_RUNTIME_REQUEST_TIMEOUT"
-	EnvLogLevel         = "MCP_RUNTIME_LOG_LEVEL"
-	EnvAnonymous        = "MCP_RUNTIME_ANONYMOUS"
-	EnvAnonymousMethods = "MCP_RUNTIME_ANONYMOUS_METHODS"
-	EnvAuthHeader       = "MCP_RUNTIME_AUTH_HEADER"
-	EnvTLSClientCert    = "MCP_RUNTIME_TLS_CLIENT_CERT"
-	EnvTLSClientKey     = "MCP_RUNTIME_TLS_CLIENT_KEY"
-	EnvTLSCABundle      = "MCP_RUNTIME_TLS_CA_BUNDLE"
+	EnvRuntimeURL      = "MCP_RUNTIME_URL"
+	EnvHumanID         = "MCP_RUNTIME_HUMAN_ID"
+	EnvAgentID         = "MCP_RUNTIME_AGENT_ID"
+	EnvTeamID          = "MCP_RUNTIME_TEAM_ID"
+	EnvSessionID       = "MCP_RUNTIME_SESSION_ID"
+	EnvHostHeader      = "MCP_RUNTIME_HOST_HEADER"
+	EnvListenAddr      = "MCP_RUNTIME_LISTEN_ADDR"
+	EnvProtocolVersion = "MCP_RUNTIME_PROTOCOL_VERSION"
+	EnvSetXForwarded   = "MCP_RUNTIME_SET_XFF"
+	EnvRequestTimeout  = "MCP_RUNTIME_REQUEST_TIMEOUT"
+	EnvLogLevel        = "MCP_RUNTIME_LOG_LEVEL"
+	EnvAuthHeader      = "MCP_RUNTIME_AUTH_HEADER"
+	EnvTLSClientCert   = "MCP_RUNTIME_TLS_CLIENT_CERT"
+	EnvTLSClientKey    = "MCP_RUNTIME_TLS_CLIENT_KEY"
+	EnvTLSCABundle     = "MCP_RUNTIME_TLS_CA_BUNDLE"
 	// EnvTLSInsecureSkipVerify skips upstream TLS certificate verification.
 	// Intended for local Kind port-forwards that terminate on Traefik's
 	// default self-signed cert (same role as curl -k). Client certificates
 	// are still presented when configured.
 	EnvTLSInsecureSkipVerify = "MCP_RUNTIME_TLS_INSECURE_SKIP_VERIFY"
 	EnvMaxInboundBytes       = "MCP_RUNTIME_MAX_INBOUND_BYTES"
-	EnvToolsCacheTTL         = "MCP_RUNTIME_TOOLS_CACHE_TTL"
 
 	DefaultListenAddr      = "127.0.0.1:8099"
 	DefaultProtocolVersion = "2025-06-18"
@@ -2282,44 +2270,14 @@ const (
 	MCPSessionHeader  = "Mcp-Session-Id"
 )
 const (
-	// ModernProtocolVersion is the first MCP revision that uses per-request
-	// metadata instead of an initialize handshake.
-	ModernProtocolVersion = "2026-07-28"
-
-	// MetaProtocolVersionKey is the params._meta key carrying a request's
-	// protocol version in modern revisions.
-	MetaProtocolVersionKey = "io.modelcontextprotocol/protocolVersion"
-
-	MCPMethodHeader      = "Mcp-Method"
-	MCPNameHeader        = "Mcp-Name"
-	MCPParamHeaderPrefix = "Mcp-Param-"
-)
-const (
 
 	// DefaultMaxInboundBytes caps the size of inbound JSON-RPC bodies that
 	// the proxy buffers for metadata capture. Requests over the cap get a
 	// 413 with a JSON-RPC parse-error body so the agent SDK can recover.
 	DefaultMaxInboundBytes int64 = 16 << 20
 )
-```
-
-<a id="agent-adapters-variables"></a>
-### Variables
-
-```text
-var DefaultAnonymousMethods = []string{
-	"initialize",
-	"notifications/initialized",
-	"server/discover",
-	"ping",
-	"tools/list",
-	"resources/list",
-	"prompts/list",
-}
-    DefaultAnonymousMethods is the set of MCP methods the stdio shim allows
-    in anonymous mode when no explicit AnonymousMethods list is configured.
-    These are read-only discovery methods and the protocol handshake (initialize
-    for legacy revisions, server/discover for 2026-07-28 and later).
+const MetaProtocolVersionKey = "io.modelcontextprotocol/protocolVersion"
+    MetaProtocolVersionKey carries the per-request MCP protocol version.
 ```
 
 <a id="agent-adapters-functions"></a>
@@ -2367,21 +2325,6 @@ func NewHTTPTransportWithTLS(cfg *tls.Config) *http.Transport
 ```text
 func RunHTTPProxy(ctx context.Context, cfg ProxyConfig) error
     RunHTTPProxy serves the local HTTP adapter until the context is cancelled.
-
-```
-
-<a id="agent-adapters-func-runstdioshim-ctx-context-context-cfg-shimconfig-opts-stdiooptions-error"></a>
-```text
-func RunStdioShim(ctx context.Context, cfg ShimConfig, opts StdioOptions) error
-    RunStdioShim reads newline-delimited stdio MCP JSON-RPC messages, forwards
-    them to the configured Streamable HTTP route, and writes JSON-RPC responses
-    back to stdout.
-
-```
-
-<a id="agent-adapters-func-splittrimmed-s-sep-string-string"></a>
-```text
-func SplitTrimmed(s, sep string) []string
 ```
 
 <a id="agent-adapters-types"></a>
@@ -2395,20 +2338,10 @@ type Identity struct {
 	TeamID    string
 	SessionID string
 }
-    Identity is the adapter's session subject (human, agent, team, session).
-    It is used for local concerns such as tools-cache keys. Runtime governance
-    identity is the session-bound client certificate (and OAuth bearer when the
-    target enables it), not request headers.
-
-```
-
-<a id="agent-adapters-type-identityprovider-func-identity"></a>
-```text
-type IdentityProvider func() Identity
-    IdentityProvider returns the current identity. Adapters call it when a
-    caller rotates session identity at runtime without restarting the process.
-    When non-nil on ProxyConfig / ShimConfig it takes precedence over the static
-    Identity.
+    Identity is the adapter's session subject (human, agent, team, session). It
+    is optional local metadata. Runtime governance identity is the session-bound
+    client certificate (and OAuth bearer when the target enables it), not
+    request headers.
 
 ```
 
@@ -2416,7 +2349,7 @@ type IdentityProvider func() Identity
 ```text
 type ProxyConfig struct {
 	RuntimeURL *url.URL
-	// Identity is optional local metadata (tools-cache keys). Runtime
+	// Identity is optional local metadata. Runtime
 	// governance identity is the TLS client certificate, not headers.
 	Identity  Identity
 	Transport *RuntimeTransport
@@ -2438,9 +2371,6 @@ type ProxyConfig struct {
 	// Prometheus exporter wired to the OTel MeterProvider that backs
 	// RuntimeTransport.Meter. Nil → /metrics returns 404.
 	MetricsHandler http.Handler
-	// IdentityProvider overrides Identity per-request when set. Used for
-	// local concerns such as tools-cache keys when identity rotates.
-	IdentityProvider IdentityProvider
 }
     ProxyConfig configures the local HTTP reverse-proxy adapter that exposes
     Streamable HTTP MCP to an agent SDK.
@@ -2484,9 +2414,9 @@ type RuntimeTransport struct {
 	// Has unexported fields.
 }
     RuntimeTransport is the shared outbound HTTP transport used by both the
-    reverse proxy and the stdio shim when forwarding to the runtime. It owns
-    every production gate — auth, OTel instrumentation, and method-keyed retry —
-    so both adapters behave identically with a single implementation.
+    reverse proxy when forwarding to the runtime. It owns every production gate
+    — auth, OTel instrumentation, and method-keyed retry — so both adapters
+    behave identically with a single implementation.
 
 ```
 
@@ -2516,67 +2446,6 @@ func (t *RuntimeTransport) RoundTrip(req *http.Request) (*http.Response, error)
      3. Execute the request, retrying idempotent methods on gateway errors.
      4. Record OTel latency histogram and denial counter (if Meter is set).
      5. Set span outcome and end it.
-
-```
-
-<a id="agent-adapters-type-shimconfig-struct"></a>
-```text
-type ShimConfig struct {
-	RuntimeURL *url.URL
-	// Identity is optional local metadata (tools-cache keys). Runtime
-	// governance identity is the TLS client certificate, not headers.
-	Identity  Identity
-	Transport *RuntimeTransport
-	// CertificateIdentity confirms that Transport presents a TLS client
-	// certificate. Required unless Anonymous is true.
-	CertificateIdentity bool
-	HostHeader          string
-	ProtocolVersion     string
-	LogLevel            string
-	LogWriter           io.Writer
-	// Anonymous, when true, relaxes identity validation so the shim can forward
-	// to public/read-only runtime routes without a client certificate.
-	// Only methods in AnonymousMethods are forwarded; all others are rejected
-	// with a JSON-RPC error before reaching the runtime.
-	Anonymous bool
-	// AnonymousMethods is the allowlist used when Anonymous is true. When empty
-	// the DefaultAnonymousMethods list applies.
-	AnonymousMethods []string
-	// ToolsCacheTTL enables a process-local tools/list response cache when
-	// set to a positive duration. Zero (or negative) disables the cache.
-	// Entries are keyed by identity + runtime URL and invalidated on a
-	// tools/list_changed notification or when the TTL expires.
-	ToolsCacheTTL time.Duration
-	// IdentityProvider overrides Identity per-request when set.
-	IdentityProvider IdentityProvider
-}
-    ShimConfig configures the stdio adapter that bridges newline-delimited
-    JSON-RPC MCP traffic to the runtime over HTTP.
-
-```
-
-<a id="agent-adapters-func-loadshimconfigfromenv-shimconfig-error"></a>
-```text
-func LoadShimConfigFromEnv() (ShimConfig, error)
-    LoadShimConfigFromEnv loads stdio shim configuration from environment
-    variables.
-
-```
-
-<a id="agent-adapters-func-cfg-shimconfig-validate-error"></a>
-```text
-func (cfg ShimConfig) Validate() error
-    Validate requires a runtime URL. Non-anonymous mode also requires a TLS
-    client certificate; identity headers are not used for governance.
-
-```
-
-<a id="agent-adapters-type-stdiooptions-struct"></a>
-```text
-type StdioOptions struct {
-	Stdin  io.Reader
-	Stdout io.Writer
-}
 ```
 
 <a id="operator-internals"></a>

@@ -10,6 +10,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
+	"io"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -213,6 +214,119 @@ func TestResolveAuthMTLSEnrollsCertificate(t *testing.T) {
 	}
 	if atomic.LoadInt32(&certCalls) != 1 {
 		t.Fatalf("certCalls = %d, want 1 enrollment", atomic.LoadInt32(&certCalls))
+	}
+}
+
+func TestSetupMTLSPreservesServerTrust(t *testing.T) {
+	var certCalls int32
+	_, client := fakeMTLSServer(t, time.Now().Add(time.Hour), &certCalls)
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if len(r.TLS.PeerCertificates) == 0 {
+			t.Error("adapter did not present its enrolled client certificate")
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	server.TLS = &tls.Config{ClientAuth: tls.RequireAnyClientCert}
+	server.StartTLS()
+	defer server.Close()
+	serverRoots := x509.NewCertPool()
+	serverRoots.AddCert(server.Certificate())
+	originalRoots := serverRoots.Clone()
+	base := &agentadapter.RuntimeTransport{
+		Base: agentadapter.NewHTTPTransportWithTLS(&tls.Config{RootCAs: serverRoots, MinVersion: tls.VersionTLS12}),
+	}
+	transport, stop, err := setupMTLS(context.Background(), client,
+		platformSessionFlags{server: "demo", agent: "ops-agent"},
+		"mcpruntime.org", base, false, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	httpClient := &http.Client{Transport: transport.Base, Timeout: 5 * time.Second}
+	defer httpClient.CloseIdleConnections()
+	resp, err := httpClient.Get(server.URL)
+	if err != nil {
+		t.Fatalf("HTTPS server signed by configured CA: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	if !serverRoots.Equal(originalRoots) {
+		t.Fatal("enrollment mutated the caller's server trust pool")
+	}
+	tlsCfg := transport.Base.(*http.Transport).TLSClientConfig
+	if tlsCfg.MinVersion != tls.VersionTLS12 || tlsCfg.InsecureSkipVerify {
+		t.Fatal("enrollment changed the caller's TLS verification settings")
+	}
+	enrolled, err := tlsClientCert(t, transport)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaf, err := x509.ParseCertificate(enrolled.Certificate[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := leaf.Verify(x509.VerifyOptions{Roots: tlsCfg.RootCAs, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}}); err != nil {
+		t.Fatalf("enrollment CA missing from trust pool: %v", err)
+	}
+	// The configured test CA replaces system trust, but does not trust arbitrary
+	// servers. A separate server with a different certificate must still fail.
+	untrustedCert := *server.Certificate()
+	untrustedCert.SerialNumber = big.NewInt(99)
+	serverKey := server.TLS.Certificates[0].PrivateKey
+	untrustedDER, err := x509.CreateCertificate(rand.Reader, &untrustedCert, &untrustedCert, server.Certificate().PublicKey, serverKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	untrusted := httptest.NewUnstartedServer(http.NotFoundHandler())
+	untrusted.TLS = &tls.Config{Certificates: []tls.Certificate{{Certificate: [][]byte{untrustedDER}, PrivateKey: serverKey}}}
+	untrusted.Config.ErrorLog = server.Config.ErrorLog
+	untrusted.StartTLS()
+	defer untrusted.Close()
+	if resp, err := httpClient.Get(untrusted.URL); err == nil {
+		resp.Body.Close()
+		t.Fatal("untrusted HTTPS server was accepted")
+	} else if !strings.Contains(err.Error(), "unknown authority") {
+		t.Fatalf("expected untrusted CA rejection, got %v", err)
+	}
+	wrongHost := tlsCfg.Clone()
+	wrongHost.ServerName = "other.example.invalid"
+	wrongHostClient := &http.Client{Transport: agentadapter.NewHTTPTransportWithTLS(wrongHost), Timeout: 5 * time.Second}
+	defer wrongHostClient.CloseIdleConnections()
+	if resp, err := wrongHostClient.Get(server.URL); err == nil {
+		resp.Body.Close()
+		t.Fatal("HTTPS server with the wrong hostname was accepted")
+	}
+}
+
+func TestSetupMTLSPreservesSystemRoots(t *testing.T) {
+	var certCalls int32
+	_, client := fakeMTLSServer(t, time.Now().Add(time.Hour), &certCalls)
+	systemRoots, err := x509.SystemCertPool()
+	if err != nil {
+		t.Fatal(err)
+	}
+	transport, stop, err := setupMTLS(context.Background(), client,
+		platformSessionFlags{server: "demo", agent: "ops-agent"},
+		"mcpruntime.org", nil, false, false, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	cfg := transport.Base.(*http.Transport).TLSClientConfig
+	if cfg.InsecureSkipVerify {
+		t.Fatal("server certificate verification is disabled")
+	}
+	// Compare with system roots plus the independently issued client CA.
+	cred, err := issueAdapterCredential(context.Background(), client,
+		platformSessionFlags{server: "demo", agent: "ops-agent"}, "mcpruntime.org")
+	if err != nil {
+		t.Fatal(err)
+	}
+	systemRoots.AppendCertsFromPEM(cred.CABundle)
+	if !cfg.RootCAs.Equal(systemRoots) {
+		t.Fatal("enrollment discarded system HTTPS trust roots")
 	}
 }
 

@@ -31,6 +31,8 @@ export STAGING_RUNNER_KIND
 source "${ROOT_DIR}/test/e2e/lib/staging.sh"
 # shellcheck source=test/e2e/lib/cluster-wait.sh
 source "${ROOT_DIR}/test/e2e/lib/cluster-wait.sh"
+# shellcheck source=test/e2e/lib/k3s-installer.sh
+source "${ROOT_DIR}/test/e2e/lib/k3s-installer.sh"
 
 log() { staging_log "$@"; }
 fail() {
@@ -273,7 +275,9 @@ stage_staging_roots() {
 stage_k3s() {
   if [[ ! -f "${KUBECONFIG}" ]]; then
     log "installing k3s on the disposable VM"
-    curl -sfL https://get.k3s.io | sh -s - --write-kubeconfig-mode 644
+    local installer="${WORK_DIR}/k3s-install.sh"
+    staging_download_k3s_installer "${installer}" || fail "could not download the k3s installer from either official source"
+    sh "${installer}" --write-kubeconfig-mode 644
     for _ in {1..60}; do
       [[ -f "${KUBECONFIG}" ]] && break
       sleep 2

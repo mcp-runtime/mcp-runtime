@@ -39,6 +39,7 @@ Default `MCPServer` ingress class: **`traefik`**.
 
 - A/AAAA (or CNAME) for `registry.`, `mcp.`, and `platform.` → same ingress IP/LB
 - Port **80** → Traefik for HTTP-01 before certs issue
+- Registry default-deny policies must allow Traefik to reach cert-manager HTTP-01 solver pods on TCP 8089. Setup applies `config/registry/base/acme-networkpolicy.yaml` before requesting registry certificates; the registry overlay retains it for renewals. If challenge self-checks return 502 while solver pods are Ready, inspect this policy and Traefik pod labels before retrying issuance.
 - Typos (`regsitry`, `platfrom`) break matching certificates
 
 **Certificates**

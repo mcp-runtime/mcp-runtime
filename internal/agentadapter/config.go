@@ -15,30 +15,27 @@ import (
 )
 
 const (
-	EnvRuntimeURL       = "MCP_RUNTIME_URL"
-	EnvHumanID          = "MCP_RUNTIME_HUMAN_ID"
-	EnvAgentID          = "MCP_RUNTIME_AGENT_ID"
-	EnvTeamID           = "MCP_RUNTIME_TEAM_ID"
-	EnvSessionID        = "MCP_RUNTIME_SESSION_ID"
-	EnvHostHeader       = "MCP_RUNTIME_HOST_HEADER"
-	EnvListenAddr       = "MCP_RUNTIME_LISTEN_ADDR"
-	EnvProtocolVersion  = "MCP_RUNTIME_PROTOCOL_VERSION"
-	EnvSetXForwarded    = "MCP_RUNTIME_SET_XFF"
-	EnvRequestTimeout   = "MCP_RUNTIME_REQUEST_TIMEOUT"
-	EnvLogLevel         = "MCP_RUNTIME_LOG_LEVEL"
-	EnvAnonymous        = "MCP_RUNTIME_ANONYMOUS"
-	EnvAnonymousMethods = "MCP_RUNTIME_ANONYMOUS_METHODS"
-	EnvAuthHeader       = "MCP_RUNTIME_AUTH_HEADER"
-	EnvTLSClientCert    = "MCP_RUNTIME_TLS_CLIENT_CERT"
-	EnvTLSClientKey     = "MCP_RUNTIME_TLS_CLIENT_KEY"
-	EnvTLSCABundle      = "MCP_RUNTIME_TLS_CA_BUNDLE"
+	EnvRuntimeURL      = "MCP_RUNTIME_URL"
+	EnvHumanID         = "MCP_RUNTIME_HUMAN_ID"
+	EnvAgentID         = "MCP_RUNTIME_AGENT_ID"
+	EnvTeamID          = "MCP_RUNTIME_TEAM_ID"
+	EnvSessionID       = "MCP_RUNTIME_SESSION_ID"
+	EnvHostHeader      = "MCP_RUNTIME_HOST_HEADER"
+	EnvListenAddr      = "MCP_RUNTIME_LISTEN_ADDR"
+	EnvProtocolVersion = "MCP_RUNTIME_PROTOCOL_VERSION"
+	EnvSetXForwarded   = "MCP_RUNTIME_SET_XFF"
+	EnvRequestTimeout  = "MCP_RUNTIME_REQUEST_TIMEOUT"
+	EnvLogLevel        = "MCP_RUNTIME_LOG_LEVEL"
+	EnvAuthHeader      = "MCP_RUNTIME_AUTH_HEADER"
+	EnvTLSClientCert   = "MCP_RUNTIME_TLS_CLIENT_CERT"
+	EnvTLSClientKey    = "MCP_RUNTIME_TLS_CLIENT_KEY"
+	EnvTLSCABundle     = "MCP_RUNTIME_TLS_CA_BUNDLE"
 	// EnvTLSInsecureSkipVerify skips upstream TLS certificate verification.
 	// Intended for local Kind port-forwards that terminate on Traefik's
 	// default self-signed cert (same role as curl -k). Client certificates
 	// are still presented when configured.
 	EnvTLSInsecureSkipVerify = "MCP_RUNTIME_TLS_INSECURE_SKIP_VERIFY"
 	EnvMaxInboundBytes       = "MCP_RUNTIME_MAX_INBOUND_BYTES"
-	EnvToolsCacheTTL         = "MCP_RUNTIME_TOOLS_CACHE_TTL"
 
 	DefaultListenAddr      = "127.0.0.1:8099"
 	DefaultProtocolVersion = "2025-06-18"
@@ -53,7 +50,7 @@ type envLookup func(string) string
 // Streamable HTTP MCP to an agent SDK.
 type ProxyConfig struct {
 	RuntimeURL *url.URL
-	// Identity is optional local metadata (tools-cache keys). Runtime
+	// Identity is optional local metadata. Runtime
 	// governance identity is the TLS client certificate, not headers.
 	Identity  Identity
 	Transport *RuntimeTransport
@@ -75,64 +72,11 @@ type ProxyConfig struct {
 	// Prometheus exporter wired to the OTel MeterProvider that backs
 	// RuntimeTransport.Meter. Nil → /metrics returns 404.
 	MetricsHandler http.Handler
-	// IdentityProvider overrides Identity per-request when set. Used for
-	// local concerns such as tools-cache keys when identity rotates.
-	IdentityProvider IdentityProvider
-}
-
-// ShimConfig configures the stdio adapter that bridges newline-delimited
-// JSON-RPC MCP traffic to the runtime over HTTP.
-type ShimConfig struct {
-	RuntimeURL *url.URL
-	// Identity is optional local metadata (tools-cache keys). Runtime
-	// governance identity is the TLS client certificate, not headers.
-	Identity  Identity
-	Transport *RuntimeTransport
-	// CertificateIdentity confirms that Transport presents a TLS client
-	// certificate. Required unless Anonymous is true.
-	CertificateIdentity bool
-	HostHeader          string
-	ProtocolVersion     string
-	LogLevel            string
-	LogWriter           io.Writer
-	// Anonymous, when true, relaxes identity validation so the shim can forward
-	// to public/read-only runtime routes without a client certificate.
-	// Only methods in AnonymousMethods are forwarded; all others are rejected
-	// with a JSON-RPC error before reaching the runtime.
-	Anonymous bool
-	// AnonymousMethods is the allowlist used when Anonymous is true. When empty
-	// the DefaultAnonymousMethods list applies.
-	AnonymousMethods []string
-	// ToolsCacheTTL enables a process-local tools/list response cache when
-	// set to a positive duration. Zero (or negative) disables the cache.
-	// Entries are keyed by identity + runtime URL and invalidated on a
-	// tools/list_changed notification or when the TTL expires.
-	ToolsCacheTTL time.Duration
-	// IdentityProvider overrides Identity per-request when set.
-	IdentityProvider IdentityProvider
-}
-
-// DefaultAnonymousMethods is the set of MCP methods the stdio shim allows in
-// anonymous mode when no explicit AnonymousMethods list is configured. These
-// are read-only discovery methods and the protocol handshake (initialize for
-// legacy revisions, server/discover for 2026-07-28 and later).
-var DefaultAnonymousMethods = []string{
-	"initialize",
-	"notifications/initialized",
-	"server/discover",
-	"ping",
-	"tools/list",
-	"resources/list",
-	"prompts/list",
 }
 
 // LoadProxyConfigFromEnv loads HTTP proxy configuration from environment
 // variables.
 func LoadProxyConfigFromEnv() (ProxyConfig, error) { return loadProxyConfig(os.Getenv) }
-
-// LoadShimConfigFromEnv loads stdio shim configuration from environment
-// variables.
-func LoadShimConfigFromEnv() (ShimConfig, error) { return loadShimConfig(os.Getenv) }
 
 func loadProxyConfig(lookup envLookup) (ProxyConfig, error) {
 	parsed, err := parseSharedEnv(lookup)
@@ -174,45 +118,6 @@ func loadProxyConfig(lookup envLookup) (ProxyConfig, error) {
 	return cfg, nil
 }
 
-func loadShimConfig(lookup envLookup) (ShimConfig, error) {
-	parsed, err := parseSharedEnv(lookup)
-	if err != nil {
-		return ShimConfig{}, err
-	}
-	cfg := ShimConfig{
-		RuntimeURL:      parsed.runtimeURL,
-		Identity:        parsed.identity,
-		Transport:       parsed.transport,
-		HostHeader:      parsed.hostHeader,
-		ProtocolVersion: parsed.protocolVersion,
-		LogLevel:        parsed.logLevel,
-	}
-	if raw := strings.TrimSpace(lookup(EnvAnonymous)); raw != "" {
-		anon, err := parseAdapterBool(raw)
-		if err != nil {
-			return ShimConfig{}, fmt.Errorf("%s is invalid: %w", EnvAnonymous, err)
-		}
-		cfg.Anonymous = anon
-	}
-	if raw := strings.TrimSpace(lookup(EnvAnonymousMethods)); raw != "" {
-		cfg.AnonymousMethods = SplitTrimmed(raw, ",")
-	}
-	if raw := strings.TrimSpace(lookup(EnvToolsCacheTTL)); raw != "" {
-		ttl, err := time.ParseDuration(raw)
-		if err != nil {
-			return ShimConfig{}, fmt.Errorf("%s is invalid: %w", EnvToolsCacheTTL, err)
-		}
-		cfg.ToolsCacheTTL = ttl
-	}
-	if err := validateRuntimeURL(cfg.RuntimeURL); err != nil {
-		return ShimConfig{}, err
-	}
-	if !cfg.Anonymous && strings.TrimSpace(lookup(EnvTLSClientCert)) != "" && strings.TrimSpace(lookup(EnvTLSClientKey)) != "" {
-		cfg.CertificateIdentity = true
-	}
-	return cfg, nil
-}
-
 // parseNonNegativeBytes parses an int64 byte size from a string. Zero is
 // allowed and signals "use the default" to callers; negative values or
 // unparseable input return an error.
@@ -231,21 +136,6 @@ func parseNonNegativeBytes(s string) (int64, error) {
 func (cfg ProxyConfig) Validate() error {
 	if err := validateRuntimeURL(cfg.RuntimeURL); err != nil {
 		return err
-	}
-	if !cfg.CertificateIdentity {
-		return fmt.Errorf("TLS client certificate is required (%s and %s)", EnvTLSClientCert, EnvTLSClientKey)
-	}
-	return nil
-}
-
-// Validate requires a runtime URL. Non-anonymous mode also requires a TLS
-// client certificate; identity headers are not used for governance.
-func (cfg ShimConfig) Validate() error {
-	if err := validateRuntimeURL(cfg.RuntimeURL); err != nil {
-		return err
-	}
-	if cfg.Anonymous {
-		return nil
 	}
 	if !cfg.CertificateIdentity {
 		return fmt.Errorf("TLS client certificate is required (%s and %s)", EnvTLSClientCert, EnvTLSClientKey)
@@ -444,15 +334,4 @@ func cloneURL(in *url.URL) *url.URL {
 	}
 	out := *in
 	return &out
-}
-
-func SplitTrimmed(s, sep string) []string {
-	parts := strings.Split(s, sep)
-	out := parts[:0]
-	for _, p := range parts {
-		if t := strings.TrimSpace(p); t != "" {
-			out = append(out, t)
-		}
-	}
-	return out
 }

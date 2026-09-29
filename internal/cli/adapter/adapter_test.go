@@ -12,7 +12,7 @@ import (
 	"mcp-runtime/pkg/certauth"
 )
 
-func TestAdapterCommandRegistersProxyStdioAndEnroll(t *testing.T) {
+func TestAdapterCommandRegistersOnlyProxyAndEnroll(t *testing.T) {
 	t.Parallel()
 
 	cmd := New(core.NewRuntime(nil))
@@ -20,10 +20,24 @@ func TestAdapterCommandRegistersProxyStdioAndEnroll(t *testing.T) {
 	for _, child := range cmd.Commands() {
 		subs[child.Use] = true
 	}
-	for _, want := range []string{"proxy", "stdio", "enroll"} {
+	if len(subs) != 2 {
+		t.Fatalf("unexpected adapter commands: %v", subs)
+	}
+	for _, want := range []string{"proxy", "enroll"} {
 		if !subs[want] {
 			t.Fatalf("adapter command missing %q subcommand; got %v", want, subs)
 		}
+	}
+}
+
+func TestAdapterRejectsRemovedStdioCommand(t *testing.T) {
+	cmd := New(core.NewRuntime(nil))
+	cmd.SetArgs([]string{"stdio"})
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "unknown command") {
+		t.Fatalf("Execute(stdio) = %v, want unknown command", err)
 	}
 }
 

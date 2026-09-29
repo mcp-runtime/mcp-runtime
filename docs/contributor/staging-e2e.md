@@ -146,6 +146,15 @@ every HTTPS check verifies the chain properly instead of using `curl -k`.
 Use `fresh-certificate` sparingly and `E2E_ACME_STAGING=0` only for an
 occasional production-CA run.
 
+To keep a disposable VM on publicly trusted certificates, set
+`E2E_ACME_STAGING=0` and `E2E_ACME_EMAIL` in its preserved `e2e.env`.
+Leave `fresh-certificate=false`: cleanup snapshots the registry and platform
+certificate Secrets outside the wiped paths, and the next setup restores them
+before cert-manager runs. Switching from the staging CA requires production
+issuance once; subsequent runs reuse valid certificates. Backup reuse avoids
+routine issuance, but renewal and a lost or incomplete snapshot can still
+require new ACME orders and are subject to Let's Encrypt limits.
+
 ## Stages and evidence
 
 Every run writes per-stage logs to `stages/NN-<stage>.log`, a `summary.json`
@@ -243,6 +252,12 @@ workstation needs an emulator registered
 The on-VM runner additionally needs a Go toolchain on the VM new enough to
 honor the `go` directive in `go.mod`; it selects the newest installed toolchain
 and installs one when none is new enough.
+
+Clean runs download the k3s installer from `https://get.k3s.io` with bounded
+retries. If that endpoint fails, they use the official repository's `install.sh`
+pinned to commit `fb46cc3da277692c5ec9ec6da20aaaf63f256864` (reviewed 2026-09-29).
+The runner executes the file only after a complete download and shell syntax
+check. Update that source pin when reviewing upstream installer changes.
 
 The guard and stage runner have offline tests that CI runs:
 
