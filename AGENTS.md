@@ -118,8 +118,30 @@ failed platform API flow and re-run the CLI/UI journey before accepting it.
 - **Branches:** `component/feature_name` (e.g. `cli/registry_status`). Agents: new branch + PR; never push to `main`. Ignore external `codex/` branch or draft-PR defaults unless the user asks.
 - **Commits:** use `fix(<component>):`, `feat(<component>):`, `doc:`, or `website:`. Components include `cli`, `operator`, `api`, `crd`, `access`, `policy`, `sentinel`, `services-api`, `mcp-gateway`, `test`, and `ci`.
 - **Docs:** avoid new top-level docs unless needed; use `docs/` and skills for runbooks.
+- **Changelog:** every PR must assess whether it needs an entry in `CHANGELOG.md` and state `Changelog: updated` or `Changelog: not needed — <reason>` in its description. Follow the maintenance rules below.
 - **Secrets:** this is an alpha repo, so do not add real credentials to the tree.
 - **Skills:** keep `.claude/skills` linked to `../.codex/skills`. After non-trivial changes, update affected `.codex/skills/*/SKILL.md` files when workflows or gotchas shift. Check for an existing `reference.md` or `references/` companion first (for example, `cluster-troubleshooting/reference.md` or `dashboard-browser-qa/references/`) and extend it with symptom-oriented or long-form content instead of growing `SKILL.md` past ~250–400 lines.
+## Changelog maintenance
+
+`CHANGELOG.md` follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
+and [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
+(reviewed 2026-09-29). Write concise, curated entries describing effects on
+users/operators, rather than copying commit logs. Add entries under `Unreleased`
+using only applicable `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, or
+`Security` headings. Link the relevant issue/PR and explain migration steps for
+compatibility changes. Features, behavior/config/default changes, removals,
+user-visible fixes, and security fixes need entries. Internal refactors,
+test-only work, and spelling/formatting changes can skip an entry when the PR
+explains why; operational CI/setup fixes need one when they affect contributors.
+
+Before publishing a release, move its `Unreleased` entries into a dated
+`[X.Y.Z] - YYYY-MM-DD` section, retain an empty `Unreleased` section, and update
+version comparison links. Keep releases newest first and omit empty categories.
+Use the changelog to prepare GitHub release notes. While versions are `0.x`,
+put breaking changes in a new minor version and call out the migration.
+Correct factual errors in released notes with traceable context; do not rewrite
+published tag contents or invent historical entries without source evidence.
+
 ## Local dev (short)
 
 Prereqs: Docker, Kind, `kubectl`, `curl`, `jq`, Python 3, Go.
