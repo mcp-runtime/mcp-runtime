@@ -7,6 +7,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=test/e2e/lib/staging.sh
 source "${SCRIPT_DIR}/lib/staging.sh"
+# shellcheck source=test/e2e/lib/k3s-installer.sh
+source "${SCRIPT_DIR}/lib/k3s-installer.sh"
 # shellcheck source=hack/deploy/mcpruntime-org/lib/adapter-readiness.sh
 source "${SCRIPT_DIR}/../../hack/deploy/mcpruntime-org/lib/adapter-readiness.sh"
 
@@ -40,6 +42,31 @@ expect_eq() {
 }
 
 # --- flags and URL parsing --------------------------------------------------
+installer_download_case() (
+  local scenario="$1" calls=0
+  curl() {
+    calls=$((calls + 1))
+    case "${scenario}:${calls}" in
+      primary:1|fallback:2) printf '#!/bin/sh\nexit 0\n' >"${TMP}/installer.sh"; return 0 ;;
+      empty:*) : >"${TMP}/installer.sh"; return 0 ;;
+      invalid:*) printf 'if\n' >"${TMP}/installer.sh"; return 0 ;;
+      *) printf 'partial download\n' >"${TMP}/installer.sh"; return 22 ;;
+    esac
+  }
+  if staging_download_k3s_installer "${TMP}/installer.sh"; then
+    case "${scenario}" in
+      primary) [[ "${calls}" == 1 ]] ;;
+      fallback) [[ "${calls}" == 2 ]] ;;
+      *) return 1 ;;
+    esac
+  else
+    [[ "${calls}" == 2 && ! -e "${TMP}/installer.sh" && "${scenario}" != primary && "${scenario}" != fallback ]]
+  fi
+)
+for scenario in primary fallback failure empty invalid; do
+  expect_ok "k3s installer download: ${scenario}" installer_download_case "${scenario}"
+done
+
 printf '%s\n' '{"error":"session_not_found"}' >"${TMP}/session-pending.json"
 printf '%s\n' '{"error":"invalid_token"}' >"${TMP}/invalid-token.json"
 printf '%s\n' '{"error":"missing_identity","detail":"session_not_found"}' >"${TMP}/missing-identity.json"

@@ -253,6 +253,12 @@ The on-VM runner additionally needs a Go toolchain on the VM new enough to
 honor the `go` directive in `go.mod`; it selects the newest installed toolchain
 and installs one when none is new enough.
 
+Clean runs download the k3s installer from `https://get.k3s.io` with bounded
+retries. If that endpoint fails, they use the official repository's `install.sh`
+pinned to commit `fb46cc3da277692c5ec9ec6da20aaaf63f256864` (reviewed 2026-09-29).
+The runner executes the file only after a complete download and shell syntax
+check. Update that source pin when reviewing upstream installer changes.
+
 The guard and stage runner have offline tests that CI runs:
 
 ```bash
