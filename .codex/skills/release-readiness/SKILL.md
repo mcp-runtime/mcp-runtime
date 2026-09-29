@@ -114,6 +114,12 @@ For public k3s or TLS/ACME work, switch to `production-operations` or
 
 ## Step 5 - Docs And Release Notes
 
+Assess `CHANGELOG.md` for every PR and record whether it was updated or why an
+entry is unnecessary. Follow the changelog maintenance rules in `AGENTS.md`.
+Before publishing a release, promote its `Unreleased` entries to the dated
+version section and update comparison links. Prepare GitHub release notes from
+those curated entries, including compatibility and migration guidance.
+
 Run `documentation-sync` when the change affects CLI help, commands, setup,
 configuration, docs, API/CRD shape, deployment behavior, agent guidance, or
 operator/debug workflows.
