@@ -8,41 +8,36 @@ To self-host MCP Runtime on your own cluster, see [Getting Started](getting-star
 
 ## 1. Install the CLI
 
-=== "macOS (Apple Silicon)"
+=== "macOS"
 
     ```bash
-    curl -Lo mcp-runtime https://github.com/mcp-runtime/mcp-runtime/releases/latest/download/mcp-runtime-darwin-arm64
-    chmod +x mcp-runtime
-    sudo mv mcp-runtime /usr/local/bin/
+    curl -fsSL https://raw.githubusercontent.com/mcp-runtime/mcp-runtime/main/install.sh | MCP_RUNTIME_OS=darwin sh
     ```
 
-=== "macOS (Intel)"
+    The installer detects your CPU and installs the binary to `~/.local/bin`.
+
+=== "Linux"
 
     ```bash
-    curl -Lo mcp-runtime https://github.com/mcp-runtime/mcp-runtime/releases/latest/download/mcp-runtime-darwin-amd64
-    chmod +x mcp-runtime
-    sudo mv mcp-runtime /usr/local/bin/
+    curl -fsSL https://raw.githubusercontent.com/mcp-runtime/mcp-runtime/main/install.sh | MCP_RUNTIME_OS=linux sh
     ```
 
-=== "Linux (amd64)"
+    The installer detects your CPU and installs the binary to `~/.local/bin`.
 
-    ```bash
-    curl -Lo mcp-runtime https://github.com/mcp-runtime/mcp-runtime/releases/latest/download/mcp-runtime-linux-amd64
-    chmod +x mcp-runtime
-    sudo mv mcp-runtime /usr/local/bin/
+=== "Windows (amd64)"
+
+    ```powershell
+    irm https://raw.githubusercontent.com/mcp-runtime/mcp-runtime/main/install.ps1 | iex
     ```
 
-=== "Linux (arm64)"
+    The installer uses a user-local directory and adds it to your user `PATH`.
+    Open a new terminal after installation.
 
-    ```bash
-    curl -Lo mcp-runtime https://github.com/mcp-runtime/mcp-runtime/releases/latest/download/mcp-runtime-linux-arm64
-    chmod +x mcp-runtime
-    sudo mv mcp-runtime /usr/local/bin/
-    ```
-
-=== "Windows"
-
-    Download [mcp-runtime-windows-amd64.exe](https://github.com/mcp-runtime/mcp-runtime/releases/latest/download/mcp-runtime-windows-amd64.exe) and add it to your `PATH`.
+Pin a specific release by setting `MCP_RUNTIME_VERSION` to its tag before
+running the installer. Browse all binaries on the
+[latest GitHub release](https://github.com/mcp-runtime/mcp-runtime/releases/latest).
+If macOS or Linux cannot find `mcp-runtime`, add `~/.local/bin` to your shell's
+`PATH`, for example with `export PATH="$HOME/.local/bin:$PATH"`.
 
 Verify:
 
@@ -50,9 +45,8 @@ Verify:
 mcp-runtime --version
 ```
 
-To upgrade the CLI, download the matching binary again from the
-[latest GitHub release](https://github.com/mcp-runtime/mcp-runtime/releases/latest)
-and verify `mcp-runtime --version`. The CLI binary and the hosted platform are
+To upgrade the CLI, run the installer again and verify `mcp-runtime --version`.
+The CLI binary and the hosted platform are
 separate release tracks: the CLI changes only when a new release is published;
 the platform UI at `platform.mcpruntime.org` is updated by its operator and
 does not need a local install.

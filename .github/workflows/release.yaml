@@ -42,6 +42,9 @@ jobs:
           fetch-depth: 0
           path: src
 
+      - name: Add CLI installers
+        run: cp src/install.sh src/install.ps1 dist/
+
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -83,6 +86,8 @@ jobs:
         run: |
           set -euo pipefail
           expected=(
+            install.sh
+            install.ps1
             mcp-runtime-darwin-arm64
             mcp-runtime-darwin-amd64
             mcp-runtime-linux-arm64
