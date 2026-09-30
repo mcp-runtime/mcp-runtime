@@ -24,29 +24,36 @@ STRICT_DEPS_CHECK=1 make deps-check
 
 ## 1. Install the CLI
 
-**Option A: download a release binary** (no Go required):
+**Option A: install a release binary** (no Go required). Select your operating
+system and copy the install command:
 
-```bash
-# macOS Apple Silicon
-curl -Lo mcp-runtime https://github.com/mcp-runtime/mcp-runtime/releases/latest/download/mcp-runtime-darwin-arm64
-chmod +x mcp-runtime && sudo mv mcp-runtime /usr/local/bin/
+=== "macOS"
 
-# macOS Intel
-curl -Lo mcp-runtime https://github.com/mcp-runtime/mcp-runtime/releases/latest/download/mcp-runtime-darwin-amd64
-chmod +x mcp-runtime && sudo mv mcp-runtime /usr/local/bin/
+    ```bash
+    curl -fsSL https://raw.githubusercontent.com/mcp-runtime/mcp-runtime/main/install.sh | MCP_RUNTIME_OS=darwin sh
+    ```
 
-# Linux amd64
-curl -Lo mcp-runtime https://github.com/mcp-runtime/mcp-runtime/releases/latest/download/mcp-runtime-linux-amd64
-chmod +x mcp-runtime && sudo mv mcp-runtime /usr/local/bin/
+=== "Linux"
 
-# Linux arm64
-curl -Lo mcp-runtime https://github.com/mcp-runtime/mcp-runtime/releases/latest/download/mcp-runtime-linux-arm64
-chmod +x mcp-runtime && sudo mv mcp-runtime /usr/local/bin/
-```
+    ```bash
+    curl -fsSL https://raw.githubusercontent.com/mcp-runtime/mcp-runtime/main/install.sh | MCP_RUNTIME_OS=linux sh
+    ```
 
-Windows users can download
-[`mcp-runtime-windows-amd64.exe`](https://github.com/mcp-runtime/mcp-runtime/releases/latest/download/mcp-runtime-windows-amd64.exe)
-and add it to `PATH`.
+=== "Windows (amd64)"
+
+    ```powershell
+    irm https://raw.githubusercontent.com/mcp-runtime/mcp-runtime/main/install.ps1 | iex
+    ```
+
+The macOS/Linux installer detects the CPU and installs to `~/.local/bin`
+without `sudo`. Windows installs to a user-local directory and adds it to your
+user `PATH`; open a new terminal after installation. Pin a
+specific release by setting `MCP_RUNTIME_VERSION` to its tag before running the
+installer. For example, run `export MCP_RUNTIME_VERSION=vX.Y.Z` on macOS/Linux
+or `$env:MCP_RUNTIME_VERSION='vX.Y.Z'` in PowerShell. Browse all binaries on the
+[latest GitHub release](https://github.com/mcp-runtime/mcp-runtime/releases/latest).
+If macOS or Linux cannot find `mcp-runtime`, add `~/.local/bin` to your shell's
+`PATH`, for example with `export PATH="$HOME/.local/bin:$PATH"`.
 
 **Option B: build from source** (requires Go 1.26+):
 
