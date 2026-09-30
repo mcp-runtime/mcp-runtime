@@ -4553,6 +4553,8 @@ Package doctor implements cluster readiness diagnostics for the cluster CLI.
 - [`func RunDoctor(kubectl core.KubectlRunner) DoctorReport`](#cli-cluster-doctor-func-rundoctor-kubectl-core-kubectlrunner-doctorreport)
 - [`func RunDoctorAndPrint(kubectl core.KubectlRunner) DoctorReport`](#cli-cluster-doctor-func-rundoctorandprint-kubectl-core-kubectlrunner-doctorreport)
 - [`func RunDoctorWithProgress(kubectl core.KubectlRunner, progress DoctorCheckProgress) DoctorReport`](#cli-cluster-doctor-func-rundoctorwithprogress-kubectl-core-kubectlrunner-progress-doctorcheckprogress-doctorreport)
+- [`func RunPostSetupSmoke(kubectl core.KubectlRunner) DoctorReport`](#cli-cluster-doctor-func-runpostsetupsmoke-kubectl-core-kubectlrunner-doctorreport)
+- [`func RunPostSetupSmokeAndPrint(kubectl core.KubectlRunner) DoctorReport`](#cli-cluster-doctor-func-runpostsetupsmokeandprint-kubectl-core-kubectlrunner-doctorreport)
 - [`func RunSetupDoctor(kubectl core.KubectlRunner) DoctorReport`](#cli-cluster-doctor-func-runsetupdoctor-kubectl-core-kubectlrunner-doctorreport)
 - [`func RunSetupDoctorAndPrint(kubectl core.KubectlRunner) DoctorReport`](#cli-cluster-doctor-func-runsetupdoctorandprint-kubectl-core-kubectlrunner-doctorreport)
 - [`func RunSetupDoctorWithProgress(kubectl core.KubectlRunner, progress DoctorCheckProgress) DoctorReport`](#cli-cluster-doctor-func-runsetupdoctorwithprogress-kubectl-core-kubectlrunner-progress-doctorcheckprogress-doctorreport)
@@ -4654,6 +4656,22 @@ func RunDoctorAndPrint(kubectl core.KubectlRunner) DoctorReport
 func RunDoctorWithProgress(kubectl core.KubectlRunner, progress DoctorCheckProgress) DoctorReport
     RunDoctorWithProgress executes cluster diagnostics and calls progress hooks
     before and after each check. It is useful for UIs that need live feedback.
+
+```
+
+<a id="cli-cluster-doctor-func-runpostsetupsmoke-kubectl-core-kubectlrunner-doctorreport"></a>
+```text
+func RunPostSetupSmoke(kubectl core.KubectlRunner) DoctorReport
+    RunPostSetupSmoke executes a short post-setup operational gate for installed
+    MCP Runtime clusters. It covers basic login-path and dependency readiness,
+    not the full `cluster diagnostics` suite.
+
+```
+
+<a id="cli-cluster-doctor-func-runpostsetupsmokeandprint-kubectl-core-kubectlrunner-doctorreport"></a>
+```text
+func RunPostSetupSmokeAndPrint(kubectl core.KubectlRunner) DoctorReport
+    RunPostSetupSmokeAndPrint streams the post-setup operational smoke checks.
 
 ```
 
@@ -6875,6 +6893,10 @@ type SetupDeps struct {
 	// StampPlatformVersion records the installed platform version on platform
 	// Deployment metadata after a successful setup. Nil skips stamping (tests).
 	StampPlatformVersion func(version string) error
+	// RunPostSetupSmoke runs a short operational gate after registry/operator/CRD
+	// checks. Nil skips the smoke (tests); production defaults fail setup when
+	// nodes, Postgres, platform-api, Sentinel rollouts, or auth probes are bad.
+	RunPostSetupSmoke func() error
 }
 
 ```

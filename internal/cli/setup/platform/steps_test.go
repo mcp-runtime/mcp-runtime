@@ -405,6 +405,7 @@ func TestRegistryStepDeploysInternalRegistry(t *testing.T) {
 func TestVerifyStepCallsChecks(t *testing.T) {
 	var waitCalls int32
 	var crdCalls int32
+	var smokeCalls int32
 	ctx := &SetupContext{
 		UsingExternalRegistry: false,
 	}
@@ -416,6 +417,10 @@ func TestVerifyStepCallsChecks(t *testing.T) {
 		PrintDeploymentDiagnostics: func(_, _, _ string) {},
 		CheckCRDInstalled: func(_ string) error {
 			atomic.AddInt32(&crdCalls, 1)
+			return nil
+		},
+		RunPostSetupSmoke: func() error {
+			atomic.AddInt32(&smokeCalls, 1)
 			return nil
 		},
 		GetDeploymentTimeout: func() time.Duration { return time.Second },
@@ -430,5 +435,8 @@ func TestVerifyStepCallsChecks(t *testing.T) {
 	}
 	if atomic.LoadInt32(&crdCalls) != 1 {
 		t.Fatalf("expected 1 CRD check, got %d", crdCalls)
+	}
+	if atomic.LoadInt32(&smokeCalls) != 1 {
+		t.Fatalf("expected 1 post-setup smoke call, got %d", smokeCalls)
 	}
 }
