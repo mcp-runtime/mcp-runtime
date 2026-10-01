@@ -77,6 +77,9 @@ jobs:
       - name: Run staticcheck
         run: staticcheck ./...
 
+      - name: Validate regression coverage index
+        run: go test ./test/regression -count=1
+
   test:
     name: Unit + Integration Tests
     runs-on: ubuntu-24.04

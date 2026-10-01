@@ -88,6 +88,7 @@ nav:
       - Service Iteration: contributor/service-iteration.md
       - Runtime MCP Testing: contributor/runtime-mcp-testing.md
       - Staging E2E: contributor/staging-e2e.md
+      - Regression Index: contributor/regression-index.md
       - Troubleshooting: contributor/troubleshooting.md
   - Internals:
       - Overview: internals/README.md
