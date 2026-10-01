@@ -1,283 +1,224 @@
-# Namespace ownership refactor: delivery plan
+# Namespace ownership refactor: implementation plan
 
 Parent: [#548](https://github.com/mcp-runtime/mcp-runtime/issues/548).
-Prepared 2026-10-01 against `main` at `14ebdb29`.
+Reviewed against the issue and current architecture on 2026-10-01.
 
-Status: proposed delivery plan. Namespace migration is **not ready to ship**.
-The implementation PRs below are drafts with known gaps, not completed findings.
-This document defines the work and evidence required to close F1–F12.
+## Scope and design decisions
 
-## Current work
+Refactor the existing platform around clear namespace ownership. Keep the
+current services, Traefik ingress, platform gateway, MCP gateway sidecars,
+databases, and event pipeline. Improve configuration, access, lifecycle code,
+and minor code inefficiencies within that architecture.
 
-| Work | PR / branch | State |
+This is a clean-install design. Remove legacy layout resolution, shared-Secret
+fallbacks, and compatibility branches. There is no migration guide or automatic
+conversion of an old installation. Setup must detect conflicting old resources
+before writes and report the fresh-install requirement. Re-running setup on a
+partial **new** installation must remain safe and preserve generated credentials
+and persistent data. The user will clean and reinstall the public demo
+separately; implementation and validation use disposable environments.
+
+| Namespace | Existing components placed here | Responsibility |
 | --- | --- | --- |
-| Component inventory and layout resolver, F5/F12 | [#553](https://github.com/mcp-runtime/mcp-runtime/pull/553), `platform/component_inventory` | Reviewable P01 foundation; persisted discovery and integration gates remain. |
-| Operator Secret scope, related to #540 and F2 | [#550](https://github.com/mcp-runtime/mcp-runtime/pull/550), `security/operator_secret_rbac` | Draft; direct access, named trust bundle and provisioning tests pass. Indirect authority/live authorization gates remain. |
-| Collector admission boundary, F1 | [#551](https://github.com/mcp-runtime/mcp-runtime/pull/551), `refactor/namespace-admission-policy` | Draft; bootstrap/cutover ordering tests pass. Live delivery/admission and inventory/lifecycle integration remain. |
-| Consumer-specific credential Secrets, F2 | [#554](https://github.com/mcp-runtime/mcp-runtime/pull/554), `refactor/namespace-credential-boundaries` | Open P02 slice, stacked on #553. Per-consumer Secrets with a synchronized legacy mirror; non-secret config split, legacy-reader removal, upgrade/rollback and P03 RBAC gates remain. |
-| Targeted credential/config rollouts, F3 | [#555](https://github.com/mcp-runtime/mcp-runtime/pull/555), `platform/dependency_rollouts` | Open P04 slice, stacked on #554. Digest-based pod-template revisions; rotation/retry/rollback, dry-run presentation and live generation-count gates remain. |
-| P03, P05–P07, P09–P10 and remaining P01/P02/P04/P08 scope | PR sequence below | Still planned; these prerequisites are not completed. |
-| Main namespace migration, P11 | After prerequisite review and merges | Deferred; no migration PR yet. |
+| `mcp-runtime` | Operator, webhooks, leader election | Reconciliation and admission. Keep this established namespace. |
+| `mcp-platform` | Platform API, runtime API, UI, platform gateway, Postgres, optional bundled auth, admin bootstrap | Product identity, management, sessions, and public control routes. |
+| `mcp-analytics` | Analytics API, ingest, processor, Kafka, ClickHouse, their init jobs | Product events, audit/usage queries, backlog, and event storage. |
+| `mcp-observability` | Prometheus, Grafana, OTel, Loki, Tempo, dashboard/datasource configuration | Platform metrics, logs, traces, and operational dashboards. |
+| `mcp-log-collector` | Existing Promtail node collector | Host-log collection with its separate admission exception. |
+| Existing tenant namespaces | MCPServer workloads and their gateway sidecars | Tenant isolation and per-server policy enforcement. |
+| Existing infrastructure namespaces | Registry, shared/external Traefik, cert-manager | Their current installation and external ownership. |
 
-Both security drafts have been refreshed against `14ebdb29`, preserving the
-post-setup smoke gate from #545. #551 still needs integration with #553's
-inventory and an explicit intermediate layout record before collector movement
-can pass the layout/migration gates. None of these PRs closes the parent issue.
+The extra `mcp-analytics` namespace separates the existing event pipeline from
+operational monitoring. It adds no service or proxy. Kafka/ClickHouse recovery
+and event retention can be handled independently of Grafana/log/trace storage.
+Each store still has its own backup and retention requirements.
 
-## Ownership and compatibility decisions
+Istio and other Kubernetes platforms provide useful principles: explicit
+identity, narrow permissions, local failure handling, connection reuse, and
+performance regression checks. This refactor introduces no service mesh, alternate
+networking stack, autoscaling controller, or additional proxy layer.
 
-The following is the target ownership map. P01 turns it into a complete,
-machine-readable inventory before the main platform/observability migration.
+## Implementation work
 
-| Domain | Current placement | Proposed placement and responsibility |
-| --- | --- | --- |
-| Controller/admission | `mcp-runtime` | Keep this namespace for the first migration. Own the operator, webhooks, coordination, and an inventory of cluster-scoped objects. `mcp-system` is a separate, optional later rename. |
-| Product management/identity | `mcp-sentinel` | `mcp-platform`: platform API, runtime API, UI, Postgres identity/platform state, and explicitly inventoried gateway/auth consumers. Runtime API co-location requires the P03 privilege review; a namespace alone provides no isolation from UI. |
-| Telemetry | `mcp-sentinel` | `mcp-observability`: analytics API, ingest, processor, Kafka, ClickHouse, Prometheus, Grafana, OTel, Loki, and Tempo. Own telemetry schemas, retention, and recovery. |
-| Node log collection | `mcp-sentinel` | Proposed `mcp-log-collector`, as in #551, exclusively for the host-access collector. Application and telemetry namespaces must not inherit its hostPath admission exception. |
-| Tenant runtime | Existing managed namespaces | Preserve namespace names, team ownership, MCPServer/grant/session identities, and per-server gateways. No tenant resource relocation. |
-| Image distribution | `registry` or external | Keep placement and storage ownership; explicitly scope publication, pull credentials, and helper workloads. |
-| Ingress | `traefik` or external | Keep external installations where they are. Own shared routing/watch scope; preserve existing public URLs and auth gates. |
-| Optional identity and infrastructure | Installation-dependent | Inventory bundled mcp-auth, Keycloak, cert-manager, bootstrap jobs, DNS/CNI/CSI and external stores/providers individually. Preserve externally managed resources; choose bundled auth placement from its actual consumers and lifecycle. |
+### 1. One component inventory and clear object ownership
 
-Compatibility rules:
+Use `pkg/platforminventory` for component IDs, domains, namespaces, workload
+names, and dependencies. Keep release image/container metadata and rollout
+order in `internal/platformrelease`, referring to those component IDs. Setup,
+update, status, logs, restart, port-forward, doctor, cleanup, and E2E must use
+that placement instead of maintaining separate namespace lists.
 
-- Preserve stable component IDs and existing Sentinel CLI/config names. Resolve
-  placement through the layout inventory rather than changing command names.
-- Preserve public API/CRD shapes, hostnames, session behavior, certificate trust,
-  tenant authorization, and existing data. Publish version compatibility for
-  CLI, APIs, operator, gateway and stored layout metadata.
-- Keep legacy installations on the legacy layout during ordinary updates.
-  Migration must be an explicit supported CLI/UI operation with a reviewable
-  plan. Command/API syntax is designed in P11; this document does not introduce
-  working flags or endpoints.
-- Proposed layout state: one non-secret record owned by setup/update in the
-  stable operator namespace, recording schema/layout version, capability
-  enablement, component placement, ownership, and migration checkpoints. Missing
-  metadata requires legacy discovery and validation, not silent adoption of a
-  new layout. Reject ambiguous/unsupported layouts before writes.
-- Keep controller/API/public interfaces stable while removing internal duplicate
-  inventories. No new service mesh, deployment product, or namespace per binary
-  is required.
+Remove the versioned layout resolver. Move every workload together with its
+Service, ServiceAccount, RoleBinding, ConfigMap, Secret, Job, PVC and policy.
+Give each namespace one authoritative declaration and Pod Security policy.
+Record owners for cluster-scoped resources; do not rely on cross-namespace
+ownerReferences. Protect all management namespaces from tenant provisioning.
+Retain useful existing component and command names; rename only where the new
+meaning would otherwise be misleading, without adding compatibility aliases.
 
-## PR sequence and dependencies
+### 2. Configuration, credentials, and access cleanup
 
-Each row is a focused PR in its own worktree. P00 is this plan. Existing drafts
-are reused for their rows; create the other PRs once they contain reviewable
-implementation. PR numbers are assigned only after creation.
+Split the shared configuration by consumer and owner. Use explicit Service
+DNS for calls across namespaces. Finish the existing consumer-Secret work:
+remove `mcp-sentinel-secrets`, its readers and RBAC, and supply only the keys a
+service uses. Keep one authoritative value for a shared key and explicitly
+listed derived copies; do not copy an entire domain's Secret elsewhere.
 
-Create future worktrees from current `origin/main` with one branch per row;
-use the existing credential worktree for P02 after refreshing its base. When a
-PR requires unmerged code, name its base PR explicitly and retarget/revalidate
-after that dependency merges. Keep unrelated rows out of each other's diffs.
-
-| ID | Scope and findings | Depends on | Completion evidence |
-| --- | --- | --- | --- |
-| P01 | [#553](https://github.com/mcp-runtime/mcp-runtime/pull/553) foundation: canonical component, owner, namespace, capability and dependency inventory; versioned legacy/target resolver (F5, F12) | P00 | Setup/update, CLI and API status/logs/restart/port-forward consume one source; legacy, target, partial and external-install fixtures resolve consistently; conflicting ownership is rejected. |
-| P02 | [#554](https://github.com/mcp-runtime/mcp-runtime/pull/554) slice: split shared credentials/config by owner and consumer while retaining current placement (F2) | P01 | Preserve existing values on upgrade; migrate only required keys; tested synchronization and rotation; unrelated consumers cannot read the resulting Secret objects; legacy fallback has an explicit removal gate. |
-| P03 | Narrow service/helper/tenant RBAC and namespace authority, incorporating #550 (F2) | P01, P02; #550 can land independently if its own gates pass | Allowed/denied capability matrix includes direct Secret reads and indirect access via workloads, service accounts, impersonation, bind and namespace labels. Generator output stays narrow. |
-| P04 | [#555](https://github.com/mcp-runtime/mcp-runtime/pull/555) slice: credential-consumer rollout and maintenance plans (F3) | P01, P02 | A telemetry-only update leaves unrelated platform pod-template generations unchanged; dry-run, execution, retry and rollback target the same affected consumers. |
-| P05 | Platform-to-telemetry query and failure contracts (F4) | P01 | Bounded authenticated queries, preserved tenant scope and explicit degraded responses; telemetry outages do not block unrelated login/deploy/session operations; audit-loss handling is tested and visible. |
-| P06 | Data ownership, backup, restore, retention and rollback procedures (F8) | P01, P02 | Store-specific backup/restore and consistency checks for Postgres, Kafka, ClickHouse, Grafana, Loki, Tempo and registry data; tested recovery in a disposable environment. |
-| P07 | Cross-domain service discovery, routing, certificates and network policies (F9) | P01, P03, P05 | Public auth/paths preserved; internal endpoints, DNS, API-server access, scrape/ingest flows, registry pulls and certificate renewal tested for legacy and target layouts. |
-| P08 | Application admission ownership and collector isolation; finish #551 (F1) | P01 and the collector-relevant parts of P03/P07 | Fresh setup succeeds; migration/resume/rollback preserves collection; application namespaces reject privileged/hostPath pods; supported application/collector workloads pass their intended policies. |
-| P09 | Domain capacity and availability profiles (F7) | P01, P06 | Resource/rollout/restore headroom is explicit for each supported deployment shape; drain and rollout checks pass; UI/gateway session locality is respected. |
-| P10 | Capability-aware diagnostics, telemetry coverage and safe cleanup (F11, F12) | P01, P06, P07; include P08 placement when enabled | Distinguish disabled, missing, degraded and failed components; verify logs/metrics/traces; dry-run cleanup excludes retained data, tenant namespaces and external/shared resources by default. |
-| P11 | Explicit installation capabilities and orchestrated layout migration (F6, F12) | P01–P10 and all relevant branch gates | Fresh install, legacy upgrade, retry/resume, rollback, restore and supported CLI/UI journeys pass in Kind/staging; migration is idempotent and blocks on failed prerequisites. |
-| P12 | Optional operator namespace rename (F10) | Separate decision after P11 | One leader-election group, correct webhook Service/SAN/CA references and cluster-scoped ownership throughout cutover; admission/reconciliation remain available. |
-
-F10 does not block the initial namespace split: keeping `mcp-runtime` retains its
-existing isolation and avoids an unnecessary webhook/leader migration. P12 is
-explicitly deferred unless the naming change is still useful after P11.
-
-The P01 inventory/resolver foundation is open as #553; persisted discovery and
-setup/update gates still need implementation. #554 (P02) and #555 (P04) are
-stacked on it (#553 → #554 → #555) and must be retargeted and revalidated as
-their bases merge. P02/P03/P04 can be reviewed while P05/P06 are
-developed, but their merge dependencies remain as listed. Do not treat the early
-existence of #551 as evidence that collector lifecycle prerequisites are done.
-
-## Implementation contracts
-
-### Inventory and management (P01, P04, P10)
-
-Start from `pkg/sentinel/components.go`, `internal/cli/sentinel/manager.go`,
-`internal/cli/platformstatus/workloads.go` and
-`internal/platformrelease/catalog.go`. A record must include stable component
-ID, owner domain, workload/service names, current placement, installation mode,
-required/optional dependencies, credential/config consumers, storage, and
-declarative owner. Include helpers, jobs and cluster-scoped resources rather
-than only Deployments. Render the human-readable inventory from that source.
-
-Use it in setup/update, runtime API/UI management, diagnostics, port-forward,
-backup/restore and cleanup. An absent namespace is not evidence that an enabled
-capability is intentionally disabled. Explicitly discovered external services
-remain external; their owner is not implicitly changed by setup.
-
-### Credentials, privilege and admission (P02, P03, P08)
-
-Inventory keys currently rendered by
-`internal/cli/setup/platform/analytics.go` and every consumer in `k8s/` before
-splitting `mcp-sentinel-secrets`. Separate platform signing/database/bootstrap,
-API auth, UI, ingest and Grafana credentials as their consumers require. Shared
-auth material must have one owner, defined synchronization and a rotation order.
-Do not clone the entire legacy Secret into multiple namespaces.
-
-Secret splitting alone is insufficient when an identity can create workloads
-that mount other Secrets or select a more privileged ServiceAccount. Review
-`k8s/08-runtime-api-rbac.yaml`, `k8s/08-platform-api-rbac.yaml`, registry-push
-helpers, user-key roles and namespace-label writers together. Protect all
-management namespaces, including the collector, from tenant provisioning.
-
-Create destination namespaces through one authoritative policy owner before
-applying namespaced RBAC or workloads. For collector migration, retain source
-RBAC and admission needed to restart the old collector until the replacement
-is healthy. Define positions/cursor handling, overlap deduplication and the
-rollback point before removing source resources or tightening source admission.
-
-### Cross-domain APIs and failure behavior (P05, P07)
-
-For each API/event/database/Secret dependency, document caller identity,
-authorization, endpoint discovery, compatibility, timeout/retry budget,
-readiness impact and outage behavior. Review runtime dashboard/event reads in
-`services/runtime-api/internal/runtimeapi/components.go` and `server_events.go`.
-Use either a bounded analytics API contract or an explicitly transitional direct
-read contract; choose based on scope and failure behavior, not namespace naming.
-
-Optional telemetry query failures must be represented as degraded data rather
-than fabricated zero values or unnecessary loss of core management. Required
-identity, authorization and admission failures remain fail-closed. Audit
-delivery needs explicit buffering, retry, loss detection and retention behavior;
-query degradation is not permission to silently discard security audit events.
-
-Preserve public URLs/admin gates. Keep one certificate owner per endpoint,
-including renewal and restore; validate cross-namespace Secret copies if any
-are necessary. Network-policy tests must exercise both allowed and denied flows
-on a CNI that enforces those policies.
-
-### Stateful migration and recovery (P06, P11)
-
-Use a persisted, versioned migration journal with these proposed phases:
-
-1. **Preflight:** discover the installed layout and capabilities; verify version
-   compatibility, ownership, privileges, data volumes, capacity, CNI, trust
-   material, destination names and a restorable backup. Produce a resource and
-   dependency diff without modifying the cluster.
-2. **Prepare:** create destination namespaces/policies and narrowly selected
-   credentials; validate destination access and dependencies. Preserve source
-   resources and trust material.
-3. **Transfer:** execute the store-specific procedure with checkpoints, writer
-   fencing/quiescence where necessary, consistency checks and explicit downtime
-   expectations. PVCs cannot simply be renamed into another namespace.
-4. **Cut over:** switch routes/discovery in dependency order and run health,
-   auth, tenant-boundary, audit and data checks. Record which dataset became
-   writable in the destination and when.
-5. **Verify:** exercise the supported login → publish/deploy → grant/session →
-   allowed/denied MCP call → audit/query/UI journey and dependency-failure cases.
-6. **Finalize:** commit the layout version only after required checks pass;
-   remove source workloads through an explicit ownership inventory. Retain
-   backups/source volumes according to the recovery policy. Never delete a
-   namespace merely because its name matches a broad prefix.
-
-Every phase must support retry without duplicate work and reject concurrent
-migrations using a single coordination owner. Interrupted migration remains
-visible as incomplete; normal setup/update must not silently advance it.
-
-Before destination writes, rollback can return routing to verified source
-services. After destination writes, rollback must fence writers and reconcile
-or restore state using the store's recovery procedure. Repointing traffic to a
-stale source or deleting destination namespaces is not a rollback strategy.
-Specify backup identifiers, checksums/consistency markers, retention and
-operator-visible recovery instructions; keep credential values out of the
-journal and logs.
-
-P06 must define recovery-point and recovery-time objectives per dataset and
-measure restore drills against them before P11 can migrate that dataset.
-
-## Existing draft merge gates
-
-### #550 — operator Secret access
-
-- The broad Secret generator marker has been removed. Contract tests reject
-  Secret permissions in the cluster-bound role and cluster bindings of the
-  managed-secret role. Live/generated-install gates still apply.
-- Setup now grants replacement access before removing legacy cluster access,
-  including empty managed namespaces. Runtime API rejects reserved namespaces
-  before provisioning; default direct manifests create `mcp-servers` and its
-  binding. Packaged installs and real API-server migration need verification.
-- The configured TLS namespace gets a pre-created public trust bundle and a
-  named get/update/patch Role, preserving adapter issuance without broad Secret
-  create there. Reconciliation waits until the bundle contains roots.
-- Direct scoped-access, reserved-namespace, provisioning, trust-bundle and
-  operator tests passed, as did runtime API module tests, builds and targeted vet.
-- Indirect workload/ServiceAccount/Certificate authority remains broader than
-  Secret API authority. Full CA-key isolation is not established by this PR.
-
-### #551 — collector namespace
-
-- Supported setup ensures the source namespace before ingress references it.
-  Fresh namespaces start restricted; legacy admission labels are preserved
-  until cutover. Source policy application is deferred during analytics setup.
-- The destination uses a separate binding. After successful rollouts, foreground
-  deletion waits for the old collector before source binding cleanup and
-  admission tightening. Interrupted/retry ordering has fake-client coverage.
-- Restricted admission for every app/helper/storage variant, namespace/lifecycle
-  reservations and diagnostics/cleanup coverage remain gates. #550 supplies
-  tenant namespace reservation; #553 requires placement integration.
-- Loki DNS no longer assumes `cluster.local`. Delivery, cursor/duplication and
-  rollback still need disposable-cluster evidence; readiness alone is insufficient.
-- Targeted tests, CLI build, formatting, whitespace checks and vet passed.
-
-These are source/fake-client results, not a live cluster audit. Neither draft
-should automatically close #548 or claim full security acceptance. Keep the
-main refactoring PR separate until its prerequisites have been reviewed and merged.
-
-## Related issues and scope control
-
-The parent issue's related-work list is not a blanket requirement to finish
-every older ticket before any preparatory refactor can merge.
-
-| Existing work | Relationship to this plan |
+| Consumer | Credential and permission rule |
 | --- | --- |
-| #268 oversized-module refactors | Refactor touched code where necessary; wholesale module cleanup remains independent. |
-| #257 shared sessions | Required before increasing UI/gateway replicas; retain current supported scaling until resolved. |
-| #71, #72 durability/resource-pressure recovery | P06/P09 must exercise affected recovery paths; unresolved failure of a moved store blocks its migration. |
-| #500 Grafana credentials | P02/P06 must preserve persisted credential consistency and prove recovery. |
-| #496, #497, #498, #543 observability coverage | P10 must demonstrate coverage/correlation and correct links for each moved component; namespace movement alone does not close these tickets. |
-| #531 registry authentication | Preserve publish/pull authorization through P03/P07; require demonstrated internal-registry isolation before making that security claim. |
-| #535, #538, #540 PKI and CA access | Keep dedicated security work linked; P03/P07 must preserve issuer/trust/approval behavior and verify CA-key restrictions. #550 is only the #540 candidate. |
-| #546 regression tracking | Record migration/admission/RBAC/failure regressions and CI coverage under its existing workflow. |
+| Platform API | Identity/bootstrap/signing and its own database access; only required named Secret access. |
+| Runtime API | Required tenant/server management permissions and API credentials. Give it a narrow local ingest-provisioning copy instead of reading an analytics namespace Secret at runtime. |
+| UI | UI/API and shared-session credentials only; no platform signing key, unrestricted database role, or Kubernetes management authority. |
+| Analytics API / ingest / processor | Only query/intake/storage credentials needed by each service. No platform database or unrelated Secret access. |
+| Grafana | Its admin credential in `mcp-observability`; drift recovery reads that source and retains the existing backup-before-reset behavior. |
+| Platform gateway | Static route configuration requires no Kubernetes discovery permissions or API token once Ingress watches are removed. |
+| Operator / collectors / helpers | Preserve required narrow access; verify that workload creation, service-account selection, `pods/exec`, or namespace-label changes cannot bypass the intended boundary. |
 
-## Validation and release gates
+Review exact API operations before removing RBAC. Disable automatic service
+account token mounts for workloads with no Kubernetes API calls. Preserve
+registry authentication and CA private-key restrictions from the merged
+security work. Keep existing authentication mechanisms; this refactor does not
+introduce a new token system.
 
-Each implementation PR records actual checks and open gaps, then passes the
-checks applicable to its surface before readiness. Required aggregate gates:
+Credential/config updates must restart only their actual consumers. Test a
+Grafana-only and an analytics-only change and assert that unrelated platform
+pod templates remain unchanged. Re-running setup must preserve authoritative
+values and reconcile intended copies without rotating credentials accidentally.
 
-- Render/contract checks: unique declarative policy owners, valid namespace and
-  Secret/RBAC/DNS references, generator consistency, packaged assets, stable
-  component IDs, legacy/target/transition layout resolution, safe cleanup plans.
-- Root and changed service-module Go build, tests, formatting and vet; contract
-  and fake-client tests cannot substitute for Kubernetes RBAC/admission tests.
-- Disposable Kind/staging: fresh install; legacy upgrade; stopped/resumed
-  migration at every checkpoint; rollback before and after writes; independent
-  restore; cleanup with retained data; optional/external component combinations.
-- Security: allowed/denied RBAC, indirect pod/ServiceAccount access, protected
-  labels/namespaces, Pod Security admission, CNI-enforced network boundaries,
-  issuer approval, certificate renewal and credential rotation.
-- Product and failure paths: supported CLI/UI journey, scoped grants/sessions,
-  telemetry outages, audit durability, scrape/log/trace coverage, external
-  Traefik and custom cluster-DNS handling, capacity pressure and drain/rollout.
-- CI and applicable Staging E2E green on the final integration commit; record
-  measured privilege/Secret-consumer scope, unrelated rollout counts and restore
-  outcomes. No performance or availability claims without measurements.
+### 3. Adapt current routing and dependency behavior
 
-Use an empty temporary kubeconfig for unit tests and commit hooks, per
-`AGENTS.md`. Use explicit disposable cluster kubeconfigs for integration/E2E.
-Do not use ambient production credentials during validation.
+Keep the existing external Traefik and platform gateway. Use one platform-host
+Ingress and TLS Secret in `mcp-platform`, targeting the platform gateway.
+Consolidate that gateway's existing routes in its file-provider configuration,
+with backend Service DNS in the appropriate namespace. Remove redundant
+hostless Ingress objects and the gateway's Kubernetes discovery RBAC. This
+supports the namespace split using the existing proxy, without another hop.
+The MCP and registry hosts keep their existing routes and owners.
 
-Initial plan preparation used source review and a Kustomize render. A local
-Go 1.26.6 toolchain is now available. Implementation PR descriptions record the
-checks above. #553's broad root unit/golden/manifest suite has one existing
-host-dependent kubeconfig-path failure, reproduced outside that branch. A C
-compiler is absent, so race checks remain for CI. No live cluster validation or
-security scanner result is claimed. P00 remains documentation-only.
+Keep one route table for targets, exact/prefix priority and middleware. Test
+adapter sessions, registry push, auth/admin APIs, analytics, `/ingest`, UI and
+admin-gated `/grafana`; preserve redaction and TLS renewal ownership. Update
+cross-namespace NetworkPolicies using both namespace and pod selectors, required
+ports, DNS and API-server access. Verify allowed and denied paths on a CNI that
+enforces the policies. Test direct backend access and path handling for auth
+bypasses.
+
+Keep the current API division: platform API owns identity, runtime API owns
+server/grant/session management, analytics API owns event and usage queries.
+Runtime API's existing direct analytics reads are an explicit, limited
+cross-domain dependency for this refactor. Keep their tenant checks, bounded
+timeouts, and narrow database access. Optional event/dashboard queries must
+report analytics unavailability without making unrelated control operations
+unready. Do not add a new internal API hop solely to hide that dependency.
+
+Telemetry export remains asynchronous and bounded. The gateway currently has
+an in-memory event queue that can drop events; expose failures and drops and
+verify existing recovery behavior. Namespace separation does not establish a
+new audit durability guarantee. Authorization remains fail-closed.
+
+### 4. Setup, management, recovery, and documentation
+
+Apply namespace/admission declarations before namespaced objects, then
+credentials/storage/init jobs, dependent services, and public routes. Keep
+setup idempotent for the new layout. Update existing CLI/UI management and
+`update --only` component selection to resolve the correct owner and namespace;
+avoid introducing a second management command hierarchy. Adjust help and flags
+only where their current semantics become misleading.
+
+Doctor and status must distinguish disabled, missing, degraded, and failed
+components. Backup/restore and cleanup must use exact owners and preserve
+retained data and external infrastructure. Verify Postgres, Kafka/ClickHouse,
+Grafana, Loki/Tempo and registry recovery through the existing supported paths.
+Cleanup previews its actual targets and never treats a broad managed label as
+permission to remove unrelated resources.
+
+Update README, `AGENTS.md`, architecture/component-inventory docs, CLI help and
+goldens, Sentinel/deployment/k3s runbooks, contributor and Staging E2E guides,
+and relevant diagrams in the same implementation stack. Update canonical
+skills `production-platform`, `contributor-cluster`, `cluster-ops`,
+`dashboard-browser-qa`, `security-audit`, and affected access-governance
+references. Keep `.claude/skills` linked to `.codex/skills`. Add a concise
+changelog entry for the breaking clean-install layout; no migration guide.
+
+### 5. Minor optimization and regression checks
+
+Limit optimizations to clear source-level improvements: remove duplicated
+work, reuse existing HTTP clients, preserve bounded timeouts and retries, and
+remove unused permissions. Use the current performance checks to verify that
+these changes and the namespace move do not regress existing behavior. Keep
+the MCP call path through the existing per-server gateway; preserve session
+revocation and tool-policy checks.
+
+Request paths may be shortened when code inspection proves a forwarding step
+or repeated read is unnecessary. The UI already calls runtime and analytics
+services directly through its authenticated session proxy; preserve that
+direct routing with the new Service DNS. Reuse results within a request only
+for the same principal and tenant. Keep steps that perform authorization,
+provisioning, policy enforcement or audit, and verify equivalent errors and
+denials whenever a redundant step is removed.
+
+One concrete cleanup is the runtime API's internal platform client:
+`authorizedJSON` closes responses without consistently consuming the body on
+no-result and error paths. Handle bounded response draining and deadlines so
+existing HTTP connections can be reused reliably. Verify repeated calls reuse
+connections and cancellation still works. Apply similar fixes only where the
+existing code demonstrates the same problem; add no new service or proxy.
+
+The event pipeline currently has three Kafka partitions and three processor
+replicas. Keep the current worker and replica counts. Verify event delivery
+and backlog recovery after the namespace move. The shared UI session store is already
+present; preserve its behavior and existing replica settings.
+
+Improve the existing performance check so required scenarios cannot silently
+skip and candidate results cannot become their own baseline. Compare repeated
+runs on the same disposable VM shape and representative load. Record p95/p99,
+throughput, errors, CPU/memory, queue drops and backlog recovery. Use baseline
+comparisons to detect regressions; record any improvement only when the
+existing checks demonstrate it. A namespace change alone is not a performance
+claim.
+
+## Delivery and validation
+
+| Stage | Reviewable result | Required evidence |
+| --- | --- | --- |
+| 1. Inventory and install ownership | Fixed placement, manifests, config/Secret consumers, idempotent setup | Inventory/render tests; fresh install and interrupted new-install rerun. |
+| 2. Routing and security | Correct DNS/routes/TLS, removed unused permissions, bounded dependencies | Route/auth tests; Secret/RBAC denies; cross-namespace allow/deny probes; telemetry outage behavior. |
+| 3. Operations and docs | Existing management flows work across namespaces; docs/skills match | Targeted-update isolation; status/doctor; backup/restore and cleanup preview; CLI goldens. |
+| 4. Final proof | Working supported journeys and verified minor cleanups | Final-commit CI, Kind QA, Staging E2E, and performance comparison. |
+
+Keep dependent changes in a reviewable PR stack; merge only when the final
+head has a complete install and passes the required gates. An intermediate
+manifest that moves only some consumers is not ready to merge.
+
+The final validation record must include the tested commit and images,
+environment, check results and limitations. Required journeys are login →
+server init/validate/build/push/deploy → grant/session → allowed and denied MCP
+calls → audit/query/UI evidence. Check Grafana access, registry pull/push,
+certificate rotation, scrape/log/trace coverage, dependency recovery, and
+unrelated workload generations after targeted updates. Run unit tests with an
+isolated KUBECONFIG. Reuse unchanged images by their source inputs, while
+running relevant manifest/security/E2E checks for every changed patchset.
+
+## Coverage of #548
+
+| Finding | Planned resolution |
+| --- | --- |
+| F1 admission | One restricted policy owner per application namespace; separate collector exception. |
+| F2 credentials and authority | Exact consumers, narrow service accounts, unused access removed and denied operations tested. |
+| F3 maintenance | Targeted credential/config rollouts with unrelated-generation checks. |
+| F4 coupling | Explicit bounded dependencies; existing analytics reads accepted with tenant and failure checks. |
+| F5 inventory | One placement catalog consumed by management and tests. |
+| F6 lifecycle | Fresh-install layout and resumable setup; legacy migration scope superseded by user direction. |
+| F7 resources | Preserve sizing and verify performance/recovery after the namespace move. |
+| F8 data | Per-store ownership, retention and tested backup/restore. |
+| F9 routing | Existing ingress/gateway adapted to namespaces; one platform certificate owner. |
+| F10 operator | Keep `mcp-runtime`; verify existing webhook/Lease and cluster-scoped ownership. |
+| F11 diagnostics | Accurate domain health and complete correlated telemetry. |
+| F12 cleanup | Exact resource ownership, idempotent apply and retained-data cleanup preview. |
+
+The inventory, narrower operator access, collector isolation, consumer Secrets,
+and targeted-rollout prerequisites were merged through #569. Build on those
+changes. This plan was checked against #548, `docs/architecture.md`, component
+inventory, setup/update, manifests, API handlers and the existing performance
+script. No live environment was changed and no runtime result is claimed by
+this planning document.
