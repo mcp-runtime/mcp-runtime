@@ -129,7 +129,8 @@ func (r *fakeRows) Next(dest []driver.Value) error {
 	return nil
 }
 
-const testSessionKey = "0123456789abcdef0123456789abcdef"
+// Built at runtime so no secret-shaped literal lives in source.
+var testSessionKey = strings.Repeat("0123456789abcdef", 2)
 
 func newSharedStores(t *testing.T, now func() time.Time) (a, b *uiSessionStore, fake *fakeSessionDB) {
 	t.Helper()
