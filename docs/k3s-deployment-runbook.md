@@ -40,6 +40,22 @@ never print them or put them in command arguments, tickets, or Buddy notes.
   status, and trace/span IDs in related logs. Record missing instrumentation
   and propagation explicitly; a missing trace does not prove success.
 
+**Trace and log correlation.** Sentinel services and the MCP gateway append
+`trace_id=<32 hex> span_id=<16 hex>` to request and failure log lines. Copy
+the `trace_id` from a Loki line into Tempo (or search Loki for a Tempo trace
+ID) to join them. Spans for 401, 403, and 5xx responses carry error status
+plus `mcp.failure.operation`, `mcp.failure.reason`, and
+`http.response.status_code`; in Tempo, search `status=error`. The gateway
+records the policy decision reason, RPC method, and status only, never
+tokens or tool arguments. Health, readiness, and metrics probes are not
+traced. Known boundaries: external OAuth authorization servers and MCP
+clients that do not send W3C `traceparent` start a new trace at the gateway,
+so a client-side refresh failure cannot be joined to the gateway trace by ID;
+correlate by time window, workload, and status instead. Collector export
+failures are logged as `otel internal error: ...` and counted by the
+`mcp_otel_internal_errors_total` metric on each service's metrics port; a
+non-zero rate means spans are being dropped before Tempo.
+
 Distinguish missing instrumentation from broken collection or an incorrect
 query/time range. Verify improvements through a real request and its
 resulting telemetry. Use read-only pod logs or authorized datasource reads
