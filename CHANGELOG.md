@@ -25,6 +25,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 ### Added
 
 - Platform regression coverage index (`docs/contributor/regression-index.yaml`) mapping incidents to regression checks, with a CI check that fails on unmapped incidents or expired waivers ([#546](https://github.com/mcp-runtime/mcp-runtime/issues/546)).
+- Sentinel UI sessions can use an opt-in shared Postgres store (`UI_SESSION_STORE=postgres`, `UI_SESSION_DATABASE_URL`, `UI_SESSION_ENCRYPTION_KEY`) with encrypted payloads, so login, status, admin-check, and logout work across UI replicas. The in-memory default and single-replica manifests are unchanged; the gateway still needs separate work ([#257](https://github.com/mcp-runtime/mcp-runtime/issues/257)).
 - Setup ends with a short operational smoke gate (nodes Ready, Bound PVCs, no Pending blockers, Postgres, platform-api `/health`+`/ready`, Sentinel rollout health, and an authenticated API probe). Failures fail setup; use `mcp-runtime cluster diagnostics` for deeper follow-up.
 - One-command macOS, Linux, and Windows CLI installers from the Getting Started and Quickstart pages; installers detect the platform and install the matching release binary to a user-local directory. The Windows installer also adds its directory to the user's `PATH`.
 
