@@ -35,6 +35,7 @@
 - CLI: https://docs.mcpruntime.org/cli/ — Commands, flags, defaults, and examples.
 - API and CRDs: https://docs.mcpruntime.org/api/ — Resource fields and HTTP endpoints.
 - API authorization matrix: https://docs.mcpruntime.org/security/authz-matrix/ — Authentication and authorization by endpoint.
+- Go packages: https://docs.pkg.mcpruntime.org/github.com/mcp-runtime/mcp-runtime — Browse Go package symbols and source for the root, service, and example modules.
 
 ## Contribute
 

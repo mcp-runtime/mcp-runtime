@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Added
+
+- Self-hosted Go package browsing for the root, service, and example modules at `docs.pkg.mcpruntime.org`, with package links from the docs site and a deployment smoke check.
+
 ### Changed
 
 - QA E2E now reclaims preinstalled runner tools only when less than 60 GiB of disk space is free, reports remaining space after the run, and skips installing tools already present or optional on the runner. Documentation-only PRs skip the Kind job; changelog edits no longer force all scenarios. The selected `multitenancy` scenario checks cross-team API and registry isolation, and targeted HTTP flows run once per job ([#569](https://github.com/mcp-runtime/mcp-runtime/pull/569)).

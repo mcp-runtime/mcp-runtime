@@ -1,0 +1,116 @@
+name: Go Package Docs
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/deploy-go-docs.yaml
+      - hack/deploy/pkgsite/**
+      - docs/mkdocs.yml
+      - docs/internals/pkgsite.md
+  push:
+    branches: [main]
+    paths:
+      - '**/*.go'
+      - '**/go.mod'
+      - '**/go.sum'
+      - '**/README*.md'
+      - .github/workflows/deploy-go-docs.yaml
+      - hack/deploy/pkgsite/**
+  workflow_dispatch: {}
+
+concurrency:
+  group: go-package-docs-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pkgsite:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build pinned pkgsite image
+        run: docker build -f hack/deploy/pkgsite/Dockerfile -t "mcp-runtime-pkgsite:${GITHUB_SHA}" .
+
+      - name: Smoke test local module documentation
+        run: |
+          set -euo pipefail
+          docker run -d --name pkgsite-smoke \
+            --read-only --tmpfs /tmp:rw,nosuid,nodev,size=512m \
+            --cap-drop ALL --security-opt no-new-privileges \
+            -p 127.0.0.1:18082:8080 \
+            "mcp-runtime-pkgsite:${GITHUB_SHA}" >/dev/null
+          trap 'docker rm -f pkgsite-smoke >/dev/null 2>&1 || true' EXIT
+          for attempt in {1..90}; do
+            if curl -fsSL --max-time 5 \
+              http://127.0.0.1:18082/github.com/mcp-runtime/mcp-runtime/pkg/access \
+              -o /dev/null 2>/dev/null; then
+              curl -fsSL --max-time 10 \
+                http://127.0.0.1:18082/github.com/mcp-runtime/mcp-runtime/services/runtime-api \
+                -o /dev/null
+              curl -fsSL --max-time 10 \
+                http://127.0.0.1:18082/github.com/mcp-runtime/mcp-runtime/examples/oauth-example-go-2025-11-25 \
+                -o /dev/null
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs --tail 80 pkgsite-smoke
+          exit 1
+
+      - name: Configure docs host SSH
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          DOCS_DEPLOY_HOST: ${{ secrets.DOCS_DEPLOY_HOST }}
+          DOCS_DEPLOY_USER: ${{ secrets.DOCS_DEPLOY_USER }}
+          DOCS_DEPLOY_SSH_KEY: ${{ secrets.DOCS_DEPLOY_SSH_KEY }}
+          DOCS_DEPLOY_HOST_KEY: ${{ secrets.DOCS_DEPLOY_HOST_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$DOCS_DEPLOY_HOST"
+          test -n "$DOCS_DEPLOY_USER"
+          test -n "$DOCS_DEPLOY_SSH_KEY"
+          test -n "$DOCS_DEPLOY_HOST_KEY"
+          docs_host="${DOCS_DEPLOY_HOST//$'\r'/}"
+          docs_host="${docs_host#"${docs_host%%[![:space:]]*}"}"
+          docs_host="${docs_host%"${docs_host##*[![:space:]]}"}"
+          printf 'DOCS_HOST=%s\n' "$docs_host" >> "$GITHUB_ENV"
+          printf '%s\n' "$DOCS_DEPLOY_SSH_KEY" > "$RUNNER_TEMP/pkgsite_id_ed25519"
+          chmod 600 "$RUNNER_TEMP/pkgsite_id_ed25519"
+          case "$DOCS_DEPLOY_HOST_KEY" in
+            ssh-*|ecdsa-*) printf '%s %s\n' "$docs_host" "$DOCS_DEPLOY_HOST_KEY" > "$RUNNER_TEMP/pkgsite_known_hosts" ;;
+            *' ssh-'*|*' ecdsa-'*) printf '%s\n' "$DOCS_DEPLOY_HOST_KEY" > "$RUNNER_TEMP/pkgsite_known_hosts" ;;
+            *) echo 'DOCS_DEPLOY_HOST_KEY must be an SSH host key or known_hosts entry' >&2; exit 1 ;;
+          esac
+          chmod 600 "$RUNNER_TEMP/pkgsite_known_hosts"
+          ssh-keygen -F "$docs_host" -f "$RUNNER_TEMP/pkgsite_known_hosts" >/dev/null
+
+      - name: Transfer image to docs host
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          DOCS_DEPLOY_USER: ${{ secrets.DOCS_DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          docker save "mcp-runtime-pkgsite:${GITHUB_SHA}" | gzip -1 | \
+            ssh -i "$RUNNER_TEMP/pkgsite_id_ed25519" \
+              -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+              -o UserKnownHostsFile="$RUNNER_TEMP/pkgsite_known_hosts" \
+              "${DOCS_DEPLOY_USER}@${DOCS_HOST}" \
+              "bash -o pipefail -c 'gzip -dc | docker load'"
+
+      - name: Roll out pkgsite on docs host
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          DOCS_DEPLOY_USER: ${{ secrets.DOCS_DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/pkgsite_id_ed25519" \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/pkgsite_known_hosts" \
+            "${DOCS_DEPLOY_USER}@${DOCS_HOST}" \
+            "PKGSITE_IMAGE=mcp-runtime-pkgsite:${GITHUB_SHA} bash -s" \
+            < hack/deploy/pkgsite/deploy-remote.sh
