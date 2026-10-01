@@ -12,6 +12,7 @@ import (
 	"mcp-runtime/internal/cli/core"
 	"mcp-runtime/internal/cli/kubeerr"
 	"mcp-runtime/internal/cli/platformstatus"
+	"mcp-runtime/pkg/platforminventory"
 )
 
 // SentinelManager operates the bundled mcp-sentinel stack via kubectl.
@@ -20,123 +21,10 @@ type SentinelManager struct {
 	logger  *zap.Logger
 }
 
-type sentinelComponent struct {
-	Key        string
-	Display    string
-	Namespace  string
-	Kind       string
-	Resource   string
-	Label      string
-	Aliases    []string
-	PortTarget *sentinelPortTarget
-}
+type sentinelComponent = platforminventory.Component
+type sentinelPortTarget = platforminventory.PortTarget
 
-type sentinelPortTarget struct {
-	ResourceKind string
-	ResourceName string
-	LocalPort    int
-	RemotePort   int
-}
-
-var sentinelComponents = []sentinelComponent{
-	{Key: "clickhouse", Display: "ClickHouse", Namespace: core.DefaultAnalyticsNamespace, Kind: "statefulset", Resource: "clickhouse", Label: "clickhouse"},
-	{Key: "kafka", Display: "Kafka", Namespace: core.DefaultAnalyticsNamespace, Kind: "statefulset", Resource: "kafka", Label: "kafka"},
-	{Key: "ingest", Display: "Ingest", Namespace: core.DefaultAnalyticsNamespace, Kind: "deployment", Resource: "mcp-sentinel-ingest", Label: "mcp-sentinel-ingest"},
-	{
-		Key:       "platform-api",
-		Display:   "Platform API",
-		Namespace: core.DefaultAnalyticsNamespace,
-		Kind:      "deployment",
-		Resource:  "mcp-platform-api",
-		Label:     "mcp-platform-api",
-		Aliases:   []string{"api", "platform"},
-		PortTarget: &sentinelPortTarget{
-			ResourceKind: "service",
-			ResourceName: "mcp-platform-api",
-			LocalPort:    8080,
-			RemotePort:   8080,
-		},
-	},
-	{
-		Key:       "runtime-api",
-		Display:   "Runtime Control",
-		Namespace: core.DefaultAnalyticsNamespace,
-		Kind:      "deployment",
-		Resource:  "mcp-runtime-api",
-		Label:     "mcp-runtime-api",
-		Aliases:   []string{"runtime"},
-		PortTarget: &sentinelPortTarget{
-			ResourceKind: "service",
-			ResourceName: "mcp-runtime-api",
-			LocalPort:    8084,
-			RemotePort:   8084,
-		},
-	},
-	{
-		Key:       "analytics-api",
-		Display:   "Analytics API",
-		Namespace: core.DefaultAnalyticsNamespace,
-		Kind:      "deployment",
-		Resource:  "mcp-analytics-api",
-		Label:     "mcp-analytics-api",
-		Aliases:   []string{"analytics"},
-		PortTarget: &sentinelPortTarget{
-			ResourceKind: "service",
-			ResourceName: "mcp-analytics-api",
-			LocalPort:    8085,
-			RemotePort:   8085,
-		},
-	},
-	{Key: "processor", Display: "Processor", Namespace: core.DefaultAnalyticsNamespace, Kind: "deployment", Resource: "mcp-sentinel-processor", Label: "mcp-sentinel-processor"},
-	{
-		Key:       "ui",
-		Display:   "UI",
-		Namespace: core.DefaultAnalyticsNamespace,
-		Kind:      "deployment",
-		Resource:  "mcp-sentinel-ui",
-		Label:     "mcp-sentinel-ui",
-		PortTarget: &sentinelPortTarget{
-			ResourceKind: "service",
-			ResourceName: "mcp-sentinel-ui",
-			LocalPort:    8082,
-			RemotePort:   8082,
-		},
-	},
-	{Key: "gateway", Display: "Gateway", Namespace: core.DefaultAnalyticsNamespace, Kind: "deployment", Resource: "mcp-sentinel-gateway", Label: "mcp-sentinel-gateway"},
-	{
-		Key:       "prometheus",
-		Display:   "Prometheus",
-		Namespace: core.DefaultAnalyticsNamespace,
-		Kind:      "deployment",
-		Resource:  "prometheus",
-		Label:     "prometheus",
-		Aliases:   []string{"prom"},
-		PortTarget: &sentinelPortTarget{
-			ResourceKind: "service",
-			ResourceName: "prometheus",
-			LocalPort:    9090,
-			RemotePort:   9090,
-		},
-	},
-	{
-		Key:       "grafana",
-		Display:   "Grafana",
-		Namespace: core.DefaultAnalyticsNamespace,
-		Kind:      "deployment",
-		Resource:  "grafana",
-		Label:     "grafana",
-		PortTarget: &sentinelPortTarget{
-			ResourceKind: "service",
-			ResourceName: "grafana",
-			LocalPort:    3000,
-			RemotePort:   3000,
-		},
-	},
-	{Key: "otel-collector", Display: "OTel Collector", Namespace: core.DefaultAnalyticsNamespace, Kind: "deployment", Resource: "otel-collector", Label: "otel-collector", Aliases: []string{"otel"}},
-	{Key: "tempo", Display: "Tempo", Namespace: core.DefaultAnalyticsNamespace, Kind: "statefulset", Resource: "tempo", Label: "tempo"},
-	{Key: "loki", Display: "Loki", Namespace: core.DefaultAnalyticsNamespace, Kind: "statefulset", Resource: "loki", Label: "loki"},
-	{Key: "promtail", Display: "Promtail", Namespace: core.DefaultAnalyticsNamespace, Kind: "daemonset", Resource: "promtail", Label: "promtail"},
-}
+var sentinelComponents = platforminventory.SentinelComponents(false)
 
 // NewSentinelManager creates a SentinelManager with explicit dependencies.
 func NewSentinelManager(kubectl *core.KubectlClient, logger *zap.Logger) *SentinelManager {
@@ -277,17 +165,21 @@ func (m *SentinelManager) PortForwardSentinelTarget(target string, localPort int
 	if err := m.requireAdminClusterAccess(); err != nil {
 		return err
 	}
-	portTarget, err := findSentinelPortTarget(target)
+	component, err := findSentinelComponent(target)
 	if err != nil {
 		return err
 	}
+	if component.PortTarget == nil {
+		return core.NewWithSentinel(nil, fmt.Sprintf("sentinel component %q has no port-forward target", target))
+	}
+	portTarget := component.PortTarget
 	if localPort <= 0 {
 		localPort = portTarget.LocalPort
 	}
 
 	args := []string{
 		"port-forward",
-		"-n", core.DefaultAnalyticsNamespace,
+		"-n", component.Namespace,
 		fmt.Sprintf("%s/%s", portTarget.ResourceKind, portTarget.ResourceName),
 		fmt.Sprintf("%d:%d", localPort, portTarget.RemotePort),
 		"--address", address,
@@ -296,7 +188,7 @@ func (m *SentinelManager) PortForwardSentinelTarget(target string, localPort int
 	if err := m.kubectl.RunWithOutput(args, os.Stdout, os.Stderr); err != nil {
 		return core.WrapWithSentinelAndContext(nil, err, fmt.Sprintf("failed to port-forward sentinel target %q: %v", target, err), map[string]any{
 			"target":    target,
-			"namespace": core.DefaultAnalyticsNamespace,
+			"namespace": component.Namespace,
 			"component": "sentinel",
 		})
 	}
