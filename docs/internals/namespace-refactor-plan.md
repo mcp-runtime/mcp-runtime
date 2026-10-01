@@ -14,8 +14,9 @@ This document defines the work and evidence required to close F1–F12.
 | Component inventory and layout resolver, F5/F12 | [#553](https://github.com/mcp-runtime/mcp-runtime/pull/553), `platform/component_inventory` | Reviewable P01 foundation; persisted discovery and integration gates remain. |
 | Operator Secret scope, related to #540 and F2 | [#550](https://github.com/mcp-runtime/mcp-runtime/pull/550), `security/operator_secret_rbac` | Draft; direct access, named trust bundle and provisioning tests pass. Indirect authority/live authorization gates remain. |
 | Collector admission boundary, F1 | [#551](https://github.com/mcp-runtime/mcp-runtime/pull/551), `refactor/namespace-admission-policy` | Draft; bootstrap/cutover ordering tests pass. Live delivery/admission and inventory/lifecycle integration remain. |
-| Credential worktree | `refactor/namespace-credential-boundaries` | Reserved locally; no implementation commit or PR yet. |
-| P02, P04–P07, P09–P10 and remaining P01/P03/P08 scope | PR sequence below | Still planned; these prerequisites are not completed. |
+| Consumer-specific credential Secrets, F2 | [#554](https://github.com/mcp-runtime/mcp-runtime/pull/554), `refactor/namespace-credential-boundaries` | Open P02 slice, stacked on #553. Per-consumer Secrets with a synchronized legacy mirror; non-secret config split, legacy-reader removal, upgrade/rollback and P03 RBAC gates remain. |
+| Targeted credential/config rollouts, F3 | [#555](https://github.com/mcp-runtime/mcp-runtime/pull/555), `platform/dependency_rollouts` | Open P04 slice, stacked on #554. Digest-based pod-template revisions; rotation/retry/rollback, dry-run presentation and live generation-count gates remain. |
+| P03, P05–P07, P09–P10 and remaining P01/P02/P04/P08 scope | PR sequence below | Still planned; these prerequisites are not completed. |
 | Main namespace migration, P11 | After prerequisite review and merges | Deferred; no migration PR yet. |
 
 Both security drafts have been refreshed against `14ebdb29`, preserving the
@@ -73,9 +74,9 @@ after that dependency merges. Keep unrelated rows out of each other's diffs.
 | ID | Scope and findings | Depends on | Completion evidence |
 | --- | --- | --- | --- |
 | P01 | [#553](https://github.com/mcp-runtime/mcp-runtime/pull/553) foundation: canonical component, owner, namespace, capability and dependency inventory; versioned legacy/target resolver (F5, F12) | P00 | Setup/update, CLI and API status/logs/restart/port-forward consume one source; legacy, target, partial and external-install fixtures resolve consistently; conflicting ownership is rejected. |
-| P02 | Split shared credentials/config by owner and consumer while retaining current placement (F2) | P01 | Preserve existing values on upgrade; migrate only required keys; tested synchronization and rotation; unrelated consumers cannot read the resulting Secret objects; legacy fallback has an explicit removal gate. |
+| P02 | [#554](https://github.com/mcp-runtime/mcp-runtime/pull/554) slice: split shared credentials/config by owner and consumer while retaining current placement (F2) | P01 | Preserve existing values on upgrade; migrate only required keys; tested synchronization and rotation; unrelated consumers cannot read the resulting Secret objects; legacy fallback has an explicit removal gate. |
 | P03 | Narrow service/helper/tenant RBAC and namespace authority, incorporating #550 (F2) | P01, P02; #550 can land independently if its own gates pass | Allowed/denied capability matrix includes direct Secret reads and indirect access via workloads, service accounts, impersonation, bind and namespace labels. Generator output stays narrow. |
-| P04 | Credential-consumer rollout and maintenance plans (F3) | P01, P02 | A telemetry-only update leaves unrelated platform pod-template generations unchanged; dry-run, execution, retry and rollback target the same affected consumers. |
+| P04 | [#555](https://github.com/mcp-runtime/mcp-runtime/pull/555) slice: credential-consumer rollout and maintenance plans (F3) | P01, P02 | A telemetry-only update leaves unrelated platform pod-template generations unchanged; dry-run, execution, retry and rollback target the same affected consumers. |
 | P05 | Platform-to-telemetry query and failure contracts (F4) | P01 | Bounded authenticated queries, preserved tenant scope and explicit degraded responses; telemetry outages do not block unrelated login/deploy/session operations; audit-loss handling is tested and visible. |
 | P06 | Data ownership, backup, restore, retention and rollback procedures (F8) | P01, P02 | Store-specific backup/restore and consistency checks for Postgres, Kafka, ClickHouse, Grafana, Loki, Tempo and registry data; tested recovery in a disposable environment. |
 | P07 | Cross-domain service discovery, routing, certificates and network policies (F9) | P01, P03, P05 | Public auth/paths preserved; internal endpoints, DNS, API-server access, scrape/ingest flows, registry pulls and certificate renewal tested for legacy and target layouts. |
@@ -90,7 +91,9 @@ existing isolation and avoids an unnecessary webhook/leader migration. P12 is
 explicitly deferred unless the naming change is still useful after P11.
 
 The P01 inventory/resolver foundation is open as #553; persisted discovery and
-setup/update gates still need implementation. P02/P03/P04 can be reviewed while P05/P06 are
+setup/update gates still need implementation. #554 (P02) and #555 (P04) are
+stacked on it (#553 → #554 → #555) and must be retargeted and revalidated as
+their bases merge. P02/P03/P04 can be reviewed while P05/P06 are
 developed, but their merge dependencies remain as listed. Do not treat the early
 existence of #551 as evidence that collector lifecycle prerequisites are done.
 
