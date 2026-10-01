@@ -42,6 +42,8 @@ const (
 
 const (
 	CertClusterIssuerName           = certClusterIssuerName
+	CertCASecretName                = certCASecretName
+	CertManagerNamespace            = certManagerNamespace
 	RegistryCertificateName         = registryCertificateName
 	RegistryTLSSecretName           = registryTLSSecretName
 	RegistryInternalCertificateName = registryInternalCertificateName

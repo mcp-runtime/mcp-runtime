@@ -30,6 +30,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 ### Security
 
 - Adapter certificates are gated on a workload-issuer approval policy: outside `--test-mode`, setup refuses `MCP_ADAPTER_CERTIFICATES=true` unless cert-manager approver-policy is installed or `MCP_WORKLOAD_ISSUER_APPROVAL_ACK=true` acknowledges another approver. The runtime API now rejects issued certificates whose SPIFFE URI, key, usage, or lifetime differ from the submitted CSR, and its ClusterRole no longer grants `list`/`watch` on `CertificateRequests`. Operators enabling adapter certificates on a cluster without approver-policy must set the acknowledgement; adapter issuance is off by default ([#538](https://github.com/mcp-runtime/mcp-runtime/issues/538)).
+- Setup validates the bundled `mcp-runtime-ca` workload CA before use (key/cert match, CA constraints, validity). Production setup now fails on a missing, invalid, expired, or under-180-day CA instead of silently generating or accepting it; test mode still generates a missing CA and warns near expiry. Rotation and backup guidance is in `docs/cli.md`. Splitting the registry and workload roots is not yet done ([#535](https://github.com/mcp-runtime/mcp-runtime/issues/535)). Migration: production installs using `--mtls-cluster-issuer mcp-runtime-ca` must have the CA Secret present beforehand.
 
 ## [0.4.1] - 2026-09-29
 
