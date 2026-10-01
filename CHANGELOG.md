@@ -18,6 +18,9 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 ### Security
 
 - Platform application workloads now use restricted Pod Security admission; node log collection runs in a dedicated namespace with its hostPath exception ([#548](https://github.com/mcp-runtime/mcp-runtime/issues/548)).
+### Security
+
+- The internal registry NetworkPolicy no longer admits tenant workload namespaces (`mcp-servers*` and platform-managed team namespaces), closing the unauthenticated in-cluster registry read/write path from tenant pods on the base manifests. Node pulls and platform publish paths are unchanged. Registry-native authentication and the k3s compatibility overlay's pod-CIDR allowance remain open follow-ups ([#531](https://github.com/mcp-runtime/mcp-runtime/issues/531)).
 
 ### Added
 

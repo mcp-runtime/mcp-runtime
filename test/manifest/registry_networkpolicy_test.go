@@ -93,11 +93,10 @@ func TestRegistryNetworkPolicyAllowsHelperPushOnlyToRegistry(t *testing.T) {
 	if !hasSameNamespaceIngressToPort(ingress, 5000) {
 		t.Fatal("registry ingress policy must allow same-namespace helper pods to reach registry:5000")
 	}
-	if !hasNamespaceIngressToPort(ingress, "mcp-servers", 5000) {
-		t.Fatal("registry ingress policy must allow catalog namespace probes to reach registry:5000")
-	}
-	if !hasManagedNamespaceIngressToPort(ingress, 5000) {
-		t.Fatal("registry ingress policy must allow managed namespace probes to reach registry:5000")
+	for _, ns := range []string{"traefik", "mcp-sentinel", "mcp-runtime"} {
+		if !hasNamespaceIngressToPort(ingress, ns, 5000) {
+			t.Fatalf("registry ingress policy must allow platform namespace %s to reach registry:5000", ns)
+		}
 	}
 
 	egress, ok := policies["registry-allow-egress"]
@@ -109,6 +108,31 @@ func TestRegistryNetworkPolicyAllowsHelperPushOnlyToRegistry(t *testing.T) {
 	}
 	if !hasRegistryEgressToPort(egress, 5000) {
 		t.Fatal("registry egress policy must allow helper pods to reach only registry pods on port 5000")
+	}
+}
+
+// TestRegistryNetworkPolicyDeniesTenantNamespaces guards #531: the internal
+// registry endpoint has no registry-native authentication, so tenant workload
+// namespaces must not be allowed to reach it directly.
+func TestRegistryNetworkPolicyDeniesTenantNamespaces(t *testing.T) {
+	ingress, ok := loadRegistryNetworkPolicies(t)["registry-allow-ingress"]
+	if !ok {
+		t.Fatal("registry-allow-ingress policy not found")
+	}
+	for _, ns := range []string{"mcp-servers", "mcp-servers-org", "mcp-servers-public"} {
+		if hasNamespaceIngressToPort(ingress, ns, 5000) {
+			t.Fatalf("registry ingress policy must not allow tenant namespace %s", ns)
+		}
+	}
+	if hasManagedNamespaceIngressToPort(ingress, 5000) {
+		t.Fatal("registry ingress policy must not allow platform-managed team namespaces")
+	}
+	for _, rule := range ingress.Spec.Ingress {
+		for _, peer := range rule.From {
+			if peer.NamespaceSelector != nil && len(peer.NamespaceSelector.MatchLabels) == 0 {
+				t.Fatal("registry ingress policy must not select all namespaces")
+			}
+		}
 	}
 }
 
