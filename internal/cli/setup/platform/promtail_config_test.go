@@ -87,12 +87,12 @@ func TestPromtailCollectsAllNamespacesWithKubernetesMetadata(t *testing.T) {
 	}
 }
 
-func TestPromtailManifestKeepsPlacementUnchanged(t *testing.T) {
+func TestPromtailManifestUsesCollectorNamespace(t *testing.T) {
 	content, err := os.ReadFile("../../../../k8s/18-promtail.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Count(string(content), "namespace: mcp-sentinel") < 4 {
-		t.Fatalf("promtail placement must stay in mcp-sentinel in this change")
+	if strings.Count(string(content), "namespace: mcp-log-collector") < 4 || strings.Contains(string(content), "namespace: mcp-sentinel") {
+		t.Fatal("promtail resources must use the collector namespace")
 	}
 }
