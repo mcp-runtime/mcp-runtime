@@ -167,8 +167,9 @@ and the `kafka.produce`, `kafka.consume`, `clickhouse.insert_event`, and
 `clickhouse.insert_batch` spans.
 
 PRs with runtime or CI changes run short QA E2E with `smoke-auth` as the baseline;
-documentation-only PRs skip the Kind job. `CHANGELOG.md` and `AGENTS.md` do not
-force all scenarios when changed alongside code. For code PRs,
+documentation-only PRs skip the Kind job. Changelog, contributor guide, article,
+and skill reference edits do not force all scenarios when changed alongside code.
+For code PRs,
 `.github/workflows/ci.yaml` calls `test/e2e/select_pr_scenarios.sh` to add
 targeted scenarios based on the changed files. API, UI, adapter, CLI, OAuth,
 observability, and multi-tenancy changes get the matching request-path mode;
