@@ -17,7 +17,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: promtail
+  name: promtail-node-log-collector
 subjects:
   - kind: ServiceAccount
     name: promtail
@@ -40,7 +40,7 @@ data:
     positions:
       filename: /run/promtail/positions.yaml
     clients:
-      - url: http://loki.mcp-sentinel.svc.cluster.local:3100/loki/api/v1/push
+      - url: http://loki.mcp-sentinel.svc:3100/loki/api/v1/push
     scrape_configs:
       - job_name: kubernetes-pods
         kubernetes_sd_configs:

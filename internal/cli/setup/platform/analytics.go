@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -37,6 +38,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
 )
 
@@ -81,11 +83,12 @@ func removeBundledOAuthServerClientGo() error {
 // ran it in mcp-sentinel. It runs only after the replacement DaemonSet is ready.
 func removeLegacyPromtail(kubectl core.KubectlRunner) error {
 	for _, resource := range []string{"daemonset/promtail", "serviceaccount/promtail", "configmap/promtail-config"} {
-		if err := kubectl.RunWithOutput([]string{"delete", resource, "-n", core.DefaultAnalyticsNamespace, "--ignore-not-found"}, os.Stdout, os.Stderr); err != nil {
+		if err := kubectl.RunWithOutput([]string{"delete", resource, "-n", core.DefaultAnalyticsNamespace, "--ignore-not-found", "--cascade=foreground", "--wait=true"}, os.Stdout, os.Stderr); err != nil {
 			return fmt.Errorf("remove legacy log collector %s from namespace %s: %w", resource, core.DefaultAnalyticsNamespace, err)
 		}
 	}
-	return nil
+	// This path shares typed-client setup for namespace/RBAC finalization.
+	return finishCollectorAdmissionCutoverClientGo()
 }
 
 func removeLegacyPromtailClientGo() error {
@@ -94,8 +97,19 @@ func removeLegacyPromtailClientGo() error {
 		return err
 	}
 	ctx := context.Background()
-	if err := clients.Clientset.AppsV1().DaemonSets(core.DefaultAnalyticsNamespace).Delete(ctx, "promtail", metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+	if err := clients.Clientset.AppsV1().DaemonSets(core.DefaultAnalyticsNamespace).Delete(ctx, "promtail", metav1.DeleteOptions{PropagationPolicy: propagationForeground()}); err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("remove legacy log collector daemonset from namespace %s: %w", core.DefaultAnalyticsNamespace, err)
+	}
+	// Foreground deletion waits for the old hostPath pods to disappear before
+	// revoking their discovery access or tightening the source namespace policy.
+	if err := wait.PollUntilContextTimeout(ctx, 200*time.Millisecond, 2*time.Minute, true, func(ctx context.Context) (bool, error) {
+		_, err := clients.Clientset.AppsV1().DaemonSets(core.DefaultAnalyticsNamespace).Get(ctx, "promtail", metav1.GetOptions{})
+		if apierrors.IsNotFound(err) {
+			return true, nil
+		}
+		return false, err
+	}); err != nil {
+		return fmt.Errorf("wait for legacy collector deletion: %w", err)
 	}
 	if err := clients.Clientset.CoreV1().ServiceAccounts(core.DefaultAnalyticsNamespace).Delete(ctx, "promtail", metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("remove legacy log collector service account from namespace %s: %w", core.DefaultAnalyticsNamespace, err)
@@ -103,7 +117,7 @@ func removeLegacyPromtailClientGo() error {
 	if err := clients.Clientset.CoreV1().ConfigMaps(core.DefaultAnalyticsNamespace).Delete(ctx, "promtail-config", metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("remove legacy log collector config from namespace %s: %w", core.DefaultAnalyticsNamespace, err)
 	}
-	return nil
+	return finishCollectorAdmissionCutoverClientGo()
 }
 
 func analyticsServiceManifests(postgresManifest string) []string {
@@ -136,6 +150,9 @@ func deployAnalyticsManifests(logger *zap.Logger, images AnalyticsImageSet, stor
 }
 
 func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageSet, storageMode, platformMode string) error {
+	if err := ensurePlatformNamespaceBeforeIngress(); err != nil {
+		return err
+	}
 	rolloutTimeoutDuration := analyticsRolloutTimeoutDuration()
 	rolloutTimeout := rolloutTimeoutDuration.String()
 
@@ -305,6 +322,9 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 }
 
 func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap.Logger, images AnalyticsImageSet, storageMode, platformMode string) error {
+	if err := ensurePlatformNamespaceBeforeIngress(); err != nil {
+		return err
+	}
 	rolloutTimeout := analyticsRolloutTimeoutString()
 
 	if err := ensureRepoManagedTraefikMiddlewareResources(kubectl, logger); err != nil {
@@ -775,6 +795,12 @@ func applyRenderedManifest(kubectl core.KubectlRunner, manifestPath string, imag
 	if err != nil {
 		return core.WrapWithSentinel(core.ErrSetupRenderManifestFailed, err, fmt.Sprintf("render manifest %s: %v", manifestPath, err))
 	}
+	if manifestPath == "k8s/00-namespace.yaml" {
+		rendered, err = deferPlatformAdmissionManifest(rendered)
+		if err != nil {
+			return err
+		}
+	}
 	return applyManifestYAML(rendered, "", os.Stdout)
 }
 
@@ -796,6 +822,12 @@ func applyRenderedManifestClientGo(manifestPath string, images AnalyticsImageSet
 	}
 	if err != nil {
 		return core.WrapWithSentinel(core.ErrSetupRenderManifestFailed, err, fmt.Sprintf("render manifest %s: %v", manifestPath, err))
+	}
+	if manifestPath == "k8s/00-namespace.yaml" {
+		rendered, err = deferPlatformAdmissionManifest(rendered)
+		if err != nil {
+			return err
+		}
 	}
 	return applyManifestYAML(rendered, "", os.Stdout)
 }
@@ -2068,4 +2100,79 @@ func waitForStatefulSetDeletionClientGo(clients *k8sclient.Clients, namespace, n
 		time.Sleep(2 * time.Second)
 	}
 	return fmt.Errorf("timed out waiting for statefulset/%s deletion", name)
+}
+
+func propagationForeground() *metav1.DeletionPropagation {
+	policy := metav1.DeletePropagationForeground
+	return &policy
+}
+
+// deferPlatformAdmissionManifest leaves source admission untouched until the
+// replacement rolls out and the old hostPath collector finishes deletion.
+func deferPlatformAdmissionManifest(content string) (string, error) {
+	var out bytes.Buffer
+	decoder := yaml.NewDecoder(strings.NewReader(content))
+	encoder := yaml.NewEncoder(&out)
+	for {
+		var doc map[string]any
+		if err := decoder.Decode(&doc); errors.Is(err, io.EOF) {
+			break
+		} else if err != nil {
+			return "", err
+		}
+		metadata, _ := doc["metadata"].(map[string]any)
+		if doc["kind"] == "Namespace" && metadata["name"] == core.DefaultAnalyticsNamespace {
+			continue
+		}
+		if len(doc) > 0 {
+			if err := encoder.Encode(doc); err != nil {
+				return "", err
+			}
+		}
+	}
+	if err := encoder.Close(); err != nil {
+		return "", err
+	}
+	return out.String(), nil
+}
+
+func finishCollectorAdmissionCutoverClientGo() error {
+	clients, err := platformKubernetesClients()
+	if err != nil {
+		return err
+	}
+	ctx := context.Background()
+	// The new collector has its own binding; an interrupted rollout leaves the
+	// legacy binding untouched. Refuse to remove an unrelated custom binding.
+	binding, err := clients.Clientset.RbacV1().ClusterRoleBindings().Get(ctx, "promtail", metav1.GetOptions{})
+	if err == nil {
+		if binding.RoleRef.Kind != "ClusterRole" || binding.RoleRef.Name != "promtail" || len(binding.Subjects) != 1 || binding.Subjects[0].Kind != "ServiceAccount" || binding.Subjects[0].Name != "promtail" || binding.Subjects[0].Namespace != core.DefaultAnalyticsNamespace {
+			return fmt.Errorf("legacy promtail ClusterRoleBinding has unexpected ownership; refusing cleanup")
+		}
+		if err := clients.Clientset.RbacV1().ClusterRoleBindings().Delete(ctx, "promtail", metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			return err
+		}
+	} else if !apierrors.IsNotFound(err) {
+		return err
+	}
+	return k8sclient.EnsureNamespace(ctx, clients, core.DefaultAnalyticsNamespace, map[string]string{
+		"pod-security.kubernetes.io/enforce": "restricted", "pod-security.kubernetes.io/audit": "restricted", "pod-security.kubernetes.io/warn": "restricted",
+	})
+}
+
+// Create a fresh source namespace restricted, but preserve a legacy admission
+// exception while its collector may still restart during an interrupted setup.
+func ensurePlatformNamespaceBeforeIngress() error {
+	clients, err := platformKubernetesClients()
+	if err != nil {
+		return err
+	}
+	ctx := context.Background()
+	_, err = clients.Clientset.CoreV1().Namespaces().Get(ctx, core.DefaultAnalyticsNamespace, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return k8sclient.EnsureNamespace(ctx, clients, core.DefaultAnalyticsNamespace, map[string]string{
+			"pod-security.kubernetes.io/enforce": "restricted", "pod-security.kubernetes.io/audit": "restricted", "pod-security.kubernetes.io/warn": "restricted",
+		})
+	}
+	return err
 }
