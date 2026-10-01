@@ -41,31 +41,82 @@ data:
       filename: /run/promtail/positions.yaml
     clients:
       - url: http://loki.mcp-sentinel.svc:3100/loki/api/v1/push
+    # -config.expand-env is on: write literal dollar signs as $$.
     scrape_configs:
+      # Primary job: Kubernetes metadata for every namespace (mcp-servers and
+      # dynamic team namespaces included). Discovery is limited to pods on this
+      # node (NODE_NAME, expanded via -config.expand-env) because only local
+      # pods have files under /var/log/pods.
       - job_name: kubernetes-pods
         kubernetes_sd_configs:
           - role: pod
+            selectors:
+              - role: pod
+                field: spec.nodeName=${NODE_NAME}
+        pipeline_stages:
+          # Parse the CRI envelope so the event timestamp is the container's
+          # and the JSON body stays intact for structured queries.
+          - cri: {}
+          # Redact bearer/basic credentials and secret-looking JSON fields
+          # before they reach Loki.
+          - replace:
+              expression: '(?i)(authorization["'':= ]+(?:bearer|basic)\s+)([A-Za-z0-9._~+/=-]+)'
+              replace: '$${1}[REDACTED]'
+          - replace:
+              expression: '(?i)("(?:access_token|refresh_token|id_token|client_secret|password|api_key|apikey|token)"\s*:\s*")[^"]*(")'
+              replace: '$${1}[REDACTED]$${2}'
         relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_phase]
+            action: drop
+            regex: (Succeeded|Failed)
+          - source_labels: [__meta_kubernetes_pod_uid]
+            action: drop
+            regex: ""
+          # Stable application identity: the operator sets app=<MCPServer name>;
+          # fall back to the common recommended label, then the pod controller.
           - source_labels: [__meta_kubernetes_pod_label_app]
             target_label: app
+          - source_labels: [app, __meta_kubernetes_pod_label_app_kubernetes_io_name]
+            separator: ";"
+            regex: ";(.+)"
+            target_label: app
+            replacement: "$$1"
+          - source_labels: [app, __meta_kubernetes_pod_controller_name]
+            separator: ";"
+            regex: ";(.+)"
+            target_label: app
+            replacement: "$$1"
           - source_labels: [__meta_kubernetes_namespace]
             target_label: namespace
           - source_labels: [__meta_kubernetes_pod_name]
             target_label: pod
           - source_labels: [__meta_kubernetes_pod_container_name]
             target_label: container
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: node
           - action: replace
             source_labels: [__meta_kubernetes_pod_uid, __meta_kubernetes_pod_container_name]
             separator: /
             target_label: __path__
-            replacement: /var/log/pods/*$1/*.log
+            replacement: /var/log/pods/*$$1/*.log
+      # Fallback for the platform namespace that does not depend on API
+      # discovery. Labels come from the CRI file path so coverage gaps in
+      # discovery remain distinguishable (job=static-pods).
       - job_name: static-pods
         static_configs:
           - targets: ["localhost"]
             labels:
               job: static-pods
-              namespace: mcp-sentinel
               __path__: /var/log/pods/mcp-sentinel_*/*/*.log
+        pipeline_stages:
+          - cri: {}
+          - regex:
+              source: filename
+              expression: '/var/log/pods/(?P<namespace>[^_]+)_(?P<pod>[^_]+)_[^/]+/(?P<container>[^/]+)/'
+          - labels:
+              namespace:
+              pod:
+              container:
 ---
 apiVersion: apps/v1
 kind: DaemonSet
@@ -88,7 +139,12 @@ spec:
       containers:
         - name: promtail
           image: grafana/promtail:2.9.4
-          args: ["-config.file=/etc/promtail/promtail.yaml"]
+          args: ["-config.file=/etc/promtail/promtail.yaml", "-config.expand-env=true"]
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

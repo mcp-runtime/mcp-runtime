@@ -21,6 +21,9 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 ### Security
 
 - The internal registry NetworkPolicy no longer admits tenant workload namespaces (`mcp-servers*` and platform-managed team namespaces), closing the unauthenticated in-cluster registry read/write path from tenant pods on the base manifests. Node pulls and platform publish paths are unchanged. Registry-native authentication and the k3s compatibility overlay's pod-CIDR allowance remain open follow-ups ([#531](https://github.com/mcp-runtime/mcp-runtime/issues/531)).
+### Fixed
+
+- Promtail now parses CRI log envelopes, discovers only node-local pods across all namespaces, labels streams with `namespace`, `pod`, `container`, `app`, and `node`, redacts bearer tokens and secret-looking JSON fields, and the platform-namespace fallback job labels streams from the log path. Intended to restore Loki coverage for MCP server and team namespaces; root cause of the production gap is not yet confirmed on a live cluster ([#496](https://github.com/mcp-runtime/mcp-runtime/issues/496)).
 
 ### Added
 
