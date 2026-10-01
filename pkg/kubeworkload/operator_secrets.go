@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	OperatorSecretAccessName   = "mcp-runtime-operator-managed-secrets" // #nosec G101 -- ClusterRole name, not a credential
+	OperatorSecretAccessName = "mcp-runtime-operator-managed-secrets" // #nosec G101 -- ClusterRole name, not a credential
 	// OperatorWorkloadAccessName grants Deployment, ServiceAccount and
 	// Certificate mutation, which are indirect routes to a Secret.
 	OperatorWorkloadAccessName = "mcp-runtime-operator-managed-workloads"
