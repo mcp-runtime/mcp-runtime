@@ -2757,7 +2757,7 @@ func TestCheckSentinelStalePods(t *testing.T) {
 {"metadata":{"name":"job-pod","ownerReferences":[{"kind":"Job"}]},"status":{"phase":"Succeeded"}}
 ]}`)
 		if !check.OK {
-		t.Fatalf("expected OK, got %q", check.Detail)
+			t.Fatalf("expected OK, got %q", check.Detail)
 		}
 	})
 }
