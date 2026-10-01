@@ -1111,6 +1111,8 @@ ensure_gateway_port_forward() {
   wait_port "${SENTINEL_PORT}"
 }
 
+# shellcheck source=lib/namespace-placement.sh
+source "${PROJECT_ROOT}/test/e2e/lib/namespace-placement.sh"
 # shellcheck source=lib/adapter-certificates.sh
 source "${PROJECT_ROOT}/test/e2e/lib/adapter-certificates.sh"
 # shellcheck source=scenarios/platform-update.sh
@@ -3663,10 +3665,15 @@ wait_core_platform_rollouts() {
   run_logged_stage "verify platform-api rollout" rollout_status_with_logs mcp-platform deploy mcp-platform-api 180s
   run_logged_stage "verify runtime-api rollout" rollout_status_with_logs mcp-platform deploy mcp-runtime-api 180s
   run_logged_stage "verify analytics-api rollout" rollout_status_with_logs mcp-observability deploy mcp-analytics-api 180s
-  run_logged_stage "verify sentinel gateway rollout" rollout_status_with_logs mcp-platform deploy mcp-platform-gateway 180s
+  run_logged_stage "verify platform gateway rollout" rollout_status_with_logs mcp-platform deploy mcp-platform-gateway 180s
+  run_logged_stage "verify ui rollout" rollout_status_with_logs mcp-platform deploy mcp-ui 180s
+  run_logged_stage "verify postgres rollout" rollout_status_with_logs mcp-platform statefulset mcp-postgres 180s
+  run_logged_stage "verify ingest rollout" rollout_status_with_logs mcp-observability deploy mcp-ingest 180s
+  run_logged_stage "verify processor rollout" rollout_status_with_logs mcp-observability deploy mcp-processor 180s
   run_logged_stage "verify tempo rollout" rollout_status_with_logs mcp-observability statefulset tempo 180s
   run_logged_stage "verify loki rollout" rollout_status_with_logs mcp-observability statefulset loki 300s
   run_logged_stage "verify promtail rollout" rollout_status_with_logs mcp-log-collector daemonset promtail 180s
+  run_logged_stage "verify namespace placement" namespace_placement_verify
 }
 
 delete_mcp_server_and_wait() {
@@ -3741,6 +3748,10 @@ platform_cache_ready() {
   kubectl rollout status deploy/mcp-runtime-api -n mcp-platform --timeout=5s >/dev/null 2>&1 || return 1
   kubectl rollout status deploy/mcp-analytics-api -n mcp-observability --timeout=5s >/dev/null 2>&1 || return 1
   kubectl rollout status deploy/mcp-platform-gateway -n mcp-platform --timeout=5s >/dev/null 2>&1 || return 1
+  kubectl rollout status deploy/mcp-ui -n mcp-platform --timeout=5s >/dev/null 2>&1 || return 1
+  kubectl rollout status statefulset/mcp-postgres -n mcp-platform --timeout=5s >/dev/null 2>&1 || return 1
+  kubectl rollout status deploy/mcp-ingest -n mcp-observability --timeout=5s >/dev/null 2>&1 || return 1
+  kubectl rollout status deploy/mcp-processor -n mcp-observability --timeout=5s >/dev/null 2>&1 || return 1
   kubectl rollout status statefulset/clickhouse -n mcp-observability --timeout=5s >/dev/null 2>&1 || return 1
   kubectl rollout status statefulset/kafka -n mcp-observability --timeout=5s >/dev/null 2>&1 || return 1
   kubectl wait --for=condition=complete job/kafka-topic-init -n mcp-observability --timeout=5s >/dev/null 2>&1 || return 1

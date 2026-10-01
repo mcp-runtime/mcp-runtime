@@ -21,6 +21,9 @@
 # here prints secret values; tokens are passed through the environment and
 # never written into the artifact directory.
 
+# shellcheck source=namespace-placement.sh
+source "$(dirname "${BASH_SOURCE[0]}")/namespace-placement.sh"
+
 STAGING_LOG_PREFIX="${STAGING_LOG_PREFIX:-staging-e2e}"
 STAGING_MARKER_MAGIC="mcp-runtime-disposable-e2e-vm"
 STAGING_DEFAULT_SUFFIX="e2e.mcpruntime.org"
@@ -1967,6 +1970,7 @@ staging_run_platform_stages() {
   STAGING_MT_RUN_ID="${STAGING_MT_RUN_ID:-mt$(printf '%s' "${RUN_ID}" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9' | tail -c 10)}"
   STAGING_MT_CONFIG_DIR="${STAGING_MT_CONFIG_DIR:-${WORK_DIR}/mcpruntime-config}"
   export STAGING_MT_RUN_ID STAGING_MT_CONFIG_DIR
+  staging_run_stage namespace-placement critical "a workload, owner Secret, shared ConfigMap, or service URL is still aimed at the old combined namespace" namespace_placement_verify
   staging_run_stage diagnostics soft "setup finished but cluster diagnostics/doctor report unmet checks; read the failing check names" staging_check_diagnostics
   staging_run_stage rollouts soft "a platform deployment is not Ready or a pod is stuck in image pull/crash loop; see diagnostics/<ns>-pods-describe.txt" staging_check_rollouts
   staging_run_stage cluster-issuer soft "the ACME ClusterIssuer is not Ready (account registration failed or wrong directory); see diagnostics/clusterissuers.yaml" staging_check_cluster_issuer
