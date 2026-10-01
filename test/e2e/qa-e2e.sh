@@ -4697,17 +4697,16 @@ if checkpoint_enabled "oauth"; then
   echo "[registry][pass] public registry catalog requires admin auth"
 
   start_mcp_ingress_header_proxies
-  if scenario_selected "trust"; then
-    ensure_trust_session_proxy
-  fi
+  # Header proxies no longer carry X-MCP identity, so session-backed ingress
+  # checks need the certificate adapter even when the trust scenario is not
+  # selected (for example, path-selected smoke-auth runs).
+  ensure_trust_session_proxy
   wait_ports_parallel \
     "${MCP_CURL_ANON_PORT}" \
     "${MCP_CURL_IDENTITY_PORT}" \
     "${MCP_CURL_SESSION_PORT}" \
     "${MCP_CURL_BAD_SESSION_PORT}"
-  if scenario_selected "trust"; then
-    wait_port "${MCP_SERVICE_SESSION_PORT}"
-  fi
+  wait_port "${MCP_SERVICE_SESSION_PORT}"
 
   refresh_mcp_proxy_urls
   if scenario_selected "trust"; then
