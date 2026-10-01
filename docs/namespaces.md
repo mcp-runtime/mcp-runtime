@@ -47,7 +47,8 @@ Each key lives on the Secret that owns it, in that owner's namespace.
 
 The bundled Traefik allowlist is `registry`, `mcp-platform`,
 `mcp-observability`, `mcp-servers`, `mcp-servers-org`, and
-`mcp-servers-public`. Team create appends `mcp-team-{slug}` when it patches
-the repo-managed Traefik Deployment.
+`mcp-servers-public`. Team create appends `mcp-team-{slug}` only when the
+Traefik Deployment already has `--providers.kubernetesingress.namespaces`.
+k3s Traefik in `kube-system` watches every namespace and is left unchanged.
 
 Service behavior is in [Platform services](platform-services.md).

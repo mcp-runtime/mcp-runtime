@@ -345,14 +345,15 @@ sequenceDiagram
 - **Observe mode:** `policy.mode: observe` returns an allow before identity, session, grant, side-effect, and trust checks run. Traffic is still proxied and audited. Use it for visibility only; it enforces nothing.
 - **Audit on allow and deny:** the gateway emits decision, reason, trust levels, required side effect, human, agent, session, server, cluster, and namespace fields.
 
-Adapters must also present a session-bound client certificate. Traefik verifies
-it before forwarding; the gateway resolves the certificate's SPIFFE identity
-to the rendered agent session. On OAuth-enabled targets it also binds the
-session human to the OAuth subject. Direct clients use OAuth without a
-certificate only when the server configures `spec.auth`; omit `spec.auth` for
-cert-only governed routes. Set `MCP_ADAPTER_CERTIFICATES=true` with
-platform-wide `MCP_MTLS_CLUSTER_ISSUER` and `MCP_TRUST_DOMAIN` to enable
-adapter enrollment.
+When `MCP_ADAPTER_CERTIFICATES=true`, adapters present a session-bound client
+certificate. Traefik verifies it before forwarding, and the gateway resolves
+the certificate's SPIFFE identity to the rendered agent session. On
+OAuth-enabled targets it also binds the session human to the OAuth subject.
+Direct clients use OAuth without a certificate only when the server configures
+`spec.auth`; omit `spec.auth` for cert-only governed routes. Enrollment itself
+uses `MCP_MTLS_CLUSTER_ISSUER` and `MCP_TRUST_DOMAIN` and does not require the
+ingress switch. Without `MCP_ADAPTER_CERTIFICATES=true`, Traefik does not ask
+for the certificate and an allow-list `tools/call` is `401` `missing_identity`.
 
 ## Dashboard API
 

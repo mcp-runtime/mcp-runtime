@@ -136,12 +136,14 @@ mcp-runtime adapter proxy \
 
 Point Claude Desktop, Cursor, or any MCP client at `http://127.0.0.1:8099`.
 
-On a platform with `MCP_ADAPTER_CERTIFICATES=true`, call the `echo` tool; it
-succeeds. Call `create_task`; the gateway denies it because it is not in the
-grant. The hosted `mcp.mcpruntime.org` routes do not request a client
-certificate, so `tools/call` returns `401` `missing_identity` until that
-operator setting is on. `initialize` still succeeds. If you configure OAuth on
-the server, the MCP client must also send its bearer token through the adapter.
+The adapter enrolls a session certificate whenever the platform has a workload
+issuer. The gateway accepts that certificate as identity only when
+`MCP_ADAPTER_CERTIFICATES=true`. The live `mcp.mcpruntime.org` routes leave
+the setting off, so `initialize` succeeds and an allow-list `tools/call`
+returns `401` `missing_identity`. On a platform with the setting on, `echo`
+succeeds and `create_task` is denied because it is not in the grant. If you
+configure OAuth on the server, the MCP client must also send its bearer token
+through the adapter.
 
 ## Step 9: See it in analytics
 

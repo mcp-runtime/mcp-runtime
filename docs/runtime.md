@@ -196,14 +196,13 @@ Implemented and stable enough to evaluate:
   server federates to one configured OIDC connector per process. Policy
   decisions stay in the gateway. See
   [MCP authorization](mcp-authorization.md).
-- Adapter certificates: optional session-bound certificates are verified at
-  ingress on gateway routes. The gateway derives the adapter session identity
-  from the verified certificate and applies grant/session policy. Direct
-  clients use OAuth only when `spec.auth` is present. Adapters always use the
+- Adapter certificates: the runtime API enrolls a session certificate when
+  `MCP_MTLS_CLUSTER_ISSUER` and `MCP_TRUST_DOMAIN` are set. Ingress verifies
+  that certificate, and the gateway derives the session identity from it, only
+  when `MCP_ADAPTER_CERTIFICATES=true`. Direct clients use OAuth only when
+  `spec.auth` is present. With verification on, adapters present the
   certificate and add OAuth for an OAuth-enabled target; the gateway then
-  binds the certificate identity to the OAuth subject. Set
-  `MCP_ADAPTER_CERTIFICATES=true` with platform `MCP_MTLS_CLUSTER_ISSUER` and
-  `MCP_TRUST_DOMAIN` to enable enrollment.
+  binds the certificate identity to the OAuth subject.
 
 Not yet:
 
