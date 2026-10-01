@@ -29,6 +29,7 @@ spec:
       labels:
         app: mcp-platform-api
     spec:
+      priorityClassName: mcp-sentinel-services
       serviceAccountName: mcp-platform-api
       automountServiceAccountToken: true
       securityContext:

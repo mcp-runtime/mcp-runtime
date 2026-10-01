@@ -7,6 +7,11 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Changed
+
+- Sentinel recovery hardening for node resource pressure and eviction: stateful stores (Kafka, ClickHouse, Postgres) run under a new `mcp-sentinel-data` PriorityClass and request-serving services under `mcp-sentinel-services` (evicted last/after data stores; placement unchanged), StatefulSet PVCs are retained on delete or scale-down, ClickHouse gains resource requests/limits and probes, Kafka and ClickHouse gain startup probes and longer termination grace, and ingest/processor gain startup probes and use `imagePullPolicy: IfNotPresent` for pinned images so restarts survive transient registry outages ([#71](https://github.com/mcp-runtime/mcp-runtime/issues/71), [#72](https://github.com/mcp-runtime/mcp-runtime/issues/72), [#548](https://github.com/mcp-runtime/mcp-runtime/issues/548)). Cluster-scoped PriorityClasses are applied by `setup`; upgrades need no migration.
+- `mcp-runtime setup` prunes Failed/Evicted and orphaned Completed pods in `mcp-sentinel` before re-applying the stack, and `cluster doctor` reports them as `sentinel stale pods`.
+
 ### Added
 
 - Setup ends with a short operational smoke gate (nodes Ready, Bound PVCs, no Pending blockers, Postgres, platform-api `/health`+`/ready`, Sentinel rollout health, and an authenticated API probe). Failures fail setup; use `mcp-runtime cluster diagnostics` for deeper follow-up.

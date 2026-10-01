@@ -100,6 +100,26 @@ func analyticsServiceManifests(postgresManifest string) []string {
 	return manifests
 }
 
+// pruneStaleSentinelPodsClientGo removes Failed/Evicted/ContainerStatusUnknown
+// pods left behind by eviction churn so they do not obscure real platform
+// state during recovery. It is best-effort: a failure is reported but never
+// blocks setup.
+func pruneStaleSentinelPodsClientGo() {
+	clients, err := platformKubernetesClients()
+	if err != nil {
+		core.Warn(fmt.Sprintf("Could not prune stale mcp-sentinel pods: %v", err))
+		return
+	}
+	pruned, err := k8sclient.PruneTerminatedPods(context.Background(), clients, core.DefaultAnalyticsNamespace)
+	if err != nil {
+		core.Warn(fmt.Sprintf("Could not prune stale mcp-sentinel pods: %v", err))
+		return
+	}
+	if len(pruned) > 0 {
+		core.Info(fmt.Sprintf("Removed %d stale terminated mcp-sentinel pod(s): %s", len(pruned), strings.Join(pruned, ", ")))
+	}
+}
+
 func deployAnalyticsManifests(logger *zap.Logger, images AnalyticsImageSet, storageMode, platformMode string) error {
 	return deployAnalyticsManifestsClientGo(logger, images, storageMode, platformMode)
 }
@@ -118,6 +138,7 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 	core.Info("Applying mcp-sentinel namespace and config")
 	manifests := []string{
 		"k8s/00-namespace.yaml",
+		"k8s/00-priority-classes.yaml",
 		"k8s/01-config.yaml",
 	}
 	for _, manifest := range manifests {
@@ -166,6 +187,7 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 	if err := ensureAnalyticsHostpathDirs(storageMode); err != nil {
 		return err
 	}
+	pruneStaleSentinelPodsClientGo()
 	if err := reconcileKafkaStatefulSetForKRaftUpgradeClientGo(); err != nil {
 		return err
 	}
@@ -280,6 +302,7 @@ func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap
 	core.Info("Applying mcp-sentinel namespace and config")
 	manifests := []string{
 		"k8s/00-namespace.yaml",
+		"k8s/00-priority-classes.yaml",
 		"k8s/01-config.yaml",
 	}
 	for _, manifest := range manifests {
@@ -853,7 +876,7 @@ func renderAnalyticsManifest(content string, images AnalyticsImageSet, imagePull
 	// Kind node may already cache that tag, so those workloads must pull it
 	// again when their pod template changes. Keep pinned release images on the
 	// manifest's IfNotPresent policy.
-	for _, image := range []string{images.PlatformAPI, images.RuntimeAPI, images.AnalyticsAPI, images.UI} {
+	for _, image := range []string{images.Ingest, images.PlatformAPI, images.RuntimeAPI, images.AnalyticsAPI, images.Processor, images.UI} {
 		if !strings.HasSuffix(strings.TrimSpace(image), ":latest") {
 			continue
 		}

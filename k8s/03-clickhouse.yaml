@@ -41,6 +41,9 @@ metadata:
   namespace: mcp-sentinel
 spec:
   serviceName: clickhouse
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
   replicas: 1
   selector:
     matchLabels:
@@ -50,6 +53,8 @@ spec:
       labels:
         app: clickhouse
     spec:
+      priorityClassName: mcp-sentinel-data
+      terminationGracePeriodSeconds: 60
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
@@ -79,6 +84,32 @@ spec:
                 configMapKeyRef:
                   name: mcp-sentinel-config
                   key: CLICKHOUSE_DB
+          startupProbe:
+            httpGet:
+              path: /ping
+              port: 8123
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 8123
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: 8123
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+              ephemeral-storage: 128Mi
+            limits:
+              memory: 2Gi
           volumeMounts:
             - name: data
               mountPath: /var/lib/clickhouse

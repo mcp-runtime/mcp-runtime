@@ -476,6 +476,7 @@ spec:
       labels:
         app: mcp-sentinel-gateway
     spec:
+      priorityClassName: mcp-sentinel-services
       serviceAccountName: mcp-sentinel-gateway
       securityContext:
         runAsNonRoot: true

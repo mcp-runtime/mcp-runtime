@@ -2680,3 +2680,51 @@ func argValueWithPrefix(args []string, prefix string) string {
 	}
 	return ""
 }
+
+func TestCheckSentinelStalePods(t *testing.T) {
+	run := func(podsJSON string) DoctorCheck {
+		mock := &core.MockExecutor{
+			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
+				switch {
+				case contains(spec.Args, "namespace"):
+					return &core.MockCommand{OutputData: []byte("mcp-sentinel")}
+				case contains(spec.Args, "pods"):
+					return &core.MockCommand{OutputData: []byte(podsJSON)}
+				default:
+					return &core.MockCommand{}
+				}
+			},
+		}
+		return checkSentinelStalePods(core.NewTestKubectlClient(mock))
+	}
+
+	t.Run("fails on evicted and orphaned completed pods", func(t *testing.T) {
+		check := run(`{"items":[
+{"metadata":{"name":"kafka-0"},"status":{"phase":"Running"}},
+{"metadata":{"name":"ingest-old"},"status":{"phase":"Failed","reason":"Evicted"}},
+{"metadata":{"name":"orphan"},"status":{"phase":"Succeeded"}},
+{"metadata":{"name":"kafka-topic-init-x","ownerReferences":[{"kind":"Job"}]},"status":{"phase":"Succeeded"}}
+]}`)
+		if check.OK {
+			t.Fatal("expected stale pod failure")
+		}
+		for _, want := range []string{"2 stale", "pod/ingest-old Evicted", "pod/orphan Completed"} {
+			if !strings.Contains(check.Detail, want) {
+				t.Fatalf("detail = %q, want %q", check.Detail, want)
+			}
+		}
+		if strings.Contains(check.Detail, "kafka-topic-init-x") {
+			t.Fatalf("job-owned completed pod must not be reported: %q", check.Detail)
+		}
+	})
+
+	t.Run("passes with only running and job-owned pods", func(t *testing.T) {
+		check := run(`{"items":[
+{"metadata":{"name":"kafka-0"},"status":{"phase":"Running"}},
+{"metadata":{"name":"job-pod","ownerReferences":[{"kind":"Job"}]},"status":{"phase":"Succeeded"}}
+]}`)
+		if !check.OK {
+			t.Fatalf("expected OK, got %q", check.Detail)
+		}
+	})
+}

@@ -1,0 +1,22 @@
+# Eviction ordering for the mcp-sentinel stack. When a node is under
+# resource pressure the kubelet evicts lower-priority pods first, so stateful
+# data stores outrank the request-serving services, which outrank
+# observability. These only affect eviction/preemption order; they do not
+# change scheduling placement.
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: mcp-sentinel-data
+value: 100000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: "mcp-sentinel stateful data stores (Kafka, ClickHouse, Postgres). Evicted last."
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: mcp-sentinel-services
+value: 50000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: "mcp-sentinel request-serving and pipeline services (ingest, processor, APIs, UI, gateway)."

@@ -49,6 +49,9 @@ metadata:
     mcpruntime.org/kafka-mode: kraft
 spec:
   serviceName: kafka-headless
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
   podManagementPolicy: Parallel
   replicas: 3
   selector:
@@ -59,6 +62,8 @@ spec:
       labels:
         app: kafka
     spec:
+      priorityClassName: mcp-sentinel-data
+      terminationGracePeriodSeconds: 120
       automountServiceAccountToken: false
       enableServiceLinks: false
       securityContext:
@@ -133,6 +138,11 @@ spec:
               value: /var/lib/kafka/data
             - name: KAFKA_HEAP_OPTS
               value: "-Xms384m -Xmx384m"
+          startupProbe:
+            tcpSocket:
+              port: broker
+            periodSeconds: 5
+            failureThreshold: 60
           readinessProbe:
             tcpSocket:
               port: broker
@@ -147,6 +157,7 @@ spec:
             requests:
               cpu: 200m
               memory: 512Mi
+              ephemeral-storage: 128Mi
             limits:
               memory: 768Mi
           volumeMounts:

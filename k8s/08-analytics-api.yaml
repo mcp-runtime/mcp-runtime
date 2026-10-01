@@ -29,6 +29,7 @@ spec:
       labels:
         app: mcp-analytics-api
     spec:
+      priorityClassName: mcp-sentinel-services
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
