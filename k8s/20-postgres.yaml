@@ -19,6 +19,9 @@ metadata:
   namespace: mcp-sentinel
 spec:
   serviceName: mcp-sentinel-postgres
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
   replicas: 1
   selector:
     matchLabels:
@@ -28,6 +31,8 @@ spec:
       labels:
         app: mcp-sentinel-postgres
     spec:
+      priorityClassName: mcp-sentinel-data
+      terminationGracePeriodSeconds: 60
       automountServiceAccountToken: false
       securityContext:
         runAsUser: 70
@@ -98,6 +103,7 @@ spec:
             requests:
               cpu: 100m
               memory: 256Mi
+              ephemeral-storage: 64Mi
             limits:
               cpu: 500m
               memory: 512Mi

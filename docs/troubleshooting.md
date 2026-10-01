@@ -226,6 +226,40 @@ kubectl delete certificaterequest -n registry --all
 # Re-run setup
 ```
 
+### Sentinel stack stuck after node pressure or eviction
+
+After `DiskPressure`, memory pressure, or a node restart, `mcp-sentinel` pods can
+be evicted and recreated. The stack is built to converge on its own once the
+node recovers:
+
+- Stateful stores (Kafka, ClickHouse, Postgres) run with the
+  `mcp-sentinel-data` PriorityClass and request-serving services with
+  `mcp-sentinel-services`, so data stores are evicted last.
+- Kafka runs in KRaft mode with a fixed cluster ID and a persistent volume per
+  broker, so a broker restart reuses its own metadata. StatefulSet PVCs are
+  retained on delete and scale-down.
+- Slow-starting stores and the ingest/processor pods have startup probes, so
+  liveness does not restart them while a dependency recovers. Ingest and
+  processor pods become ready again on their own once Kafka is healthy.
+- `ingest` and `processor` use `imagePullPolicy: IfNotPresent` for pinned
+  images, so a restart during a registry outage reuses the node's cached image.
+
+Recovery check and repair:
+
+```bash
+mcp-runtime cluster doctor          # reports "sentinel stale pods", Kafka, and ingest readiness
+mcp-runtime setup                   # single repair action: re-applies manifests and prunes terminated pods
+```
+
+`cluster doctor` flags `Failed` (Evicted, Error, ContainerStatusUnknown) pods
+and orphaned `Completed` pods in `mcp-sentinel`; `mcp-runtime setup` removes
+them before re-applying the stack. Pods owned by a Job are left alone.
+
+If Kafka logs `InconsistentClusterIdException`, setup refuses to delete the
+broker volume automatically because that discards queued events. Restore the
+metadata that matches the volume, or, if losing queued events is acceptable,
+reset the Kafka PVCs explicitly and rerun `mcp-runtime setup`.
+
 ### Namespace stuck in Terminating
 
 ```bash

@@ -297,6 +297,7 @@ func doctorCheckSpecs(kubectl core.KubectlRunner, distro Distribution) []doctorC
 		{Name: "sentinel ingest readiness", Detail: "checking the analytics ingest deployment is ready", Run: func() DoctorCheck { return checkSentinelIngestReadiness(kubectl) }},
 		{Name: "sentinel platform API readiness", Detail: "checking the platform-api deployment and /health + /ready endpoints", Run: func() DoctorCheck { return checkSentinelPlatformAPIReadiness(kubectl) }},
 		{Name: "sentinel workload rollout health", Detail: "detecting unavailable deployments, stuck rollouts, crash loops, and repeated container restarts", Run: func() DoctorCheck { return checkSentinelWorkloadHealth(kubectl) }},
+		{Name: "sentinel stale pods", Detail: "detecting Failed, Evicted, and orphaned Completed pods that obscure platform state after eviction churn", Run: func() DoctorCheck { return checkSentinelStalePods(kubectl) }},
 		{Name: "sentinel Postgres credential drift", Detail: "comparing the database password Secret with the live Postgres process before API pods fail authentication", Run: func() DoctorCheck { return checkSentinelPostgresCredentialDrift(kubectl) }},
 		{Name: "sentinel analytics API readiness", Detail: "checking the analytics-api deployment and /health + /ready endpoints", Run: func() DoctorCheck { return checkSentinelAnalyticsAPIReadiness(kubectl) }},
 		{Name: "sentinel telemetry pipeline", Detail: "checking the collector Service, endpoints, workload, and trace pipeline configuration", Run: func() DoctorCheck { return checkSentinelTelemetryPipeline(kubectl) }},

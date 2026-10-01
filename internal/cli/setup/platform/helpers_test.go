@@ -2250,6 +2250,7 @@ func TestDeployAnalyticsManifestsWithKubectl_RecreatesInitializationJobs(t *test
 	manifestContent := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: fixture\n  namespace: mcp-sentinel\n"
 	for _, name := range []string{
 		"00-namespace.yaml",
+		"00-priority-classes.yaml",
 		"01-config.yaml",
 		"03-clickhouse.yaml",
 		"04-clickhouse-init.yaml",
@@ -2522,6 +2523,7 @@ func TestDeployAnalyticsManifestsReturnsRolloutFailures(t *testing.T) {
 	manifestContent := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: fixture\n  namespace: mcp-sentinel\n"
 	for _, name := range []string{
 		"00-namespace.yaml",
+		"00-priority-classes.yaml",
 		"01-config.yaml",
 		"03-clickhouse.yaml",
 		"03-clickhouse-hostpath.yaml",
@@ -2623,6 +2625,7 @@ func TestDeployAnalyticsManifestsWithKubectl_HostpathUsesHostpathManifests(t *te
 	manifestContent := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: fixture\n  namespace: mcp-sentinel\n"
 	for _, name := range []string{
 		"00-namespace.yaml",
+		"00-priority-classes.yaml",
 		"01-config.yaml",
 		"03-clickhouse-hostpath.yaml",
 		"04-clickhouse-init.yaml",
@@ -2694,6 +2697,7 @@ func TestDeployAnalyticsManifestsWithKubectl_WaitsForPostgresStatefulSet(t *test
 	manifestContent := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: fixture\n  namespace: mcp-sentinel\n"
 	for _, name := range []string{
 		"00-namespace.yaml",
+		"00-priority-classes.yaml",
 		"01-config.yaml",
 		"03-clickhouse.yaml",
 		"04-clickhouse-init.yaml",
@@ -3839,5 +3843,32 @@ func TestTraefikMiddlewarePatchAddsSpiffeIdentityToExistingInstall(t *testing.T)
 	volume, _ := ops[2].Value.(map[string]any)
 	if configMap, _ := volume["configMap"].(map[string]any); configMap["name"] != "traefik-plugin-spiffe-identity" {
 		t.Fatalf("volume op = %+v, want the spiffe-identity plugin ConfigMap", ops[2])
+	}
+}
+
+func TestRenderAnalyticsManifestPullsRepublishedLatestIngestAndProcessor(t *testing.T) {
+	for _, tc := range []struct {
+		manifest, repo string
+		set            func(string) AnalyticsImageSet
+	}{
+		{"k8s/06-ingest.yaml", "mcp-sentinel-ingest", func(i string) AnalyticsImageSet { return AnalyticsImageSet{Ingest: i} }},
+		{"k8s/07-processor.yaml", "mcp-sentinel-processor", func(i string) AnalyticsImageSet { return AnalyticsImageSet{Processor: i} }},
+	} {
+		raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", tc.manifest))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, c := range []struct{ image, wantPolicy string }{
+			{"registry.registry.svc.cluster.local:5000/" + tc.repo + ":latest", "Always"},
+			{"registry.registry.svc.cluster.local:5000/" + tc.repo + "@sha256:abc123", "IfNotPresent"},
+		} {
+			rendered, err := renderAnalyticsManifest(string(raw), tc.set(c.image), "", setupplan.PlatformModeTenant)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(rendered, "image: "+c.image+"\n          imagePullPolicy: "+c.wantPolicy) {
+				t.Fatalf("%s image %q rendered with wrong pull policy", tc.manifest, c.image)
+			}
+		}
 	}
 }

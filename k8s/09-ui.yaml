@@ -27,6 +27,7 @@ spec:
       labels:
         app: mcp-sentinel-ui
     spec:
+      priorityClassName: mcp-sentinel-services
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true

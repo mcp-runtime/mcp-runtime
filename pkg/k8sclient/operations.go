@@ -723,3 +723,47 @@ func cloneStringMap(in map[string]string) map[string]string {
 	}
 	return out
 }
+
+// PruneTerminatedPods deletes pods in a namespace that are terminal leftovers
+// of eviction or restart churn: pods in the Failed phase (Evicted, Error,
+// ContainerStatusUnknown, ...) and Succeeded pods that no Job owns. Pods
+// owned by a Job in the Succeeded phase are left to the Job's own lifecycle.
+// Running and Pending pods are never touched. It returns the deleted names.
+func PruneTerminatedPods(ctx context.Context, clients *Clients, namespace string) ([]string, error) {
+	pods := clients.Clientset.CoreV1().Pods(namespace)
+	list, err := pods.List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list pods in %s: %w", namespace, err)
+	}
+	var deleted []string
+	for _, pod := range list.Items {
+		if !isPrunableTerminatedPod(&pod) {
+			continue
+		}
+		err := pods.Delete(ctx, pod.Name, metav1.DeleteOptions{})
+		if err != nil && !apierrors.IsNotFound(err) {
+			return deleted, fmt.Errorf("delete terminated pod %s/%s: %w", namespace, pod.Name, err)
+		}
+		deleted = append(deleted, pod.Name)
+	}
+	sort.Strings(deleted)
+	return deleted, nil
+}
+
+func isPrunableTerminatedPod(pod *corev1.Pod) bool {
+	if pod.DeletionTimestamp != nil {
+		return false
+	}
+	switch pod.Status.Phase {
+	case corev1.PodFailed:
+		return true
+	case corev1.PodSucceeded:
+		for _, owner := range pod.OwnerReferences {
+			if owner.Kind == "Job" {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
