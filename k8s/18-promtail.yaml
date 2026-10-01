@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: promtail
-  namespace: mcp-sentinel
+  namespace: mcp-log-collector
 automountServiceAccountToken: true
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -17,11 +17,11 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: promtail
+  name: promtail-node-log-collector
 subjects:
   - kind: ServiceAccount
     name: promtail
-    namespace: mcp-sentinel
+    namespace: mcp-log-collector
 roleRef:
   kind: ClusterRole
   name: promtail
@@ -31,7 +31,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: promtail-config
-  namespace: mcp-sentinel
+  namespace: mcp-log-collector
 data:
   promtail.yaml: |
     server:
@@ -40,7 +40,7 @@ data:
     positions:
       filename: /run/promtail/positions.yaml
     clients:
-      - url: http://loki:3100/loki/api/v1/push
+      - url: http://loki.mcp-sentinel.svc:3100/loki/api/v1/push
     scrape_configs:
       - job_name: kubernetes-pods
         kubernetes_sd_configs:
@@ -71,7 +71,7 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: promtail
-  namespace: mcp-sentinel
+  namespace: mcp-log-collector
 spec:
   selector:
     matchLabels:

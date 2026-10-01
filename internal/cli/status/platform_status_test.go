@@ -306,7 +306,7 @@ func TestShowPlatformStatus(t *testing.T) {
 			commandKey("kubectl", "get", "statefulset", "loki", "-n", "mcp-sentinel", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
 				Stdout: "1/1",
 			},
-			commandKey("kubectl", "get", "daemonset", "promtail", "-n", "mcp-sentinel", "-o", "jsonpath={.status.numberReady}/{.status.desiredNumberScheduled}"): {
+			commandKey("kubectl", "get", "daemonset", "promtail", "-n", "mcp-log-collector", "-o", "jsonpath={.status.numberReady}/{.status.desiredNumberScheduled}"): {
 				Stdout: "3/3",
 			},
 			commandKey("kubectl", "get", "mcpserver", "--all-namespaces", "-o", "custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,IMAGE:.spec.image,REPLICAS:.spec.replicas,PATH:.spec.ingressPath"): {},

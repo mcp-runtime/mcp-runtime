@@ -26,15 +26,6 @@ metadata:
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: mcp-sentinel
-  labels:
-    pod-security.kubernetes.io/enforce: baseline
-    pod-security.kubernetes.io/audit: restricted
-    pod-security.kubernetes.io/warn: restricted
----
-apiVersion: v1
-kind: Namespace
-metadata:
   name: mcp-servers
   labels:
     pod-security.kubernetes.io/enforce: restricted

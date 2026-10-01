@@ -2,7 +2,11 @@
 // It does not provision resources or authorize namespace access.
 package platforminventory
 
-import "strings"
+import (
+	"strings"
+
+	"mcp-runtime/pkg/mcpdefaults"
+)
 
 type Owner string
 
@@ -60,8 +64,9 @@ type PortTarget struct {
 }
 
 const (
-	DefaultNamespace  = "mcp-sentinel"
-	OperatorNamespace = "mcp-runtime"
+	DefaultNamespace      = "mcp-sentinel"
+	LogCollectorNamespace = mcpdefaults.LogCollectorNamespace
+	OperatorNamespace     = "mcp-runtime"
 )
 
 // catalog keeps the historical Sentinel management order.
@@ -272,7 +277,7 @@ var catalog = []Component{
 		Capabilities: []Capability{Telemetry, NodeLogs},
 		Dependencies: []Dependency{{Component: "loki", Optional: false}},
 		Display:      "Promtail",
-		Namespace:    DefaultNamespace,
+		Namespace:    LogCollectorNamespace,
 		Kind:         "daemonset",
 		Resource:     "promtail",
 		Label:        "promtail",

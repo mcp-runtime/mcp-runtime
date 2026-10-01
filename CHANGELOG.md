@@ -15,6 +15,9 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 ### Security
 
 - Operator tenant Secret permissions are scoped to MCPServer namespaces, and Secret reads bypass the controller cache. Runtime-managed namespaces receive a scoped binding automatically; setup backfills existing managed namespaces. The configured TLS namespace grants named read/update access only to the public adapter trust bundle ([#540](https://github.com/mcp-runtime/mcp-runtime/issues/540)).
+### Security
+
+- Platform application workloads now use restricted Pod Security admission; node log collection runs in a dedicated namespace with its hostPath exception ([#548](https://github.com/mcp-runtime/mcp-runtime/issues/548)).
 
 ### Added
 
