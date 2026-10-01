@@ -156,11 +156,17 @@ mcp-runtime adapter proxy \
 ```
 
 Point **Claude Desktop**, **Cursor**, or any MCP client at `http://127.0.0.1:8099`.
-This quickstart does not configure `spec.auth`, so the route uses the adapter
-certificate without an OAuth bearer. Call the `echo` or `add` tool. The
-allow-list policy created by `server init` checks the grant and required session
-on each tool call. If you enable OAuth for the server, the client must send its
-bearer through the adapter; see [Agent adapters](agent-adapters.md).
+This quickstart does not configure `spec.auth`, so the route is meant to use
+the adapter certificate without an OAuth bearer. That works only when the
+platform operator has set `MCP_ADAPTER_CERTIFICATES=true` (see
+[Getting Started](getting-started.md)). The hosted `mcp.mcpruntime.org` routes
+are plain Ingress objects and do not ask for a client certificate, so
+`tools/call` returns `401` `missing_identity` even after the adapter enrolls a
+session. `initialize` still succeeds. Call `echo` or `add` once adapter
+certificates are enabled. The allow-list policy created by `server init`
+checks the grant and required session on each tool call. If you enable OAuth
+for the server, the client must send its bearer through the adapter; see
+[Agent adapters](agent-adapters.md).
 
 ## 5. See it in the analytics
 
