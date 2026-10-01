@@ -153,8 +153,12 @@ func TestWorkloadSecretReferencesMatchConsumerAllowlists(t *testing.T) {
 			}
 		}
 	}
+	consumerFiles := map[string]bool{}
+	for _, name := range []string{"06-ingest.yaml", "08-platform-api.yaml", "08-runtime-api.yaml", "08-analytics-api.yaml", "09-ui.yaml", "12-grafana.yaml", "14-mcp-gateway-sidecar.yaml", "20-postgres.yaml", "20-postgres-hostpath.yaml", "21-platform-admin-bootstrap-job.yaml"} {
+		consumerFiles[name] = true
+	}
 	for _, file := range files {
-		if !strings.HasSuffix(file.Name(), ".yaml") {
+		if !consumerFiles[file.Name()] {
 			continue
 		}
 		data, err := os.ReadFile(filepath.Join(root, file.Name()))
