@@ -1,0 +1,18 @@
+# Workload mutation for the operator, bound only by namespace-local RoleBindings
+# in managed MCPServer namespaces. Deployments, ServiceAccounts and Certificates
+# are the indirect routes to a Secret (mounting or issuing into it), so they must
+# never be writable in cert-manager or other infrastructure namespaces.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: mcp-runtime-operator-managed-workloads
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["create", "delete", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["create", "patch", "update"]
+  - apiGroups: ["cert-manager.io"]
+    resources: ["certificates"]
+    verbs: ["create", "delete", "patch", "update"]

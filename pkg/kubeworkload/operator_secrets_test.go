@@ -45,6 +45,32 @@ func TestOperatorSecretBindingIsScopedAndIdempotent(t *testing.T) {
 	}
 }
 
+func TestOperatorWorkloadBindingIsNamespaceScoped(t *testing.T) {
+	ctx := context.Background()
+	client := fake.NewSimpleClientset()
+	if err := EnsureOperatorSecretAccess(ctx, client, "mcp-team-acme"); err != nil {
+		t.Fatal(err)
+	}
+	binding, err := client.RbacV1().RoleBindings("mcp-team-acme").Get(ctx, OperatorWorkloadAccessName, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if binding.RoleRef.Kind != "ClusterRole" || binding.RoleRef.Name != OperatorWorkloadAccessName || len(binding.Subjects) != 1 || binding.Subjects[0].Namespace != OperatorNamespace {
+		t.Fatalf("bad workload binding: %+v", binding)
+	}
+	binding.RoleRef.Name = "unexpected"
+	if _, err = client.RbacV1().RoleBindings("mcp-team-acme").Update(ctx, binding, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err = EnsureOperatorSecretAccess(ctx, client, "mcp-team-acme"); err == nil {
+		t.Fatal("accepted conflicting workload roleRef")
+	}
+	denied := fake.NewSimpleClientset()
+	if err = EnsureOperatorSecretAccess(ctx, denied, "cert-manager"); err == nil || len(denied.Actions()) != 0 {
+		t.Fatalf("cert-manager must receive no workload binding, err=%v actions=%v", err, denied.Actions())
+	}
+}
+
 func TestTrustBundleGrantCannotReadSigningKeyOrCreateSecrets(t *testing.T) {
 	ctx := context.Background()
 	client := fake.NewSimpleClientset(&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: OperatorTrustBundleName, Namespace: "traefik"}, Data: map[string][]byte{"ca.crt": []byte("public-root")}})

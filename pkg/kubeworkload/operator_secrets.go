@@ -13,7 +13,10 @@ import (
 )
 
 const (
-	OperatorSecretAccessName   = "mcp-runtime-operator-managed-secrets"
+	OperatorSecretAccessName = "mcp-runtime-operator-managed-secrets"
+	// OperatorWorkloadAccessName grants Deployment, ServiceAccount and
+	// Certificate mutation, which are indirect routes to a Secret.
+	OperatorWorkloadAccessName = "mcp-runtime-operator-managed-workloads"
 	OperatorServiceAccountName = "mcp-runtime-operator-controller-manager"
 	OperatorNamespace          = "mcp-runtime"
 	OperatorTrustBundleName    = "mcp-adapter-client-ca" // #nosec G101 -- object name, not a credential
@@ -33,15 +36,25 @@ func OperatorSecretNamespaceProtected(namespace string) bool {
 	return false
 }
 
-// EnsureOperatorSecretAccess is invoked only after the installer or platform
+// EnsureOperatorSecretAccess binds the operator's namespace-local Secret and
+// workload roles. It is invoked only after the installer or platform
 // has established that the namespace hosts managed MCPServers.
 func EnsureOperatorSecretAccess(ctx context.Context, client kubernetes.Interface, namespace string) error {
 	if OperatorSecretNamespaceProtected(namespace) {
 		return fmt.Errorf("operator tenant Secret access is prohibited in namespace %q", namespace)
 	}
+	for _, clusterRole := range []string{OperatorSecretAccessName, OperatorWorkloadAccessName} {
+		if err := ensureOperatorRoleBinding(ctx, client, namespace, clusterRole); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ensureOperatorRoleBinding(ctx context.Context, client kubernetes.Interface, namespace, clusterRole string) error {
 	desired := &rbacv1.RoleBinding{
-		ObjectMeta: metav1.ObjectMeta{Name: OperatorSecretAccessName, Namespace: namespace},
-		RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "ClusterRole", Name: OperatorSecretAccessName},
+		ObjectMeta: metav1.ObjectMeta{Name: clusterRole, Namespace: namespace},
+		RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "ClusterRole", Name: clusterRole},
 		Subjects:   []rbacv1.Subject{{Kind: rbacv1.ServiceAccountKind, Name: OperatorServiceAccountName, Namespace: OperatorNamespace}},
 	}
 	existing, err := client.RbacV1().RoleBindings(namespace).Get(ctx, desired.Name, metav1.GetOptions{})
@@ -53,7 +66,7 @@ func EnsureOperatorSecretAccess(ctx context.Context, client kubernetes.Interface
 		return err
 	}
 	if existing.RoleRef != desired.RoleRef {
-		return fmt.Errorf("existing operator Secret binding in namespace %q has a conflicting roleRef", namespace)
+		return fmt.Errorf("existing operator binding %q in namespace %q has a conflicting roleRef", clusterRole, namespace)
 	}
 	existing.Subjects = desired.Subjects
 	_, err = client.RbacV1().RoleBindings(namespace).Update(ctx, existing, metav1.UpdateOptions{})

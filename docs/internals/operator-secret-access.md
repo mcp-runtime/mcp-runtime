@@ -23,8 +23,16 @@ namespaces cannot be configured for this trust bundle. Direct customized
 installations must pre-provision the bundle and equivalent named RoleBinding;
 removing the Secret requires rerunning setup before reconciliation can restore it.
 
-This limits direct Secret API access. It does not establish full workload-CA
-isolation while the operator retains cluster-wide Deployment, ServiceAccount
-and Certificate mutation rights. Narrowing that indirect authority and testing
-real API-server authorization remain prerequisites in the namespace refactor
-plan. Do not treat this change as closing the CA-key isolation issue.
+Indirect routes are scoped the same way. Deployment, ServiceAccount and
+Certificate create/update/patch/delete (the ways to mount or issue into a Secret)
+are granted by the `mcp-runtime-operator-managed-workloads` ClusterRole, bound only
+through the same namespace-local RoleBindings. The cluster-bound role keeps
+get/list/watch on them for informers. The operator therefore cannot create a
+Deployment in `cert-manager` to mount the workload CA key, nor read it directly.
+Runtime API holds `bind` on the role for provisioning.
+
+Remaining gaps: other mutating verbs (Services, ConfigMaps, Ingresses,
+NetworkPolicies, Traefik resources, `pods` patch) stay cluster-wide, and
+real API-server authorization (`kubectl auth can-i` for
+`cert-manager/mcp-runtime-ca`) plus Staging E2E have not been exercised.
+Do not treat this change as closing the CA-key isolation issue until that is done.

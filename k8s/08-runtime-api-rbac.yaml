@@ -59,7 +59,7 @@ rules:
     verbs: ["get", "list", "watch", "create", "update", "patch"]
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["clusterroles"]
-    resourceNames: ["mcp-runtime-api-team-secrets", "mcp-runtime-operator-managed-secrets"]
+    resourceNames: ["mcp-runtime-api-team-secrets", "mcp-runtime-operator-managed-secrets", "mcp-runtime-operator-managed-workloads"]
     verbs: ["bind"]
   - apiGroups: [""]
     resources: ["users", "groups"]
