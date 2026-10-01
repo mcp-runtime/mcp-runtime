@@ -32,12 +32,14 @@ jobs:
         id: filter
         uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         with:
+          predicate-quantifier: some-with-excludes
           filters: |
             code:
               - '**'
               - '!articles/**'
               - '!docs/**'
               - '!website/**'
+              - '!.codex/skills/**/*.md'
               - '!AGENTS.md'
               - '!CHANGELOG.md'
               - '!README.md'
@@ -213,19 +215,32 @@ jobs:
         id: e2e_changes
         uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         with:
-          list-files: shell
+          list-files: json
           filters: |
             changed:
               - '**'
 
       - name: Select QA E2E scenarios
+        env:
+          CHANGED_FILES_JSON: ${{ steps.e2e_changes.outputs.changed_files }}
         run: |
-          changed_files=( ${{ steps.e2e_changes.outputs.changed_files }} )
-          if [ "${#changed_files[@]}" -gt 0 ]; then
-            printf '%s\n' "${changed_files[@]}" > "${RUNNER_TEMP}/e2e-changed-files.txt"
-          else
-            : > "${RUNNER_TEMP}/e2e-changed-files.txt"
-          fi
+          python3 - "${RUNNER_TEMP}/e2e-changed-files.txt" <<'PY'
+          import json
+          import os
+          import sys
+
+          paths = json.loads(os.environ.get("CHANGED_FILES_JSON") or "[]")
+          if not isinstance(paths, list) or any(not isinstance(path, str) for path in paths):
+              raise SystemExit("E2E changed file list is not a JSON string array")
+          with open(sys.argv[1], "w", encoding="utf-8") as changed_file:
+              for path in paths:
+                  # The selector's input is line-oriented; force all scenarios if a
+                  # filename cannot be represented without splitting it.
+                  if not path or "\n" in path or "\r" in path:
+                      changed_file.write(".github/workflows/ci.yaml\n")
+                      break
+                  changed_file.write(path + "\n")
+          PY
 
           scenarios="$(bash test/e2e/select_pr_scenarios.sh < "${RUNNER_TEMP}/e2e-changed-files.txt")"
           echo "E2E_SCENARIOS=${scenarios}" >> "${GITHUB_ENV}"

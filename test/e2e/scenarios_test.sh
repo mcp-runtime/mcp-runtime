@@ -156,7 +156,7 @@ selector_expect "runtime-team" "smoke-auth,api-platform,multitenancy" "services/
 selector_expect "broad" "all" "api/v1alpha1/mcpserver_types.go"
 selector_expect "staging-e2e-only" "smoke-auth" "test/e2e/staging-vm.sh" "test/e2e/lib/staging.sh" ".github/workflows/staging-e2e.yaml"
 
-python3 - "${PROJECT_ROOT}/.github/workflows/staging-e2e.yaml" "${PROJECT_ROOT}/test/e2e/qa-e2e.sh" "${PROJECT_ROOT}/docs/contributor/staging-e2e.md" <<'PY'
+python3 - "${PROJECT_ROOT}/.github/workflows/staging-e2e.yaml" "${PROJECT_ROOT}/test/e2e/qa-e2e.sh" "${PROJECT_ROOT}/docs/contributor/staging-e2e.md" "${PROJECT_ROOT}/.github/workflows/ci.yaml" <<'PY'
 import pathlib
 import sys
 
@@ -184,6 +184,18 @@ print("[pass] staging E2E main-push trigger and event defaults")
 staging_docs = pathlib.Path(sys.argv[3]).read_text(encoding="utf-8")
 assert "gh workflow run staging-e2e.yaml" in staging_docs, "staging E2E docs must name the on-VM workflow"
 assert "gh workflow run staging-e2e-remote.yaml" in staging_docs, "staging E2E docs must name the runner-driven workflow"
+
+ci_workflow = pathlib.Path(sys.argv[4]).read_text(encoding="utf-8")
+assert "predicate-quantifier: some-with-excludes" in ci_workflow, (
+    "documentation exclusions must override the catch-all code path filter"
+)
+assert "list-files: json" in ci_workflow and "CHANGED_FILES_JSON: ${{ steps.e2e_changes.outputs.changed_files }}" in ci_workflow, (
+    "PR filenames must enter the selector as JSON through the environment"
+)
+assert "changed_files=( ${{ steps.e2e_changes.outputs.changed_files }} )" not in ci_workflow, (
+    "PR filenames must not be interpolated into shell code"
+)
+print("[pass] CI path exclusions and selector input are guarded")
 
 kind = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")
 build_start = kind.index("build_and_publish_image() {")
