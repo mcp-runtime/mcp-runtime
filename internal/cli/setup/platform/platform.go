@@ -206,6 +206,10 @@ type SetupDeps struct {
 	// StampPlatformVersion records the installed platform version on platform
 	// Deployment metadata after a successful setup. Nil skips stamping (tests).
 	StampPlatformVersion func(version string) error
+	// RunPostSetupSmoke runs a short operational gate after registry/operator/CRD
+	// checks. Nil skips the smoke (tests); production defaults fail setup when
+	// nodes, Postgres, platform-api, Sentinel rollouts, or auth probes are bad.
+	RunPostSetupSmoke func() error
 }
 
 func (d SetupDeps) withDefaults(logger *zap.Logger) SetupDeps {
@@ -396,7 +400,11 @@ func publicAuthConfigValue(existingData map[string]string, key string) string {
 }
 
 func SetupPlatform(logger *zap.Logger, plan setupplan.Plan, clusterMgr ClusterManagerAPI) error {
-	return setupPlatformWithDeps(logger, plan, SetupDeps{ClusterManager: clusterMgr, StampPlatformVersion: stampPlatformVersionClientGo}.withDefaults(logger))
+	return setupPlatformWithDeps(logger, plan, SetupDeps{
+		ClusterManager:       clusterMgr,
+		StampPlatformVersion: stampPlatformVersionClientGo,
+		RunPostSetupSmoke:    runPostSetupOperationalSmoke,
+	}.withDefaults(logger))
 }
 
 func buildOperatorArgs(metricsAddr, probeAddr string, leaderElect, leaderElectChanged bool) []string {

@@ -16,6 +16,7 @@ This file is the **onboarding index** for the MCP Runtime repo. It complements `
 | Merge / ship / tag | CI green + Staging E2E (`docs/contributor/staging-e2e.md`); then the focused skill for the diff |
 | API / CRD / CLI design review | Focused skill for the surface; `.codex/skills/_shared/design-principles.md` for contract choices |
 | Docs / AGENTS / golden help drift | Update nearest docs when behavior changes; golden/docs CI is the deterministic check (no docs-sync skill) |
+| Post-setup health | Setup Step 6 now includes an operational smoke gate (nodes/PVCs/Postgres/platform-api/Sentinel/auth). Deeper installed-cluster diagnosis: `mcp-runtime cluster diagnostics` |
 | Codebase navigation | `graphify query` / `path` / `explain` when `graphify-out/graph.json` exists (CLI, not a skill) |
 
 ## Repository map (where to look)

@@ -37,7 +37,11 @@ workarounds for kubelet image pulls. In production, use a registry name that
 resolves through normal DNS and that every node trusts with TLS verification
 enabled.
 
-`./bin/mcp-runtime cluster diagnostics` validates the installed registry. For the bundled
+`./bin/mcp-runtime cluster diagnostics` validates the installed registry and
+the rest of a live install. Setup itself also runs a short post-setup
+operational smoke gate (nodes Ready, Bound PVCs, Postgres, platform-api
+health/ready, Sentinel rollout health, auth probe) and fails if those basics
+are not green. For the bundled
 registry it probes the in-cluster `registry/registry` Service and selects HTTP
 or HTTPS from the installed registry state: if `registry/registry-internal-tls`
 exists, doctor probes `https://registry.registry.svc.cluster.local:5000/v2/`;

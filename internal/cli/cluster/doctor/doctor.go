@@ -182,6 +182,26 @@ func RunSetupDoctorAndPrint(kubectl core.KubectlRunner) DoctorReport {
 	return report
 }
 
+// RunPostSetupSmoke executes a short post-setup operational gate for installed
+// MCP Runtime clusters. It covers basic login-path and dependency readiness,
+// not the full `cluster diagnostics` suite.
+func RunPostSetupSmoke(kubectl core.KubectlRunner) DoctorReport {
+	distro := DetectDistribution(kubectl)
+	return runDoctorChecksWithSpecs(kubectl, distro, nil, doctorPostSetupCheckSpecs(kubectl))
+}
+
+// RunPostSetupSmokeAndPrint streams the post-setup operational smoke checks.
+func RunPostSetupSmokeAndPrint(kubectl core.KubectlRunner) DoctorReport {
+	core.Section("Post-setup operational smoke")
+	core.Info("Checking nodes, Postgres, platform API, Sentinel rollouts, PVCs, and auth probe")
+	distro := DetectDistribution(kubectl)
+	core.Info(fmt.Sprintf("Distribution: %s", distro))
+
+	report := runDoctorChecksWithSpecs(kubectl, distro, printDoctorCheckProgress, doctorPostSetupCheckSpecs(kubectl))
+	printDoctorReportFooter(report)
+	return report
+}
+
 func runDoctorChecks(kubectl core.KubectlRunner, distro Distribution, progress DoctorCheckProgress) DoctorReport {
 	return runDoctorChecksWithSpecs(kubectl, distro, progress, doctorCheckSpecs(kubectl, distro))
 }
@@ -326,6 +346,22 @@ func doctorSetupCheckSpecs(kubectl core.KubectlRunner, distro Distribution) []do
 		{Name: "cert-manager readiness", Detail: "checking cert-manager deployments when TLS preflight is requested", Run: func() DoctorCheck { return checkCertManagerReadiness(kubectl) }},
 		{Name: "TLS ClusterIssuer", Detail: "checking the configured cert-manager ClusterIssuer when MCP_TLS_CLUSTER_ISSUER is set", Run: func() DoctorCheck { return checkDoctorTLSClusterIssuer(kubectl) }},
 		{Name: "ACME HTTP-01 exposure", Detail: "verifying the active Traefik web entrypoint exposes public port 80 when MCP_ACME_EMAIL is set", Run: func() DoctorCheck { return checkDoctorACMEHTTP01Exposure(kubectl, distro) }},
+	}
+}
+
+// doctorPostSetupCheckSpecs is the short operational gate run at the end of
+// setup. Keep this list small and login/dependency focused; deeper coverage
+// stays in `cluster diagnostics`.
+func doctorPostSetupCheckSpecs(kubectl core.KubectlRunner) []doctorCheckSpec {
+	return []doctorCheckSpec{
+		{Name: "Kubernetes nodes ready", Detail: "every node must be Ready or login and platform APIs can go dark", Run: func() DoctorCheck { return checkClusterNodesReady(kubectl) }},
+		{Name: "persistent volume claims", Detail: "Bound PVCs so Postgres and other stateful deps can schedule", Run: func() DoctorCheck { return checkPersistentVolumeClaims(kubectl) }},
+		{Name: "pending pods", Detail: "no Pending pods left after setup that block core services", Run: func() DoctorCheck { return checkPendingPodsByNamespace(kubectl) }},
+		{Name: "sentinel secrets", Detail: "platform admin and API keys exist for login", Run: func() DoctorCheck { return checkSentinelSecrets(kubectl) }},
+		{Name: "sentinel Postgres credential drift", Detail: "Postgres is running and matches the rendered Secret", Run: func() DoctorCheck { return checkSentinelPostgresCredentialDrift(kubectl) }},
+		{Name: "sentinel platform API readiness", Detail: "platform-api deployment plus /health and /ready", Run: func() DoctorCheck { return checkSentinelPlatformAPIReadiness(kubectl) }},
+		{Name: "sentinel workload rollout health", Detail: "no CrashLoopBackOff / ImagePullBackOff on Sentinel workloads", Run: func() DoctorCheck { return checkSentinelWorkloadHealth(kubectl) }},
+		{Name: "sentinel API auth probe", Detail: "authenticated runtime-api call with the UI API key", Run: func() DoctorCheck { return checkSentinelAPIAuthProbe(kubectl) }},
 	}
 }
 
