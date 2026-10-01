@@ -263,6 +263,20 @@ func TestReconcileDefaultClientAuthTLSOption(t *testing.T) {
 		}
 	})
 
+	t.Run("waits for a pre-created empty trust bundle", func(t *testing.T) {
+		placeholder := caSecret.DeepCopy()
+		placeholder.Data = nil
+		r, c := reconciler(placeholder)
+		if err := r.reconcileDefaultClientAuthTLSOption(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		option := &unstructured.Unstructured{}
+		option.SetGroupVersionKind(tlsOptionGVK)
+		if err := c.Get(context.Background(), types.NamespacedName{Name: "default", Namespace: "traefik"}, option); !apierrors.IsNotFound(err) {
+			t.Fatalf("TLSOption created before trust roots: %v", err)
+		}
+	})
+
 	t.Run("waits for the CA before creating the option", func(t *testing.T) {
 		r, c := reconciler()
 		if err := r.reconcileDefaultClientAuthTLSOption(context.Background()); err != nil {

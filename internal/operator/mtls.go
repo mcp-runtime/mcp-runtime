@@ -591,6 +591,11 @@ func (r *MCPServerReconciler) reconcileDefaultClientAuthTLSOption(ctx context.Co
 		}
 		return err
 	}
+	// Setup pre-creates the named bundle because Secret create cannot be
+	// constrained by resourceNames. Wait until issuance populates public roots.
+	if len(ca.Data["tls.ca"]) == 0 && len(ca.Data["ca.crt"]) == 0 {
+		return nil
+	}
 	existing := &unstructured.Unstructured{}
 	existing.SetGroupVersionKind(tlsOptionGVK)
 	err := r.Get(ctx, types.NamespacedName{Name: "default", Namespace: namespace}, existing)

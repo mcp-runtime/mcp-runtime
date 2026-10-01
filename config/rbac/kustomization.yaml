@@ -1,5 +1,9 @@
 resources:
+- managed_server_namespace.yaml
 - role.yaml
+- operator_secret_access.yaml
+- operator_secret_access_binding.yaml
+- operator_workload_access.yaml
+- operator_workload_access_binding.yaml
 - role_binding.yaml
 - service_account.yaml
-

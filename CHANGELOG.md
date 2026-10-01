@@ -12,6 +12,9 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 - Setup rolls workloads when their consumed Secret or ConfigMap values change, replacing blanket Sentinel deployment restarts ([#548](https://github.com/mcp-runtime/mcp-runtime/issues/548)).
 
 - Setup gives API, UI, ingest, Grafana and Postgres workloads consumer-specific credential Secrets, preserving installed values and retaining the legacy Secret as a compatibility mirror ([#548](https://github.com/mcp-runtime/mcp-runtime/issues/548)).
+### Security
+
+- Operator tenant Secret permissions are scoped to MCPServer namespaces, and Secret reads bypass the controller cache. Runtime-managed namespaces receive a scoped binding automatically; setup backfills existing managed namespaces. The configured TLS namespace grants named read/update access only to the public adapter trust bundle ([#540](https://github.com/mcp-runtime/mcp-runtime/issues/540)).
 
 ### Added
 
