@@ -22,7 +22,6 @@ type SentinelManager struct {
 }
 
 type sentinelComponent = platforminventory.Component
-type sentinelPortTarget = platforminventory.PortTarget
 
 var sentinelComponents = platforminventory.SentinelComponents(false)
 
@@ -61,17 +60,6 @@ func findSentinelComponent(name string) (*sentinelComponent, error) {
 	}
 
 	return nil, core.NewWithSentinel(nil, fmt.Sprintf("unknown sentinel component %q (use one of: %s)", name, strings.Join(ComponentKeys(), ", ")))
-}
-
-func findSentinelPortTarget(name string) (*sentinelPortTarget, error) {
-	component, err := findSentinelComponent(name)
-	if err != nil {
-		return nil, err
-	}
-	if component.PortTarget == nil {
-		return nil, core.NewWithSentinel(nil, fmt.Sprintf("component %q does not expose a predefined port-forward target", name))
-	}
-	return component.PortTarget, nil
 }
 
 // ShowSentinelStatus prints a status table for sentinel workloads.
@@ -170,7 +158,7 @@ func (m *SentinelManager) PortForwardSentinelTarget(target string, localPort int
 		return err
 	}
 	if component.PortTarget == nil {
-		return core.NewWithSentinel(nil, fmt.Sprintf("sentinel component %q has no port-forward target", target))
+		return core.NewWithSentinel(nil, fmt.Sprintf("component %q does not expose a predefined port-forward target", target))
 	}
 	portTarget := component.PortTarget
 	if localPort <= 0 {
