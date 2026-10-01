@@ -171,7 +171,11 @@ Normal PRs run short QA E2E with `smoke-auth` as the baseline, then
 targeted scenarios based on the changed files. API, UI, adapter, CLI, OAuth,
 observability, and multi-tenancy changes get the matching request-path mode;
 shared or unknown code paths fall back to `all` so CI stays conservative. The
-manual Pre-release Regression workflow runs full QA E2E with
+`multitenancy` scenario checks that two team users can read only their own team
+and namespace and that their registry credentials cannot access the other
+team's repositories. Staging E2E separately exercises the full tenant image
+build, push, deploy, and adapter path. The manual Pre-release Regression
+workflow runs full QA E2E with
 `E2E_SCENARIOS=all` and `E2E_DEEP_REQUEST_FLOWS=1` across tenant, org, and
 public platform modes, plus a tenant cache-mode replay when requested.
 

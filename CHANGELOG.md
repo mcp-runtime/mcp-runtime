@@ -9,6 +9,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Changed
 
+- QA E2E now reclaims preinstalled runner tools only when less than 60 GiB of disk space is free, reports remaining space after the run, and skips installing tools already present or optional on the runner. The selected `multitenancy` scenario now checks cross-team API and registry isolation, and targeted HTTP flows run once per job ([#569](https://github.com/mcp-runtime/mcp-runtime/pull/569)).
 - Setup rolls workloads when their consumed Secret or ConfigMap values change, replacing blanket Sentinel deployment restarts ([#548](https://github.com/mcp-runtime/mcp-runtime/issues/548)).
 
 - Setup gives API, UI, ingest, Grafana and Postgres workloads consumer-specific credential Secrets, preserving installed values and retaining the legacy Secret as a compatibility mirror ([#548](https://github.com/mcp-runtime/mcp-runtime/issues/548)).

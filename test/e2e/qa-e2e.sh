@@ -351,6 +351,7 @@ api_service_paths_selected() {
   scenario_selected "governance" \
     || scenario_selected "observability" \
     || scenario_selected "api-platform" \
+    || scenario_selected "multitenancy" \
     || scenario_selected "adapter-proxy" \
     || scenario_selected "cli-platform"
 }
@@ -2666,6 +2667,10 @@ run_parallel_grant_tool_rules() {
 }
 
 run_api_platform_http_flows() {
+  local multitenancy=0
+  if scenario_selected "multitenancy"; then
+    multitenancy=1
+  fi
   log_line policy "validating targeted platform API request paths"
   ensure_api_port_forward
   ensure_gateway_port_forward
@@ -2678,6 +2683,7 @@ run_api_platform_http_flows() {
   AGENT_ID="${AGENT_ID}" \
   PLATFORM_ADMIN_EMAIL="${PLATFORM_ADMIN_EMAIL}" \
   PLATFORM_ADMIN_PASSWORD="${PLATFORM_ADMIN_PASSWORD}" \
+  E2E_MULTITENANCY="${multitenancy}" \
   python3 test/e2e/api_platform_flows.py
 }
 
@@ -2692,11 +2698,15 @@ run_ui_auth_http_flows() {
   python3 test/e2e/ui_auth_flows.py
 }
 
+HTTP_FLOWS_RAN=0
 run_selected_http_flow_scenarios() {
   local run_api=0
   local run_ui=0
 
-  if scenario_selected "api-platform" && ! deep_request_flows_enabled; then
+  if [[ "${HTTP_FLOWS_RAN}" -eq 1 ]]; then
+    return 0
+  fi
+  if scenario_selected "multitenancy" || { scenario_selected "api-platform" && ! deep_request_flows_enabled; }; then
     run_api=1
   fi
   if scenario_selected "ui-auth" && ! deep_request_flows_enabled; then
@@ -2705,6 +2715,7 @@ run_selected_http_flow_scenarios() {
   if [[ "${run_api}" -eq 0 && "${run_ui}" -eq 0 ]]; then
     return 0
   fi
+  HTTP_FLOWS_RAN=1
 
   if [[ "${run_api}" -eq 1 ]]; then
     ensure_api_port_forward

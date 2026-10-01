@@ -244,9 +244,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Free runner disk space
+      - name: Ensure runner disk headroom
         run: |
-          df -h
+          df -h /
+          available_bytes="$(df --output=avail -B1 / | tail -n 1 | tr -d '[:space:]')"
+          minimum_bytes=$((60 * 1024 * 1024 * 1024))
+          if (( available_bytes >= minimum_bytes )); then
+            echo "At least 60 GiB free; skipping runner cleanup"
+            exit 0
+          fi
+
+          echo "Less than 60 GiB free; removing unused runner toolchains"
           sudo rm -rf \
             /opt/ghc \
             /opt/hostedtoolcache/CodeQL \
@@ -254,7 +262,7 @@ jobs:
             /usr/local/share/boost \
             /usr/share/dotnet
           docker system prune -af --volumes || true
-          df -h
+          df -h /
 
       - name: Validate E2E scenario selectors
         run: bash test/e2e/scenarios_test.sh
@@ -274,18 +282,12 @@ jobs:
           chmod +x kind
           sudo mv kind /usr/local/bin/kind
 
-      - name: Install E2E dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y python3 ripgrep
-
       - name: Show tool versions
         run: |
           docker version
           kubectl version --client
           kind version
           python3 --version
-          rg --version
 
       - name: Configure E2E resource names
         run: |
@@ -321,6 +323,10 @@ jobs:
           MCP_HTTP_TIMEOUT: "15"
           RAW_REQUEST_TRIES: "8"
         run: bash test/e2e/qa-e2e.sh
+
+      - name: Report runner disk use
+        if: always()
+        run: df -h /
 
       - name: Upload e2e artifacts
         if: always()
