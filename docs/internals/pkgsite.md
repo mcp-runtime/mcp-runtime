@@ -49,8 +49,9 @@ curl -fsSI http://127.0.0.1:8082/github.com/mcp-runtime/mcp-runtime/pkg/access
 Several repository modules use short names such as `mcp-runtime` and
 `mcp-runtime-api`. Pkgsite interprets a bare first path segment as a standard
 library path. The image therefore rewrites only its **documentation copy** of
-each `go.mod` module declaration to a canonical URL under
-`github.com/mcp-runtime/mcp-runtime`. The source modules used by builds and
+each `go.mod` module declaration and local Go import literal to a canonical
+URL under `github.com/mcp-runtime/mcp-runtime`. This keeps links between
+rendered package symbols working. The source modules used by builds and
 releases are not changed. Service and example modules are discovered from
 their `go.mod` files, so a new module appears after the next main-branch
 deployment without adding it to the startup command.

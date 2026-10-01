@@ -48,7 +48,12 @@ jobs:
           for attempt in {1..90}; do
             if curl -fsSL --max-time 5 \
               http://127.0.0.1:18082/github.com/mcp-runtime/mcp-runtime/pkg/access \
-              -o /dev/null 2>/dev/null; then
+              -o "$RUNNER_TEMP/pkgsite-access.html" 2>/dev/null; then
+              grep -Fq 'href="/github.com/mcp-runtime/mcp-runtime@v0.0.0/api/v1alpha1"' \
+                "$RUNNER_TEMP/pkgsite-access.html"
+              curl -fsSL --max-time 10 \
+                http://127.0.0.1:18082/github.com/mcp-runtime/mcp-runtime@v0.0.0/api/v1alpha1 \
+                -o /dev/null
               curl -fsSL --max-time 10 \
                 http://127.0.0.1:18082/github.com/mcp-runtime/mcp-runtime/services/runtime-api \
                 -o /dev/null
