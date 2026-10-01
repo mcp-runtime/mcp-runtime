@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Fixed
+
+- Promtail now parses CRI log envelopes, discovers only node-local pods across all namespaces, labels streams with `namespace`, `pod`, `container`, `app`, and `node`, redacts bearer tokens and secret-looking JSON fields, and the platform-namespace fallback job labels streams from the log path. Intended to restore Loki coverage for MCP server and team namespaces; root cause of the production gap is not yet confirmed on a live cluster ([#496](https://github.com/mcp-runtime/mcp-runtime/issues/496)).
+
 ### Added
 
 - Setup ends with a short operational smoke gate (nodes Ready, Bound PVCs, no Pending blockers, Postgres, platform-api `/health`+`/ready`, Sentinel rollout health, and an authenticated API probe). Failures fail setup; use `mcp-runtime cluster diagnostics` for deeper follow-up.
