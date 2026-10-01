@@ -7,6 +7,10 @@ misconfigurations:
     paths:
       - "config/rbac/role.yaml"
     statement: "The operator reads gateway certificate Secrets and reconciles the per-server mTLS trust-bundle Secret (re-keying the cert-manager CA bundle to the tls.ca key Traefik's TLSOption requires). Secret access is functionally required for adapter certificate routes; the cached controller client also needs list/watch to serve Get."
+  - id: KSV-0041
+    paths:
+      - "config/rbac/operator_secret_access.yaml"
+    statement: "mcp-runtime-operator-managed-secrets is never bound cluster-wide; it is granted only through RoleBindings in MCPServer namespaces (config/rbac/operator_secret_access_binding.yaml and EnsureOperatorSecretAccess), and reserved/infrastructure namespaces are refused. The cluster-scoped role object only defines the verbs those bindings grant."
   - id: KSV-0056
     paths:
       - "k8s/08-runtime-api-rbac.yaml"
