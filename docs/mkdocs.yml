@@ -97,6 +97,7 @@ nav:
       - Go Package Reference: internals/go-package-reference.md
       - CLI Internals: internals/internal-cli.md
       - Operator Internals: internals/cmd-operator.md
+      - Component Inventory: internals/component-inventory.md
       - Runtime CLI Cmd: internals/cmd-mcp-runtime.md
       - Metadata Package: internals/pkg-metadata.md
       - Config and Examples: internals/config-and-examples.md

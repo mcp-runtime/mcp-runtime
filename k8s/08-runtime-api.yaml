@@ -68,23 +68,23 @@ spec:
             - name: API_KEYS
               valueFrom:
                 secretKeyRef:
-                  name: mcp-sentinel-secrets
+                  name: mcp-runtime-api-credentials
                   key: API_KEYS
             - name: ADMIN_API_KEYS
               valueFrom:
                 secretKeyRef:
-                  name: mcp-sentinel-secrets
+                  name: mcp-runtime-api-credentials
                   key: ADMIN_API_KEYS
                   optional: true
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: mcp-sentinel-secrets
+                  name: mcp-runtime-api-credentials
                   key: JWT_SECRET
             - name: INTERNAL_AUTH_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: mcp-sentinel-secrets
+                  name: mcp-runtime-api-credentials
                   key: INTERNAL_AUTH_TOKEN
             - name: OTEL_SERVICE_NAME
               value: mcp-runtime-api

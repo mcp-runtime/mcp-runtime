@@ -215,13 +215,6 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 		return err
 	}
 
-	// Explicitly restart analytics deployments so they pick up the secret values
-	// written above. On reruns where the image tag is unchanged, Kubernetes does
-	// not trigger an automatic rollout, leaving pods with stale env var snapshots.
-	if err := restartAnalyticsDeploymentsClientGo(); err != nil {
-		core.Warn(fmt.Sprintf("Could not restart analytics deployments after secret update: %v", err))
-	}
-
 	core.Info(fmt.Sprintf("Waiting for mcp-sentinel workload rollouts (per-resource timeout %s; override with MCP_DEPLOYMENT_TIMEOUT)", rolloutTimeout))
 	targets := []struct{ kind, name string }{
 		{kind: "statefulset", name: "mcp-sentinel-postgres"},
@@ -292,7 +285,7 @@ func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap
 	}
 
 	core.Info("Applying mcp-sentinel managed secrets")
-	secretManifest, err := renderAnalyticsSecretManifest(kubectl)
+	secretManifest, err := renderCredentialBundleClientGo()
 	if err != nil {
 		return err
 	}
@@ -720,6 +713,10 @@ func applyRenderedManifest(kubectl core.KubectlRunner, manifestPath string, imag
 	if err != nil {
 		return core.WrapWithSentinel(core.ErrSetupRenderManifestFailed, err, fmt.Sprintf("render manifest %s: %v", manifestPath, err))
 	}
+	rendered, err = stampDependencyRevisionsClientGo(rendered)
+	if err != nil {
+		return fmt.Errorf("plan dependency rollouts for %s: %w", manifestPath, err)
+	}
 	return applyManifestYAML(rendered, "", os.Stdout)
 }
 
@@ -741,6 +738,10 @@ func applyRenderedManifestClientGo(manifestPath string, images AnalyticsImageSet
 	}
 	if err != nil {
 		return core.WrapWithSentinel(core.ErrSetupRenderManifestFailed, err, fmt.Sprintf("render manifest %s: %v", manifestPath, err))
+	}
+	rendered, err = stampDependencyRevisionsClientGo(rendered)
+	if err != nil {
+		return fmt.Errorf("plan dependency rollouts for %s: %w", manifestPath, err)
 	}
 	return applyManifestYAML(rendered, "", os.Stdout)
 }
@@ -1100,7 +1101,7 @@ func renderAnalyticsSecretManifest(kubectl core.KubectlRunner) (string, error) {
 }
 
 func renderAnalyticsSecretManifestClientGo() (string, error) {
-	return renderAnalyticsSecretManifestWithReader(existingSecretDataValueClientGo)
+	return renderCredentialBundleClientGo()
 }
 
 type analyticsSecretValueReader func(namespace, name, key string) (string, error)
@@ -1795,56 +1796,6 @@ func randomHex(size int) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(buffer), nil
-}
-
-// restartAnalyticsDeploymentsClientGo triggers a rollout restart for each
-// mcp-sentinel Deployment that reads credentials from mcp-sentinel-secrets.
-// On reruns where the image tag has not changed, Kubernetes does not roll out
-// new pods automatically, so pods keep the env var snapshot from their last
-// start — which may contain stale secret values. Stamping the standard
-// kubectl.kubernetes.io/restartedAt annotation forces one clean rollout.
-func restartAnalyticsDeploymentsClientGo() error {
-	clients, err := platformKubernetesClients()
-	if err != nil {
-		return err
-	}
-	ctx := context.Background()
-	now := time.Now()
-	deployments := []string{
-		"mcp-platform-api",
-		"mcp-runtime-api",
-		"mcp-analytics-api",
-		"mcp-sentinel-ui",
-		"mcp-sentinel-ingest",
-		"mcp-sentinel-processor",
-		"mcp-sentinel-gateway",
-		"grafana",
-	}
-	// Only restart deployments that pre-existed this setup run.
-	// On a fresh install all deployments were just created and already have the
-	// correct secret values — restarting them is unnecessary and doubles the
-	// image-pull time, increasing the risk of rollout-wait timeouts in CI.
-	// A deployment created less than freshDeploymentThreshold seconds ago was
-	// created during this run; its pods have current secret values.
-	const freshDeploymentThreshold = 5 * time.Minute
-
-	var errs []string
-	for _, name := range deployments {
-		deploy, err := k8sclient.GetDeployment(ctx, clients, core.DefaultAnalyticsNamespace, name)
-		if err != nil || deploy == nil {
-			continue // not deployed yet — skip
-		}
-		if now.Sub(deploy.CreationTimestamp.Time) < freshDeploymentThreshold {
-			continue // brand new — pods already have current secret values
-		}
-		if err := k8sclient.RestartDeployment(ctx, clients, core.DefaultAnalyticsNamespace, name, now); err != nil {
-			errs = append(errs, fmt.Sprintf("%s: %v", name, err))
-		}
-	}
-	if len(errs) > 0 {
-		return fmt.Errorf("restart failed for: %s", strings.Join(errs, "; "))
-	}
-	return nil
 }
 
 // syncPostgresPasswordClientGo runs ALTER USER on the Postgres pod so that the

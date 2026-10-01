@@ -67,12 +67,12 @@ spec:
             - name: API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: mcp-sentinel-secrets
+                  name: mcp-ui-credentials
                   key: UI_API_KEY
             - name: ADMIN_API_KEYS
               valueFrom:
                 secretKeyRef:
-                  name: mcp-sentinel-secrets
+                  name: mcp-ui-credentials
                   key: ADMIN_API_KEYS
                   optional: true
             - name: OTEL_SERVICE_NAME

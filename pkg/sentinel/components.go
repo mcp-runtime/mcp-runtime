@@ -4,205 +4,21 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"mcp-runtime/pkg/platforminventory"
 )
 
-// Component represents a Sentinel stack component.
-type Component struct {
-	Key        string
-	Display    string
-	Namespace  string
-	Kind       string
-	Resource   string
-	Label      string
-	Aliases    []string
-	PortTarget *PortTarget
-}
-
-// PortTarget defines a port forwarding target.
-type PortTarget struct {
-	ResourceKind string
-	ResourceName string
-	LocalPort    int
-	RemotePort   int
-}
+// Component and PortTarget retain the Sentinel API's existing field names.
+type Component = platforminventory.Component
+type PortTarget = platforminventory.PortTarget
 
 const (
-	DefaultNamespace  = "mcp-sentinel"
-	OperatorNamespace = "mcp-runtime"
+	DefaultNamespace  = platforminventory.DefaultNamespace
+	OperatorNamespace = platforminventory.OperatorNamespace
 )
 
-// Components is the registry of all Sentinel stack components.
-var Components = []Component{
-	{
-		Key:       "operator",
-		Display:   "Operator",
-		Namespace: OperatorNamespace,
-		Kind:      "deployment",
-		Resource:  "mcp-runtime-operator-controller-manager",
-		Label:     "mcp-runtime-operator-controller-manager",
-	},
-	{
-		Key:       "clickhouse",
-		Display:   "ClickHouse",
-		Namespace: DefaultNamespace,
-		Kind:      "statefulset",
-		Resource:  "clickhouse",
-		Label:     "clickhouse",
-	},
-	{
-		Key:       "kafka",
-		Display:   "Kafka",
-		Namespace: DefaultNamespace,
-		Kind:      "statefulset",
-		Resource:  "kafka",
-		Label:     "kafka",
-	},
-	{
-		Key:       "ingest",
-		Display:   "Ingest",
-		Namespace: DefaultNamespace,
-		Kind:      "deployment",
-		Resource:  "mcp-sentinel-ingest",
-		Label:     "mcp-sentinel-ingest",
-	},
-	{
-		Key:       "platform-api",
-		Display:   "Platform API",
-		Namespace: DefaultNamespace,
-		Kind:      "deployment",
-		Resource:  "mcp-platform-api",
-		Label:     "mcp-platform-api",
-		Aliases:   []string{"api", "platform"},
-		PortTarget: &PortTarget{
-			ResourceKind: "service",
-			ResourceName: "mcp-platform-api",
-			LocalPort:    8080,
-			RemotePort:   8080,
-		},
-	},
-	{
-		Key:       "runtime-api",
-		Display:   "Runtime Control",
-		Namespace: DefaultNamespace,
-		Kind:      "deployment",
-		Resource:  "mcp-runtime-api",
-		Label:     "mcp-runtime-api",
-		Aliases:   []string{"runtime"},
-		PortTarget: &PortTarget{
-			ResourceKind: "service",
-			ResourceName: "mcp-runtime-api",
-			LocalPort:    8084,
-			RemotePort:   8084,
-		},
-	},
-	{
-		Key:       "analytics-api",
-		Display:   "Analytics API",
-		Namespace: DefaultNamespace,
-		Kind:      "deployment",
-		Resource:  "mcp-analytics-api",
-		Label:     "mcp-analytics-api",
-		Aliases:   []string{"analytics"},
-		PortTarget: &PortTarget{
-			ResourceKind: "service",
-			ResourceName: "mcp-analytics-api",
-			LocalPort:    8085,
-			RemotePort:   8085,
-		},
-	},
-	{
-		Key:       "processor",
-		Display:   "Processor",
-		Namespace: DefaultNamespace,
-		Kind:      "deployment",
-		Resource:  "mcp-sentinel-processor",
-		Label:     "mcp-sentinel-processor",
-	},
-	{
-		Key:       "ui",
-		Display:   "UI",
-		Namespace: DefaultNamespace,
-		Kind:      "deployment",
-		Resource:  "mcp-sentinel-ui",
-		Label:     "mcp-sentinel-ui",
-		PortTarget: &PortTarget{
-			ResourceKind: "service",
-			ResourceName: "mcp-sentinel-ui",
-			LocalPort:    8082,
-			RemotePort:   8082,
-		},
-	},
-	{
-		Key:       "gateway",
-		Display:   "Gateway",
-		Namespace: DefaultNamespace,
-		Kind:      "deployment",
-		Resource:  "mcp-sentinel-gateway",
-		Label:     "mcp-sentinel-gateway",
-	},
-	{
-		Key:       "prometheus",
-		Display:   "Prometheus",
-		Namespace: DefaultNamespace,
-		Kind:      "deployment",
-		Resource:  "prometheus",
-		Label:     "prometheus",
-		Aliases:   []string{"prom"},
-		PortTarget: &PortTarget{
-			ResourceKind: "service",
-			ResourceName: "prometheus",
-			LocalPort:    9090,
-			RemotePort:   9090,
-		},
-	},
-	{
-		Key:       "grafana",
-		Display:   "Grafana",
-		Namespace: DefaultNamespace,
-		Kind:      "deployment",
-		Resource:  "grafana",
-		Label:     "grafana",
-		PortTarget: &PortTarget{
-			ResourceKind: "service",
-			ResourceName: "grafana",
-			LocalPort:    3000,
-			RemotePort:   3000,
-		},
-	},
-	{
-		Key:       "otel-collector",
-		Display:   "OTel Collector",
-		Namespace: DefaultNamespace,
-		Kind:      "deployment",
-		Resource:  "otel-collector",
-		Label:     "otel-collector",
-		Aliases:   []string{"otel"},
-	},
-	{
-		Key:       "tempo",
-		Display:   "Tempo",
-		Namespace: DefaultNamespace,
-		Kind:      "statefulset",
-		Resource:  "tempo",
-		Label:     "tempo",
-	},
-	{
-		Key:       "loki",
-		Display:   "Loki",
-		Namespace: DefaultNamespace,
-		Kind:      "statefulset",
-		Resource:  "loki",
-		Label:     "loki",
-	},
-	{
-		Key:       "promtail",
-		Display:   "Promtail",
-		Namespace: DefaultNamespace,
-		Kind:      "daemonset",
-		Resource:  "promtail",
-		Label:     "promtail",
-	},
-}
+// Components preserves the historical public status and management surface.
+var Components = platforminventory.SentinelComponents(true)
 
 // GetComponentKeys returns sorted list of all component keys.
 func GetComponentKeys() []string {

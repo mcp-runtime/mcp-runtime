@@ -3,7 +3,10 @@
 // by `mcp-runtime setup` (version stamping) and `mcp-runtime update`.
 package platformrelease
 
-import "sort"
+import (
+	"mcp-runtime/pkg/platforminventory"
+	"sort"
+)
 
 // Metadata keys written on platform Deployments. They live on Deployment
 // metadata (never the pod template) so writing them never triggers a rollout.
@@ -65,9 +68,7 @@ type Component struct {
 func (c Component) HasWorkload() bool { return c.Deployment != "" }
 
 const (
-	nsRuntime     = "mcp-runtime"
-	nsSentinel    = "mcp-sentinel"
-	nsCertManager = "cert-manager"
+	nsRuntime = platforminventory.OperatorNamespace
 
 	// OperatorDeployment is the operator controller-manager Deployment name.
 	OperatorDeployment = "mcp-runtime-operator-controller-manager"
@@ -77,21 +78,36 @@ const (
 
 // catalog is ordered in rollout order: cert-manager first (when selected),
 // then the operator, then Sentinel services, then mcp-auth.
-var catalog = []Component{
-	{Name: "cert-manager-controller", Namespace: nsCertManager, Deployment: "cert-manager", Container: "cert-manager-controller", OptIn: OptInCertManager},
-	{Name: "cert-manager-webhook", Namespace: nsCertManager, Deployment: "cert-manager-webhook", Container: "cert-manager-webhook", OptIn: OptInCertManager},
-	{Name: "cert-manager-cainjector", Namespace: nsCertManager, Deployment: "cert-manager-cainjector", Container: "cert-manager-cainjector", OptIn: OptInCertManager},
-	{Name: "operator", Namespace: nsRuntime, Deployment: OperatorDeployment, Container: "manager", Repository: "mcp-runtime-operator", Built: true},
-	{Name: "gateway-proxy", Namespace: nsRuntime, Deployment: OperatorDeployment, Container: "manager", EnvVar: "MCP_GATEWAY_PROXY_IMAGE", Repository: "mcp-sentinel-mcp-gateway", Built: true,
+var catalog = withInventoryPlacement([]Component{
+	{Name: "cert-manager-controller", Container: "cert-manager-controller", OptIn: OptInCertManager},
+	{Name: "cert-manager-webhook", Container: "cert-manager-webhook", OptIn: OptInCertManager},
+	{Name: "cert-manager-cainjector", Container: "cert-manager-cainjector", OptIn: OptInCertManager},
+	{Name: "operator", Container: "manager", Repository: "mcp-runtime-operator", Built: true},
+	{Name: "gateway-proxy", Container: "manager", EnvVar: "MCP_GATEWAY_PROXY_IMAGE", Repository: "mcp-sentinel-mcp-gateway", Built: true,
 		Note: "operator re-renders MCPServer gateway sidecars; tenant MCP server pods will restart"},
-	{Name: "platform-api", Namespace: nsSentinel, Deployment: "mcp-platform-api", Container: "platform-api", Repository: "mcp-platform-api", Built: true},
-	{Name: "runtime-api", Namespace: nsSentinel, Deployment: "mcp-runtime-api", Container: "runtime-api", Repository: "mcp-runtime-api", Built: true},
-	{Name: "analytics-api", Namespace: nsSentinel, Deployment: "mcp-analytics-api", Container: "analytics-api", Repository: "mcp-analytics-api", Built: true},
-	{Name: "ingest", Namespace: nsSentinel, Deployment: "mcp-sentinel-ingest", Container: "ingest", Repository: "mcp-sentinel-ingest", Built: true},
-	{Name: "processor", Namespace: nsSentinel, Deployment: "mcp-sentinel-processor", Container: "processor", Repository: "mcp-sentinel-processor", Built: true},
-	{Name: "ui", Namespace: nsSentinel, Deployment: "mcp-sentinel-ui", Container: "ui", Repository: "mcp-sentinel-ui", Built: true},
+	{Name: "platform-api", Container: "platform-api", Repository: "mcp-platform-api", Built: true},
+	{Name: "runtime-api", Container: "runtime-api", Repository: "mcp-runtime-api", Built: true},
+	{Name: "analytics-api", Container: "analytics-api", Repository: "mcp-analytics-api", Built: true},
+	{Name: "ingest", Container: "ingest", Repository: "mcp-sentinel-ingest", Built: true},
+	{Name: "processor", Container: "processor", Repository: "mcp-sentinel-processor", Built: true},
+	{Name: "ui", Container: "ui", Repository: "mcp-sentinel-ui", Built: true},
 	{Name: "doctor-smoke", Repository: "mcp-runtime-doctor-smoke", Built: true},
-	{Name: "mcp-auth", Namespace: nsSentinel, Deployment: "mcp-auth-server", Container: "auth-server", OptIn: OptInAuth},
+	{Name: "mcp-auth", Container: "auth-server", OptIn: OptInAuth},
+})
+
+func withInventoryPlacement(components []Component) []Component {
+	for i := range components {
+		c, ok := platforminventory.Lookup(components[i].Name)
+		if !ok {
+			panic("unknown release component: " + components[i].Name)
+		}
+		if c.Kind != "" && c.Kind != "deployment" {
+			panic("release component must be deployment-backed: " + c.Key)
+		}
+		components[i].Namespace = c.Namespace
+		components[i].Deployment = c.Resource
+	}
+	return components
 }
 
 // Catalog returns a copy of the component catalog in rollout order.

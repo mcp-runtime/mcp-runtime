@@ -37,20 +37,20 @@ spec:
             - name: POSTGRES_DSN
               valueFrom:
                 secretKeyRef:
-                  name: mcp-sentinel-secrets
+                  name: mcp-platform-api-credentials
                   key: POSTGRES_DSN
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: mcp-sentinel-secrets
+                  name: mcp-platform-api-credentials
                   key: JWT_SECRET
             - name: PLATFORM_ADMIN_EMAIL
               valueFrom:
                 secretKeyRef:
-                  name: mcp-sentinel-secrets
+                  name: mcp-platform-api-credentials
                   key: PLATFORM_ADMIN_EMAIL
             - name: PLATFORM_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: mcp-sentinel-secrets
+                  name: mcp-platform-api-credentials
                   key: PLATFORM_ADMIN_PASSWORD

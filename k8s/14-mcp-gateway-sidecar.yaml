@@ -78,7 +78,7 @@ spec:
             - name: ANALYTICS_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: mcp-sentinel-secrets
+                  name: mcp-ingest-credentials
                   key: INGEST_API_KEYS
             - name: ANALYTICS_SOURCE
               value: "mcp-gateway"
