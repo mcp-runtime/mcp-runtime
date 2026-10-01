@@ -33,6 +33,14 @@ reachable. k3s already lists the node's public IP in the API server
 certificate SANs, so the fetched kubeconfig only needs its loopback server URL
 rewritten.
 
+Both staging runners authenticate to GHCR with the workflow's short-lived
+package-read token and reuse content-hash platform images when available.
+The on-VM runner passes that token over SSH stdin after the disposable-target
+guard and removes its temporary Docker credentials during cleanup. Cache misses
+build locally; Staging does not publish to GHCR. QA E2E publishes the same
+cache tags. Set `E2E_IMAGE_CACHE=0` for a run that must rebuild every platform
+image.
+
 ## Safety: the disposable-target guard
 
 The suite installs and uninstalls k3s, prunes every Docker image, and wipes

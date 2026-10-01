@@ -351,6 +351,7 @@ api_service_paths_selected() {
   scenario_selected "governance" \
     || scenario_selected "observability" \
     || scenario_selected "api-platform" \
+    || scenario_selected "multitenancy" \
     || scenario_selected "adapter-proxy" \
     || scenario_selected "cli-platform"
 }
@@ -2666,6 +2667,10 @@ run_parallel_grant_tool_rules() {
 }
 
 run_api_platform_http_flows() {
+  local multitenancy=0
+  if scenario_selected "multitenancy"; then
+    multitenancy=1
+  fi
   log_line policy "validating targeted platform API request paths"
   ensure_api_port_forward
   ensure_gateway_port_forward
@@ -2678,6 +2683,7 @@ run_api_platform_http_flows() {
   AGENT_ID="${AGENT_ID}" \
   PLATFORM_ADMIN_EMAIL="${PLATFORM_ADMIN_EMAIL}" \
   PLATFORM_ADMIN_PASSWORD="${PLATFORM_ADMIN_PASSWORD}" \
+  E2E_MULTITENANCY="${multitenancy}" \
   python3 test/e2e/api_platform_flows.py
 }
 
@@ -2696,7 +2702,7 @@ run_selected_http_flow_scenarios() {
   local run_api=0
   local run_ui=0
 
-  if scenario_selected "api-platform" && ! deep_request_flows_enabled; then
+  if scenario_selected "multitenancy" || { scenario_selected "api-platform" && ! deep_request_flows_enabled; }; then
     run_api=1
   fi
   if scenario_selected "ui-auth" && ! deep_request_flows_enabled; then
@@ -3523,12 +3529,11 @@ build_and_publish_image() {
   local dockerfile="$2"
   local context_dir="$3"
 
-  # Do not use the local mirror as a cache for images built from this checkout.
-  # When setup runs, the platform was not ready (or needed reconfiguration),
-  # and reusing a matching :latest tag can deploy code from an older checkout.
-  # Docker's layer cache still avoids repeating unchanged build work.
-  echo "[image] building ${image}"
-  docker build -t "${image}" -f "${dockerfile}" "${context_dir}"
+  # Reuse only a GHCR image keyed by this checkout's content. Mutable tags in
+  # the local mirror can contain code from a different checkout.
+  "${SENTINEL_ROOT}/bin/e2e-image-cache" ensure \
+    --image "${image}" --dockerfile "${dockerfile}" \
+    --context "${context_dir}" --root "${SENTINEL_ROOT}"
   publish_image_to_local_registry "${image}"
 }
 
@@ -3647,7 +3652,7 @@ wait_core_platform_rollouts() {
   run_logged_stage "verify sentinel gateway rollout" rollout_status_with_logs mcp-sentinel deploy mcp-sentinel-gateway 180s
   run_logged_stage "verify tempo rollout" rollout_status_with_logs mcp-sentinel statefulset tempo 180s
   run_logged_stage "verify loki rollout" rollout_status_with_logs mcp-sentinel statefulset loki 300s
-  run_logged_stage "verify promtail rollout" rollout_status_with_logs mcp-sentinel daemonset promtail 180s
+  run_logged_stage "verify promtail rollout" rollout_status_with_logs mcp-log-collector daemonset promtail 180s
 }
 
 delete_mcp_server_and_wait() {
@@ -3725,7 +3730,7 @@ platform_cache_ready() {
   kubectl rollout status statefulset/clickhouse -n mcp-sentinel --timeout=5s >/dev/null 2>&1 || return 1
   kubectl rollout status statefulset/kafka -n mcp-sentinel --timeout=5s >/dev/null 2>&1 || return 1
   kubectl wait --for=condition=complete job/kafka-topic-init -n mcp-sentinel --timeout=5s >/dev/null 2>&1 || return 1
-  kubectl rollout status daemonset/promtail -n mcp-sentinel --timeout=5s >/dev/null 2>&1 || return 1
+  kubectl rollout status daemonset/promtail -n mcp-log-collector --timeout=5s >/dev/null 2>&1 || return 1
   kubectl rollout status statefulset/loki -n mcp-sentinel --timeout=5s >/dev/null 2>&1 || return 1
   kubectl rollout status statefulset/tempo -n mcp-sentinel --timeout=5s >/dev/null 2>&1 || return 1
 }
@@ -3883,6 +3888,7 @@ if platform_cache_ready; then
   fi
 fi
 if [[ "${PLATFORM_CACHE_READY}" != "1" ]]; then
+  go build -o "${SENTINEL_ROOT}/bin/e2e-image-cache" ./hack/e2e-image-cache
   mirror_upstream_images_parallel \
     "registry:2.8.3" \
     "traefik:v2.10" \
@@ -4510,8 +4516,6 @@ print(json.dumps({"email": os.environ["PLATFORM_ADMIN_EMAIL"], "password": os.en
     env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime access session list --namespace mcp-servers >/dev/null
     env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime access session get "${SESSION_ID}" --namespace mcp-servers >/dev/null
   fi
-
-  run_selected_http_flow_scenarios
 
   if scenario_selected "trust"; then
     refresh_kind_kubeconfig || true

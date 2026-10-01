@@ -62,12 +62,12 @@ spec:
             - name: GF_SECURITY_ADMIN_USER
               valueFrom:
                 secretKeyRef:
-                  name: mcp-sentinel-secrets
+                  name: mcp-grafana-credentials
                   key: GRAFANA_ADMIN_USER
             - name: GF_SECURITY_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: mcp-sentinel-secrets
+                  name: mcp-grafana-credentials
                   key: GRAFANA_ADMIN_PASSWORD
             - name: GF_SERVER_SERVE_FROM_SUB_PATH
               value: "true"

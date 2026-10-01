@@ -134,3 +134,7 @@ colored `START`, `RUNNING`, `DONE`, and `FAILED` lifecycle lines plus short
 stdout/stderr previews, while the full logs stay in the artifact. Major
 sequential stages such as setup, cluster doctor, CLI rebuilds, and server
 deploys are mirrored under `stage-logs/` in the same artifact.
+
+Every confirmed platform bug should map to a regression check. See the
+[Regression Index](regression-index.md); `go test ./test/regression -count=1`
+fails when a listed incident has no mapped check or an expired waiver.

@@ -73,7 +73,7 @@ kubectl -n "$NAMESPACE" rollout status deployment/workspace-assistant-sidecar --
 kubectl -n "$NAMESPACE" rollout status deployment/otel-collector --timeout=180s
 kubectl -n "$NAMESPACE" rollout status statefulset/tempo --timeout=180s
 kubectl -n "$NAMESPACE" rollout status statefulset/loki --timeout="$LOKI_ROLLOUT_TIMEOUT"
-kubectl -n "$NAMESPACE" rollout status daemonset/promtail --timeout=180s
+kubectl -n mcp-log-collector rollout status daemonset/promtail --timeout=180s
 
 PIDS=()
 kubectl -n "$NAMESPACE" port-forward svc/mcp-sentinel-gateway "${GATEWAY_PORT}:8083" >/tmp/mcp-pf.log 2>&1 &

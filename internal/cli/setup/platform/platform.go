@@ -264,6 +264,9 @@ func (d SetupDeps) withDefaults(logger *zap.Logger) SetupDeps {
 	}
 	if d.EnsureNamespace == nil {
 		d.EnsureNamespace = func(namespace string) error {
+			if namespace == core.DefaultAnalyticsNamespace {
+				return ensurePlatformNamespaceBeforeIngress()
+			}
 			return ensureNamespaceWithLabels(namespace, nil)
 		}
 	}
@@ -500,6 +503,13 @@ func setupClusterSteps(logger *zap.Logger, kubeconfig, context string, ingressOp
 
 	// Step 2: Configure cluster
 	core.Step("Step 2: Configure cluster")
+	// The ingress bundle references Sentinel Roles before analytics deploys.
+	// Ensure identity first, preserving existing admission labels during upgrades.
+	if deps.EnsureNamespace != nil {
+		if err := deps.EnsureNamespace(core.DefaultAnalyticsNamespace); err != nil {
+			return fmt.Errorf("ensure platform namespace before ingress: %w", err)
+		}
+	}
 	core.Info("Checking ingress controller")
 	if err := deps.ClusterManager.ConfigureCluster(ingressOpts); err != nil {
 		wrappedErr := core.WrapWithSentinel(core.ErrClusterConfigFailed, err, fmt.Sprintf("cluster configuration failed: %v", err))
@@ -578,7 +588,7 @@ type jsonPatchOperation struct {
 
 // analyticsFailedRollout records a failed rollout and optional tee capture from runRolloutWithOptionalDebugCapture.
 type analyticsFailedRollout struct {
-	kind, name, rolloutLog string
+	kind, name, namespace, rolloutLog string
 }
 
 // operatorEnvVar represents an environment variable for the operator.

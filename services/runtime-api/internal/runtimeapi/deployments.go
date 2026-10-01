@@ -467,6 +467,9 @@ func (s *DeploymentService) ensureManagedNamespace(ctx context.Context, namespac
 	if s == nil || s.k8sClients == nil || strings.TrimSpace(namespace) == "" {
 		return nil
 	}
+	if kubeworkload.OperatorSecretNamespaceProtected(namespace) {
+		return fmt.Errorf("managed MCPServer namespace %q is reserved for platform infrastructure", namespace)
+	}
 	base := s.k8sClients.Clientset
 	current, err := base.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
@@ -499,6 +502,9 @@ func (s *DeploymentService) ensureManagedNamespace(ctx context.Context, namespac
 	if err := ensureNamespacePlatformAPISecretAccess(ctx, base, namespace); err != nil {
 		return err
 	}
+	if err := ensureNamespaceOperatorSecretAccess(ctx, base, namespace); err != nil {
+		return err
+	}
 	if err := s.ensureNamespaceRegistryPullSecretAfterBinding(ctx, base, namespace); err != nil {
 		return fmt.Errorf("provision registry pull secret for namespace %q: %w", namespace, err)
 	}
@@ -508,6 +514,15 @@ func (s *DeploymentService) ensureManagedNamespace(ctx context.Context, namespac
 const registryPullSecretName = "mcp-runtime-registry-pull" // #nosec G101 -- Kubernetes Secret object name, not credential material.
 const platformNamespaceAPISecretAccessName = "mcp-runtime-api-team-secrets"
 const platformNamespaceAPIServiceAccountName = "mcp-runtime-api"
+const operatorNamespaceSecretAccessName = "mcp-runtime-operator-managed-secrets"
+
+// ensureNamespaceOperatorSecretAccess grants the operator Secret access only
+// inside namespaces managed by the platform. The operator has no cluster-wide
+// Secret permissions; this binding lets it reconcile server-local certificates
+// and registry pull credentials without reaching unrelated platform Secrets.
+func ensureNamespaceOperatorSecretAccess(ctx context.Context, client kubernetes.Interface, namespace string) error {
+	return kubeworkload.EnsureOperatorSecretAccess(ctx, client, namespace)
+}
 
 // A newly created RoleBinding can be visible before the API server's RBAC
 // authorizer observes it. Retry only Forbidden errors in this provisioning

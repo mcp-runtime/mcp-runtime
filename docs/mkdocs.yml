@@ -88,14 +88,17 @@ nav:
       - Service Iteration: contributor/service-iteration.md
       - Runtime MCP Testing: contributor/runtime-mcp-testing.md
       - Staging E2E: contributor/staging-e2e.md
+      - Regression Index: contributor/regression-index.md
       - Troubleshooting: contributor/troubleshooting.md
   - Internals:
       - Overview: internals/README.md
       - API Types: internals/api-types.md
       - Request Flows: internals/request-flows.md
+      - Namespace Refactor Plan: internals/namespace-refactor-plan.md
       - Go Package Reference: internals/go-package-reference.md
       - CLI Internals: internals/internal-cli.md
       - Operator Internals: internals/cmd-operator.md
+      - Component Inventory: internals/component-inventory.md
       - Runtime CLI Cmd: internals/cmd-mcp-runtime.md
       - Metadata Package: internals/pkg-metadata.md
       - Config and Examples: internals/config-and-examples.md

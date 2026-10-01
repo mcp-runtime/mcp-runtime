@@ -2250,6 +2250,7 @@ func TestDeployAnalyticsManifestsWithKubectl_RecreatesInitializationJobs(t *test
 	manifestContent := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: fixture\n  namespace: mcp-sentinel\n"
 	for _, name := range []string{
 		"00-namespace.yaml",
+		"00-priority-classes.yaml",
 		"01-config.yaml",
 		"03-clickhouse.yaml",
 		"04-clickhouse-init.yaml",
@@ -2366,6 +2367,47 @@ func TestGrafanaPrometheusDatasourceUsesRoutePrefix(t *testing.T) {
 	}
 	if strings.Contains(rendered, "url: http://prometheus:9090\n") {
 		t.Fatalf("Prometheus datasource URL is missing route prefix:\n%s", rendered)
+	}
+}
+
+// TestGrafanaProvisioningContract pins the identifiers that server-card
+// Grafana deep links depend on (runtime-api emits /grafana/d/mcp-server/...):
+// the dashboard uid, the Prometheus datasource uid its panels reference, and
+// the Grafana mounts that provision both.
+func TestGrafanaProvisioningContract(t *testing.T) {
+	read := func(name string) string {
+		t.Helper()
+		b, err := os.ReadFile("../../../../k8s/" + name)
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		return string(b)
+	}
+	if !strings.Contains(read("19-grafana-datasources.yaml"), "type: prometheus\n        uid: prometheus\n") {
+		t.Errorf("Prometheus datasource must pin uid: prometheus")
+	}
+	dashboards := read("21-grafana-dashboards.yaml")
+	if !strings.Contains(dashboards, `"uid": "mcp-server"`) {
+		t.Errorf("dashboard must declare uid mcp-server")
+	}
+	if !strings.Contains(dashboards, `"uid": "prometheus"`) {
+		t.Errorf("dashboard panels must reference datasource uid prometheus")
+	}
+	grafana := read("12-grafana.yaml")
+	for _, want := range []string{"name: grafana-datasources", "key: dashboard-provider.yaml", "key: mcp-server.json"} {
+		if !strings.Contains(grafana, want) {
+			t.Errorf("grafana deployment missing %q", want)
+		}
+	}
+	manifests := analyticsServiceManifests("k8s/04-postgres.yaml")
+	for _, want := range []string{"k8s/19-grafana-datasources.yaml", "k8s/21-grafana-dashboards.yaml", "k8s/12-grafana.yaml"} {
+		found := false
+		for _, m := range manifests {
+			found = found || m == want
+		}
+		if !found {
+			t.Errorf("analyticsServiceManifests missing %s", want)
+		}
 	}
 }
 
@@ -2522,6 +2564,7 @@ func TestDeployAnalyticsManifestsReturnsRolloutFailures(t *testing.T) {
 	manifestContent := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: fixture\n  namespace: mcp-sentinel\n"
 	for _, name := range []string{
 		"00-namespace.yaml",
+		"00-priority-classes.yaml",
 		"01-config.yaml",
 		"03-clickhouse.yaml",
 		"03-clickhouse-hostpath.yaml",
@@ -2623,6 +2666,7 @@ func TestDeployAnalyticsManifestsWithKubectl_HostpathUsesHostpathManifests(t *te
 	manifestContent := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: fixture\n  namespace: mcp-sentinel\n"
 	for _, name := range []string{
 		"00-namespace.yaml",
+		"00-priority-classes.yaml",
 		"01-config.yaml",
 		"03-clickhouse-hostpath.yaml",
 		"04-clickhouse-init.yaml",
@@ -2694,6 +2738,7 @@ func TestDeployAnalyticsManifestsWithKubectl_WaitsForPostgresStatefulSet(t *test
 	manifestContent := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: fixture\n  namespace: mcp-sentinel\n"
 	for _, name := range []string{
 		"00-namespace.yaml",
+		"00-priority-classes.yaml",
 		"01-config.yaml",
 		"03-clickhouse.yaml",
 		"04-clickhouse-init.yaml",
@@ -3839,5 +3884,32 @@ func TestTraefikMiddlewarePatchAddsSpiffeIdentityToExistingInstall(t *testing.T)
 	volume, _ := ops[2].Value.(map[string]any)
 	if configMap, _ := volume["configMap"].(map[string]any); configMap["name"] != "traefik-plugin-spiffe-identity" {
 		t.Fatalf("volume op = %+v, want the spiffe-identity plugin ConfigMap", ops[2])
+	}
+}
+
+func TestRenderAnalyticsManifestPullsRepublishedLatestIngestAndProcessor(t *testing.T) {
+	for _, tc := range []struct {
+		manifest, repo string
+		set            func(string) AnalyticsImageSet
+	}{
+		{"k8s/06-ingest.yaml", "mcp-sentinel-ingest", func(i string) AnalyticsImageSet { return AnalyticsImageSet{Ingest: i} }},
+		{"k8s/07-processor.yaml", "mcp-sentinel-processor", func(i string) AnalyticsImageSet { return AnalyticsImageSet{Processor: i} }},
+	} {
+		raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", tc.manifest))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, c := range []struct{ image, wantPolicy string }{
+			{"registry.registry.svc.cluster.local:5000/" + tc.repo + ":latest", "Always"},
+			{"registry.registry.svc.cluster.local:5000/" + tc.repo + "@sha256:abc123", "IfNotPresent"},
+		} {
+			rendered, err := renderAnalyticsManifest(string(raw), tc.set(c.image), "", setupplan.PlatformModeTenant)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(rendered, "image: "+c.image+"\n          imagePullPolicy: "+c.wantPolicy) {
+				t.Fatalf("%s image %q rendered with wrong pull policy", tc.manifest, c.image)
+			}
+		}
 	}
 }

@@ -66,7 +66,7 @@ func TestIssueSessionCertificateSubmitsPEMRequest(t *testing.T) {
 	// thus our capture — happens first, which is all this test asserts.
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	_, _, _ = svc.issueSessionCertificateDER(ctx, ns, sess, csrDER, time.Hour)
+	_, _, _ = svc.issueSessionCertificateDER(ctx, ns, sess, csrDER, identity.SessionSPIFFEID(trust, ns, sess), time.Hour)
 
 	if capturedRequest == "" {
 		t.Fatal("no CertificateRequest was created")

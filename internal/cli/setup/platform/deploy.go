@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"mcp-runtime/internal/cli/certmanager"
 	clusterdoctor "mcp-runtime/internal/cli/cluster/doctor"
@@ -20,6 +22,7 @@ import (
 	"mcp-runtime/internal/cli/registry/config"
 	setupplan "mcp-runtime/internal/cli/setup/plan"
 	"mcp-runtime/pkg/k8sclient"
+	"mcp-runtime/pkg/kubeworkload"
 	"mcp-runtime/pkg/manifest"
 )
 
@@ -115,6 +118,61 @@ func ensureOperatorImagePullSecret(extRegistry *config.ExternalRegistryConfig, r
 		return "", err
 	}
 	return secretName, nil
+}
+
+// ensureOperatorSecretAccessBindingsClientGo applies namespace-scoped Secret
+// access for every existing MCPServer namespace before the operator rolls out.
+// New namespaces receive the same binding from runtime-api provisioning.
+func ensureOperatorSecretAccessBindingsClientGo() error {
+	clients, err := platformKubernetesClients()
+	if err != nil {
+		return err
+	}
+	servers, err := clients.Dynamic.Resource(schema.GroupVersionResource{
+		Group: "mcpruntime.org", Version: "v1alpha1", Resource: "mcpservers",
+	}).List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("list MCPServers for Secret RBAC migration: %w", err)
+	}
+	// Include provisioned namespaces with no current MCPServer so redeploying
+	// into an existing team remains possible after the RBAC migration.
+	managed, err := clients.Clientset.CoreV1().Namespaces().List(context.Background(), metav1.ListOptions{LabelSelector: "platform.mcpruntime.org/managed=true"})
+	if err != nil {
+		return fmt.Errorf("list managed namespaces for Secret RBAC migration: %w", err)
+	}
+	namespaceSet := make(map[string]struct{}, len(servers.Items)+1)
+	namespaceSet[core.NamespaceMCPServers] = struct{}{}
+	for i := range servers.Items {
+		if namespace := strings.TrimSpace(servers.Items[i].GetNamespace()); namespace != "" {
+			if isProtectedOperatorSecretNamespace(namespace) {
+				continue
+			}
+			namespaceSet[namespace] = struct{}{}
+		}
+	}
+	for _, ns := range managed.Items {
+		if !isProtectedOperatorSecretNamespace(ns.Name) {
+			namespaceSet[ns.Name] = struct{}{}
+		}
+	}
+	namespaces := make([]string, 0, len(namespaceSet))
+	for namespace := range namespaceSet {
+		namespaces = append(namespaces, namespace)
+	}
+	sort.Strings(namespaces)
+	for _, namespace := range namespaces {
+		if err := kubeworkload.EnsureOperatorSecretAccess(context.Background(), clients.Clientset, namespace); err != nil {
+			return fmt.Errorf("bind operator Secret access in namespace %q: %w", namespace, err)
+		}
+	}
+	if err := kubeworkload.EnsureOperatorTrustBundleAccess(context.Background(), clients.Clientset, strings.TrimSpace(os.Getenv("MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE"))); err != nil {
+		return fmt.Errorf("bind operator public trust bundle access: %w", err)
+	}
+	return nil
+}
+
+func isProtectedOperatorSecretNamespace(namespace string) bool {
+	return kubeworkload.OperatorSecretNamespaceProtected(namespace)
 }
 
 func verifySetup(logger *zap.Logger, usingExternalRegistry bool, deps SetupDeps) error {
@@ -439,8 +497,25 @@ func deployOperatorManifests(logger *zap.Logger, operatorImage, gatewayProxyImag
 	return deployOperatorManifestsWithClientGo(logger, operatorImage, gatewayProxyImage, operatorArgs, imagePullSecretName)
 }
 
+// operatorRBACManifests are applied directly by setup. config/rbac/role.yaml is
+// reapplied separately after Secret access migration. Every other resource in
+// config/rbac/kustomization.yaml must be listed here, or a namespace-local
+// binding can reference a role that setup never created.
+var operatorRBACManifests = []string{
+	"config/rbac/managed_server_namespace.yaml",
+	"config/rbac/service_account.yaml",
+	"config/rbac/operator_secret_access.yaml",
+	"config/rbac/operator_secret_access_binding.yaml",
+	"config/rbac/operator_workload_access.yaml",
+	"config/rbac/operator_workload_access_binding.yaml",
+	"config/rbac/role_binding.yaml",
+}
+
 func deployOperatorManifestsWithClientGo(logger *zap.Logger, operatorImage, gatewayProxyImage string, operatorArgs []string, imagePullSecretName string) error {
 	if err := validateAdapterCertificateIngressIdentity(); err != nil {
+		return err
+	}
+	if err := validateWorkloadIssuerApprovalGate(); err != nil {
 		return err
 	}
 	if err := ensureRepoManagedTraefikMiddlewareResourcesClientGo(logger); err != nil {
@@ -471,11 +546,7 @@ func deployOperatorManifestsWithClientGo(logger *zap.Logger, operatorImage, gate
 		}
 		return wrappedErr
 	}
-	for _, path := range []string{
-		"config/rbac/service_account.yaml",
-		"config/rbac/role.yaml",
-		"config/rbac/role_binding.yaml",
-	} {
+	for _, path := range operatorRBACManifests {
 		if err := applyManifestFile(path, "", os.Stdout); err != nil {
 			wrappedErr := core.WrapWithSentinel(core.ErrApplyRBACFailed, err, fmt.Sprintf("failed to apply RBAC: %v", err))
 			core.Error("Failed to apply RBAC")
@@ -484,6 +555,19 @@ func deployOperatorManifestsWithClientGo(logger *zap.Logger, operatorImage, gate
 			}
 			return wrappedErr
 		}
+	}
+	if err := ensureOperatorSecretAccessBindingsClientGo(); err != nil {
+		wrappedErr := core.WrapWithSentinel(core.ErrApplyRBACFailed, err, fmt.Sprintf("failed to scope operator Secret access to MCPServer namespaces: %v", err))
+		core.Error("Failed to scope operator Secret access")
+		if logger != nil {
+			core.LogStructuredError(logger, wrappedErr, "Failed to scope operator Secret access")
+		}
+		return wrappedErr
+	}
+	// Grant replacement access before stripping the old cluster-wide rule.
+	// If migration fails, keep the old role intact and let setup be retried.
+	if err := applyManifestFile("config/rbac/role.yaml", "", os.Stdout); err != nil {
+		return core.WrapWithSentinel(core.ErrApplyRBACFailed, err, fmt.Sprintf("failed to narrow operator RBAC: %v", err))
 	}
 	core.Info("Reapplied operator ClusterRole mcp-runtime-operator-role from config/rbac/role.yaml; run `mcp-runtime cluster doctor` if MCPServer creates ever appear unreconciled")
 
@@ -618,6 +702,9 @@ func renderOperatorManagerManifest(operatorImage, gatewayProxyImage string, oper
 // It applies CRD, RBAC, and manager manifests directly, replacing the image name and injecting operator args/env.
 func deployOperatorManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap.Logger, operatorImage, gatewayProxyImage string, operatorArgs []string, imagePullSecretName string) error {
 	if err := validateAdapterCertificateIngressIdentity(); err != nil {
+		return err
+	}
+	if err := validateWorkloadIssuerApprovalGate(); err != nil {
 		return err
 	}
 	if err := ensureRepoManagedTraefikMiddlewareResources(kubectl, logger); err != nil {

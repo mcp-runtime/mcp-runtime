@@ -3,11 +3,13 @@ package k8sclient
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -57,7 +59,7 @@ func TestWaitForWorkloadRolloutAcceptsRolledOutDeployment(t *testing.T) {
 
 func TestWaitForWorkloadRolloutWaitsForDaemonSetReadyReplicas(t *testing.T) {
 	clients := &Clients{Clientset: kubernetesfake.NewSimpleClientset(&appsv1.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{Name: "promtail", Namespace: "mcp-sentinel", Generation: 2},
+		ObjectMeta: metav1.ObjectMeta{Name: "promtail", Namespace: "mcp-log-collector", Generation: 2},
 		Status: appsv1.DaemonSetStatus{
 			ObservedGeneration:     1,
 			DesiredNumberScheduled: 1,
@@ -66,7 +68,7 @@ func TestWaitForWorkloadRolloutWaitsForDaemonSetReadyReplicas(t *testing.T) {
 		},
 	})}
 
-	err := WaitForWorkloadRollout(context.Background(), clients, "mcp-sentinel", "daemonset", "promtail", time.Millisecond)
+	err := WaitForWorkloadRollout(context.Background(), clients, "mcp-log-collector", "daemonset", "promtail", time.Millisecond)
 	if err == nil {
 		t.Fatal("expected rollout wait to fail while daemonset replicas are not ready")
 	}
@@ -74,7 +76,7 @@ func TestWaitForWorkloadRolloutWaitsForDaemonSetReadyReplicas(t *testing.T) {
 
 func TestWaitForWorkloadRolloutAcceptsReadyDaemonSet(t *testing.T) {
 	clients := &Clients{Clientset: kubernetesfake.NewSimpleClientset(&appsv1.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{Name: "promtail", Namespace: "mcp-sentinel", Generation: 2},
+		ObjectMeta: metav1.ObjectMeta{Name: "promtail", Namespace: "mcp-log-collector", Generation: 2},
 		Status: appsv1.DaemonSetStatus{
 			ObservedGeneration:     2,
 			DesiredNumberScheduled: 1,
@@ -83,7 +85,7 @@ func TestWaitForWorkloadRolloutAcceptsReadyDaemonSet(t *testing.T) {
 		},
 	})}
 
-	if err := WaitForWorkloadRollout(context.Background(), clients, "mcp-sentinel", "daemonset", "promtail", time.Second); err != nil {
+	if err := WaitForWorkloadRollout(context.Background(), clients, "mcp-log-collector", "daemonset", "promtail", time.Second); err != nil {
 		t.Fatalf("WaitForWorkloadRollout() error = %v", err)
 	}
 }
@@ -141,5 +143,45 @@ func TestWaitForCertificateReadyAcceptsReadyCertificate(t *testing.T) {
 
 	if err := WaitForCertificateReady(context.Background(), clients, "registry", "registry-cert", time.Second); err != nil {
 		t.Fatalf("WaitForCertificateReady() error = %v", err)
+	}
+}
+
+func TestPruneTerminatedPodsRemovesOnlyTerminalLeftovers(t *testing.T) {
+	pod := func(name string, phase corev1.PodPhase, owners ...metav1.OwnerReference) *corev1.Pod {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "mcp-sentinel", OwnerReferences: owners},
+			Status:     corev1.PodStatus{Phase: phase},
+		}
+	}
+	clientset := kubernetesfake.NewSimpleClientset(
+		pod("evicted", corev1.PodFailed),
+		pod("orphan-done", corev1.PodSucceeded),
+		pod("job-done", corev1.PodSucceeded, metav1.OwnerReference{Kind: "Job", Name: "kafka-topic-init"}),
+		pod("running", corev1.PodRunning),
+		pod("pending", corev1.PodPending),
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "other-ns", Namespace: "other"},
+			Status:     corev1.PodStatus{Phase: corev1.PodFailed},
+		},
+	)
+	deleted, err := PruneTerminatedPods(context.Background(), &Clients{Clientset: clientset}, "mcp-sentinel")
+	if err != nil {
+		t.Fatalf("PruneTerminatedPods: %v", err)
+	}
+	if got := strings.Join(deleted, ","); got != "evicted,orphan-done" {
+		t.Fatalf("deleted = %q, want evicted,orphan-done", got)
+	}
+	remaining, _ := clientset.CoreV1().Pods("mcp-sentinel").List(context.Background(), metav1.ListOptions{})
+	names := map[string]bool{}
+	for _, p := range remaining.Items {
+		names[p.Name] = true
+	}
+	for _, want := range []string{"job-done", "running", "pending"} {
+		if !names[want] {
+			t.Fatalf("pod %s must be preserved; remaining=%v", want, names)
+		}
+	}
+	if _, err := clientset.CoreV1().Pods("other").Get(context.Background(), "other-ns", metav1.GetOptions{}); err != nil {
+		t.Fatalf("pod in another namespace must be untouched: %v", err)
 	}
 }

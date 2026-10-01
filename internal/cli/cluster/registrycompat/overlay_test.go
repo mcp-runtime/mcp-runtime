@@ -93,11 +93,13 @@ func TestK3sOverlayContainsCompatRules(t *testing.T) {
 	for _, want := range []string{
 		"registry-allow-ingress-k3s",
 		"app.kubernetes.io/name: traefik",
-		"cidr: 10.0.0.0/8",
 	} {
 		if !strings.Contains(raw, want) {
 			t.Fatalf("k3s compat networkpolicy missing %q", want)
 		}
+	}
+	if strings.Contains(raw, "ipBlock:") {
+		t.Fatal("k3s registry policy must not allow pod CIDRs that include tenant workloads")
 	}
 }
 

@@ -31,6 +31,7 @@ concurrency:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   staging-e2e-remote:
@@ -67,6 +68,13 @@ jobs:
 
       - name: Verify disposable target
         run: bash test/e2e/staging-target.sh check
+
+      - name: Log in to GHCR for cached images
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       # The CLI runs here and reaches the cluster over its kubeconfig, so the
       # repository never leaves the runner and artifacts are already local.

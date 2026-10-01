@@ -78,13 +78,6 @@ type uiSession struct {
 	CSRFToken string
 }
 
-// uiSessionStore is intentionally in-memory only; sessions are cleared on UI restart.
-type uiSessionStore struct {
-	mu       sync.Mutex
-	sessions map[string]uiSession
-	now      func() time.Time
-}
-
 type loginAttemptTracker struct {
 	mu        sync.Mutex
 	clients   map[string]*loginClientState
@@ -120,6 +113,10 @@ func main() {
 	apiUpstream := serviceutil.EnvOr("API_UPSTREAM", "http://mcp-platform-api.mcp-sentinel.svc.cluster.local:8080")
 	if apiKey == "" && apiKeys == "" {
 		log.Printf("WARNING: neither API_KEY nor API_KEYS is set; UI API-key login is disabled")
+	}
+
+	if err := configureSessionStore(context.Background()); err != nil {
+		log.Fatalf("invalid session store configuration: %v", err)
 	}
 
 	mux, err := newMux(apiBase, apiUpstream, apiKey, apiKeys, adminAPIKeys)
@@ -797,75 +794,6 @@ func refillLoginTokens(state *loginClientState, now time.Time) {
 		state.tokens = loginRateLimitCapacity
 	}
 	state.lastRefill = state.lastRefill.Add(time.Duration(refill) * loginRateLimitRefill)
-}
-
-func newUISessionStore(now func() time.Time) *uiSessionStore {
-	return &uiSessionStore{sessions: map[string]uiSession{}, now: now}
-}
-
-func (s *uiSessionStore) createSession(_ context.Context, session uiSession) (uiSession, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.purgeExpiredLocked()
-	id, err := randomURLToken(24)
-	if err != nil {
-		return uiSession{}, err
-	}
-	session.ID = id
-	csrfToken, err := randomURLToken(24)
-	if err != nil {
-		return uiSession{}, err
-	}
-	session.CSRFToken = csrfToken
-	maxExpiry := s.now().Add(sessionDuration)
-	if session.ExpiresAt.IsZero() || session.ExpiresAt.After(maxExpiry) {
-		session.ExpiresAt = maxExpiry
-	}
-	if !session.ExpiresAt.After(s.now()) {
-		return uiSession{}, errors.New("session expiry is in the past")
-	}
-	s.sessions[session.ID] = session
-	return session, nil
-}
-
-func (s *uiSessionStore) sessionFromRequest(r *http.Request) (uiSession, bool) {
-	cookie, err := r.Cookie(sessionCookieName)
-	if err != nil {
-		return uiSession{}, false
-	}
-	sessionID := strings.TrimSpace(cookie.Value)
-	if sessionID == "" {
-		return uiSession{}, false
-	}
-	return s.get(sessionID)
-}
-
-func (s *uiSessionStore) get(id string) (uiSession, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.purgeExpiredLocked()
-	sess, ok := s.sessions[id]
-	if !ok {
-		return uiSession{}, false
-	}
-	return sess, true
-}
-
-func (s *uiSessionStore) delete(id string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.sessions, id)
-}
-
-func (s *uiSessionStore) purgeExpiredLocked() {
-	now := s.now()
-	for id, sess := range s.sessions {
-		if !sess.ExpiresAt.After(now) {
-			delete(s.sessions, id)
-		}
-	}
 }
 
 func handleLogout(store *uiSessionStore) http.HandlerFunc {

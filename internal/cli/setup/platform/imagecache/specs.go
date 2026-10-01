@@ -1,5 +1,5 @@
-// Package imagecache provides content-hash based GHCR reuse for QA E2E /
-// setup --test-mode platform images. Unchanged component hashes pull from
+// Package imagecache provides content-hash based GHCR reuse for QA E2E and
+// setup platform images. Unchanged component hashes pull from
 // ghcr.io instead of rebuilding.
 package imagecache
 
@@ -15,8 +15,10 @@ type Spec struct {
 	Dockerfile string // relative to repo root; empty when UseMake
 	Context    string // relative to repo root; empty means "."
 	UseMake    bool
-	// HashPaths are files or directories relative to the repo root whose contents
-	// contribute to the content hash. Keep aligned with Dockerfile COPY sets.
+	// GoPackage is the binary package directory relative to the repo root.
+	// Its local transitive imports are hashed for the selected target platform.
+	GoPackage string
+	// HashPaths cover non-Go build inputs relative to the repo root.
 	HashPaths []string
 }
 
@@ -26,83 +28,73 @@ var Specs = map[string]Spec{
 	"operator": {
 		Component:  "operator",
 		UseMake:    true,
+		GoPackage:  "cmd/operator",
 		Dockerfile: "Dockerfile.operator",
 		HashPaths: []string{
 			"Dockerfile.operator",
 			"Makefile.operator",
 			"go.mod",
 			"go.sum",
-			"api",
-			"cmd/operator",
-			"internal/operator",
-			"pkg",
 		},
 	},
 	"gateway-proxy": {
 		Component:  "gateway-proxy",
+		GoPackage:  "services/mcp-gateway",
 		Dockerfile: "services/mcp-gateway/Dockerfile",
 		Context:    ".",
-		HashPaths: []string{
-			"services/mcp-gateway/Dockerfile",
-			"go.mod",
-			"go.sum",
-			"api",
-			"pkg",
-			"services/mcp-gateway",
-		},
+		HashPaths:  goServiceHashPaths("mcp-gateway"),
 	},
 	"platform-api": {
 		Component:  "platform-api",
+		GoPackage:  "services/platform-api",
 		Dockerfile: "services/platform-api/Dockerfile",
 		Context:    ".",
 		HashPaths:  goServiceHashPaths("platform-api"),
 	},
 	"runtime-api": {
 		Component:  "runtime-api",
+		GoPackage:  "services/runtime-api",
 		Dockerfile: "services/runtime-api/Dockerfile",
 		Context:    ".",
 		HashPaths:  goServiceHashPaths("runtime-api"),
 	},
 	"analytics-api": {
 		Component:  "analytics-api",
+		GoPackage:  "services/analytics-api",
 		Dockerfile: "services/analytics-api/Dockerfile",
 		Context:    ".",
 		HashPaths:  goServiceHashPaths("analytics-api"),
 	},
 	"ingest": {
 		Component:  "ingest",
+		GoPackage:  "services/ingest",
 		Dockerfile: "services/ingest/Dockerfile",
 		Context:    ".",
 		HashPaths:  goServiceHashPaths("ingest"),
 	},
 	"processor": {
 		Component:  "processor",
+		GoPackage:  "services/processor",
 		Dockerfile: "services/processor/Dockerfile",
 		Context:    ".",
 		HashPaths:  goServiceHashPaths("processor"),
 	},
 	"ui": {
 		Component:  "ui",
+		GoPackage:  "services/ui",
 		Dockerfile: "services/ui/Dockerfile",
 		Context:    ".",
-		HashPaths: []string{
-			"services/ui/Dockerfile",
-			"go.mod",
-			"go.sum",
-			"pkg",
-			"services/ui",
-		},
+		HashPaths:  append(goServiceHashPaths("ui"), "services/ui/frontend"),
 	},
 	"doctor-smoke": {
 		Component:  "doctor-smoke",
+		GoPackage:  "cmd/doctor-smoke",
 		Dockerfile: "services/doctor-smoke/Dockerfile",
 		Context:    ".",
 		HashPaths: []string{
 			"services/doctor-smoke/Dockerfile",
 			"go.mod",
 			"go.sum",
-			"pkg",
-			"cmd/doctor-smoke",
 		},
 	},
 	"e2e-registry": {
@@ -120,9 +112,8 @@ func goServiceHashPaths(service string) []string {
 		"services/" + service + "/Dockerfile",
 		"go.mod",
 		"go.sum",
-		"api",
-		"pkg",
-		"services/" + service,
+		"services/" + service + "/go.mod",
+		"services/" + service + "/go.sum",
 	}
 }
 

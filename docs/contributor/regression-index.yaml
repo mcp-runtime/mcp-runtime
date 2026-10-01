@@ -1,0 +1,147 @@
+# Platform regression coverage index (issue #546, parent #548).
+# Source of truth for incident -> regression-check mapping. Validated by
+#   go test ./test/regression -count=1
+# See docs/contributor/regression-index.md for the schema and rules.
+#
+# status:
+#   covered  - at least one check proves the protected behavior (checks required)
+#   partial  - checks exist but do not prove the whole behavior (checks, gap,
+#              and waiver required)
+#   untested - no automated check yet; requires a waiver (owner, follow_up,
+#              expires, blocker). Expired waivers fail CI.
+# Do not mark an entry covered unless the mapped check really asserts it.
+version: 1
+incidents:
+  - id: "533"
+    title: Keep last-good MCP route serving during gateway port transitions
+    protected_behavior: >-
+      A broken gateway candidate never replaces the serving route and is not reported Ready;
+      a fixed candidate promotes; operator restart mid-transition recovers.
+    status: untested
+    waiver:
+      owner: Agent-Hellboy
+      follow_up: "https://github.com/mcp-runtime/mcp-runtime/issues/546"
+      expires: "2026-12-31"
+      blocker: No failed-rollout Kind QA E2E scenario exists yet.
+  - id: "532"
+    title: Fix gateway-enabled TypeScript OAuth example crash
+    protected_behavior: >-
+      Both containers become ready; anonymous MCP calls get the auth challenge;
+      authorized calls succeed without 502.
+    status: untested
+    waiver:
+      owner: Agent-Hellboy
+      follow_up: "https://github.com/mcp-runtime/mcp-runtime/issues/546"
+      expires: "2026-12-31"
+      blocker: No Kind QA E2E scenario deploys the TypeScript OAuth example behind a gateway.
+  - id: "531"
+    title: Authenticate the internal registry for tenant workloads
+    protected_behavior: >-
+      Team workloads cannot anonymously list/read protected repositories or upload images;
+      cross-team access is denied while authorized publish and node pulls keep working.
+    status: untested
+    waiver:
+      owner: Agent-Hellboy
+      follow_up: "https://github.com/mcp-runtime/mcp-runtime/issues/546"
+      expires: "2026-12-31"
+      blocker: Needs a Kind QA E2E registry-isolation scenario with disposable repositories.
+  - id: "501"
+    title: Buddy OAuth refresh-token replay causes repeated credential revocation
+    protected_behavior: >-
+      Two clients sharing a credential do not trigger spurious revocation while
+      replay detection stays effective.
+    status: untested
+    waiver:
+      owner: Agent-Hellboy
+      follow_up: "https://github.com/mcp-runtime/mcp-runtime/issues/546"
+      expires: "2026-12-31"
+      blocker: Depends on an upstream client/version fix; reproduction fixture not written.
+  - id: "540"
+    title: Restrict operator access to workload CA private key
+    protected_behavior: >-
+      Operator cannot read the root signing key or unrelated Secrets while gateway
+      reconciliation and certificate rotation still work.
+    status: untested
+    waiver:
+      owner: Agent-Hellboy
+      follow_up: "https://github.com/mcp-runtime/mcp-runtime/issues/546"
+      expires: "2026-12-31"
+      blocker: Needs a live RBAC check as the operator service account once the RBAC fix lands.
+  - id: "538"
+    title: Gate workload CertificateRequests before enabling adapter certificates
+    protected_behavior: >-
+      Forged-identity workload certificate requests are denied; bounded legitimate
+      enrollment succeeds.
+    status: partial
+    checks:
+      - kind: go-test
+        path: pkg/certauth/csr_test.go
+        name: TestValidateCSRPEMRejectsAdditionalSANs
+        command: go test ./pkg/certauth -run TestValidateCSRPEMRejectsAdditionalSANs -count=1
+        ci_job: ci.yaml#test
+    gap: >-
+      Covers CSR SAN validation only. Does not cover approval gating of
+      CertificateRequests created directly by workloads.
+    waiver:
+      owner: Agent-Hellboy
+      follow_up: "https://github.com/mcp-runtime/mcp-runtime/issues/546"
+      expires: "2026-12-31"
+      blocker: Approval-gating policy is not implemented; no live check is possible yet.
+  - id: "534"
+    title: Upgrade unsupported cert-manager on Kubernetes 1.36
+    protected_behavior: Installer version checks and certificate issuance on supported cert-manager/Kubernetes versions.
+    status: untested
+    waiver:
+      owner: Agent-Hellboy
+      follow_up: "https://github.com/mcp-runtime/mcp-runtime/issues/546"
+      expires: "2026-12-31"
+      blocker: Needs Staging E2E version-matrix coverage.
+  - id: "535"
+    title: Define production-safe lifecycle for the bundled workload CA
+    protected_behavior: Renewal, invalid/missing CA handling, and isolated rotation/recovery.
+    status: untested
+    waiver:
+      owner: Agent-Hellboy
+      follow_up: "https://github.com/mcp-runtime/mcp-runtime/issues/546"
+      expires: "2026-12-31"
+      blocker: Lifecycle design is not finalized.
+  - id: "543"
+    title: "UI observability deep-links drift: provision MCP Server dashboard + Prometheus datasource UID"
+    protected_behavior: >-
+      Fresh and updated installs provide the dashboard, a stable datasource UID, and
+      working deep links and panel queries.
+    status: untested
+    waiver:
+      owner: Agent-Hellboy
+      follow_up: "https://github.com/mcp-runtime/mcp-runtime/issues/546"
+      expires: "2026-12-31"
+      blocker: No observability scenario asserts the dashboard or datasource UID yet.
+  - id: "146"
+    title: "Review follow-up: shutdown data loss, silent audit drops, unbounded login-attempt state"
+    protected_behavior: >-
+      Audit flush on shutdown, observable overflow handling, bounded login-throttle
+      state (where still applicable).
+    status: untested
+    waiver:
+      owner: Agent-Hellboy
+      follow_up: "https://github.com/mcp-runtime/mcp-runtime/issues/546"
+      expires: "2026-12-31"
+      blocker: Findings must first be revalidated against current code.
+  - id: "71"
+    title: Make sentinel messaging stack durable and self-healing across node restarts
+    protected_behavior: Restart/eviction/dependency recovery without data loss or manual destructive repair.
+    status: untested
+    waiver:
+      owner: Agent-Hellboy
+      follow_up: "https://github.com/mcp-runtime/mcp-runtime/issues/546"
+      expires: "2026-12-31"
+      blocker: Existing coverage has not been inventoried.
+  - id: "72"
+    title: Harden platform recovery for cluster resource pressure and workload eviction
+    protected_behavior: Recovery from resource pressure/eviction without unintended data loss.
+    status: untested
+    waiver:
+      owner: Agent-Hellboy
+      follow_up: "https://github.com/mcp-runtime/mcp-runtime/issues/546"
+      expires: "2026-12-31"
+      blocker: Existing coverage has not been inventoried.

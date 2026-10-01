@@ -37,6 +37,7 @@ spec:
       labels:
         app: mcp-sentinel-processor
     spec:
+      priorityClassName: mcp-sentinel-services
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
@@ -45,7 +46,7 @@ spec:
       containers:
         - name: processor
           image: mcp-sentinel-processor:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
             runAsNonRoot: true
@@ -69,9 +70,16 @@ spec:
             requests:
               cpu: 100m
               memory: 128Mi
+              ephemeral-storage: 64Mi
             limits:
               cpu: 500m
               memory: 256Mi
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 9102
+            periodSeconds: 5
+            failureThreshold: 36
           readinessProbe:
             httpGet:
               path: /health

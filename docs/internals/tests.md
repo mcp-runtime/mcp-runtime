@@ -80,21 +80,26 @@ image tags already published to the local registry.
 
 ### Content-hash GHCR image cache
 
-CI QA E2E (and optional local runs) can skip rebuilding unchanged platform
-images by pulling content-hash tags from GitHub Container Registry:
+CI QA E2E and disposable-VM Staging E2E can skip rebuilding unchanged platform
+images by pulling content-hash tags from GitHub Container Registry. QA E2E
+publishes cache misses; Staging E2E uses the same tags without a write credential:
 
 | Env | Meaning |
 |-----|---------|
-| `E2E_IMAGE_CACHE=1` | Enable pull-or-build in `qa-e2e.sh` via `hack/e2e-image-cache` |
-| `MCP_SETUP_IMAGE_CACHE=1` | Same cache inside `setup --test-mode` image publish |
-| `E2E_GHCR_PUSH=1` | After a cache miss build, push `ghcr.io/<owner>/mcp-runtime/<component>:<hash>` |
+| `E2E_IMAGE_CACHE=1` | Enable pull-or-build in QA prebuild and setup; enabled by default in both E2E runners |
+| `MCP_SETUP_IMAGE_CACHE=1` | Same cache inside `setup` image publish, including Staging E2E's strict production setup |
+| `E2E_GHCR_PUSH=1` | After a cache miss build, push `ghcr.io/<owner>/mcp-runtime/<component>:<hash>-<architecture>` |
 | `E2E_IMAGE_CACHE_REGISTRY` | Override registry prefix (default `ghcr.io/<owner>/mcp-runtime`) |
 | `E2E_IMAGE_CACHE=0` | Force-disable even if setup cache is set |
 
-Hashes cover each component’s Dockerfile plus the source trees it copies (see
-`internal/cli/setup/platform/imagecache`). Cluster tags stay `:latest` in
+Each hash covers the component's Dockerfile, `.dockerignore`, module files,
+and the Go files in its transitive import graph for the target architecture.
+The UI hash also covers its frontend files. An edit to an unused package
+does not rebuild that service; an edit to an imported shared package rebuilds
+every service that imports it (see `internal/cli/setup/platform/imagecache`).
+Cluster tags stay `:latest` in
 test-mode; only GHCR uses the hash tag. Forks without `packages: write` to the
-parent org fall back to a full local build. Bust the cache with
+parent org can pull existing cache entries but cannot publish misses. Bust the cache with
 `E2E_IMAGE_CACHE=0` or by changing a hashed input file.
 
 `E2E_DEEP_REQUEST_FLOWS=1` is for pre-release sweeps, not normal PR feedback.
@@ -161,12 +166,19 @@ contains the gateway service, `mcp-sentinel-ingest`, `mcp-sentinel-processor`,
 and the `kafka.produce`, `kafka.consume`, `clickhouse.insert_event`, and
 `clickhouse.insert_batch` spans.
 
-Normal PRs run short QA E2E with `smoke-auth` as the baseline, then
+PRs with runtime or CI changes run short QA E2E with `smoke-auth` as the baseline;
+documentation-only PRs skip the Kind job. Changelog, contributor guide, article,
+and skill reference edits do not force all scenarios when changed alongside code.
+For code PRs,
 `.github/workflows/ci.yaml` calls `test/e2e/select_pr_scenarios.sh` to add
 targeted scenarios based on the changed files. API, UI, adapter, CLI, OAuth,
 observability, and multi-tenancy changes get the matching request-path mode;
 shared or unknown code paths fall back to `all` so CI stays conservative. The
-manual Pre-release Regression workflow runs full QA E2E with
+`multitenancy` scenario checks that two team users can read only their own team
+and namespace and that their registry credentials cannot access the other
+team's repositories. Staging E2E separately exercises the full tenant image
+build, push, deploy, and adapter path. The manual Pre-release Regression
+workflow runs full QA E2E with
 `E2E_SCENARIOS=all` and `E2E_DEEP_REQUEST_FLOWS=1` across tenant, org, and
 public platform modes, plus a tenant cache-mode replay when requested.
 
@@ -185,7 +197,7 @@ The main CI workflow runs:
 - service module tests
 - generated file drift
 - repository SBOM generation
-- path-selected short QA E2E on PRs and manual CI runs
+- path-selected short QA E2E on code PRs and manual CI runs
 
 Relevant pushes to `main` after merge run Staging E2E on the disposable VM;
 the CI QA E2E job is skipped on main pushes. QA E2E still uses Kind for its

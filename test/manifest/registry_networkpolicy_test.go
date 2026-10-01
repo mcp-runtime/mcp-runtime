@@ -36,6 +36,29 @@ type networkPolicyEgressRule struct {
 type networkPolicyPeer struct {
 	PodSelector       *networkPolicySelector `yaml:"podSelector"`
 	NamespaceSelector *networkPolicySelector `yaml:"namespaceSelector"`
+	IPBlock           *struct {
+		CIDR string `yaml:"cidr"`
+	} `yaml:"ipBlock"`
+}
+
+func TestK3sRegistryPolicyCannotAdmitTenantPodCIDRs(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "config", "registry", "overlays", "compatibility", "k3s", "networkpolicy-k3s-compat.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var policy networkPolicyDoc
+	if err := yaml.Unmarshal(raw, &policy); err != nil {
+		t.Fatal(err)
+	}
+	if len(policy.Spec.Ingress) != 1 || len(policy.Spec.Ingress[0].From) != 1 {
+		t.Fatal("k3s registry policy must admit only one scoped ingress peer")
+	}
+	peer := policy.Spec.Ingress[0].From[0]
+	if peer.IPBlock != nil || peer.NamespaceSelector == nil || peer.PodSelector == nil ||
+		peer.NamespaceSelector.MatchLabels["kubernetes.io/metadata.name"] != "kube-system" ||
+		peer.PodSelector.MatchLabels["app.kubernetes.io/name"] != "traefik" {
+		t.Fatalf("k3s registry policy admits a source other than kube-system Traefik: %+v", peer)
+	}
 }
 
 type networkPolicySelector struct {
@@ -93,11 +116,10 @@ func TestRegistryNetworkPolicyAllowsHelperPushOnlyToRegistry(t *testing.T) {
 	if !hasSameNamespaceIngressToPort(ingress, 5000) {
 		t.Fatal("registry ingress policy must allow same-namespace helper pods to reach registry:5000")
 	}
-	if !hasNamespaceIngressToPort(ingress, "mcp-servers", 5000) {
-		t.Fatal("registry ingress policy must allow catalog namespace probes to reach registry:5000")
-	}
-	if !hasManagedNamespaceIngressToPort(ingress, 5000) {
-		t.Fatal("registry ingress policy must allow managed namespace probes to reach registry:5000")
+	for _, ns := range []string{"traefik", "mcp-sentinel", "mcp-runtime"} {
+		if !hasNamespaceIngressToPort(ingress, ns, 5000) {
+			t.Fatalf("registry ingress policy must allow platform namespace %s to reach registry:5000", ns)
+		}
 	}
 
 	egress, ok := policies["registry-allow-egress"]
@@ -109,6 +131,31 @@ func TestRegistryNetworkPolicyAllowsHelperPushOnlyToRegistry(t *testing.T) {
 	}
 	if !hasRegistryEgressToPort(egress, 5000) {
 		t.Fatal("registry egress policy must allow helper pods to reach only registry pods on port 5000")
+	}
+}
+
+// TestRegistryNetworkPolicyDeniesTenantNamespaces guards #531: the internal
+// registry endpoint has no registry-native authentication, so tenant workload
+// namespaces must not be allowed to reach it directly.
+func TestRegistryNetworkPolicyDeniesTenantNamespaces(t *testing.T) {
+	ingress, ok := loadRegistryNetworkPolicies(t)["registry-allow-ingress"]
+	if !ok {
+		t.Fatal("registry-allow-ingress policy not found")
+	}
+	for _, ns := range []string{"mcp-servers", "mcp-servers-org", "mcp-servers-public"} {
+		if hasNamespaceIngressToPort(ingress, ns, 5000) {
+			t.Fatalf("registry ingress policy must not allow tenant namespace %s", ns)
+		}
+	}
+	if hasManagedNamespaceIngressToPort(ingress, 5000) {
+		t.Fatal("registry ingress policy must not allow platform-managed team namespaces")
+	}
+	for _, rule := range ingress.Spec.Ingress {
+		for _, peer := range rule.From {
+			if peer.NamespaceSelector != nil && len(peer.NamespaceSelector.MatchLabels) == 0 {
+				t.Fatal("registry ingress policy must not select all namespaces")
+			}
+		}
 	}
 }
 

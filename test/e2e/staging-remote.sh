@@ -482,6 +482,11 @@ export MCP_REGISTRY_INGRESS_HOST="${E2E_HOSTS[2]}"
 export MCP_AUTH_INGRESS_HOST="${E2E_HOSTS[3]}"
 export E2E_ARTIFACT_DIR="${ARTIFACT_DIR}"
 export MCPRUNTIME_ORG_ROOT="${ROOT_DIR}"
+# Reuse the same content-hash GHCR images as QA E2E. Staging runners pull
+# existing tags and build cache misses locally without GHCR write access.
+export E2E_IMAGE_CACHE="${E2E_IMAGE_CACHE:-1}"
+export E2E_GHCR_PUSH="${E2E_GHCR_PUSH:-0}"
+export E2E_IMAGE_CACHE_REGISTRY="${E2E_IMAGE_CACHE_REGISTRY:-ghcr.io/mcp-runtime/mcp-runtime}"
 export BIN PLATFORM_URL MCP_URL REGISTRY_HOST AUTH_URL WORK_DIR RUN_ID ROOT_DIR
 
 # kubelet resolves names through the node's resolver, not CoreDNS, so it cannot

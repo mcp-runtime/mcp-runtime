@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -37,6 +38,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
 )
 
@@ -49,6 +51,8 @@ const (
 	kafkaHeadlessServiceName = "kafka-headless"
 	kafkaKRaftReplicaCount   = int32(3)
 )
+
+type analyticsRolloutTarget struct{ kind, name, namespace string }
 
 func removeBundledOAuthServer(kubectl core.KubectlRunner) error {
 	resources := []struct{ kind, name string }{
@@ -73,6 +77,47 @@ func removeBundledOAuthServer(kubectl core.KubectlRunner) error {
 
 func removeBundledOAuthServerClientGo() error {
 	return removeBundledOAuthServer(core.DefaultKubectlClient())
+}
+
+// removeLegacyPromtail removes the collector left behind by installations that
+// ran it in mcp-sentinel. It runs only after the replacement DaemonSet is ready.
+func removeLegacyPromtail(kubectl core.KubectlRunner) error {
+	for _, resource := range []string{"daemonset/promtail", "serviceaccount/promtail", "configmap/promtail-config"} {
+		if err := kubectl.RunWithOutput([]string{"delete", resource, "-n", core.DefaultAnalyticsNamespace, "--ignore-not-found", "--cascade=foreground", "--wait=true"}, os.Stdout, os.Stderr); err != nil {
+			return fmt.Errorf("remove legacy log collector %s from namespace %s: %w", resource, core.DefaultAnalyticsNamespace, err)
+		}
+	}
+	// This path shares typed-client setup for namespace/RBAC finalization.
+	return finishCollectorAdmissionCutoverClientGo()
+}
+
+func removeLegacyPromtailClientGo() error {
+	clients, err := platformKubernetesClients()
+	if err != nil {
+		return err
+	}
+	ctx := context.Background()
+	if err := clients.Clientset.AppsV1().DaemonSets(core.DefaultAnalyticsNamespace).Delete(ctx, "promtail", metav1.DeleteOptions{PropagationPolicy: propagationForeground()}); err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("remove legacy log collector daemonset from namespace %s: %w", core.DefaultAnalyticsNamespace, err)
+	}
+	// Foreground deletion waits for the old hostPath pods to disappear before
+	// revoking their discovery access or tightening the source namespace policy.
+	if err := wait.PollUntilContextTimeout(ctx, 200*time.Millisecond, 2*time.Minute, true, func(ctx context.Context) (bool, error) {
+		_, err := clients.Clientset.AppsV1().DaemonSets(core.DefaultAnalyticsNamespace).Get(ctx, "promtail", metav1.GetOptions{})
+		if apierrors.IsNotFound(err) {
+			return true, nil
+		}
+		return false, err
+	}); err != nil {
+		return fmt.Errorf("wait for legacy collector deletion: %w", err)
+	}
+	if err := clients.Clientset.CoreV1().ServiceAccounts(core.DefaultAnalyticsNamespace).Delete(ctx, "promtail", metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("remove legacy log collector service account from namespace %s: %w", core.DefaultAnalyticsNamespace, err)
+	}
+	if err := clients.Clientset.CoreV1().ConfigMaps(core.DefaultAnalyticsNamespace).Delete(ctx, "promtail-config", metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("remove legacy log collector config from namespace %s: %w", core.DefaultAnalyticsNamespace, err)
+	}
+	return finishCollectorAdmissionCutoverClientGo()
 }
 
 func analyticsServiceManifests(postgresManifest string) []string {
@@ -100,11 +145,34 @@ func analyticsServiceManifests(postgresManifest string) []string {
 	return manifests
 }
 
+// pruneStaleSentinelPodsClientGo removes Failed/Evicted/ContainerStatusUnknown
+// pods left behind by eviction churn so they do not obscure real platform
+// state during recovery. It is best-effort: a failure is reported but never
+// blocks setup.
+func pruneStaleSentinelPodsClientGo() {
+	clients, err := platformKubernetesClients()
+	if err != nil {
+		core.Warn(fmt.Sprintf("Could not prune stale mcp-sentinel pods: %v", err))
+		return
+	}
+	pruned, err := k8sclient.PruneTerminatedPods(context.Background(), clients, core.DefaultAnalyticsNamespace)
+	if err != nil {
+		core.Warn(fmt.Sprintf("Could not prune stale mcp-sentinel pods: %v", err))
+		return
+	}
+	if len(pruned) > 0 {
+		core.Info(fmt.Sprintf("Removed %d stale terminated mcp-sentinel pod(s): %s", len(pruned), strings.Join(pruned, ", ")))
+	}
+}
+
 func deployAnalyticsManifests(logger *zap.Logger, images AnalyticsImageSet, storageMode, platformMode string) error {
 	return deployAnalyticsManifestsClientGo(logger, images, storageMode, platformMode)
 }
 
 func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageSet, storageMode, platformMode string) error {
+	if err := ensurePlatformNamespaceBeforeIngress(); err != nil {
+		return err
+	}
 	rolloutTimeoutDuration := analyticsRolloutTimeoutDuration()
 	rolloutTimeout := rolloutTimeoutDuration.String()
 
@@ -118,6 +186,7 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 	core.Info("Applying mcp-sentinel namespace and config")
 	manifests := []string{
 		"k8s/00-namespace.yaml",
+		"k8s/00-priority-classes.yaml",
 		"k8s/01-config.yaml",
 	}
 	for _, manifest := range manifests {
@@ -166,6 +235,7 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 	if err := ensureAnalyticsHostpathDirs(storageMode); err != nil {
 		return err
 	}
+	pruneStaleSentinelPodsClientGo()
 	if err := reconcileKafkaStatefulSetForKRaftUpgradeClientGo(); err != nil {
 		return err
 	}
@@ -215,15 +285,8 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 		return err
 	}
 
-	// Explicitly restart analytics deployments so they pick up the secret values
-	// written above. On reruns where the image tag is unchanged, Kubernetes does
-	// not trigger an automatic rollout, leaving pods with stale env var snapshots.
-	if err := restartAnalyticsDeploymentsClientGo(); err != nil {
-		core.Warn(fmt.Sprintf("Could not restart analytics deployments after secret update: %v", err))
-	}
-
 	core.Info(fmt.Sprintf("Waiting for mcp-sentinel workload rollouts (per-resource timeout %s; override with MCP_DEPLOYMENT_TIMEOUT)", rolloutTimeout))
-	targets := []struct{ kind, name string }{
+	targets := []analyticsRolloutTarget{
 		{kind: "statefulset", name: "mcp-sentinel-postgres"},
 		{kind: "deployment", name: "mcp-sentinel-ingest"},
 		{kind: "deployment", name: "mcp-sentinel-processor"},
@@ -237,10 +300,13 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 		{kind: "deployment", name: "otel-collector"},
 		{kind: "statefulset", name: "tempo"},
 		{kind: "statefulset", name: "loki"},
-		{kind: "daemonset", name: "promtail"},
+		{kind: "daemonset", name: "promtail", namespace: core.LogCollectorNamespace},
 	}
 	rolloutFailures, failedForDebug := waitForAnalyticsTargetsClientGo(targets, rolloutTimeoutDuration)
 	if len(rolloutFailures) == 0 {
+		if err := removeLegacyPromtailClientGo(); err != nil {
+			return err
+		}
 		core.Success("mcp-sentinel manifests deployed successfully")
 		return nil
 	}
@@ -249,6 +315,9 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 	} else if recovered {
 		rolloutFailures, failedForDebug = waitForAnalyticsTargetsClientGo(targets, rolloutTimeoutDuration)
 		if len(rolloutFailures) == 0 {
+			if err := removeLegacyPromtailClientGo(); err != nil {
+				return err
+			}
 			core.Success("mcp-sentinel manifests deployed successfully")
 			return nil
 		}
@@ -268,6 +337,9 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 }
 
 func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap.Logger, images AnalyticsImageSet, storageMode, platformMode string) error {
+	if err := ensurePlatformNamespaceBeforeIngress(); err != nil {
+		return err
+	}
 	rolloutTimeout := analyticsRolloutTimeoutString()
 
 	if err := ensureRepoManagedTraefikMiddlewareResources(kubectl, logger); err != nil {
@@ -280,6 +352,7 @@ func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap
 	core.Info("Applying mcp-sentinel namespace and config")
 	manifests := []string{
 		"k8s/00-namespace.yaml",
+		"k8s/00-priority-classes.yaml",
 		"k8s/01-config.yaml",
 	}
 	for _, manifest := range manifests {
@@ -292,7 +365,7 @@ func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap
 	}
 
 	core.Info("Applying mcp-sentinel managed secrets")
-	secretManifest, err := renderAnalyticsSecretManifest(kubectl)
+	secretManifest, err := renderCredentialBundleClientGo()
 	if err != nil {
 		return err
 	}
@@ -373,7 +446,7 @@ func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap
 	}
 
 	core.Info(fmt.Sprintf("Waiting for mcp-sentinel workload rollouts (per-resource timeout %s; override with MCP_DEPLOYMENT_TIMEOUT)", rolloutTimeout))
-	targets := []struct{ kind, name string }{
+	targets := []analyticsRolloutTarget{
 		{kind: "statefulset", name: "mcp-sentinel-postgres"},
 		{kind: "deployment", name: "mcp-sentinel-ingest"},
 		{kind: "deployment", name: "mcp-sentinel-processor"},
@@ -387,10 +460,13 @@ func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap
 		{kind: "deployment", name: "otel-collector"},
 		{kind: "statefulset", name: "tempo"},
 		{kind: "statefulset", name: "loki"},
-		{kind: "daemonset", name: "promtail"},
+		{kind: "daemonset", name: "promtail", namespace: core.LogCollectorNamespace},
 	}
 	rolloutFailures, failedForDebug := waitForAnalyticsTargetsWithKubectl(kubectl, targets, rolloutTimeout)
 	if len(rolloutFailures) == 0 {
+		if err := removeLegacyPromtail(kubectl); err != nil {
+			return err
+		}
 		core.Success("mcp-sentinel manifests deployed successfully")
 		return nil
 	}
@@ -399,6 +475,9 @@ func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap
 	} else if recovered {
 		rolloutFailures, failedForDebug = waitForAnalyticsTargetsWithKubectl(kubectl, targets, rolloutTimeout)
 		if len(rolloutFailures) == 0 {
+			if err := removeLegacyPromtail(kubectl); err != nil {
+				return err
+			}
 			core.Success("mcp-sentinel manifests deployed successfully")
 			return nil
 		}
@@ -493,30 +572,38 @@ func networkHostCIDR(ip net.IP) string {
 func protocolPtr(value corev1.Protocol) *corev1.Protocol { return &value }
 func intstrPtr(value int32) *intstr.IntOrString          { result := intstr.FromInt(int(value)); return &result }
 
-func waitForAnalyticsTargetsClientGo(targets []struct{ kind, name string }, rolloutTimeout time.Duration) ([]string, []analyticsFailedRollout) {
+func waitForAnalyticsTargetsClientGo(targets []analyticsRolloutTarget, rolloutTimeout time.Duration) ([]string, []analyticsFailedRollout) {
 	var rolloutFailures []string
 	var failedForDebug []analyticsFailedRollout
 	for _, target := range targets {
-		rolloutLog, err := runRolloutWithOptionalDebugCaptureClientGo(target.kind, target.name, core.DefaultAnalyticsNamespace, rolloutTimeout)
+		namespace := target.namespace
+		if namespace == "" {
+			namespace = core.DefaultAnalyticsNamespace
+		}
+		rolloutLog, err := runRolloutWithOptionalDebugCaptureClientGo(target.kind, target.name, namespace, rolloutTimeout)
 		if err != nil {
-			rolloutFailures = append(rolloutFailures, fmt.Sprintf("%s/%s: %v", target.kind, target.name, err))
+			rolloutFailures = append(rolloutFailures, fmt.Sprintf("%s/%s/%s: %v", namespace, target.kind, target.name, err))
 			failedForDebug = append(failedForDebug, analyticsFailedRollout{
-				kind: target.kind, name: target.name, rolloutLog: rolloutLog,
+				kind: target.kind, name: target.name, namespace: namespace, rolloutLog: rolloutLog,
 			})
 		}
 	}
 	return rolloutFailures, failedForDebug
 }
 
-func waitForAnalyticsTargetsWithKubectl(kubectl core.KubectlRunner, targets []struct{ kind, name string }, rolloutTimeout string) ([]string, []analyticsFailedRollout) {
+func waitForAnalyticsTargetsWithKubectl(kubectl core.KubectlRunner, targets []analyticsRolloutTarget, rolloutTimeout string) ([]string, []analyticsFailedRollout) {
 	var rolloutFailures []string
 	var failedForDebug []analyticsFailedRollout
 	for _, target := range targets {
-		rolloutLog, err := runRolloutWithOptionalDebugCapture(kubectl, target.kind, target.name, core.DefaultAnalyticsNamespace, rolloutTimeout)
+		namespace := target.namespace
+		if namespace == "" {
+			namespace = core.DefaultAnalyticsNamespace
+		}
+		rolloutLog, err := runRolloutWithOptionalDebugCapture(kubectl, target.kind, target.name, namespace, rolloutTimeout)
 		if err != nil {
-			rolloutFailures = append(rolloutFailures, fmt.Sprintf("%s/%s: %v", target.kind, target.name, err))
+			rolloutFailures = append(rolloutFailures, fmt.Sprintf("%s/%s/%s: %v", namespace, target.kind, target.name, err))
 			failedForDebug = append(failedForDebug, analyticsFailedRollout{
-				kind: target.kind, name: target.name, rolloutLog: rolloutLog,
+				kind: target.kind, name: target.name, namespace: namespace, rolloutLog: rolloutLog,
 			})
 		}
 	}
@@ -674,9 +761,13 @@ func buildAnalyticsRolloutDebugDetail(kubectl core.KubectlRunner, failed []analy
 			b.WriteString(fmt.Sprintf("---- kubectl rollout status %s/%s\n", w.kind, w.name))
 			b.WriteString(w.rolloutLog)
 		}
-		b.WriteString(fmt.Sprintf("---- describe %s %s\n", w.kind, w.name))
+		namespace := w.namespace
+		if namespace == "" {
+			namespace = core.DefaultAnalyticsNamespace
+		}
+		b.WriteString(fmt.Sprintf("---- describe %s %s in %s\n", w.kind, w.name, namespace))
 		out, err := kubectlText(kubectl, []string{
-			"describe", w.kind, w.name, "-n", core.DefaultAnalyticsNamespace, "--request-timeout=30s",
+			"describe", w.kind, w.name, "-n", namespace, "--request-timeout=30s",
 		})
 		if err != nil {
 			b.WriteString(fmt.Sprintf("error: %v\n", err))
@@ -720,6 +811,16 @@ func applyRenderedManifest(kubectl core.KubectlRunner, manifestPath string, imag
 	if err != nil {
 		return core.WrapWithSentinel(core.ErrSetupRenderManifestFailed, err, fmt.Sprintf("render manifest %s: %v", manifestPath, err))
 	}
+	rendered, err = stampDependencyRevisionsClientGo(rendered)
+	if err != nil {
+		return fmt.Errorf("plan dependency rollouts for %s: %w", manifestPath, err)
+	}
+	if manifestPath == "k8s/00-namespace.yaml" {
+		rendered, err = deferPlatformAdmissionManifest(rendered)
+		if err != nil {
+			return err
+		}
+	}
 	return applyManifestYAML(rendered, "", os.Stdout)
 }
 
@@ -741,6 +842,16 @@ func applyRenderedManifestClientGo(manifestPath string, images AnalyticsImageSet
 	}
 	if err != nil {
 		return core.WrapWithSentinel(core.ErrSetupRenderManifestFailed, err, fmt.Sprintf("render manifest %s: %v", manifestPath, err))
+	}
+	rendered, err = stampDependencyRevisionsClientGo(rendered)
+	if err != nil {
+		return fmt.Errorf("plan dependency rollouts for %s: %w", manifestPath, err)
+	}
+	if manifestPath == "k8s/00-namespace.yaml" {
+		rendered, err = deferPlatformAdmissionManifest(rendered)
+		if err != nil {
+			return err
+		}
 	}
 	return applyManifestYAML(rendered, "", os.Stdout)
 }
@@ -853,7 +964,7 @@ func renderAnalyticsManifest(content string, images AnalyticsImageSet, imagePull
 	// Kind node may already cache that tag, so those workloads must pull it
 	// again when their pod template changes. Keep pinned release images on the
 	// manifest's IfNotPresent policy.
-	for _, image := range []string{images.PlatformAPI, images.RuntimeAPI, images.AnalyticsAPI, images.UI} {
+	for _, image := range []string{images.Ingest, images.PlatformAPI, images.RuntimeAPI, images.AnalyticsAPI, images.Processor, images.UI} {
 		if !strings.HasSuffix(strings.TrimSpace(image), ":latest") {
 			continue
 		}
@@ -1100,7 +1211,7 @@ func renderAnalyticsSecretManifest(kubectl core.KubectlRunner) (string, error) {
 }
 
 func renderAnalyticsSecretManifestClientGo() (string, error) {
-	return renderAnalyticsSecretManifestWithReader(existingSecretDataValueClientGo)
+	return renderCredentialBundleClientGo()
 }
 
 type analyticsSecretValueReader func(namespace, name, key string) (string, error)
@@ -1797,56 +1908,6 @@ func randomHex(size int) (string, error) {
 	return hex.EncodeToString(buffer), nil
 }
 
-// restartAnalyticsDeploymentsClientGo triggers a rollout restart for each
-// mcp-sentinel Deployment that reads credentials from mcp-sentinel-secrets.
-// On reruns where the image tag has not changed, Kubernetes does not roll out
-// new pods automatically, so pods keep the env var snapshot from their last
-// start — which may contain stale secret values. Stamping the standard
-// kubectl.kubernetes.io/restartedAt annotation forces one clean rollout.
-func restartAnalyticsDeploymentsClientGo() error {
-	clients, err := platformKubernetesClients()
-	if err != nil {
-		return err
-	}
-	ctx := context.Background()
-	now := time.Now()
-	deployments := []string{
-		"mcp-platform-api",
-		"mcp-runtime-api",
-		"mcp-analytics-api",
-		"mcp-sentinel-ui",
-		"mcp-sentinel-ingest",
-		"mcp-sentinel-processor",
-		"mcp-sentinel-gateway",
-		"grafana",
-	}
-	// Only restart deployments that pre-existed this setup run.
-	// On a fresh install all deployments were just created and already have the
-	// correct secret values — restarting them is unnecessary and doubles the
-	// image-pull time, increasing the risk of rollout-wait timeouts in CI.
-	// A deployment created less than freshDeploymentThreshold seconds ago was
-	// created during this run; its pods have current secret values.
-	const freshDeploymentThreshold = 5 * time.Minute
-
-	var errs []string
-	for _, name := range deployments {
-		deploy, err := k8sclient.GetDeployment(ctx, clients, core.DefaultAnalyticsNamespace, name)
-		if err != nil || deploy == nil {
-			continue // not deployed yet — skip
-		}
-		if now.Sub(deploy.CreationTimestamp.Time) < freshDeploymentThreshold {
-			continue // brand new — pods already have current secret values
-		}
-		if err := k8sclient.RestartDeployment(ctx, clients, core.DefaultAnalyticsNamespace, name, now); err != nil {
-			errs = append(errs, fmt.Sprintf("%s: %v", name, err))
-		}
-	}
-	if len(errs) > 0 {
-		return fmt.Errorf("restart failed for: %s", strings.Join(errs, "; "))
-	}
-	return nil
-}
-
 // syncPostgresPasswordClientGo runs ALTER USER on the Postgres pod so that the
 // database password matches whatever was just written to mcp-sentinel-secrets.
 // This is needed because Kubernetes env vars snapshotted at pod start are NOT
@@ -2013,4 +2074,79 @@ func waitForStatefulSetDeletionClientGo(clients *k8sclient.Clients, namespace, n
 		time.Sleep(2 * time.Second)
 	}
 	return fmt.Errorf("timed out waiting for statefulset/%s deletion", name)
+}
+
+func propagationForeground() *metav1.DeletionPropagation {
+	policy := metav1.DeletePropagationForeground
+	return &policy
+}
+
+// deferPlatformAdmissionManifest leaves source admission untouched until the
+// replacement rolls out and the old hostPath collector finishes deletion.
+func deferPlatformAdmissionManifest(content string) (string, error) {
+	var out bytes.Buffer
+	decoder := yaml.NewDecoder(strings.NewReader(content))
+	encoder := yaml.NewEncoder(&out)
+	for {
+		var doc map[string]any
+		if err := decoder.Decode(&doc); errors.Is(err, io.EOF) {
+			break
+		} else if err != nil {
+			return "", err
+		}
+		metadata, _ := doc["metadata"].(map[string]any)
+		if doc["kind"] == "Namespace" && metadata["name"] == core.DefaultAnalyticsNamespace {
+			continue
+		}
+		if len(doc) > 0 {
+			if err := encoder.Encode(doc); err != nil {
+				return "", err
+			}
+		}
+	}
+	if err := encoder.Close(); err != nil {
+		return "", err
+	}
+	return out.String(), nil
+}
+
+func finishCollectorAdmissionCutoverClientGo() error {
+	clients, err := platformKubernetesClients()
+	if err != nil {
+		return err
+	}
+	ctx := context.Background()
+	// The new collector has its own binding; an interrupted rollout leaves the
+	// legacy binding untouched. Refuse to remove an unrelated custom binding.
+	binding, err := clients.Clientset.RbacV1().ClusterRoleBindings().Get(ctx, "promtail", metav1.GetOptions{})
+	if err == nil {
+		if binding.RoleRef.Kind != "ClusterRole" || binding.RoleRef.Name != "promtail" || len(binding.Subjects) != 1 || binding.Subjects[0].Kind != "ServiceAccount" || binding.Subjects[0].Name != "promtail" || binding.Subjects[0].Namespace != core.DefaultAnalyticsNamespace {
+			return fmt.Errorf("legacy promtail ClusterRoleBinding has unexpected ownership; refusing cleanup")
+		}
+		if err := clients.Clientset.RbacV1().ClusterRoleBindings().Delete(ctx, "promtail", metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			return err
+		}
+	} else if !apierrors.IsNotFound(err) {
+		return err
+	}
+	return k8sclient.EnsureNamespace(ctx, clients, core.DefaultAnalyticsNamespace, map[string]string{
+		"pod-security.kubernetes.io/enforce": "restricted", "pod-security.kubernetes.io/audit": "restricted", "pod-security.kubernetes.io/warn": "restricted",
+	})
+}
+
+// Create a fresh source namespace restricted, but preserve a legacy admission
+// exception while its collector may still restart during an interrupted setup.
+func ensurePlatformNamespaceBeforeIngress() error {
+	clients, err := platformKubernetesClients()
+	if err != nil {
+		return err
+	}
+	ctx := context.Background()
+	_, err = clients.Clientset.CoreV1().Namespaces().Get(ctx, core.DefaultAnalyticsNamespace, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return k8sclient.EnsureNamespace(ctx, clients, core.DefaultAnalyticsNamespace, map[string]string{
+			"pod-security.kubernetes.io/enforce": "restricted", "pod-security.kubernetes.io/audit": "restricted", "pod-security.kubernetes.io/warn": "restricted",
+		})
+	}
+	return err
 }

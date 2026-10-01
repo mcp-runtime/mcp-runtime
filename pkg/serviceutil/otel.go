@@ -144,6 +144,7 @@ func TraceIDFromContext(ctx context.Context) string {
 // InitTracer initializes OpenTelemetry tracing from OTEL_* environment variables.
 func InitTracer(serviceName string) (func(context.Context) error, error) {
 	ConfigureTracePropagation()
+	ConfigureOTelDiagnostics()
 
 	if envName := strings.TrimSpace(os.Getenv("OTEL_SERVICE_NAME")); envName != "" {
 		serviceName = envName

@@ -189,6 +189,47 @@ func TestPushDockerArchiveTarFetchSkipsExecCopy(t *testing.T) {
 	}
 }
 
+func TestPushDockerArchiveTarFetchFailureIncludesHelperDiagnostics(t *testing.T) {
+	client := fake.NewSimpleClientset(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "mcp-sentinel"}})
+	origWait := waitPodSucceededHook
+	defer func() { waitPodSucceededHook = origWait }()
+	waitPodSucceededHook = func(ctx context.Context, clientset kubernetes.Interface, namespace, name string) error {
+		pod, err := clientset.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			t.Fatalf("get helper pod: %v", err)
+		}
+		pod.Status.Phase = corev1.PodFailed
+		pod.Status.Reason = "RegistryUnavailable"
+		pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
+			Name: name,
+			State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
+				ExitCode: 6,
+				Reason:   "Error",
+				Message:  "registry DNS lookup failed",
+			}},
+		}}
+		if _, err := clientset.CoreV1().Pods(namespace).UpdateStatus(ctx, pod, metav1.UpdateOptions{}); err != nil {
+			t.Fatalf("update helper pod status: %v", err)
+		}
+		return os.ErrPermission
+	}
+
+	err := PushDockerArchive(context.Background(), client, &rest.Config{Host: "https://example.invalid"}, "/tmp/image.tar", "registry.example.com/acme/demo:v1", Config{
+		HelperNamespace: "mcp-sentinel",
+		TarFetchURL:     "http://10.0.0.5:8080/internal/registry-push/tar",
+	})
+	if err == nil || !strings.Contains(err.Error(), "helper diagnostics: phase=Failed") || !strings.Contains(err.Error(), "registry DNS lookup failed") {
+		t.Fatalf("PushDockerArchive() error = %v, want helper pod failure details", err)
+	}
+	pods, err := client.CoreV1().Pods("mcp-sentinel").List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		t.Fatalf("list pods: %v", err)
+	}
+	if len(pods.Items) != 0 {
+		t.Fatalf("expected helper pod cleanup after failure, found %d pod(s)", len(pods.Items))
+	}
+}
+
 func TestNewHelperNameIncludesRandomSuffix(t *testing.T) {
 	first := newHelperName()
 	second := newHelperName()

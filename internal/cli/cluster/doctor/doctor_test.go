@@ -721,6 +721,26 @@ func TestCheckRegistryReachableFromCluster(t *testing.T) {
 			t.Fatal("expected failure when helper pod errors")
 		}
 	})
+
+	t.Run("reports failed probe diagnostics", func(t *testing.T) {
+		mock := &core.MockExecutor{
+			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
+				switch {
+				case len(spec.Args) > 0 && spec.Args[0] == "get" && contains(spec.Args, "jsonpath={.status.phase}"):
+					return &core.MockCommand{OutputData: []byte("Failed")}
+				case len(spec.Args) > 0 && spec.Args[0] == "get" && contains(spec.Args, "jsonpath={.status.containerStatuses[0].state.terminated.reason}|{.status.containerStatuses[0].state.terminated.exitCode}|{.status.containerStatuses[0].state.terminated.message}"):
+					return &core.MockCommand{OutputData: []byte("Error|6|")}
+				case len(spec.Args) > 0 && spec.Args[0] == "logs":
+					return &core.MockCommand{OutputData: []byte("curl: (6) Could not resolve host: registry.registry.svc.cluster.local")}
+				}
+				return &core.MockCommand{}
+			},
+		}
+		check := checkRegistryReachableFromCluster(core.NewTestKubectlClient(mock))
+		if check.OK || !strings.Contains(check.Detail, "Error|6") || !strings.Contains(check.Detail, "Could not resolve host") {
+			t.Fatalf("expected failed probe diagnostics, got %#v", check)
+		}
+	})
 }
 
 func TestParseImagePullCandidates(t *testing.T) {
@@ -2561,6 +2581,39 @@ func TestCheckMCPServersDNSAndNetworkReadsCompletedPodLogs(t *testing.T) {
 	}
 }
 
+func TestCheckMCPServersDNSAndNetworkTreatsPolicyDenyAsExpected(t *testing.T) {
+	run := func(logs string) DoctorCheck {
+		mock := &core.MockExecutor{
+			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
+				switch {
+				case len(spec.Args) > 0 && spec.Args[0] == "run":
+					return &core.MockCommand{}
+				case len(spec.Args) > 0 && spec.Args[0] == "get" && contains(spec.Args, "jsonpath={.status.phase}"):
+					return &core.MockCommand{OutputData: []byte("Failed")}
+				case len(spec.Args) > 0 && spec.Args[0] == "logs":
+					return &core.MockCommand{OutputData: []byte(logs)}
+				case len(spec.Args) > 0 && spec.Args[0] == "delete":
+					return &core.MockCommand{}
+				}
+				return &core.MockCommand{OutputErr: fmt.Errorf("unexpected command: %v", spec.Args)}
+			},
+		}
+		return checkMCPServersDNSAndNetwork(core.NewTestKubectlClient(mock))
+	}
+	if c := run("curl: (28) Connection timed out after 5001 milliseconds"); !c.OK {
+		t.Fatalf("a NetworkPolicy deny after DNS resolves should pass, got %q", c.Detail)
+	}
+	if c := run("curl: (7) Failed to connect to registry port 5000: Connection refused"); !c.OK {
+		t.Fatalf("a refused connection after DNS resolves should pass, got %q", c.Detail)
+	}
+	if c := run("curl: (6) Could not resolve host: registry.registry.svc.cluster.local"); c.OK {
+		t.Fatal("a DNS failure must still fail the check")
+	}
+	if c := run(""); c.OK {
+		t.Fatal("an unexplained helper pod failure must still fail the check")
+	}
+}
+
 func TestRegistryReachabilityUsesHTTPSForInternalTLSRegistry(t *testing.T) {
 	var runArgs []string
 	mock := &core.MockExecutor{
@@ -2588,8 +2641,8 @@ func TestRegistryReachabilityUsesHTTPSForInternalTLSRegistry(t *testing.T) {
 	if !argContains(runArgs, "https://registry.registry.svc.cluster.local:5000/v2/") {
 		t.Fatalf("registry probe should use HTTPS when registry-internal-tls exists, got args=%v", runArgs)
 	}
-	if !argContains(runArgs, "-skI") {
-		t.Fatalf("registry probe should allow the internal CA probe with -k, got args=%v", runArgs)
+	if !argContains(runArgs, "-skSI") {
+		t.Fatalf("registry probe should show curl errors while allowing the internal CA probe with -k, got args=%v", runArgs)
 	}
 }
 
@@ -2679,4 +2732,104 @@ func argValueWithPrefix(args []string, prefix string) string {
 		}
 	}
 	return ""
+}
+
+func TestCheckSentinelStalePods(t *testing.T) {
+	run := func(podsJSON string) DoctorCheck {
+		mock := &core.MockExecutor{
+			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
+				switch {
+				case contains(spec.Args, "namespace"):
+					return &core.MockCommand{OutputData: []byte("mcp-sentinel")}
+				case contains(spec.Args, "pods"):
+					return &core.MockCommand{OutputData: []byte(podsJSON)}
+				default:
+					return &core.MockCommand{}
+				}
+			},
+		}
+		return checkSentinelStalePods(core.NewTestKubectlClient(mock))
+	}
+
+	t.Run("fails on evicted and orphaned completed pods", func(t *testing.T) {
+		check := run(`{"items":[
+{"metadata":{"name":"kafka-0"},"status":{"phase":"Running"}},
+{"metadata":{"name":"ingest-old"},"status":{"phase":"Failed","reason":"Evicted"}},
+{"metadata":{"name":"orphan"},"status":{"phase":"Succeeded"}},
+{"metadata":{"name":"kafka-topic-init-x","ownerReferences":[{"kind":"Job"}]},"status":{"phase":"Succeeded"}}
+]}`)
+		if check.OK {
+			t.Fatal("expected stale pod failure")
+		}
+		for _, want := range []string{"2 stale", "pod/ingest-old Evicted", "pod/orphan Completed"} {
+			if !strings.Contains(check.Detail, want) {
+				t.Fatalf("detail = %q, want %q", check.Detail, want)
+			}
+		}
+		if strings.Contains(check.Detail, "kafka-topic-init-x") {
+			t.Fatalf("job-owned completed pod must not be reported: %q", check.Detail)
+		}
+	})
+
+	t.Run("passes with only running and job-owned pods", func(t *testing.T) {
+		check := run(`{"items":[
+{"metadata":{"name":"kafka-0"},"status":{"phase":"Running"}},
+{"metadata":{"name":"job-pod","ownerReferences":[{"kind":"Job"}]},"status":{"phase":"Succeeded"}}
+]}`)
+		if !check.OK {
+			t.Fatalf("expected OK, got %q", check.Detail)
+		}
+	})
+}
+
+func TestCheckSentinelGrafanaProvisioning(t *testing.T) {
+	const goodDS = "apiVersion: 1\ndatasources:\n  - name: Prometheus\n    type: prometheus\n    uid: prometheus\n"
+	const noUIDDS = "apiVersion: 1\ndatasources:\n  - name: Prometheus\n    type: prometheus\n"
+	const goodDash = `{"uid": "mcp-server", "panels": []}`
+	const goodDeploy = `{"spec":{"template":{"spec":{"volumes":[
+		{"configMap":{"name":"grafana-datasources"}},
+		{"configMap":{"name":"grafana-dashboards","items":[{"key":"dashboard-provider.yaml"}]}},
+		{"configMap":{"name":"grafana-dashboards","items":[{"key":"mcp-server.json"}]}}]}}}}`
+	const datasourceOnlyDeploy = `{"spec":{"template":{"spec":{"volumes":[{"configMap":{"name":"grafana-datasources"}}]}}}}`
+
+	run := func(ds, dash, deploy string) DoctorCheck {
+		mock := &core.MockExecutor{
+			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
+				args := strings.Join(spec.Args, " ")
+				switch {
+				case strings.Contains(args, "get namespace"):
+					return &core.MockCommand{OutputData: []byte("mcp-sentinel")}
+				case strings.Contains(args, "get deployment grafana") && strings.Contains(args, "jsonpath"):
+					return &core.MockCommand{OutputData: []byte("grafana")}
+				case strings.Contains(args, "get deployment grafana"):
+					return &core.MockCommand{OutputData: []byte(deploy)}
+				case strings.Contains(args, "grafana-datasources"):
+					if ds == "" {
+						return &core.MockCommand{OutputData: []byte("not found"), RunErr: errors.New("not found")}
+					}
+					return &core.MockCommand{OutputData: []byte(ds)}
+				case strings.Contains(args, "grafana-dashboards"):
+					return &core.MockCommand{OutputData: []byte(dash)}
+				}
+				return &core.MockCommand{}
+			},
+		}
+		return checkSentinelGrafanaProvisioning(core.NewTestKubectlClient(mock))
+	}
+
+	if c := run(goodDS, goodDash, goodDeploy); !c.OK {
+		t.Fatalf("expected OK, got %q", c.Detail)
+	}
+	for name, tc := range map[string]struct{ ds, dash, deploy, want string }{
+		"datasource uid drift": {noUIDDS, goodDash, goodDeploy, "Data source not found"},
+		"datasource missing":   {"", goodDash, goodDeploy, "Data source not found"},
+		"dashboard missing":    {goodDS, "", goodDeploy, "Dashboard not found"},
+		"dashboard wrong uid":  {goodDS, `{"uid":"other"}`, goodDeploy, "dashboard uid"},
+		"mounts missing":       {goodDS, goodDash, datasourceOnlyDeploy, "mcp-server.json"},
+	} {
+		c := run(tc.ds, tc.dash, tc.deploy)
+		if c.OK || !strings.Contains(c.Detail, tc.want) || c.Remedy == "" {
+			t.Errorf("%s: got OK=%v detail=%q remedy=%q, want failure containing %q", name, c.OK, c.Detail, c.Remedy, tc.want)
+		}
+	}
 }

@@ -7,6 +7,7 @@ import (
 
 	"mcp-runtime/internal/cli/core"
 	"mcp-runtime/internal/cli/kubeerr"
+	"mcp-runtime/pkg/platforminventory"
 )
 
 // PlatformWorkload identifies a namespaced workload for status tables.
@@ -18,22 +19,20 @@ type PlatformWorkload struct {
 }
 
 // DefaultPlatformStatusWorkloads lists bundled analytics stack workloads for status output.
-var DefaultPlatformStatusWorkloads = []PlatformWorkload{
-	{Component: "ClickHouse", Namespace: core.DefaultAnalyticsNamespace, Kind: "statefulset", Name: "clickhouse"},
-	{Component: "Kafka", Namespace: core.DefaultAnalyticsNamespace, Kind: "statefulset", Name: "kafka"},
-	{Component: "Ingest", Namespace: core.DefaultAnalyticsNamespace, Kind: "deployment", Name: "mcp-sentinel-ingest"},
-	{Component: "Processor", Namespace: core.DefaultAnalyticsNamespace, Kind: "deployment", Name: "mcp-sentinel-processor"},
-	{Component: "Platform API", Namespace: core.DefaultAnalyticsNamespace, Kind: "deployment", Name: "mcp-platform-api"},
-	{Component: "Runtime Control", Namespace: core.DefaultAnalyticsNamespace, Kind: "deployment", Name: "mcp-runtime-api"},
-	{Component: "Analytics API", Namespace: core.DefaultAnalyticsNamespace, Kind: "deployment", Name: "mcp-analytics-api"},
-	{Component: "UI", Namespace: core.DefaultAnalyticsNamespace, Kind: "deployment", Name: "mcp-sentinel-ui"},
-	{Component: "Gateway", Namespace: core.DefaultAnalyticsNamespace, Kind: "deployment", Name: "mcp-sentinel-gateway"},
-	{Component: "Prometheus", Namespace: core.DefaultAnalyticsNamespace, Kind: "deployment", Name: "prometheus"},
-	{Component: "Grafana", Namespace: core.DefaultAnalyticsNamespace, Kind: "deployment", Name: "grafana"},
-	{Component: "OTel Collector", Namespace: core.DefaultAnalyticsNamespace, Kind: "deployment", Name: "otel-collector"},
-	{Component: "Tempo", Namespace: core.DefaultAnalyticsNamespace, Kind: "statefulset", Name: "tempo"},
-	{Component: "Loki", Namespace: core.DefaultAnalyticsNamespace, Kind: "statefulset", Name: "loki"},
-	{Component: "Promtail", Namespace: core.DefaultAnalyticsNamespace, Kind: "daemonset", Name: "promtail"},
+var DefaultPlatformStatusWorkloads = defaultPlatformStatusWorkloads()
+
+func defaultPlatformStatusWorkloads() []PlatformWorkload {
+	// Preserve the existing status table order separately from identity/placement.
+	keys := []string{"clickhouse", "kafka", "ingest", "processor", "platform-api", "runtime-api", "analytics-api", "ui", "gateway", "prometheus", "grafana", "otel-collector", "tempo", "loki", "promtail"}
+	out := make([]PlatformWorkload, 0, len(keys))
+	for _, key := range keys {
+		c, ok := platforminventory.Lookup(key)
+		if !ok {
+			panic("unknown status component: " + key)
+		}
+		out = append(out, PlatformWorkload{Component: c.Display, Namespace: c.Namespace, Kind: c.Kind, Name: c.Resource})
+	}
+	return out
 }
 
 // AnalyticsNamespaceInstalled reports whether the analytics namespace exists.

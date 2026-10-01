@@ -2986,6 +2986,9 @@ const (
 
 	// DefaultAnalyticsNamespace is the namespace for the bundled mcp-sentinel stack.
 	DefaultAnalyticsNamespace = "mcp-sentinel"
+
+	// LogCollectorNamespace isolates the node log collector and its hostPath access.
+	LogCollectorNamespace = mcpdefaults.LogCollectorNamespace
 )
     This file defines constants used across the CLI, including:
       - Kubernetes namespace names
@@ -3178,6 +3181,9 @@ var (
 	ErrCertManagerNotInstalled     = newSentinelError("cert-manager not installed", errx.CodeCert, errx.DescCert)
 	ErrCertManagerInstallFailed    = newSentinelError("cert-manager install failed", errx.CodeCert, errx.DescCert)
 	ErrCASecretNotFound            = newSentinelError("CA secret not found", errx.CodeCert, errx.DescCert)
+	ErrCASecretInvalid             = newSentinelError("CA secret invalid", errx.CodeCert, errx.DescCert)
+	ErrCAExpired                   = newSentinelError("CA certificate expired", errx.CodeCert, errx.DescCert)
+	ErrCANearExpiry                = newSentinelError("CA certificate near expiry", errx.CodeCert, errx.DescCert)
 	ErrCertificateNotReady         = newSentinelError("certificate not ready", errx.CodeCert, errx.DescCert)
 	ErrClusterIssuerNotFound       = newSentinelError("ClusterIssuer not found", errx.CodeCert, errx.DescCert)
 	ErrRegistryCertificateNotFound = newSentinelError("registry Certificate not found", errx.CodeCert, errx.DescCert)
@@ -4760,6 +4766,8 @@ _No package overview is documented._
 - [`func ValidateIngressManifestForACME(ingressManifest string) error`](#cli-cert-manager-func-validateingressmanifestforacme-ingressmanifest-string-error)
 - [`func WaitForCertificateReadyWithKubectl(kubectl core.KubectlRunner, name, namespace string, timeout time.Duration) error`](#cli-cert-manager-func-waitforcertificatereadywithkubectl-kubectl-core-kubectlrunner-name-namespace-string-timeout-time-duration-error)
 - [`func WaitForTraefikDeploymentForACME(kubectl core.KubectlRunner) error`](#cli-cert-manager-func-waitfortraefikdeploymentforacme-kubectl-core-kubectlrunner-error)
+- [`type CAHealth struct`](#cli-cert-manager-type-cahealth-struct)
+- [`func ValidateCAKeyPair(certPEM, keyPEM []byte, now time.Time) (CAHealth, error)`](#cli-cert-manager-func-validatecakeypair-certpem-keypem-byte-now-time-time-cahealth-error)
 - [`type CertManager struct`](#cli-cert-manager-type-certmanager-struct)
 - [`func NewCertManager(kubectl core.KubectlRunner, logger *zap.Logger) *CertManager`](#cli-cert-manager-func-newcertmanager-kubectl-core-kubectlrunner-logger-zap-logger-certmanager)
 - [`func (m *CertManager) Apply(dryRun bool) error`](#cli-cert-manager-func-m-certmanager-apply-dryrun-bool-error)
@@ -4772,11 +4780,18 @@ _No package overview is documented._
 ```text
 const (
 	CertClusterIssuerName           = certClusterIssuerName
+	CertCASecretName                = certCASecretName
+	CertManagerNamespace            = certManagerNamespace
 	RegistryCertificateName         = registryCertificateName
 	RegistryTLSSecretName           = registryTLSSecretName
 	RegistryInternalCertificateName = registryInternalCertificateName
 	RegistryInternalTLSSecretName   = registryInternalTLSSecretName
 )
+const MinCARemainingLifetime = 180 * 24 * time.Hour
+    MinCARemainingLifetime is the minimum remaining root lifetime accepted for
+    the bundled workload CA in production. Below this, operators must plan a
+    dual-trust rotation (docs/cli.md, "Bundled workload CA lifecycle") before
+    setup will treat the CA as healthy.
 ```
 
 <a id="cli-cert-manager-functions"></a>
@@ -4935,6 +4950,29 @@ func WaitForTraefikDeploymentForACME(kubectl core.KubectlRunner) error
 
 <a id="cli-cert-manager-types"></a>
 ### Types
+
+<a id="cli-cert-manager-type-cahealth-struct"></a>
+```text
+type CAHealth struct {
+	Subject   string
+	NotAfter  time.Time
+	Remaining time.Duration
+	// NearExpiry is true when Remaining is below MinCARemainingLifetime.
+	NearExpiry bool
+}
+    CAHealth describes a validated CA keypair. It never carries key material.
+
+```
+
+<a id="cli-cert-manager-func-validatecakeypair-certpem-keypem-byte-now-time-time-cahealth-error"></a>
+```text
+func ValidateCAKeyPair(certPEM, keyPEM []byte, now time.Time) (CAHealth, error)
+    ValidateCAKeyPair checks that certPEM/keyPEM form a usable CA: parseable,
+    matching, CA-constrained with certSign usage, within its validity window.
+    Errors never include key material. Near-expiry is reported, not an error,
+    so callers can choose policy (fail in production, warn in test mode).
+
+```
 
 <a id="cli-cert-manager-type-certmanager-struct"></a>
 ```text
@@ -5568,23 +5606,7 @@ _No package overview is documented._
 ### Variables
 
 ```text
-var DefaultPlatformStatusWorkloads = []PlatformWorkload{
-	{Component: "ClickHouse", Namespace: core.DefaultAnalyticsNamespace, Kind: "statefulset", Name: "clickhouse"},
-	{Component: "Kafka", Namespace: core.DefaultAnalyticsNamespace, Kind: "statefulset", Name: "kafka"},
-	{Component: "Ingest", Namespace: core.DefaultAnalyticsNamespace, Kind: "deployment", Name: "mcp-sentinel-ingest"},
-	{Component: "Processor", Namespace: core.DefaultAnalyticsNamespace, Kind: "deployment", Name: "mcp-sentinel-processor"},
-	{Component: "Platform API", Namespace: core.DefaultAnalyticsNamespace, Kind: "deployment", Name: "mcp-platform-api"},
-	{Component: "Runtime Control", Namespace: core.DefaultAnalyticsNamespace, Kind: "deployment", Name: "mcp-runtime-api"},
-	{Component: "Analytics API", Namespace: core.DefaultAnalyticsNamespace, Kind: "deployment", Name: "mcp-analytics-api"},
-	{Component: "UI", Namespace: core.DefaultAnalyticsNamespace, Kind: "deployment", Name: "mcp-sentinel-ui"},
-	{Component: "Gateway", Namespace: core.DefaultAnalyticsNamespace, Kind: "deployment", Name: "mcp-sentinel-gateway"},
-	{Component: "Prometheus", Namespace: core.DefaultAnalyticsNamespace, Kind: "deployment", Name: "prometheus"},
-	{Component: "Grafana", Namespace: core.DefaultAnalyticsNamespace, Kind: "deployment", Name: "grafana"},
-	{Component: "OTel Collector", Namespace: core.DefaultAnalyticsNamespace, Kind: "deployment", Name: "otel-collector"},
-	{Component: "Tempo", Namespace: core.DefaultAnalyticsNamespace, Kind: "statefulset", Name: "tempo"},
-	{Component: "Loki", Namespace: core.DefaultAnalyticsNamespace, Kind: "statefulset", Name: "loki"},
-	{Component: "Promtail", Namespace: core.DefaultAnalyticsNamespace, Kind: "daemonset", Name: "promtail"},
-}
+var DefaultPlatformStatusWorkloads = defaultPlatformStatusWorkloads()
     DefaultPlatformStatusWorkloads lists bundled analytics stack workloads for
     status output.
 ```

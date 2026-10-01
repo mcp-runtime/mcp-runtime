@@ -43,6 +43,7 @@ func cmdHash(args []string) error {
 	fs := flag.NewFlagSet("hash", flag.ContinueOnError)
 	component := fs.String("component", "", "component name")
 	root := fs.String("root", "", "repository root (default: detect)")
+	platform := fs.String("platform", "", "target platform (default: MCP_IMAGE_PLATFORM, DOCKER_DEFAULT_PLATFORM, or host)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -53,7 +54,11 @@ func cmdHash(args []string) error {
 	if err != nil {
 		return err
 	}
-	hash, err := imagecache.ContentHash(repoRoot, *component)
+	targetPlatform := imagecache.OptionsFromEnv().Platform
+	if strings.TrimSpace(*platform) != "" {
+		targetPlatform = strings.TrimSpace(*platform)
+	}
+	hash, err := imagecache.ContentHashForPlatform(repoRoot, *component, targetPlatform)
 	if err != nil {
 		return err
 	}
@@ -85,6 +90,7 @@ func cmdEnsure(args []string) error {
 	dockerfile := fs.String("dockerfile", "", "dockerfile path relative to root (optional)")
 	contextDir := fs.String("context", ".", "docker build context")
 	root := fs.String("root", "", "repository root (default: detect)")
+	platform := fs.String("platform", "", "target platform (default: MCP_IMAGE_PLATFORM, DOCKER_DEFAULT_PLATFORM, or host)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -120,19 +126,23 @@ func cmdEnsure(args []string) error {
 		}
 	}
 
+	useMake := spec.UseMake && strings.TrimSpace(*dockerfile) == ""
+	opts := imagecache.OptionsFromEnv()
+	if strings.TrimSpace(*platform) != "" {
+		opts.Platform = strings.TrimSpace(*platform)
+	}
 	if !imagecache.Enabled() {
-		return buildLocal(repoRoot, comp, *image, df, ctxDir, spec.UseMake)
+		return buildLocal(repoRoot, *image, df, ctxDir, useMake, opts.Platform)
 	}
 
-	opts := imagecache.OptionsFromEnv()
 	opts.Progress = func(msg string) { fmt.Fprintln(os.Stderr, msg) }
 	_, err = imagecache.EnsureLocalImage(context.Background(), repoRoot, comp, *image, opts, func() error {
-		return buildLocal(repoRoot, comp, *image, df, ctxDir, spec.UseMake)
+		return buildLocal(repoRoot, *image, df, ctxDir, useMake, opts.Platform)
 	})
 	return err
 }
 
-func buildLocal(repoRoot, component, image, dockerfile, contextDir string, useMake bool) error {
+func buildLocal(repoRoot, image, dockerfile, contextDir string, useMake bool, platform string) error {
 	ref, err := platformrelease.ParseImageRef(image)
 	if err != nil || ref.String() != image {
 		if err == nil {
@@ -140,9 +150,9 @@ func buildLocal(repoRoot, component, image, dockerfile, contextDir string, useMa
 		}
 		return fmt.Errorf("invalid image reference %q: %w", image, err)
 	}
-	if useMake || component == "operator" {
+	if useMake {
 		// #nosec G204 -- image is validated above and exec passes fixed args without a shell.
-		cmd := exec.Command("make", "-f", "Makefile.operator", "docker-build-operator-no-test", "IMG="+image)
+		cmd := exec.Command("make", "-f", "Makefile.operator", "docker-build-operator-no-test", "IMG="+image, "DOCKER_PLATFORM="+platform)
 		cmd.Dir = repoRoot
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -158,7 +168,7 @@ func buildLocal(repoRoot, component, image, dockerfile, contextDir string, useMa
 	}
 	fmt.Fprintf(os.Stderr, "[image] building %s\n", image)
 	// #nosec G204 -- image is validated above and exec passes fixed args without a shell.
-	cmd := exec.Command("docker", "build", "-t", image, "-f", df, ctx)
+	cmd := exec.Command("docker", "build", "--platform="+platform, "-t", image, "-f", df, ctx)
 	cmd.Dir = repoRoot
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

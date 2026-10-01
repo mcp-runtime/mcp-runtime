@@ -40,6 +40,7 @@ spec:
       labels:
         app: mcp-sentinel-ingest
     spec:
+      priorityClassName: mcp-sentinel-services
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
@@ -48,7 +49,7 @@ spec:
       containers:
         - name: ingest
           image: mcp-sentinel-ingest:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
             runAsNonRoot: true
@@ -72,7 +73,7 @@ spec:
             - name: INGEST_API_KEYS
               valueFrom:
                 secretKeyRef:
-                  name: mcp-sentinel-secrets
+                  name: mcp-ingest-credentials
                   key: INGEST_API_KEYS
             - name: OTEL_SERVICE_NAME
               value: mcp-sentinel-ingest
@@ -80,9 +81,16 @@ spec:
             requests:
               cpu: 100m
               memory: 128Mi
+              ephemeral-storage: 64Mi
             limits:
               cpu: 500m
               memory: 256Mi
+          startupProbe:
+            httpGet:
+              path: /live
+              port: 8081
+            periodSeconds: 5
+            failureThreshold: 36
           readinessProbe:
             httpGet:
               path: /ready

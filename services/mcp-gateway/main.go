@@ -112,7 +112,7 @@ func main() {
 	}
 
 	log.Printf("mcp-gateway listening on :%s -> %s (metrics on :%s)", port, upstream, metricsPort)
-	handler := otelhttp.NewHandler(mux, "http.server")
+	handler := otelhttp.NewHandler(mux, "http.server", otelhttp.WithFilter(serviceutil.TraceableRequest))
 	httpServer := &http.Server{
 		Addr:              ":" + port,
 		Handler:           handler,

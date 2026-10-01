@@ -1315,6 +1315,9 @@ staging_configure_adapter_certificates() {
     return 0
   fi
   export MCP_ADAPTER_CERTIFICATES=true
+  # The staging VM is disposable and uses the bundled mcp-runtime-ca without
+  # approver-policy; acknowledge that so the setup approval gate passes.
+  export MCP_WORKLOAD_ISSUER_APPROVAL_ACK="${MCP_WORKLOAD_ISSUER_APPROVAL_ACK:-true}"
   export MCP_TRUST_DOMAIN="${MCP_TRUST_DOMAIN:-$(staging_adapter_trust_domain)}"
   export MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE="${MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE:-${STAGING_ADAPTER_TLS_NAMESPACE_DEFAULT}}"
 }
@@ -1322,6 +1325,19 @@ staging_configure_adapter_certificates() {
 staging_operator_env() {
   kubectl -n mcp-runtime get deploy mcp-runtime-operator-controller-manager \
     -o jsonpath="{.spec.template.spec.containers[0].env[?(@.name==\"$1\")].value}" 2>/dev/null || true
+}
+
+# kubectl auth can-i exits nonzero for a legitimate "no" answer. Keep that
+# answer so negative authorization checks do not stop the stage under set -e.
+staging_auth_can_i() {
+  local decision
+  decision="$(kubectl auth can-i "$@" 2>&1)" || {
+    if [[ "${decision}" != "no" ]]; then
+      staging_err "authorization check failed: ${decision}"
+      return 1
+    fi
+  }
+  printf '%s\n' "${decision}"
 }
 
 # One MCP JSON-RPC POST through the public MCP ingress; prints the HTTP status.
@@ -1726,6 +1742,28 @@ staging_check_adapter_enrollment() {
   fi
 
   local ns=mcp-servers
+  # A tenant service account must not bypass the runtime API's session checks
+  # by submitting its own CertificateRequest to the workload issuer.
+  local sa decision
+  for sa in default mcp-workload; do
+    kubectl -n "${MT_ACME_NS}" get serviceaccount "${sa}" >/dev/null || {
+      staging_err "tenant service account ${MT_ACME_NS}/${sa} is missing"
+      return 1
+    }
+    decision="$(staging_auth_can_i create certificaterequests.cert-manager.io \
+      -n "${MT_ACME_NS}" --as="system:serviceaccount:${MT_ACME_NS}:${sa}")" || return 1
+    if [[ "${decision}" != "no" ]]; then
+      staging_err "tenant service account ${MT_ACME_NS}/${sa} CertificateRequest create decision: ${decision}, want no"
+      return 1
+    fi
+    staging_log "tenant service account ${MT_ACME_NS}/${sa} cannot create CertificateRequests"
+  done
+  decision="$(staging_auth_can_i create certificaterequests.cert-manager.io \
+    -n "${MT_ACME_NS}" --as=system:serviceaccount:mcp-sentinel:mcp-runtime-api)" || return 1
+  if [[ "${decision}" != "yes" ]]; then
+    staging_err "runtime API service account CertificateRequest create decision: ${decision}, want yes"
+    return 1
+  fi
   local server=staging-e2e-adapter wrong=staging-e2e-adapter-other
   local oauth_server=staging-e2e-adapter-oauth oauth_wrong=staging-e2e-adapter-oauth-other
   local agent="${MT_GLOBEX_AGENT_ID}" team_id="${MT_GLOBEX_TEAM_ID}"

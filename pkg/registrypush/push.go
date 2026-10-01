@@ -50,7 +50,7 @@ type Config struct {
 
 // PushDockerArchive pushes a docker save tar to target using a short-lived
 // skopeo helper pod inside the cluster.
-func PushDockerArchive(ctx context.Context, client kubernetes.Interface, restConfig *rest.Config, tarPath, target string, cfg Config) error {
+func PushDockerArchive(ctx context.Context, client kubernetes.Interface, restConfig *rest.Config, tarPath, target string, cfg Config) (retErr error) {
 	if client == nil || restConfig == nil {
 		return fmt.Errorf("kubernetes client is required")
 	}
@@ -105,9 +105,9 @@ func PushDockerArchive(ctx context.Context, client kubernetes.Interface, restCon
 	}
 	var pushErr error
 	defer func() {
-		if pushErr != nil {
+		if retErr != nil {
 			if detail := helperPodDiagnostics(context.Background(), client, helperNS, helperName, containerName); detail != "" {
-				pushErr = fmt.Errorf("%w; helper diagnostics: %s", pushErr, detail)
+				retErr = fmt.Errorf("%w; helper diagnostics: %s", retErr, detail)
 			}
 		}
 		_ = client.CoreV1().Pods(helperNS).Delete(context.Background(), helperName, metav1.DeleteOptions{})

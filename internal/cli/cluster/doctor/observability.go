@@ -3,6 +3,7 @@ package doctor
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"mcp-runtime/internal/cli/core"
@@ -72,4 +73,95 @@ func checkPersistentVolumeClaims(kubectl core.KubectlRunner) DoctorCheck {
 		return DoctorCheck{Name: "persistent volume claims", OK: true, Detail: "no PVCs are present; skipping persistence validation"}
 	}
 	return DoctorCheck{Name: "persistent volume claims", OK: true, Detail: fmt.Sprintf("%d PVC(s) are Bound", len(payload.Items))}
+}
+
+const (
+	grafanaDashboardUID  = "mcp-server"
+	grafanaPrometheusUID = "prometheus"
+)
+
+var grafanaPrometheusUIDPattern = regexp.MustCompile(`(?m)^\s*uid:\s*["']?` + grafanaPrometheusUID + `["']?\s*$`)
+
+// checkSentinelGrafanaProvisioning detects drift between the live Grafana
+// provisioning objects and the repo manifests. Server-card deep links target
+// dashboard UID "mcp-server" whose panels pin datasource UID "prometheus"; if
+// either is missing Grafana reports "Dashboard not found" or "Data source not
+// found" even though the card metrics (served from the Prometheus API) work.
+// All reads are ConfigMap/Deployment reads; no Grafana credentials are needed.
+func checkSentinelGrafanaProvisioning(kubectl core.KubectlRunner) DoctorCheck {
+	const name = "sentinel Grafana provisioning"
+	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", doctorSentinelNamespace, "-o", "jsonpath={.metadata.name}"}); err != nil {
+		return DoctorCheck{Name: name, OK: true, Detail: "namespace mcp-sentinel not found; skipping Grafana provisioning check"}
+	}
+	if _, err := readKubectlOutput(kubectl, []string{"get", "deployment", "grafana", "-n", doctorSentinelNamespace, "-o", "jsonpath={.metadata.name}"}); err != nil {
+		return DoctorCheck{Name: name, OK: true, Detail: "grafana deployment not found; skipping Grafana provisioning check"}
+	}
+	const remedy = "re-run `mcp-runtime setup` (or the targeted platform update) so k8s/19-grafana-datasources.yaml, k8s/21-grafana-dashboards.yaml, and k8s/12-grafana.yaml are applied, then restart deployment/grafana"
+
+	datasources, err := readKubectlOutput(kubectl, []string{"get", "configmap", "grafana-datasources", "-n", doctorSentinelNamespace, "-o", `jsonpath={.data.datasources\.yaml}`})
+	if err != nil {
+		return DoctorCheck{Name: name, OK: false, Detail: fmt.Sprintf("ConfigMap grafana-datasources is unavailable: %v", err), Remedy: remedy}
+	}
+	if !grafanaPrometheusUIDPattern.MatchString(datasources) {
+		return DoctorCheck{Name: name, OK: false, Detail: fmt.Sprintf("grafana-datasources does not pin the Prometheus datasource uid %q; dashboard panels fail with \"Data source not found\"", grafanaPrometheusUID), Remedy: remedy}
+	}
+
+	dashboard, err := readKubectlOutput(kubectl, []string{"get", "configmap", "grafana-dashboards", "-n", doctorSentinelNamespace, "-o", `jsonpath={.data.mcp-server\.json}`})
+	if err != nil || strings.TrimSpace(dashboard) == "" {
+		return DoctorCheck{Name: name, OK: false, Detail: "ConfigMap grafana-dashboards is missing the mcp-server.json dashboard; server-card Grafana links fail with \"Dashboard not found\"", Remedy: remedy}
+	}
+	var parsed struct {
+		UID string `json:"uid"`
+	}
+	if err := json.Unmarshal([]byte(dashboard), &parsed); err != nil || parsed.UID != grafanaDashboardUID {
+		return DoctorCheck{Name: name, OK: false, Detail: fmt.Sprintf("mcp-server.json does not declare dashboard uid %q", grafanaDashboardUID), Remedy: remedy}
+	}
+
+	raw, err := readKubectlOutput(kubectl, []string{"get", "deployment", "grafana", "-n", doctorSentinelNamespace, "-o", "json"})
+	if err != nil {
+		return DoctorCheck{Name: name, OK: false, Detail: fmt.Sprintf("failed reading deployment/grafana: %v", err), Remedy: remedy}
+	}
+	var deploy struct {
+		Spec struct {
+			Template struct {
+				Spec struct {
+					Volumes []struct {
+						ConfigMap *struct {
+							Name  string `json:"name"`
+							Items []struct {
+								Key string `json:"key"`
+							} `json:"items"`
+						} `json:"configMap"`
+					} `json:"volumes"`
+				} `json:"spec"`
+			} `json:"template"`
+		} `json:"spec"`
+	}
+	if err := json.Unmarshal([]byte(raw), &deploy); err != nil {
+		return DoctorCheck{Name: name, OK: false, Detail: fmt.Sprintf("failed parsing deployment/grafana: %v", err), Remedy: remedy}
+	}
+	mounted := map[string]bool{}
+	for _, vol := range deploy.Spec.Template.Spec.Volumes {
+		if vol.ConfigMap == nil {
+			continue
+		}
+		if vol.ConfigMap.Name == "grafana-datasources" {
+			mounted["grafana-datasources"] = true
+		}
+		for _, item := range vol.ConfigMap.Items {
+			if vol.ConfigMap.Name == "grafana-dashboards" {
+				mounted[item.Key] = true
+			}
+		}
+	}
+	var missing []string
+	for _, key := range []string{"grafana-datasources", "dashboard-provider.yaml", "mcp-server.json"} {
+		if !mounted[key] {
+			missing = append(missing, key)
+		}
+	}
+	if len(missing) > 0 {
+		return DoctorCheck{Name: name, OK: false, Detail: fmt.Sprintf("deployment/grafana does not mount provisioning input(s): %s", strings.Join(missing, ", ")), Remedy: remedy}
+	}
+	return DoctorCheck{Name: name, OK: true, Detail: fmt.Sprintf("dashboard uid %q and Prometheus datasource uid %q are provisioned and mounted", grafanaDashboardUID, grafanaPrometheusUID)}
 }

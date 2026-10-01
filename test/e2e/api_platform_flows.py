@@ -24,6 +24,7 @@ platform_admin_email = os.environ["PLATFORM_ADMIN_EMAIL"]
 platform_admin_password = os.environ["PLATFORM_ADMIN_PASSWORD"]
 grant_name = f"{server_name}-grant"
 test_user_password = "test-password-123"
+check_multitenancy = os.environ.get("E2E_MULTITENANCY") == "1"
 
 
 def request(url, *, method="GET", headers=None, body=None):
@@ -291,6 +292,68 @@ expect_json(
     headers=admin_headers,
 )
 
+if check_multitenancy:
+    other_team_slug = f"e2e-api-other-{suffix}"
+    other_team = expect_json(
+        f"{api_base}/runtime/teams",
+        method="POST",
+        headers=admin_headers,
+        body={"slug": other_team_slug, "name": f"E2E API Other {suffix}"},
+    ).get("team", {})
+    other_team_namespace = other_team.get("namespace", "")
+    check(
+        other_team.get("slug") == other_team_slug and bool(other_team_namespace),
+        "created a second managed team for isolation checks",
+        f"second team response: {other_team}",
+    )
+    expect_json(
+        f"{api_base}/runtime/teams/{quote_segment(other_team_slug)}/members/{quote_segment(team_user_id)}",
+        method="PUT",
+        headers=admin_headers,
+        body={"role": "owner"},
+    )
+    first_login = expect_json(
+        f"{api_base}/auth/login",
+        method="POST",
+        body={"email": signup_email, "password": test_user_password},
+    )
+    other_login = expect_json(
+        f"{api_base}/auth/login",
+        method="POST",
+        body={"email": team_user_email, "password": test_user_password},
+    )
+    first_team_headers = bearer_headers(first_login["access_token"])
+    other_team_headers = bearer_headers(other_login["access_token"])
+    for own_slug, own_namespace, own_headers, foreign_slug, foreign_namespace in (
+        (team_slug, team_namespace, first_team_headers, other_team_slug, other_team_namespace),
+        (other_team_slug, other_team_namespace, other_team_headers, team_slug, team_namespace),
+    ):
+        listed_teams = expect_json(f"{api_base}/runtime/teams", headers=own_headers)
+        visible_slugs = {item.get("slug") for item in listed_teams.get("teams", [])}
+        check(
+            own_slug in visible_slugs and foreign_slug not in visible_slugs,
+            f"{own_slug} sees only its own team",
+            f"visible teams: {listed_teams}",
+        )
+        expect_json(
+            f"{api_base}/runtime/teams/{quote_segment(own_slug)}",
+            headers=own_headers,
+        )
+        expect_status(
+            f"{api_base}/runtime/teams/{quote_segment(foreign_slug)}",
+            403,
+            headers=own_headers,
+        )
+        expect_json(
+            f"{api_base}/runtime/namespaces/{quote_segment(own_namespace)}",
+            headers=own_headers,
+        )
+        expect_status(
+            f"{api_base}/runtime/namespaces/{quote_segment(foreign_namespace)}",
+            403,
+            headers=own_headers,
+        )
+
 namespaces = expect_json(f"{api_base}/runtime/namespaces", headers=admin_headers)
 check(
     team_namespace
@@ -347,6 +410,35 @@ expect_status(
         repo_path=f"/v2/{team_namespace}/demo/manifests/latest",
     ),
 )
+if check_multitenancy:
+    other_credential = expect_json(
+        f"{api_base}/user/registry-credentials",
+        status=201,
+        method="POST",
+        headers=other_team_headers,
+        body={"name": f"e2e-registry-other-{suffix}"},
+    )
+    other_registry_headers = basic_headers(
+        other_credential["username"], other_credential["password"]
+    )
+    for own_slug, own_headers, foreign_slug in (
+        (team_slug, registry_basic_headers, other_team_slug),
+        (other_team_slug, other_registry_headers, team_slug),
+    ):
+        expect_status(
+            f"{api_base}/registry/authz",
+            204,
+            headers=registry_authz_headers(
+                own_headers, repo_path=f"/v2/{own_slug}/demo/manifests/latest"
+            ),
+        )
+        expect_status(
+            f"{api_base}/registry/authz",
+            403,
+            headers=registry_authz_headers(
+                own_headers, repo_path=f"/v2/{foreign_slug}/demo/manifests/latest"
+            ),
+        )
 
 expect_json(f"{api_base}/analytics/usage?limit=3", headers=admin_key_headers)
 expect_json(f"{api_base}/user/analytics/usage?limit=3", headers=user_headers)

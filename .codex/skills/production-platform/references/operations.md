@@ -311,6 +311,11 @@ Workflows `Staging E2E (Disposable VM)` / `Staging E2E (Remote Cluster)` drive
 the full strict-prod install on the disposable VM (`*.e2e.mcpruntime.org`) and
 upload `summary.md`, `summary.json`, `stages/NN-<stage>.log`, and
 `diagnostics/`. Start triage from the first failed stage in `summary.md`.
+Both runners enable the content-hash GHCR image cache for setup. The remote
+runner logs in to GHCR after the target guard; the on-VM runner receives the
+workflow's package-read token over SSH stdin and removes its temporary Docker
+config during cleanup. A cache miss builds locally without publishing from
+Staging. Use `E2E_IMAGE_CACHE=0` when testing a full image rebuild.
 
 Safety rules:
 

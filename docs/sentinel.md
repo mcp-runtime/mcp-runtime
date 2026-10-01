@@ -29,7 +29,7 @@ use HTTP, Kafka, ClickHouse, Postgres, or local files.
 | **analytics-api** | ClickHouse-only; `automountServiceAccountToken: false`. | Events, stats, usage queries; resolves display names via platform-api `/internal/*`. | No Kubernetes RBAC. NetworkPolicy egress to platform-api:8080. |
 | **gateway** | Kubernetes-aware Traefik ingress controller. | Watches Ingress, Service, Endpoint, Secret, and IngressClass resources for the namespaces it serves. The bundled Sentinel-local gateway watches `mcp-sentinel`; the shared ingress overlays watch `registry`, `mcp-sentinel`, `mcp-servers`, `mcp-servers-org`, and `mcp-servers-public`. | Keep watched namespaces explicit, avoid cluster-wide ingress watches unless required, keep Grafana admin-gated, do not expose Prometheus directly on public hosts, and keep redaction middleware limited to routes that need it. |
 | **mcp-gateway** | Kubernetes-integrated but Kubernetes API-agnostic. It is injected into MCP server pods and reads operator-rendered policy from mounted files and env vars. | Does not need a Kubernetes client or service account token. It forwards MCP traffic to the local server container and emits audit events to ingest. | Keep `automountServiceAccountToken: false`, read-only policy mounts, `readOnlyRootFilesystem`, dropped capabilities, and non-root execution. Treat `ANALYTICS_API_KEY` as ingest-scoped, not an admin API key. |
-| **ui** | Kubernetes API-agnostic. | Serves the browser UI and proxies allowlisted read-only `GET /api/ui/v1/*` dashboard paths to runtime-api (`RUNTIME_UPSTREAM`) or analytics-api (`ANALYTICS_UPSTREAM`) using the server-held UI session credential. Login still uses `API_UPSTREAM` against platform-api. All other `/api/v1/*` traffic stays on Traefik split-API ingress. | Keep it behind TLS for public hosts, retain the security headers in `services/ui`, set `UI_REQUIRE_HTTPS=false` only for deliberate non-TLS dev ingress, set `UI_FORCE_SECURE_COOKIE=true` when a TLS-terminating proxy does not send `X-Forwarded-Proto: https`, and do not grant it Kubernetes RBAC. |
+| **ui** | Kubernetes API-agnostic. | Serves the browser UI and proxies allowlisted read-only `GET /api/ui/v1/*` dashboard paths to runtime-api (`RUNTIME_UPSTREAM`) or analytics-api (`ANALYTICS_UPSTREAM`) using the server-held UI session credential. Login still uses `API_UPSTREAM` against platform-api. All other `/api/v1/*` traffic stays on Traefik split-API ingress. | Keep it behind TLS for public hosts, retain the security headers in `services/ui`, set `UI_REQUIRE_HTTPS=false` only for deliberate non-TLS dev ingress, set `UI_FORCE_SECURE_COOKIE=true` when a TLS-terminating proxy does not send `X-Forwarded-Proto: https`, and do not grant it Kubernetes RBAC. Sessions are in memory by default (lost on restart, not shared across replicas, so keep `replicas: 1`). Set `UI_SESSION_STORE=postgres` with `UI_SESSION_DATABASE_URL` and `UI_SESSION_ENCRYPTION_KEY` (32+ characters, identical on every replica) to keep sessions in a shared `ui_sessions` table with AES-GCM encrypted payloads; sessions then survive restarts and work across replicas. Rotating the key forces re-login. The gateway is not covered, and the shipped manifests stay at one replica until that backend is validated in the cluster. |
 | **ingest** | Kubernetes API-agnostic. | Authenticates `/events`, validates request size and event shape, and writes to Kafka. | Require `INGEST_API_KEYS` or OIDC for real deployments, use ingest-only keys, restrict network access to proxy/gateway callers, and keep the public `/ingest` route off production hosts unless intentionally exposed. |
 | **processor** | Kubernetes API-agnostic. | Consumes Kafka and writes ClickHouse. It only exposes health and metrics. | Do not expose it through ingress. Restrict network access to Kafka, ClickHouse, metrics scraping, and tracing endpoints. |
 | **storage and observability** | Mixed. ClickHouse, Kafka, Postgres, Grafana, Prometheus, Tempo, Loki, and the OTel collector are Kubernetes API-agnostic in the bundled manifests; Promtail is Kubernetes-aware so it can discover pod logs. | Data stores and dashboards back Sentinel audit, identity, metrics, traces, and logs. Promtail has pod read/watch RBAC. | Review persistence, retention, backups, and dashboard auth before production use. The generated platform-host observability route uses `sentinel-admin-auth@file`; provide equivalent auth if you replace repo-managed Traefik, and review Promtail's cluster log visibility before enabling it on multi-tenant clusters. |
@@ -73,7 +73,7 @@ flowchart LR
 |---|---|
 | **ClickHouse** | Stores the event stream with trace IDs plus materialized fields: server, namespace, team ID, cluster, human, agent, session, decision, tool name. |
 | **Kafka KRaft cluster** | Three combined broker/controller nodes buffer ingest events for the processor. `mcp.events` has three partitions, replication factor three, `min.insync.replicas=2`, and ingest publishes with `acks=all`. |
-| **Prometheus + Grafana** | Service metrics, scrape config, dashboards. |
+| **Prometheus + Grafana** | Service metrics, scrape config, dashboards. Prometheus scrapes the platform APIs, ingest, processor, ClickHouse, gateway sidecars, and the telemetry collectors (OTel collector, Loki, Tempo, Promtail). Rules flag required targets that are absent or down and list workloads without metrics (`mcp:scrape_uninstrumented_workload:info`); gateways expose bounded `mcp_gateway_oauth_outcomes_total{outcome}`. The "Scrape Coverage" dashboard separates absent targets from healthy targets with zero traffic. |
 | **OTel Collector + Tempo** | Distributed tracing pipeline. |
 | **Loki + Promtail** | Log shipping and storage. |
 
@@ -119,6 +119,23 @@ provisioned Prometheus, Loki, and Tempo data sources to inspect metrics, logs,
 and traces in one place. Grafana remains protected by the platform admin
 forward-auth route. Platform health also links to Grafana; it does not expose a
 separate Prometheus UI link.
+
+Grafana has two independent authentication layers: the platform ingress gate
+(`sentinel-admin-auth`) and Grafana's own persisted admin account. Passing the
+gate does not prove the Grafana login works, and changing the bootstrap
+password in `mcp-sentinel-secrets` does not update an existing persisted
+account. A browser that clears the gate but then sees `password-auth.failed`
+indicates credential drift. Diagnose it read-only with
+`mcp-runtime sentinel grafana check`, which probes from inside the Grafana pod
+(so it bypasses the gate and reports only the Grafana login layer) and never
+resets anything. Recover deliberately with
+`mcp-runtime sentinel grafana reset-admin-password --yes`: it runs only when
+drift is detected, copies the Grafana database inside the pod volume to
+`/var/lib/grafana/backups/` first, passes the configured password to the Grafana
+CLI over stdin inside the pod, verifies authenticated API access, and preserves
+dashboards and datasources. It overwrites any password an operator set inside
+Grafana. Keep working credentials and the Grafana URL only in your private
+operator `infra.env`.
 
 ### Scoped user observability
 
@@ -413,7 +430,7 @@ source subject preserved, never on the other server.
 
 | Group | Files |
 |---|---|
-| **Core app** | `00-namespace`, `01-config`, `02-secrets`, `03-clickhouse`, `04-clickhouse-init`, `05-kafka`, `06-ingest`, `07-processor`, `08-platform-api`, `08-runtime-api`, `08-analytics-api`, `09-ui`, `10-gateway`, `20-postgres`, `21-platform-admin-bootstrap-job`, `22-split-api-networkpolicy` |
+| **Core app** | `00-namespace`, `00-priority-classes`, `01-config`, `02-secrets`, `03-clickhouse`, `04-clickhouse-init`, `05-kafka`, `06-ingest`, `07-processor`, `08-platform-api`, `08-runtime-api`, `08-analytics-api`, `09-ui`, `10-gateway`, `20-postgres`, `21-platform-admin-bootstrap-job`, `22-split-api-networkpolicy` |
 | **Observability** | `11-prometheus`, `12-grafana`, `15-otel-collector`, `16-tempo`, `17-loki`, `18-promtail`, `19-grafana-datasources`, `21-grafana-dashboards` |
 | **Example wiring** | `13-mcp-example`, `14-mcp-gateway-sidecar` |
 
@@ -440,6 +457,10 @@ mcp-runtime sentinel port-forward grafana
 # Restart
 mcp-runtime sentinel restart gateway
 mcp-runtime sentinel restart --all
+
+# Grafana admin credential drift (see Admin Grafana access)
+mcp-runtime sentinel grafana check
+mcp-runtime sentinel grafana reset-admin-password --yes
 ```
 
 `sentinel events` is a Kubernetes event view for the `mcp-sentinel` namespace.

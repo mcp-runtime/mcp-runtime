@@ -3,6 +3,7 @@
 package certauth
 
 import (
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -12,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"mcp-runtime/pkg/identity"
 )
@@ -69,6 +71,54 @@ func ValidateCSRPEM(raw, expectedSPIFFEID string) ([]byte, error) {
 		return nil, fmt.Errorf("csr may not contain DNS, email, or IP subject alternative names")
 	}
 	return block.Bytes, nil
+}
+
+// ValidateIssuedCertificatePEM verifies a certificate returned by the workload
+// issuer against the CSR the platform submitted. It is a defense-in-depth check
+// that does not depend on the issuer's approval policy: the leaf must carry
+// exactly the expected SPIFFE URI and no other SAN, be a non-CA client-auth-only
+// certificate bound to the CSR's public key, and not outlive maxTTL (plus a
+// small skew allowance for issuers that backdate NotBefore).
+func ValidateIssuedCertificatePEM(certPEM string, csrDER []byte, expectedSPIFFEID string, maxTTL time.Duration, now time.Time) error {
+	csr, err := x509.ParseCertificateRequest(csrDER)
+	if err != nil {
+		return fmt.Errorf("parse csr: %w", err)
+	}
+	block, _ := pem.Decode([]byte(certPEM))
+	if block == nil || block.Type != "CERTIFICATE" {
+		return fmt.Errorf("issued certificate is not a PEM CERTIFICATE")
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return fmt.Errorf("parse issued certificate: %w", err)
+	}
+	if len(cert.URIs) != 1 || cert.URIs[0].String() != expectedSPIFFEID {
+		return fmt.Errorf("issued certificate does not carry exactly the SPIFFE URI %q", expectedSPIFFEID)
+	}
+	if len(cert.DNSNames) != 0 || len(cert.EmailAddresses) != 0 || len(cert.IPAddresses) != 0 {
+		return fmt.Errorf("issued certificate carries unexpected subject alternative names")
+	}
+	if cert.IsCA {
+		return fmt.Errorf("issued certificate is a CA certificate")
+	}
+	if len(cert.ExtKeyUsage) != 1 || cert.ExtKeyUsage[0] != x509.ExtKeyUsageClientAuth {
+		return fmt.Errorf("issued certificate must be restricted to client authentication")
+	}
+	if !publicKeysEqual(csr.PublicKey, cert.PublicKey) {
+		return fmt.Errorf("issued certificate does not match the submitted key")
+	}
+	if cert.NotAfter.After(now.Add(maxTTL + certExpirySkew)) {
+		return fmt.Errorf("issued certificate outlives the requested duration")
+	}
+	return nil
+}
+
+const certExpirySkew = 5 * time.Minute
+
+func publicKeysEqual(a, b any) bool {
+	type equaler interface{ Equal(crypto.PublicKey) bool }
+	ea, ok := a.(equaler)
+	return ok && ea.Equal(b)
 }
 
 // WritePrivateFile writes data to dir/name with mode, rejecting path traversal.

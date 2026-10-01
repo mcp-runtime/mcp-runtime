@@ -224,6 +224,16 @@ expect_eq "adapter certificates off without a workload issuer" \
 expect_eq "adapter certificates opt-out" \
   "$(adapter_env E2E_MTLS_CLUSTER_ISSUER=mcp-runtime-ca E2E_ADAPTER_CERTIFICATES=false)" "||"
 
+staging_auth_decision_case() (
+  local output="$1" status="$2" expected="$3" decision
+  kubectl() { printf '%s\n' "${output}"; return "${status}"; }
+  decision="$(staging_auth_can_i create certificaterequests.cert-manager.io)" || return 1
+  [[ "${decision}" == "${expected}" ]]
+)
+expect_ok "adapter authorization accepts a denied can-i result" staging_auth_decision_case no 1 no
+expect_ok "adapter authorization accepts an allowed can-i result" staging_auth_decision_case yes 0 yes
+expect_fail "adapter authorization reports API errors" staging_auth_decision_case forbidden 1 no
+
 # --- diagnostics failed-check parsing -------------------------------------------
 printf '\033[30;42m SUCCESS \033[0m ok check — fine\n\033[30;101m  ERROR  \033[0m \033[91msentinel OIDC configuration — tenant mode\033[0m\n\033[30;101m         \033[0m continuation line\n  ERROR   MCPServer reconcile smoke — timed out\n' >"${TMP}/diag.log"
 expect_eq "failed checks parsed" "$(staging_failed_checks "${TMP}/diag.log" | paste -sd'|' -)" \

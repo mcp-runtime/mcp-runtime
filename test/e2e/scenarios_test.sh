@@ -53,6 +53,7 @@ run_valid "smoke-auth" "smoke-auth" "smoke-auth"
 run_valid "governance" "governance" "governance"
 run_valid "trust" "trust" "trust"
 run_valid "oauth" "oauth" "oauth"
+run_valid "multitenancy" "smoke-auth,multitenancy" "smoke-auth,multitenancy"
 run_valid "api-platform" "api-platform" "api-platform"
 run_valid "ui-auth" "ui-auth" "ui-auth"
 run_valid "adapter-proxy" "adapter-proxy" "adapter-proxy"
@@ -138,7 +139,10 @@ selector_expect() {
 }
 
 selector_expect "docs-only" "smoke-auth" "docs/internals/tests.md"
+selector_expect "changelog-only" "smoke-auth" "CHANGELOG.md"
 selector_expect "ui" "smoke-auth,ui-auth" "services/ui/main.go"
+selector_expect "ui-with-changelog" "smoke-auth,ui-auth" "services/ui/main.go" "CHANGELOG.md"
+selector_expect "ui-with-guides" "smoke-auth,ui-auth" "services/ui/main.go" "articles/cache.md" ".codex/skills/production-platform/references/operations.md"
 selector_expect "api" "smoke-auth,api-platform" "services/platform-api/auth/login.go"
 selector_expect "runtime-tools-api" "smoke-auth,api-platform,cli-platform" "services/runtime-api/internal/runtimeapi/tools.go"
 selector_expect "catalog-cli" "smoke-auth,cli-platform" "internal/cli/catalog/catalog.go"
@@ -147,10 +151,12 @@ selector_expect "mtls-operator" "smoke-auth,oauth,adapter-proxy,adapter-certific
 selector_expect "gateway" "smoke-auth,governance,trust,oauth,adapter-proxy,adapter-certificates,observability" "services/mcp-gateway/main.go"
 selector_expect "observability" "smoke-auth,governance,trust,oauth,observability" "services/ingest/main.go"
 selector_expect "platform-update" "smoke-auth,platform-update" "internal/cli/update/plan.go"
+selector_expect "team-management" "smoke-auth,api-platform,cli-platform,multitenancy" "internal/cli/team/team.go"
+selector_expect "runtime-team" "smoke-auth,api-platform,multitenancy" "services/runtime-api/internal/runtimeapi/team_members.go"
 selector_expect "broad" "all" "api/v1alpha1/mcpserver_types.go"
 selector_expect "staging-e2e-only" "smoke-auth" "test/e2e/staging-vm.sh" "test/e2e/lib/staging.sh" ".github/workflows/staging-e2e.yaml"
 
-python3 - "${PROJECT_ROOT}/.github/workflows/staging-e2e.yaml" "${PROJECT_ROOT}/test/e2e/qa-e2e.sh" "${PROJECT_ROOT}/docs/contributor/staging-e2e.md" <<'PY'
+python3 - "${PROJECT_ROOT}/.github/workflows/staging-e2e.yaml" "${PROJECT_ROOT}/test/e2e/qa-e2e.sh" "${PROJECT_ROOT}/docs/contributor/staging-e2e.md" "${PROJECT_ROOT}/.github/workflows/ci.yaml" <<'PY'
 import pathlib
 import sys
 
@@ -166,11 +172,30 @@ for path in (
     assert path in workflow, f"staging E2E push trigger is missing {path}"
 assert "RUN_MULTITENANCY: ${{ github.event_name == 'push' || inputs.run-multitenancy }}" in workflow
 assert "FRESH_CERTIFICATE: ${{ github.event_name == 'workflow_dispatch' && inputs.fresh-certificate }}" in workflow
+assert "  packages: read" in workflow, "staging must be allowed to pull private GHCR cache images"
+assert workflow.index("Verify disposable target") < workflow.index("E2E_GHCR_AUTH_STDIN=1"), (
+    "the VM must pass the disposable-target guard before receiving a GHCR token"
+)
+remote_workflow = pathlib.Path(sys.argv[1]).with_name("staging-e2e-remote.yaml").read_text(encoding="utf-8")
+assert "  packages: read" in remote_workflow
+assert remote_workflow.index("Verify disposable target") < remote_workflow.index("Log in to GHCR for cached images")
 print("[pass] staging E2E main-push trigger and event defaults")
 
 staging_docs = pathlib.Path(sys.argv[3]).read_text(encoding="utf-8")
 assert "gh workflow run staging-e2e.yaml" in staging_docs, "staging E2E docs must name the on-VM workflow"
 assert "gh workflow run staging-e2e-remote.yaml" in staging_docs, "staging E2E docs must name the runner-driven workflow"
+
+ci_workflow = pathlib.Path(sys.argv[4]).read_text(encoding="utf-8")
+assert "predicate-quantifier: some-with-excludes" in ci_workflow, (
+    "documentation exclusions must override the catch-all code path filter"
+)
+assert "list-files: json" in ci_workflow and "CHANGED_FILES_JSON: ${{ steps.e2e_changes.outputs.changed_files }}" in ci_workflow, (
+    "PR filenames must enter the selector as JSON through the environment"
+)
+assert "changed_files=( ${{ steps.e2e_changes.outputs.changed_files }} )" not in ci_workflow, (
+    "PR filenames must not be interpolated into shell code"
+)
+print("[pass] CI path exclusions and selector input are guarded")
 
 kind = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")
 build_start = kind.index("build_and_publish_image() {")
@@ -179,6 +204,12 @@ build_image = kind[build_start:build_end]
 assert "pull_cached_image" not in build_image, (
     "images built from the checkout must not be replaced with stale local-mirror tags"
 )
+assert 'bin/e2e-image-cache' in build_image, "QA images must use the content-hash GHCR cache"
+for runner in ("staging-vm.sh", "staging-remote.sh"):
+    staging_script = pathlib.Path(sys.argv[2]).parent / runner
+    assert 'E2E_IMAGE_CACHE:-1' in staging_script.read_text(encoding="utf-8"), (
+        f"{runner} must enable the content-hash GHCR cache"
+    )
 assert "prune_kind_platform_images" in kind, "setup must evict stale node-local platform image tags"
 assert "restart_kind_platform_deployments" in kind, "setup must restart deployments to pull refreshed image tags"
 setup_branch = kind.index('echo "[setup] running platform setup in test mode')

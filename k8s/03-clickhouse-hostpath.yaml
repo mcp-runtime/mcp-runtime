@@ -69,6 +69,9 @@ metadata:
   namespace: mcp-sentinel
 spec:
   serviceName: clickhouse
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
   replicas: 1
   selector:
     matchLabels:
@@ -78,6 +81,8 @@ spec:
       labels:
         app: clickhouse
     spec:
+      priorityClassName: mcp-sentinel-data
+      terminationGracePeriodSeconds: 60
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
@@ -120,6 +125,12 @@ spec:
             - containerPort: 9000
             - containerPort: 8123
             - containerPort: 9363
+          startupProbe:
+            httpGet:
+              path: /ping
+              port: 8123
+            periodSeconds: 5
+            failureThreshold: 60
           livenessProbe:
             httpGet:
               path: /ping
@@ -142,6 +153,7 @@ spec:
             requests:
               cpu: 250m
               memory: 512Mi
+              ephemeral-storage: 128Mi
             limits:
               cpu: "1"
               memory: 2Gi

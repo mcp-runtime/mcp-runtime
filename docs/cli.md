@@ -646,6 +646,10 @@ KUBECONFIG=~/.kube/config mcp-runtime sentinel logs ingest --tail 200
 KUBECONFIG=~/.kube/config mcp-runtime sentinel restart gateway
 KUBECONFIG=~/.kube/config mcp-runtime sentinel restart --all
 
+# Grafana admin credential drift: read-only check, then deliberate recovery
+KUBECONFIG=~/.kube/config mcp-runtime sentinel grafana check
+KUBECONFIG=~/.kube/config mcp-runtime sentinel grafana reset-admin-password --yes
+
 # Port-forward a component locally
 KUBECONFIG=~/.kube/config mcp-runtime sentinel port-forward ui
 KUBECONFIG=~/.kube/config mcp-runtime sentinel port-forward grafana
@@ -719,6 +723,28 @@ mcp-runtime setup \
 certificates; name your enterprise issuer, or the bundled `mcp-runtime-ca` to
 have setup provision one. `--test-mode` defaults it to `mcp-runtime-ca`. Full
 flow: [Agent adapters](agent-adapters.md#enterprise-mtls-and-spiffe).
+
+#### Bundled workload CA lifecycle
+
+When `--mtls-cluster-issuer mcp-runtime-ca` is selected, setup validates the
+`cert-manager/mcp-runtime-ca` Secret before accepting it: the certificate and
+key must match, the certificate must be a CA with `keyCertSign`, and it must be
+inside its validity window. Setup never prints key material.
+
+- **Production** setup fails if the Secret is missing (it will not mint a new
+  root silently), invalid, expired, or has under 180 days remaining. Prefer an
+  enterprise issuer for production.
+- **Test mode** generates a missing CA, still fails on invalid or expired CAs,
+  and only warns when the root is near expiry.
+- cert-manager does not rotate a CA Secret or reissue leaves when it changes.
+  Rotate with overlap: back up the current Secret to encrypted off-host storage
+  first; create the new root and publish a trust bundle containing both roots;
+  switch the issuer to the new root and reissue leaf certificates
+  (adapter, gateway/Traefik, registry); remove the old root only after every
+  leaf is reissued. Restore a lost Secret from the encrypted backup, then re-run
+  setup to re-validate. Limit access to the Secret in `cert-manager`.
+- The bundled registry/internal TLS still shares this root. Splitting the
+  workload and registry signing roots is tracked under #535 and is not yet done.
 
 ### Local and single-node clusters
 

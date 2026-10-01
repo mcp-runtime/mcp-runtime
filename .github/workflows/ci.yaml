@@ -32,12 +32,16 @@ jobs:
         id: filter
         uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         with:
+          predicate-quantifier: some-with-excludes
           filters: |
             code:
               - '**'
               - '!articles/**'
               - '!docs/**'
               - '!website/**'
+              - '!.codex/skills/**/*.md'
+              - '!AGENTS.md'
+              - '!CHANGELOG.md'
               - '!README.md'
             articles:
               - 'articles/**'
@@ -76,6 +80,9 @@ jobs:
 
       - name: Run staticcheck
         run: staticcheck ./...
+
+      - name: Validate regression coverage index
+        run: go test ./test/regression -count=1
 
   test:
     name: Unit + Integration Tests
@@ -190,10 +197,10 @@ jobs:
   qa-e2e:
     name: QA E2E
     runs-on: ubuntu-24.04
-    # Staging E2E covers relevant main pushes after merge.
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
-    # Start after lint only so QA E2E overlaps unit/integration tests on the runner queue.
-    needs: [lint]
+    # Staging E2E covers relevant main pushes; documentation-only PRs do not change the runtime.
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && needs['changed-paths'].outputs.code == 'true')
+    # Start after lint and path detection so QA E2E overlaps unit/integration tests.
+    needs: [lint, changed-paths]
     timeout-minutes: 90
     permissions:
       contents: read
@@ -208,19 +215,32 @@ jobs:
         id: e2e_changes
         uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         with:
-          list-files: shell
+          list-files: json
           filters: |
             changed:
               - '**'
 
       - name: Select QA E2E scenarios
+        env:
+          CHANGED_FILES_JSON: ${{ steps.e2e_changes.outputs.changed_files }}
         run: |
-          changed_files=( ${{ steps.e2e_changes.outputs.changed_files }} )
-          if [ "${#changed_files[@]}" -gt 0 ]; then
-            printf '%s\n' "${changed_files[@]}" > "${RUNNER_TEMP}/e2e-changed-files.txt"
-          else
-            : > "${RUNNER_TEMP}/e2e-changed-files.txt"
-          fi
+          python3 - "${RUNNER_TEMP}/e2e-changed-files.txt" <<'PY'
+          import json
+          import os
+          import sys
+
+          paths = json.loads(os.environ.get("CHANGED_FILES_JSON") or "[]")
+          if not isinstance(paths, list) or any(not isinstance(path, str) for path in paths):
+              raise SystemExit("E2E changed file list is not a JSON string array")
+          with open(sys.argv[1], "w", encoding="utf-8") as changed_file:
+              for path in paths:
+                  # The selector's input is line-oriented; force all scenarios if a
+                  # filename cannot be represented without splitting it.
+                  if not path or "\n" in path or "\r" in path:
+                      changed_file.write(".github/workflows/ci.yaml\n")
+                      break
+                  changed_file.write(path + "\n")
+          PY
 
           scenarios="$(bash test/e2e/select_pr_scenarios.sh < "${RUNNER_TEMP}/e2e-changed-files.txt")"
           echo "E2E_SCENARIOS=${scenarios}" >> "${GITHUB_ENV}"
@@ -241,9 +261,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Free runner disk space
+      - name: Ensure runner disk headroom
         run: |
-          df -h
+          df -h /
+          available_bytes="$(df --output=avail -B1 / | tail -n 1 | tr -d '[:space:]')"
+          minimum_bytes=$((60 * 1024 * 1024 * 1024))
+          if (( available_bytes >= minimum_bytes )); then
+            echo "At least 60 GiB free; skipping runner cleanup"
+            exit 0
+          fi
+
+          echo "Less than 60 GiB free; removing unused runner toolchains"
           sudo rm -rf \
             /opt/ghc \
             /opt/hostedtoolcache/CodeQL \
@@ -251,7 +279,7 @@ jobs:
             /usr/local/share/boost \
             /usr/share/dotnet
           docker system prune -af --volumes || true
-          df -h
+          df -h /
 
       - name: Validate E2E scenario selectors
         run: bash test/e2e/scenarios_test.sh
@@ -271,18 +299,12 @@ jobs:
           chmod +x kind
           sudo mv kind /usr/local/bin/kind
 
-      - name: Install E2E dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y python3 ripgrep
-
       - name: Show tool versions
         run: |
           docker version
           kubectl version --client
           kind version
           python3 --version
-          rg --version
 
       - name: Configure E2E resource names
         run: |
@@ -318,6 +340,10 @@ jobs:
           MCP_HTTP_TIMEOUT: "15"
           RAW_REQUEST_TRIES: "8"
         run: bash test/e2e/qa-e2e.sh
+
+      - name: Report runner disk use
+        if: always()
+        run: df -h /
 
       - name: Upload e2e artifacts
         if: always()

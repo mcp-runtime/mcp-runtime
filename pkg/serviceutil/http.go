@@ -107,7 +107,10 @@ func LogRequests(next http.Handler) http.Handler {
 		start := time.Now()
 		recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(recorder, r)
+		if failureStatus(recorder.status) {
+			RecordSpanFailure(r.Context(), r.Method+" "+r.URL.Path, http.StatusText(recorder.status), recorder.status, nil)
+		}
 		// #nosec G706 -- request method/path are operational logs.
-		log.Printf("%s %s %d %s", r.Method, r.URL.Path, recorder.status, time.Since(start))
+		log.Printf("%s %s %d %s%s", r.Method, r.URL.Path, recorder.status, time.Since(start), TraceLogSuffix(r.Context()))
 	})
 }
