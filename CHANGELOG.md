@@ -9,7 +9,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Added
 
-- Self-hosted Go package browsing for the root, service, and example modules at `docs.pkg.mcpruntime.org`, with package links from the docs site and a deployment smoke check.
+- Self-hosted Go package browsing for the root, service, and example modules at `docs.pkg.mcpruntime.org`, with package links from the docs site and a deployment smoke check ([#574](https://github.com/mcp-runtime/mcp-runtime/pull/574)).
 
 ### Changed
 
