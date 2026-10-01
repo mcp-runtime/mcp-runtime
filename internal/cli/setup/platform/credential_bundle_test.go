@@ -102,6 +102,42 @@ func TestCredentialBundleMigrationAndOwnerPrecedence(t *testing.T) {
 		t.Fatal("revoked owner key resurrected from legacy")
 	}
 }
+
+func TestCredentialBundleBuildsDSNWhenOwnerOmitsIt(t *testing.T) {
+	read := func(ns, name, key string) (string, error) {
+		if key == "POSTGRES_DSN" {
+			return "", nil
+		}
+		return "installed-" + key, nil
+	}
+	owner := map[string]map[string]string{
+		"mcp-platform-api-credentials": {
+			"API_KEYS":            "kept-api",
+			"JWT_SECRET":          "kept-jwt",
+			"INTERNAL_AUTH_TOKEN": "kept-token",
+		},
+		"mcp-postgres-credentials": {
+			"POSTGRES_USER":     "mcp",
+			"POSTGRES_PASSWORD": "pw",
+			"POSTGRES_DB":       "mcp_runtime",
+		},
+	}
+	manifest, err := renderCredentialBundleWithSnapshots(read, owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dsn := objectsValue(t, manifest, "mcp-platform-api-credentials", "POSTGRES_DSN")
+	if !strings.Contains(dsn, "mcp-postgres.mcp-platform.svc.cluster.local") {
+		t.Fatalf("omitted POSTGRES_DSN was not built for the platform postgres service: %q", dsn)
+	}
+	if !strings.Contains(dsn, "mcp_runtime") {
+		t.Fatal("built DSN dropped the owner database name")
+	}
+	owner["mcp-platform-api-credentials"]["POSTGRES_DSN"] = ""
+	if _, err := renderCredentialBundleWithSnapshots(read, owner); err == nil {
+		t.Fatal("empty POSTGRES_DSN was accepted")
+	}
+}
 func objectsValue(t *testing.T, manifest, name, key string) string {
 	return bundleValues(t, manifest)[name][key]
 }

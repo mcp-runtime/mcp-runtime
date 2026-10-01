@@ -39,7 +39,12 @@ func renderCredentialBundleClientGo() (string, error) {
 func renderCredentialBundleWithSnapshots(read analyticsSecretValueReader, snapshots map[string]map[string]string) (string, error) {
 	for _, key := range []string{"API_KEYS", "JWT_SECRET", "INTERNAL_AUTH_TOKEN", "POSTGRES_DSN", "POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB", "UI_API_KEY", "INGEST_API_KEYS", "GRAFANA_ADMIN_PASSWORD", "OAUTH_PRIVATE_KEY"} {
 		owner, _ := platforminventory.CredentialOwner(key)
-		if values, present := snapshots[owner]; present && values[key] == "" {
+		values, ownerPresent := snapshots[owner]
+		if !ownerPresent {
+			continue
+		}
+		value, keyPresent := values[key]
+		if keyPresent && value == "" {
 			return "", fmt.Errorf("required credential %q missing from owner %q", key, owner)
 		}
 	}
