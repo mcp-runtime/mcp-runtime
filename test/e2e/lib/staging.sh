@@ -1729,6 +1729,24 @@ staging_check_adapter_enrollment() {
   fi
 
   local ns=mcp-servers
+  # A tenant service account must not bypass the runtime API's session checks
+  # by submitting its own CertificateRequest to the workload issuer.
+  local sa decision
+  for sa in default mcp-workload; do
+    kubectl -n "${MT_ACME_NS}" get serviceaccount "${sa}" >/dev/null || return 1
+    decision="$(kubectl auth can-i create certificaterequests.cert-manager.io \
+      -n "${MT_ACME_NS}" --as="system:serviceaccount:${MT_ACME_NS}:${sa}")" || return 1
+    if [[ "${decision}" != "no" ]]; then
+      staging_err "tenant service account ${MT_ACME_NS}/${sa} can create CertificateRequests"
+      return 1
+    fi
+  done
+  decision="$(kubectl auth can-i create certificaterequests.cert-manager.io \
+    -n "${MT_ACME_NS}" --as=system:serviceaccount:mcp-sentinel:mcp-runtime-api)" || return 1
+  if [[ "${decision}" != "yes" ]]; then
+    staging_err "runtime API service account cannot create managed-team CertificateRequests"
+    return 1
+  fi
   local server=staging-e2e-adapter wrong=staging-e2e-adapter-other
   local oauth_server=staging-e2e-adapter-oauth oauth_wrong=staging-e2e-adapter-oauth-other
   local agent="${MT_GLOBEX_AGENT_ID}" team_id="${MT_GLOBEX_TEAM_ID}"
