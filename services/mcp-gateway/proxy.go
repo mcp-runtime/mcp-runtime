@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -18,6 +17,7 @@ import (
 
 	"mcp-runtime/pkg/events"
 	policypkg "mcp-runtime/pkg/policy"
+	"mcp-runtime/pkg/serviceutil"
 )
 
 const upstreamResponseHeaderTimeout = 30 * time.Second
@@ -44,7 +44,7 @@ func newUpstreamTransport(responseHeaderTimeout time.Duration) http.RoundTripper
 	return otelhttp.NewTransport(transport)
 }
 
-func handleUpstreamError(w http.ResponseWriter, _ *http.Request, err error) {
+func handleUpstreamError(w http.ResponseWriter, r *http.Request, err error) {
 	logMessage := "gateway upstream error"
 	status := http.StatusBadGateway
 	errorCode := "upstream_error"
@@ -55,7 +55,8 @@ func handleUpstreamError(w http.ResponseWriter, _ *http.Request, err error) {
 		errorCode = "upstream_timeout"
 		message = "upstream response timeout"
 	}
-	log.Printf("%s: %v", logMessage, err)
+	serviceutil.RecordSpanFailure(r.Context(), "gateway.upstream", errorCode, status, err)
+	serviceutil.LogfCtx(r.Context(), "%s: %v", logMessage, err)
 
 	w.Header().Set("content-type", "application/json")
 	w.WriteHeader(status)
@@ -104,7 +105,36 @@ func (s *gatewayServer) handleGateway(w http.ResponseWriter, r *http.Request) {
 	if !policyDecisionObserved && !ex.Decision.Allowed && !ex.SkipAudit {
 		policyDecisionObserved = true
 	}
+	s.recordGatewayOutcome(ex)
 	s.emitAuditFromExchange(ex)
+}
+
+// recordGatewayOutcome marks the request span as failed and writes a
+// trace-correlated log line for denied or failed requests. Only the bounded
+// decision reason, RPC method, and status are recorded: never tokens, headers,
+// tool arguments, or bodies. Upstream failures are recorded by
+// handleUpstreamError.
+func (s *gatewayServer) recordGatewayOutcome(ex *Exchange) {
+	status := ex.W.status
+	denied := !ex.Decision.Allowed && !ex.SkipAudit
+	if !denied && status < http.StatusBadRequest {
+		return
+	}
+	if status >= http.StatusInternalServerError && ex.Decision.Allowed {
+		return
+	}
+	reason := ex.Decision.Reason
+	if reason == "" {
+		reason = http.StatusText(status)
+	}
+	method := ex.Inspection.Method
+	if method == "" {
+		method = ex.R.Method
+	}
+	ctx := ex.R.Context()
+	serviceutil.RecordSpanFailure(ctx, "gateway.request", reason, status, nil)
+	serviceutil.LogfCtx(ctx, "gateway request rejected method=%q status=%d reason=%q duration=%s",
+		method, status, reason, time.Since(ex.StartTime))
 }
 
 // buildPipeline returns the fixed ordered filter slice for a gateway request.
