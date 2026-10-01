@@ -9,6 +9,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Changed
 
+- Setup rolls workloads when their consumed Secret or ConfigMap values change, replacing blanket Sentinel deployment restarts ([#548](https://github.com/mcp-runtime/mcp-runtime/issues/548)).
+
 - Setup gives API, UI, ingest, Grafana and Postgres workloads consumer-specific credential Secrets, preserving installed values and retaining the legacy Secret as a compatibility mirror ([#548](https://github.com/mcp-runtime/mcp-runtime/issues/548)).
 
 ### Added
