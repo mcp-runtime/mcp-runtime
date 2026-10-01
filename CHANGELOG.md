@@ -12,6 +12,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 - Setup ends with a short operational smoke gate (nodes Ready, Bound PVCs, no Pending blockers, Postgres, platform-api `/health`+`/ready`, Sentinel rollout health, and an authenticated API probe). Failures fail setup; use `mcp-runtime cluster diagnostics` for deeper follow-up.
 - One-command macOS, Linux, and Windows CLI installers from the Getting Started and Quickstart pages; installers detect the platform and install the matching release binary to a user-local directory. The Windows installer also adds its directory to the user's `PATH`.
 
+- Prometheus now scrapes the OTel collector, Loki, Tempo, Promtail, itself, and opt-in annotated Services in `mcp-sentinel`, and ships coverage rules (required target absent or down, intentionally uninstrumented workloads), OAuth-failure, gateway analytics-drop, and collector export-failure alerts. Gateways export a bounded `mcp_gateway_oauth_outcomes_total{outcome}` counter, and Grafana has a new "Scrape Coverage" dashboard ([#497](https://github.com/mcp-runtime/mcp-runtime/issues/497)). The bundled `mcp-auth-server` image is listed as not instrumented; its OAuth failures are visible through the gateway counter.
+
 ## [0.4.1] - 2026-09-29
 
 ### Fixed

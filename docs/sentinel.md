@@ -73,7 +73,7 @@ flowchart LR
 |---|---|
 | **ClickHouse** | Stores the event stream with trace IDs plus materialized fields: server, namespace, team ID, cluster, human, agent, session, decision, tool name. |
 | **Kafka KRaft cluster** | Three combined broker/controller nodes buffer ingest events for the processor. `mcp.events` has three partitions, replication factor three, `min.insync.replicas=2`, and ingest publishes with `acks=all`. |
-| **Prometheus + Grafana** | Service metrics, scrape config, dashboards. |
+| **Prometheus + Grafana** | Service metrics, scrape config, dashboards. Prometheus scrapes the platform APIs, ingest, processor, ClickHouse, gateway sidecars, and the telemetry collectors (OTel collector, Loki, Tempo, Promtail). Rules flag required targets that are absent or down and list workloads without metrics (`mcp:scrape_uninstrumented_workload:info`); gateways expose bounded `mcp_gateway_oauth_outcomes_total{outcome}`. The "Scrape Coverage" dashboard separates absent targets from healthy targets with zero traffic. |
 | **OTel Collector + Tempo** | Distributed tracing pipeline. |
 | **Loki + Promtail** | Log shipping and storage. |
 

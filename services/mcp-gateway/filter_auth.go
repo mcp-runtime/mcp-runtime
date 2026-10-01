@@ -44,6 +44,7 @@ func (s *gatewayServer) authFilter(ex *Exchange) Result {
 	}
 
 	oauthResult := s.authenticateOAuth(ex.R, ex.Policy)
+	s.metrics.recordOAuthOutcome(s.metricScope(ex.Policy), oauthResult.Allowed, oauthResult.Reason)
 	ex.Identity = oauthResult.Identity
 	ex.OAuthToken = oauthResult.Token
 
