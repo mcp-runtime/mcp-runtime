@@ -55,6 +55,9 @@ jobs:
       - name: Validate E2E scenario selectors
         run: bash test/e2e/scenarios_test.sh
 
+      - name: Validate regression coverage index
+        run: go test ./test/regression -count=1
+
       - name: Regenerate CRDs/manifests
         run: make -f Makefile.operator generate manifests
 
