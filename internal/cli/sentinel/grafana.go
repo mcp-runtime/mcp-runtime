@@ -17,29 +17,42 @@ import (
 const (
 	grafanaExecTarget = "deploy/grafana"
 	grafanaContainer  = "grafana"
+)
 
+var (
 	// grafanaProbeScript prints "health=<code> auth=<code>"; an empty code means
 	// no HTTP response. Busybox wget -S writes response headers to stderr.
-	grafanaProbeScript = `code() { sed -n 's/^ *HTTP\/[0-9.]* \([0-9][0-9]*\).*/\1/p' | tail -n 1; }
+	grafanaProbeScript = oneLine(`code() { sed -n 's/^ *HTTP\/[0-9.]* \([0-9][0-9]*\).*/\1/p' | tail -n 1; }
 base=http://127.0.0.1:3000/grafana
 h=$(wget -q -S -O /dev/null "$base/api/health" 2>&1 | code)
 cred=$(printf '%s:%s' "$GF_SECURITY_ADMIN_USER" "$GF_SECURITY_ADMIN_PASSWORD" | base64 | tr -d '\n')
 a=$(wget -q -S -O /dev/null --header "Authorization: Basic $cred" "$base/api/user" 2>&1 | code)
-echo "health=$h auth=$a"`
+echo "health=$h auth=$a"`)
 
 	// grafanaBackupScript copies the persisted Grafana database (dashboards,
 	// datasources, users) next to itself before any account change.
-	grafanaBackupScript = `set -e
+	grafanaBackupScript = oneLine(`set -e
 dir=/var/lib/grafana/backups
 mkdir -p "$dir"
 dest="$dir/grafana.db.$(date +%Y%m%d%H%M%S)"
 cp /var/lib/grafana/grafana.db "$dest"
-echo "$dest"`
+echo "$dest"`)
 
 	// grafanaResetScript pipes the configured password into the Grafana CLI over
 	// stdin so it never appears in an argument list.
 	grafanaResetScript = `printf '%s' "$GF_SECURITY_ADMIN_PASSWORD" | grafana cli --homepath /usr/share/grafana admin reset-admin-password --password-from-stdin`
 )
+
+// oneLine joins a multi-line shell script into a single line. The kubectl
+// client rejects newlines, tabs and carriage returns in any argument, so a
+// script passed to `sh -c` must not contain them.
+func oneLine(script string) string {
+	lines := strings.Split(strings.TrimSpace(script), "\n")
+	for i, l := range lines {
+		lines[i] = strings.TrimSpace(l)
+	}
+	return strings.Join(lines, "; ")
+}
 
 // GrafanaState classifies the result of the Grafana credential probe.
 type GrafanaState string
