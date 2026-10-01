@@ -2,7 +2,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: kafka-topic-init
-  namespace: mcp-sentinel
+  namespace: mcp-observability
 spec:
   backoffLimit: 12
   template:

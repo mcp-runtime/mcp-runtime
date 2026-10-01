@@ -4,9 +4,9 @@ The MCP Runtime API has three layers:
 
 1. **CRDs** under `mcpruntime.org/v1alpha1`: `MCPServer`, `MCPAccessGrant`, `MCPAgentSession`.
 2. **Gateway headers** carried on live MCP requests when `gateway.enabled`.
-3. **Sentinel HTTP APIs** exposed by **platform-api**, **runtime-api**, and **analytics-api** (routed at `/api/v1/*` via Traefik): platform identity, runtime governance, governance actions, and analytics.
+3. **Platform HTTP APIs** exposed by **platform-api**, **runtime-api**, and **analytics-api** (routed at `/api/v1/*` via Traefik): platform identity, runtime governance, governance actions, and analytics.
 
-> **Path prefix:** Public HTTP routes use `/api/v1/*` only. Legacy `/api/*` paths return `404`. Traefik routes each prefix to **platform-api**, **runtime-api**, or **analytics-api**; see [route ownership](#route-ownership) below and [`docs/sentinel.md`](sentinel.md).
+> **Path prefix:** Public HTTP routes use `/api/v1/*` only. Legacy `/api/*` paths return `404`. Traefik routes each prefix to **platform-api**, **runtime-api**, or **analytics-api**; see [route ownership](#route-ownership) below and [`docs/platform-services.md`](platform-services.md).
 
 ### Route ownership
 
@@ -29,7 +29,7 @@ flowchart LR
         Grant[MCPAccessGrant]
         Session[MCPAgentSession]
     end
-    subgraph HTTP["Sentinel HTTP APIs /api/v1"]
+    subgraph HTTP["Platform HTTP APIs /api/v1"]
         Plat[platform-api auth admin registry]
         Run[runtime-api governance]
         Ana[analytics-api events stats]
@@ -287,7 +287,7 @@ over the public HTTPS issuer.
 
 - Use the **gateway** to resolve OAuth claims and certificate-bound agent sessions.
 - Use **MCPAccessGrant + MCPAgentSession** for side-effect permissions, trust, and revocation.
-- Use **OIDC-issued bearer tokens** only where Sentinel services validate them.
+- Use **OIDC-issued bearer tokens** only where platform-api, runtime-api, analytics-api, or ingest validates them.
 
 ## Authentication API
 
@@ -309,7 +309,7 @@ GET  /api/v1/auth/me
 | `POST /api/v1/auth/oidc` | Body: `id_token`. Requires configured issuer and audience; JWKS is read from issuer discovery when `OIDC_JWKS_URL` is unset. Returns `200` with `access_token`, `token_type`, `expires_in`, and `user`. |
 | `GET /api/v1/auth/me` | Requires auth. Returns `authenticated=true` and the current principal. |
 
-`setup` writes OIDC settings through `mcp-sentinel-config`. For Google sign-in,
+`setup` writes OIDC settings through the shared ConfigMap `mcp-shared-config` in `mcp-platform` and `mcp-observability`. For Google sign-in,
 set `GOOGLE_CLIENT_ID` before setup; when the issuer, audience, and JWKS URL are
 empty, setup derives the standard Google OIDC values from that client ID. For
 other OIDC providers, set `OIDC_ISSUER` and `OIDC_AUDIENCE`; the services
@@ -637,6 +637,6 @@ GET /api/v1/events?trace_id=<trace>&server=payments&decision=deny&agent_id=agt_0
 
 ## Next
 
-- [Sentinel](sentinel.md): what each HTTP surface above maps to.
+- [Platform services](platform-services.md): what each HTTP surface above maps to.
 - [Architecture](architecture.md): how requests flow through the gateway.
 - [internals/api-types.md](internals/api-types.md): contributor guide to the CRD Go types and generated API contract.

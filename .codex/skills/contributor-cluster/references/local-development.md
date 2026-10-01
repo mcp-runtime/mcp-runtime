@@ -23,16 +23,16 @@ kubectl port-forward -n traefik svc/traefik 18080:8000 18443:8443
 | Grafana | `http://localhost:18080/grafana` |
 | MCP samples (plain Ingress) | `http://localhost:18080/oauth-example-go-2025-11-25-gateway/mcp`, `…/example-python-2025-11-25-gateway/mcp`, `…/example-rust-2025-11-25-gateway/mcp` |
 | Adapter-certificate MCP routes | `https://localhost:18443/<publicPathPrefix>/mcp` (use `-k` / insecure TLS skip for Traefik's local default cert; IngressRoute is websecure-only) |
-| Prometheus (debug) | `kubectl port-forward -n mcp-sentinel svc/prometheus 9090:9090` |
+| Prometheus (debug) | `kubectl port-forward -n mcp-observability svc/prometheus 9090:9090` |
 
 PII redaction: `config/ingress/overlays/http` + `pii-redactor@file` — keep off `/api/v1` routes (keys and grant subjects must stay exact).
 
 ## API keys
 
 ```bash
-UI_KEY="$(kubectl get secret mcp-sentinel-secrets -n mcp-sentinel \
+UI_KEY="$(kubectl get secret mcp-ui-credentials -n mcp-platform \
   -o jsonpath='{.data.UI_API_KEY}' | base64 -d)"
-INGEST_KEY="$(kubectl get secret mcp-sentinel-secrets -n mcp-sentinel \
+INGEST_KEY="$(kubectl get secret mcp-ingest-credentials -n mcp-observability \
   -o jsonpath='{.data.INGEST_API_KEYS}' | base64 -d)"
 ```
 
@@ -51,14 +51,14 @@ them to reports.
 - `test@mcpruntime.org` / `test@123`
 - `admin@mcpruntime.org` / `admin@123`
 
-Override via `PLATFORM_DEV_*` in `mcp-sentinel-secrets`; roll the split API Deployments after changes.
+Override via `PLATFORM_DEV_*` in `mcp-platform-api-credentials`; roll the split API Deployments after changes.
 
 ## Platform admin bootstrap (one-shot)
 
 ```bash
 kubectl apply -f k8s/21-platform-admin-bootstrap-job.yaml
-kubectl wait --for=condition=complete job/mcp-sentinel-platform-admin-bootstrap -n mcp-sentinel --timeout=120s
-kubectl patch secret mcp-sentinel-secrets -n mcp-sentinel --type merge -p '{"stringData":{"PLATFORM_ADMIN_PASSWORD":""}}'
+kubectl wait --for=condition=complete job/mcp-platform-admin-bootstrap -n mcp-platform --timeout=120s
+kubectl patch secret mcp-platform-api-credentials -n mcp-platform --type merge -p '{"stringData":{"PLATFORM_ADMIN_PASSWORD":""}}'
 ```
 
 Clear `PLATFORM_ADMIN_PASSWORD` from steady-state API env after bootstrap.

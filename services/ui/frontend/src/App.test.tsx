@@ -66,13 +66,13 @@ const EMPTY_CATALOG = {
 
 beforeEach(() => {
   delete window.MCP_API_BASE;
-  window.localStorage.removeItem("mcp-sentinel-theme");
+  window.localStorage.removeItem("mcp-theme");
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
-  window.localStorage.removeItem("mcp-sentinel-theme");
+  window.localStorage.removeItem("mcp-theme");
 });
 
 describe("App", () => {
@@ -109,7 +109,7 @@ describe("App", () => {
 
     expect(toggle).toHaveAttribute("aria-label", "Switch to dark mode");
     expect(document.documentElement.dataset.theme).toBe("light");
-    expect(window.localStorage.getItem("mcp-sentinel-theme")).toBe("light");
+    expect(window.localStorage.getItem("mcp-theme")).toBe("light");
   });
 
   it("signs in through the UI session endpoint and loads the catalog", async () => {

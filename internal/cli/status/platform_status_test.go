@@ -182,8 +182,8 @@ func TestShowPlatformStatus(t *testing.T) {
 			commandKey("kubectl", "get", "deployment", "mcp-runtime-operator-controller-manager", "-n", "mcp-runtime", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
 				Stdout: "0/1",
 			},
-			commandKey("kubectl", "get", "namespace", "mcp-sentinel", "-o", "jsonpath={.metadata.name}"): {
-				Stdout:   "Error from server (NotFound): namespaces \"mcp-sentinel\" not found\n",
+			commandKey("kubectl", "get", "namespace", "mcp-platform", "-o", "jsonpath={.metadata.name}"): {
+				Stdout:   "Error from server (NotFound): namespaces \"mcp-platform\" not found\n",
 				ExitCode: 1,
 			},
 			commandKey("kubectl", "get", "mcpserver", "--all-namespaces", "-o", "custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,IMAGE:.spec.image,REPLICAS:.spec.replicas,PATH:.spec.ingressPath"): {},
@@ -231,8 +231,8 @@ func TestShowPlatformStatus(t *testing.T) {
 			commandKey("kubectl", "get", "deployment", "mcp-runtime-operator-controller-manager", "-n", "mcp-runtime", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
 				Stdout: "1/1",
 			},
-			commandKey("kubectl", "get", "namespace", "mcp-sentinel", "-o", "jsonpath={.metadata.name}"): {
-				Stdout:   "Error from server (NotFound): namespaces \"mcp-sentinel\" not found\n",
+			commandKey("kubectl", "get", "namespace", "mcp-platform", "-o", "jsonpath={.metadata.name}"): {
+				Stdout:   "Error from server (NotFound): namespaces \"mcp-platform\" not found\n",
 				ExitCode: 1,
 			},
 			commandKey("kubectl", "get", "mcpserver", "--all-namespaces", "-o", "custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,IMAGE:.spec.image,REPLICAS:.spec.replicas,PATH:.spec.ingressPath"): {},
@@ -261,49 +261,49 @@ func TestShowPlatformStatus(t *testing.T) {
 			commandKey("kubectl", "get", "deployment", "mcp-runtime-operator-controller-manager", "-n", "mcp-runtime", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
 				Stdout: "1/1",
 			},
-			commandKey("kubectl", "get", "namespace", "mcp-sentinel", "-o", "jsonpath={.metadata.name}"): {
-				Stdout: "mcp-sentinel",
+			commandKey("kubectl", "get", "namespace", "mcp-platform", "-o", "jsonpath={.metadata.name}"): {
+				Stdout: "mcp-platform",
 			},
-			commandKey("kubectl", "get", "statefulset", "clickhouse", "-n", "mcp-sentinel", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
+			commandKey("kubectl", "get", "statefulset", "clickhouse", "-n", "mcp-observability", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
 				Stdout: "1/1",
 			},
-			commandKey("kubectl", "get", "statefulset", "kafka", "-n", "mcp-sentinel", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
+			commandKey("kubectl", "get", "statefulset", "kafka", "-n", "mcp-observability", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
 				Stdout: "3/3",
 			},
-			commandKey("kubectl", "get", "deployment", "mcp-sentinel-ingest", "-n", "mcp-sentinel", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
+			commandKey("kubectl", "get", "deployment", "mcp-ingest", "-n", "mcp-observability", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
 				Stdout: "2/2",
 			},
-			commandKey("kubectl", "get", "deployment", "mcp-sentinel-processor", "-n", "mcp-sentinel", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
+			commandKey("kubectl", "get", "deployment", "mcp-processor", "-n", "mcp-observability", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
 				Stdout: "1/1",
 			},
-			commandKey("kubectl", "get", "deployment", "mcp-platform-api", "-n", "mcp-sentinel", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
+			commandKey("kubectl", "get", "deployment", "mcp-platform-api", "-n", "mcp-platform", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
 				Stdout: "1/1",
 			},
-			commandKey("kubectl", "get", "deployment", "mcp-runtime-api", "-n", "mcp-sentinel", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
+			commandKey("kubectl", "get", "deployment", "mcp-runtime-api", "-n", "mcp-platform", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
 				Stdout: "1/1",
 			},
-			commandKey("kubectl", "get", "deployment", "mcp-analytics-api", "-n", "mcp-sentinel", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
+			commandKey("kubectl", "get", "deployment", "mcp-analytics-api", "-n", "mcp-observability", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
 				Stdout: "1/1",
 			},
-			commandKey("kubectl", "get", "deployment", "mcp-sentinel-ui", "-n", "mcp-sentinel", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
+			commandKey("kubectl", "get", "deployment", "mcp-ui", "-n", "mcp-platform", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
 				Stdout: "1/1",
 			},
-			commandKey("kubectl", "get", "deployment", "mcp-sentinel-gateway", "-n", "mcp-sentinel", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
+			commandKey("kubectl", "get", "deployment", "mcp-platform-gateway", "-n", "mcp-platform", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
 				Stdout: "1/1",
 			},
-			commandKey("kubectl", "get", "deployment", "prometheus", "-n", "mcp-sentinel", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
+			commandKey("kubectl", "get", "deployment", "prometheus", "-n", "mcp-observability", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
 				Stdout: "1/1",
 			},
-			commandKey("kubectl", "get", "deployment", "grafana", "-n", "mcp-sentinel", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
+			commandKey("kubectl", "get", "deployment", "grafana", "-n", "mcp-observability", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
 				Stdout: "1/1",
 			},
-			commandKey("kubectl", "get", "deployment", "otel-collector", "-n", "mcp-sentinel", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
+			commandKey("kubectl", "get", "deployment", "otel-collector", "-n", "mcp-observability", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
 				Stdout: "1/1",
 			},
-			commandKey("kubectl", "get", "statefulset", "tempo", "-n", "mcp-sentinel", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
+			commandKey("kubectl", "get", "statefulset", "tempo", "-n", "mcp-observability", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
 				Stdout: "1/1",
 			},
-			commandKey("kubectl", "get", "statefulset", "loki", "-n", "mcp-sentinel", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
+			commandKey("kubectl", "get", "statefulset", "loki", "-n", "mcp-observability", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
 				Stdout: "1/1",
 			},
 			commandKey("kubectl", "get", "daemonset", "promtail", "-n", "mcp-log-collector", "-o", "jsonpath={.status.numberReady}/{.status.desiredNumberScheduled}"): {
@@ -336,7 +336,7 @@ func TestAnalyticsNamespaceInstalledRequiresExactMatch(t *testing.T) {
 	resetStatusTestConfig(t)
 
 	responses := map[string]commandResponse{
-		commandKey("kubectl", "get", "namespace", "mcp-sentinel", "-o", "jsonpath={.metadata.name}"): {
+		commandKey("kubectl", "get", "namespace", "mcp-platform", "-o", "jsonpath={.metadata.name}"): {
 			Stdout: "unexpected-namespace",
 		},
 	}
@@ -358,7 +358,7 @@ func TestAnalyticsNamespaceInstalledReturnsErrorOnEmptyFailure(t *testing.T) {
 	resetStatusTestConfig(t)
 
 	responses := map[string]commandResponse{
-		commandKey("kubectl", "get", "namespace", "mcp-sentinel", "-o", "jsonpath={.metadata.name}"): {
+		commandKey("kubectl", "get", "namespace", "mcp-platform", "-o", "jsonpath={.metadata.name}"): {
 			ExitCode: 1,
 		},
 	}

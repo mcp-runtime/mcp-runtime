@@ -10,4 +10,4 @@ patches:
     patch: |-
       - op: replace
         path: /spec/template/spec/containers/0/args/3
-        value: --providers.kubernetescrd.namespaces=mcp-servers,mcp-servers-org,mcp-servers-public,mcp-sentinel
+        value: --providers.kubernetescrd.namespaces=mcp-platform,mcp-observability,mcp-servers,mcp-servers-org,mcp-servers-public

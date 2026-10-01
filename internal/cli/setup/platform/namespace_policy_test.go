@@ -46,8 +46,8 @@ func TestLogCollectorPodSecurityBoundary(t *testing.T) {
 			}
 		}
 	}
-	if got := policies[core.DefaultAnalyticsNamespace]; len(got) != 1 || got[0] != "restricted" {
-		t.Fatalf("%s namespace declarations = %v, want one restricted owner", core.DefaultAnalyticsNamespace, got)
+	if got := policies[core.ComponentNamespace("platform-api")]; len(got) != 1 || got[0] != "restricted" {
+		t.Fatalf("%s namespace declarations = %v, want one restricted owner", core.ComponentNamespace("platform-api"), got)
 	}
 	if got := policies[core.LogCollectorNamespace]; len(got) != 1 || got[0] != "privileged" {
 		t.Fatalf("%s Pod Security declarations = %v, want one privileged hostPath collector namespace", core.LogCollectorNamespace, got)

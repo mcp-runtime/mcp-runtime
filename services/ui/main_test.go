@@ -654,7 +654,7 @@ func TestHTTPSRedirectMiddlewareSkipsAdminCheckForwardAuth(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/auth/admin-check", nil)
-	req.Host = "mcp-sentinel-ui.mcp-sentinel.svc.cluster.local:8082"
+	req.Host = "mcp-ui.mcp-platform.svc.cluster.local:8082"
 	req.Header.Set("X-Forwarded-Proto", "http")
 	handler.ServeHTTP(rec, req)
 

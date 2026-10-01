@@ -746,7 +746,7 @@ func TestCheckRegistryReachableFromCluster(t *testing.T) {
 func TestParseImagePullCandidates(t *testing.T) {
 	sep := imagePullListSep
 	out := strings.Join([]string{
-		"mcp-sentinel|mcp-sentinel-api-abc|10.96.64.95:5000/mcp-sentinel-api:latest" + sep + "|ImagePullBackOff" + sep + "|",
+		"mcp-servers|mcp-api-abc|10.96.64.95:5000/mcp-api:latest" + sep + "|ImagePullBackOff" + sep + "|",
 		"mcp-runtime|operator-abc|registry.registry.svc.cluster.local:5000/mcp-runtime-operator:latest" + sep + "|Running" + sep + "|",
 		"registry|registry-abc|registry.local/distribution:latest" + sep + "|ErrImagePull" + sep + "|",
 		"mcp-servers|demo-init-abc|registry.local/bootstrap:latest" + sep + "registry.local/demo:latest" + sep + "|ImagePullBackOff" + sep + "|",
@@ -756,10 +756,10 @@ func TestParseImagePullCandidates(t *testing.T) {
 	if len(candidates) != 3 {
 		t.Fatalf("expected 3 image pull candidates, got %d", len(candidates))
 	}
-	if candidates[0].Namespace != "mcp-sentinel" || candidates[0].Name != "mcp-sentinel-api-abc" {
+	if candidates[0].Namespace != "mcp-servers" || candidates[0].Name != "mcp-api-abc" {
 		t.Fatalf("unexpected first candidate: %#v", candidates[0])
 	}
-	if candidates[0].Images[0] != "10.96.64.95:5000/mcp-sentinel-api:latest" {
+	if candidates[0].Images[0] != "10.96.64.95:5000/mcp-api:latest" {
 		t.Fatalf("expected ClusterIP registry image, got %q", candidates[0].Images[0])
 	}
 	if candidates[1].Images[0] != "registry.local/distribution:latest" {
@@ -1033,7 +1033,7 @@ func TestCheckSentinelPipelineReadiness(t *testing.T) {
 			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
 				switch {
 				case contains(spec.Args, "namespace"):
-					return &core.MockCommand{OutputData: []byte("mcp-sentinel")}
+					return &core.MockCommand{OutputData: []byte("mcp-observability")}
 				case contains(spec.Args, "statefulset"):
 					return &core.MockCommand{OutputData: []byte("0/1")}
 				default:
@@ -1055,8 +1055,8 @@ func TestCheckSentinelPipelineReadiness(t *testing.T) {
 			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
 				switch {
 				case contains(spec.Args, "namespace"):
-					return &core.MockCommand{OutputData: []byte("mcp-sentinel")}
-				case contains(spec.Args, "mcp-sentinel-ingest"):
+					return &core.MockCommand{OutputData: []byte("mcp-observability")}
+				case contains(spec.Args, "mcp-ingest"):
 					return &core.MockCommand{OutputData: []byte("1/1")}
 				default:
 					return &core.MockCommand{}
@@ -1078,8 +1078,8 @@ func TestCheckRuntimeAPIImageDisplayRefs(t *testing.T) {
 			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
 				switch {
 				case contains(spec.Args, "namespace"):
-					return &core.MockCommand{OutputData: []byte("mcp-sentinel")}
-				case contains(spec.Args, "secret") && contains(spec.Args, "mcp-sentinel-secrets"):
+					return &core.MockCommand{OutputData: []byte("mcp-platform")}
+				case contains(spec.Args, "secret") && contains(spec.Args, "mcp-ui-credentials"):
 					return &core.MockCommand{OutputData: []byte(uiKeyB64)}
 				case contains(spec.Args, "run"):
 					return &core.MockCommand{OutputData: []byte("pod created")}
@@ -1107,8 +1107,8 @@ HTTP_STATUS=200`)}
 			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
 				switch {
 				case contains(spec.Args, "namespace"):
-					return &core.MockCommand{OutputData: []byte("mcp-sentinel")}
-				case contains(spec.Args, "secret") && contains(spec.Args, "mcp-sentinel-secrets"):
+					return &core.MockCommand{OutputData: []byte("mcp-platform")}
+				case contains(spec.Args, "secret") && contains(spec.Args, "mcp-ui-credentials"):
 					return &core.MockCommand{OutputData: []byte(uiKeyB64)}
 				case contains(spec.Args, "run"):
 					return &core.MockCommand{OutputData: []byte("pod created")}
@@ -1133,13 +1133,13 @@ func TestCheckRegistryHTTPPullMismatch(t *testing.T) {
 	sep := imagePullListSep
 
 	t.Run("reports HTTP registry mismatch from describe pod events", func(t *testing.T) {
-		pods := "mcp-sentinel|mcp-sentinel-api-abc|10.96.64.95:5000/mcp-sentinel-api:latest" + sep + "|ImagePullBackOff" + sep + "|\n"
-		describe := `Name:             mcp-sentinel-api-abc
-Namespace:        mcp-sentinel
+		pods := "mcp-servers|mcp-api-abc|10.96.64.95:5000/mcp-api:latest" + sep + "|ImagePullBackOff" + sep + "|\n"
+		describe := `Name:             mcp-api-abc
+Namespace:        mcp-servers
 Events:
   Type     Reason     Age   From               Message
   ----     ------     ----  ----               -------
-  Warning  Failed     31s   kubelet            Failed to pull image "10.96.64.95:5000/mcp-sentinel-api:latest": failed to resolve reference "10.96.64.95:5000/mcp-sentinel-api:latest": failed to do request: Head "https://10.96.64.95:5000/v2/mcp-sentinel-api/manifests/latest": http: server gave HTTP response to HTTPS client
+  Warning  Failed     31s   kubelet            Failed to pull image "10.96.64.95:5000/mcp-api:latest": failed to resolve reference "10.96.64.95:5000/mcp-api:latest": failed to do request: Head "https://10.96.64.95:5000/v2/mcp-api/manifests/latest": http: server gave HTTP response to HTTPS client
 `
 		mock := &core.MockExecutor{
 			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
@@ -1158,7 +1158,7 @@ Events:
 		if check.OK {
 			t.Fatal("expected registry HTTP mismatch to fail")
 		}
-		for _, want := range []string{"mcp-sentinel/mcp-sentinel-api-abc", "10.96.64.95:5000/mcp-sentinel-api:latest", "(ImagePullBackOff)", registryHTTPPullMismatch} {
+		for _, want := range []string{"mcp-servers/mcp-api-abc", "10.96.64.95:5000/mcp-api:latest", "(ImagePullBackOff)", registryHTTPPullMismatch} {
 			if !strings.Contains(check.Detail, want) {
 				t.Fatalf("detail should contain %q, got %q", want, check.Detail)
 			}
@@ -1585,7 +1585,7 @@ func TestDoctorCurlProbesPassPathValidator(t *testing.T) {
 			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
 				switch {
 				case contains(spec.Args, "namespace"):
-					return &core.MockCommand{OutputData: []byte(doctorSentinelNamespace)}
+					return &core.MockCommand{OutputData: []byte(componentNamespace("platform-api"))}
 				case contains(spec.Args, "jsonpath={.data.UI_API_KEY}"):
 					return &core.MockCommand{OutputData: []byte("dGVzdA==")}
 				case len(spec.Args) > 0 && spec.Args[0] == "run":
@@ -1627,7 +1627,7 @@ func TestCheckSentinelSecretsReportsInvalidBase64(t *testing.T) {
 		CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
 			switch {
 			case contains(spec.Args, "namespace"):
-				return &core.MockCommand{OutputData: []byte(doctorSentinelNamespace)}
+				return &core.MockCommand{OutputData: []byte(componentNamespace("platform-api"))}
 			case contains(spec.Args, "jsonpath={.data.API_KEYS}"):
 				return &core.MockCommand{OutputData: []byte("not-base64")}
 			case contains(spec.Args, "jsonpath={.data.ADMIN_API_KEYS}"):
@@ -1655,7 +1655,7 @@ func TestCheckRuntimeAPIKubernetesAPIEgressUsesLiveEndpointPort(t *testing.T) {
 		CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
 			switch {
 			case contains(spec.Args, "namespace"):
-				return &core.MockCommand{OutputData: []byte(doctorSentinelNamespace)}
+				return &core.MockCommand{OutputData: []byte(componentNamespace("platform-api"))}
 			case contains(spec.Args, "endpoints"):
 				return &core.MockCommand{OutputData: []byte("9443\n")}
 			case contains(spec.Args, "networkpolicy"):
@@ -1680,7 +1680,7 @@ func TestCheckSentinelRuntimeCatalogProbeChecksServersAndTools(t *testing.T) {
 		CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
 			switch {
 			case contains(spec.Args, "namespace"):
-				return &core.MockCommand{OutputData: []byte(doctorSentinelNamespace)}
+				return &core.MockCommand{OutputData: []byte(componentNamespace("platform-api"))}
 			case contains(spec.Args, "jsonpath={.data.ADMIN_API_KEYS}"):
 				return &core.MockCommand{OutputData: []byte("YWRtaW4=")}
 			case contains(spec.Args, "jsonpath={.data.API_KEYS}"):
@@ -1923,7 +1923,7 @@ func TestCheckIngressLoadBalancerStatus(t *testing.T) {
 	t.Run("fails when host based runtime ingress has no load balancer status", func(t *testing.T) {
 		out := strings.Join([]string{
 			"registry|registry|registry.mcpruntime.org,||",
-			"mcp-sentinel|mcp-sentinel-platform-ui|platform.mcpruntime.org,|1.2.3.4|",
+			"mcp-platform|mcp-platform-ui|platform.mcpruntime.org,|1.2.3.4|",
 			"default|unrelated|example.com,||",
 		}, "\n")
 		mock := &core.MockExecutor{
@@ -1997,7 +1997,7 @@ func TestCheckPlatformAPILiveInventoryNetworkPolicy(t *testing.T) {
 		if check.OK {
 			t.Fatal("expected blocked platform API ingress to fail")
 		}
-		for _, want := range []string{"mcp-team-acme/platform-default-deny", "mcp-sentinel"} {
+		for _, want := range []string{"mcp-team-acme/platform-default-deny", "mcp-platform"} {
 			if !strings.Contains(check.Detail, want) {
 				t.Fatalf("detail should contain %q, got %q", want, check.Detail)
 			}
@@ -2015,7 +2015,7 @@ func TestCheckPlatformAPILiveInventoryNetworkPolicy(t *testing.T) {
 						"spec": {
 							"ingress": [
 								{"from": [{
-									"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "mcp-sentinel"}}
+									"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "mcp-platform"}}
 								}]}
 							]
 						}
@@ -2704,7 +2704,7 @@ func TestCheckSentinelTelemetryPipelineSkipsMissingNamespace(t *testing.T) {
 func TestCheckPersistentVolumeClaimsReportsPendingClaims(t *testing.T) {
 	mock := &core.MockExecutor{
 		CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
-			return &core.MockCommand{OutputData: []byte(`{"items":[{"metadata":{"namespace":"mcp-sentinel","name":"kafka-data-0"},"status":{"phase":"Pending"}}]}`)}
+			return &core.MockCommand{OutputData: []byte(`{"items":[{"metadata":{"namespace":"mcp-observability","name":"kafka-data-0"},"status":{"phase":"Pending"}}]}`)}
 		},
 	}
 	check := checkPersistentVolumeClaims(core.NewTestKubectlClient(mock))
@@ -2740,7 +2740,7 @@ func TestCheckSentinelStalePods(t *testing.T) {
 			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
 				switch {
 				case contains(spec.Args, "namespace"):
-					return &core.MockCommand{OutputData: []byte("mcp-sentinel")}
+					return &core.MockCommand{OutputData: []byte("mcp-platform")}
 				case contains(spec.Args, "pods"):
 					return &core.MockCommand{OutputData: []byte(podsJSON)}
 				default:
@@ -2798,7 +2798,7 @@ func TestCheckSentinelGrafanaProvisioning(t *testing.T) {
 				args := strings.Join(spec.Args, " ")
 				switch {
 				case strings.Contains(args, "get namespace"):
-					return &core.MockCommand{OutputData: []byte("mcp-sentinel")}
+					return &core.MockCommand{OutputData: []byte("mcp-observability")}
 				case strings.Contains(args, "get deployment grafana") && strings.Contains(args, "jsonpath"):
 					return &core.MockCommand{OutputData: []byte("grafana")}
 				case strings.Contains(args, "get deployment grafana"):

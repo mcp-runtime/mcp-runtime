@@ -31,6 +31,7 @@ import (
 	"mcp-runtime/internal/cli/setup/ingressmanifest"
 	setupplan "mcp-runtime/internal/cli/setup/plan"
 	"mcp-runtime/pkg/k8sclient"
+	"mcp-runtime/pkg/platforminventory"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -62,7 +63,7 @@ func removeBundledOAuthServer(kubectl core.KubectlRunner) error {
 		{kind: "networkpolicy", name: "mcp-oauth-server-egress"},
 	}
 	for _, resource := range resources {
-		cmd, err := kubectl.CommandArgs([]string{"delete", resource.kind, resource.name, "-n", core.DefaultAnalyticsNamespace, "--ignore-not-found"})
+		cmd, err := kubectl.CommandArgs([]string{"delete", resource.kind, resource.name, "-n", core.ComponentNamespace("mcp-auth"), "--ignore-not-found"})
 		if err != nil {
 			return err
 		}
@@ -80,11 +81,11 @@ func removeBundledOAuthServerClientGo() error {
 }
 
 // removeLegacyPromtail removes the collector left behind by installations that
-// ran it in mcp-sentinel. It runs only after the replacement DaemonSet is ready.
+// ran it in platform. It runs only after the replacement DaemonSet is ready.
 func removeLegacyPromtail(kubectl core.KubectlRunner) error {
 	for _, resource := range []string{"daemonset/promtail", "serviceaccount/promtail", "configmap/promtail-config"} {
-		if err := kubectl.RunWithOutput([]string{"delete", resource, "-n", core.DefaultAnalyticsNamespace, "--ignore-not-found", "--cascade=foreground", "--wait=true"}, os.Stdout, os.Stderr); err != nil {
-			return fmt.Errorf("remove legacy log collector %s from namespace %s: %w", resource, core.DefaultAnalyticsNamespace, err)
+		if err := kubectl.RunWithOutput([]string{"delete", resource, "-n", core.ComponentNamespace("promtail"), "--ignore-not-found", "--cascade=foreground", "--wait=true"}, os.Stdout, os.Stderr); err != nil {
+			return fmt.Errorf("remove legacy log collector %s from namespace %s: %w", resource, core.ComponentNamespace("promtail"), err)
 		}
 	}
 	// This path shares typed-client setup for namespace/RBAC finalization.
@@ -97,13 +98,13 @@ func removeLegacyPromtailClientGo() error {
 		return err
 	}
 	ctx := context.Background()
-	if err := clients.Clientset.AppsV1().DaemonSets(core.DefaultAnalyticsNamespace).Delete(ctx, "promtail", metav1.DeleteOptions{PropagationPolicy: propagationForeground()}); err != nil && !apierrors.IsNotFound(err) {
-		return fmt.Errorf("remove legacy log collector daemonset from namespace %s: %w", core.DefaultAnalyticsNamespace, err)
+	if err := clients.Clientset.AppsV1().DaemonSets(core.ComponentNamespace("promtail")).Delete(ctx, "promtail", metav1.DeleteOptions{PropagationPolicy: propagationForeground()}); err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("remove legacy log collector daemonset from namespace %s: %w", core.ComponentNamespace("promtail"), err)
 	}
 	// Foreground deletion waits for the old hostPath pods to disappear before
 	// revoking their discovery access or tightening the source namespace policy.
 	if err := wait.PollUntilContextTimeout(ctx, 200*time.Millisecond, 2*time.Minute, true, func(ctx context.Context) (bool, error) {
-		_, err := clients.Clientset.AppsV1().DaemonSets(core.DefaultAnalyticsNamespace).Get(ctx, "promtail", metav1.GetOptions{})
+		_, err := clients.Clientset.AppsV1().DaemonSets(core.ComponentNamespace("promtail")).Get(ctx, "promtail", metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
 			return true, nil
 		}
@@ -111,11 +112,11 @@ func removeLegacyPromtailClientGo() error {
 	}); err != nil {
 		return fmt.Errorf("wait for legacy collector deletion: %w", err)
 	}
-	if err := clients.Clientset.CoreV1().ServiceAccounts(core.DefaultAnalyticsNamespace).Delete(ctx, "promtail", metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
-		return fmt.Errorf("remove legacy log collector service account from namespace %s: %w", core.DefaultAnalyticsNamespace, err)
+	if err := clients.Clientset.CoreV1().ServiceAccounts(core.ComponentNamespace("promtail")).Delete(ctx, "promtail", metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("remove legacy log collector service account from namespace %s: %w", core.ComponentNamespace("promtail"), err)
 	}
-	if err := clients.Clientset.CoreV1().ConfigMaps(core.DefaultAnalyticsNamespace).Delete(ctx, "promtail-config", metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
-		return fmt.Errorf("remove legacy log collector config from namespace %s: %w", core.DefaultAnalyticsNamespace, err)
+	if err := clients.Clientset.CoreV1().ConfigMaps(core.ComponentNamespace("promtail")).Delete(ctx, "promtail-config", metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("remove legacy log collector config from namespace %s: %w", core.ComponentNamespace("promtail"), err)
 	}
 	return finishCollectorAdmissionCutoverClientGo()
 }
@@ -152,16 +153,24 @@ func analyticsServiceManifests(postgresManifest string) []string {
 func pruneStaleSentinelPodsClientGo() {
 	clients, err := platformKubernetesClients()
 	if err != nil {
-		core.Warn(fmt.Sprintf("Could not prune stale mcp-sentinel pods: %v", err))
+		core.Warn(fmt.Sprintf("Could not prune stale platform pods: %v", err))
 		return
 	}
-	pruned, err := k8sclient.PruneTerminatedPods(context.Background(), clients, core.DefaultAnalyticsNamespace)
+	var pruned []string
+	for _, namespace := range publishedWorkloadNamespaces() {
+		names, pruneErr := k8sclient.PruneTerminatedPods(context.Background(), clients, namespace)
+		if pruneErr != nil {
+			err = pruneErr
+			continue
+		}
+		pruned = append(pruned, names...)
+	}
 	if err != nil {
-		core.Warn(fmt.Sprintf("Could not prune stale mcp-sentinel pods: %v", err))
+		core.Warn(fmt.Sprintf("Could not prune stale platform pods: %v", err))
 		return
 	}
 	if len(pruned) > 0 {
-		core.Info(fmt.Sprintf("Removed %d stale terminated mcp-sentinel pod(s): %s", len(pruned), strings.Join(pruned, ", ")))
+		core.Info(fmt.Sprintf("Removed %d stale terminated platform pod(s): %s", len(pruned), strings.Join(pruned, ", ")))
 	}
 }
 
@@ -183,7 +192,7 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 		return err
 	}
 
-	core.Info("Applying mcp-sentinel namespace and config")
+	core.Info("Applying platform namespace and config")
 	manifests := []string{
 		"k8s/00-namespace.yaml",
 		"k8s/00-priority-classes.yaml",
@@ -198,7 +207,7 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 		return err
 	}
 
-	core.Info("Applying mcp-sentinel managed secrets")
+	core.Info("Applying platform managed secrets")
 	secretManifest, err := renderAnalyticsSecretManifestClientGo()
 	if err != nil {
 		return err
@@ -217,7 +226,7 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 
 	// Sync Postgres password: if Postgres is already running, the pod has an
 	// existing database password that may differ from what was just written to
-	// mcp-sentinel-secrets. Apply the current secret value via ALTER USER so
+	// owner credential Secrets. Apply the current secret value via ALTER USER so
 	// the API can connect on reruns without needing a Postgres pod restart.
 	if err := syncPostgresPasswordClientGo(); err != nil {
 		core.Warn(fmt.Sprintf("Could not sync Postgres password (will retry on next run): %v", err))
@@ -250,25 +259,25 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 		}
 	}
 
-	if err := waitForRolloutStatusWithClientGo("statefulset", "clickhouse", core.DefaultAnalyticsNamespace, rolloutTimeoutDuration); err != nil {
-		return mcpSentinelDependencyRolloutFailed(core.DefaultKubectlClient(), err, "statefulset", "clickhouse", core.DefaultAnalyticsNamespace, "storage (clickhouse)")
+	if err := waitForRolloutStatusWithClientGo("statefulset", "clickhouse", core.ComponentNamespace("clickhouse"), rolloutTimeoutDuration); err != nil {
+		return mcpSentinelDependencyRolloutFailed(core.DefaultKubectlClient(), err, "statefulset", "clickhouse", core.ComponentNamespace("clickhouse"), "storage (clickhouse)")
 	}
 	if err := waitForKafkaRolloutClientGo(logger, rolloutTimeoutDuration, storageMode); err != nil {
-		return mcpSentinelDependencyRolloutFailed(core.DefaultKubectlClient(), err, "statefulset", "kafka", core.DefaultAnalyticsNamespace, "messaging (kafka)")
+		return mcpSentinelDependencyRolloutFailed(core.DefaultKubectlClient(), err, "statefulset", "kafka", core.ComponentNamespace("kafka"), "messaging (kafka)")
 	}
 	if err := initializeKafkaTopicsClientGo(images, imagePullSecretName, platformMode, rolloutTimeoutDuration); err != nil {
 		return err
 	}
 
 	core.Info("Initializing ClickHouse schema")
-	if err := deleteJobIfExistsClientGo("clickhouse-init", core.DefaultAnalyticsNamespace); err != nil {
+	if err := deleteJobIfExistsClientGo("clickhouse-init", core.ComponentNamespace("clickhouse")); err != nil {
 		return core.WrapWithSentinel(core.ErrSetupDeleteClickHouseInitJobFailed, err, fmt.Sprintf("delete existing clickhouse init job: %v", err))
 	}
 	if err := applyRenderedManifestClientGo("k8s/04-clickhouse-init.yaml", images, imagePullSecretName, platformMode); err != nil {
 		return err
 	}
-	if err := waitForJobCompletionClientGo("clickhouse-init", core.DefaultAnalyticsNamespace, rolloutTimeoutDuration); err != nil {
-		return mcpSentinelDependencyJobFailed(core.DefaultKubectlClient(), err, "clickhouse-init", core.DefaultAnalyticsNamespace, "clickhouse init schema")
+	if err := waitForJobCompletionClientGo("clickhouse-init", core.ComponentNamespace("clickhouse"), rolloutTimeoutDuration); err != nil {
+		return mcpSentinelDependencyJobFailed(core.DefaultKubectlClient(), err, "clickhouse-init", core.ComponentNamespace("clickhouse"), "clickhouse init schema")
 	}
 
 	core.Info("Applying analytics services")
@@ -285,16 +294,16 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 		return err
 	}
 
-	core.Info(fmt.Sprintf("Waiting for mcp-sentinel workload rollouts (per-resource timeout %s; override with MCP_DEPLOYMENT_TIMEOUT)", rolloutTimeout))
+	core.Info(fmt.Sprintf("Waiting for platform workload rollouts (per-resource timeout %s; override with MCP_DEPLOYMENT_TIMEOUT)", rolloutTimeout))
 	targets := []analyticsRolloutTarget{
-		{kind: "statefulset", name: "mcp-sentinel-postgres"},
-		{kind: "deployment", name: "mcp-sentinel-ingest"},
-		{kind: "deployment", name: "mcp-sentinel-processor"},
+		{kind: "statefulset", name: "mcp-postgres"},
+		{kind: "deployment", name: "mcp-ingest"},
+		{kind: "deployment", name: "mcp-processor"},
 		{kind: "deployment", name: "mcp-platform-api"},
 		{kind: "deployment", name: "mcp-runtime-api"},
 		{kind: "deployment", name: "mcp-analytics-api"},
-		{kind: "deployment", name: "mcp-sentinel-ui"},
-		{kind: "deployment", name: "mcp-sentinel-gateway"},
+		{kind: "deployment", name: "mcp-ui"},
+		{kind: "deployment", name: "mcp-platform-gateway"},
 		{kind: "deployment", name: "prometheus"},
 		{kind: "deployment", name: "grafana"},
 		{kind: "deployment", name: "otel-collector"},
@@ -307,7 +316,7 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 		if err := removeLegacyPromtailClientGo(); err != nil {
 			return err
 		}
-		core.Success("mcp-sentinel manifests deployed successfully")
+		core.Success("platform manifests deployed successfully")
 		return nil
 	}
 	if recovered, recoverErr := recoverKafkaClusterIDMismatchClientGo(logger, storageMode); recoverErr != nil {
@@ -318,7 +327,7 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 			if err := removeLegacyPromtailClientGo(); err != nil {
 				return err
 			}
-			core.Success("mcp-sentinel manifests deployed successfully")
+			core.Success("platform manifests deployed successfully")
 			return nil
 		}
 	}
@@ -327,7 +336,7 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 	summary := strings.Join(rolloutFailures, "; ")
 	cause := core.NewWithSentinel(core.ErrSetupAnalyticsRolloutFailed, summary)
 	msg := fmt.Sprintf("analytics components failed to roll out: %s", summary)
-	ctx := map[string]any{"component": "mcp-sentinel", "rollout_failures": summary}
+	ctx := map[string]any{"component": "platform", "rollout_failures": summary}
 	if core.IsDebugMode() {
 		if diag := buildAnalyticsRolloutDebugDetail(core.DefaultKubectlClient(), failedForDebug); diag != "" {
 			ctx["diagnostics"] = trimDiagnosticsString(diag)
@@ -349,7 +358,7 @@ func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap
 		return err
 	}
 
-	core.Info("Applying mcp-sentinel namespace and config")
+	core.Info("Applying platform namespace and config")
 	manifests := []string{
 		"k8s/00-namespace.yaml",
 		"k8s/00-priority-classes.yaml",
@@ -364,7 +373,7 @@ func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap
 		return err
 	}
 
-	core.Info("Applying mcp-sentinel managed secrets")
+	core.Info("Applying platform managed secrets")
 	secretManifest, err := renderCredentialBundleClientGo()
 	if err != nil {
 		return err
@@ -407,25 +416,25 @@ func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap
 		}
 	}
 
-	if err := waitForRolloutStatusWithKubectl(kubectl, "statefulset", "clickhouse", core.DefaultAnalyticsNamespace, rolloutTimeout); err != nil {
-		return mcpSentinelDependencyRolloutFailed(kubectl, err, "statefulset", "clickhouse", core.DefaultAnalyticsNamespace, "storage (clickhouse)")
+	if err := waitForRolloutStatusWithKubectl(kubectl, "statefulset", "clickhouse", core.ComponentNamespace("clickhouse"), rolloutTimeout); err != nil {
+		return mcpSentinelDependencyRolloutFailed(kubectl, err, "statefulset", "clickhouse", core.ComponentNamespace("clickhouse"), "storage (clickhouse)")
 	}
 	if err := waitForKafkaRolloutWithKubectl(kubectl, rolloutTimeout, storageMode); err != nil {
-		return mcpSentinelDependencyRolloutFailed(kubectl, err, "statefulset", "kafka", core.DefaultAnalyticsNamespace, "messaging (kafka)")
+		return mcpSentinelDependencyRolloutFailed(kubectl, err, "statefulset", "kafka", core.ComponentNamespace("kafka"), "messaging (kafka)")
 	}
 	if err := initializeKafkaTopicsWithKubectl(kubectl, images, imagePullSecretName, platformMode, rolloutTimeout); err != nil {
 		return err
 	}
 
 	core.Info("Initializing ClickHouse schema")
-	if err := deleteJobIfExistsWithKubectl(kubectl, "clickhouse-init", core.DefaultAnalyticsNamespace); err != nil {
+	if err := deleteJobIfExistsWithKubectl(kubectl, "clickhouse-init", core.ComponentNamespace("clickhouse")); err != nil {
 		return core.WrapWithSentinel(core.ErrSetupDeleteClickHouseInitJobFailed, err, fmt.Sprintf("delete existing clickhouse init job: %v", err))
 	}
 	if err := applyRenderedManifest(kubectl, "k8s/04-clickhouse-init.yaml", images, imagePullSecretName, platformMode); err != nil {
 		return err
 	}
-	if err := waitForJobCompletionWithKubectl(kubectl, "clickhouse-init", core.DefaultAnalyticsNamespace, rolloutTimeout); err != nil {
-		return mcpSentinelDependencyJobFailed(kubectl, err, "clickhouse-init", core.DefaultAnalyticsNamespace, "clickhouse init schema")
+	if err := waitForJobCompletionWithKubectl(kubectl, "clickhouse-init", core.ComponentNamespace("clickhouse"), rolloutTimeout); err != nil {
+		return mcpSentinelDependencyJobFailed(kubectl, err, "clickhouse-init", core.ComponentNamespace("clickhouse"), "clickhouse init schema")
 	}
 
 	core.Info("Applying analytics services")
@@ -445,16 +454,16 @@ func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap
 		return err
 	}
 
-	core.Info(fmt.Sprintf("Waiting for mcp-sentinel workload rollouts (per-resource timeout %s; override with MCP_DEPLOYMENT_TIMEOUT)", rolloutTimeout))
+	core.Info(fmt.Sprintf("Waiting for platform workload rollouts (per-resource timeout %s; override with MCP_DEPLOYMENT_TIMEOUT)", rolloutTimeout))
 	targets := []analyticsRolloutTarget{
-		{kind: "statefulset", name: "mcp-sentinel-postgres"},
-		{kind: "deployment", name: "mcp-sentinel-ingest"},
-		{kind: "deployment", name: "mcp-sentinel-processor"},
+		{kind: "statefulset", name: "mcp-postgres"},
+		{kind: "deployment", name: "mcp-ingest"},
+		{kind: "deployment", name: "mcp-processor"},
 		{kind: "deployment", name: "mcp-platform-api"},
 		{kind: "deployment", name: "mcp-runtime-api"},
 		{kind: "deployment", name: "mcp-analytics-api"},
-		{kind: "deployment", name: "mcp-sentinel-ui"},
-		{kind: "deployment", name: "mcp-sentinel-gateway"},
+		{kind: "deployment", name: "mcp-ui"},
+		{kind: "deployment", name: "mcp-platform-gateway"},
 		{kind: "deployment", name: "prometheus"},
 		{kind: "deployment", name: "grafana"},
 		{kind: "deployment", name: "otel-collector"},
@@ -467,7 +476,7 @@ func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap
 		if err := removeLegacyPromtail(kubectl); err != nil {
 			return err
 		}
-		core.Success("mcp-sentinel manifests deployed successfully")
+		core.Success("platform manifests deployed successfully")
 		return nil
 	}
 	if recovered, recoverErr := recoverKafkaClusterIDMismatchWithKubectl(kubectl, storageMode); recoverErr != nil {
@@ -478,7 +487,7 @@ func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap
 			if err := removeLegacyPromtail(kubectl); err != nil {
 				return err
 			}
-			core.Success("mcp-sentinel manifests deployed successfully")
+			core.Success("platform manifests deployed successfully")
 			return nil
 		}
 	}
@@ -487,7 +496,7 @@ func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap
 	summary := strings.Join(rolloutFailures, "; ")
 	cause := core.NewWithSentinel(core.ErrSetupAnalyticsRolloutFailed, summary)
 	msg := fmt.Sprintf("analytics components failed to roll out: %s", summary)
-	ctx := map[string]any{"component": "mcp-sentinel", "rollout_failures": summary}
+	ctx := map[string]any{"component": "platform", "rollout_failures": summary}
 	if core.IsDebugMode() {
 		if diag := buildAnalyticsRolloutDebugDetail(kubectl, failedForDebug); diag != "" {
 			ctx["diagnostics"] = trimDiagnosticsString(diag)
@@ -507,7 +516,7 @@ func ensureRuntimeKubernetesAPIEgressClientGo() error {
 		return err
 	}
 	ctx := context.Background()
-	policy, err := clients.Clientset.NetworkingV1().NetworkPolicies(core.DefaultAnalyticsNamespace).Get(ctx, "mcp-runtime-api-platform-egress", metav1.GetOptions{})
+	policy, err := clients.Clientset.NetworkingV1().NetworkPolicies(core.ComponentNamespace("runtime-api")).Get(ctx, "mcp-runtime-api-platform-egress", metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		return nil
 	}
@@ -556,7 +565,7 @@ func ensureRuntimeKubernetesAPIEgressClientGo() error {
 			}
 		}
 	}
-	if _, err := clients.Clientset.NetworkingV1().NetworkPolicies(core.DefaultAnalyticsNamespace).Update(ctx, policy, metav1.UpdateOptions{}); err != nil {
+	if _, err := clients.Clientset.NetworkingV1().NetworkPolicies(core.ComponentNamespace("runtime-api")).Update(ctx, policy, metav1.UpdateOptions{}); err != nil {
 		return fmt.Errorf("update runtime API Kubernetes API egress: %w", err)
 	}
 	return nil
@@ -578,7 +587,7 @@ func waitForAnalyticsTargetsClientGo(targets []analyticsRolloutTarget, rolloutTi
 	for _, target := range targets {
 		namespace := target.namespace
 		if namespace == "" {
-			namespace = core.DefaultAnalyticsNamespace
+			namespace = workloadNamespace(target.name)
 		}
 		rolloutLog, err := runRolloutWithOptionalDebugCaptureClientGo(target.kind, target.name, namespace, rolloutTimeout)
 		if err != nil {
@@ -597,7 +606,7 @@ func waitForAnalyticsTargetsWithKubectl(kubectl core.KubectlRunner, targets []an
 	for _, target := range targets {
 		namespace := target.namespace
 		if namespace == "" {
-			namespace = core.DefaultAnalyticsNamespace
+			namespace = workloadNamespace(target.name)
 		}
 		rolloutLog, err := runRolloutWithOptionalDebugCapture(kubectl, target.kind, target.name, namespace, rolloutTimeout)
 		if err != nil {
@@ -611,7 +620,7 @@ func waitForAnalyticsTargetsWithKubectl(kubectl core.KubectlRunner, targets []an
 }
 
 func waitForKafkaRolloutClientGo(logger *zap.Logger, rolloutTimeout time.Duration, storageMode string) error {
-	if err := waitForRolloutStatusWithClientGo("statefulset", kafkaStatefulSetName, core.DefaultAnalyticsNamespace, rolloutTimeout); err == nil {
+	if err := waitForRolloutStatusWithClientGo("statefulset", kafkaStatefulSetName, core.ComponentNamespace("kafka"), rolloutTimeout); err == nil {
 		return nil
 	} else {
 		recovered, recoverErr := recoverKafkaClusterIDMismatchClientGo(logger, storageMode)
@@ -619,7 +628,7 @@ func waitForKafkaRolloutClientGo(logger *zap.Logger, rolloutTimeout time.Duratio
 			return recoverErr
 		}
 		if recovered {
-			return waitForRolloutStatusWithClientGo("statefulset", kafkaStatefulSetName, core.DefaultAnalyticsNamespace, rolloutTimeout)
+			return waitForRolloutStatusWithClientGo("statefulset", kafkaStatefulSetName, core.ComponentNamespace("kafka"), rolloutTimeout)
 		}
 		return err
 	}
@@ -631,7 +640,7 @@ func isKubectlNotFound(output string) bool {
 }
 
 func waitForKafkaRolloutWithKubectl(kubectl core.KubectlRunner, rolloutTimeout, storageMode string) error {
-	if err := waitForRolloutStatusWithKubectl(kubectl, "statefulset", kafkaStatefulSetName, core.DefaultAnalyticsNamespace, rolloutTimeout); err == nil {
+	if err := waitForRolloutStatusWithKubectl(kubectl, "statefulset", kafkaStatefulSetName, core.ComponentNamespace("kafka"), rolloutTimeout); err == nil {
 		return nil
 	} else {
 		recovered, recoverErr := recoverKafkaClusterIDMismatchWithKubectl(kubectl, storageMode)
@@ -639,7 +648,7 @@ func waitForKafkaRolloutWithKubectl(kubectl core.KubectlRunner, rolloutTimeout, 
 			return recoverErr
 		}
 		if recovered {
-			return waitForRolloutStatusWithKubectl(kubectl, "statefulset", kafkaStatefulSetName, core.DefaultAnalyticsNamespace, rolloutTimeout)
+			return waitForRolloutStatusWithKubectl(kubectl, "statefulset", kafkaStatefulSetName, core.ComponentNamespace("kafka"), rolloutTimeout)
 		}
 		return err
 	}
@@ -659,7 +668,7 @@ func recoverKafkaClusterIDMismatchClientGo(logger *zap.Logger, _ string) (bool, 
 	}
 	return false, fmt.Errorf(
 		"kafka cluster ID does not match stored metadata; setup will not delete persistent volume %s/%s automatically. Restore or migrate metadata to match the Kafka volume, or explicitly reset both stores if data loss is acceptable",
-		core.DefaultAnalyticsNamespace, kafkaPVCName,
+		core.ComponentNamespace("kafka"), kafkaPVCName,
 	)
 }
 
@@ -670,13 +679,13 @@ func recoverKafkaClusterIDMismatchWithKubectl(kubectl core.KubectlRunner, _ stri
 	}
 	return false, fmt.Errorf(
 		"kafka cluster ID does not match stored metadata; setup will not delete persistent volume %s/%s automatically. Restore or migrate metadata to match the Kafka volume, or explicitly reset both stores if data loss is acceptable",
-		core.DefaultAnalyticsNamespace, kafkaPVCName,
+		core.ComponentNamespace("kafka"), kafkaPVCName,
 	)
 }
 
 func kafkaLogsClientGo(clients *k8sclient.Clients) (string, error) {
 	for _, previous := range []bool{false, true} {
-		req := clients.Clientset.CoreV1().Pods(core.DefaultAnalyticsNamespace).GetLogs(kafkaPodName, &corev1.PodLogOptions{
+		req := clients.Clientset.CoreV1().Pods(core.ComponentNamespace("kafka")).GetLogs(kafkaPodName, &corev1.PodLogOptions{
 			Container: kafkaPodContainer,
 			Previous:  previous,
 		})
@@ -695,8 +704,8 @@ func kafkaLogsClientGo(clients *k8sclient.Clients) (string, error) {
 
 func kafkaLogsWithKubectl(kubectl core.KubectlRunner) (string, error) {
 	for _, args := range [][]string{
-		{"logs", kafkaPodName, "-n", core.DefaultAnalyticsNamespace, "-c", kafkaPodContainer},
-		{"logs", kafkaPodName, "-n", core.DefaultAnalyticsNamespace, "-c", kafkaPodContainer, "--previous"},
+		{"logs", kafkaPodName, "-n", core.ComponentNamespace("kafka"), "-c", kafkaPodContainer},
+		{"logs", kafkaPodName, "-n", core.ComponentNamespace("kafka"), "-c", kafkaPodContainer, "--previous"},
 	} {
 		out, err := kubectlText(kubectl, args)
 		if err == nil && strings.TrimSpace(out) != "" {
@@ -711,27 +720,27 @@ func isKafkaClusterIDMismatchLog(logs string) bool {
 }
 
 func initializeKafkaTopicsClientGo(images AnalyticsImageSet, imagePullSecretName, platformMode string, timeout time.Duration) error {
-	if err := deleteJobIfExistsClientGo(kafkaTopicInitJob, core.DefaultAnalyticsNamespace); err != nil {
+	if err := deleteJobIfExistsClientGo(kafkaTopicInitJob, core.ComponentNamespace("kafka")); err != nil {
 		return err
 	}
 	if err := applyRenderedManifestClientGo("k8s/05-kafka-topic-init.yaml", images, imagePullSecretName, platformMode); err != nil {
 		return err
 	}
-	if err := waitForJobCompletionClientGo(kafkaTopicInitJob, core.DefaultAnalyticsNamespace, timeout); err != nil {
-		return mcpSentinelDependencyJobFailed(core.DefaultKubectlClient(), err, kafkaTopicInitJob, core.DefaultAnalyticsNamespace, "Kafka topic initialization")
+	if err := waitForJobCompletionClientGo(kafkaTopicInitJob, core.ComponentNamespace("kafka"), timeout); err != nil {
+		return mcpSentinelDependencyJobFailed(core.DefaultKubectlClient(), err, kafkaTopicInitJob, core.ComponentNamespace("kafka"), "Kafka topic initialization")
 	}
 	return nil
 }
 
 func initializeKafkaTopicsWithKubectl(kubectl core.KubectlRunner, images AnalyticsImageSet, imagePullSecretName, platformMode, timeout string) error {
-	if err := deleteJobIfExistsWithKubectl(kubectl, kafkaTopicInitJob, core.DefaultAnalyticsNamespace); err != nil {
+	if err := deleteJobIfExistsWithKubectl(kubectl, kafkaTopicInitJob, core.ComponentNamespace("kafka")); err != nil {
 		return err
 	}
 	if err := applyRenderedManifest(kubectl, "k8s/05-kafka-topic-init.yaml", images, imagePullSecretName, platformMode); err != nil {
 		return err
 	}
-	if err := waitForJobCompletionWithKubectl(kubectl, kafkaTopicInitJob, core.DefaultAnalyticsNamespace, timeout); err != nil {
-		return mcpSentinelDependencyJobFailed(kubectl, err, kafkaTopicInitJob, core.DefaultAnalyticsNamespace, "Kafka topic initialization")
+	if err := waitForJobCompletionWithKubectl(kubectl, kafkaTopicInitJob, core.ComponentNamespace("kafka"), timeout); err != nil {
+		return mcpSentinelDependencyJobFailed(kubectl, err, kafkaTopicInitJob, core.ComponentNamespace("kafka"), "Kafka topic initialization")
 	}
 	return nil
 }
@@ -753,7 +762,7 @@ func trimDiagnosticsString(s string) string {
 	return s[:maxBytes] + "\n... [diagnostics truncated]\n"
 }
 
-// buildAnalyticsRolloutDebugDetail collects kubectl output for mcp-sentinel (describe + get) when --debug is set.
+// buildAnalyticsRolloutDebugDetail collects kubectl output for platform (describe + get) when --debug is set.
 func buildAnalyticsRolloutDebugDetail(kubectl core.KubectlRunner, failed []analyticsFailedRollout) string {
 	var b strings.Builder
 	for _, w := range failed {
@@ -763,7 +772,7 @@ func buildAnalyticsRolloutDebugDetail(kubectl core.KubectlRunner, failed []analy
 		}
 		namespace := w.namespace
 		if namespace == "" {
-			namespace = core.DefaultAnalyticsNamespace
+			namespace = workloadNamespace(w.name)
 		}
 		b.WriteString(fmt.Sprintf("---- describe %s %s in %s\n", w.kind, w.name, namespace))
 		out, err := kubectlText(kubectl, []string{
@@ -776,14 +785,14 @@ func buildAnalyticsRolloutDebugDetail(kubectl core.KubectlRunner, failed []analy
 		b.WriteString(out)
 	}
 	b.WriteString("---- get pods (wide)\n")
-	if out, err := kubectlText(kubectl, []string{"get", "pods", "-n", core.DefaultAnalyticsNamespace, "-o", "wide", "--request-timeout=30s"}); err != nil {
+	if out, err := kubectlText(kubectl, []string{"get", "pods", "-n", core.ComponentNamespace("platform-api"), "-o", "wide", "--request-timeout=30s"}); err != nil {
 		b.WriteString(fmt.Sprintf("error: %v\n", err))
 	} else {
 		b.WriteString(out)
 	}
 	b.WriteString("---- get events (sorted)\n")
 	if out, err := kubectlText(kubectl, []string{
-		"get", "events", "-n", core.DefaultAnalyticsNamespace, "--sort-by", ".lastTimestamp", "--request-timeout=30s",
+		"get", "events", "-n", core.ComponentNamespace("platform-api"), "--sort-by", ".lastTimestamp", "--request-timeout=30s",
 	}); err != nil {
 		b.WriteString(fmt.Sprintf("error: %v\n", err))
 	} else {
@@ -861,7 +870,9 @@ func applyPlatformIngressIfConfigured() error {
 	if host == "" {
 		return nil
 	}
-	manifest := ingressmanifest.RenderPlatformUIIngress(host, core.GetRegistryClusterIssuerName(), core.GetRegistryClusterIssuerName() != "" || core.GetProvidedTLSSecrets(), core.DefaultAnalyticsNamespace)
+	issuerName := core.GetRegistryClusterIssuerName()
+	platformNamespace := core.ComponentNamespace("ui")
+	manifest := ingressmanifest.RenderPlatformUIIngress(host, issuerName, issuerName != "" || core.GetProvidedTLSSecrets(), platformNamespace, core.ComponentNamespace("grafana"))
 	core.Info(fmt.Sprintf("Applying platform UI ingress for %s", host))
 	if err := applyManifestYAML(manifest, "", os.Stdout); err != nil {
 		return core.WrapWithSentinel(core.ErrSetupApplyPlatformUIIngressFailed, err, fmt.Sprintf("apply platform UI ingress: %v", err))
@@ -869,7 +880,14 @@ func applyPlatformIngressIfConfigured() error {
 	if err := removePathBasedSentinelIngresses(); err != nil {
 		return err
 	}
-	return nil
+	if issuerName == "" {
+		return nil
+	}
+	certTimeout := core.GetCertTimeout()
+	if certTimeout < 5*time.Minute {
+		certTimeout = 5 * time.Minute
+	}
+	return waitForCertificateReadyClientGo(ingressmanifest.PlatformTLSSecretName, platformNamespace, certTimeout, nil, "platform certificate")
 }
 
 func removePathBasedSentinelIngresses() error {
@@ -877,10 +895,11 @@ func removePathBasedSentinelIngresses() error {
 	if err != nil {
 		return err
 	}
-	for _, name := range pathBasedSentinelIngressNames {
-		err := clients.Clientset.NetworkingV1().Ingresses(core.DefaultAnalyticsNamespace).Delete(context.Background(), name, metav1.DeleteOptions{})
+	for _, ingress := range pathBasedPlatformIngresses {
+		namespace := core.ComponentNamespace(ingress.component)
+		err := clients.Clientset.NetworkingV1().Ingresses(namespace).Delete(context.Background(), ingress.name, metav1.DeleteOptions{})
 		if err != nil && !apierrors.IsNotFound(err) {
-			return core.WrapWithSentinel(core.ErrSetupRemovePathBasedSentinelIngressesFailed, err, fmt.Sprintf("remove path-based sentinel ingress %s/%s for public platform host: %v", core.DefaultAnalyticsNamespace, name, err))
+			return core.WrapWithSentinel(core.ErrSetupRemovePathBasedSentinelIngressesFailed, err, fmt.Sprintf("remove path-based platform ingress %s/%s for public platform host: %v", namespace, ingress.name, err))
 		}
 	}
 	return nil
@@ -899,7 +918,7 @@ func renderAnalyticsManifest(content string, images AnalyticsImageSet, imagePull
 		replacements[`PLATFORM_MODE: "tenant"`] = fmt.Sprintf(`PLATFORM_MODE: "%s"`, mode)
 	}
 	if strings.TrimSpace(images.Ingest) != "" {
-		replacements["image: mcp-sentinel-ingest:latest"] = "image: " + images.Ingest
+		replacements["image: mcp-ingest:latest"] = "image: " + images.Ingest
 	}
 	if strings.TrimSpace(images.PlatformAPI) != "" {
 		replacements["image: mcp-platform-api:latest"] = "image: " + images.PlatformAPI
@@ -911,10 +930,10 @@ func renderAnalyticsManifest(content string, images AnalyticsImageSet, imagePull
 		replacements["image: mcp-analytics-api:latest"] = "image: " + images.AnalyticsAPI
 	}
 	if strings.TrimSpace(images.Processor) != "" {
-		replacements["image: mcp-sentinel-processor:latest"] = "image: " + images.Processor
+		replacements["image: mcp-processor:latest"] = "image: " + images.Processor
 	}
 	if strings.TrimSpace(images.UI) != "" {
-		replacements["image: mcp-sentinel-ui:latest"] = "image: " + images.UI
+		replacements["image: mcp-ui:latest"] = "image: " + images.UI
 	}
 	if strings.TrimSpace(images.Traefik) != "" {
 		replacements["image: traefik:v3.0"] = "image: " + images.Traefik
@@ -1026,7 +1045,7 @@ func renderAnalyticsConfigManifestWithReaders(content, platformMode string, imag
 		manifest.Data = map[string]string{}
 	}
 
-	existingData, err := readConfigMap(core.DefaultAnalyticsNamespace, "mcp-sentinel-config")
+	existingData, err := readConfigMap(core.ComponentNamespace("platform-api"), platforminventory.SharedConfigName)
 	if err != nil {
 		return "", err
 	}
@@ -1108,11 +1127,23 @@ func renderAnalyticsConfigManifestWithReaders(content, platformMode string, imag
 		manifest.Data["PLATFORM_MODE"] = mode
 	}
 
-	rendered, err := yaml.Marshal(manifest)
-	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrSetupEncodeAnalyticsConfigManifestFailed, err, fmt.Sprintf("encode analytics config manifest: %v", err))
+	var out bytes.Buffer
+	for i, namespace := range publishedWorkloadNamespaces() {
+		if manifest.Metadata == nil {
+			manifest.Metadata = map[string]any{}
+		}
+		manifest.Metadata["namespace"] = namespace
+		manifest.Metadata["name"] = platforminventory.SharedConfigName
+		rendered, err := yaml.Marshal(manifest)
+		if err != nil {
+			return "", core.WrapWithSentinel(core.ErrSetupEncodeAnalyticsConfigManifestFailed, err, fmt.Sprintf("encode analytics config manifest: %v", err))
+		}
+		if i > 0 {
+			out.WriteString("---\n")
+		}
+		out.Write(rendered)
 	}
-	return string(rendered), nil
+	return out.String(), nil
 }
 
 func setupAnalyticsConfigEnvValue(key string) string {
@@ -1216,62 +1247,110 @@ func renderAnalyticsSecretManifestClientGo() (string, error) {
 
 type analyticsSecretValueReader func(namespace, name, key string) (string, error)
 
+func ownedCredential(key string) (namespace, name string, err error) {
+	namespace, name, ok := platforminventory.CredentialPlacement(key)
+	if !ok {
+		return "", "", fmt.Errorf("credential %q has no owner", key)
+	}
+	return namespace, name, nil
+}
+
 func renderAnalyticsSecretManifestWithReader(readSecret analyticsSecretValueReader) (string, error) {
-	apiKeys, err := existingSecretDataValueOrRandomWithReader(readSecret, core.DefaultAnalyticsNamespace, "mcp-sentinel-secrets", "API_KEYS", 16)
+	apiNamespace, apiSecret, err := ownedCredential("API_KEYS")
+	if err != nil {
+		return "", err
+	}
+	apiKeys, err := existingSecretDataValueOrRandomWithReader(readSecret, apiNamespace, apiSecret, "API_KEYS", 16)
 	if err != nil {
 		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
-	ingestAPIKeys, err := existingSecretDataValueOrRandomWithReader(readSecret, core.DefaultAnalyticsNamespace, "mcp-sentinel-secrets", "INGEST_API_KEYS", 16)
+	ingestNamespace, ingestSecret, err := ownedCredential("INGEST_API_KEYS")
+	if err != nil {
+		return "", err
+	}
+	ingestAPIKeys, err := existingSecretDataValueOrRandomWithReader(readSecret, ingestNamespace, ingestSecret, "INGEST_API_KEYS", 16)
 	if err != nil {
 		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
-	uiAPIKey, err := existingSecretDataValueOrRandomWithReader(readSecret, core.DefaultAnalyticsNamespace, "mcp-sentinel-secrets", "UI_API_KEY", 16)
+	uiNamespace, uiSecret, err := ownedCredential("UI_API_KEY")
+	if err != nil {
+		return "", err
+	}
+	uiAPIKey, err := existingSecretDataValueOrRandomWithReader(readSecret, uiNamespace, uiSecret, "UI_API_KEY", 16)
 	if err != nil {
 		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
 	apiKeys = ensureCSVIncludes(apiKeys, uiAPIKey)
-	adminAPIKeys, err := readSecret(core.DefaultAnalyticsNamespace, "mcp-sentinel-secrets", "ADMIN_API_KEYS")
+	adminNamespace, adminSecret, err := ownedCredential("ADMIN_API_KEYS")
+	if err != nil {
+		return "", err
+	}
+	adminAPIKeys, err := readSecret(adminNamespace, adminSecret, "ADMIN_API_KEYS")
 	if err != nil {
 		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
 	adminAPIKeys = ensureCSVIncludes(adminAPIKeys, uiAPIKey)
-	grafanaPassword, err := existingSecretDataValueOrRandomWithReader(readSecret, core.DefaultAnalyticsNamespace, "mcp-sentinel-secrets", "GRAFANA_ADMIN_PASSWORD", 16)
+	grafanaNamespace, grafanaSecret, err := ownedCredential("GRAFANA_ADMIN_PASSWORD")
+	if err != nil {
+		return "", err
+	}
+	grafanaPassword, err := existingSecretDataValueOrRandomWithReader(readSecret, grafanaNamespace, grafanaSecret, "GRAFANA_ADMIN_PASSWORD", 16)
 	if err != nil {
 		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
-	postgresUser, err := existingSecretDataValueOrDefaultWithReader(readSecret, core.DefaultAnalyticsNamespace, "mcp-sentinel-secrets", "POSTGRES_USER", "mcp_runtime")
+	postgresNamespace, postgresSecret, err := ownedCredential("POSTGRES_USER")
+	if err != nil {
+		return "", err
+	}
+	postgresUser, err := existingSecretDataValueOrDefaultWithReader(readSecret, postgresNamespace, postgresSecret, "POSTGRES_USER", "mcp_runtime")
 	if err != nil {
 		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
-	postgresPassword, err := existingSecretDataValueOrRandomWithReader(readSecret, core.DefaultAnalyticsNamespace, "mcp-sentinel-secrets", "POSTGRES_PASSWORD", 16)
+	postgresPassword, err := existingSecretDataValueOrRandomWithReader(readSecret, postgresNamespace, postgresSecret, "POSTGRES_PASSWORD", 16)
 	if err != nil {
 		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
-	postgresDB, err := existingSecretDataValueOrDefaultWithReader(readSecret, core.DefaultAnalyticsNamespace, "mcp-sentinel-secrets", "POSTGRES_DB", "mcp_runtime")
+	postgresDB, err := existingSecretDataValueOrDefaultWithReader(readSecret, postgresNamespace, postgresSecret, "POSTGRES_DB", "mcp_runtime")
 	if err != nil {
 		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
-	postgresDSN, err := readSecret(core.DefaultAnalyticsNamespace, "mcp-sentinel-secrets", "POSTGRES_DSN")
+	dsnNamespace, dsnSecret, err := ownedCredential("POSTGRES_DSN")
+	if err != nil {
+		return "", err
+	}
+	postgresDSN, err := readSecret(dsnNamespace, dsnSecret, "POSTGRES_DSN")
 	if err != nil {
 		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
 	if postgresDSN == "" {
 		postgresDSN = fmt.Sprintf(
-			"postgres://%s@mcp-sentinel-postgres.%s.svc.cluster.local:5432/%s?sslmode=disable",
+			"postgres://%s@mcp-postgres.%s.svc.cluster.local:5432/%s?sslmode=disable",
 			url.UserPassword(postgresUser, postgresPassword).String(),
-			core.DefaultAnalyticsNamespace,
+			core.ComponentNamespace("postgres"),
 			postgresDB,
 		)
 	}
-	jwtSecret, err := existingSecretDataValueOrRandomWithReader(readSecret, core.DefaultAnalyticsNamespace, "mcp-sentinel-secrets", "JWT_SECRET", 32)
+	jwtNamespace, jwtSecretName, err := ownedCredential("JWT_SECRET")
+	if err != nil {
+		return "", err
+	}
+	jwtSecret, err := existingSecretDataValueOrRandomWithReader(readSecret, jwtNamespace, jwtSecretName, "JWT_SECRET", 32)
 	if err != nil {
 		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
-	internalAuthToken, err := existingSecretDataValueOrRandomWithReader(readSecret, core.DefaultAnalyticsNamespace, "mcp-sentinel-secrets", "INTERNAL_AUTH_TOKEN", 32)
+	tokenNamespace, tokenSecret, err := ownedCredential("INTERNAL_AUTH_TOKEN")
+	if err != nil {
+		return "", err
+	}
+	internalAuthToken, err := existingSecretDataValueOrRandomWithReader(readSecret, tokenNamespace, tokenSecret, "INTERNAL_AUTH_TOKEN", 32)
 	if err != nil {
 		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
-	oauthPrivateKey, err := readSecret(core.DefaultAnalyticsNamespace, "mcp-sentinel-secrets", "OAUTH_PRIVATE_KEY")
+	oauthNamespace, oauthSecret, err := ownedCredential("OAUTH_PRIVATE_KEY")
+	if err != nil {
+		return "", err
+	}
+	oauthPrivateKey, err := readSecret(oauthNamespace, oauthSecret, "OAUTH_PRIVATE_KEY")
 	if err != nil {
 		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
@@ -1284,15 +1363,15 @@ func renderAnalyticsSecretManifestWithReader(readSecret analyticsSecretValueRead
 			return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("generate OAuth signing key: %v", err))
 		}
 	}
-	platformAdminEmail, err := readSecret(core.DefaultAnalyticsNamespace, "mcp-sentinel-secrets", "PLATFORM_ADMIN_EMAIL")
+	platformAdminEmail, err := readSecret(apiNamespace, apiSecret, "PLATFORM_ADMIN_EMAIL")
 	if err != nil {
 		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
-	platformAdminPassword, err := readSecret(core.DefaultAnalyticsNamespace, "mcp-sentinel-secrets", "PLATFORM_ADMIN_PASSWORD")
+	platformAdminPassword, err := readSecret(apiNamespace, apiSecret, "PLATFORM_ADMIN_PASSWORD")
 	if err != nil {
 		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
-	adminUsers, err := readSecret(core.DefaultAnalyticsNamespace, "mcp-sentinel-secrets", "ADMIN_USERS")
+	adminUsers, err := readSecret(apiNamespace, apiSecret, "ADMIN_USERS")
 	if err != nil {
 		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
@@ -1317,19 +1396,19 @@ func renderAnalyticsSecretManifestWithReader(readSecret analyticsSecretValueRead
 	}
 	adminUsers = ensureCSVIncludesValues(adminUsers, adminUserCandidates...)
 	platformDevLoginEnabled := ""
-	platformDevUserEmail, err := readSecret(core.DefaultAnalyticsNamespace, "mcp-sentinel-secrets", "PLATFORM_DEV_USER_EMAIL")
+	platformDevUserEmail, err := readSecret(apiNamespace, apiSecret, "PLATFORM_DEV_USER_EMAIL")
 	if err != nil {
 		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
-	platformDevUserPassword, err := readSecret(core.DefaultAnalyticsNamespace, "mcp-sentinel-secrets", "PLATFORM_DEV_USER_PASSWORD")
+	platformDevUserPassword, err := readSecret(apiNamespace, apiSecret, "PLATFORM_DEV_USER_PASSWORD")
 	if err != nil {
 		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
-	platformDevAdminEmail, err := readSecret(core.DefaultAnalyticsNamespace, "mcp-sentinel-secrets", "PLATFORM_DEV_ADMIN_EMAIL")
+	platformDevAdminEmail, err := readSecret(apiNamespace, apiSecret, "PLATFORM_DEV_ADMIN_EMAIL")
 	if err != nil {
 		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
-	platformDevAdminPassword, err := readSecret(core.DefaultAnalyticsNamespace, "mcp-sentinel-secrets", "PLATFORM_DEV_ADMIN_PASSWORD")
+	platformDevAdminPassword, err := readSecret(apiNamespace, apiSecret, "PLATFORM_DEV_ADMIN_PASSWORD")
 	if err != nil {
 		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
@@ -1372,6 +1451,23 @@ func renderAnalyticsSecretManifestWithReader(readSecret analyticsSecretValueRead
 		"GRAFANA_ADMIN_USER":      "admin",
 		"GRAFANA_ADMIN_PASSWORD":  grafanaPassword,
 	}
+	sessionNamespace, sessionSecret, err := ownedCredential("UI_SESSION_ENCRYPTION_KEY")
+	if err != nil {
+		return "", err
+	}
+	sessionKey, err := existingSecretDataValueOrRandomWithReader(readSecret, sessionNamespace, sessionSecret, "UI_SESSION_ENCRYPTION_KEY", 32)
+	if err != nil {
+		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
+	}
+	sessionURL, err := readSecret(sessionNamespace, sessionSecret, "UI_SESSION_DATABASE_URL")
+	if err != nil {
+		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
+	}
+	if sessionURL == "" {
+		sessionURL = postgresDSN
+	}
+	stringData["UI_SESSION_ENCRYPTION_KEY"] = sessionKey
+	stringData["UI_SESSION_DATABASE_URL"] = sessionURL
 	if platformDevLoginEnabled != "" ||
 		platformDevUserEmail != "" ||
 		platformDevUserPassword != "" ||
@@ -1387,8 +1483,8 @@ func renderAnalyticsSecretManifestWithReader(readSecret analyticsSecretValueRead
 		"apiVersion": "v1",
 		"kind":       "Secret",
 		"metadata": map[string]string{
-			"name":      "mcp-sentinel-secrets",
-			"namespace": core.DefaultAnalyticsNamespace,
+			"name":      "mcp-credential-values",
+			"namespace": core.ComponentNamespace("platform-api"),
 		},
 		"type":       "Opaque",
 		"stringData": stringData,
@@ -1453,6 +1549,10 @@ func setupSecretEnvValue(candidates ...string) string {
 	return ""
 }
 
+func publishedWorkloadNamespaces() []string {
+	return []string{core.ComponentNamespace("platform-api"), core.ComponentNamespace("analytics-api")}
+}
+
 func ensureAnalyticsImagePullSecret(kubectl core.KubectlRunner, images AnalyticsImageSet) (string, error) {
 	if explicit := platformImagePullSecretOverride(); explicit != "" {
 		return explicit, nil
@@ -1461,20 +1561,26 @@ func ensureAnalyticsImagePullSecret(kubectl core.KubectlRunner, images Analytics
 	if err != nil {
 		return "", err
 	}
-	if extRegistry == nil || extRegistry.URL == "" || (extRegistry.Username == "" && extRegistry.Password == "") {
-		return ensureBundledPublicRegistryPullSecret(
-			kubectl,
-			core.DefaultAnalyticsNamespace,
-			analyticsImagePullSecretCandidates(images),
-			func(namespace, name, key string) (string, error) {
-				return existingSecretDataValue(kubectl, namespace, name, key)
-			},
-		)
+	secretName := ""
+	for _, namespace := range publishedWorkloadNamespaces() {
+		if extRegistry == nil || extRegistry.URL == "" || (extRegistry.Username == "" && extRegistry.Password == "") {
+			secretName, err = ensureBundledPublicRegistryPullSecret(
+				kubectl,
+				namespace,
+				analyticsImagePullSecretCandidates(images),
+				func(namespace, name, key string) (string, error) {
+					return existingSecretDataValue(kubectl, namespace, name, key)
+				},
+			)
+		} else {
+			err = ensureImagePullSecretWithKubectl(kubectl, namespace, defaultRegistrySecretName, extRegistry.URL, extRegistry.Username, extRegistry.Password)
+			secretName = defaultRegistrySecretName
+		}
+		if err != nil {
+			return "", err
+		}
 	}
-	if err := ensureImagePullSecretWithKubectl(kubectl, core.DefaultAnalyticsNamespace, defaultRegistrySecretName, extRegistry.URL, extRegistry.Username, extRegistry.Password); err != nil {
-		return "", err
-	}
-	return defaultRegistrySecretName, nil
+	return secretName, nil
 }
 
 func platformImagePullSecretOverride() string {
@@ -1489,17 +1595,24 @@ func ensureAnalyticsImagePullSecretClientGo(images AnalyticsImageSet) (string, e
 	if err != nil {
 		return "", err
 	}
-	if extRegistry == nil || extRegistry.URL == "" || (extRegistry.Username == "" && extRegistry.Password == "") {
-		return ensureBundledPublicRegistryPullSecretClientGo(core.DefaultAnalyticsNamespace, analyticsImagePullSecretCandidates(images))
+	secretName := ""
+	for _, namespace := range publishedWorkloadNamespaces() {
+		if extRegistry == nil || extRegistry.URL == "" || (extRegistry.Username == "" && extRegistry.Password == "") {
+			secretName, err = ensureBundledPublicRegistryPullSecretClientGo(namespace, analyticsImagePullSecretCandidates(images))
+		} else {
+			var clients *k8sclient.Clients
+			clients, err = platformKubernetesClients()
+			if err != nil {
+				return "", err
+			}
+			err = k8sclient.UpsertDockerConfigSecret(context.Background(), clients, namespace, defaultRegistrySecretName, extRegistry.URL, extRegistry.Username, extRegistry.Password)
+			secretName = defaultRegistrySecretName
+		}
+		if err != nil {
+			return "", err
+		}
 	}
-	clients, err := platformKubernetesClients()
-	if err != nil {
-		return "", err
-	}
-	if err := k8sclient.UpsertDockerConfigSecret(context.Background(), clients, core.DefaultAnalyticsNamespace, defaultRegistrySecretName, extRegistry.URL, extRegistry.Username, extRegistry.Password); err != nil {
-		return "", err
-	}
-	return defaultRegistrySecretName, nil
+	return secretName, nil
 }
 
 func ensureOperatorPublicRegistryPullSecret(kubectl core.KubectlRunner, images AnalyticsImageSet) error {
@@ -1536,12 +1649,16 @@ func ensureBundledPublicRegistryPullSecret(kubectl core.KubectlRunner, namespace
 	if registryHost == "" {
 		return "", nil
 	}
-	password, err := readSecret(core.DefaultAnalyticsNamespace, "mcp-sentinel-secrets", "UI_API_KEY")
+	uiNamespace, uiSecret, err := ownedCredential("UI_API_KEY")
+	if err != nil {
+		return "", err
+	}
+	password, err := readSecret(uiNamespace, uiSecret, "UI_API_KEY")
 	if err != nil {
 		return "", err
 	}
 	if strings.TrimSpace(password) == "" {
-		return "", fmt.Errorf("cannot create pull secret for public registry %q: mcp-sentinel-secrets UI_API_KEY is empty", registryHost)
+		return "", fmt.Errorf("cannot create pull secret for public registry %q: %s UI_API_KEY is empty", registryHost, uiSecret)
 	}
 	if err := ensureImagePullSecretWithKubectl(kubectl, namespace, defaultRegistrySecretName, registryHost, "platform-service", password); err != nil {
 		return "", err
@@ -1554,12 +1671,16 @@ func ensureBundledPublicRegistryPullSecretClientGo(namespace string, images []st
 	if registryHost == "" {
 		return "", nil
 	}
-	password, err := existingSecretDataValueClientGo(core.DefaultAnalyticsNamespace, "mcp-sentinel-secrets", "UI_API_KEY")
+	uiNamespace, uiSecret, err := ownedCredential("UI_API_KEY")
+	if err != nil {
+		return "", err
+	}
+	password, err := existingSecretDataValueClientGo(uiNamespace, uiSecret, "UI_API_KEY")
 	if err != nil {
 		return "", err
 	}
 	if strings.TrimSpace(password) == "" {
-		return "", fmt.Errorf("cannot create pull secret for public registry %q: mcp-sentinel-secrets UI_API_KEY is empty", registryHost)
+		return "", fmt.Errorf("cannot create pull secret for public registry %q: %s UI_API_KEY is empty", registryHost, uiSecret)
 	}
 	clients, err := platformKubernetesClients()
 	if err != nil {
@@ -1909,7 +2030,7 @@ func randomHex(size int) (string, error) {
 }
 
 // syncPostgresPasswordClientGo runs ALTER USER on the Postgres pod so that the
-// database password matches whatever was just written to mcp-sentinel-secrets.
+// database password matches whatever was just written to owner credential Secrets.
 // This is needed because Kubernetes env vars snapshotted at pod start are NOT
 // automatically refreshed when a Secret is updated, and the StatefulSet restart
 // that would re-read POSTGRES_PASSWORD may differ from what the already-running
@@ -1922,12 +2043,16 @@ func syncPostgresPasswordClientGo() error {
 	ctx := context.Background()
 
 	// Only sync if the Postgres pod is actually running.
-	podName, err := k8sclient.GetFirstReadyPodName(ctx, clients, core.DefaultAnalyticsNamespace, "app=mcp-sentinel-postgres")
+	podName, err := k8sclient.GetFirstReadyPodName(ctx, clients, core.ComponentNamespace("postgres"), "app=mcp-postgres")
 	if err != nil || podName == "" {
 		return nil // not running yet; fresh install will use the correct password
 	}
 
-	password, err := existingSecretDataValueClientGo(core.DefaultAnalyticsNamespace, "mcp-sentinel-secrets", "POSTGRES_PASSWORD")
+	postgresNamespace, postgresSecret, err := ownedCredential("POSTGRES_PASSWORD")
+	if err != nil {
+		return err
+	}
+	password, err := existingSecretDataValueClientGo(postgresNamespace, postgresSecret, "POSTGRES_PASSWORD")
 	if err != nil || strings.TrimSpace(password) == "" {
 		return err
 	}
@@ -1937,7 +2062,7 @@ func syncPostgresPasswordClientGo() error {
 	sql := fmt.Sprintf("ALTER USER mcp_runtime PASSWORD '%s';", strings.ReplaceAll(password, "'", "''"))
 	kubectl := core.DefaultKubectlClient()
 	cmd, err := kubectl.CommandArgs([]string{
-		"exec", "-n", core.DefaultAnalyticsNamespace, podName, "--",
+		"exec", "-n", core.ComponentNamespace("postgres"), podName, "--",
 		"sh", "-c", fmt.Sprintf("PGPASSWORD=%s psql -h localhost -U mcp_runtime -c %q",
 			shellQuote(password), sql),
 	})
@@ -1988,7 +2113,7 @@ func reconcileKafkaStatefulSetForKRaftUpgradeClientGo() error {
 	if err != nil {
 		return err
 	}
-	namespace := core.DefaultAnalyticsNamespace
+	namespace := core.ComponentNamespace("kafka")
 	statefulSets := clients.Clientset.AppsV1().StatefulSets(namespace)
 	current, err := statefulSets.Get(context.Background(), kafkaStatefulSetName, metav1.GetOptions{})
 	if err != nil {
@@ -2009,7 +2134,7 @@ func reconcileKafkaStatefulSetForKRaftUpgradeClientGo() error {
 }
 
 func reconcileKafkaStatefulSetForKRaftUpgradeWithKubectl(kubectl core.KubectlRunner) error {
-	namespace := core.DefaultAnalyticsNamespace
+	namespace := core.ComponentNamespace("kafka")
 	output, err := kubectlText(kubectl, []string{
 		"get", "statefulset", kafkaStatefulSetName, "-n", namespace, "-o", "json",
 	})
@@ -2095,7 +2220,7 @@ func deferPlatformAdmissionManifest(content string) (string, error) {
 			return "", err
 		}
 		metadata, _ := doc["metadata"].(map[string]any)
-		if doc["kind"] == "Namespace" && metadata["name"] == core.DefaultAnalyticsNamespace {
+		if doc["kind"] == "Namespace" && metadata["name"] == core.ComponentNamespace("platform-api") {
 			continue
 		}
 		if len(doc) > 0 {
@@ -2120,7 +2245,7 @@ func finishCollectorAdmissionCutoverClientGo() error {
 	// legacy binding untouched. Refuse to remove an unrelated custom binding.
 	binding, err := clients.Clientset.RbacV1().ClusterRoleBindings().Get(ctx, "promtail", metav1.GetOptions{})
 	if err == nil {
-		if binding.RoleRef.Kind != "ClusterRole" || binding.RoleRef.Name != "promtail" || len(binding.Subjects) != 1 || binding.Subjects[0].Kind != "ServiceAccount" || binding.Subjects[0].Name != "promtail" || binding.Subjects[0].Namespace != core.DefaultAnalyticsNamespace {
+		if binding.RoleRef.Kind != "ClusterRole" || binding.RoleRef.Name != "promtail" || len(binding.Subjects) != 1 || binding.Subjects[0].Kind != "ServiceAccount" || binding.Subjects[0].Name != "promtail" || binding.Subjects[0].Namespace != core.ComponentNamespace("promtail") {
 			return fmt.Errorf("legacy promtail ClusterRoleBinding has unexpected ownership; refusing cleanup")
 		}
 		if err := clients.Clientset.RbacV1().ClusterRoleBindings().Delete(ctx, "promtail", metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
@@ -2129,7 +2254,7 @@ func finishCollectorAdmissionCutoverClientGo() error {
 	} else if !apierrors.IsNotFound(err) {
 		return err
 	}
-	return k8sclient.EnsureNamespace(ctx, clients, core.DefaultAnalyticsNamespace, map[string]string{
+	return k8sclient.EnsureNamespace(ctx, clients, core.ComponentNamespace("platform-api"), map[string]string{
 		"pod-security.kubernetes.io/enforce": "restricted", "pod-security.kubernetes.io/audit": "restricted", "pod-security.kubernetes.io/warn": "restricted",
 	})
 }
@@ -2142,9 +2267,9 @@ func ensurePlatformNamespaceBeforeIngress() error {
 		return err
 	}
 	ctx := context.Background()
-	_, err = clients.Clientset.CoreV1().Namespaces().Get(ctx, core.DefaultAnalyticsNamespace, metav1.GetOptions{})
+	_, err = clients.Clientset.CoreV1().Namespaces().Get(ctx, core.ComponentNamespace("platform-api"), metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
-		return k8sclient.EnsureNamespace(ctx, clients, core.DefaultAnalyticsNamespace, map[string]string{
+		return k8sclient.EnsureNamespace(ctx, clients, core.ComponentNamespace("platform-api"), map[string]string{
 			"pod-security.kubernetes.io/enforce": "restricted", "pod-security.kubernetes.io/audit": "restricted", "pod-security.kubernetes.io/warn": "restricted",
 		})
 	}

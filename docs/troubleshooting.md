@@ -137,7 +137,7 @@ credentials. This happens after a `mcp-runtime setup` rerun that rotates API key
 kubectl get secret mcp-runtime-registry-pull -n mcp-team-<slug>
 
 # Re-run setup or re-create the secret manually:
-ADMIN_KEY=$(kubectl get secret mcp-sentinel-secrets -n mcp-sentinel \
+ADMIN_KEY=$(kubectl get secret mcp-ui-credentials -n mcp-platform \
   -o jsonpath='{.data.UI_API_KEY}' | base64 -d)
 
 kubectl create secret docker-registry mcp-runtime-registry-pull \
@@ -166,17 +166,17 @@ kubectl create secret docker-registry mcp-runtime-registry-pull \
 
 3. Check Kafka has the `mcp.events` topic:
    ```bash
-   kubectl exec -n mcp-sentinel kafka-0 -- \
+   kubectl exec -n mcp-observability kafka-0 -- \
      kafka-topics --list --bootstrap-server localhost:9092
    ```
    If `mcp.events` is missing, inspect `job/kafka-topic-init` and rerun `setup`.
 
 4. Check the three-broker KRaft quorum and replicas:
    ```bash
-   kubectl get pods -n mcp-sentinel -l app=kafka -o wide
-   kubectl exec -n mcp-sentinel kafka-0 -- \
+   kubectl get pods -n mcp-platform -l app=kafka -o wide
+   kubectl exec -n mcp-observability kafka-0 -- \
      kafka-metadata-quorum --bootstrap-server localhost:9092 describe --status
-   kubectl exec -n mcp-sentinel kafka-0 -- \
+   kubectl exec -n mcp-observability kafka-0 -- \
      kafka-topics --bootstrap-server localhost:9092 --describe --topic mcp.events
    ```
    Healthy output shows three Kafka pods, three `mcp.events` partitions, replica
@@ -194,8 +194,9 @@ setup run.
 
 ```bash
 # Restart to pick up current keys
-kubectl rollout restart deployment/mcp-platform-api deployment/mcp-runtime-api deployment/mcp-analytics-api -n mcp-sentinel
-kubectl rollout status deployment/mcp-platform-api -n mcp-sentinel --timeout=120s
+kubectl rollout restart deployment/mcp-platform-api deployment/mcp-runtime-api -n mcp-platform
+kubectl rollout restart deployment/mcp-analytics-api -n mcp-observability
+kubectl rollout status deployment/mcp-platform-api -n mcp-platform --timeout=120s
 ```
 
 ## Platform and cluster health
@@ -226,15 +227,15 @@ kubectl delete certificaterequest -n registry --all
 # Re-run setup
 ```
 
-### Sentinel stack stuck after node pressure or eviction
+### Platform stack stuck after node pressure or eviction
 
-After `DiskPressure`, memory pressure, or a node restart, `mcp-sentinel` pods can
+After `DiskPressure`, memory pressure, or a node restart, platform and telemetry pods can
 be evicted and recreated. The stack is built to converge on its own once the
 node recovers:
 
 - Stateful stores (Kafka, ClickHouse, Postgres) run with the
-  `mcp-sentinel-data` PriorityClass and request-serving services with
-  `mcp-sentinel-services`, so data stores are evicted last.
+  `mcp-shared-data` PriorityClass and request-serving services with
+  `mcp-shared-services`, so data stores are evicted last.
 - Kafka runs in KRaft mode with a fixed cluster ID and a persistent volume per
   broker, so a broker restart reuses its own metadata. StatefulSet PVCs are
   retained on delete and scale-down.
@@ -252,7 +253,7 @@ mcp-runtime setup                   # single repair action: re-applies manifests
 ```
 
 `cluster doctor` flags `Failed` (Evicted, Error, ContainerStatusUnknown) pods
-and orphaned `Completed` pods in `mcp-sentinel`; `mcp-runtime setup` removes
+and orphaned `Completed` pods in `mcp-platform`; `mcp-runtime setup` removes
 them before re-applying the stack. Pods owned by a Job are left alone.
 
 If Kafka logs `InconsistentClusterIdException`, setup refuses to delete the

@@ -1074,8 +1074,8 @@ start_mcp_ingress_header_proxies() {
 
 ensure_ui_port_forward() {
   if [[ -z "${UI_SERVICE_PORT_FORWARD_PID:-}" ]]; then
-    echo "[port-forward] exposing mcp-sentinel-ui on localhost:${UI_SERVICE_PORT}"
-    port_forward_bg mcp-sentinel mcp-sentinel-ui "${UI_SERVICE_PORT}" 8082 "${WORKDIR}/ui-port-forward.log"
+    echo "[port-forward] exposing mcp-ui on localhost:${UI_SERVICE_PORT}"
+    port_forward_bg mcp-platform mcp-ui "${UI_SERVICE_PORT}" 8082 "${WORKDIR}/ui-port-forward.log"
     UI_SERVICE_PORT_FORWARD_PID="${LAST_MANAGED_PID}"
   fi
   wait_port "${UI_SERVICE_PORT}"
@@ -1084,7 +1084,7 @@ ensure_ui_port_forward() {
 ensure_api_port_forward() {
   if [[ -z "${API_SERVICE_PORT_FORWARD_PID:-}" ]]; then
     echo "[port-forward] exposing mcp-platform-api on localhost:${API_SERVICE_PORT}"
-    port_forward_bg mcp-sentinel mcp-platform-api "${API_SERVICE_PORT}" 8080 "${WORKDIR}/api-port-forward.log"
+    port_forward_bg mcp-platform mcp-platform-api "${API_SERVICE_PORT}" 8080 "${WORKDIR}/api-port-forward.log"
     API_SERVICE_PORT_FORWARD_PID="${LAST_MANAGED_PID}"
   fi
   wait_port "${API_SERVICE_PORT}"
@@ -1092,8 +1092,8 @@ ensure_api_port_forward() {
 
 ensure_gateway_port_forward() {
   if [[ -z "${SENTINEL_PORT_FORWARD_PID:-}" ]]; then
-    echo "[port-forward] exposing mcp-sentinel-gateway on localhost:${SENTINEL_PORT}"
-    port_forward_bg mcp-sentinel mcp-sentinel-gateway "${SENTINEL_PORT}" 8083 "${WORKDIR}/sentinel-port-forward.log"
+    echo "[port-forward] exposing mcp-platform-gateway on localhost:${SENTINEL_PORT}"
+    port_forward_bg mcp-platform mcp-platform-gateway "${SENTINEL_PORT}" 8083 "${WORKDIR}/sentinel-port-forward.log"
     SENTINEL_PORT_FORWARD_PID="${LAST_MANAGED_PID}"
   fi
   wait_port "${SENTINEL_PORT}"
@@ -3332,13 +3332,13 @@ prune_kind_platform_images() {
   echo "[kind] removing cached platform image tags before setup refreshes the internal registry"
   for repository in \
     mcp-runtime-operator \
-    mcp-sentinel-mcp-gateway \
-    mcp-sentinel-ingest \
+    mcp-gateway \
+    mcp-ingest \
     mcp-platform-api \
     mcp-runtime-api \
     mcp-analytics-api \
-    mcp-sentinel-processor \
-    mcp-sentinel-ui; do
+    mcp-processor \
+    mcp-ui; do
     prune_kind_image "registry.registry.svc.cluster.local:5000/${repository}:latest"
   done
 }
@@ -3347,14 +3347,16 @@ restart_kind_platform_deployments() {
   echo "[kind] restarting platform deployments to pull the freshly published image tags"
   kubectl rollout restart deployment/mcp-runtime-operator-controller-manager -n mcp-runtime
   kubectl rollout restart \
-    deployment/mcp-sentinel-gateway \
-    deployment/mcp-sentinel-ingest \
+    deployment/mcp-platform-gateway \
     deployment/mcp-platform-api \
     deployment/mcp-runtime-api \
+    deployment/mcp-ui \
+    -n mcp-platform
+  kubectl rollout restart \
+    deployment/mcp-ingest \
     deployment/mcp-analytics-api \
-    deployment/mcp-sentinel-processor \
-    deployment/mcp-sentinel-ui \
-    -n mcp-sentinel
+    deployment/mcp-processor \
+    -n mcp-observability
 }
 
 run_logged_stage() {
@@ -3546,10 +3548,10 @@ image_build_label() {
     docker.io/library/mcp-runtime-registry:*)
       echo "build test registry image (${image})"
       ;;
-    docker.io/library/mcp-sentinel-mcp-gateway:*)
+    docker.io/library/mcp-gateway:*)
       echo "build Sentinel MCP gateway image (${image})"
       ;;
-    docker.io/library/mcp-sentinel-ingest:*)
+    docker.io/library/mcp-ingest:*)
       echo "build Sentinel ingest image (${image})"
       ;;
     docker.io/library/mcp-platform-api:*)
@@ -3561,10 +3563,10 @@ image_build_label() {
     docker.io/library/mcp-analytics-api:*)
       echo "build analytics-api image (${image})"
       ;;
-    docker.io/library/mcp-sentinel-processor:*)
+    docker.io/library/mcp-processor:*)
       echo "build Sentinel processor image (${image})"
       ;;
-    docker.io/library/mcp-sentinel-ui:*)
+    docker.io/library/mcp-ui:*)
       echo "build Sentinel UI image (${image})"
       ;;
     *)
@@ -3646,12 +3648,12 @@ wait_core_platform_rollouts() {
   run_logged_stage "verify registry rollout" rollout_status_with_logs registry deploy registry 180s
   run_logged_stage "verify operator rollout" rollout_status_with_logs mcp-runtime deploy mcp-runtime-operator-controller-manager 180s
   run_logged_stage "verify traefik rollout" rollout_status_with_logs traefik deploy traefik 180s
-  run_logged_stage "verify platform-api rollout" rollout_status_with_logs mcp-sentinel deploy mcp-platform-api 180s
-  run_logged_stage "verify runtime-api rollout" rollout_status_with_logs mcp-sentinel deploy mcp-runtime-api 180s
-  run_logged_stage "verify analytics-api rollout" rollout_status_with_logs mcp-sentinel deploy mcp-analytics-api 180s
-  run_logged_stage "verify sentinel gateway rollout" rollout_status_with_logs mcp-sentinel deploy mcp-sentinel-gateway 180s
-  run_logged_stage "verify tempo rollout" rollout_status_with_logs mcp-sentinel statefulset tempo 180s
-  run_logged_stage "verify loki rollout" rollout_status_with_logs mcp-sentinel statefulset loki 300s
+  run_logged_stage "verify platform-api rollout" rollout_status_with_logs mcp-platform deploy mcp-platform-api 180s
+  run_logged_stage "verify runtime-api rollout" rollout_status_with_logs mcp-platform deploy mcp-runtime-api 180s
+  run_logged_stage "verify analytics-api rollout" rollout_status_with_logs mcp-observability deploy mcp-analytics-api 180s
+  run_logged_stage "verify sentinel gateway rollout" rollout_status_with_logs mcp-platform deploy mcp-platform-gateway 180s
+  run_logged_stage "verify tempo rollout" rollout_status_with_logs mcp-observability statefulset tempo 180s
+  run_logged_stage "verify loki rollout" rollout_status_with_logs mcp-observability statefulset loki 300s
   run_logged_stage "verify promtail rollout" rollout_status_with_logs mcp-log-collector daemonset promtail 180s
 }
 
@@ -3719,20 +3721,20 @@ platform_cache_ready() {
   if ! cache_mode_enabled; then
     return 1
   fi
-  kubectl get namespace registry mcp-runtime mcp-sentinel mcp-servers mcp-servers-org mcp-servers-public >/dev/null 2>&1 || return 1
+  kubectl get namespace registry mcp-runtime mcp-platform mcp-observability mcp-log-collector mcp-servers mcp-servers-org mcp-servers-public >/dev/null 2>&1 || return 1
   kubectl rollout status deploy/registry -n registry --timeout=5s >/dev/null 2>&1 || return 1
   kubectl rollout status deploy/mcp-runtime-operator-controller-manager -n mcp-runtime --timeout=5s >/dev/null 2>&1 || return 1
   kubectl rollout status deploy/traefik -n traefik --timeout=5s >/dev/null 2>&1 || return 1
-  kubectl rollout status deploy/mcp-platform-api -n mcp-sentinel --timeout=5s >/dev/null 2>&1 || return 1
-  kubectl rollout status deploy/mcp-runtime-api -n mcp-sentinel --timeout=5s >/dev/null 2>&1 || return 1
-  kubectl rollout status deploy/mcp-analytics-api -n mcp-sentinel --timeout=5s >/dev/null 2>&1 || return 1
-  kubectl rollout status deploy/mcp-sentinel-gateway -n mcp-sentinel --timeout=5s >/dev/null 2>&1 || return 1
-  kubectl rollout status statefulset/clickhouse -n mcp-sentinel --timeout=5s >/dev/null 2>&1 || return 1
-  kubectl rollout status statefulset/kafka -n mcp-sentinel --timeout=5s >/dev/null 2>&1 || return 1
-  kubectl wait --for=condition=complete job/kafka-topic-init -n mcp-sentinel --timeout=5s >/dev/null 2>&1 || return 1
+  kubectl rollout status deploy/mcp-platform-api -n mcp-platform --timeout=5s >/dev/null 2>&1 || return 1
+  kubectl rollout status deploy/mcp-runtime-api -n mcp-platform --timeout=5s >/dev/null 2>&1 || return 1
+  kubectl rollout status deploy/mcp-analytics-api -n mcp-observability --timeout=5s >/dev/null 2>&1 || return 1
+  kubectl rollout status deploy/mcp-platform-gateway -n mcp-platform --timeout=5s >/dev/null 2>&1 || return 1
+  kubectl rollout status statefulset/clickhouse -n mcp-observability --timeout=5s >/dev/null 2>&1 || return 1
+  kubectl rollout status statefulset/kafka -n mcp-observability --timeout=5s >/dev/null 2>&1 || return 1
+  kubectl wait --for=condition=complete job/kafka-topic-init -n mcp-observability --timeout=5s >/dev/null 2>&1 || return 1
   kubectl rollout status daemonset/promtail -n mcp-log-collector --timeout=5s >/dev/null 2>&1 || return 1
-  kubectl rollout status statefulset/loki -n mcp-sentinel --timeout=5s >/dev/null 2>&1 || return 1
-  kubectl rollout status statefulset/tempo -n mcp-sentinel --timeout=5s >/dev/null 2>&1 || return 1
+  kubectl rollout status statefulset/loki -n mcp-observability --timeout=5s >/dev/null 2>&1 || return 1
+  kubectl rollout status statefulset/tempo -n mcp-observability --timeout=5s >/dev/null 2>&1 || return 1
 }
 
 reset_traefik_namespace_watches() {
@@ -3744,8 +3746,8 @@ import sys
 deployment = json.load(sys.stdin)
 args = deployment["spec"]["template"]["spec"]["containers"][0]["args"]
 desired = {
-    "--providers.kubernetesingress.namespaces=": "--providers.kubernetesingress.namespaces=registry,mcp-sentinel,mcp-servers,mcp-servers-org,mcp-servers-public",
-    "--providers.kubernetescrd.namespaces=": "--providers.kubernetescrd.namespaces=mcp-servers,mcp-servers-org,mcp-servers-public,mcp-sentinel",
+    "--providers.kubernetesingress.namespaces=": "--providers.kubernetesingress.namespaces=registry,mcp-platform,mcp-observability,mcp-log-collector,mcp-servers,mcp-servers-org,mcp-servers-public",
+    "--providers.kubernetescrd.namespaces=": "--providers.kubernetescrd.namespaces=mcp-platform,mcp-observability,mcp-servers,mcp-servers-org,mcp-servers-public",
 }
 patch = []
 for prefix, value in desired.items():
@@ -3905,20 +3907,20 @@ if [[ "${PLATFORM_CACHE_READY}" != "1" ]]; then
   build_and_publish_images_parallel \
     "docker.io/library/mcp-runtime-operator:latest" "Dockerfile.operator" "." \
     "${TEST_MODE_REGISTRY_IMAGE}" "test/e2e/registry.Dockerfile" "." \
-    "docker.io/library/mcp-sentinel-mcp-gateway:latest" "${SENTINEL_ROOT}/services/mcp-gateway/Dockerfile" "${SENTINEL_ROOT}" \
-    "docker.io/library/mcp-sentinel-ingest:latest" "${SENTINEL_ROOT}/services/ingest/Dockerfile" "${SENTINEL_ROOT}" \
+    "docker.io/library/mcp-gateway:latest" "${SENTINEL_ROOT}/services/mcp-gateway/Dockerfile" "${SENTINEL_ROOT}" \
+    "docker.io/library/mcp-ingest:latest" "${SENTINEL_ROOT}/services/ingest/Dockerfile" "${SENTINEL_ROOT}" \
     "docker.io/library/mcp-platform-api:latest" "${SENTINEL_ROOT}/services/platform-api/Dockerfile" "${SENTINEL_ROOT}" \
     "docker.io/library/mcp-runtime-api:latest" "${SENTINEL_ROOT}/services/runtime-api/Dockerfile" "${SENTINEL_ROOT}" \
     "docker.io/library/mcp-analytics-api:latest" "${SENTINEL_ROOT}/services/analytics-api/Dockerfile" "${SENTINEL_ROOT}" \
-    "docker.io/library/mcp-sentinel-processor:latest" "${SENTINEL_ROOT}/services/processor/Dockerfile" "${SENTINEL_ROOT}" \
-    "docker.io/library/mcp-sentinel-ui:latest" "${SENTINEL_ROOT}/services/ui/Dockerfile" "${SENTINEL_ROOT}"
+    "docker.io/library/mcp-processor:latest" "${SENTINEL_ROOT}/services/processor/Dockerfile" "${SENTINEL_ROOT}" \
+    "docker.io/library/mcp-ui:latest" "${SENTINEL_ROOT}/services/ui/Dockerfile" "${SENTINEL_ROOT}"
 fi
 
 export MCP_SETUP_WAIT_TIMEOUT="${MCP_SETUP_WAIT_TIMEOUT:-900}"
 export MCP_DEPLOYMENT_TIMEOUT="${MCP_DEPLOYMENT_TIMEOUT:-900s}"
 export MCP_REGISTRY_ENDPOINT="${MCP_REGISTRY_ENDPOINT:-registry.registry.svc.cluster.local:5000}"
 export MCP_INGRESS_READINESS_MODE="${MCP_INGRESS_READINESS_MODE:-permissive}"
-export MCP_GATEWAY_OTEL_EXPORTER_OTLP_ENDPOINT="${MCP_GATEWAY_OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector.mcp-sentinel.svc.cluster.local:4318}"
+export MCP_GATEWAY_OTEL_EXPORTER_OTLP_ENDPOINT="${MCP_GATEWAY_OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector.mcp-observability.svc.cluster.local:4318}"
 if [[ "${PLATFORM_CACHE_READY}" == "1" ]]; then
   refresh_cached_platform_ingress_contract
   echo "[setup] skipping platform setup because E2E_CACHE_MODE=1 found a ready platform"
@@ -4051,29 +4053,29 @@ if [[ -n "${_cli_pf_pid}" ]]; then
   wait "${_cli_pf_pid}" 2>/dev/null || true
 fi
 
-API_KEY="$(kubectl get secret mcp-sentinel-secrets -n mcp-sentinel -o jsonpath='{.data.UI_API_KEY}' | decode_base64)"
+API_KEY="$(kubectl get secret mcp-ui-credentials -n mcp-platform -o jsonpath='{.data.UI_API_KEY}' | decode_base64)"
 if [[ -z "${API_KEY}" ]]; then
-  API_KEY="$(kubectl get secret mcp-sentinel-secrets -n mcp-sentinel -o jsonpath='{.data.API_KEYS}' | decode_base64 | cut -d',' -f1)"
+  API_KEY="$(kubectl get secret mcp-platform-api-credentials -n mcp-platform -o jsonpath='{.data.API_KEYS}' | decode_base64 | cut -d',' -f1)"
 fi
 if [[ -z "${API_KEY}" ]]; then
-  echo "[error] failed to resolve mcp-sentinel UI/API key from secret" >&2
+  echo "[error] failed to resolve UI/API key from owner Secrets" >&2
   exit 1
 fi
-INGEST_API_KEY="$(kubectl get secret mcp-sentinel-secrets -n mcp-sentinel -o jsonpath='{.data.INGEST_API_KEYS}' | decode_base64 | cut -d',' -f1)"
+INGEST_API_KEY="$(kubectl get secret mcp-ingest-credentials -n mcp-observability -o jsonpath='{.data.INGEST_API_KEYS}' | decode_base64 | cut -d',' -f1)"
 if [[ -z "${INGEST_API_KEY}" ]]; then
   INGEST_API_KEY="${API_KEY}"
 fi
 if [[ -z "${INGEST_API_KEY}" ]]; then
-  echo "[error] failed to resolve mcp-sentinel ingest API key from secret" >&2
+  echo "[error] failed to resolve ingest API key from mcp-ingest-credentials" >&2
   exit 1
 fi
 GRAFANA_ADMIN_USER=""
 GRAFANA_ADMIN_PASSWORD=""
 if scenario_selected "observability"; then
-  GRAFANA_ADMIN_USER="$(kubectl get secret mcp-sentinel-secrets -n mcp-sentinel -o jsonpath='{.data.GRAFANA_ADMIN_USER}' | decode_base64)"
-  GRAFANA_ADMIN_PASSWORD="$(kubectl get secret mcp-sentinel-secrets -n mcp-sentinel -o jsonpath='{.data.GRAFANA_ADMIN_PASSWORD}' | decode_base64)"
+  GRAFANA_ADMIN_USER="$(kubectl get secret mcp-grafana-credentials -n mcp-observability -o jsonpath='{.data.GRAFANA_ADMIN_USER}' | decode_base64)"
+  GRAFANA_ADMIN_PASSWORD="$(kubectl get secret mcp-grafana-credentials -n mcp-observability -o jsonpath='{.data.GRAFANA_ADMIN_PASSWORD}' | decode_base64)"
   if [[ -z "${GRAFANA_ADMIN_USER}" || -z "${GRAFANA_ADMIN_PASSWORD}" ]]; then
-    echo "[error] failed to resolve Grafana admin credentials from mcp-sentinel-secrets" >&2
+    echo "[error] failed to resolve Grafana admin credentials from mcp-grafana-credentials" >&2
     exit 1
   fi
 fi
@@ -4150,7 +4152,7 @@ servers:
           cpu: 1m
           memory: 32Mi
     analytics:
-      ingestURL: "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events"
+      ingestURL: "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events"
       apiKeySecretRef:
         name: ${SERVER_SECRET_NAME}
         key: api-key
@@ -4616,17 +4618,17 @@ if checkpoint_enabled "oauth"; then
   echo "[port-forward] exposing ingress and observability services"
   ensure_traefik_port_forward
   ensure_gateway_port_forward
-  port_forward_bg mcp-sentinel loki "${LOKI_PORT}" 3100 "${WORKDIR}/loki-port-forward.log"
-  port_forward_bg mcp-sentinel tempo "${TEMPO_PORT}" 3200 "${WORKDIR}/tempo-port-forward.log"
+  port_forward_bg mcp-observability loki "${LOKI_PORT}" 3100 "${WORKDIR}/loki-port-forward.log"
+  port_forward_bg mcp-observability tempo "${TEMPO_PORT}" 3200 "${WORKDIR}/tempo-port-forward.log"
   if api_service_paths_selected; then
     ensure_api_port_forward
   fi
   if scenario_selected "observability"; then
-    port_forward_bg mcp-sentinel mcp-platform-api "${API_METRICS_PORT}" 9090 "${WORKDIR}/api-metrics-port-forward.log"
-    port_forward_bg mcp-sentinel mcp-sentinel-ingest "${INGEST_SERVICE_PORT}" 8081 "${WORKDIR}/ingest-port-forward.log"
-    port_forward_bg mcp-sentinel mcp-sentinel-ingest "${INGEST_METRICS_PORT}" 9091 "${WORKDIR}/ingest-metrics-port-forward.log"
-    port_forward_bg mcp-sentinel mcp-sentinel-processor "${PROCESSOR_METRICS_PORT}" 9102 "${WORKDIR}/processor-metrics-port-forward.log"
-    port_forward_bg mcp-sentinel prometheus "${PROMETHEUS_PORT}" 9090 "${WORKDIR}/prometheus-port-forward.log"
+    port_forward_bg mcp-platform mcp-platform-api "${API_METRICS_PORT}" 9090 "${WORKDIR}/api-metrics-port-forward.log"
+    port_forward_bg mcp-observability mcp-ingest "${INGEST_SERVICE_PORT}" 8081 "${WORKDIR}/ingest-port-forward.log"
+    port_forward_bg mcp-observability mcp-ingest "${INGEST_METRICS_PORT}" 9091 "${WORKDIR}/ingest-metrics-port-forward.log"
+    port_forward_bg mcp-observability mcp-processor "${PROCESSOR_METRICS_PORT}" 9102 "${WORKDIR}/processor-metrics-port-forward.log"
+    port_forward_bg mcp-observability prometheus "${PROMETHEUS_PORT}" 9090 "${WORKDIR}/prometheus-port-forward.log"
     port_forward_resource_bg mcp-servers "deployment/${SERVER_NAME}" "${SERVER_UPSTREAM_PORT}" 8090 "${WORKDIR}/server-upstream-port-forward.log"
   fi
   if server_proxy_paths_selected; then
@@ -5014,7 +5016,7 @@ servers:
           cpu: 1m
           memory: 32Mi
     analytics:
-      ingestURL: "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events"
+      ingestURL: "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events"
       apiKeySecretRef:
         name: ${SERVER_SECRET_NAME}
         key: api-key
@@ -5988,7 +5990,7 @@ def wait_for_prometheus_up(base_url, *, headers=None, description):
         value = result.get("value", [])
         if len(value) >= 2 and metric.get("job"):
             jobs[metric["job"]] = str(value[1])
-    for job in ("mcp-platform-api", "mcp-runtime-api", "mcp-analytics-api", "mcp-sentinel-ingest", "mcp-sentinel-processor", "clickhouse"):
+    for job in ("mcp-platform-api", "mcp-runtime-api", "mcp-analytics-api", "mcp-ingest", "mcp-processor", "clickhouse"):
         check(
             jobs.get(job) == "1",
             f"{description} reports {job}=1",
@@ -6434,7 +6436,7 @@ for service_name in gateway_trace_services:
     tempo_gateway_counts[service_name] = count
     tempo_gateway_services.update(names)
 
-required_trace_services = {gateway_trace_services[0], "mcp-sentinel-ingest", "mcp-sentinel-processor"}
+required_trace_services = {gateway_trace_services[0], "mcp-ingest", "mcp-processor"}
 required_trace_spans = {"kafka.produce", "kafka.consume", "clickhouse.insert_event", "clickhouse.insert_batch"}
 tempo_full_trace_id, tempo_full_trace_services, tempo_full_trace_spans = wait_for_tempo_trace_path(
     tempo_base,
@@ -6499,7 +6501,7 @@ grafana_prometheus_jobs = wait_for_prometheus_up(
 )
 
 sentinel_request_counts = {}
-for service_name in ("mcp-platform-api", "mcp-runtime-api", "mcp-analytics-api", "mcp-sentinel-ingest"):
+for service_name in ("mcp-platform-api", "mcp-runtime-api", "mcp-analytics-api", "mcp-ingest"):
     sentinel_request_counts[service_name] = wait_for_prometheus_metric(
         prometheus_base,
         f'sum(mcp_request_total{{service="{service_name}"}})',
@@ -6554,7 +6556,7 @@ end_ns = int(time.time() * 1e9)
 start_ns = end_ns - int(10 * 60 * 1e9)
 params = urllib.parse.urlencode(
     {
-        "query": '{namespace=~"mcp-servers|mcp-sentinel"}',
+        "query": '{namespace=~"mcp-servers|mcp-platform|mcp-observability"}',
         "limit": "20",
         "start": str(start_ns),
         "end": str(end_ns),
@@ -6625,7 +6627,7 @@ for key, value in rows:
     print(f"{key:{width}}  {value}")
 PY
 
-  tempo_log_errors="$(kubectl logs -n mcp-sentinel statefulset/tempo --since=20m 2>/dev/null | grep -E 'failed to poll or create index for tenant.*tenant=wal|invalid UUID length' || true)"
+  tempo_log_errors="$(kubectl logs -n mcp-observability statefulset/tempo --since=20m 2>/dev/null | grep -E 'failed to poll or create index for tenant.*tenant=wal|invalid UUID length' || true)"
   if [[ -n "${tempo_log_errors}" ]]; then
     log_line error "tempo logged WAL blocklist parse errors; local block storage must not share the WAL parent path"
     printf '%s\n' "${tempo_log_errors}" | tail -n 20 >&2
@@ -6642,9 +6644,9 @@ fi
 echo "[cli] checking sentinel restart command"
 # The full E2E stack packs single-node Kind tightly, so avoid requiring surge CPU for this restart smoke.
 refresh_kind_kubeconfig
-kubectl patch deployment mcp-platform-api -n mcp-sentinel --type merge -p '{"spec":{"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxSurge":0,"maxUnavailable":1}}}}' >/dev/null
+kubectl patch deployment mcp-platform-api -n mcp-platform --type merge -p '{"spec":{"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxSurge":0,"maxUnavailable":1}}}}' >/dev/null
 KUBECONFIG="${KUBECONFIG_FILE}" ./bin/mcp-runtime sentinel restart api
-rollout_status_with_logs mcp-sentinel deploy mcp-platform-api 180s
+rollout_status_with_logs mcp-platform deploy mcp-platform-api 180s
 
 echo "[cli] deleting deployed MCP servers"
 if scenario_selected "oauth"; then

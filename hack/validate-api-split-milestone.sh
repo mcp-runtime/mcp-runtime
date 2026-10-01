@@ -3,7 +3,8 @@
 # Usage: bash hack/validate-api-split-milestone.sh [m13|m14|m15|m16|m2|all]
 set -euo pipefail
 
-NS="${NAMESPACE:-mcp-sentinel}"
+PLATFORM_NS="${PLATFORM_NAMESPACE:-mcp-platform}"
+OBSERVABILITY_NS="${OBSERVABILITY_NAMESPACE:-mcp-observability}"
 SCOPE="${1:-all}"
 
 pass=0
@@ -20,21 +21,21 @@ check() {
   fi
 }
 
-ADMIN_KEY=$(kubectl -n "$NS" get secret mcp-sentinel-secrets -o jsonpath='{.data.ADMIN_API_KEYS}' | base64 -d | cut -d, -f1)
-API_KEY=$(kubectl -n "$NS" get secret mcp-sentinel-secrets -o jsonpath='{.data.API_KEYS}' | base64 -d | cut -d, -f1)
-INTERNAL_TOKEN=$(kubectl -n "$NS" get secret mcp-sentinel-secrets -o jsonpath='{.data.INTERNAL_AUTH_TOKEN}' | base64 -d)
+ADMIN_KEY=$(kubectl -n "$PLATFORM_NS" get secret mcp-platform-api-credentials -o jsonpath='{.data.ADMIN_API_KEYS}' | base64 -d | cut -d, -f1)
+API_KEY=$(kubectl -n "$PLATFORM_NS" get secret mcp-platform-api-credentials -o jsonpath='{.data.API_KEYS}' | base64 -d | cut -d, -f1)
+INTERNAL_TOKEN=$(kubectl -n "$PLATFORM_NS" get secret mcp-platform-api-credentials -o jsonpath='{.data.INTERNAL_AUTH_TOKEN}' | base64 -d)
 
 pkill -f 'port-forward svc/mcp-' 2>/dev/null || true
 sleep 1
 
 if [ "$SCOPE" = "m15" ] || [ "$SCOPE" = "m16" ] || [ "$SCOPE" = "m2" ] || [ "$SCOPE" = "all" ]; then
-  kubectl -n "$NS" port-forward svc/mcp-platform-api 18080:8080 >/tmp/pf-platform.log 2>&1 &
+  kubectl -n "$PLATFORM_NS" port-forward svc/mcp-platform-api 18080:8080 >/tmp/pf-platform.log 2>&1 &
 fi
 if [ "$SCOPE" = "m13" ] || [ "$SCOPE" = "m15" ] || [ "$SCOPE" = "m16" ] || [ "$SCOPE" = "m2" ] || [ "$SCOPE" = "all" ]; then
-  kubectl -n "$NS" port-forward svc/mcp-analytics-api 18095:8085 >/tmp/pf-analytics.log 2>&1 &
+  kubectl -n "$OBSERVABILITY_NS" port-forward svc/mcp-analytics-api 18095:8085 >/tmp/pf-analytics.log 2>&1 &
 fi
 if [ "$SCOPE" = "m14" ] || [ "$SCOPE" = "m15" ] || [ "$SCOPE" = "m16" ] || [ "$SCOPE" = "m2" ] || [ "$SCOPE" = "all" ]; then
-  kubectl -n "$NS" port-forward svc/mcp-runtime-api 18084:8084 >/tmp/pf-runtime.log 2>&1 &
+  kubectl -n "$PLATFORM_NS" port-forward svc/mcp-runtime-api 18084:8084 >/tmp/pf-runtime.log 2>&1 &
 fi
 sleep 3
 
@@ -94,15 +95,15 @@ fi
 
 if [ "$SCOPE" = "m2" ] || [ "$SCOPE" = "all" ]; then
   echo "=== M2 split cutover ==="
-  MONOLITH_REPLICAS=$(kubectl -n "$NS" get deploy mcp-sentinel-api -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "absent")
+  MONOLITH_REPLICAS=$(kubectl -n "$PLATFORM_NS" get deploy mcp-api -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "absent")
   if [ "$MONOLITH_REPLICAS" = "absent" ] || [ "${MONOLITH_REPLICAS:-0}" = "0" ]; then
     check monolith-scaled-to-zero 0 "${MONOLITH_REPLICAS:-0}"
   else
     check monolith-scaled-to-zero 0 "$MONOLITH_REPLICAS"
   fi
 
-  pkill -f 'port-forward svc/mcp-sentinel-gateway' 2>/dev/null || true
-  kubectl -n "$NS" port-forward svc/mcp-sentinel-gateway 18083:8083 >/tmp/pf-gateway.log 2>&1 &
+  pkill -f 'port-forward svc/mcp-platform-gateway' 2>/dev/null || true
+  kubectl -n "$PLATFORM_NS" port-forward svc/mcp-platform-gateway 18083:8083 >/tmp/pf-gateway.log 2>&1 &
   sleep 2
   echo "=== M2.3 Traefik gateway /api/v1 routing ==="
   check gateway-v1-login 200 "$(curl -sS -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:18083/api/v1/auth/login -H 'content-type: application/json' -d '{"email":"admin@mcpruntime.org","password":"admin@123"}')"

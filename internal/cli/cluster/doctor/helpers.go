@@ -10,6 +10,7 @@ import (
 
 	"mcp-runtime/internal/cli/core"
 	"mcp-runtime/pkg/mcpdefaults"
+	"mcp-runtime/pkg/platforminventory"
 )
 
 func waitForDoctorResource(kubectl core.KubectlRunner, resource, name, namespace string, timeout time.Duration) error {
@@ -233,8 +234,9 @@ func resolveDoctorSmokeTarget(kubectl core.KubectlRunner, preferredNamespace str
 	if image := strings.TrimSpace(os.Getenv("MCP_DOCTOR_SMOKE_IMAGE")); image != "" {
 		return doctorSmokeTarget{Image: image, Port: mcpdefaults.MCPServerPort, Source: "MCP_DOCTOR_SMOKE_IMAGE", WaitForReady: false}
 	}
-	if image, err := readKubectlOutput(kubectl, []string{"get", "configmap", "mcp-sentinel-config", "-n", doctorSentinelNamespace, "-o", "jsonpath={.data.MCP_DOCTOR_SMOKE_IMAGE}"}); err == nil && strings.TrimSpace(image) != "" {
-		return doctorSmokeTarget{Image: strings.TrimSpace(image), Port: mcpdefaults.MCPServerPort, Source: "mcp-sentinel-config/MCP_DOCTOR_SMOKE_IMAGE", WaitForReady: true}
+	configName := platforminventory.SharedConfigName
+	if image, err := readKubectlOutput(kubectl, []string{"get", "configmap", configName, "-n", componentNamespace("platform-api"), "-o", "jsonpath={.data.MCP_DOCTOR_SMOKE_IMAGE}"}); err == nil && strings.TrimSpace(image) != "" {
+		return doctorSmokeTarget{Image: strings.TrimSpace(image), Port: mcpdefaults.MCPServerPort, Source: configName + "/MCP_DOCTOR_SMOKE_IMAGE", WaitForReady: true}
 	}
 	mcpServerNames, haveMCPServerNames := readDoctorMCPServerNames(kubectl, preferredNamespace)
 	out, err := readKubectlOutput(kubectl, []string{"get", "deploy", "-n", preferredNamespace, "-o", "jsonpath={range .items[*]}{.metadata.name}|{.status.readyReplicas}|{.spec.template.spec.containers[0].image}|{.spec.template.spec.containers[0].ports[0].containerPort}{\"\\n\"}{end}"})

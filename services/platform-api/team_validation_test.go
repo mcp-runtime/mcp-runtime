@@ -34,6 +34,9 @@ func TestValidateTeamNamespaceReserved(t *testing.T) {
 		{name: "team namespace", namespace: "mcp-team-core", wantErr: false},
 		{name: "shared reserved", namespace: sharedCatalogNamespace, wantErr: true},
 		{name: "kube reserved", namespace: "kube-system", wantErr: true},
+		{name: "platform reserved", namespace: "mcp-platform", wantErr: true},
+		{name: "observability reserved", namespace: "mcp-observability", wantErr: true},
+		{name: "log collector reserved", namespace: "mcp-log-collector", wantErr: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

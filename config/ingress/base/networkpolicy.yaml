@@ -57,7 +57,10 @@ spec:
               kubernetes.io/metadata.name: registry
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: mcp-sentinel
+              kubernetes.io/metadata.name: mcp-platform
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: mcp-observability
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: mcp-servers

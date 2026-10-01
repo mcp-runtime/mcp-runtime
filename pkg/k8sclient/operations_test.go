@@ -23,7 +23,7 @@ import (
 func TestWaitForWorkloadRolloutWaitsForDeploymentCurrentRevision(t *testing.T) {
 	replicas := int32(2)
 	clients := &Clients{Clientset: kubernetesfake.NewSimpleClientset(&appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "mcp-sentinel", Generation: 2},
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "mcp-platform", Generation: 2},
 		Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
 		Status: appsv1.DeploymentStatus{
 			ObservedGeneration: 2,
@@ -33,7 +33,7 @@ func TestWaitForWorkloadRolloutWaitsForDeploymentCurrentRevision(t *testing.T) {
 		},
 	})}
 
-	err := WaitForWorkloadRollout(context.Background(), clients, "mcp-sentinel", "deployment", "api", time.Millisecond)
+	err := WaitForWorkloadRollout(context.Background(), clients, "mcp-platform", "deployment", "api", time.Millisecond)
 	if err == nil {
 		t.Fatal("expected rollout wait to fail while only an old replica is available")
 	}
@@ -42,7 +42,7 @@ func TestWaitForWorkloadRolloutWaitsForDeploymentCurrentRevision(t *testing.T) {
 func TestWaitForWorkloadRolloutAcceptsRolledOutDeployment(t *testing.T) {
 	replicas := int32(2)
 	clients := &Clients{Clientset: kubernetesfake.NewSimpleClientset(&appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "mcp-sentinel", Generation: 2},
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "mcp-platform", Generation: 2},
 		Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
 		Status: appsv1.DeploymentStatus{
 			ObservedGeneration: 2,
@@ -52,7 +52,7 @@ func TestWaitForWorkloadRolloutAcceptsRolledOutDeployment(t *testing.T) {
 		},
 	})}
 
-	if err := WaitForWorkloadRollout(context.Background(), clients, "mcp-sentinel", "deployment", "api", time.Second); err != nil {
+	if err := WaitForWorkloadRollout(context.Background(), clients, "mcp-platform", "deployment", "api", time.Second); err != nil {
 		t.Fatalf("WaitForWorkloadRollout() error = %v", err)
 	}
 }
@@ -92,7 +92,7 @@ func TestWaitForWorkloadRolloutAcceptsReadyDaemonSet(t *testing.T) {
 
 func TestDeleteJobUsesBackgroundPropagation(t *testing.T) {
 	clientset := kubernetesfake.NewSimpleClientset(&batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{Name: "clickhouse-init", Namespace: "mcp-sentinel"},
+		ObjectMeta: metav1.ObjectMeta{Name: "clickhouse-init", Namespace: "mcp-observability"},
 	})
 	clients := &Clients{Clientset: clientset}
 	clientset.PrependReactor("delete", "jobs", func(action clienttesting.Action) (bool, runtime.Object, error) {
@@ -104,7 +104,7 @@ func TestDeleteJobUsesBackgroundPropagation(t *testing.T) {
 		return false, nil, nil
 	})
 
-	if err := DeleteJob(context.Background(), clients, "mcp-sentinel", "clickhouse-init", time.Second); err != nil {
+	if err := DeleteJob(context.Background(), clients, "mcp-observability", "clickhouse-init", time.Second); err != nil {
 		t.Fatalf("DeleteJob() error = %v", err)
 	}
 }
@@ -149,7 +149,7 @@ func TestWaitForCertificateReadyAcceptsReadyCertificate(t *testing.T) {
 func TestPruneTerminatedPodsRemovesOnlyTerminalLeftovers(t *testing.T) {
 	pod := func(name string, phase corev1.PodPhase, owners ...metav1.OwnerReference) *corev1.Pod {
 		return &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "mcp-sentinel", OwnerReferences: owners},
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "mcp-platform", OwnerReferences: owners},
 			Status:     corev1.PodStatus{Phase: phase},
 		}
 	}
@@ -164,14 +164,14 @@ func TestPruneTerminatedPodsRemovesOnlyTerminalLeftovers(t *testing.T) {
 			Status:     corev1.PodStatus{Phase: corev1.PodFailed},
 		},
 	)
-	deleted, err := PruneTerminatedPods(context.Background(), &Clients{Clientset: clientset}, "mcp-sentinel")
+	deleted, err := PruneTerminatedPods(context.Background(), &Clients{Clientset: clientset}, "mcp-platform")
 	if err != nil {
 		t.Fatalf("PruneTerminatedPods: %v", err)
 	}
 	if got := strings.Join(deleted, ","); got != "evicted,orphan-done" {
 		t.Fatalf("deleted = %q, want evicted,orphan-done", got)
 	}
-	remaining, _ := clientset.CoreV1().Pods("mcp-sentinel").List(context.Background(), metav1.ListOptions{})
+	remaining, _ := clientset.CoreV1().Pods("mcp-platform").List(context.Background(), metav1.ListOptions{})
 	names := map[string]bool{}
 	for _, p := range remaining.Items {
 		names[p.Name] = true

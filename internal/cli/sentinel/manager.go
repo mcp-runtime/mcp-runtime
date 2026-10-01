@@ -15,7 +15,7 @@ import (
 	"mcp-runtime/pkg/platforminventory"
 )
 
-// SentinelManager operates the bundled mcp-sentinel stack via kubectl.
+// SentinelManager operates the bundled platform stack via kubectl.
 type SentinelManager struct {
 	kubectl *core.KubectlClient
 	logger  *zap.Logger
@@ -138,10 +138,10 @@ func (m *SentinelManager) ShowSentinelEvents() error {
 	if err := m.requireAdminClusterAccess(); err != nil {
 		return err
 	}
-	args := []string{"get", "events", "-n", core.DefaultAnalyticsNamespace, "--sort-by=.lastTimestamp"}
+	args := []string{"get", "events", "-n", core.ComponentNamespace("platform-api"), "--sort-by=.lastTimestamp"}
 	if err := m.kubectl.RunWithOutput(args, os.Stdout, os.Stderr); err != nil {
 		return core.WrapWithSentinelAndContext(nil, err, fmt.Sprintf("failed to list sentinel events: %v", err), map[string]any{
-			"namespace": core.DefaultAnalyticsNamespace,
+			"namespace": core.ComponentNamespace("platform-api"),
 			"component": "sentinel",
 		})
 	}

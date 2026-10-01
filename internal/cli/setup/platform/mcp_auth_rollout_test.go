@@ -45,14 +45,14 @@ func TestMCPAuthRolloutRequiresCurrentRevision(t *testing.T) {
 			platformSetupKubeconfig = ""
 			replicas := int32(1)
 			clients := newPlatformKubernetesTestClients([]runtime.Object{&appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "mcp-auth-server", Namespace: core.DefaultAnalyticsNamespace, Generation: 2},
+				ObjectMeta: metav1.ObjectMeta{Name: "mcp-auth-server", Namespace: core.ComponentNamespace("mcp-auth"), Generation: 2},
 				Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
 				Status:     tc.status,
 			}}, nil)
 			swapKubernetesClientsForTest(t, clients)
 			// Diagnostics must never fall back to the contributor's real cluster.
 			swapDefaultKubectlClientForTest(t, core.NewTestKubectlClient(&core.MockExecutor{}))
-			err := waitForDeploymentRolledOut(zap.NewNop(), "mcp-auth-server", core.DefaultAnalyticsNamespace, "app=mcp-auth-server", time.Millisecond)
+			err := waitForDeploymentRolledOut(zap.NewNop(), "mcp-auth-server", core.ComponentNamespace("mcp-auth"), "app=mcp-auth-server", time.Millisecond)
 			if (err != nil) != tc.wantError {
 				t.Fatalf("waitForDeploymentRolledOut() = %v, wantError %v", err, tc.wantError)
 			}

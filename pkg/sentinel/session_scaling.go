@@ -9,6 +9,6 @@ const SessionLocalMaxReplicas int32 = 1
 // SessionLocalMaxReplicas. Scaling UI or gateway beyond one replica breaks
 // login and /auth/admin-check when requests hit different pods.
 var SessionLocalDeploymentNames = []string{
-	"mcp-sentinel-ui",
-	"mcp-sentinel-gateway",
+	"mcp-ui",
+	"mcp-platform-gateway",
 }

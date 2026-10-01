@@ -351,7 +351,7 @@ func parseIngressLoadBalancerStatuses(value string) []doctorIngressStatus {
 }
 
 func isMCPRuntimeIngress(status doctorIngressStatus) bool {
-	if status.Namespace == "registry" || status.Namespace == doctorSentinelNamespace || status.Namespace == doctorMCPServersNamespace {
+	if status.Namespace == "registry" || status.Namespace == componentNamespace("platform-api") || status.Namespace == doctorMCPServersNamespace {
 		return true
 	}
 	if strings.HasPrefix(status.Namespace, "mcp-team-") || strings.HasPrefix(status.Namespace, "mcp-servers-") {

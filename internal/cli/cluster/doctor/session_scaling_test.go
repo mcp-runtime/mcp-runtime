@@ -8,16 +8,15 @@ import (
 )
 
 func TestCheckSessionLocalDeploymentScaling(t *testing.T) {
-	t.Run("passes when ui and gateway are single replica", func(t *testing.T) {
+	ui := `{"spec":{"template":{"spec":{"containers":[{"env":[{"name":"UI_SESSION_STORE","value":"postgres"}]}]}}}}`
+	t.Run("passes when the UI uses postgres sessions", func(t *testing.T) {
 		mock := &core.MockExecutor{
 			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
 				switch {
 				case contains(spec.Args, "namespace"):
-					return &core.MockCommand{OutputData: []byte(doctorSentinelNamespace)}
-				case contains(spec.Args, "mcp-sentinel-ui"):
-					return &core.MockCommand{OutputData: []byte("1")}
-				case contains(spec.Args, "mcp-sentinel-gateway"):
-					return &core.MockCommand{OutputData: []byte("1")}
+					return &core.MockCommand{OutputData: []byte(componentNamespace("ui"))}
+				case contains(spec.Args, "mcp-ui"):
+					return &core.MockCommand{OutputData: []byte(ui)}
 				default:
 					return &core.MockCommand{}
 				}
@@ -29,16 +28,14 @@ func TestCheckSessionLocalDeploymentScaling(t *testing.T) {
 		}
 	})
 
-	t.Run("fails when ui is scaled above one replica", func(t *testing.T) {
+	t.Run("fails when the UI session store is memory", func(t *testing.T) {
 		mock := &core.MockExecutor{
 			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
 				switch {
 				case contains(spec.Args, "namespace"):
-					return &core.MockCommand{OutputData: []byte(doctorSentinelNamespace)}
-				case contains(spec.Args, "mcp-sentinel-ui"):
-					return &core.MockCommand{OutputData: []byte("3")}
-				case contains(spec.Args, "mcp-sentinel-gateway"):
-					return &core.MockCommand{OutputData: []byte("1")}
+					return &core.MockCommand{OutputData: []byte(componentNamespace("ui"))}
+				case contains(spec.Args, "mcp-ui"):
+					return &core.MockCommand{OutputData: []byte(`{"spec":{"template":{"spec":{"containers":[{"env":[{"name":"UI_SESSION_STORE","value":"memory"}]}]}}}}`)}
 				default:
 					return &core.MockCommand{}
 				}
@@ -46,10 +43,10 @@ func TestCheckSessionLocalDeploymentScaling(t *testing.T) {
 		}
 		check := checkSessionLocalDeploymentScaling(core.NewTestKubectlClient(mock))
 		if check.OK {
-			t.Fatal("expected failure when ui replicas > 1")
+			t.Fatal("expected failure when the session store is memory")
 		}
-		if !strings.Contains(check.Detail, "mcp-sentinel-ui") {
-			t.Fatalf("detail = %q, want ui deployment called out", check.Detail)
+		if !strings.Contains(check.Detail, "memory") {
+			t.Fatalf("detail = %q, want memory store called out", check.Detail)
 		}
 	})
 }

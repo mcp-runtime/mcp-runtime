@@ -5,12 +5,12 @@
 #
 # Usage:
 #   KUBECONFIG=$HOME/.kube/test-mcp-runtime-config bash hack/cluster-ops/k8s-hardening-check.sh
-#   NAMESPACES="mcp-runtime,mcp-sentinel" bash hack/cluster-ops/k8s-hardening-check.sh
+#   NAMESPACES="mcp-runtime,mcp-platform,mcp-observability" bash hack/cluster-ops/k8s-hardening-check.sh
 set -euo pipefail
 
 TEST_KUBECONFIG="${TEST_KUBECONFIG:-${KUBECONFIG:-$HOME/.kube/test-mcp-runtime-config}}"
 export KUBECONFIG="$TEST_KUBECONFIG"
-NAMESPACES="${NAMESPACES:-mcp-runtime,mcp-sentinel,mcp-servers,registry,traefik}"
+NAMESPACES="${NAMESPACES:-mcp-runtime,mcp-platform,mcp-observability,mcp-log-collector,mcp-servers,registry,traefik}"
 
 pass=0
 fail=0
@@ -46,7 +46,7 @@ for ns in "${NS_LIST[@]}"; do
 
   # NetworkPolicy presence for tenant/workload namespaces
   case "$ns" in
-    mcp-sentinel|mcp-servers|registry)
+    mcp-platform|mcp-observability|mcp-log-collector|mcp-servers|registry)
       np_count="$(kubectl -n "$ns" get networkpolicy -o json 2>/dev/null | jq '.items | length')"
       if [[ "$np_count" -gt 0 ]]; then
         ok "${ns} has ${np_count} NetworkPolicy object(s)"

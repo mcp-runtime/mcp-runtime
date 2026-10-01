@@ -9,7 +9,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: traefik-dynamic
-  namespace: mcp-sentinel
+  namespace: mcp-platform
 data:
   dynamic.yml: |
     http:
@@ -30,14 +30,14 @@ data:
               - /ingest
         sentinel-admin-auth:
           forwardAuth:
-            address: http://mcp-sentinel-ui.mcp-sentinel.svc.cluster.local:8082/auth/admin-check
+            address: http://mcp-ui.mcp-platform.svc.cluster.local:8082/auth/admin-check
             trustForwardHeader: true
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: traefik-plugin-pii-redactor
-  namespace: mcp-sentinel
+  namespace: mcp-platform
 data:
   go.mod: |
     module github.com/Agent-Hellboy/mcp-runtime/traefik-plugins/pii-redactor
@@ -394,15 +394,15 @@ data:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: mcp-sentinel-gateway
-  namespace: mcp-sentinel
+  name: mcp-platform-gateway
+  namespace: mcp-platform
 automountServiceAccountToken: true
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: mcp-sentinel-gateway
-  namespace: mcp-sentinel
+  name: mcp-platform-gateway
+  namespace: mcp-platform
 rules:
   - apiGroups: [""]
     resources: ["services", "endpoints", "secrets"]
@@ -414,21 +414,48 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: mcp-sentinel-gateway
-  namespace: mcp-sentinel
+  name: mcp-platform-gateway
+  namespace: mcp-platform
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: mcp-sentinel-gateway
+  name: mcp-platform-gateway
 subjects:
   - kind: ServiceAccount
-    name: mcp-sentinel-gateway
-    namespace: mcp-sentinel
+    name: mcp-platform-gateway
+    namespace: mcp-platform
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mcp-platform-gateway
+  namespace: mcp-observability
+rules:
+  - apiGroups: [""]
+    resources: ["services", "endpoints", "secrets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mcp-platform-gateway
+  namespace: mcp-observability
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: mcp-platform-gateway
+subjects:
+  - kind: ServiceAccount
+    name: mcp-platform-gateway
+    namespace: mcp-platform
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: mcp-sentinel-gateway-ingressclass
+  name: mcp-platform-gateway-ingressclass
 rules:
   - apiGroups: ["networking.k8s.io"]
     resources: ["ingressclasses"]
@@ -437,24 +464,24 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: mcp-sentinel-gateway-ingressclass
+  name: mcp-platform-gateway-ingressclass
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: mcp-sentinel-gateway-ingressclass
+  name: mcp-platform-gateway-ingressclass
 subjects:
   - kind: ServiceAccount
-    name: mcp-sentinel-gateway
-    namespace: mcp-sentinel
+    name: mcp-platform-gateway
+    namespace: mcp-platform
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: mcp-sentinel-gateway
-  namespace: mcp-sentinel
+  name: mcp-platform-gateway
+  namespace: mcp-platform
 spec:
   selector:
-    app: mcp-sentinel-gateway
+    app: mcp-platform-gateway
   ports:
     - name: web
       port: 8083
@@ -463,21 +490,20 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: mcp-sentinel-gateway
-  namespace: mcp-sentinel
+  name: mcp-platform-gateway
+  namespace: mcp-platform
 spec:
-  # Keep at 1 replica until shared UI session storage exists (issue #257).
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
-      app: mcp-sentinel-gateway
+      app: mcp-platform-gateway
   template:
     metadata:
       labels:
-        app: mcp-sentinel-gateway
+        app: mcp-platform-gateway
     spec:
-      priorityClassName: mcp-sentinel-services
-      serviceAccountName: mcp-sentinel-gateway
+      priorityClassName: mcp-shared-services
+      serviceAccountName: mcp-platform-gateway
       securityContext:
         runAsNonRoot: true
         seccompProfile:
@@ -499,7 +525,7 @@ spec:
           args:
             - "--entrypoints.web.address=:8083"
             - "--providers.kubernetesingress=true"
-            - "--providers.kubernetesingress.namespaces=mcp-sentinel"
+            - "--providers.kubernetesingress.namespaces=mcp-platform,mcp-observability"
             - "--providers.kubernetesingress.ingressclass=traefik"
             - "--providers.file.filename=/etc/traefik/dynamic/dynamic.yml"
             - "--providers.file.watch=true"
@@ -546,8 +572,8 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: mcp-sentinel-gateway
-  namespace: mcp-sentinel
+  name: mcp-platform-gateway
+  namespace: mcp-platform
 spec:
   ingressClassName: traefik
   rules:
@@ -557,15 +583,15 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: mcp-sentinel-ui
+                name: mcp-ui
                 port:
                   number: 8082
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: mcp-sentinel-gateway-observability
-  namespace: mcp-sentinel
+  name: mcp-platform-gateway-observability
+  namespace: mcp-observability
   annotations:
     traefik.ingress.kubernetes.io/router.middlewares: sentinel-admin-auth@file
 spec:
@@ -584,8 +610,8 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: mcp-sentinel-gateway-adapter-session
-  namespace: mcp-sentinel
+  name: mcp-platform-gateway-adapter-session
+  namespace: mcp-platform
 spec:
   ingressClassName: traefik
   rules:
@@ -602,8 +628,8 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: mcp-sentinel-gateway-api
-  namespace: mcp-sentinel
+  name: mcp-platform-gateway-api
+  namespace: mcp-platform
 spec:
   ingressClassName: traefik
   rules:
@@ -665,48 +691,6 @@ spec:
                 name: mcp-platform-api
                 port:
                   number: 8080
-          - path: /api/v1/user/analytics
-            pathType: Prefix
-            backend:
-              service:
-                name: mcp-analytics-api
-                port:
-                  number: 8085
-          - path: /api/v1/events
-            pathType: Prefix
-            backend:
-              service:
-                name: mcp-analytics-api
-                port:
-                  number: 8085
-          - path: /api/v1/event-types
-            pathType: Prefix
-            backend:
-              service:
-                name: mcp-analytics-api
-                port:
-                  number: 8085
-          - path: /api/v1/stats
-            pathType: Prefix
-            backend:
-              service:
-                name: mcp-analytics-api
-                port:
-                  number: 8085
-          - path: /api/v1/sources
-            pathType: Prefix
-            backend:
-              service:
-                name: mcp-analytics-api
-                port:
-                  number: 8085
-          - path: /api/v1/analytics
-            pathType: Prefix
-            backend:
-              service:
-                name: mcp-analytics-api
-                port:
-                  number: 8085
           - path: /api/v1/admin/deployments
             pathType: Prefix
             backend:
@@ -753,8 +737,61 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: mcp-sentinel-gateway-ingest
-  namespace: mcp-sentinel
+  name: mcp-platform-gateway-analytics
+  namespace: mcp-observability
+spec:
+  ingressClassName: traefik
+  rules:
+    - http:
+        paths:
+          - path: /api/v1/user/analytics
+            pathType: Prefix
+            backend:
+              service:
+                name: mcp-analytics-api
+                port:
+                  number: 8085
+          - path: /api/v1/events
+            pathType: Prefix
+            backend:
+              service:
+                name: mcp-analytics-api
+                port:
+                  number: 8085
+          - path: /api/v1/event-types
+            pathType: Prefix
+            backend:
+              service:
+                name: mcp-analytics-api
+                port:
+                  number: 8085
+          - path: /api/v1/stats
+            pathType: Prefix
+            backend:
+              service:
+                name: mcp-analytics-api
+                port:
+                  number: 8085
+          - path: /api/v1/sources
+            pathType: Prefix
+            backend:
+              service:
+                name: mcp-analytics-api
+                port:
+                  number: 8085
+          - path: /api/v1/analytics
+            pathType: Prefix
+            backend:
+              service:
+                name: mcp-analytics-api
+                port:
+                  number: 8085
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mcp-platform-gateway-ingest
+  namespace: mcp-observability
   annotations:
     traefik.ingress.kubernetes.io/router.middlewares: strip-ingest-prefix@file,pii-redactor@file
 spec:
@@ -766,6 +803,6 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: mcp-sentinel-ingest
+                name: mcp-ingest
                 port:
                   number: 8081

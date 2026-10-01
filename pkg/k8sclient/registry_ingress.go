@@ -10,6 +10,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/yaml"
+
+	"mcp-runtime/pkg/platforminventory"
 )
 
 const (
@@ -21,8 +23,8 @@ const (
 	// config/registry manifests.
 	RegistryPlaceholderHost = "registry.local"
 
-	platformConfigNamespace = "mcp-sentinel"
-	platformConfigName      = "mcp-sentinel-config"
+	platformConfigNamespace = platforminventory.PlatformNamespace
+	platformConfigName      = platforminventory.SharedConfigName
 )
 
 // Registry public host sources, in precedence order.
@@ -30,8 +32,8 @@ const (
 	RegistryHostSourceExplicit       = "explicit"
 	RegistryHostSourceIngressTLS     = "registry Ingress TLS host"
 	RegistryHostSourceIngressRule    = "registry Ingress rule host"
-	RegistryHostSourceConfigHost     = "mcp-sentinel-config MCP_REGISTRY_INGRESS_HOST"
-	RegistryHostSourceConfigDomain   = "mcp-sentinel-config MCP_PLATFORM_DOMAIN"
+	RegistryHostSourceConfigHost     = "mcp-shared-config MCP_REGISTRY_INGRESS_HOST"
+	RegistryHostSourceConfigDomain   = "mcp-shared-config MCP_PLATFORM_DOMAIN"
 	RegistryHostSourcePlaceholder    = "default placeholder"
 	registryHostSourceDomainTemplate = "registry.%s"
 )

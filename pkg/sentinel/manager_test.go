@@ -13,7 +13,7 @@ func TestGetDeploymentStatusDefaultsNilReplicasToOne(t *testing.T) {
 	t.Parallel()
 
 	clientset := fake.NewSimpleClientset(&appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "mcp-sentinel"},
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "mcp-platform"},
 		Spec:       appsv1.DeploymentSpec{},
 		Status: appsv1.DeploymentStatus{
 			ReadyReplicas: 1,
@@ -24,7 +24,7 @@ func TestGetDeploymentStatusDefaultsNilReplicasToOne(t *testing.T) {
 	component := Component{
 		Key:       "api",
 		Display:   "API",
-		Namespace: "mcp-sentinel",
+		Namespace: "mcp-platform",
 		Kind:      "deployment",
 		Resource:  "api",
 	}
@@ -45,7 +45,7 @@ func TestGetStatefulSetStatusDefaultsNilReplicasToOne(t *testing.T) {
 	t.Parallel()
 
 	clientset := fake.NewSimpleClientset(&appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{Name: "tempo", Namespace: "mcp-sentinel"},
+		ObjectMeta: metav1.ObjectMeta{Name: "tempo", Namespace: "mcp-observability"},
 		Spec:       appsv1.StatefulSetSpec{},
 		Status: appsv1.StatefulSetStatus{
 			ReadyReplicas: 0,
@@ -56,7 +56,7 @@ func TestGetStatefulSetStatusDefaultsNilReplicasToOne(t *testing.T) {
 	component := Component{
 		Key:       "tempo",
 		Display:   "Tempo",
-		Namespace: "mcp-sentinel",
+		Namespace: "mcp-observability",
 		Kind:      "statefulset",
 		Resource:  "tempo",
 	}

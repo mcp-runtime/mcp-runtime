@@ -47,7 +47,7 @@ Flags:
       --tls-cluster-issuer string            Use an existing cert-manager ClusterIssuer (e.g. internal CA; setup does not create it). Mutually exclusive with --acme-email. Overrides env MCP_SETUP_TLS_CLUSTER_ISSUER
       --with-mcp-auth-server                 Deploy the optional bundled mcp-auth authorization server; production requires a platform domain, connector, and TLS-enabled ingress
       --with-tls                             Enable TLS overlays (ingress/registry). Use --acme-email for public Let's Encrypt, --tls-cluster-issuer for an org ClusterIssuer, or the bundled mcp-runtime-ca private CA (no ACME) when neither is set
-      --without-sentinel                     Skip deploying the bundled mcp-sentinel stack
+      --without-sentinel                     Skip deploying the bundled platform stack
 
 Global Flags:
       --debug   Enable debug mode with structured error logging

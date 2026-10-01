@@ -52,20 +52,25 @@ func readyPod(ns, app, container, imageID string) *corev1.Pod {
 // installed returns objects for a v0.4.0 test install of the default components.
 func installed(version string) []runtime.Object {
 	sentinel := func(name, container, repo string) *appsv1.Deployment {
-		return deployment("mcp-sentinel", name, container, fmt.Sprintf("%s/%s:%s", reg, repo, version), nil)
+		ns := "mcp-platform"
+		switch name {
+		case "mcp-analytics-api", "mcp-ingest", "mcp-processor":
+			ns = "mcp-observability"
+		}
+		return deployment(ns, name, container, fmt.Sprintf("%s/%s:%s", reg, repo, version), nil)
 	}
 	return []runtime.Object{
 		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "mcp-runtime"}},
 		deployment("mcp-runtime", platformrelease.OperatorDeployment, "manager", reg+"/mcp-runtime-operator:"+version, nil,
-			corev1.EnvVar{Name: "MCP_GATEWAY_PROXY_IMAGE", Value: reg + "/mcp-sentinel-mcp-gateway:" + version},
+			corev1.EnvVar{Name: "MCP_GATEWAY_PROXY_IMAGE", Value: reg + "/mcp-gateway:" + version},
 			corev1.EnvVar{Name: "OTHER", Value: "keep"}),
 		sentinel("mcp-platform-api", "platform-api", "mcp-platform-api"),
 		sentinel("mcp-runtime-api", "runtime-api", "mcp-runtime-api"),
 		sentinel("mcp-analytics-api", "analytics-api", "mcp-analytics-api"),
-		sentinel("mcp-sentinel-ingest", "ingest", "mcp-sentinel-ingest"),
-		sentinel("mcp-sentinel-processor", "processor", "mcp-sentinel-processor"),
-		sentinel("mcp-sentinel-ui", "ui", "mcp-sentinel-ui"),
-		deployment("mcp-sentinel", "mcp-auth-server", "auth-server", "docker.io/princekrroshan01/mcp-auth-server:v1.0.0", nil),
+		sentinel("mcp-ingest", "ingest", "mcp-ingest"),
+		sentinel("mcp-processor", "processor", "mcp-processor"),
+		sentinel("mcp-ui", "ui", "mcp-ui"),
+		deployment("mcp-platform", "mcp-auth-server", "auth-server", "docker.io/princekrroshan01/mcp-auth-server:v1.0.0", nil),
 	}
 }
 
@@ -175,11 +180,11 @@ func TestPlanDetectsTagChangeAndRelativeRegistry(t *testing.T) {
 		t.Fatal(err)
 	}
 	ui := rowFor(t, plan, "ui")
-	if ui.Action != ActionUpdate || ui.TargetImage != reg+"/mcp-sentinel-ui:v0.5.0" || ui.CurrentVersion != "v0.4.0" {
+	if ui.Action != ActionUpdate || ui.TargetImage != reg+"/mcp-ui:v0.5.0" || ui.CurrentVersion != "v0.4.0" {
 		t.Fatalf("ui = %+v", ui)
 	}
 	gw := rowFor(t, plan, "gateway-proxy")
-	if gw.Action != ActionUpdate || gw.CurrentImage != reg+"/mcp-sentinel-mcp-gateway:v0.4.0" {
+	if gw.Action != ActionUpdate || gw.CurrentImage != reg+"/mcp-gateway:v0.4.0" {
 		t.Fatalf("gateway-proxy = %+v", gw)
 	}
 	if len(plan.Warnings) == 0 || !strings.Contains(strings.Join(plan.Warnings, ";"), "tenant MCP server pods") {
@@ -189,16 +194,16 @@ func TestPlanDetectsTagChangeAndRelativeRegistry(t *testing.T) {
 
 func TestPlanDigestComparison(t *testing.T) {
 	objs := installed("v0.4.0")
-	objs = append(objs, readyPod("mcp-sentinel", "mcp-sentinel-ui", "ui", reg+"/mcp-sentinel-ui@"+digestA))
+	objs = append(objs, readyPod("mcp-platform", "mcp-ui", "ui", reg+"/mcp-ui@"+digestA))
 	cs := fake.NewSimpleClientset(objs...)
 
 	// Running digest matches: spec gets pinned (update) so later runs are exact.
-	plan, err := BuildPlan(context.Background(), cs, manifest(t, "v0.4.0", setComponent("ui", "mcp-sentinel-ui", "v0.4.0", digestA)), Selection{})
+	plan, err := BuildPlan(context.Background(), cs, manifest(t, "v0.4.0", setComponent("ui", "mcp-ui", "v0.4.0", digestA)), Selection{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	ui := rowFor(t, plan, "ui")
-	if ui.Action != ActionUpdate || ui.CurrentDigest != digestA || ui.TargetImage != reg+"/mcp-sentinel-ui:v0.4.0@"+digestA {
+	if ui.Action != ActionUpdate || ui.CurrentDigest != digestA || ui.TargetImage != reg+"/mcp-ui:v0.4.0@"+digestA {
 		t.Fatalf("pin row = %+v", ui)
 	}
 	if n := len(plan.Changed()); n != 1 {
@@ -206,15 +211,15 @@ func TestPlanDigestComparison(t *testing.T) {
 	}
 
 	// Different digest for the same tag: update.
-	plan, _ = BuildPlan(context.Background(), cs, manifest(t, "v0.4.0", setComponent("ui", "mcp-sentinel-ui", "v0.4.0", digestB)), Selection{})
+	plan, _ = BuildPlan(context.Background(), cs, manifest(t, "v0.4.0", setComponent("ui", "mcp-ui", "v0.4.0", digestB)), Selection{})
 	if r := rowFor(t, plan, "ui"); r.Action != ActionUpdate {
 		t.Fatalf("digest change = %+v", r)
 	}
 
 	// Spec already pinned to target digest: unchanged.
 	pinned := fake.NewSimpleClientset(append(installed("v0.4.0")[:7],
-		deployment("mcp-sentinel", "mcp-sentinel-ui", "ui", reg+"/mcp-sentinel-ui:v0.4.0@"+digestA, nil))...)
-	plan, _ = BuildPlan(context.Background(), pinned, manifest(t, "v0.4.0", setComponent("ui", "mcp-sentinel-ui", "v0.4.0", digestA)), Selection{})
+		deployment("mcp-platform", "mcp-ui", "ui", reg+"/mcp-ui:v0.4.0@"+digestA, nil))...)
+	plan, _ = BuildPlan(context.Background(), pinned, manifest(t, "v0.4.0", setComponent("ui", "mcp-ui", "v0.4.0", digestA)), Selection{})
 	if r := rowFor(t, plan, "ui"); r.Action != ActionUnchanged {
 		t.Fatalf("pinned = %+v", r)
 	}
@@ -398,8 +403,8 @@ func TestCRDReadyConditions(t *testing.T) {
 func TestApplyPatchesOnlyChangedImages(t *testing.T) {
 	cs := fake.NewSimpleClientset(installed("v0.4.0")...)
 	m := manifest(t, "v0.4.0",
-		setComponent("ui", "mcp-sentinel-ui", "v0.4.1", ""),
-		setComponent("gateway-proxy", "mcp-sentinel-mcp-gateway", "v0.4.1", ""),
+		setComponent("ui", "mcp-ui", "v0.4.1", ""),
+		setComponent("gateway-proxy", "mcp-gateway", "v0.4.1", ""),
 		setComponent("operator", "mcp-runtime-operator", "v0.4.1", ""))
 	plan, err := BuildPlan(context.Background(), cs, m, Selection{})
 	if err != nil {
@@ -413,7 +418,7 @@ func TestApplyPatchesOnlyChangedImages(t *testing.T) {
 	if res.Failed {
 		t.Fatalf("apply failed: %+v", res)
 	}
-	if got := patchedDeployments(cs); strings.Join(got, ",") != platformrelease.OperatorDeployment+",mcp-sentinel-ui" {
+	if got := patchedDeployments(cs); strings.Join(got, ",") != platformrelease.OperatorDeployment+",mcp-ui" {
 		t.Fatalf("patched = %v", got)
 	}
 	if len(waited) != 2 {
@@ -424,7 +429,7 @@ func TestApplyPatchesOnlyChangedImages(t *testing.T) {
 	if c.Image != reg+"/mcp-runtime-operator:v0.4.1" {
 		t.Fatalf("operator image = %s", c.Image)
 	}
-	if envValue(c.Env, "MCP_GATEWAY_PROXY_IMAGE") != reg+"/mcp-sentinel-mcp-gateway:v0.4.1" || envValue(c.Env, "OTHER") != "keep" {
+	if envValue(c.Env, "MCP_GATEWAY_PROXY_IMAGE") != reg+"/mcp-gateway:v0.4.1" || envValue(c.Env, "OTHER") != "keep" {
 		t.Fatalf("operator env = %+v", c.Env)
 	}
 	if op.Annotations[platformrelease.AnnotationVersion] != "v0.4.0" ||
@@ -467,15 +472,15 @@ func TestApplyPartialFailureRollsBack(t *testing.T) {
 	if status[platformrelease.OperatorDeployment] != StatusRolledBack || status["mcp-platform-api"] != StatusRolledBack || status["mcp-runtime-api"] != StatusRolledBack {
 		t.Fatalf("status = %v", status)
 	}
-	if status["mcp-sentinel-ui"] != StatusNotAttempted {
+	if status["mcp-ui"] != StatusNotAttempted {
 		t.Fatalf("ui should not be attempted: %v", status)
 	}
-	api, _ := cs.AppsV1().Deployments("mcp-sentinel").Get(context.Background(), "mcp-platform-api", metav1.GetOptions{})
+	api, _ := cs.AppsV1().Deployments("mcp-platform").Get(context.Background(), "mcp-platform-api", metav1.GetOptions{})
 	if api.Spec.Template.Spec.Containers[0].Image != reg+"/mcp-platform-api:v0.4.0" {
 		t.Fatalf("platform-api not restored: %s", api.Spec.Template.Spec.Containers[0].Image)
 	}
 	op, _ := cs.AppsV1().Deployments("mcp-runtime").Get(context.Background(), platformrelease.OperatorDeployment, metav1.GetOptions{})
-	if envValue(op.Spec.Template.Spec.Containers[0].Env, "MCP_GATEWAY_PROXY_IMAGE") != reg+"/mcp-sentinel-mcp-gateway:v0.4.0" {
+	if envValue(op.Spec.Template.Spec.Containers[0].Env, "MCP_GATEWAY_PROXY_IMAGE") != reg+"/mcp-gateway:v0.4.0" {
 		t.Fatal("gateway proxy env not restored")
 	}
 	// Rollback order is reverse: runtime-api, platform-api, operator.
@@ -499,12 +504,12 @@ func TestApplyFailureWithoutRollbackKeepsStateAndPrintsRecovery(t *testing.T) {
 	var buf bytes.Buffer
 	writeResultText(&buf, res)
 	out := buf.String()
-	if !strings.Contains(out, "kubectl -n mcp-sentinel rollout undo deployment/mcp-sentinel-ui") ||
-		!strings.Contains(out, "kubectl -n mcp-sentinel set image deployment/mcp-sentinel-ui ui="+reg+"/mcp-sentinel-ui:v0.4.0") {
+	if !strings.Contains(out, "kubectl -n mcp-platform rollout undo deployment/mcp-ui") ||
+		!strings.Contains(out, "kubectl -n mcp-platform set image deployment/mcp-ui ui="+reg+"/mcp-ui:v0.4.0") {
 		t.Fatalf("recovery commands missing:\n%s", out)
 	}
-	ui, _ := cs.AppsV1().Deployments("mcp-sentinel").Get(context.Background(), "mcp-sentinel-ui", metav1.GetOptions{})
-	if ui.Spec.Template.Spec.Containers[0].Image != reg+"/mcp-sentinel-ui:v0.5.0" {
+	ui, _ := cs.AppsV1().Deployments("mcp-platform").Get(context.Background(), "mcp-ui", metav1.GetOptions{})
+	if ui.Spec.Template.Spec.Containers[0].Image != reg+"/mcp-ui:v0.5.0" {
 		t.Fatal("without rollback the new image should remain")
 	}
 }
@@ -564,7 +569,7 @@ func TestCommandDryRunMakesNoChanges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"Kube context:   kind-mcp-runtime", "Cluster ID:     uid-1", "Version:        v0.4.0 -> v0.5.0", "Dry run (plan only;", "Preserved (never modified by update):", "mcp-sentinel/mcp-sentinel-ui"} {
+	for _, want := range []string{"Kube context:   kind-mcp-runtime", "Cluster ID:     uid-1", "Version:        v0.4.0 -> v0.5.0", "Dry run (plan only;", "Preserved (never modified by update):", "mcp-platform/mcp-ui"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("dry-run output missing %q:\n%s", want, out)
 		}
@@ -594,7 +599,7 @@ func TestCommandConfirmation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("apply: %v\n%s", err, out)
 	}
-	if got := patchedDeployments(cs); len(got) != 1 || got[0] != "mcp-sentinel-ui" {
+	if got := patchedDeployments(cs); len(got) != 1 || got[0] != "mcp-ui" {
 		t.Fatalf("patched = %v", got)
 	}
 	if !strings.Contains(out, "updated") {
@@ -655,7 +660,7 @@ func TestPlanImageBuildsChangedOnlyReuseAndBuild(t *testing.T) {
 		t.Fatal(err)
 	}
 	present := map[string]bool{
-		reg + "/mcp-sentinel-ui:v0.5.0": true,
+		reg + "/mcp-ui:v0.5.0": true,
 	}
 	actions, err := planImageBuilds(context.Background(), plan, BuildOptions{
 		RegistryHasImage: func(_ context.Context, image string) (bool, error) {
@@ -686,7 +691,7 @@ func TestPlanImageBuildsChangedOnlyReuseAndBuild(t *testing.T) {
 func TestBuildAndPushChangedSkipsReuse(t *testing.T) {
 	var built, pushed []string
 	actions := []ImageBuildAction{
-		{Component: "ui", Image: reg + "/mcp-sentinel-ui:v0.5.0", Action: ImageActionReuse},
+		{Component: "ui", Image: reg + "/mcp-ui:v0.5.0", Action: ImageActionReuse},
 		{Component: "platform-api", Image: reg + "/mcp-platform-api:v0.5.0", Action: ImageActionBuild},
 	}
 	err := buildAndPushChanged(context.Background(), actions, BuildOptions{
@@ -715,14 +720,14 @@ func TestBuildAndPushChangedSkipsReuse(t *testing.T) {
 func TestApplySkipsAlreadyCurrentDeployment(t *testing.T) {
 	cs := fake.NewSimpleClientset(installed("v0.5.0")...)
 	// Force a plan row that thinks ui needs update while the live image already matches.
-	plan, err := BuildPlan(context.Background(), cs, manifest(t, "v0.5.0", setComponent("ui", "mcp-sentinel-ui", "v0.5.1", "")), Selection{Only: []string{"ui"}})
+	plan, err := BuildPlan(context.Background(), cs, manifest(t, "v0.5.0", setComponent("ui", "mcp-ui", "v0.5.1", "")), Selection{Only: []string{"ui"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Pretend inventory said update, but put the target image on the Deployment before Apply.
-	ui, _ := cs.AppsV1().Deployments("mcp-sentinel").Get(context.Background(), "mcp-sentinel-ui", metav1.GetOptions{})
-	ui.Spec.Template.Spec.Containers[0].Image = reg + "/mcp-sentinel-ui:v0.5.1"
-	_, _ = cs.AppsV1().Deployments("mcp-sentinel").Update(context.Background(), ui, metav1.UpdateOptions{})
+	ui, _ := cs.AppsV1().Deployments("mcp-platform").Get(context.Background(), "mcp-ui", metav1.GetOptions{})
+	ui.Spec.Template.Spec.Containers[0].Image = reg + "/mcp-ui:v0.5.1"
+	_, _ = cs.AppsV1().Deployments("mcp-platform").Update(context.Background(), ui, metav1.UpdateOptions{})
 	cs.ClearActions()
 
 	res := Apply(context.Background(), cs, plan, ApplyOptions{Timeout: time.Second, Waiter: noopWaiter})
@@ -787,7 +792,7 @@ func TestCommandBuildDryRunPlansImagesWithoutDocker(t *testing.T) {
 func TestBuildAndPushRetriesThenSucceeds(t *testing.T) {
 	attempts := 0
 	actions := []ImageBuildAction{
-		{Component: "ui", Image: reg + "/mcp-sentinel-ui:v0.5.0", Action: ImageActionBuild},
+		{Component: "ui", Image: reg + "/mcp-ui:v0.5.0", Action: ImageActionBuild},
 	}
 	err := buildAndPushChanged(context.Background(), actions, BuildOptions{
 		Enabled: true,

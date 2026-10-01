@@ -28,7 +28,7 @@ const (
 var preservedResources = []string{
 	"Secrets (credentials, registry pull secrets, TLS material)",
 	"PersistentVolumeClaims and PersistentVolumes (ClickHouse, Kafka, Postgres, registry data)",
-	"ConfigMaps (mcp-sentinel-config, operator and gateway config)",
+	"ConfigMaps (mcp-shared-config, operator and gateway config)",
 	"cert-manager Issuers, ClusterIssuers, and Certificates",
 	"Existing MCP Runtime custom resources (MCPServer, grants, sessions)",
 	"Services, Ingresses, IngressRoutes, NetworkPolicies, and RBAC",

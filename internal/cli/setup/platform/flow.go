@@ -12,6 +12,7 @@ import (
 	"mcp-runtime/internal/cli/core"
 	"mcp-runtime/internal/cli/registry/config"
 	setupplan "mcp-runtime/internal/cli/setup/plan"
+	"mcp-runtime/pkg/platforminventory"
 )
 
 // printPlatformEntrypoints prints the public URLs derived from
@@ -176,7 +177,7 @@ func existingPublicAuthConfigForSetup(plan setupplan.Plan) (map[string]string, e
 	if publicBrowserLoginConfigConfigured(nil) {
 		return nil, nil
 	}
-	return existingConfigMapDataClientGo(core.DefaultAnalyticsNamespace, "mcp-sentinel-config")
+	return existingConfigMapDataClientGo(core.ComponentNamespace("platform-api"), platforminventory.SharedConfigName)
 }
 
 func platformAdminEnvConfigured() bool {

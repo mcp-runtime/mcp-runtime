@@ -24,13 +24,13 @@ const registryAdminAuthMiddleware = "registry-admin-auth@file"
 
 const testModeOperatorImage = "docker.io/library/mcp-runtime-operator:latest"
 
-const defaultGatewayProxyRepository = "mcp-sentinel-mcp-gateway"
+const defaultGatewayProxyRepository = "mcp-gateway"
 
-const defaultAnalyticsIngestURL = "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events"
+const defaultAnalyticsIngestURL = "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events"
 
 const gatewayOTELExporterOTLPEndpointEnv = "MCP_GATEWAY_OTEL_EXPORTER_OTLP_ENDPOINT"
 
-const defaultGatewayOTELExporterOTLPEndpoint = "http://otel-collector.mcp-sentinel.svc.cluster.local:4318"
+const defaultGatewayOTELExporterOTLPEndpoint = "http://otel-collector.mcp-observability.svc.cluster.local:4318"
 
 func clusterServiceDNS(service, namespace string) string {
 	domain := strings.Trim(strings.TrimSuffix(strings.TrimSpace(os.Getenv("MCP_CLUSTER_DOMAIN")), "."), ".")
@@ -41,27 +41,30 @@ func clusterServiceDNS(service, namespace string) string {
 }
 
 func defaultAnalyticsIngestURLForCluster() string {
-	return "http://" + clusterServiceDNS("mcp-sentinel-ingest", "mcp-sentinel") + ":8081/events"
+	return "http://" + clusterServiceDNS("mcp-ingest", core.ComponentNamespace("ingest")) + ":8081/events"
 }
 
 func defaultGatewayOTELExporterOTLPEndpointForCluster() string {
-	return "http://" + clusterServiceDNS("otel-collector", "mcp-sentinel") + ":4318"
+	return "http://" + clusterServiceDNS("otel-collector", core.ComponentNamespace("otel-collector")) + ":4318"
 }
 
 const gatewayProxyDockerfilePath = "services/mcp-gateway/Dockerfile"
 
 const gatewayProxyBuildContext = "."
 
-// pathBasedSentinelIngressNames lists the dev path-based ingresses for the
-// mcp-sentinel stack. Public-host installs remove these after applying the
-// dedicated platform ingress so platform UI/API routes are not exposed on
-// unrelated public hosts such as the MCP gateway host.
-var pathBasedSentinelIngressNames = []string{
-	"mcp-sentinel-gateway",
-	"mcp-sentinel-gateway-observability",
-	"mcp-sentinel-gateway-adapter-session",
-	"mcp-sentinel-gateway-api",
-	"mcp-sentinel-gateway-ingest",
+// pathBasedPlatformIngresses lists the dev path-based ingresses. Public-host
+// installs remove them after applying the dedicated platform ingress so those
+// routes are not exposed on unrelated public hosts such as the MCP gateway host.
+var pathBasedPlatformIngresses = []struct {
+	name      string
+	component string
+}{
+	{"mcp-platform-gateway", "ui"},
+	{"mcp-platform-gateway-adapter-session", "runtime-api"},
+	{"mcp-platform-gateway-api", "platform-api"},
+	{"mcp-platform-gateway-observability", "grafana"},
+	{"mcp-platform-gateway-analytics", "analytics-api"},
+	{"mcp-platform-gateway-ingest", "ingest"},
 }
 
 const (
@@ -115,7 +118,7 @@ type AnalyticsImageSet struct {
 var analyticsComponents = []analyticsComponent{
 	{
 		Name:         "ingest",
-		Repository:   "mcp-sentinel-ingest",
+		Repository:   "mcp-ingest",
 		Dockerfile:   "services/ingest/Dockerfile",
 		BuildContext: ".",
 	},
@@ -139,13 +142,13 @@ var analyticsComponents = []analyticsComponent{
 	},
 	{
 		Name:         "processor",
-		Repository:   "mcp-sentinel-processor",
+		Repository:   "mcp-processor",
 		Dockerfile:   "services/processor/Dockerfile",
 		BuildContext: ".",
 	},
 	{
 		Name:         "ui",
-		Repository:   "mcp-sentinel-ui",
+		Repository:   "mcp-ui",
 		Dockerfile:   "services/ui/Dockerfile",
 		BuildContext: ".",
 	},
@@ -264,7 +267,7 @@ func (d SetupDeps) withDefaults(logger *zap.Logger) SetupDeps {
 	}
 	if d.EnsureNamespace == nil {
 		d.EnsureNamespace = func(namespace string) error {
-			if namespace == core.DefaultAnalyticsNamespace {
+			if namespace == core.ComponentNamespace("platform-api") {
 				return ensurePlatformNamespaceBeforeIngress()
 			}
 			return ensureNamespaceWithLabels(namespace, nil)
@@ -377,7 +380,7 @@ func ValidatePublicPlatformAuthConfig(platformMode string, tlsEnabled, testMode 
 	}
 	return core.NewWithSentinel(
 		core.ErrFieldRequired,
-		"--platform-mode public with --with-tls requires browser login configuration: set GOOGLE_CLIENT_ID or MCP_GOOGLE_CLIENT_ID for Google sign-in, or set OIDC_ISSUER and OIDC_AUDIENCE for another provider (OIDC_JWKS_URL is optional when issuer discovery is available), or rerun against a cluster whose mcp-sentinel-config already contains those values",
+		"--platform-mode public with --with-tls requires browser login configuration: set GOOGLE_CLIENT_ID or MCP_GOOGLE_CLIENT_ID for Google sign-in, or set OIDC_ISSUER and OIDC_AUDIENCE for another provider (OIDC_JWKS_URL is optional when issuer discovery is available), or rerun against a cluster whose mcp-shared-config already contains those values",
 	)
 }
 
@@ -506,7 +509,7 @@ func setupClusterSteps(logger *zap.Logger, kubeconfig, context string, ingressOp
 	// The ingress bundle references Sentinel Roles before analytics deploys.
 	// Ensure identity first, preserving existing admission labels during upgrades.
 	if deps.EnsureNamespace != nil {
-		if err := deps.EnsureNamespace(core.DefaultAnalyticsNamespace); err != nil {
+		if err := deps.EnsureNamespace(core.ComponentNamespace("platform-api")); err != nil {
 			return fmt.Errorf("ensure platform namespace before ingress: %w", err)
 		}
 	}

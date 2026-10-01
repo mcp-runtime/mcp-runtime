@@ -3,9 +3,8 @@
 Parent: [#548](https://github.com/mcp-runtime/mcp-runtime/issues/548).
 Prepared 2026-10-01 against `main` at `14ebdb29`.
 
-Status: proposed delivery plan. Namespace migration is **not ready to ship**.
-The implementation PRs below are drafts with known gaps, not completed findings.
-This document defines the work and evidence required to close F1–F12.
+Status: install placement is [Namespaces](../namespaces.md). The sections below
+are the earlier delivery record, not operator steps.
 
 ## Current work
 

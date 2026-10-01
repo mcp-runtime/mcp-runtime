@@ -15,25 +15,14 @@ import (
 )
 
 // Manager provides operations for Sentinel stack components.
+// Each component carries its own namespace from the inventory.
 type Manager struct {
 	clientset kubernetes.Interface
-	namespace string
 }
 
 // NewManager creates a new Sentinel component manager.
 func NewManager(clientset kubernetes.Interface) *Manager {
-	return &Manager{
-		clientset: clientset,
-		namespace: DefaultNamespace,
-	}
-}
-
-// NewManagerWithNamespace creates a manager for a specific namespace.
-func NewManagerWithNamespace(clientset kubernetes.Interface, namespace string) *Manager {
-	return &Manager{
-		clientset: clientset,
-		namespace: namespace,
-	}
+	return &Manager{clientset: clientset}
 }
 
 // GetComponentStatus returns the status of a single component.

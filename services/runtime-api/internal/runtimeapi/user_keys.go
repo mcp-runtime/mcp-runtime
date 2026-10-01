@@ -16,11 +16,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"mcp-runtime/pkg/sentinel"
 )
 
 const (
-	defaultUserKeySecretNamespace = "mcp-sentinel"
-	defaultUserKeySecretName      = "mcp-sentinel-user-api-keys" // #nosec G101 -- Kubernetes secret resource name, not credential material.
+	defaultUserKeySecretNamespace = sentinel.PlatformNamespace
+	defaultUserKeySecretName      = "mcp-user-api-keys" // #nosec G101 -- Kubernetes secret resource name, not credential material.
 	userKeySecretPayloadKey       = "records.json"
 )
 

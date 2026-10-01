@@ -71,7 +71,8 @@ nav:
       - k3s On-Prem Cluster: k3s-on-prem-cluster.md
       - k3s Deployment Runbook: k3s-deployment-runbook.md
       - Runtime: runtime.md
-      - Sentinel: sentinel.md
+      - Namespaces: namespaces.md
+      - Platform services: platform-services.md
       - Troubleshooting: troubleshooting.md
   - Reference:
       - CLI: cli.md

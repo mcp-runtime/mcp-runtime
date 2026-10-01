@@ -162,7 +162,7 @@ observability paths.
 
 The `observability` scenario validates the trace backend through both direct
 Tempo and Grafana's Tempo datasource. It must find a single request trace that
-contains the gateway service, `mcp-sentinel-ingest`, `mcp-sentinel-processor`,
+contains the gateway service, `mcp-ingest`, `mcp-processor`,
 and the `kafka.produce`, `kafka.consume`, `clickhouse.insert_event`, and
 `clickhouse.insert_batch` spans.
 

@@ -58,11 +58,7 @@ func TestSentinelManagementSurfaceIsStable(t *testing.T) {
 	var got []string
 	for _, c := range SentinelComponents(false) {
 		got = append(got, c.Key)
-		wantNamespace := DefaultNamespace
-		if c.Key == "promtail" {
-			wantNamespace = LogCollectorNamespace
-		}
-		if c.Namespace != wantNamespace {
+		if c.Kind != "" && c.Namespace != ownerNamespace[c.Owner] {
 			t.Fatalf("unexpected component placement: %+v", c)
 		}
 	}

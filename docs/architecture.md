@@ -14,15 +14,22 @@ flowchart TB
         MCP[MCP clients]
     end
 
-    subgraph control [Control plane]
+    subgraph platform [mcp-platform]
         PlatAPI[platform-api]
         RunAPI[runtime-api]
-        AnaAPI[analytics-api]
-        K8s[Kubernetes API]
+    end
+
+    subgraph operatorns [mcp-runtime]
         Op[MCPServer operator]
     end
 
-    subgraph runtime [Runtime plane]
+    subgraph observability [mcp-observability]
+        AnaAPI[analytics-api]
+        Ingest[ingest]
+        CH[ClickHouse / Grafana]
+    end
+
+    subgraph runtime [MCP server namespaces]
         Ing[Ingress / Traefik]
         GW[mcp-gateway sidecar]
         Srv[MCP server pods]
@@ -36,10 +43,7 @@ flowchart TB
         Reg[Container registry]
     end
 
-    subgraph obs [Observability]
-        Ingest[Sentinel ingest]
-        CH[ClickHouse / Grafana]
-    end
+    K8s[Kubernetes API]
 
     CLI --> PlatAPI
     CLI --> RunAPI
@@ -64,10 +68,10 @@ flowchart TB
     AnaAPI --> CH
 ```
 
-The `/api/v1` surface is served by three services behind Traefik path routing:
+Service placement is in [Namespaces](namespaces.md). The `/api/v1` surface is served by three services behind Traefik path routing:
 **platform-api** (identity, auth, registry authorization, admin), **runtime-api**
 (servers, grants, sessions, deployments, adapter sessions), and **analytics-api**
-(events, stats, usage). See [Sentinel](sentinel.md) for the per-service route and
+(events, stats, usage). See [Platform services](platform-services.md) for the per-service route and
 RBAC split.
 
 ## What each layer owns
@@ -75,8 +79,8 @@ RBAC split.
 | Layer | Owns | Read next |
 |-------|------|-----------|
 | **Runtime** | Bootstrap, setup, registry workflow, `MCPServer` reconciliation, grants/sessions, rollout | [Runtime](runtime.md) |
-| **Sentinel** | Gateway sidecar policy enforcement, analytics ingest, dashboards | [Sentinel](sentinel.md) |
-| **Split APIs** | platform-api (teams, identity, registry authz), runtime-api (deploy/push, grants, adapter sessions), analytics-api (events, usage) | [API](api.md), [Sentinel](sentinel.md) |
+| **Platform services** | Gateway sidecar policy enforcement, analytics ingest, dashboards | [Platform services](platform-services.md) |
+| **Split APIs** | platform-api (teams, identity, registry authz), runtime-api (deploy/push, grants, adapter sessions), analytics-api (events, usage) | [API](api.md), [Platform services](platform-services.md) |
 | **Multi-team** | Namespace isolation, team RBAC, Traefik watch scope | [Multi-Team Isolation](multi-team.md) |
 
 ## Typical request path

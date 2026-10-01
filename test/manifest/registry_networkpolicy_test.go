@@ -116,7 +116,7 @@ func TestRegistryNetworkPolicyAllowsHelperPushOnlyToRegistry(t *testing.T) {
 	if !hasSameNamespaceIngressToPort(ingress, 5000) {
 		t.Fatal("registry ingress policy must allow same-namespace helper pods to reach registry:5000")
 	}
-	for _, ns := range []string{"traefik", "mcp-sentinel", "mcp-runtime"} {
+	for _, ns := range []string{"traefik", "mcp-platform", "mcp-runtime"} {
 		if !hasNamespaceIngressToPort(ingress, ns, 5000) {
 			t.Fatalf("registry ingress policy must allow platform namespace %s to reach registry:5000", ns)
 		}

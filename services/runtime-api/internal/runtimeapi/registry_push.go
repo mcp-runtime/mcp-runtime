@@ -16,6 +16,7 @@ import (
 	"mcp-runtime/pkg/metadata"
 	"mcp-runtime/pkg/publishscope"
 	"mcp-runtime/pkg/registrypush"
+	"mcp-runtime/pkg/sentinel"
 )
 
 const (
@@ -155,7 +156,7 @@ func (s *RegistryPushService) HandleRuntimeRegistryPush(w http.ResponseWriter, r
 
 	helperNS := strings.TrimSpace(os.Getenv("MCP_REGISTRY_PUSH_HELPER_NAMESPACE"))
 	if helperNS == "" {
-		helperNS = "mcp-sentinel"
+		helperNS = sentinel.PlatformNamespace
 	}
 	if err := registrypush.EnsureHelperNamespace(ctx, clients.Clientset, helperNS); err != nil {
 		writeAPIError(w, http.StatusBadRequest, err.Error())

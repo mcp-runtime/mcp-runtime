@@ -369,7 +369,7 @@ kubectl -n registry create secret tls registry-tls \
   --cert=/secure/fullchain.pem --key=/secure/privkey.pem \
   --dry-run=client -o yaml | kubectl apply -f -
 
-kubectl -n mcp-sentinel create secret tls mcp-sentinel-platform-tls \
+kubectl -n mcp-platform create secret tls mcp-platform-tls \
   --cert=/secure/fullchain.pem --key=/secure/privkey.pem \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
@@ -382,7 +382,7 @@ Then run setup with static Secret mode:
 
 Do not combine `--provided-tls-secrets` with `--acme-email` or
 `--tls-cluster-issuer`. If you also deploy bundled mcp-auth, add its
-operator-managed TLS Secret to the `mcp-sentinel` namespace and pass its name
+operator-managed TLS Secret to the `mcp-platform` namespace and pass its name
 through the optional `--mcp-auth-tls-secret` override.
 
 ### Renewal

@@ -14,27 +14,27 @@ import (
 // exported. It remains distribution-neutral by discovering the Service and
 // checking the deployed workload rather than assuming a node address.
 func checkSentinelTelemetryPipeline(kubectl core.KubectlRunner) DoctorCheck {
-	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", doctorSentinelNamespace, "-o", "jsonpath={.metadata.name}"}); err != nil {
-		return DoctorCheck{Name: "sentinel telemetry pipeline", OK: true, Detail: "namespace mcp-sentinel not found; skipping telemetry check"}
+	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", componentNamespace("otel-collector"), "-o", "jsonpath={.metadata.name}"}); err != nil {
+		return DoctorCheck{Name: "sentinel telemetry pipeline", OK: true, Detail: "namespace mcp-observability not found; skipping telemetry check"}
 	}
 
-	collectorPair, collectorReady, err := doctorDeploymentReplicaStatus(kubectl, doctorSentinelNamespace, "otel-collector")
+	collectorPair, collectorReady, err := doctorDeploymentReplicaStatus(kubectl, componentNamespace("otel-collector"), "otel-collector")
 	if err != nil {
 		return DoctorCheck{Name: "sentinel telemetry pipeline", OK: false, Detail: err.Error(), Remedy: "inspect the otel-collector deployment and its ConfigMap"}
 	}
 	if !collectorReady {
-		return DoctorCheck{Name: "sentinel telemetry pipeline", OK: false, Detail: fmt.Sprintf("otel-collector %s replicas ready", collectorPair), Remedy: "inspect `kubectl -n mcp-sentinel logs deploy/otel-collector` and the collector ConfigMap"}
+		return DoctorCheck{Name: "sentinel telemetry pipeline", OK: false, Detail: fmt.Sprintf("otel-collector %s replicas ready", collectorPair), Remedy: "inspect `kubectl -n mcp-observability logs deploy/otel-collector` and the collector ConfigMap"}
 	}
 
-	if _, err := readKubectlOutput(kubectl, []string{"get", "service", "otel-collector", "-n", doctorSentinelNamespace, "-o", "jsonpath={.metadata.name}"}); err != nil {
+	if _, err := readKubectlOutput(kubectl, []string{"get", "service", "otel-collector", "-n", componentNamespace("otel-collector"), "-o", "jsonpath={.metadata.name}"}); err != nil {
 		return DoctorCheck{Name: "sentinel telemetry pipeline", OK: false, Detail: fmt.Sprintf("otel-collector Service is unavailable: %v", err), Remedy: "restore Service/otel-collector and its selector"}
 	}
-	addresses, err := readKubectlOutput(kubectl, []string{"get", "endpoints", "otel-collector", "-n", doctorSentinelNamespace, "-o", "jsonpath={.subsets[*].addresses[*].ip}"})
+	addresses, err := readKubectlOutput(kubectl, []string{"get", "endpoints", "otel-collector", "-n", componentNamespace("otel-collector"), "-o", "jsonpath={.subsets[*].addresses[*].ip}"})
 	if err != nil || strings.TrimSpace(addresses) == "" {
 		return DoctorCheck{Name: "sentinel telemetry pipeline", OK: false, Detail: "otel-collector Service has no ready endpoints", Remedy: "check the collector pod labels, readiness probe, and Service selector"}
 	}
 
-	if _, err := readKubectlOutput(kubectl, []string{"get", "configmap", "otel-collector-config", "-n", doctorSentinelNamespace, "-o", "jsonpath={.data.otel-collector-config.yaml}"}); err != nil {
+	if _, err := readKubectlOutput(kubectl, []string{"get", "configmap", "otel-collector-config", "-n", componentNamespace("otel-collector"), "-o", "jsonpath={.data.otel-collector-config.yaml}"}); err != nil {
 		return DoctorCheck{Name: "sentinel telemetry pipeline", OK: false, Detail: fmt.Sprintf("otel-collector ConfigMap is unavailable: %v", err), Remedy: "restore ConfigMap/otel-collector-config and its trace pipeline"}
 	}
 	return DoctorCheck{Name: "sentinel telemetry pipeline", OK: true, Detail: fmt.Sprintf("otel-collector %s ready with a Service endpoint", collectorPair)}
@@ -90,15 +90,15 @@ var grafanaPrometheusUIDPattern = regexp.MustCompile(`(?m)^\s*uid:\s*["']?` + gr
 // All reads are ConfigMap/Deployment reads; no Grafana credentials are needed.
 func checkSentinelGrafanaProvisioning(kubectl core.KubectlRunner) DoctorCheck {
 	const name = "sentinel Grafana provisioning"
-	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", doctorSentinelNamespace, "-o", "jsonpath={.metadata.name}"}); err != nil {
-		return DoctorCheck{Name: name, OK: true, Detail: "namespace mcp-sentinel not found; skipping Grafana provisioning check"}
+	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", componentNamespace("grafana"), "-o", "jsonpath={.metadata.name}"}); err != nil {
+		return DoctorCheck{Name: name, OK: true, Detail: "namespace mcp-observability not found; skipping Grafana provisioning check"}
 	}
-	if _, err := readKubectlOutput(kubectl, []string{"get", "deployment", "grafana", "-n", doctorSentinelNamespace, "-o", "jsonpath={.metadata.name}"}); err != nil {
+	if _, err := readKubectlOutput(kubectl, []string{"get", "deployment", "grafana", "-n", componentNamespace("grafana"), "-o", "jsonpath={.metadata.name}"}); err != nil {
 		return DoctorCheck{Name: name, OK: true, Detail: "grafana deployment not found; skipping Grafana provisioning check"}
 	}
 	const remedy = "re-run `mcp-runtime setup` (or the targeted platform update) so k8s/19-grafana-datasources.yaml, k8s/21-grafana-dashboards.yaml, and k8s/12-grafana.yaml are applied, then restart deployment/grafana"
 
-	datasources, err := readKubectlOutput(kubectl, []string{"get", "configmap", "grafana-datasources", "-n", doctorSentinelNamespace, "-o", `jsonpath={.data.datasources\.yaml}`})
+	datasources, err := readKubectlOutput(kubectl, []string{"get", "configmap", "grafana-datasources", "-n", componentNamespace("grafana"), "-o", `jsonpath={.data.datasources\.yaml}`})
 	if err != nil {
 		return DoctorCheck{Name: name, OK: false, Detail: fmt.Sprintf("ConfigMap grafana-datasources is unavailable: %v", err), Remedy: remedy}
 	}
@@ -106,7 +106,7 @@ func checkSentinelGrafanaProvisioning(kubectl core.KubectlRunner) DoctorCheck {
 		return DoctorCheck{Name: name, OK: false, Detail: fmt.Sprintf("grafana-datasources does not pin the Prometheus datasource uid %q; dashboard panels fail with \"Data source not found\"", grafanaPrometheusUID), Remedy: remedy}
 	}
 
-	dashboard, err := readKubectlOutput(kubectl, []string{"get", "configmap", "grafana-dashboards", "-n", doctorSentinelNamespace, "-o", `jsonpath={.data.mcp-server\.json}`})
+	dashboard, err := readKubectlOutput(kubectl, []string{"get", "configmap", "grafana-dashboards", "-n", componentNamespace("grafana"), "-o", `jsonpath={.data.mcp-server\.json}`})
 	if err != nil || strings.TrimSpace(dashboard) == "" {
 		return DoctorCheck{Name: name, OK: false, Detail: "ConfigMap grafana-dashboards is missing the mcp-server.json dashboard; server-card Grafana links fail with \"Dashboard not found\"", Remedy: remedy}
 	}
@@ -117,7 +117,7 @@ func checkSentinelGrafanaProvisioning(kubectl core.KubectlRunner) DoctorCheck {
 		return DoctorCheck{Name: name, OK: false, Detail: fmt.Sprintf("mcp-server.json does not declare dashboard uid %q", grafanaDashboardUID), Remedy: remedy}
 	}
 
-	raw, err := readKubectlOutput(kubectl, []string{"get", "deployment", "grafana", "-n", doctorSentinelNamespace, "-o", "json"})
+	raw, err := readKubectlOutput(kubectl, []string{"get", "deployment", "grafana", "-n", componentNamespace("grafana"), "-o", "json"})
 	if err != nil {
 		return DoctorCheck{Name: name, OK: false, Detail: fmt.Sprintf("failed reading deployment/grafana: %v", err), Remedy: remedy}
 	}

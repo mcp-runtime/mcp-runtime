@@ -1,14 +1,14 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: mcp-sentinel-config
-  namespace: mcp-sentinel
+  name: mcp-shared-config
+  namespace: mcp-platform
 data:
-  CLICKHOUSE_ADDR: "clickhouse:9000"
+  CLICKHOUSE_ADDR: "clickhouse.mcp-observability.svc.cluster.local:9000"
   CLICKHOUSE_DB: "mcp"
-  KAFKA_BROKERS: "kafka:9092"
+  KAFKA_BROKERS: "kafka.mcp-observability.svc.cluster.local:9092"
   KAFKA_TOPIC: "mcp.events"
-  MCP_SENTINEL_INGEST_URL: "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events"
+  MCP_SENTINEL_INGEST_URL: "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events"
   OIDC_ISSUER: ""
   OIDC_AUDIENCE: ""
   OIDC_JWKS_URL: ""

@@ -61,7 +61,7 @@ echo "registry internal: $REGISTRY_INTERNAL"
 echo "registry host: $REGISTRY_HOST"
 echo "registry push mode: $PUSH_MODE"
 if [[ "$UPDATE_MCP_AUTH" == "1" ]]; then
-  mcpruntime_org_kubectl get deployment mcp-auth-server -n mcp-sentinel >/dev/null
+  mcpruntime_org_kubectl get deployment mcp-auth-server -n mcp-platform >/dev/null
   if [[ "$MCP_AUTH_IMAGE_SOURCE" == "local" ]]; then
     : "${MCP_AUTH_BUILD_REF:?set MCP_AUTH_BUILD_REF to the selected mcp-auth branch, tag, or commit}"
     [[ -f "$MCP_AUTH_SOURCE/auth-server/Dockerfile" ]] || {
@@ -89,7 +89,7 @@ fi
 if [[ "$PUSH_MODE" == "public" ]]; then
   DOCKER_CONFIG_TMP="$(mktemp -d)"
   export DOCKER_CONFIG="$DOCKER_CONFIG_TMP"
-  mcpruntime_org_kubectl get secret mcp-sentinel-secrets -n mcp-sentinel \
+  mcpruntime_org_kubectl get secret mcp-ui-credentials -n mcp-platform \
     -o jsonpath='{.data.UI_API_KEY}' | base64 -d \
     | docker login "$REGISTRY_HOST" --username platform-service --password-stdin
 fi
@@ -110,9 +110,9 @@ for entry in "${API_SERVICES[@]}"; do
     -f "services/${dir}/Dockerfile" -t "${IMAGE_REGISTRY}/${image}:${TAG}" .
 done
 
-echo "Building ${IMAGE_REGISTRY}/mcp-sentinel-ui:${TAG} (${PLATFORM})..."
+echo "Building ${IMAGE_REGISTRY}/mcp-ui:${TAG} (${PLATFORM})..."
 docker build --platform "$PLATFORM" --label "org.opencontainers.image.revision=$(git rev-parse HEAD)" \
-  -f services/ui/Dockerfile -t "${IMAGE_REGISTRY}/mcp-sentinel-ui:${TAG}" .
+  -f services/ui/Dockerfile -t "${IMAGE_REGISTRY}/mcp-ui:${TAG}" .
 echo "Building ${IMAGE_REGISTRY}/mcp-runtime-doctor-smoke:${TAG} (${PLATFORM})..."
 docker build --platform "$PLATFORM" --label "org.opencontainers.image.revision=$(git rev-parse HEAD)" \
   -f services/doctor-smoke/Dockerfile -t "${IMAGE_REGISTRY}/mcp-runtime-doctor-smoke:${TAG}" .
@@ -140,7 +140,7 @@ for entry in "${API_SERVICES[@]}"; do
     echo "failed to push ${image}:${TAG}" >&2; exit 1
   fi
 done
-for image in mcp-sentinel-ui mcp-runtime-doctor-smoke; do
+for image in mcp-ui mcp-runtime-doctor-smoke; do
   if [[ "$PUSH_MODE" == "public" ]]; then
     docker push "${REGISTRY_HOST}/${image}:${TAG}"
   elif ! mcpruntime_org_registry_push_via_port_forward "$REGISTRY_INTERNAL" "$PF_PORT" "$image" "$TAG"; then
@@ -157,11 +157,11 @@ fi
 
 mcpruntime_org_ensure_platform_pull_secret
 if [[ "$UPDATE_MCP_AUTH" == "1" ]]; then
-  mcpruntime_org_kubectl patch deployment/mcp-auth-server -n mcp-sentinel \
+  mcpruntime_org_kubectl patch deployment/mcp-auth-server -n mcp-platform \
     -p '{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"mcp-runtime-registry-pull"}]}}}}'
 fi
 
-mcpruntime_org_kubectl patch configmap mcp-sentinel-config -n mcp-sentinel --type merge -p "$(cat <<PATCH
+mcpruntime_org_kubectl patch configmap mcp-shared-config -n mcp-platform --type merge -p "$(cat <<PATCH
 {
   "data": {
     "PLATFORM_TEAM_TRAEFIK_WATCH": "${PLATFORM_TEAM_TRAEFIK_WATCH:-disabled}",
@@ -176,13 +176,17 @@ PATCH
 
 for entry in "${API_SERVICES[@]}"; do
   IFS=: read -r _ image container <<<"$entry"
-  mcpruntime_org_kubectl set image "deployment/${image}" -n mcp-sentinel \
+  ns=mcp-platform
+  if [[ "$image" == "mcp-analytics-api" ]]; then
+    ns=mcp-observability
+  fi
+  mcpruntime_org_kubectl set image "deployment/${image}" -n "$ns" \
     "${container}=${REGISTRY_HOST}/${image}:${TAG}"
 done
-mcpruntime_org_kubectl set image deployment/mcp-sentinel-ui -n mcp-sentinel \
-  "ui=${REGISTRY_HOST}/mcp-sentinel-ui:${TAG}"
+mcpruntime_org_kubectl set image deployment/mcp-ui -n mcp-platform \
+  "ui=${REGISTRY_HOST}/mcp-ui:${TAG}"
 if [[ "$UPDATE_MCP_AUTH" == "1" ]]; then
-  mcpruntime_org_kubectl set image deployment/mcp-auth-server -n mcp-sentinel \
+  mcpruntime_org_kubectl set image deployment/mcp-auth-server -n mcp-platform \
     "auth-server=${REGISTRY_HOST}/mcp-auth-server:${MCP_AUTH_TAG}"
   auth_env=()
   if [[ -n "${MCP_AUTH_CLIENT_ID_METADATA_ENABLED:-}" ]]; then
@@ -192,17 +196,21 @@ if [[ "$UPDATE_MCP_AUTH" == "1" ]]; then
     auth_env+=("MCP_AUTH_CLIENT_ID_METADATA_HOSTS=${MCP_AUTH_CLIENT_ID_METADATA_HOSTS}")
   fi
   if ((${#auth_env[@]} > 0)); then
-    mcpruntime_org_kubectl set env deployment/mcp-auth-server -n mcp-sentinel "${auth_env[@]}"
+    mcpruntime_org_kubectl set env deployment/mcp-auth-server -n mcp-platform "${auth_env[@]}"
   fi
 fi
 
 for entry in "${API_SERVICES[@]}"; do
   IFS=: read -r _ image _ <<<"$entry"
-  mcpruntime_org_kubectl rollout status "deployment/${image}" -n mcp-sentinel --timeout=180s
+  ns=mcp-platform
+  if [[ "$image" == "mcp-analytics-api" ]]; then
+    ns=mcp-observability
+  fi
+  mcpruntime_org_kubectl rollout status "deployment/${image}" -n "$ns" --timeout=180s
 done
-mcpruntime_org_kubectl rollout status deployment/mcp-sentinel-ui -n mcp-sentinel --timeout=180s
+mcpruntime_org_kubectl rollout status deployment/mcp-ui -n mcp-platform --timeout=180s
 if [[ "$UPDATE_MCP_AUTH" == "1" ]]; then
-  mcpruntime_org_kubectl rollout status deployment/mcp-auth-server -n mcp-sentinel --timeout=180s
+  mcpruntime_org_kubectl rollout status deployment/mcp-auth-server -n mcp-platform --timeout=180s
 fi
 
 echo "Patching team namespace NetworkPolicies for ingress controller (${PLATFORM_TRAEFIK_NAMESPACE:-kube-system})..."

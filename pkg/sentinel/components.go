@@ -13,9 +13,10 @@ type Component = platforminventory.Component
 type PortTarget = platforminventory.PortTarget
 
 const (
-	DefaultNamespace      = platforminventory.DefaultNamespace
-	LogCollectorNamespace = platforminventory.LogCollectorNamespace
-	OperatorNamespace     = platforminventory.OperatorNamespace
+	PlatformNamespace      = platforminventory.PlatformNamespace
+	ObservabilityNamespace = platforminventory.ObservabilityNamespace
+	LogCollectorNamespace  = platforminventory.LogCollectorNamespace
+	OperatorNamespace      = platforminventory.OperatorNamespace
 )
 
 // Components preserves the historical public status and management surface.

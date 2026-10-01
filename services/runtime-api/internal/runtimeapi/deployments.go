@@ -657,7 +657,7 @@ func ensureNamespacePlatformAPISecretAccess(ctx context.Context, client kubernet
 			{
 				Kind:      rbacv1.ServiceAccountKind,
 				Name:      platformNamespaceAPIServiceAccountName,
-				Namespace: sentinel.DefaultNamespace,
+				Namespace: sentinel.PlatformNamespace,
 			},
 		},
 	}
@@ -770,15 +770,17 @@ func desiredDefaultDenyNetworkPolicy(ns string, ingressFromNamespaces ...string)
 			},
 		})
 	}
-	ingress = append(ingress, networkingv1.NetworkPolicyIngressRule{
-		From: []networkingv1.NetworkPolicyPeer{
-			{
-				NamespaceSelector: &metav1.LabelSelector{
-					MatchLabels: map[string]string{"kubernetes.io/metadata.name": sentinel.DefaultNamespace},
+	for _, namespace := range []string{sentinel.PlatformNamespace, sentinel.ObservabilityNamespace} {
+		ingress = append(ingress, networkingv1.NetworkPolicyIngressRule{
+			From: []networkingv1.NetworkPolicyPeer{
+				{
+					NamespaceSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{"kubernetes.io/metadata.name": namespace},
+					},
 				},
 			},
-		},
-	})
+		})
+	}
 	policy := &networkingv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: "platform-default-deny", Namespace: ns},
 		Spec: networkingv1.NetworkPolicySpec{
@@ -806,7 +808,7 @@ func desiredDefaultDenyNetworkPolicy(ns string, ingressFromNamespaces ...string)
 					To: []networkingv1.NetworkPolicyPeer{
 						{
 							NamespaceSelector: &metav1.LabelSelector{
-								MatchLabels: map[string]string{"kubernetes.io/metadata.name": sentinel.DefaultNamespace},
+								MatchLabels: map[string]string{"kubernetes.io/metadata.name": sentinel.ObservabilityNamespace},
 							},
 						},
 					},

@@ -111,7 +111,7 @@ func main() {
 	})
 	mux.Handle("/events", server.auth(http.HandlerFunc(server.handleEvents)))
 
-	shutdown, err := serviceutil.InitTracer("mcp-sentinel-ingest")
+	shutdown, err := serviceutil.InitTracer("mcp-ingest")
 	if err != nil {
 		log.Printf("otel init failed: %v", err)
 	} else {
@@ -129,9 +129,9 @@ func main() {
 		}
 	}()
 
-	log.Printf("mcp-sentinel-ingest listening on :%s", port)
+	log.Printf("mcp-ingest listening on :%s", port)
 	requestMetrics := serviceutil.DefaultRequestMetrics()
-	handler := otelhttp.NewHandler(serviceutil.LogRequests(requestMetrics.Middleware("mcp-sentinel-ingest", mux)), "http.server")
+	handler := otelhttp.NewHandler(serviceutil.LogRequests(requestMetrics.Middleware("mcp-ingest", mux)), "http.server")
 	httpServer := &http.Server{
 		Addr:              ":" + port,
 		Handler:           handler,
@@ -229,7 +229,7 @@ func (s *ingestServer) handleEvents(w http.ResponseWriter, r *http.Request) {
 	if s.topic != "" {
 		spanOpts = append(spanOpts, trace.WithAttributes(attribute.String("kafka.topic", s.topic)))
 	}
-	writeCtx, span := otel.Tracer("mcp-sentinel-ingest").Start(r.Context(), "kafka.produce", spanOpts...)
+	writeCtx, span := otel.Tracer("mcp-ingest").Start(r.Context(), "kafka.produce", spanOpts...)
 	payload.SetTraceID(serviceutil.TraceIDFromContext(writeCtx))
 
 	raw, err := json.Marshal(payload)

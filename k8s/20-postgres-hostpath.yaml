@@ -1,12 +1,12 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: mcp-sentinel-postgres
-  namespace: mcp-sentinel
+  name: mcp-postgres
+  namespace: mcp-platform
 spec:
   clusterIP: None
   selector:
-    app: mcp-sentinel-postgres
+    app: mcp-postgres
   ports:
     - name: postgres
       port: 5432
@@ -15,23 +15,23 @@ spec:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: mcp-sentinel-postgres
-  namespace: mcp-sentinel
+  name: mcp-postgres
+  namespace: mcp-platform
 spec:
-  serviceName: mcp-sentinel-postgres
+  serviceName: mcp-postgres
   persistentVolumeClaimRetentionPolicy:
     whenDeleted: Retain
     whenScaled: Retain
   replicas: 1
   selector:
     matchLabels:
-      app: mcp-sentinel-postgres
+      app: mcp-postgres
   template:
     metadata:
       labels:
-        app: mcp-sentinel-postgres
+        app: mcp-postgres
     spec:
-      priorityClassName: mcp-sentinel-data
+      priorityClassName: mcp-shared-data
       terminationGracePeriodSeconds: 60
       automountServiceAccountToken: false
       securityContext:

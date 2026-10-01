@@ -27,7 +27,7 @@ import (
 )
 
 func deployAnalyticsStepCmd(logger *zap.Logger, images AnalyticsImageSet, storageMode, platformMode string, deps SetupDeps) error {
-	core.Info("Deploying mcp-sentinel manifests")
+	core.Info("Deploying platform manifests")
 	if err := deps.DeployAnalyticsManifests(logger, images, storageMode, platformMode); err != nil {
 		core.Error("Analytics deployment failed")
 		core.LogStructuredError(logger, err, "Analytics deployment failed")
@@ -915,10 +915,10 @@ func applyOperatorManagerManifest(kubectl core.KubectlRunner, managerYAML []byte
 	return cmd.Run()
 }
 
-// mcpSentinelDependencyRolloutFailed wraps early mcp-sentinel storage/messaging rollouts; diagnostics are attached only in --debug.
+// mcpSentinelDependencyRolloutFailed wraps early platform storage/messaging rollouts; diagnostics are attached only in --debug.
 func mcpSentinelDependencyRolloutFailed(kubectl core.KubectlRunner, err error, kind, name, namespace, phase string) error {
 	ctx := map[string]any{
-		"component": "mcp-sentinel",
+		"component": "platform",
 		"phase":     phase,
 		"resource":  fmt.Sprintf("%s/%s", kind, name),
 		"namespace": namespace,
@@ -929,13 +929,13 @@ func mcpSentinelDependencyRolloutFailed(kubectl core.KubectlRunner, err error, k
 		}
 	}
 	return core.WrapWithSentinelAndContext(core.ErrOperatorDeploymentFailed, err,
-		fmt.Sprintf("mcp-sentinel %s: %s/%s: %v", phase, kind, name, err), ctx)
+		fmt.Sprintf("platform %s: %s/%s: %v", phase, kind, name, err), ctx)
 }
 
 // mcpSentinelDependencyJobFailed wraps the clickhouse init job; diagnostics are attached only in --debug.
 func mcpSentinelDependencyJobFailed(kubectl core.KubectlRunner, err error, name, namespace, phase string) error {
 	ctx := map[string]any{
-		"component": "mcp-sentinel",
+		"component": "platform",
 		"phase":     phase,
 		"resource":  "job/" + name,
 		"namespace": namespace,
@@ -946,7 +946,7 @@ func mcpSentinelDependencyJobFailed(kubectl core.KubectlRunner, err error, name,
 		}
 	}
 	return core.WrapWithSentinelAndContext(core.ErrOperatorDeploymentFailed, err,
-		fmt.Sprintf("mcp-sentinel %s: job/%s: %v", phase, name, err), ctx)
+		fmt.Sprintf("platform %s: job/%s: %v", phase, name, err), ctx)
 }
 
 // runRolloutWithOptionalDebugCapture runs kubectl rollout status, teeing output to a buffer
@@ -991,7 +991,7 @@ func waitForRolloutStatusWithClientGo(kind, name, namespace string, timeout time
 	return k8sclient.WaitForWorkloadRollout(context.Background(), clients, namespace, kind, name, timeout)
 }
 
-// analyticsRolloutTimeoutString returns the kubectl --timeout value for mcp-sentinel rollouts.
+// analyticsRolloutTimeoutString returns the kubectl --timeout value for platform rollouts.
 // Uses MCP_DEPLOYMENT_TIMEOUT (see core.GetDeploymentTimeout); if unset or non-positive, uses the default 5m.
 func analyticsRolloutTimeoutString() string {
 	return analyticsRolloutTimeoutDuration().String()
@@ -1005,13 +1005,13 @@ func analyticsRolloutTimeoutDuration() time.Duration {
 	return d
 }
 
-// printAnalyticsRolloutDiagnostics prints pods and events to help triage stuck mcp-sentinel rollouts.
+// printAnalyticsRolloutDiagnostics prints pods and events to help triage stuck platform rollouts.
 func printAnalyticsRolloutDiagnostics(kubectl core.KubectlRunner) {
-	core.Warn("mcp-sentinel rollouts failed. Namespace snapshot (pods):")
+	core.Warn("platform rollouts failed. Namespace snapshot (pods):")
 	// #nosec G204 -- fixed namespace for diagnostics.
-	_ = kubectl.RunWithOutput([]string{"get", "pods", "-n", core.DefaultAnalyticsNamespace, "-o", "wide"}, os.Stdout, os.Stderr)
-	core.Warn("Recent events in mcp-sentinel (newest last):")
-	_ = kubectl.RunWithOutput([]string{"get", "events", "-n", core.DefaultAnalyticsNamespace, "--sort-by", ".lastTimestamp"}, os.Stdout, os.Stderr)
+	_ = kubectl.RunWithOutput([]string{"get", "pods", "-n", core.ComponentNamespace("platform-api"), "-o", "wide"}, os.Stdout, os.Stderr)
+	core.Warn("Recent events in platform (newest last):")
+	_ = kubectl.RunWithOutput([]string{"get", "events", "-n", core.ComponentNamespace("platform-api"), "--sort-by", ".lastTimestamp"}, os.Stdout, os.Stderr)
 }
 
 func waitForJobCompletionWithKubectl(kubectl core.KubectlRunner, name, namespace, timeout string) error {
@@ -1054,7 +1054,7 @@ var bundledMCPAuthServicePresent = func() bool {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	_, err = clients.Clientset.CoreV1().Services(core.DefaultAnalyticsNamespace).Get(ctx, "mcp-auth-server", metav1.GetOptions{})
+	_, err = clients.Clientset.CoreV1().Services(core.ComponentNamespace("mcp-auth")).Get(ctx, "mcp-auth-server", metav1.GetOptions{})
 	return err == nil
 }
 

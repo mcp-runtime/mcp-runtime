@@ -7,7 +7,10 @@ import (
 	"mcp-runtime/internal/cli/setup/ingressmanifest"
 )
 
-const testAnalyticsNS = "mcp-sentinel"
+const (
+	testPlatformNS      = "mcp-platform"
+	testObservabilityNS = "mcp-observability"
+)
 
 func assertNoPrometheusRoute(t *testing.T, manifest, context string) {
 	t.Helper()
@@ -23,11 +26,12 @@ func assertNoPrometheusRoute(t *testing.T, manifest, context string) {
 }
 
 func TestRenderPlatformUIIngressNoTLS(t *testing.T) {
-	got := ingressmanifest.RenderPlatformUIIngress("platform.example.com", "", false, testAnalyticsNS)
+	got := ingressmanifest.RenderPlatformUIIngress("platform.example.com", "", false, testPlatformNS, testObservabilityNS)
 	mustContain := []string{
 		"name: " + ingressmanifest.PlatformIngressName,
 		"name: " + ingressmanifest.PlatformObservabilityIngressName,
-		"namespace: " + testAnalyticsNS,
+		"namespace: " + testPlatformNS,
+		"namespace: " + testObservabilityNS,
 		"traefik.ingress.kubernetes.io/router.entrypoints: web",
 		"traefik.ingress.kubernetes.io/router.middlewares: sentinel-admin-auth@file",
 		`- host: "platform.example.com"`,
@@ -38,7 +42,7 @@ func TestRenderPlatformUIIngressNoTLS(t *testing.T) {
 		"name: mcp-platform-api",
 		"name: mcp-analytics-api",
 		"name: mcp-runtime-api",
-		"name: mcp-sentinel-ui",
+		"name: mcp-ui",
 		"name: grafana",
 		"number: 8082",
 		"number: 3000",
@@ -51,7 +55,7 @@ func TestRenderPlatformUIIngressNoTLS(t *testing.T) {
 	mustNotContain := []string{
 		"name: " + ingressmanifest.PlatformHTTPRedirectIngressName,
 		"- path: /api\n",
-		"name: mcp-sentinel-api",
+		"name: mcp-api",
 	}
 	for _, unwanted := range mustNotContain {
 		if strings.Contains(got, unwanted) {
@@ -65,7 +69,7 @@ func TestRenderPlatformUIIngressNoTLS(t *testing.T) {
 }
 
 func TestRenderPlatformUIIngressApiBeforeRoot(t *testing.T) {
-	got := ingressmanifest.RenderPlatformUIIngress("platform.example.com", "", false, testAnalyticsNS)
+	got := ingressmanifest.RenderPlatformUIIngress("platform.example.com", "", false, testPlatformNS, testObservabilityNS)
 	pushIdx := strings.Index(got, "- path: /api/v1/runtime/registry/push")
 	authIdx := strings.Index(got, "- path: /api/v1/auth\n")
 	rootIdx := strings.Index(got, "- path: /\n")
@@ -78,7 +82,7 @@ func TestRenderPlatformUIIngressApiBeforeRoot(t *testing.T) {
 }
 
 func TestRenderPlatformUIIngressWithTLS(t *testing.T) {
-	got := ingressmanifest.RenderPlatformUIIngress("platform.mcpruntime.org", "letsencrypt-prod", true, testAnalyticsNS)
+	got := ingressmanifest.RenderPlatformUIIngress("platform.mcpruntime.org", "letsencrypt-prod", true, testPlatformNS, testObservabilityNS)
 	mustContain := []string{
 		"traefik.ingress.kubernetes.io/router.entrypoints: websecure",
 		"cert-manager.io/cluster-issuer: letsencrypt-prod",
@@ -97,17 +101,20 @@ func TestRenderPlatformUIIngressWithTLS(t *testing.T) {
 	if count := strings.Count(got, "cert-manager.io/cluster-issuer:"); count != 1 {
 		t.Fatalf("expected exactly one cert-manager annotation, got %d:\n%s", count, got)
 	}
+	if count := strings.Count(got, "secretName:"); count != 1 {
+		t.Fatalf("expected exactly one TLS secret, got %d:\n%s", count, got)
+	}
 }
 
 func TestRenderPlatformObservabilityIngressShape(t *testing.T) {
-	got := ingressmanifest.RenderPlatformUIIngress("platform.example.com", "", false, testAnalyticsNS)
+	got := ingressmanifest.RenderPlatformUIIngress("platform.example.com", "", false, testPlatformNS, testObservabilityNS)
 	idx := strings.Index(got, "name: "+ingressmanifest.PlatformObservabilityIngressName)
 	if idx < 0 {
 		t.Fatalf("expected platform observability ingress:\n%s", got)
 	}
 	tail := got[idx:]
 	mustContain := []string{
-		"namespace: " + testAnalyticsNS,
+		"namespace: " + testObservabilityNS,
 		"traefik.ingress.kubernetes.io/router.entrypoints: web",
 		"traefik.ingress.kubernetes.io/router.middlewares: sentinel-admin-auth@file",
 		`- host: "platform.example.com"`,
@@ -124,7 +131,7 @@ func TestRenderPlatformObservabilityIngressShape(t *testing.T) {
 }
 
 func TestRenderPlatformObservabilityIngressWithTLS(t *testing.T) {
-	got := ingressmanifest.RenderPlatformUIIngress("platform.mcpruntime.org", "letsencrypt-prod", true, testAnalyticsNS)
+	got := ingressmanifest.RenderPlatformUIIngress("platform.mcpruntime.org", "letsencrypt-prod", true, testPlatformNS, testObservabilityNS)
 	idx := strings.Index(got, "name: "+ingressmanifest.PlatformObservabilityIngressName)
 	if idx < 0 {
 		t.Fatalf("expected platform observability ingress:\n%s", got)
@@ -143,10 +150,13 @@ func TestRenderPlatformObservabilityIngressWithTLS(t *testing.T) {
 		}
 	}
 	assertNoPrometheusRoute(t, tail, "TLS observability ingress")
+	if strings.Contains(tail, "secretName:") || strings.Contains(tail, "cert-manager.io/cluster-issuer:") {
+		t.Fatalf("observability ingress must not own a certificate:\n%s", tail)
+	}
 }
 
 func TestRenderPlatformUIIngressHTTPRedirectShape(t *testing.T) {
-	got := ingressmanifest.RenderPlatformUIIngress("platform.mcpruntime.org", "letsencrypt-prod", true, testAnalyticsNS)
+	got := ingressmanifest.RenderPlatformUIIngress("platform.mcpruntime.org", "letsencrypt-prod", true, testPlatformNS, testObservabilityNS)
 	idx := strings.Index(got, "name: "+ingressmanifest.PlatformHTTPRedirectIngressName)
 	if idx < 0 {
 		t.Fatalf("expected HTTP redirect ingress when TLS configured:\n%s", got)
@@ -154,7 +164,7 @@ func TestRenderPlatformUIIngressHTTPRedirectShape(t *testing.T) {
 	tail := got[idx:]
 	mustContain := []string{
 		"- path: /\n",
-		"name: mcp-sentinel-ui",
+		"name: mcp-ui",
 	}
 	for _, want := range mustContain {
 		if !strings.Contains(tail, want) {
@@ -164,11 +174,11 @@ func TestRenderPlatformUIIngressHTTPRedirectShape(t *testing.T) {
 }
 
 func TestRenderPlatformUIIngressProvidedTLSSecret(t *testing.T) {
-	got := ingressmanifest.RenderPlatformUIIngress("platform.example.com", "", true, testAnalyticsNS)
+	got := ingressmanifest.RenderPlatformUIIngress("platform.example.com", "", true, testPlatformNS, testObservabilityNS)
 	for _, want := range []string{
 		"traefik.ingress.kubernetes.io/router.entrypoints: websecure",
 		"secretName: " + ingressmanifest.PlatformTLSSecretName,
-		"name: mcp-sentinel-platform-ui-http",
+		"name: mcp-platform-ui-http",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("provided TLS ingress missing %q:\n%s", want, got)

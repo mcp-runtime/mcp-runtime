@@ -213,13 +213,13 @@ func TestMCPServerDefaultWithOptions(t *testing.T) {
 
 	server.DefaultWithOptions(MCPServerDefaultOptions{
 		DefaultIngressHost:        "mcp.example.com",
-		DefaultAnalyticsIngestURL: "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events",
+		DefaultAnalyticsIngestURL: "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events",
 	})
 
 	if server.Spec.IngressHost != "mcp.example.com" {
 		t.Fatalf("expected ingressHost default from options, got %q", server.Spec.IngressHost)
 	}
-	if server.Spec.Analytics == nil || server.Spec.Analytics.IngestURL != "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events" {
+	if server.Spec.Analytics == nil || server.Spec.Analytics.IngestURL != "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events" {
 		t.Fatalf("expected analytics ingest URL default from options, got %#v", server.Spec.Analytics)
 	}
 }

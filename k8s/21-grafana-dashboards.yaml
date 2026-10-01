@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: grafana-dashboards
-  namespace: mcp-sentinel
+  namespace: mcp-observability
 data:
   dashboard-provider.yaml: |
     apiVersion: 1
@@ -154,7 +154,7 @@ data:
           },
           "targets": [
             {
-              "expr": "up{job=~\"mcp-platform-api|mcp-runtime-api|mcp-analytics-api|mcp-sentinel-ingest|mcp-sentinel-processor|clickhouse|prometheus|otel-collector|loki|tempo|promtail\"}",
+              "expr": "up{job=~\"mcp-platform-api|mcp-runtime-api|mcp-analytics-api|mcp-ingest|mcp-processor|clickhouse|prometheus|otel-collector|loki|tempo|promtail\"}",
               "legendFormat": "",
               "refId": "A",
               "instant": true,

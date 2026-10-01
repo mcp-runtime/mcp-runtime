@@ -1,4 +1,4 @@
-module mcp-sentinel-ingest
+module mcp-ingest
 
 go 1.26.6
 

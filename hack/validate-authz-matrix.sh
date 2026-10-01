@@ -11,16 +11,17 @@ if [ ! -f "$MATRIX" ]; then
   exit 1
 fi
 
-NS="${NAMESPACE:-mcp-sentinel}"
+PLATFORM_NS="${PLATFORM_NAMESPACE:-mcp-platform}"
+OBSERVABILITY_NS="${OBSERVABILITY_NAMESPACE:-mcp-observability}"
 if ! curl -fsS -o /dev/null "${BASE}/" 2>/dev/null; then
-  echo "Port-forward Traefik gateway: kubectl -n $NS port-forward svc/mcp-sentinel-gateway 18083:8083"
-  kubectl -n "$NS" port-forward svc/mcp-sentinel-gateway 18083:8083 >/tmp/pf-gateway-authz.log 2>&1 &
+  echo "Port-forward Traefik gateway: kubectl -n $PLATFORM_NS port-forward svc/mcp-platform-gateway 18083:8083"
+  kubectl -n "$PLATFORM_NS" port-forward svc/mcp-platform-gateway 18083:8083 >/tmp/pf-gateway-authz.log 2>&1 &
   sleep 2
 fi
 
-ADMIN_KEY=$(kubectl -n "$NS" get secret mcp-sentinel-secrets -o jsonpath='{.data.ADMIN_API_KEYS}' | base64 -d | cut -d, -f1)
-UI_KEY=$(kubectl -n "$NS" get secret mcp-sentinel-secrets -o jsonpath='{.data.UI_API_KEY}' | base64 -d)
-INGEST_KEY=$(kubectl -n "$NS" get secret mcp-sentinel-secrets -o jsonpath='{.data.INGEST_API_KEYS}' | base64 -d | cut -d, -f1)
+ADMIN_KEY=$(kubectl -n "$PLATFORM_NS" get secret mcp-platform-api-credentials -o jsonpath='{.data.ADMIN_API_KEYS}' | base64 -d | cut -d, -f1)
+UI_KEY=$(kubectl -n "$PLATFORM_NS" get secret mcp-ui-credentials -o jsonpath='{.data.UI_API_KEY}' | base64 -d)
+INGEST_KEY=$(kubectl -n "$OBSERVABILITY_NS" get secret mcp-ingest-credentials -o jsonpath='{.data.INGEST_API_KEYS}' | base64 -d | cut -d, -f1)
 
 pass=0
 fail=0

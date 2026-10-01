@@ -32,7 +32,7 @@ spec:
               kubernetes.io/metadata.name: traefik
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: mcp-sentinel
+              kubernetes.io/metadata.name: mcp-platform
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: mcp-runtime

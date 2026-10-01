@@ -92,16 +92,16 @@ jobs:
             tag: mcp-runtime-api:ci
           - image: ui
             dockerfile: services/ui/Dockerfile
-            tag: mcp-sentinel-ui:ci
+            tag: mcp-ui:ci
           - image: ingest
             dockerfile: services/ingest/Dockerfile
-            tag: mcp-sentinel-ingest:ci
+            tag: mcp-ingest:ci
           - image: processor
             dockerfile: services/processor/Dockerfile
-            tag: mcp-sentinel-processor:ci
+            tag: mcp-processor:ci
           - image: mcp-gateway
             dockerfile: services/mcp-gateway/Dockerfile
-            tag: mcp-sentinel-mcp-gateway:ci
+            tag: mcp-gateway:ci
           - image: doctor-smoke
             dockerfile: services/doctor-smoke/Dockerfile
             tag: mcp-runtime-doctor-smoke:ci

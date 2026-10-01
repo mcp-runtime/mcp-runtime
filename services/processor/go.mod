@@ -1,4 +1,4 @@
-module mcp-sentinel-processor
+module mcp-processor
 
 go 1.26.6
 

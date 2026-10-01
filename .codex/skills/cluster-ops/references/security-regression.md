@@ -50,9 +50,9 @@ Pull admin and ingest keys separately; do not assume a UI key is authorized
 as an admin key. Never echo keys into the report.
 
 ```bash
-ADMIN_KEY="$(kubectl get secret mcp-sentinel-secrets -n mcp-sentinel \
+ADMIN_KEY="$(kubectl get secret mcp-platform-api-credentials -n mcp-platform \
   -o jsonpath='{.data.ADMIN_API_KEYS}' | base64 -d | cut -d, -f1)"
-INGEST_KEY="$(kubectl get secret mcp-sentinel-secrets -n mcp-sentinel \
+INGEST_KEY="$(kubectl get secret mcp-ingest-credentials -n mcp-observability \
   -o jsonpath='{.data.INGEST_API_KEYS}' | base64 -d | cut -d, -f1)"
 test -n "$ADMIN_KEY" || { echo "Failed to retrieve ADMIN_API_KEYS"; exit 1; }
 test -n "$INGEST_KEY" || { echo "Failed to retrieve INGEST_KEY"; exit 1; }
@@ -326,7 +326,7 @@ kubectl logs -n traefik deploy/traefik --tail=120 \
 Regressions where tokens leak into logs are common after refactors.
 
 ```bash
-for ns in mcp-runtime mcp-sentinel mcp-servers traefik registry; do
+for ns in mcp-runtime mcp-platform mcp-observability mcp-log-collector mcp-servers traefik registry; do
   for d in $(kubectl get pods -n "$ns" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'); do
     kubectl logs -n "$ns" "$d" --all-containers --since=10m 2>/dev/null \
       | grep -aE 'Bearer [A-Za-z0-9._-]{20,}|sk-[A-Za-z0-9]{16,}|eyJ[A-Za-z0-9._-]{20,}|x-api-key:\s*[A-Za-z0-9_-]{12,}'

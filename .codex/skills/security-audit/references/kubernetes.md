@@ -37,9 +37,9 @@ kubeconfig explicitly and label every live finding with that context.
 Repo-owned namespaces (per `CLAUDE.md`):
 
 - `mcp-runtime` — operator.
-- `mcp-sentinel` — platform/runtime/analytics api, ui, oauth-server, ingest,
-  processor, gateway, observability (ClickHouse, Kafka, Grafana, Prometheus,
-  Loki, Tempo, otel-collector).
+- `mcp-platform` — platform-api, runtime-api, UI, gateway, Postgres, optional mcp-auth.
+- `mcp-observability` — analytics-api, ingest, processor, ClickHouse, Kafka, Grafana, Prometheus, Loki, Tempo, otel-collector.
+- `mcp-log-collector` — Promtail.
 - `mcp-servers` — user MCP server workloads, gateway sidecars.
 - `registry` — Distribution v2 registry.
 - `traefik` — ingress controller (or `kube-system/traefik` on k3s).
@@ -51,7 +51,7 @@ may use `traefik`.
 For each existing namespace:
 
 ```sh
-NS=mcp-sentinel
+NS=mcp-platform
 kubectl -n "$NS" get all,sa,role,rolebinding,networkpolicy -o name
 kubectl get clusterrole,clusterrolebinding -o name | grep -iE 'mcp|sentinel'
 ```
@@ -71,9 +71,9 @@ go install github.com/reactiveops/rbac-lookup@latest
 Per ServiceAccount:
 
 ```sh
-for sa in $(kubectl -n mcp-sentinel get sa -o name); do
+for sa in $(kubectl -n mcp-platform get sa -o name); do
   echo "=== $sa ==="
-  rakkess --sa "$(echo $sa | cut -d/ -f2)" --namespace mcp-sentinel
+  rakkess --sa "$(echo $sa | cut -d/ -f2)" --namespace mcp-platform
 done
 ```
 
@@ -90,7 +90,7 @@ Findings to flag:
 - Bindings to `system:authenticated` or `system:unauthenticated` → **Critical**.
 
 Confirm Traefik narrowing (CLAUDE.md): bundled manifests should watch only
-`registry`, `mcp-sentinel`, `mcp-servers`. Any extra namespace with a
+`registry`, `mcp-platform`, `mcp-observability`, `mcp-servers`. Any extra namespace with a
 `traefik-watch` Role binding without a documented reason is a Medium finding.
 
 ## Step 3 — Pod Security Standards
@@ -99,7 +99,7 @@ The repo claims "restricted pod-security labels in repo-owned namespaces."
 Verify every namespace label:
 
 ```sh
-kubectl get ns mcp-runtime mcp-sentinel mcp-servers registry traefik \
+kubectl get ns mcp-runtime mcp-platform mcp-observability mcp-log-collector mcp-servers registry traefik \
   -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.labels}{"\n"}{end}'
 ```
 
@@ -154,7 +154,7 @@ For each namespace that holds workloads, confirm:
   to documented destinations (DNS, ingest service, k8s API).
 - The mcp-server gateway sidecar can reach the ingest endpoint, the k8s
   API (for SAR/auth), and the user MCP container — and nothing else.
-- User MCP server containers cannot egress to `mcp-sentinel` directly,
+- User MCP server containers cannot egress to `mcp-platform` or `mcp-observability` directly,
   only via the sidecar.
 - The registry namespace egress is limited (no random outbound).
 
@@ -164,7 +164,7 @@ without specific authorization. Clean up the pod after the probe.
 
 ```sh
 kubectl -n mcp-servers run probe --rm -i --image=busybox:1.36 --restart=Never -- sh -c '
-  wget -T2 -qO- http://mcp-platform-api.mcp-sentinel.svc:8080/health || echo BLOCKED
+  wget -T2 -qO- http://mcp-platform-api.mcp-platform.svc:8080/health || echo BLOCKED
 '
 ```
 
@@ -208,7 +208,7 @@ Repeat with filters for `runAsNonRoot`, `allowPrivilegeEscalation`, and
 
 ## Step 6 — Secret access and storage
 
-- Confirm every Secret in `mcp-sentinel` is mounted by exactly the
+- Confirm every Secret in `mcp-platform` is mounted by exactly the
   workloads that need it; no broad `secrets get` on workload SAs.
 - Confirm secrets are not committed to git: `gitleaks` (handled by
   `security-audit`) and `grep -RIn 'kind: Secret' k8s/ config/` —

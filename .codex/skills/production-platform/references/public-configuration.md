@@ -17,7 +17,7 @@ Operator may set `MCP_DEFAULT_INGRESS_HOST=mcp.<domain>` from platform domain en
 
 ## Expected URLs (after DNS + TLS)
 
-- **Dashboard:** `https://platform.<domain>/` (API at `/api/v1/*` via Traefik). Grafana at `/grafana` via `mcp-sentinel-platform-observability` + `sentinel-admin-auth@file` (admin cookie or admin `x-api-key`). Prometheus stays internal — port-forward only for backend debug.
+- **Dashboard:** `https://platform.<domain>/` (API at `/api/v1/*` via Traefik). Grafana at `/grafana` via `mcp-platform-observability` + `sentinel-admin-auth@file` (admin cookie or admin `x-api-key`). Prometheus stays internal — port-forward only for backend debug.
 - **Registry:** `https://registry.<domain>/v2/` (admin auth via `registry-admin-auth@file` → `/api/v1/registry/authz`)
 - **MCP server:** `https://mcp.<domain>/<server-name>/mcp` (path-based; set `spec.publicPathPrefix` and `MCP_PATH`)
 
@@ -41,7 +41,7 @@ Default `MCPServer` ingress class: **`traefik`**.
 **Certificates**
 
 - `registry/registry-cert` → `registry/registry-tls` (only supported owner for that Secret; registry Ingress must not use `cert-manager.io/cluster-issuer` on the Ingress itself)
-- Platform UI: `mcp-sentinel-platform-tls` in `mcp-sentinel` via `mcp-sentinel-platform-ui` Ingress
+- Platform UI: `mcp-platform-tls` in `mcp-platform` via `mcp-platform-ui` Ingress
 - Bundled HTTPS may create `cert-manager/mcp-runtime-ca`; nodes must trust `tls.crt` for image pulls
 - Private CA without ACME: `config/cert-manager/` and omit `--acme-email`
 
@@ -49,12 +49,12 @@ Default `MCPServer` ingress class: **`traefik`**.
 
 - `MCP_REGISTRY_HOST` — public alias; do not let it override node pull endpoint incorrectly
 - HTTPS public: `MCP_REGISTRY_ENDPOINT=registry.<domain>`
-- Platform pull secrets: `MCP_PLATFORM_IMAGE_PULL_SECRET` in `mcp-runtime` and `mcp-sentinel` when using external auth registries
+- Platform pull secrets: `MCP_PLATFORM_IMAGE_PULL_SECRET` in `mcp-runtime`, `mcp-platform`, and `mcp-observability` when using external auth registries
 - Tenant pulls: platform creates `mcp-runtime-registry-pull` on `mcp-workload` SA per team namespace
 
 ## OIDC / Google sign-in
 
-Non-test public TLS (`--platform-mode public --with-tls`) requires `GOOGLE_CLIENT_ID` / `MCP_GOOGLE_CLIENT_ID`, or all of `OIDC_ISSUER`, `OIDC_AUDIENCE`, `OIDC_JWKS_URL`. Setup preserves existing values in `mcp-sentinel-config` on reruns.
+Non-test public TLS (`--platform-mode public --with-tls`) requires `GOOGLE_CLIENT_ID` / `MCP_GOOGLE_CLIENT_ID`, or all of `OIDC_ISSUER`, `OIDC_AUDIENCE`, `OIDC_JWKS_URL`. Setup preserves existing values in `mcp-shared-config` on reruns.
 
 ## k3s-specific
 

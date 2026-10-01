@@ -124,7 +124,7 @@ func TestPushDockerArchiveDeletesHelperAfterExecFailure(t *testing.T) {
 }
 
 func TestPushDockerArchiveTarFetchSkipsExecCopy(t *testing.T) {
-	client := fake.NewSimpleClientset(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "mcp-sentinel"}})
+	client := fake.NewSimpleClientset(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "mcp-platform"}})
 	tmp, err := os.CreateTemp("", "mcp-registry-push-*.tar")
 	if err != nil {
 		t.Fatalf("create temp tar: %v", err)
@@ -161,7 +161,7 @@ func TestPushDockerArchiveTarFetchSkipsExecCopy(t *testing.T) {
 	}
 
 	err = PushDockerArchive(context.Background(), client, &rest.Config{Host: "https://example.invalid"}, tmpPath, "registry.example.com/acme/demo:v1", Config{
-		HelperNamespace: "mcp-sentinel",
+		HelperNamespace: "mcp-platform",
 		TarFetchURL:     "http://10.0.0.5:8080/internal/registry-push/tar",
 		TarFetchToken:   "test",
 		Hosts: Hosts{
@@ -180,7 +180,7 @@ func TestPushDockerArchiveTarFetchSkipsExecCopy(t *testing.T) {
 	if execCalled {
 		t.Fatal("execInPod should not run when TarFetchURL is set")
 	}
-	pod, err := client.CoreV1().Pods("mcp-sentinel").List(context.Background(), metav1.ListOptions{})
+	pod, err := client.CoreV1().Pods("mcp-platform").List(context.Background(), metav1.ListOptions{})
 	if err != nil {
 		t.Fatalf("list pods: %v", err)
 	}
@@ -190,7 +190,7 @@ func TestPushDockerArchiveTarFetchSkipsExecCopy(t *testing.T) {
 }
 
 func TestPushDockerArchiveTarFetchFailureIncludesHelperDiagnostics(t *testing.T) {
-	client := fake.NewSimpleClientset(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "mcp-sentinel"}})
+	client := fake.NewSimpleClientset(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "mcp-platform"}})
 	origWait := waitPodSucceededHook
 	defer func() { waitPodSucceededHook = origWait }()
 	waitPodSucceededHook = func(ctx context.Context, clientset kubernetes.Interface, namespace, name string) error {
@@ -215,13 +215,13 @@ func TestPushDockerArchiveTarFetchFailureIncludesHelperDiagnostics(t *testing.T)
 	}
 
 	err := PushDockerArchive(context.Background(), client, &rest.Config{Host: "https://example.invalid"}, "/tmp/image.tar", "registry.example.com/acme/demo:v1", Config{
-		HelperNamespace: "mcp-sentinel",
+		HelperNamespace: "mcp-platform",
 		TarFetchURL:     "http://10.0.0.5:8080/internal/registry-push/tar",
 	})
 	if err == nil || !strings.Contains(err.Error(), "helper diagnostics: phase=Failed") || !strings.Contains(err.Error(), "registry DNS lookup failed") {
 		t.Fatalf("PushDockerArchive() error = %v, want helper pod failure details", err)
 	}
-	pods, err := client.CoreV1().Pods("mcp-sentinel").List(context.Background(), metav1.ListOptions{})
+	pods, err := client.CoreV1().Pods("mcp-platform").List(context.Background(), metav1.ListOptions{})
 	if err != nil {
 		t.Fatalf("list pods: %v", err)
 	}

@@ -17,16 +17,17 @@ If it returns servers:
 1. Confirm the UI and API Deployments are on the current images.
 
    ```bash
-   kubectl get deploy mcp-platform-api mcp-runtime-api mcp-analytics-api mcp-sentinel-ui -n mcp-sentinel \
+   kubectl get deploy mcp-platform-api mcp-runtime-api mcp-ui -n mcp-platform \
+   kubectl get deploy mcp-analytics-api -n mcp-observability \
      -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.template.spec.containers[0].image}{"\n"}{end}'
    ```
 
 2. Roll both Deployments after patching auth or catalog code.
 
    ```bash
-   kubectl rollout status deployment/mcp-platform-api -n mcp-sentinel --timeout=90s
-   kubectl rollout status deployment/mcp-runtime-api -n mcp-sentinel --timeout=90s
-   kubectl rollout status deployment/mcp-sentinel-ui -n mcp-sentinel --timeout=90s
+   kubectl rollout status deployment/mcp-platform-api -n mcp-platform --timeout=90s
+   kubectl rollout status deployment/mcp-runtime-api -n mcp-platform --timeout=90s
+   kubectl rollout status deployment/mcp-ui -n mcp-platform --timeout=90s
    ```
 
 3. Sign out in the browser or use a fresh private window. A valid UI session
@@ -153,12 +154,12 @@ The HTTP ingress overlay can include the `pii-redactor@file` Traefik middleware.
 That middleware is useful for request-path testing on ingest traffic, but it
 must not be attached to control-plane `/api/v1` routes because API keys, team IDs,
 server names, namespaces, and grant/session subjects must stay exact. If local
-API responses show `[redacted]`, verify that `mcp-sentinel-gateway-api` does not
+API responses show `[redacted]`, verify that `mcp-platform-gateway-api` does not
 reference `pii-redactor@file`. For identity-store debugging, port-forward the
 platform API directly:
 
 ```bash
-kubectl port-forward -n mcp-sentinel svc/mcp-platform-api 18081:8080
+kubectl port-forward -n mcp-platform svc/mcp-platform-api 18081:8080
 ```
 
 Then use `http://localhost:18081` for direct API debugging and stop the

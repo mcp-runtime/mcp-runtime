@@ -213,7 +213,7 @@ func stampDependencyRevisions(content string, read dependencyReader) (string, er
 		metadata, _ := doc["metadata"].(map[string]any)
 		namespace, _ := metadata["namespace"].(string)
 		if namespace == "" {
-			namespace = core.DefaultAnalyticsNamespace
+			namespace = core.ComponentNamespace("platform-api")
 		}
 		revision, err := dependencyRevision(namespace, refs, cachedRead)
 		if err != nil {
@@ -245,7 +245,7 @@ func stampDependencyRevisions(content string, read dependencyReader) (string, er
 }
 func dependencyResourceKey(ns, kind, name string) string {
 	if ns == "" {
-		ns = core.DefaultAnalyticsNamespace
+		ns = core.ComponentNamespace("platform-api")
 	}
 	data, _ := json.Marshal([]string{ns, kind, name})
 	return string(data)

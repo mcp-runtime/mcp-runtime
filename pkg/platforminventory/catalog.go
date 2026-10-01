@@ -64,9 +64,17 @@ type PortTarget struct {
 }
 
 const (
-	DefaultNamespace      = "mcp-sentinel"
-	LogCollectorNamespace = mcpdefaults.LogCollectorNamespace
-	OperatorNamespace     = "mcp-runtime"
+	PlatformNamespace      = "mcp-platform"
+	ObservabilityNamespace = "mcp-observability"
+	LogCollectorNamespace  = mcpdefaults.LogCollectorNamespace
+	OperatorNamespace      = "mcp-runtime"
+	// SharedConfigName is the same ConfigMap name in every published namespace.
+	// The namespace is the location; the name marks the copy as shared.
+	SharedConfigName = "mcp-shared-config"
+	// SharedDataPriorityClass outranks SharedServicesPriorityClass during eviction.
+	// Both are cluster-scoped and used by more than one namespace.
+	SharedDataPriorityClass     = "mcp-shared-data"
+	SharedServicesPriorityClass = "mcp-shared-services"
 )
 
 // catalog keeps the historical Sentinel management order.
@@ -86,7 +94,7 @@ var catalog = []Component{
 		Owner: Observability, Sentinel: true,
 		Capabilities: []Capability{Telemetry, Persistent},
 		Display:      "ClickHouse",
-		Namespace:    DefaultNamespace,
+		Namespace:    "",
 		Kind:         "statefulset",
 		Resource:     "clickhouse",
 		Label:        "clickhouse",
@@ -96,7 +104,7 @@ var catalog = []Component{
 		Owner: Observability, Sentinel: true,
 		Capabilities: []Capability{Telemetry, Persistent},
 		Display:      "Kafka",
-		Namespace:    DefaultNamespace,
+		Namespace:    "",
 		Kind:         "statefulset",
 		Resource:     "kafka",
 		Label:        "kafka",
@@ -107,10 +115,10 @@ var catalog = []Component{
 		Capabilities: []Capability{Telemetry},
 		Dependencies: []Dependency{{Component: "kafka", Optional: false}},
 		Display:      "Ingest",
-		Namespace:    DefaultNamespace,
+		Namespace:    "",
 		Kind:         "deployment",
-		Resource:     "mcp-sentinel-ingest",
-		Label:        "mcp-sentinel-ingest",
+		Resource:     "mcp-ingest",
+		Label:        "mcp-ingest",
 	},
 	{
 		Key:   "platform-api",
@@ -118,7 +126,7 @@ var catalog = []Component{
 		Capabilities: []Capability{Control},
 		Dependencies: []Dependency{{Component: "postgres", Optional: false}, {Component: "runtime-api", Optional: false}},
 		Display:      "Platform API",
-		Namespace:    DefaultNamespace,
+		Namespace:    "",
 		Kind:         "deployment",
 		Resource:     "mcp-platform-api",
 		Label:        "mcp-platform-api",
@@ -136,7 +144,7 @@ var catalog = []Component{
 		Capabilities: []Capability{Control},
 		Dependencies: []Dependency{{Component: "platform-api", Optional: false}, {Component: "clickhouse", Optional: true}},
 		Display:      "Runtime Control",
-		Namespace:    DefaultNamespace,
+		Namespace:    "",
 		Kind:         "deployment",
 		Resource:     "mcp-runtime-api",
 		Label:        "mcp-runtime-api",
@@ -154,7 +162,7 @@ var catalog = []Component{
 		Capabilities: []Capability{Telemetry},
 		Dependencies: []Dependency{{Component: "clickhouse", Optional: false}, {Component: "platform-api", Optional: false}},
 		Display:      "Analytics API",
-		Namespace:    DefaultNamespace,
+		Namespace:    "",
 		Kind:         "deployment",
 		Resource:     "mcp-analytics-api",
 		Label:        "mcp-analytics-api",
@@ -172,10 +180,10 @@ var catalog = []Component{
 		Capabilities: []Capability{Telemetry},
 		Dependencies: []Dependency{{Component: "kafka", Optional: false}, {Component: "clickhouse", Optional: false}},
 		Display:      "Processor",
-		Namespace:    DefaultNamespace,
+		Namespace:    "",
 		Kind:         "deployment",
-		Resource:     "mcp-sentinel-processor",
-		Label:        "mcp-sentinel-processor",
+		Resource:     "mcp-processor",
+		Label:        "mcp-processor",
 	},
 	{
 		Key:   "ui",
@@ -183,13 +191,13 @@ var catalog = []Component{
 		Capabilities: []Capability{Control},
 		Dependencies: []Dependency{{Component: "platform-api", Optional: false}, {Component: "runtime-api", Optional: false}, {Component: "analytics-api", Optional: true}},
 		Display:      "UI",
-		Namespace:    DefaultNamespace,
+		Namespace:    "",
 		Kind:         "deployment",
-		Resource:     "mcp-sentinel-ui",
-		Label:        "mcp-sentinel-ui",
+		Resource:     "mcp-ui",
+		Label:        "mcp-ui",
 		PortTarget: &PortTarget{
 			ResourceKind: "service",
-			ResourceName: "mcp-sentinel-ui",
+			ResourceName: "mcp-ui",
 			LocalPort:    8082,
 			RemotePort:   8082,
 		},
@@ -200,17 +208,17 @@ var catalog = []Component{
 		Capabilities: []Capability{Routing},
 		Dependencies: []Dependency{{Component: "ui", Optional: false}, {Component: "platform-api", Optional: false}, {Component: "runtime-api", Optional: false}, {Component: "analytics-api", Optional: true}, {Component: "grafana", Optional: true}},
 		Display:      "Gateway",
-		Namespace:    DefaultNamespace,
+		Namespace:    "",
 		Kind:         "deployment",
-		Resource:     "mcp-sentinel-gateway",
-		Label:        "mcp-sentinel-gateway",
+		Resource:     "mcp-platform-gateway",
+		Label:        "mcp-platform-gateway",
 	},
 	{
 		Key:   "prometheus",
 		Owner: Observability, Sentinel: true,
 		Capabilities: []Capability{Telemetry},
 		Display:      "Prometheus",
-		Namespace:    DefaultNamespace,
+		Namespace:    "",
 		Kind:         "deployment",
 		Resource:     "prometheus",
 		Label:        "prometheus",
@@ -228,7 +236,7 @@ var catalog = []Component{
 		Capabilities: []Capability{Telemetry},
 		Dependencies: []Dependency{{Component: "prometheus", Optional: true}, {Component: "loki", Optional: true}, {Component: "tempo", Optional: true}},
 		Display:      "Grafana",
-		Namespace:    DefaultNamespace,
+		Namespace:    "",
 		Kind:         "deployment",
 		Resource:     "grafana",
 		Label:        "grafana",
@@ -245,7 +253,7 @@ var catalog = []Component{
 		Capabilities: []Capability{Telemetry},
 		Dependencies: []Dependency{{Component: "tempo", Optional: false}},
 		Display:      "OTel Collector",
-		Namespace:    DefaultNamespace,
+		Namespace:    "",
 		Kind:         "deployment",
 		Resource:     "otel-collector",
 		Label:        "otel-collector",
@@ -256,7 +264,7 @@ var catalog = []Component{
 		Owner: Observability, Sentinel: true,
 		Capabilities: []Capability{Telemetry, Persistent},
 		Display:      "Tempo",
-		Namespace:    DefaultNamespace,
+		Namespace:    "",
 		Kind:         "statefulset",
 		Resource:     "tempo",
 		Label:        "tempo",
@@ -266,7 +274,7 @@ var catalog = []Component{
 		Owner: Observability, Sentinel: true,
 		Capabilities: []Capability{Telemetry, Persistent},
 		Display:      "Loki",
-		Namespace:    DefaultNamespace,
+		Namespace:    "",
 		Kind:         "statefulset",
 		Resource:     "loki",
 		Label:        "loki",
@@ -286,8 +294,8 @@ var catalog = []Component{
 	{Key: "registry", Display: "Registry", Owner: Registry, Namespace: "registry", Kind: "deployment", Resource: "registry", Label: "registry", Capabilities: []Capability{Persistent}},
 	{Key: "traefik", Display: "Traefik", Owner: Ingress, Namespace: "traefik", Kind: "deployment", Resource: "traefik", Label: "traefik", Capabilities: []Capability{Routing, External}},
 
-	{Key: "postgres", Display: "Postgres", Owner: Platform, Namespace: DefaultNamespace, Kind: "statefulset", Resource: "mcp-sentinel-postgres", Label: "mcp-sentinel-postgres", Capabilities: []Capability{Control, Persistent}},
-	{Key: "mcp-auth", Display: "MCP Auth", Owner: Platform, Namespace: DefaultNamespace, Kind: "deployment", Resource: "mcp-auth-server", Label: "mcp-auth-server", Capabilities: []Capability{Control, Persistent, Optional}},
+	{Key: "postgres", Display: "Postgres", Owner: Platform, Namespace: "", Kind: "statefulset", Resource: "mcp-postgres", Label: "mcp-postgres", Capabilities: []Capability{Control, Persistent}},
+	{Key: "mcp-auth", Display: "MCP Auth", Owner: Platform, Namespace: "", Kind: "deployment", Resource: "mcp-auth-server", Label: "mcp-auth-server", Capabilities: []Capability{Control, Persistent, Optional}},
 	{Key: "gateway-proxy", Display: "Gateway Proxy Image", Owner: Operator, Namespace: OperatorNamespace, Kind: "deployment", Resource: "mcp-runtime-operator-controller-manager", Label: "mcp-runtime-operator-controller-manager", Capabilities: []Capability{Control}},
 	{Key: "cert-manager-controller", Display: "cert-manager", Owner: Certificates, Namespace: "cert-manager", Kind: "deployment", Resource: "cert-manager", Capabilities: []Capability{External, Optional}},
 	{Key: "cert-manager-webhook", Display: "cert-manager webhook", Owner: Certificates, Namespace: "cert-manager", Kind: "deployment", Resource: "cert-manager-webhook", Capabilities: []Capability{External, Optional}},
@@ -311,6 +319,11 @@ func clone(c Component) Component {
 	if c.PortTarget != nil {
 		target := *c.PortTarget
 		c.PortTarget = &target
+	}
+	if c.Kind != "" {
+		if namespace, ok := ownerNamespace[c.Owner]; ok {
+			c.Namespace = namespace
+		}
 	}
 	return c
 }

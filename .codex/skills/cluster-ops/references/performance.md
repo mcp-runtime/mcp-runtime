@@ -48,7 +48,8 @@ the report. Perf numbers without an environment line are not comparable.
 ```bash
 sysctl -n hw.ncpu 2>/dev/null || nproc
 kubectl get nodes -o wide
-kubectl -n mcp-sentinel get deploy -o jsonpath='{range .items[*]}{.metadata.name}={.spec.template.spec.containers[0].image}{"\n"}{end}'
+kubectl -n mcp-platform get deploy -o jsonpath='{range .items[*]}{.metadata.name}={.spec.template.spec.containers[0].image}{"\n"}{end}'
+kubectl -n mcp-observability get deploy -o jsonpath='{range .items[*]}{.metadata.name}={.spec.template.spec.containers[0].image}{"\n"}{end}'
 ```
 
 ## Step 2 — Choose mode
@@ -171,7 +172,7 @@ PVC-corruption signature and recover it first rather than recording a
 baseline against a 500/502-erroring endpoint.
 
 ```bash
-UI_KEY="$(kubectl get secret mcp-sentinel-secrets -n mcp-sentinel \
+UI_KEY="$(kubectl get secret mcp-ui-credentials -n mcp-platform \
   -o jsonpath='{.data.UI_API_KEY}' | base64 -d)"
 python3 - <<'PY' "$PERF_OUT_DIR" "$PERF_SAMPLES" "$UI_KEY"
 import json, time, urllib.request, sys
@@ -251,9 +252,10 @@ kubectl exec -n mcp-servers "$POD" -c mcp-gateway -- \
   wget -qO- http://127.0.0.1:6060/debug/pprof/profile?seconds=10 > /tmp/proxy-cpu.pprof 2>/dev/null \
   || echo "pprof not enabled on mcp-gateway"
 
-kubectl top pods -n mcp-sentinel
+kubectl top pods -n mcp-platform
+kubectl top pods -n mcp-observability
 kubectl top pods -n mcp-servers
-kubectl logs -n mcp-sentinel deploy/mcp-sentinel-processor --since=2m | tail -40
+kubectl logs -n mcp-observability deploy/mcp-processor --since=2m | tail -40
 ```
 
 Record the suspected hot path with file:line references in

@@ -15,6 +15,7 @@ import (
 	setupplan "mcp-runtime/internal/cli/setup/plan"
 	"mcp-runtime/pkg/k8sclient"
 	"mcp-runtime/pkg/metadata"
+	"mcp-runtime/pkg/platforminventory"
 )
 
 // preflightIssue describes a cluster state problem that setup detected before
@@ -289,7 +290,7 @@ func checkStuckOperatorDeployment(ctx context.Context, clients *k8sclient.Client
 func checkTerminatingNamespaces(ctx context.Context, clients *k8sclient.Clients, includeAnalytics bool) []preflightIssue {
 	namespaces := []string{core.NamespaceMCPRuntime, core.NamespaceRegistry}
 	if includeAnalytics {
-		namespaces = append(namespaces, core.DefaultAnalyticsNamespace)
+		namespaces = append(namespaces, core.ComponentNamespace("platform-api"))
 	}
 	var stuck []string
 	for _, ns := range namespaces {
@@ -388,7 +389,7 @@ func checkOrphanedRegistryTLSSecret(ctx context.Context, clients *k8sclient.Clie
 // the operator know why a previous analytics deploy may have failed.
 func checkStaleAnalyticsJob(ctx context.Context, clients *k8sclient.Clients) []preflightIssue {
 	const jobName = "clickhouse-init"
-	failed, err := k8sclient.IsJobFailed(ctx, clients, core.DefaultAnalyticsNamespace, jobName)
+	failed, err := k8sclient.IsJobFailed(ctx, clients, core.ComponentNamespace("clickhouse"), jobName)
 	if err != nil || !failed {
 		return nil
 	}
@@ -396,10 +397,10 @@ func checkStaleAnalyticsJob(ctx context.Context, clients *k8sclient.Clients) []p
 		fatal: false,
 		message: fmt.Sprintf(
 			"Job %q in namespace %q is in a failed state from a previous run — setup will delete and re-run it.",
-			jobName, core.DefaultAnalyticsNamespace,
+			jobName, core.ComponentNamespace("clickhouse"),
 		),
 		cleanup: []string{
-			fmt.Sprintf("kubectl delete job -n %s %s", core.DefaultAnalyticsNamespace, jobName),
+			fmt.Sprintf("kubectl delete job -n %s %s", core.ComponentNamespace("clickhouse"), jobName),
 		},
 	}}
 }
@@ -408,12 +409,16 @@ func checkStaleAnalyticsJob(ctx context.Context, clients *k8sclient.Clients) []p
 // any namespace has a password that no longer matches the current UI_API_KEY.
 // This causes ImagePullBackOff on new pods after a setup rerun rotates the key.
 func checkStalePullSecrets(ctx context.Context, clients *k8sclient.Clients) []preflightIssue {
-	currentKey, err := k8sclient.SecretStringDataValue(ctx, clients, core.DefaultAnalyticsNamespace, "mcp-sentinel-secrets", "UI_API_KEY")
+	uiNamespace, uiSecret, ok := platforminventory.CredentialPlacement("UI_API_KEY")
+	if !ok {
+		return nil
+	}
+	currentKey, err := k8sclient.SecretStringDataValue(ctx, clients, uiNamespace, uiSecret, "UI_API_KEY")
 	if err != nil || strings.TrimSpace(currentKey) == "" {
 		return nil // secret not yet created; fresh install — nothing to check
 	}
 
-	namespaces := []string{core.DefaultAnalyticsNamespace, core.NamespaceMCPRuntime}
+	namespaces := []string{core.ComponentNamespace("platform-api"), core.NamespaceMCPRuntime}
 	var stale []string
 	for _, ns := range namespaces {
 		exists, err := k8sclient.SecretExists(ctx, clients, ns, defaultRegistrySecretName)
@@ -453,15 +458,19 @@ func checkStalePullSecrets(ctx context.Context, clients *k8sclient.Clients) []pr
 }
 
 // checkPostgresPasswordSync detects when the Postgres pod is running but the
-// POSTGRES_DSN password in mcp-sentinel-secrets no longer authenticates. This
+// POSTGRES_DSN password in mcp-postgres-credentials no longer authenticates. This
 // happens when setup rotated the secret on a rerun but didn't sync the live DB.
 func checkPostgresPasswordSync(ctx context.Context, clients *k8sclient.Clients) []preflightIssue {
-	podName, err := k8sclient.GetFirstReadyPodName(ctx, clients, core.DefaultAnalyticsNamespace, "app=mcp-sentinel-postgres")
+	podName, err := k8sclient.GetFirstReadyPodName(ctx, clients, core.ComponentNamespace("postgres"), "app=mcp-postgres")
 	if err != nil || podName == "" {
 		return nil // Postgres not running yet
 	}
 
-	dsn, err := k8sclient.SecretStringDataValue(ctx, clients, core.DefaultAnalyticsNamespace, "mcp-sentinel-secrets", "POSTGRES_DSN")
+	dsnNamespace, dsnSecret, ok := platforminventory.CredentialPlacement("POSTGRES_DSN")
+	if !ok {
+		return nil
+	}
+	dsn, err := k8sclient.SecretStringDataValue(ctx, clients, dsnNamespace, dsnSecret, "POSTGRES_DSN")
 	if err != nil || strings.TrimSpace(dsn) == "" {
 		return nil // secret not yet created
 	}
@@ -470,7 +479,7 @@ func checkPostgresPasswordSync(ctx context.Context, clients *k8sclient.Clients) 
 	// Use PGPASSWORD + -h localhost to bypass peer auth and actually test the password.
 	kubectl := core.DefaultKubectlClient()
 	cmd, err := kubectl.CommandArgs([]string{
-		"exec", "-n", core.DefaultAnalyticsNamespace, podName, "--",
+		"exec", "-n", core.ComponentNamespace("postgres"), podName, "--",
 		"sh", "-c", fmt.Sprintf("PGPASSWORD=%s psql -h localhost -U mcp_runtime -c '\\l' -t -q 2>&1", shellQuote(extractPostgresPassword(dsn))),
 	})
 	if err != nil {
@@ -487,14 +496,14 @@ func checkPostgresPasswordSync(ctx context.Context, clients *k8sclient.Clients) 
 	return []preflightIssue{{
 		fatal: false,
 		message: fmt.Sprintf(
-			"Postgres pod %q is running but the password in mcp-sentinel-secrets does not authenticate.\n"+
+			"Postgres pod %q is running but the password in mcp-postgres-credentials does not authenticate.\n"+
 				"         Setup will fix this automatically by running ALTER USER on the Postgres pod.",
 			podName,
 		),
 		cleanup: []string{
 			"# Setup will run this automatically; or run it manually:",
 			fmt.Sprintf("kubectl exec -n %s %s -- sh -c 'PGPASSWORD=<new_pass> psql -h localhost -U mcp_runtime -c \"ALTER USER mcp_runtime PASSWORD '\\''<new_pass>'\\''\"'",
-				core.DefaultAnalyticsNamespace, podName),
+				core.ComponentNamespace("postgres"), podName),
 		},
 	}}
 }
@@ -628,14 +637,14 @@ func checkStuckAnalyticsStatefulSets(ctx context.Context, clients *k8sclient.Cli
 	}
 	targets := []stsSpec{
 		{"clickhouse", "app=clickhouse"},
-		{"mcp-sentinel-postgres", "app=mcp-sentinel-postgres"},
+		{"mcp-postgres", "app=mcp-postgres"},
 		{"kafka", "app=kafka"},
 		{"tempo", "app=tempo"},
 		{"loki", "app=loki"},
 	}
 	var issues []preflightIssue
 	for _, t := range targets {
-		pods, err := clients.Clientset.CoreV1().Pods(core.DefaultAnalyticsNamespace).List(
+		pods, err := clients.Clientset.CoreV1().Pods(core.ComponentNamespace("clickhouse")).List(
 			ctx, metav1.ListOptions{LabelSelector: t.selector})
 		if err != nil || len(pods.Items) == 0 {
 			continue
@@ -667,7 +676,7 @@ func checkStuckAnalyticsStatefulSets(ctx context.Context, clients *k8sclient.Cli
 			),
 			cleanup: []string{
 				fmt.Sprintf("kubectl delete pod -n %s -l %s --grace-period=0 --force",
-					core.DefaultAnalyticsNamespace, t.selector),
+					core.ComponentNamespace("clickhouse"), t.selector),
 			},
 		})
 	}

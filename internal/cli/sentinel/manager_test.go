@@ -31,7 +31,7 @@ func TestSentinelManager_ViewSentinelLogs(t *testing.T) {
 	if cmd.Name != "kubectl" {
 		t.Fatalf("expected kubectl, got %q", cmd.Name)
 	}
-	for _, want := range []string{"logs", "-n", core.DefaultAnalyticsNamespace, "-l", "app=mcp-platform-api", "--all-containers=true", "--prefix=true", "--tail", "50", "--since", "5m", "-f"} {
+	for _, want := range []string{"logs", "-n", core.ComponentNamespace("platform-api"), "-l", "app=mcp-platform-api", "--all-containers=true", "--prefix=true", "--tail", "50", "--since", "5m", "-f"} {
 		if !contains(cmd.Args, want) {
 			t.Fatalf("expected %q in args, got %v", want, cmd.Args)
 		}
@@ -48,7 +48,7 @@ func TestSentinelManager_PortForwardSentinelTarget(t *testing.T) {
 	}
 
 	cmd := mock.LastCommand()
-	for _, want := range []string{"port-forward", "-n", core.DefaultAnalyticsNamespace, "service/grafana", "3000:3000", "--address", "0.0.0.0"} {
+	for _, want := range []string{"port-forward", "-n", core.ComponentNamespace("grafana"), "service/grafana", "3000:3000", "--address", "0.0.0.0"} {
 		if !contains(cmd.Args, want) {
 			t.Fatalf("expected %q in args, got %v", want, cmd.Args)
 		}
@@ -65,7 +65,7 @@ func TestSentinelManager_RestartSentinel(t *testing.T) {
 	}
 
 	cmd := mock.LastCommand()
-	for _, want := range []string{"rollout", "restart", "deployment/mcp-sentinel-processor", "-n", core.DefaultAnalyticsNamespace} {
+	for _, want := range []string{"rollout", "restart", "deployment/mcp-processor", "-n", core.ComponentNamespace("processor")} {
 		if !contains(cmd.Args, want) {
 			t.Fatalf("expected %q in args, got %v", want, cmd.Args)
 		}

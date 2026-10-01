@@ -41,9 +41,9 @@ func AnalyticsNamespaceInstalled(kubectl core.KubectlRunner, clusterReachable bo
 		return false, nil
 	}
 
-	output, err := runKubectlCombinedOutput(kubectl, []string{"get", "namespace", core.DefaultAnalyticsNamespace, "-o", "jsonpath={.metadata.name}"})
+	output, err := runKubectlCombinedOutput(kubectl, []string{"get", "namespace", core.ComponentNamespace("platform-api"), "-o", "jsonpath={.metadata.name}"})
 	if err == nil {
-		return strings.TrimSpace(output) == core.DefaultAnalyticsNamespace, nil
+		return strings.TrimSpace(output) == core.ComponentNamespace("platform-api"), nil
 	}
 	if strings.TrimSpace(output) == "" {
 		return false, fmt.Errorf("empty output from namespace probe")
@@ -59,7 +59,7 @@ func AnalyticsNamespaceInstalled(kubectl core.KubectlRunner, clusterReachable bo
 
 // AnalyticsStackRow builds a table row for the analytics namespace aggregate status.
 func AnalyticsStackRow(status, details string) []string {
-	ns := core.DefaultAnalyticsNamespace
+	ns := core.ComponentNamespace("platform-api")
 	return []string{"Analytics Stack", ns, "namespace/" + ns, status, details}
 }
 

@@ -100,9 +100,9 @@ func TestContentHashTracksTargetArchitecture(t *testing.T) {
 func TestComponentFromLocalImage(t *testing.T) {
 	cases := map[string]string{
 		"docker.io/library/mcp-runtime-operator:latest": "operator",
-		"mcp-sentinel-mcp-gateway:latest":               "gateway-proxy",
+		"mcp-gateway:latest":                            "gateway-proxy",
 		"mcp-platform-api:latest":                       "platform-api",
-		"registry.local/mcp-sentinel-ui:dev":            "ui",
+		"registry.local/mcp-ui:dev":                     "ui",
 		"mcp-runtime-registry:latest":                   "e2e-registry",
 		"unknown:latest":                                "",
 	}

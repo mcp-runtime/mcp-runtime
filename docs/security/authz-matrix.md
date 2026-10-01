@@ -1,8 +1,7 @@
-# Sentinel API authn/authz matrix
+# API authn/authz matrix
 
-This is the **source of truth** for which roles can call which endpoint on the
-split Sentinel API services (`mcp-platform-api`, `mcp-runtime-api`,
-`mcp-analytics-api`). The `security-audit` skill mode `platform` (see
+This is the **source of truth** for which roles can call which endpoint on
+`mcp-platform-api`, `mcp-runtime-api`, and `mcp-analytics-api`. The `security-audit` skill mode `platform` (see
 `.codex/skills/security-audit/references/platform.md`) compares the live
 services against this table. A divergence in either direction is a finding:
 
@@ -23,9 +22,9 @@ internally; include both the prefix and the meaningful sub-paths in the table.
 |------------------|--------------------------------------------------------------|---------------------------------------------------------------|
 | `anon`           | none                                                         | n/a                                                           |
 | `user-cookie`    | logged-in browser session (platform identity)                | seeded via `PLATFORM_DEV_*` in test mode, OIDC otherwise      |
-| `user-key`       | `x-api-key` matching a user-scoped key                       | `mcp-sentinel-secrets.UI_API_KEY` (also dual-purposed for UI) |
-| `admin-key`      | `x-api-key` matching `ADMIN_API_KEYS` entry                  | `mcp-sentinel-secrets.ADMIN_API_KEYS`                         |
-| `ingest-key`     | `x-api-key` matching `INGEST_API_KEYS` entry                 | `mcp-sentinel-secrets.INGEST_API_KEYS`                        |
+| `user-key`       | `x-api-key` matching a user-scoped key                       | `mcp-ui-credentials` `UI_API_KEY` in `mcp-platform` |
+| `admin-key`      | `x-api-key` matching `ADMIN_API_KEYS` entry                  | `mcp-platform-api-credentials` `ADMIN_API_KEYS` in `mcp-platform` |
+| `ingest-key`     | `x-api-key` matching `INGEST_API_KEYS` entry                 | `mcp-ingest-credentials` `INGEST_API_KEYS` in `mcp-observability` |
 
 `admin-role` is enforced by `platformauth.Authenticator.RequireRole` wraps in
 each split service's `routes.go`. `user-cookie` and `user-key` distinguish which

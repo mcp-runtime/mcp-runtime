@@ -30,16 +30,14 @@ tags
 
 # Local/generated artifacts
 /.playwright-mcp/
-/mcp-sentinel/
-/services/mcp-server/mcp-sentinel-mcp-server
-/services/ui/mcp-sentinel-ui
+/services/ui/mcp-ui
 /services/ui/frontend/node_modules/
 /services/ui/frontend/dist/
 /services/ui/frontend/.vite/
 /services/ui/frontend/*.tsbuildinfo
-/services/ingest/mcp-sentinel-ingest
-/services/processor/mcp-sentinel-processor
-/services/mcp-gateway/mcp-sentinel-mcp-gateway
+/services/ingest/mcp-ingest
+/services/processor/mcp-processor
+/services/mcp-gateway/mcp-gateway
 /services/platform-api/mcp-platform-api
 /services/runtime-api/mcp-runtime-api
 /services/analytics-api/mcp-analytics-api

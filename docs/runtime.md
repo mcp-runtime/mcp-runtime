@@ -1,6 +1,6 @@
 # Runtime
 
-The runtime is the Kubernetes control plane for MCP servers. It handles cluster bootstrap, the registry, ingress setup, operator reconciliation, deployment resources, rollout, and the access model for each server. Requests then pass to the [Sentinel](sentinel.md) request path.
+The runtime is the Kubernetes control plane for MCP servers. It handles cluster bootstrap, the registry, ingress setup, operator reconciliation, deployment resources, rollout, and the access model for each server. Requests then pass to the [platform services](platform-services.md) request path.
 
 The runtime runs on top of your ingress and networking layer and handles MCP-specific delivery, access, and rollout. It does not route general cluster traffic.
 
@@ -213,4 +213,4 @@ Not yet:
 
 - [CLI](cli.md): every command and flag.
 - [API](api.md): full CRD reference with examples.
-- [Sentinel](sentinel.md): what happens after traffic enters the gateway.
+- [Platform services](platform-services.md): what happens after traffic enters the gateway.

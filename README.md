@@ -56,7 +56,11 @@ A public preview runs at [platform.mcpruntime.org](https://platform.mcpruntime.o
 - Kubernetes operator for `Deployment`, `Service`, `Ingress`, and policy materialization
 - Internal or provisioned registry workflows
 - Optional gateway enforcement for identity, tool policy, trust, and audit emission
-- Bundled Sentinel stack for ingest, processing, API, UI, and observability
+- Bundled Sentinel stack for ingest, processing, API, UI, and observability.
+  Control-plane services run in `mcp-platform`. The event pipeline and
+  telemetry stack run in `mcp-observability`. Promtail runs in
+  `mcp-log-collector`. MCP servers stay in `mcp-servers`, `mcp-servers-org`,
+  `mcp-servers-public`, or `mcp-team-{slug}`. See [Namespaces](docs/namespaces.md).
 
 ## Comparison
 

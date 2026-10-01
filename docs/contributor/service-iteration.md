@@ -44,10 +44,10 @@ Build and roll the UI:
 
 ```bash
 SERVICE=ui
-IMAGE_REPO=mcp-sentinel-ui
+IMAGE_REPO=mcp-ui
 DOCKERFILE=services/ui/Dockerfile
 BUILD_CONTEXT=.
-DEPLOYMENT=mcp-sentinel-ui
+DEPLOYMENT=mcp-ui
 CONTAINER=ui
 TAG="${SERVICE}-dev-$(date +%s)"
 LOCAL_IMAGE="${IMAGE_REPO}:${TAG}"
@@ -61,11 +61,11 @@ docker build -t "$LOCAL_IMAGE" -f "$DOCKERFILE" "$BUILD_CONTEXT"
   --image "$LOCAL_IMAGE" \
   --name "$IMAGE_REPO"
 
-kubectl -n mcp-sentinel set image \
+kubectl -n mcp-platform set image \
   "deployment/$DEPLOYMENT" \
   "$CONTAINER=$REGISTRY/$IMAGE_REPO:$TAG"
 
-kubectl -n mcp-sentinel rollout status "deployment/$DEPLOYMENT" --timeout=90s
+kubectl -n mcp-platform rollout status "deployment/$DEPLOYMENT" --timeout=90s
 ```
 
 Use the same shape for each split API service:
@@ -95,8 +95,8 @@ For analytics pipeline changes:
 
 | Service | Image repo | Dockerfile | Build context | Deployment | Container |
 |---|---|---|---|---|---|
-| Ingest | `mcp-sentinel-ingest` | `services/ingest/Dockerfile` | `.` | `mcp-sentinel-ingest` | `ingest` |
-| Processor | `mcp-sentinel-processor` | `services/processor/Dockerfile` | `.` | `mcp-sentinel-processor` | `processor` |
+| Ingest | `mcp-ingest` | `services/ingest/Dockerfile` | `.` | `mcp-ingest` | `ingest` |
+| Processor | `mcp-processor` | `services/processor/Dockerfile` | `.` | `mcp-processor` | `processor` |
 
 After rolling either service, generate one MCP request and check both logs
 (admin kubectl):
@@ -161,7 +161,7 @@ kubectl apply -f config/crd/bases/mcpruntime.org_mcpservers.yaml
 ## MCP gateway sidecar
 
 `services/mcp-gateway` runs as the `mcp-gateway` sidecar in each MCP server pod.
-To test gateway changes, rebuild and push `mcp-sentinel-mcp-gateway`, update the
+To test gateway changes, rebuild and push `mcp-gateway`, update the
 operator's `MCP_GATEWAY_PROXY_IMAGE`, roll the operator, then restart affected
 MCP server pods so the sidecar is reinjected.
 

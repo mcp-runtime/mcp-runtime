@@ -95,7 +95,7 @@ func TestRenderMCPAuthServerManifestProductionHardensDevSwitches(t *testing.T) {
 		// them itself now, so no rewrite middleware sits in front.
 		"/.well-known/oauth-authorization-server/mcp-auth",
 		"/.well-known/openid-configuration/mcp-auth",
-		"mcp-sentinel-mcp-auth-server-strip-prefix@kubernetescrd",
+		"mcp-platform-mcp-auth-server-strip-prefix@kubernetescrd",
 	} {
 		if !strings.Contains(manifest, want) {
 			t.Errorf("manifest missing %q", want)

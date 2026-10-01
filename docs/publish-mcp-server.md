@@ -491,6 +491,6 @@ analytics:
 - [CLI](cli.md)
 - [Runtime](runtime.md)
 - [API](api.md)
-- [Sentinel](sentinel.md)
+- [Platform services](platform-services.md)
 
 **Next:** [Agent Adapters](agent-adapters.md): connect your MCP client through the adapter proxy.

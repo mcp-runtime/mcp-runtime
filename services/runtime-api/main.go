@@ -52,7 +52,7 @@ func main() {
 
 	platformAPIURL := strings.TrimSpace(os.Getenv("PLATFORM_API_URL"))
 	if platformAPIURL == "" {
-		platformAPIURL = "http://mcp-platform-api.mcp-sentinel.svc.cluster.local:8080"
+		platformAPIURL = "http://mcp-platform-api.mcp-platform.svc.cluster.local:8080"
 	}
 	internalToken := strings.TrimSpace(os.Getenv("INTERNAL_AUTH_TOKEN"))
 	platformClient := &platformclient.Client{

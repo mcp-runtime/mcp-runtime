@@ -9,6 +9,7 @@ import (
 
 	"mcp-runtime/internal/cli/core"
 	"mcp-runtime/pkg/mcpdefaults"
+	"mcp-runtime/pkg/platforminventory"
 )
 
 // Distribution identifies a Kubernetes flavor for remediation messaging.
@@ -61,7 +62,6 @@ const (
 	doctorTraefikServiceName  = "traefik"
 	doctorTraefikWebPort      = 8000
 	doctorK3sTraefikWebPort   = 80
-	doctorSentinelNamespace   = "mcp-sentinel"
 	doctorPlatformAPIService  = "mcp-platform-api"
 	doctorPlatformAPIPort     = 8080
 	doctorRuntimeAPIService   = "mcp-runtime-api"
@@ -72,7 +72,18 @@ const (
 	doctorProbePodRunTimeout  = "90s"
 
 	registryHTTPPullMismatch = "http: server gave HTTP response to HTTPS client"
+)
 
+// componentNamespace is the only namespace lookup doctor checks use.
+func componentNamespace(key string) string {
+	component, ok := platforminventory.Lookup(key)
+	if !ok {
+		return ""
+	}
+	return component.Namespace
+}
+
+const (
 	// imagePullListSep separates list items emitted by the image-pull jsonpath.
 	// ASCII Unit Separator (0x1f) avoids collisions with commas that appear
 	// inside kubelet error messages.
@@ -308,7 +319,7 @@ func doctorCheckSpecs(kubectl core.KubectlRunner, distro Distribution) []doctorC
 		{Name: "DNS NetworkPolicy portability", Detail: "checking runtime-api egress matches the cluster's actual DNS pod labels", Run: func() DoctorCheck { return checkDNSNetworkPolicyPortability(kubectl) }},
 		{Name: "storage class readiness", Detail: "checking the configured StorageClass exists and is safe for the cluster topology", Run: func() DoctorCheck { return checkStorageClassReadiness(kubectl) }},
 		{Name: "sentinel session-local deployment scaling", Detail: "checking UI and gateway stay at one replica until shared session storage exists", Run: func() DoctorCheck { return checkSessionLocalDeploymentScaling(kubectl) }},
-		{Name: "sentinel secrets", Detail: "reading Sentinel API, admin, UI, and ingest keys from mcp-sentinel-secrets", Run: func() DoctorCheck { return checkSentinelSecrets(kubectl) }},
+		{Name: "sentinel secrets", Detail: "reading API, admin, UI, and ingest keys from their owner Secrets", Run: func() DoctorCheck { return checkSentinelSecrets(kubectl) }},
 		{Name: "sentinel secret consumer freshness", Detail: "checking runtime-api pods were started after the latest auth Secret update", Run: func() DoctorCheck { return checkSentinelSecretConsumerFreshness(kubectl) }},
 		{Name: "sentinel OIDC configuration", Detail: "checking tenant/public login configuration is complete", Run: func() DoctorCheck { return checkSentinelOIDCConfiguration(kubectl) }},
 		{Name: "gateway analytics credentials", Detail: "checking gateway sidecars have ingest credentials when analytics is enabled", Run: func() DoctorCheck { return checkGatewayAnalyticsCredentials(kubectl) }},

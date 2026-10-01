@@ -147,7 +147,7 @@ Read these first:
 
 - [Deployment Targets](deployment-targets.md)
 - [Cluster readiness](cluster-readiness.md)
-- [Sentinel Kubernetes awareness and hardening](sentinel.md#kubernetes-awareness-and-hardening)
+- [Platform service Kubernetes awareness and hardening](platform-services.md#kubernetes-awareness-and-hardening)
 - [Multi-team isolation](multi-team.md) if multiple teams will publish or govern servers on one cluster
 
 For production-oriented setup, choose the registry path explicitly. With a
@@ -264,7 +264,7 @@ export MCP_PLATFORM_ADMIN_EMAIL=admin@example.com
 
 For a non-Google OIDC provider, set `OIDC_ISSUER`, `OIDC_AUDIENCE`, and
 `OIDC_JWKS_URL` before setup. Reruns preserve existing values in
-`mcp-sentinel/mcp-sentinel-config`.
+`mcp-platform/mcp-shared-config` and `mcp-observability/mcp-shared-config`.
 
 For multi-team or tenant-separated deployments, keep setup as the platform
 install and provision one namespace per team with `mcp-runtime team create
@@ -402,6 +402,6 @@ flowchart LR
 - [Architecture](architecture.md): how the pieces fit together.
 - [CLI](cli.md): full command reference.
 - [API](api.md): every CRD field and HTTP endpoint.
-- [Sentinel](sentinel.md): request-path governance, audit, observability.
+- [Platform services](platform-services.md): request-path governance, audit, observability.
 
 **Next:** [Concepts](concepts.md): understand Grants, Sessions, Trust levels, and Side effects before deploying servers.

@@ -18,7 +18,7 @@ Available Commands:
   completion  Generate the autocompletion script for the specified shell
   help        Help about any command
   registry    Manage container registry
-  sentinel    Operate the bundled mcp-sentinel stack (admin only)
+  sentinel    Operate the bundled platform stack (admin only)
   server      Manage MCP servers
   setup       Setup the complete MCP platform
   status      Show platform status

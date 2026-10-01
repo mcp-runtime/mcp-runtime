@@ -30,8 +30,8 @@ type doctorEgressNetworkPolicy struct {
 // catches the especially subtle failure where /health is green but all runtime
 // inventory calls fail when the API server is reached through a NetworkPolicy.
 func checkRuntimeAPIKubernetesAPIEgress(kubectl core.KubectlRunner) DoctorCheck {
-	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", doctorSentinelNamespace, "-o", "jsonpath={.metadata.name}"}); err != nil {
-		return DoctorCheck{Name: "runtime API Kubernetes API egress", OK: true, Detail: "namespace mcp-sentinel not found; skipping runtime API egress check"}
+	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", componentNamespace("platform-api"), "-o", "jsonpath={.metadata.name}"}); err != nil {
+		return DoctorCheck{Name: "runtime API Kubernetes API egress", OK: true, Detail: "namespace mcp-platform not found; skipping runtime API egress check"}
 	}
 	portsRaw, err := readKubectlOutput(kubectl, []string{"get", "endpoints", "kubernetes", "-o", `jsonpath={range .subsets[*].ports[*]}{.port}{"\n"}{end}`})
 	if err != nil {
@@ -47,7 +47,7 @@ func checkRuntimeAPIKubernetesAPIEgress(kubectl core.KubectlRunner) DoctorCheck 
 	if len(ports) == 0 {
 		return DoctorCheck{Name: "runtime API Kubernetes API egress", OK: false, Detail: "Kubernetes Service has no usable endpoint port", Remedy: "restore Kubernetes API endpoints before using the runtime catalog"}
 	}
-	policyRaw, err := readNetworkPolicyJSON(kubectl, doctorSentinelNamespace, "mcp-runtime-api-platform-egress")
+	policyRaw, err := readNetworkPolicyJSON(kubectl, componentNamespace("platform-api"), "mcp-runtime-api-platform-egress")
 	if err != nil {
 		return DoctorCheck{Name: "runtime API Kubernetes API egress", OK: false, Detail: fmt.Sprintf("failed reading runtime API NetworkPolicy: %v", err), Remedy: "apply k8s/22-split-api-networkpolicy.yaml or configure the runtime API egress policy"}
 	}
@@ -115,8 +115,8 @@ func checkPlatformAPILiveInventoryNetworkPolicy(kubectl core.KubectlRunner) Doct
 			return DoctorCheck{
 				Name:   "platform API live inventory ingress",
 				OK:     false,
-				Detail: fmt.Sprintf("networkpolicy %s/platform-default-deny blocks mcp-sentinel from probing MCPServer Services", namespace),
-				Remedy: "rerun team provisioning or patch platform-default-deny to allow ingress from namespace mcp-sentinel",
+				Detail: fmt.Sprintf("networkpolicy %s/platform-default-deny blocks %s from probing MCPServer Services", namespace, componentNamespace("platform-api")),
+				Remedy: "rerun team provisioning or patch platform-default-deny to allow ingress from namespace " + componentNamespace("platform-api"),
 			}
 		}
 	}
@@ -209,7 +209,7 @@ func networkPolicyAllowsPlatformAPI(raw string) bool {
 			if peer.NamespaceSelector == nil {
 				continue
 			}
-			if peer.NamespaceSelector.MatchLabels["kubernetes.io/metadata.name"] != doctorSentinelNamespace {
+			if peer.NamespaceSelector.MatchLabels["kubernetes.io/metadata.name"] != componentNamespace("platform-api") {
 				continue
 			}
 			if peer.PodSelector == nil {

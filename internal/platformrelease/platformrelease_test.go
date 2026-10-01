@@ -52,8 +52,8 @@ func TestParseImageRef(t *testing.T) {
 		in                          string
 		registry, path, tag, digest string
 	}{
-		{"mcp-sentinel-ui:latest", "", "mcp-sentinel-ui", "latest", ""},
-		{"registry.registry.svc.cluster.local:5000/mcp-sentinel-ui:v1", "registry.registry.svc.cluster.local:5000", "mcp-sentinel-ui", "v1", ""},
+		{"mcp-ui:latest", "", "mcp-ui", "latest", ""},
+		{"registry.registry.svc.cluster.local:5000/mcp-ui:v1", "registry.registry.svc.cluster.local:5000", "mcp-ui", "v1", ""},
 		{"localhost/foo/bar", "localhost", "foo/bar", "", ""},
 		{"docker.io/princekrroshan01/mcp-auth-server:latest@" + digest, "docker.io", "princekrroshan01/mcp-auth-server", "latest", digest},
 		{"quay.io/jetstack/cert-manager-controller:v1.14.5", "quay.io", "jetstack/cert-manager-controller", "v1.14.5", ""},
@@ -85,7 +85,7 @@ func TestParseImageRef(t *testing.T) {
 }
 
 func TestParseManifestValidation(t *testing.T) {
-	good := `{"apiVersion":"mcpruntime.org/v1alpha1","kind":"PlatformRelease","version":"v0.5.0","components":[{"name":"ui","repository":"mcp-sentinel-ui","tag":"v0.5.0"}]}`
+	good := `{"apiVersion":"mcpruntime.org/v1alpha1","kind":"PlatformRelease","version":"v0.5.0","components":[{"name":"ui","repository":"mcp-ui","tag":"v0.5.0"}]}`
 	if _, err := ParseManifest([]byte(good)); err != nil {
 		t.Fatalf("good manifest: %v", err)
 	}
@@ -115,13 +115,13 @@ func TestParseManifestValidation(t *testing.T) {
 
 func TestTargetRefResolution(t *testing.T) {
 	m := &Manifest{}
-	ref, err := m.TargetRef(ManifestComponent{Repository: "mcp-sentinel-ui", Tag: "v1"}, "registry.local:5000")
-	if err != nil || ref.String() != "registry.local:5000/mcp-sentinel-ui:v1" {
+	ref, err := m.TargetRef(ManifestComponent{Repository: "mcp-ui", Tag: "v1"}, "registry.local:5000")
+	if err != nil || ref.String() != "registry.local:5000/mcp-ui:v1" {
 		t.Fatalf("fallback registry: %v %s", err, ref.String())
 	}
 	m.Registry = "ghcr.io"
-	ref, _ = m.TargetRef(ManifestComponent{Repository: "mcp-sentinel-ui", Tag: "v1"}, "registry.local:5000")
-	if ref.String() != "ghcr.io/mcp-sentinel-ui:v1" {
+	ref, _ = m.TargetRef(ManifestComponent{Repository: "mcp-ui", Tag: "v1"}, "registry.local:5000")
+	if ref.String() != "ghcr.io/mcp-ui:v1" {
 		t.Fatalf("manifest registry: %s", ref.String())
 	}
 	ref, _ = m.TargetRef(ManifestComponent{Repository: "quay.io/x/y", Tag: "v1"}, "registry.local:5000")
@@ -210,13 +210,13 @@ func TestLoadManifestRejectsPlainHTTP(t *testing.T) {
 }
 
 func TestStampInstalledVersionMetadataOnly(t *testing.T) {
-	ui := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "mcp-sentinel-ui", Namespace: "mcp-sentinel"}}
+	ui := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "mcp-ui", Namespace: "mcp-platform"}}
 	op := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: OperatorDeployment, Namespace: OperatorNamespace}}
 	cs := fake.NewSimpleClientset(ui, op)
 	if err := StampInstalledVersion(context.Background(), cs, "v0.5.0"); err != nil {
 		t.Fatal(err)
 	}
-	got, _ := cs.AppsV1().Deployments("mcp-sentinel").Get(context.Background(), "mcp-sentinel-ui", metav1.GetOptions{})
+	got, _ := cs.AppsV1().Deployments("mcp-platform").Get(context.Background(), "mcp-ui", metav1.GetOptions{})
 	if got.Annotations[AnnotationVersion] != "v0.5.0" || got.Labels[LabelComponent] != "ui" || got.Labels[LabelPartOf] != LabelPartOfValue {
 		t.Fatalf("ui metadata = %v %v", got.Labels, got.Annotations)
 	}

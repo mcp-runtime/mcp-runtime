@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-NAMESPACE=${NAMESPACE:-mcp-sentinel}
+PLATFORM_NAMESPACE=${PLATFORM_NAMESPACE:-mcp-platform}
+OBSERVABILITY_NAMESPACE=${OBSERVABILITY_NAMESPACE:-mcp-observability}
+SERVERS_NAMESPACE=${SERVERS_NAMESPACE:-mcp-servers}
 GATEWAY_PORT=${GATEWAY_PORT:-8083}
 API_KEY=${API_KEY:-changeme}
 REQ_START=${REQ_START:-20}
 REQ_END=${REQ_END:-230}
-KIND_CLUSTER_NAME=${KIND_CLUSTER_NAME:-mcp-sentinel}
+KIND_CLUSTER_NAME=${KIND_CLUSTER_NAME:-mcp-runtime}
 PROMETHEUS_PORT=${PROMETHEUS_PORT:-9090}
 TEMPO_PORT=${TEMPO_PORT:-3200}
 LOKI_PORT=${LOKI_PORT:-3100}
@@ -31,58 +33,58 @@ kubectl config use-context "kind-${KIND_CLUSTER_NAME}" >/dev/null
 docker build -t mcp-platform-api:latest -f services/platform-api/Dockerfile .
 docker build -t mcp-runtime-api:latest -f services/runtime-api/Dockerfile .
 docker build -t mcp-analytics-api:latest -f services/analytics-api/Dockerfile .
-docker build -t mcp-sentinel-ingest:latest -f services/ingest/Dockerfile .
-docker build -t mcp-sentinel-processor:latest -f services/processor/Dockerfile .
-docker build -t mcp-sentinel-ui:latest -f services/ui/Dockerfile .
+docker build -t mcp-ingest:latest -f services/ingest/Dockerfile .
+docker build -t mcp-processor:latest -f services/processor/Dockerfile .
+docker build -t mcp-ui:latest -f services/ui/Dockerfile .
 docker build -t oauth-example-go-2025-11-25:latest examples/oauth-example-go-2025-11-25
-docker build -t mcp-sentinel-mcp-gateway:latest -f services/mcp-gateway/Dockerfile .
+docker build -t mcp-gateway:latest -f services/mcp-gateway/Dockerfile .
 
 kind load docker-image mcp-platform-api:latest --name "$KIND_CLUSTER_NAME"
 kind load docker-image mcp-runtime-api:latest --name "$KIND_CLUSTER_NAME"
 kind load docker-image mcp-analytics-api:latest --name "$KIND_CLUSTER_NAME"
-kind load docker-image mcp-sentinel-ingest:latest --name "$KIND_CLUSTER_NAME"
-kind load docker-image mcp-sentinel-processor:latest --name "$KIND_CLUSTER_NAME"
-kind load docker-image mcp-sentinel-ui:latest --name "$KIND_CLUSTER_NAME"
+kind load docker-image mcp-ingest:latest --name "$KIND_CLUSTER_NAME"
+kind load docker-image mcp-processor:latest --name "$KIND_CLUSTER_NAME"
+kind load docker-image mcp-ui:latest --name "$KIND_CLUSTER_NAME"
 kind load docker-image oauth-example-go-2025-11-25:latest --name "$KIND_CLUSTER_NAME"
-kind load docker-image mcp-sentinel-mcp-gateway:latest --name "$KIND_CLUSTER_NAME"
+kind load docker-image mcp-gateway:latest --name "$KIND_CLUSTER_NAME"
 
 kubectl apply -f k8s
 
-kubectl -n "$NAMESPACE" rollout restart deployment/mcp-platform-api
-kubectl -n "$NAMESPACE" rollout restart deployment/mcp-runtime-api
-kubectl -n "$NAMESPACE" rollout restart deployment/mcp-analytics-api
-kubectl -n "$NAMESPACE" rollout restart deployment/mcp-sentinel-ingest
-kubectl -n "$NAMESPACE" rollout restart deployment/mcp-sentinel-processor
-kubectl -n "$NAMESPACE" rollout restart deployment/mcp-sentinel-ui
-kubectl -n "$NAMESPACE" rollout restart deployment/mcp-sentinel-gateway
-kubectl -n "$NAMESPACE" rollout restart deployment/workspace-assistant-server
-kubectl -n "$NAMESPACE" rollout restart deployment/workspace-assistant-sidecar
+kubectl -n "$PLATFORM_NAMESPACE" rollout restart deployment/mcp-platform-api
+kubectl -n "$PLATFORM_NAMESPACE" rollout restart deployment/mcp-runtime-api
+kubectl -n "$OBSERVABILITY_NAMESPACE" rollout restart deployment/mcp-analytics-api
+kubectl -n "$OBSERVABILITY_NAMESPACE" rollout restart deployment/mcp-ingest
+kubectl -n "$OBSERVABILITY_NAMESPACE" rollout restart deployment/mcp-processor
+kubectl -n "$PLATFORM_NAMESPACE" rollout restart deployment/mcp-ui
+kubectl -n "$PLATFORM_NAMESPACE" rollout restart deployment/mcp-platform-gateway
+kubectl -n "$SERVERS_NAMESPACE" rollout restart deployment/workspace-assistant-server
+kubectl -n "$SERVERS_NAMESPACE" rollout restart deployment/workspace-assistant-sidecar
 
-kubectl -n "$NAMESPACE" rollout status statefulset/clickhouse --timeout=180s
-kubectl -n "$NAMESPACE" rollout status statefulset/kafka --timeout=180s
-kubectl -n "$NAMESPACE" wait --for=condition=complete job/kafka-topic-init --timeout=180s
-kubectl -n "$NAMESPACE" rollout status deployment/mcp-sentinel-ingest --timeout=180s
-kubectl -n "$NAMESPACE" rollout status deployment/mcp-sentinel-processor --timeout=180s
-kubectl -n "$NAMESPACE" rollout status deployment/mcp-platform-api --timeout=180s
-kubectl -n "$NAMESPACE" rollout status deployment/mcp-runtime-api --timeout=180s
-kubectl -n "$NAMESPACE" rollout status deployment/mcp-analytics-api --timeout=180s
-kubectl -n "$NAMESPACE" rollout status deployment/mcp-sentinel-ui --timeout=180s
-kubectl -n "$NAMESPACE" rollout status deployment/mcp-sentinel-gateway --timeout=180s
-kubectl -n "$NAMESPACE" rollout status deployment/workspace-assistant-server --timeout=180s
-kubectl -n "$NAMESPACE" rollout status deployment/workspace-assistant-sidecar --timeout=180s
-kubectl -n "$NAMESPACE" rollout status deployment/otel-collector --timeout=180s
-kubectl -n "$NAMESPACE" rollout status statefulset/tempo --timeout=180s
-kubectl -n "$NAMESPACE" rollout status statefulset/loki --timeout="$LOKI_ROLLOUT_TIMEOUT"
+kubectl -n "$OBSERVABILITY_NAMESPACE" rollout status statefulset/clickhouse --timeout=180s
+kubectl -n "$OBSERVABILITY_NAMESPACE" rollout status statefulset/kafka --timeout=180s
+kubectl -n "$OBSERVABILITY_NAMESPACE" wait --for=condition=complete job/kafka-topic-init --timeout=180s
+kubectl -n "$OBSERVABILITY_NAMESPACE" rollout status deployment/mcp-ingest --timeout=180s
+kubectl -n "$OBSERVABILITY_NAMESPACE" rollout status deployment/mcp-processor --timeout=180s
+kubectl -n "$PLATFORM_NAMESPACE" rollout status deployment/mcp-platform-api --timeout=180s
+kubectl -n "$PLATFORM_NAMESPACE" rollout status deployment/mcp-runtime-api --timeout=180s
+kubectl -n "$OBSERVABILITY_NAMESPACE" rollout status deployment/mcp-analytics-api --timeout=180s
+kubectl -n "$PLATFORM_NAMESPACE" rollout status deployment/mcp-ui --timeout=180s
+kubectl -n "$PLATFORM_NAMESPACE" rollout status deployment/mcp-platform-gateway --timeout=180s
+kubectl -n "$SERVERS_NAMESPACE" rollout status deployment/workspace-assistant-server --timeout=180s
+kubectl -n "$SERVERS_NAMESPACE" rollout status deployment/workspace-assistant-sidecar --timeout=180s
+kubectl -n "$OBSERVABILITY_NAMESPACE" rollout status deployment/otel-collector --timeout=180s
+kubectl -n "$OBSERVABILITY_NAMESPACE" rollout status statefulset/tempo --timeout=180s
+kubectl -n "$OBSERVABILITY_NAMESPACE" rollout status statefulset/loki --timeout="$LOKI_ROLLOUT_TIMEOUT"
 kubectl -n mcp-log-collector rollout status daemonset/promtail --timeout=180s
 
 PIDS=()
-kubectl -n "$NAMESPACE" port-forward svc/mcp-sentinel-gateway "${GATEWAY_PORT}:8083" >/tmp/mcp-pf.log 2>&1 &
+kubectl -n "$PLATFORM_NAMESPACE" port-forward svc/mcp-platform-gateway "${GATEWAY_PORT}:8083" >/tmp/mcp-pf.log 2>&1 &
 PIDS+=("$!")
-kubectl -n "$NAMESPACE" port-forward svc/prometheus "${PROMETHEUS_PORT}:9090" >/tmp/mcp-pf-prom.log 2>&1 &
+kubectl -n "$OBSERVABILITY_NAMESPACE" port-forward svc/prometheus "${PROMETHEUS_PORT}:9090" >/tmp/mcp-pf-prom.log 2>&1 &
 PIDS+=("$!")
-kubectl -n "$NAMESPACE" port-forward svc/tempo "${TEMPO_PORT}:3200" >/tmp/mcp-pf-tempo.log 2>&1 &
+kubectl -n "$OBSERVABILITY_NAMESPACE" port-forward svc/tempo "${TEMPO_PORT}:3200" >/tmp/mcp-pf-tempo.log 2>&1 &
 PIDS+=("$!")
-kubectl -n "$NAMESPACE" port-forward svc/loki "${LOKI_PORT}:3100" >/tmp/mcp-pf-loki.log 2>&1 &
+kubectl -n "$OBSERVABILITY_NAMESPACE" port-forward svc/loki "${LOKI_PORT}:3100" >/tmp/mcp-pf-loki.log 2>&1 &
 PIDS+=("$!")
 
 trap 'for pid in "${PIDS[@]}"; do kill "$pid" 2>/dev/null || true; done' EXIT
@@ -299,7 +301,7 @@ except Exception as exc:
     rows.append(("analytics.error", str(exc)))
 
 try:
-    jobs = ["mcp-platform-api", "mcp-runtime-api", "mcp-analytics-api", "mcp-sentinel-ingest", "mcp-sentinel-processor"]
+    jobs = ["mcp-platform-api", "mcp-runtime-api", "mcp-analytics-api", "mcp-ingest", "mcp-processor"]
     up_values = []
     for job in jobs:
         query = urllib.parse.urlencode({"query": f'up{{job=\"{job}\"}}'})
@@ -322,7 +324,7 @@ except Exception as exc:
     rows.append(("traces.error", str(exc)))
 
 try:
-    query = '{namespace="mcp-sentinel"}'
+    query = '{namespace=~"mcp-platform|mcp-observability|mcp-servers"}'
     end_ns = int(time.time() * 1e9)
     start_ns = end_ns - int(10 * 60 * 1e9)
     params = urllib.parse.urlencode({

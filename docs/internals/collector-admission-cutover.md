@@ -1,7 +1,7 @@
 # Collector admission cutover
 
 The node log collector requires hostPath access and runs in `mcp-log-collector`.
-Application workloads in `mcp-sentinel` use restricted Pod Security. The namespace
+Application workloads in `mcp-platform` and `mcp-observability` use restricted Pod Security. The namespace
 policy declarations live in `k8s/00-namespace.yaml`.
 
 Supported setup ensures the Sentinel namespace exists before ingress installs
@@ -12,7 +12,7 @@ setup defers the Sentinel policy declaration until cutover finishes.
 
 The destination collector uses its own `promtail-node-log-collector`
 ClusterRoleBinding. Setup preserves the legacy `promtail` binding through failed
-or interrupted rollout checks. The Loki URL uses `loki.mcp-sentinel.svc`, which
+or interrupted rollout checks. The Loki URL uses `loki.mcp-observability.svc`, which
 resolves through Kubernetes search domains without assuming `cluster.local`.
 
 After all required workloads roll out, setup deletes the old DaemonSet with

@@ -16,13 +16,13 @@ func New(runtime *core.Runtime) *cobra.Command {
 func NewWithManager(mgr *SentinelManager) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "sentinel",
-		Short: "Operate the bundled mcp-sentinel stack (admin only)",
-		Long:  "Inspect and operate the bundled mcp-sentinel analytics, gateway, and observability stack. These commands require admin/operator Kubernetes access with kubectl; normal users should use the platform API and dashboard instead.",
+		Short: "Operate the bundled platform stack (admin only)",
+		Long:  "Inspect and operate the bundled platform analytics, gateway, and observability stack. These commands require admin/operator Kubernetes access with kubectl; normal users should use the platform API and dashboard instead.",
 	}
 
 	statusCmd := &cobra.Command{
 		Use:   "status",
-		Short: "Show mcp-sentinel stack status",
+		Short: "Show platform stack status",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return mgr.ShowSentinelStatus()
 		},
@@ -34,7 +34,7 @@ func NewWithManager(mgr *SentinelManager) *cobra.Command {
 	var since string
 	logsCmd := &cobra.Command{
 		Use:       "logs [component]",
-		Short:     "View logs for a mcp-sentinel component",
+		Short:     "View logs for a platform component",
 		Args:      cobra.ExactArgs(1),
 		ValidArgs: ComponentKeys(),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -48,7 +48,7 @@ func NewWithManager(mgr *SentinelManager) *cobra.Command {
 
 	eventsCmd := &cobra.Command{
 		Use:   "events",
-		Short: "Show recent Kubernetes events for mcp-sentinel",
+		Short: "Show recent Kubernetes events for the platform namespaces",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return mgr.ShowSentinelEvents()
 		},
@@ -58,7 +58,7 @@ func NewWithManager(mgr *SentinelManager) *cobra.Command {
 	var address string
 	portForwardCmd := &cobra.Command{
 		Use:   "port-forward [target]",
-		Short: "Port-forward a common mcp-sentinel service",
+		Short: "Port-forward a common platform service",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return mgr.PortForwardSentinelTarget(args[0], localPort, address)
@@ -70,7 +70,7 @@ func NewWithManager(mgr *SentinelManager) *cobra.Command {
 	var restartAll bool
 	restartCmd := &cobra.Command{
 		Use:   "restart [component]",
-		Short: "Restart one or all mcp-sentinel workloads",
+		Short: "Restart one or all platform workloads",
 		Args: func(cmd *cobra.Command, args []string) error {
 			if restartAll && len(args) == 0 {
 				return nil
@@ -85,7 +85,7 @@ func NewWithManager(mgr *SentinelManager) *cobra.Command {
 			return mgr.RestartSentinel(component, restartAll)
 		},
 	}
-	restartCmd.Flags().BoolVar(&restartAll, "all", false, "Restart every mcp-sentinel workload")
+	restartCmd.Flags().BoolVar(&restartAll, "all", false, "Restart every platform workload")
 
 	grafanaCmd := &cobra.Command{
 		Use:   "grafana",
@@ -104,7 +104,7 @@ func NewWithManager(mgr *SentinelManager) *cobra.Command {
 	grafanaResetCmd := &cobra.Command{
 		Use:   "reset-admin-password",
 		Short: "Back up Grafana and reset the persisted admin password to the configured value",
-		Long:  "Reset the persisted Grafana admin password to the value in mcp-sentinel-secrets. Runs only when drift is detected, backs up the Grafana database first, passes the password to the Grafana CLI over stdin inside the pod, and verifies authenticated API access afterwards. Dashboards and datasources are preserved.",
+		Long:  "Reset the persisted Grafana admin password to the value in mcp-grafana-credentials. Runs only when drift is detected, backs up the Grafana database first, passes the password to the Grafana CLI over stdin inside the pod, and verifies authenticated API access afterwards. Dashboards and datasources are preserved.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return mgr.ResetGrafanaAdminPassword(resetYes)

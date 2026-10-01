@@ -128,7 +128,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: traefik-watch
-  namespace: mcp-sentinel
+  namespace: mcp-platform
 rules:
   - apiGroups: [""]
     resources: ["services", "endpoints", "secrets"]
@@ -141,7 +141,34 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: traefik-watch
-  namespace: mcp-sentinel
+  namespace: mcp-platform
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: traefik-watch
+subjects:
+  - kind: ServiceAccount
+    name: traefik
+    namespace: traefik
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: traefik-watch
+  namespace: mcp-observability
+rules:
+  - apiGroups: [""]
+    resources: ["services", "endpoints", "secrets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: traefik-watch
+  namespace: mcp-observability
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -283,9 +310,9 @@ spec:
               - ALL
         args:
           - --providers.kubernetesingress=true
-          - --providers.kubernetesingress.namespaces=registry,mcp-sentinel,mcp-servers,mcp-servers-org,mcp-servers-public
+          - --providers.kubernetesingress.namespaces=registry,mcp-platform,mcp-observability,mcp-log-collector,mcp-servers,mcp-servers-org,mcp-servers-public
           - --providers.kubernetescrd=true
-          - --providers.kubernetescrd.namespaces=mcp-servers,mcp-servers-org,mcp-servers-public
+          - --providers.kubernetescrd.namespaces=mcp-platform,mcp-observability,mcp-servers,mcp-servers-org,mcp-servers-public
           - --entrypoints.web.address=:8000
           - --entrypoints.web.forwardedHeaders.insecure=false
           - --entrypoints.web.http.redirections.entryPoint.to=websecure

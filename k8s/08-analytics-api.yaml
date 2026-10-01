@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: mcp-analytics-api
-  namespace: mcp-sentinel
+  namespace: mcp-observability
 spec:
   selector:
     app: mcp-analytics-api
@@ -18,7 +18,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mcp-analytics-api
-  namespace: mcp-sentinel
+  namespace: mcp-observability
 spec:
   replicas: 1
   selector:
@@ -29,7 +29,7 @@ spec:
       labels:
         app: mcp-analytics-api
     spec:
-      priorityClassName: mcp-sentinel-services
+      priorityClassName: mcp-shared-services
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
@@ -53,7 +53,7 @@ spec:
             - containerPort: 9095
           envFrom:
             - configMapRef:
-                name: mcp-sentinel-config
+                name: mcp-shared-config
           env:
             - name: PORT
               value: "8085"
@@ -64,7 +64,7 @@ spec:
             - name: CLICKHOUSE_DB
               value: "mcp"
             - name: PLATFORM_API_URL
-              value: "http://mcp-platform-api.mcp-sentinel.svc.cluster.local:8080"
+              value: "http://mcp-platform-api.mcp-platform.svc.cluster.local:8080"
             - name: API_KEYS
               valueFrom:
                 secretKeyRef:

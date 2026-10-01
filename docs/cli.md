@@ -96,7 +96,7 @@ mcp-runtime auth logout
 | `access` | User / Admin | Grants and sessions for gateway policy | [API reference](api.md) |
 | `adapter` | User | Certificate-authenticated HTTP proxy and enrollment for agents | [Agent adapter](agent-adapters.md) |
 | `team` | Admin | Create teams and add password users | [Multi-team](multi-team.md) |
-| `sentinel` | Operator | Inspect and operate the analytics stack | [Sentinel](sentinel.md) |
+| `sentinel` | Operator | Inspect and operate the analytics stack | [Platform services](platform-services.md) |
 | `bootstrap` | Operator | Pre-install cluster checks | [Cluster readiness](cluster-readiness.md) |
 | `setup` | Operator | Install the full platform stack | [setup](#setup) |
 | `update` | Operator | Update installed platform services to a release | [update](#update) |
@@ -632,7 +632,7 @@ users in their own teams. `team init` is deprecated; use `team create`.
 
 **[Operator]** Requires `KUBECONFIG` with cluster-admin RBAC.
 
-> Full guide: [Sentinel](sentinel.md)
+> Full guide: [Platform services](platform-services.md)
 
 ```bash
 KUBECONFIG=~/.kube/config mcp-runtime sentinel status
@@ -926,6 +926,6 @@ KUBECONFIG=~/.kube/config mcp-runtime cluster diagnostics    # post-setup diagno
 | MCPServer, MCPAccessGrant, MCPAgentSession fields | [API reference](api.md) |
 | Certificate-authenticated HTTP adapter | [Agent adapter](agent-adapters.md) |
 | Multi-team namespaces and RBAC | [Multi-team isolation](multi-team.md) |
-| Sentinel logs, events, restart | [Sentinel](sentinel.md) |
+| Platform service logs, events, restart | [Platform services](platform-services.md) |
 | Distro-specific cluster prerequisites | [Cluster readiness](cluster-readiness.md) |
 | Kind, EKS, k3s deployment | [Deployment targets](deployment-targets.md) |

@@ -56,7 +56,7 @@ auth.example.com     → <public ingress IP>
 ```
 
 Issue certificates for both names with the cluster's ACME issuer. Setup creates
-the auth-server Certificate and its Secret in the `mcp-sentinel` namespace;
+the auth-server Certificate and its Secret in the `mcp-platform` namespace;
 `--mcp-auth-tls-secret` is only needed when certificates are externally managed.
 Keycloak's certificate can be named `keycloak-tls`.
 
@@ -68,9 +68,9 @@ its default certificate. Check these before debugging login:
 
 ```bash
 dig +short platform.example.com
-kubectl get ingress -n mcp-sentinel mcp-sentinel-platform-ui
-kubectl get certificate -n mcp-sentinel
-kubectl describe certificate -n mcp-sentinel <platform-certificate>
+kubectl get ingress -n mcp-platform mcp-platform-ui
+kubectl get certificate -n mcp-platform
+kubectl describe certificate -n mcp-platform <platform-certificate>
 ```
 
 Wait for the Certificate condition to become `Ready=True`, and verify that
@@ -143,8 +143,8 @@ export KEYCLOAK_CLIENT_SECRET="$(tr -d '\n' < /secure/keycloak-client-secret)"
     "authorization_endpoint": "https://keycloak.example.com/realms/mcp-runtime/protocol/openid-connect/auth",
     "token_endpoint": "https://keycloak.example.com/realms/mcp-runtime/protocol/openid-connect/token",
     "jwks_uri": "https://keycloak.example.com/realms/mcp-runtime/protocol/openid-connect/certs",
-    "token_endpoint_internal": "https://keycloak.mcp-sentinel.svc.cluster.local:8443/realms/mcp-runtime/protocol/openid-connect/token",
-    "jwks_uri_internal": "https://keycloak.mcp-sentinel.svc.cluster.local:8443/realms/mcp-runtime/protocol/openid-connect/certs",
+    "token_endpoint_internal": "https://keycloak.mcp-platform.svc.cluster.local:8443/realms/mcp-runtime/protocol/openid-connect/token",
+    "jwks_uri_internal": "https://keycloak.mcp-platform.svc.cluster.local:8443/realms/mcp-runtime/protocol/openid-connect/certs",
     "token_endpoint_server_name": "keycloak.example.com",
     "client_id": "mcp-auth",
     "client_secret_env": "KEYCLOAK_CLIENT_SECRET",
@@ -294,7 +294,7 @@ not under the issuer URL:
 ```bash
 curl -fsS https://auth.example.com/.well-known/oauth-authorization-server/mcp-auth
 curl -fsS https://keycloak.example.com/realms/mcp-runtime/.well-known/openid-configuration
-kubectl -n mcp-sentinel rollout status deploy/mcp-auth-server
+kubectl -n mcp-platform rollout status deploy/mcp-auth-server
 ```
 
 Then use an MCP client or the Go example's OAuth metadata (`examples/oauth-example-go-2025-11-25/.mcp/servers.yaml`)

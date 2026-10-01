@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: workspace-assistant-sidecar
-  namespace: mcp-sentinel
+  namespace: mcp-servers
 spec:
   selector:
     app: workspace-assistant-sidecar
@@ -15,7 +15,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: workspace-assistant-sidecar
-  namespace: mcp-sentinel
+  namespace: mcp-servers
 spec:
   replicas: 1
   selector:
@@ -48,7 +48,7 @@ spec:
             - name: PORT
               value: "8090"
         - name: mcp-gateway
-          image: mcp-sentinel-mcp-gateway:latest
+          image: mcp-gateway:latest
           imagePullPolicy: IfNotPresent
           resources:
             requests:
@@ -74,7 +74,7 @@ spec:
             - name: UPSTREAM_URL
               value: "http://127.0.0.1:8090"
             - name: ANALYTICS_INGEST_URL
-              value: "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events"
+              value: "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events"
             - name: ANALYTICS_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -91,7 +91,7 @@ spec:
             - name: MCP_CLUSTER_NAME
               valueFrom:
                 configMapKeyRef:
-                  name: mcp-sentinel-config
+                  name: mcp-shared-config
                   key: MCP_CLUSTER_NAME
             - name: STRIP_PREFIX
               value: "/mcp-auto"
@@ -102,7 +102,7 @@ spec:
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               valueFrom:
                 configMapKeyRef:
-                  name: mcp-sentinel-config
+                  name: mcp-shared-config
                   key: OTEL_EXPORTER_OTLP_ENDPOINT
           readinessProbe:
             httpGet:

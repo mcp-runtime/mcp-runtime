@@ -17,7 +17,7 @@ import { login, logout, readAuthStatus, type LoginInput } from "./api/auth";
 import { isAdmin, type AuthStatus } from "./api/types";
 
 type ThemeMode = "dark" | "light";
-const THEME_STORAGE_KEY = "mcp-sentinel-theme";
+const THEME_STORAGE_KEY = "mcp-theme";
 
 function initialTheme(): ThemeMode {
   try {

@@ -260,8 +260,8 @@ grep -RIn -E '(api[_-]?key|password|secret|token|bearer|cookie|x-api-key)' \
 
 Triage every match: is the value being logged, returned, or only read into a
 struct? For the dynamic side, run sustained traffic and grep
-`kubectl logs deploy/<name> -n mcp-sentinel` for the actual secret values from
-`mcp-sentinel-secrets` — anything found is at least High.
+`kubectl logs deploy/<name> -n mcp-platform` or `-n mcp-observability` for the actual secret values from
+the owner credential Secrets. Anything found is at least High.
 
 Check error responses for stack traces, internal paths, or environment
 variables — any of those is Medium.
@@ -275,7 +275,7 @@ variables — any of those is Medium.
   `json.NewDecoder(r.Body).Decode(...)`. Missing limit is Medium.
 - SQL/ClickHouse: `grep -RIn 'fmt.Sprintf' services/processor/` for any
   format-string into a query. Any hit is High until proven safe.
-- Postgres in `mcp-sentinel`: same search across `services/platform-api/` for query
+- Postgres in `mcp-platform`: same search across `services/platform-api/` for query
   building.
 - Shell exec: `grep -RIn 'exec.Command' --include='*.go'`. Any non-constant
   first arg is High.

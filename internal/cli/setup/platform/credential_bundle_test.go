@@ -43,7 +43,7 @@ func TestCredentialBundleCopiesOnlyConsumerKeys(t *testing.T) {
 			values[key] = "value-" + key
 		}
 	}
-	data, err := yaml.Marshal(map[string]any{"metadata": map[string]string{"namespace": "mcp-sentinel"}, "stringData": values})
+	data, err := yaml.Marshal(map[string]any{"metadata": map[string]string{"namespace": "mcp-platform"}, "stringData": values})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,8 +89,8 @@ func TestCredentialBundleMigrationAndOwnerPrecedence(t *testing.T) {
 		t.Fatal(err)
 	}
 	objects = bundleValues(t, manifest)
-	if objects[platforminventory.LegacyCredentialSecret]["GRAFANA_ADMIN_PASSWORD"] != "rotated" {
-		t.Fatal("owner rotation not synchronized to mirror")
+	if objects["mcp-grafana-credentials"]["GRAFANA_ADMIN_PASSWORD"] != "rotated" {
+		t.Fatal("owner rotation not applied to the grafana credential set")
 	}
 	owner = map[string]map[string]string{"mcp-platform-api-credentials": objects["mcp-platform-api-credentials"]}
 	owner["mcp-platform-api-credentials"]["ADMIN_API_KEYS"] = ""

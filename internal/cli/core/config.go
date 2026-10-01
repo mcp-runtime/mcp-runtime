@@ -84,7 +84,7 @@ func LoadCLIConfig() *CLIConfig {
 	mcpIngressHost := metadata.ResolveMcpIngressHost()
 	platformIngressHost := metadata.ResolvePlatformIngressHost()
 	return &CLIConfig{
-		// Applies to core deployment waits and mcp-sentinel rollouts (ingest, Kafka, etc.).
+		// Applies to core deployment waits and platform rollouts (ingest, Kafka, etc.).
 		DeploymentTimeout:           parseDurationEnv("MCP_DEPLOYMENT_TIMEOUT", defaultDeploymentTimeout),
 		CertTimeout:                 parseDurationEnv("MCP_CERT_TIMEOUT", defaultCertTimeout),
 		HelperPodTimeout:            parseDurationEnv("MCP_HELPER_POD_TIMEOUT", defaultHelperPodTimeout),

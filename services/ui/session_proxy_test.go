@@ -95,11 +95,11 @@ func TestParseRuntimeUpstream(t *testing.T) {
 	if _, err := parseRuntimeUpstream("http://user:pass@runtime.example"); err == nil {
 		t.Fatal("userinfo upstream should fail")
 	}
-	got, err := parseRuntimeUpstream("http://mcp-runtime-api.mcp-sentinel.svc.cluster.local:8084")
+	got, err := parseRuntimeUpstream("http://mcp-runtime-api.mcp-platform.svc.cluster.local:8084")
 	if err != nil {
 		t.Fatalf("parseRuntimeUpstream() error = %v", err)
 	}
-	if got.Scheme != "http" || got.Host != "mcp-runtime-api.mcp-sentinel.svc.cluster.local:8084" {
+	if got.Scheme != "http" || got.Host != "mcp-runtime-api.mcp-platform.svc.cluster.local:8084" {
 		t.Fatalf("parsed upstream = %s", got)
 	}
 }

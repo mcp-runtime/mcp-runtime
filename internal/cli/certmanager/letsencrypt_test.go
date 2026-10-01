@@ -21,7 +21,7 @@ func TestValidateIngressManifestForACME(t *testing.T) {
 }
 
 // TestACMETLSDNSNamesExcludesPlatformHost asserts that the registry-cert SANs
-// do NOT include the platform host. The platform Ingress in mcp-sentinel uses
+// do NOT include the platform host. The platform Ingress in mcp-platform uses
 // cert-manager's ingress-shim to mint its own cert; including the platform
 // host in the registry-cert would cause a redundant ACME order on every
 // renewal (and the secret in the registry namespace cannot be referenced from
@@ -50,10 +50,10 @@ func TestACMETLSDNSNamesExcludesPlatformHost(t *testing.T) {
 }
 
 func TestRenderCertificateUsesRequestedNamespace(t *testing.T) {
-	manifest := RenderCertificate("mcp-auth-server-cert", "mcp-auth-server-tls", "mcp-sentinel", []string{"auth.example.com"}, nil, "letsencrypt-prod")
+	manifest := RenderCertificate("mcp-auth-server-cert", "mcp-auth-server-tls", "mcp-platform", []string{"auth.example.com"}, nil, "letsencrypt-prod")
 	for _, want := range []string{
 		"name: mcp-auth-server-cert",
-		"namespace: mcp-sentinel",
+		"namespace: mcp-platform",
 		"secretName: mcp-auth-server-tls",
 		`- "auth.example.com"`,
 		"name: letsencrypt-prod",

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"mcp-runtime/internal/cli/core"
+	"mcp-runtime/pkg/platforminventory"
 )
 
 func checkClusterImageArchitecture(kubectl core.KubectlRunner) DoctorCheck {
@@ -35,8 +36,8 @@ func checkClusterImageArchitecture(kubectl core.KubectlRunner) DoctorCheck {
 }
 
 func checkDNSNetworkPolicyPortability(kubectl core.KubectlRunner) DoctorCheck {
-	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", doctorSentinelNamespace, "-o", "jsonpath={.metadata.name}"}); err != nil {
-		return DoctorCheck{Name: "DNS NetworkPolicy portability", OK: true, Detail: "namespace mcp-sentinel is not installed; skipping runtime API DNS policy check"}
+	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", componentNamespace("platform-api"), "-o", "jsonpath={.metadata.name}"}); err != nil {
+		return DoctorCheck{Name: "DNS NetworkPolicy portability", OK: true, Detail: "namespace mcp-platform is not installed; skipping runtime API DNS policy check"}
 	}
 	selectors := []string{"k8s-app=kube-dns", "k8s-app=coredns", "app.kubernetes.io/name=coredns"}
 	matched := ""
@@ -50,7 +51,7 @@ func checkDNSNetworkPolicyPortability(kubectl core.KubectlRunner) DoctorCheck {
 	if matched == "" {
 		return DoctorCheck{Name: "DNS NetworkPolicy portability", OK: false, Detail: "no supported CoreDNS/kube-dns pod label was found", Remedy: "configure MCP_DNS_LABEL_KEY and MCP_DNS_LABEL_VALUE or ensure the cluster DNS Service has discoverable backing pods"}
 	}
-	policy, err := readNetworkPolicyJSON(kubectl, doctorSentinelNamespace, "mcp-runtime-api-platform-egress")
+	policy, err := readNetworkPolicyJSON(kubectl, componentNamespace("platform-api"), "mcp-runtime-api-platform-egress")
 	if err != nil {
 		return DoctorCheck{Name: "DNS NetworkPolicy portability", OK: false, Detail: fmt.Sprintf("failed reading runtime API NetworkPolicy: %v", err), Remedy: "apply the runtime API NetworkPolicy after discovering the cluster DNS selector"}
 	}
@@ -104,9 +105,13 @@ func checkStorageClassReadiness(kubectl core.KubectlRunner) DoctorCheck {
 }
 
 func checkSentinelSecretConsumerFreshness(kubectl core.KubectlRunner) DoctorCheck {
-	secretRaw, err := readKubectlOutput(kubectl, []string{"get", "secret", "mcp-sentinel-secrets", "-n", doctorSentinelNamespace, "-o", "json"})
+	namespace, secretName, ok := platforminventory.CredentialPlacement("API_KEYS")
+	if !ok {
+		return DoctorCheck{Name: "sentinel secret consumer freshness", OK: false, Detail: "API_KEYS has no credential owner", Remedy: "restore the platform credential catalog"}
+	}
+	secretRaw, err := readKubectlOutput(kubectl, []string{"get", "secret", secretName, "-n", namespace, "-o", "json"})
 	if err != nil {
-		return DoctorCheck{Name: "sentinel secret consumer freshness", OK: true, Detail: "mcp-sentinel-secrets is not installed; skipping freshness check"}
+		return DoctorCheck{Name: "sentinel secret consumer freshness", OK: true, Detail: secretName + " is not installed; skipping freshness check"}
 	}
 	var secret struct {
 		Metadata struct {
@@ -116,7 +121,7 @@ func checkSentinelSecretConsumerFreshness(kubectl core.KubectlRunner) DoctorChec
 		} `json:"metadata"`
 	}
 	if err := json.Unmarshal([]byte(secretRaw), &secret); err != nil {
-		return DoctorCheck{Name: "sentinel secret consumer freshness", OK: false, Detail: fmt.Sprintf("failed parsing mcp-sentinel-secrets metadata: %v", err), Remedy: "inspect the Secret metadata and redeploy Sentinel"}
+		return DoctorCheck{Name: "sentinel secret consumer freshness", OK: false, Detail: fmt.Sprintf("failed parsing %s metadata: %v", secretName, err), Remedy: "inspect the Secret metadata and redeploy Sentinel"}
 	}
 	var secretUpdated time.Time
 	for _, field := range secret.Metadata.ManagedFields {
@@ -127,7 +132,7 @@ func checkSentinelSecretConsumerFreshness(kubectl core.KubectlRunner) DoctorChec
 	if secretUpdated.IsZero() {
 		return DoctorCheck{Name: "sentinel secret consumer freshness", OK: true, Detail: "Secret update timestamp is unavailable; runtime auth probes remain authoritative"}
 	}
-	podsRaw, err := readKubectlOutput(kubectl, []string{"get", "pods", "-n", doctorSentinelNamespace, "-l", "app=mcp-runtime-api", "-o", `jsonpath={range .items[*]}{.metadata.name}|{.status.startTime}{"\n"}{end}`})
+	podsRaw, err := readKubectlOutput(kubectl, []string{"get", "pods", "-n", componentNamespace("platform-api"), "-l", "app=mcp-runtime-api", "-o", `jsonpath={range .items[*]}{.metadata.name}|{.status.startTime}{"\n"}{end}`})
 	if err != nil {
 		return DoctorCheck{Name: "sentinel secret consumer freshness", OK: false, Detail: fmt.Sprintf("failed reading runtime-api pod start times: %v", err), Remedy: "inspect runtime-api pods and restart them after Secret changes"}
 	}
@@ -138,22 +143,23 @@ func checkSentinelSecretConsumerFreshness(kubectl core.KubectlRunner) DoctorChec
 		}
 		started, parseErr := time.Parse(time.RFC3339, parts[1])
 		if parseErr == nil && started.Before(secretUpdated) {
-			return DoctorCheck{Name: "sentinel secret consumer freshness", OK: false, Detail: fmt.Sprintf("runtime-api pod %s started before the latest Secret update", parts[0]), Remedy: "roll out deployment/mcp-runtime-api and deployment/mcp-sentinel-ui after changing mcp-sentinel-secrets"}
+			return DoctorCheck{Name: "sentinel secret consumer freshness", OK: false, Detail: fmt.Sprintf("runtime-api pod %s started before the latest Secret update", parts[0]), Remedy: "roll out deployment/mcp-runtime-api and deployment/mcp-ui after changing " + secretName}
 		}
 	}
 	return DoctorCheck{Name: "sentinel secret consumer freshness", OK: true, Detail: "runtime-api pods are not older than the latest Secret update"}
 }
 
 func checkSentinelOIDCConfiguration(kubectl core.KubectlRunner) DoctorCheck {
-	raw, err := readKubectlOutput(kubectl, []string{"get", "configmap", "mcp-sentinel-config", "-n", doctorSentinelNamespace, "-o", "json"})
+	configName := platforminventory.SharedConfigName
+	raw, err := readKubectlOutput(kubectl, []string{"get", "configmap", configName, "-n", componentNamespace("platform-api"), "-o", "json"})
 	if err != nil {
-		return DoctorCheck{Name: "sentinel OIDC configuration", OK: true, Detail: "mcp-sentinel-config not found; skipping OIDC configuration check"}
+		return DoctorCheck{Name: "sentinel OIDC configuration", OK: true, Detail: configName + " not found; skipping OIDC configuration check"}
 	}
 	var config struct {
 		Data map[string]string `json:"data"`
 	}
 	if err := json.Unmarshal([]byte(raw), &config); err != nil {
-		return DoctorCheck{Name: "sentinel OIDC configuration", OK: false, Detail: fmt.Sprintf("failed parsing mcp-sentinel-config: %v", err), Remedy: "reapply the Sentinel ConfigMap"}
+		return DoctorCheck{Name: "sentinel OIDC configuration", OK: false, Detail: fmt.Sprintf("failed parsing %s: %v", configName, err), Remedy: "reapply the platform ConfigMap"}
 	}
 	mode := strings.TrimSpace(config.Data["PLATFORM_MODE"])
 	if strings.EqualFold(strings.TrimSpace(config.Data["MCP_RUNTIME_TEST_MODE"]), "1") || strings.EqualFold(strings.TrimSpace(config.Data["MCP_RUNTIME_TEST_MODE"]), "true") {

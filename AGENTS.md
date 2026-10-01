@@ -30,7 +30,7 @@ This file is the **onboarding index** for the MCP Runtime repo. It complements `
 | Access and policy | `pkg/access/`, `pkg/policy/` | Grant/session helpers; gateway policy contract |
 | Control-plane / K8s | `pkg/controlplane/`, `pkg/k8sclient/`, `pkg/kubeworkload/`, `pkg/manifest/`, `pkg/metadata/` | MCPServer ops, manifests, registry resolution |
 | Sentinel packages | `pkg/events/`, `pkg/clickhouse/`, `pkg/serviceutil/`, `pkg/sentinel/` | Events, analytics, service utilities |
-| Sentinel services | `services/platform-api`, `services/runtime-api`, `services/analytics-api`, `services/ui`, `services/ingest`, `services/processor`, `services/mcp-gateway`, … | Separate `go.mod` where present; Go 1.26 for shared imports |
+| Sentinel services | `services/platform-api`, `services/runtime-api`, `services/analytics-api`, `services/ui`, `services/ingest`, `services/processor`, `services/mcp-gateway`, … | Separate `go.mod` where present; Go 1.26 for shared imports. Namespaces come from `pkg/platforminventory`: `mcp-platform`, `mcp-observability`, `mcp-log-collector`. See `docs/namespaces.md`. |
 | Samples / install YAML | `examples/oauth-example-go-2025-11-25/`, `k8s/`, `config/` | Demo server; overlays and CRDs |
 | Team isolation | `docs/multi-team.md` | Namespaces, RBAC, ingress watch scope |
 | Deployment targets | `docs/deployment-targets.md`, `docs/k3s-on-prem-cluster.md` | Before distribution-specific runbooks |
@@ -196,7 +196,12 @@ When work reveals a concrete maintainability or debuggability improvement, searc
 
 ```bash
 kubectl logs -n mcp-runtime deploy/mcp-runtime-operator-controller-manager
-kubectl logs -n mcp-sentinel deploy/<api|ingest|processor|ui|gateway>
+kubectl logs -n mcp-platform deploy/mcp-platform-api
+kubectl logs -n mcp-platform deploy/mcp-runtime-api
+kubectl logs -n mcp-platform deploy/mcp-ui
+kubectl logs -n mcp-observability deploy/mcp-analytics-api
+kubectl logs -n mcp-observability deploy/mcp-ingest
+kubectl logs -n mcp-observability deploy/mcp-processor
 ./bin/mcp-runtime status
 ```
 

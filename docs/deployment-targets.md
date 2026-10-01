@@ -82,7 +82,7 @@ one example.
 | public API access | Kubernetes API endpoint used by nodes and operators; the runtime API NetworkPolicy port must match the cluster API port. |
 
 The `hack/deploy/mcpruntime-org/` scripts encode this repository's public k3s
-layout (Sentinel namespace, bundled registry, Traefik integration, and
+layout (`mcp-platform`, `mcp-observability`, bundled registry, Traefik integration, and
 mcpruntime.org hostnames). For other distributions, use the generic CLI setup
 and the cluster's own image publication/GitOps process unless a separate
 distribution-specific rollout guide is provided.
@@ -204,7 +204,8 @@ production.
    ```bash
    ./bin/mcp-runtime status
    ./bin/mcp-runtime cluster diagnostics
-   kubectl get pods -n mcp-sentinel
+   kubectl get pods -n mcp-platform
+   kubectl get pods -n mcp-observability
    ```
 
 If setup prints a different registry internal URL, copy that exact `host:port`
@@ -396,7 +397,8 @@ Run the same checks on every distribution:
 ./bin/mcp-runtime cluster diagnostics
 
 kubectl get pods -n mcp-runtime
-kubectl get pods -n mcp-sentinel
+kubectl get pods -n mcp-platform
+kubectl get pods -n mcp-observability
 kubectl get ingress -A
 ```
 

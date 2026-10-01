@@ -219,7 +219,7 @@ apply. Do not apply stale `resourceVersion`, `uid`, `managedFields`, or
   by default, or local source when intentionally testing a confirmed clean ref
   with `MCP_AUTH_IMAGE_SOURCE=local`
 - deploy API/UI refs as `registry.<domain>/<repo>:<tag>`
-- ensure `mcp-sentinel/mcp-runtime-registry-pull` exists and is attached to
+- ensure `mcp-platform/mcp-runtime-registry-pull` exists and is attached to
   API/UI deployments
 - finish both rollout status checks successfully
 
@@ -246,8 +246,11 @@ MCP_ROLLOUT_TAG=verify-rollout-$(date +%m%d%H%M%S) \
 Then verify:
 
 ```bash
-kubectl --kubeconfig "$KUBECONFIG" \
-  get deploy mcp-platform-api mcp-runtime-api mcp-analytics-api mcp-sentinel-ui -n mcp-sentinel \
+kubectl --kubeconfig "$KUBECONFIG" -n mcp-platform \
+  get deploy mcp-platform-api mcp-runtime-api mcp-ui \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{range .spec.template.spec.imagePullSecrets[*]}{.name}{","}{end}{"|"}{range .spec.template.spec.containers[*]}{.image}{";"}{end}{"|"}{.status.readyReplicas}{"/"}{.status.replicas}{"\n"}{end}'
+kubectl --kubeconfig "$KUBECONFIG" -n mcp-observability \
+  get deploy mcp-analytics-api \
   -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{range .spec.template.spec.imagePullSecrets[*]}{.name}{","}{end}{"|"}{range .spec.template.spec.containers[*]}{.image}{";"}{end}{"|"}{.status.readyReplicas}{"/"}{.status.replicas}{"\n"}{end}'
 
 KUBECONFIG="$HOME/.kube/prod-mcp-runtime-config" ./bin/mcp-runtime cluster doctor
@@ -259,7 +262,7 @@ Get admin key:
 
 ```bash
 ADMIN_KEY="$(kubectl --kubeconfig "$KUBECONFIG" \
-  get secret mcp-sentinel-secrets -n mcp-sentinel \
+  get secret mcp-ui-credentials -n mcp-platform \
   -o jsonpath='{.data.UI_API_KEY}' | base64 -d)"
 ```
 

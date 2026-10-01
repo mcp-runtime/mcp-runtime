@@ -370,14 +370,14 @@ func TestDefaultedMCPServerForReconcile(t *testing.T) {
 		r := MCPServerReconciler{
 			GatewayProxyImage:         "example.com/mcp-gateway:test",
 			Scheme:                    runtime.NewScheme(),
-			DefaultAnalyticsIngestURL: "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events",
+			DefaultAnalyticsIngestURL: "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events",
 		}
 		mcpServer = *r.defaultedMCPServerForReconcile(&mcpServer)
 
 		if mcpServer.Spec.Analytics == nil {
 			t.Fatal("expected analytics defaults to be applied")
 		}
-		assertEqual(t, "analyticsIngestURL", mcpServer.Spec.Analytics.IngestURL, "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events")
+		assertEqual(t, "analyticsIngestURL", mcpServer.Spec.Analytics.IngestURL, "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events")
 	})
 }
 
@@ -413,7 +413,7 @@ func TestReconcileDeploymentLabels(t *testing.T) {
 		Client:              client,
 		Scheme:              scheme,
 		GatewayProxyImage:   "example.com/mcp-gateway:latest",
-		GatewayOTLPEndpoint: "http://otel-collector.mcp-sentinel.svc.cluster.local:4318",
+		GatewayOTLPEndpoint: "http://otel-collector.mcp-observability.svc.cluster.local:4318",
 	}
 
 	if err := reconciler.reconcileDeployment(context.Background(), &mcpServer); err != nil {
@@ -509,7 +509,7 @@ func TestReconcileDeploymentAddsGatewaySidecar(t *testing.T) {
 		GatewayProxyImage:   "example.com/mcp-gateway:test",
 		Client:              client,
 		Scheme:              scheme,
-		GatewayOTLPEndpoint: "http://otel-collector.mcp-sentinel.svc.cluster.local:4318",
+		GatewayOTLPEndpoint: "http://otel-collector.mcp-observability.svc.cluster.local:4318",
 	}
 	mcpServer = *reconciler.defaultedMCPServerForReconcile(&mcpServer)
 
@@ -544,7 +544,7 @@ func TestReconcileDeploymentAddsGatewaySidecar(t *testing.T) {
 	assertEqual(t, "gatewayMetricsPortEnv", envByName["METRICS_PORT"].Value, "9103")
 	assertEqual(t, "gatewayUpstreamEnv", envByName["UPSTREAM_URL"].Value, "http://127.0.0.1:8088")
 	assertEqual(t, "gatewayOTELServiceName", envByName["OTEL_SERVICE_NAME"].Value, "gateway-server-gateway")
-	assertEqual(t, "gatewayOTELEndpoint", envByName["OTEL_EXPORTER_OTLP_ENDPOINT"].Value, "http://otel-collector.mcp-sentinel.svc.cluster.local:4318")
+	assertEqual(t, "gatewayOTELEndpoint", envByName["OTEL_EXPORTER_OTLP_ENDPOINT"].Value, "http://otel-collector.mcp-observability.svc.cluster.local:4318")
 	assertEqual(t, "gatewayExternalBaseURL", envByName["EXTERNAL_BASE_URL"].Value, "http://gateway.example.com")
 	assertEqual(t, "analyticsIngestEnv", envByName["ANALYTICS_INGEST_URL"].Value, "http://analytics.default.svc/api/events")
 	assertEqual(t, "analyticsSourceEnv", envByName["ANALYTICS_SOURCE"].Value, "gateway-server")
@@ -920,7 +920,7 @@ func TestDefaultedMCPServerForReconcileDoesNotPersistDefaults(t *testing.T) {
 		Client:                    client,
 		Scheme:                    scheme,
 		DefaultIngressHost:        "example.com",
-		DefaultAnalyticsIngestURL: "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events",
+		DefaultAnalyticsIngestURL: "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events",
 	}
 
 	defaulted := r.defaultedMCPServerForReconcile(mcpServer)
