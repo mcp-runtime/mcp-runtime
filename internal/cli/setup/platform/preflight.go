@@ -290,7 +290,11 @@ func checkStuckOperatorDeployment(ctx context.Context, clients *k8sclient.Client
 func checkTerminatingNamespaces(ctx context.Context, clients *k8sclient.Clients, includeAnalytics bool) []preflightIssue {
 	namespaces := []string{core.NamespaceMCPRuntime, core.NamespaceRegistry}
 	if includeAnalytics {
-		namespaces = append(namespaces, core.ComponentNamespace("platform-api"))
+		namespaces = append(namespaces,
+			core.ComponentNamespace("platform-api"),
+			core.ComponentNamespace("analytics-api"),
+			core.ComponentNamespace("promtail"),
+		)
 	}
 	var stuck []string
 	for _, ns := range namespaces {
@@ -644,7 +648,8 @@ func checkStuckAnalyticsStatefulSets(ctx context.Context, clients *k8sclient.Cli
 	}
 	var issues []preflightIssue
 	for _, t := range targets {
-		pods, err := clients.Clientset.CoreV1().Pods(core.ComponentNamespace("clickhouse")).List(
+		namespace := workloadNamespace(t.name)
+		pods, err := clients.Clientset.CoreV1().Pods(namespace).List(
 			ctx, metav1.ListOptions{LabelSelector: t.selector})
 		if err != nil || len(pods.Items) == 0 {
 			continue
@@ -676,7 +681,7 @@ func checkStuckAnalyticsStatefulSets(ctx context.Context, clients *k8sclient.Cli
 			),
 			cleanup: []string{
 				fmt.Sprintf("kubectl delete pod -n %s -l %s --grace-period=0 --force",
-					core.ComponentNamespace("clickhouse"), t.selector),
+					namespace, t.selector),
 			},
 		})
 	}

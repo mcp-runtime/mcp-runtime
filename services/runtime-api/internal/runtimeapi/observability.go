@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	defaultPrometheusAPIURL  = "http://prometheus:9090/prometheus"
+	defaultPrometheusAPIURL  = "http://prometheus.mcp-observability.svc:9090/prometheus"
 	prometheusErrorBodyLimit = 1024
 
 	envPrometheusAPIURL          = "PROMETHEUS_API_URL"

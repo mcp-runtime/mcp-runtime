@@ -164,6 +164,12 @@ about behavior).
 ./bin/mcp-runtime server logs nonexistent --namespace mcp-servers 2>&1 | head -5
 ```
 
+After setup, confirm `daemonset/promtail` remains ready in
+`mcp-log-collector` and that `sentinel events` includes
+`mcp-observability` and `mcp-log-collector`. The shared ConfigMap's OTel and
+Prometheus endpoints must resolve from both `mcp-platform` and
+`mcp-observability`.
+
 Any error that prints a bare Cobra usage dump (no `Error:` framing) is a
 finding; route the report back to `internal/cli/core/errors.go` and
 `pkg/errx/`.

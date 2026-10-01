@@ -655,6 +655,9 @@ KUBECONFIG=~/.kube/config mcp-runtime sentinel port-forward ui
 KUBECONFIG=~/.kube/config mcp-runtime sentinel port-forward grafana
 ```
 
+`sentinel events` lists operator, platform, observability, and log collector
+events by namespace so failures in the telemetry stack remain visible.
+
 Component names for `logs` and `restart`:
 `clickhouse`, `kafka`, `ingest`, `processor`, `api`, `ui`,
 `gateway`, `prometheus`, `grafana`, `otel-collector`, `tempo`, `loki`, `promtail`

@@ -133,17 +133,25 @@ func (m *SentinelManager) ViewSentinelLogs(component string, follow, previous bo
 	return nil
 }
 
-// ShowSentinelEvents lists recent events in the analytics namespace.
+// ShowSentinelEvents lists events from each platform-owned namespace.
 func (m *SentinelManager) ShowSentinelEvents() error {
 	if err := m.requireAdminClusterAccess(); err != nil {
 		return err
 	}
-	args := []string{"get", "events", "-n", core.ComponentNamespace("platform-api"), "--sort-by=.lastTimestamp"}
-	if err := m.kubectl.RunWithOutput(args, os.Stdout, os.Stderr); err != nil {
-		return core.WrapWithSentinelAndContext(nil, err, fmt.Sprintf("failed to list sentinel events: %v", err), map[string]any{
-			"namespace": core.ComponentNamespace("platform-api"),
-			"component": "sentinel",
-		})
+	for _, namespace := range []string{
+		core.NamespaceMCPRuntime,
+		core.ComponentNamespace("platform-api"),
+		core.ComponentNamespace("analytics-api"),
+		core.ComponentNamespace("promtail"),
+	} {
+		fmt.Fprintf(os.Stdout, "\n%s events:\n", namespace)
+		args := []string{"get", "events", "-n", namespace, "--sort-by=.lastTimestamp"}
+		if err := m.kubectl.RunWithOutput(args, os.Stdout, os.Stderr); err != nil {
+			return core.WrapWithSentinelAndContext(nil, err, fmt.Sprintf("failed to list platform events in %s: %v", namespace, err), map[string]any{
+				"namespace": namespace,
+				"component": "sentinel",
+			})
+		}
 	}
 	return nil
 }

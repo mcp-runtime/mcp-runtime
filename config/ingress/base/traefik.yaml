@@ -310,7 +310,7 @@ spec:
               - ALL
         args:
           - --providers.kubernetesingress=true
-          - --providers.kubernetesingress.namespaces=registry,mcp-platform,mcp-observability,mcp-log-collector,mcp-servers,mcp-servers-org,mcp-servers-public
+          - --providers.kubernetesingress.namespaces=registry,mcp-platform,mcp-observability,mcp-servers,mcp-servers-org,mcp-servers-public
           - --providers.kubernetescrd=true
           - --providers.kubernetescrd.namespaces=mcp-platform,mcp-observability,mcp-servers,mcp-servers-org,mcp-servers-public
           - --entrypoints.web.address=:8000

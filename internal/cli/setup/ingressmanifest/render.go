@@ -16,7 +16,7 @@ const (
 	// PlatformHTTPRedirectIngressName is the HTTP-only redirect Ingress resource name.
 	PlatformHTTPRedirectIngressName = "mcp-platform-ui-http"
 	// PlatformTLSSecretName is the TLS secret name used when TLS is enabled.
-	PlatformTLSSecretName = "mcp-platform-tls"
+	PlatformTLSSecretName = "mcp-platform-tls" // #nosec G101 -- Kubernetes Secret name, not a credential.
 )
 
 // RenderPlatformUIIngress emits Ingresses for platform.<domain>. The UI,

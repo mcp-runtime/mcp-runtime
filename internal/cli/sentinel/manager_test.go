@@ -71,3 +71,26 @@ func TestSentinelManager_RestartSentinel(t *testing.T) {
 		}
 	}
 }
+
+func TestSentinelManager_ShowSentinelEventsCoversEveryOwnerNamespace(t *testing.T) {
+	mock := &core.MockExecutor{}
+	mgr := sentinel.NewSentinelManager(core.NewTestKubectlClient(mock), zap.NewNop())
+	if err := mgr.ShowSentinelEvents(); err != nil {
+		t.Fatal(err)
+	}
+	wantNamespaces := []string{core.NamespaceMCPRuntime, core.ComponentNamespace("platform-api"), core.ComponentNamespace("analytics-api"), core.ComponentNamespace("promtail")}
+	var eventCommands []core.ExecSpec
+	for _, command := range mock.Commands {
+		if len(command.Args) >= 2 && command.Args[0] == "get" && command.Args[1] == "events" {
+			eventCommands = append(eventCommands, command)
+		}
+	}
+	if len(eventCommands) != len(wantNamespaces) {
+		t.Fatalf("event commands = %d, want %d", len(eventCommands), len(wantNamespaces))
+	}
+	for i, namespace := range wantNamespaces {
+		if !contains(eventCommands[i].Args, namespace) {
+			t.Errorf("command %d does not query %s: %v", i, namespace, eventCommands[i].Args)
+		}
+	}
+}

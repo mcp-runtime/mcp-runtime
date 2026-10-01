@@ -6,12 +6,32 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
 
 	"mcp-runtime/internal/cli/core"
 )
+
+func TestTraefikDoesNotWatchLogCollectorNamespace(t *testing.T) {
+	root := filepath.Join("..", "..", "..", "..")
+	for _, path := range []string{
+		"config/ingress/base/traefik.yaml",
+		"config/ingress/overlays/http/deployment-args.patch.yaml",
+		"config/ingress/overlays/prod/traefik-no-redirect.yaml",
+	} {
+		content, err := os.ReadFile(filepath.Join(root, path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, line := range strings.Split(string(content), "\n") {
+			if strings.Contains(line, "--providers.kubernetesingress.namespaces=") && strings.Contains(line, core.LogCollectorNamespace) {
+				t.Errorf("%s grants Traefik an unused collector watch: %s", path, line)
+			}
+		}
+	}
+}
 
 func TestLogCollectorPodSecurityBoundary(t *testing.T) {
 	root := filepath.Join("..", "..", "..", "..")

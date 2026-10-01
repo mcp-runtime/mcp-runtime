@@ -38,9 +38,9 @@ data:
   OAUTH_INTERNAL_ISSUER_URL: ""
   MCP_MCP_INGRESS_HOST: ""
   API_BASE: "/api/v1"
-  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4318"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.mcp-observability.svc:4318"
   MCP_CLUSTER_NAME: "local"
   # Dashboard observability links
   GRAFANA_URL: "/grafana"
-  PROMETHEUS_API_URL: "http://prometheus:9090/prometheus"
+  PROMETHEUS_API_URL: "http://prometheus.mcp-observability.svc:9090/prometheus"
   DASHBOARD_REFRESH_INTERVAL: "30"

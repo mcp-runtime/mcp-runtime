@@ -267,8 +267,8 @@ func (d SetupDeps) withDefaults(logger *zap.Logger) SetupDeps {
 	}
 	if d.EnsureNamespace == nil {
 		d.EnsureNamespace = func(namespace string) error {
-			if namespace == core.ComponentNamespace("platform-api") {
-				return ensurePlatformNamespaceBeforeIngress()
+			if namespace == core.ComponentNamespace("platform-api") || namespace == core.ComponentNamespace("analytics-api") {
+				return ensureRestrictedPlatformNamespace(namespace)
 			}
 			return ensureNamespaceWithLabels(namespace, nil)
 		}
@@ -506,11 +506,13 @@ func setupClusterSteps(logger *zap.Logger, kubeconfig, context string, ingressOp
 
 	// Step 2: Configure cluster
 	core.Step("Step 2: Configure cluster")
-	// The ingress bundle references Sentinel Roles before analytics deploys.
-	// Ensure identity first, preserving existing admission labels during upgrades.
+	// The ingress bundle creates Roles and RoleBindings in both namespaces.
+	// Kubernetes rejects namespaced resources before their namespace exists.
 	if deps.EnsureNamespace != nil {
-		if err := deps.EnsureNamespace(core.ComponentNamespace("platform-api")); err != nil {
-			return fmt.Errorf("ensure platform namespace before ingress: %w", err)
+		for _, namespace := range []string{core.ComponentNamespace("platform-api"), core.ComponentNamespace("analytics-api")} {
+			if err := deps.EnsureNamespace(namespace); err != nil {
+				return fmt.Errorf("ensure namespace %s before ingress: %w", namespace, err)
+			}
 		}
 	}
 	core.Info("Checking ingress controller")

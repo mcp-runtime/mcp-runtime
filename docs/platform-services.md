@@ -158,7 +158,7 @@ Prometheus requests use
 `/api/v1/runtime/observability/prometheus/query?namespace=<namespace>&server=<server>&query_id=<id>`.
 The `query_id` is allowlisted (`up`, `request_rate`, `deny_rate`,
 `latency_p95`); arbitrary PromQL is never accepted. `PROMETHEUS_API_URL`
-defaults to `http://prometheus:9090/prometheus`.
+defaults to `http://prometheus.mcp-observability.svc:9090/prometheus`.
 
 The Prometheus query API link form depends on the caller. Requests that arrive
 through the UI session proxy (`x-mcp-source: ui`) get
@@ -437,6 +437,10 @@ source subject preserved, never on the other server.
 | **Core app** | `00-namespace`, `00-priority-classes`, `01-config`, `02-secrets`, `03-clickhouse`, `04-clickhouse-init`, `05-kafka`, `06-ingest`, `07-processor`, `08-platform-api`, `08-runtime-api`, `08-analytics-api`, `09-ui`, `10-gateway`, `20-postgres`, `21-platform-admin-bootstrap-job`, `22-split-api-networkpolicy` |
 | **Observability** | `11-prometheus`, `12-grafana`, `15-otel-collector`, `16-tempo`, `17-loki`, `18-promtail`, `19-grafana-datasources`, `21-grafana-dashboards` |
 | **Example wiring** | `13-mcp-example`, `14-mcp-gateway-sidecar` |
+
+The example manifests use `oauth-example-go-2025-11-25-standalone` for the
+direct server and `oauth-example-go-2025-11-25-gateway` for the sidecar,
+matching the Go example's gateway metadata and E2E names.
 
 `mcp-runtime setup` builds the sentinel images and deploys this stack by default. Use `--without-sentinel` to skip.
 

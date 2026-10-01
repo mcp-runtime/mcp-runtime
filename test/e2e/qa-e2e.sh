@@ -3746,7 +3746,7 @@ import sys
 deployment = json.load(sys.stdin)
 args = deployment["spec"]["template"]["spec"]["containers"][0]["args"]
 desired = {
-    "--providers.kubernetesingress.namespaces=": "--providers.kubernetesingress.namespaces=registry,mcp-platform,mcp-observability,mcp-log-collector,mcp-servers,mcp-servers-org,mcp-servers-public",
+    "--providers.kubernetesingress.namespaces=": "--providers.kubernetesingress.namespaces=registry,mcp-platform,mcp-observability,mcp-servers,mcp-servers-org,mcp-servers-public",
     "--providers.kubernetescrd.namespaces=": "--providers.kubernetescrd.namespaces=mcp-platform,mcp-observability,mcp-servers,mcp-servers-org,mcp-servers-public",
 }
 patch = []
