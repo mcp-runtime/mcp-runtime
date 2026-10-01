@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Security
+
+- Platform application workloads now use restricted Pod Security admission; node log collection runs in a dedicated namespace with its hostPath exception ([#548](https://github.com/mcp-runtime/mcp-runtime/issues/548)).
+
 ## [0.4.1] - 2026-09-29
 
 ### Fixed

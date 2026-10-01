@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"mcp-runtime/pkg/mcpdefaults"
 )
 
 // Component represents a Sentinel stack component.
@@ -27,8 +29,9 @@ type PortTarget struct {
 }
 
 const (
-	DefaultNamespace  = "mcp-sentinel"
-	OperatorNamespace = "mcp-runtime"
+	DefaultNamespace      = "mcp-sentinel"
+	LogCollectorNamespace = mcpdefaults.LogCollectorNamespace
+	OperatorNamespace     = "mcp-runtime"
 )
 
 // Components is the registry of all Sentinel stack components.
@@ -197,7 +200,7 @@ var Components = []Component{
 	{
 		Key:       "promtail",
 		Display:   "Promtail",
-		Namespace: DefaultNamespace,
+		Namespace: LogCollectorNamespace,
 		Kind:      "daemonset",
 		Resource:  "promtail",
 		Label:     "promtail",

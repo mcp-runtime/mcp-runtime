@@ -135,7 +135,7 @@ var sentinelComponents = []sentinelComponent{
 	{Key: "otel-collector", Display: "OTel Collector", Namespace: core.DefaultAnalyticsNamespace, Kind: "deployment", Resource: "otel-collector", Label: "otel-collector", Aliases: []string{"otel"}},
 	{Key: "tempo", Display: "Tempo", Namespace: core.DefaultAnalyticsNamespace, Kind: "statefulset", Resource: "tempo", Label: "tempo"},
 	{Key: "loki", Display: "Loki", Namespace: core.DefaultAnalyticsNamespace, Kind: "statefulset", Resource: "loki", Label: "loki"},
-	{Key: "promtail", Display: "Promtail", Namespace: core.DefaultAnalyticsNamespace, Kind: "daemonset", Resource: "promtail", Label: "promtail"},
+	{Key: "promtail", Display: "Promtail", Namespace: core.LogCollectorNamespace, Kind: "daemonset", Resource: "promtail", Label: "promtail"},
 }
 
 // NewSentinelManager creates a SentinelManager with explicit dependencies.

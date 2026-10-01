@@ -5565,7 +5565,7 @@ var DefaultPlatformStatusWorkloads = []PlatformWorkload{
 	{Component: "OTel Collector", Namespace: core.DefaultAnalyticsNamespace, Kind: "deployment", Name: "otel-collector"},
 	{Component: "Tempo", Namespace: core.DefaultAnalyticsNamespace, Kind: "statefulset", Name: "tempo"},
 	{Component: "Loki", Namespace: core.DefaultAnalyticsNamespace, Kind: "statefulset", Name: "loki"},
-	{Component: "Promtail", Namespace: core.DefaultAnalyticsNamespace, Kind: "daemonset", Name: "promtail"},
+	{Component: "Promtail", Namespace: core.LogCollectorNamespace, Kind: "daemonset", Name: "promtail"},
 }
     DefaultPlatformStatusWorkloads lists bundled analytics stack workloads for
     status output.

@@ -57,7 +57,7 @@ func TestWaitForWorkloadRolloutAcceptsRolledOutDeployment(t *testing.T) {
 
 func TestWaitForWorkloadRolloutWaitsForDaemonSetReadyReplicas(t *testing.T) {
 	clients := &Clients{Clientset: kubernetesfake.NewSimpleClientset(&appsv1.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{Name: "promtail", Namespace: "mcp-sentinel", Generation: 2},
+		ObjectMeta: metav1.ObjectMeta{Name: "promtail", Namespace: "mcp-log-collector", Generation: 2},
 		Status: appsv1.DaemonSetStatus{
 			ObservedGeneration:     1,
 			DesiredNumberScheduled: 1,
@@ -66,7 +66,7 @@ func TestWaitForWorkloadRolloutWaitsForDaemonSetReadyReplicas(t *testing.T) {
 		},
 	})}
 
-	err := WaitForWorkloadRollout(context.Background(), clients, "mcp-sentinel", "daemonset", "promtail", time.Millisecond)
+	err := WaitForWorkloadRollout(context.Background(), clients, "mcp-log-collector", "daemonset", "promtail", time.Millisecond)
 	if err == nil {
 		t.Fatal("expected rollout wait to fail while daemonset replicas are not ready")
 	}
@@ -74,7 +74,7 @@ func TestWaitForWorkloadRolloutWaitsForDaemonSetReadyReplicas(t *testing.T) {
 
 func TestWaitForWorkloadRolloutAcceptsReadyDaemonSet(t *testing.T) {
 	clients := &Clients{Clientset: kubernetesfake.NewSimpleClientset(&appsv1.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{Name: "promtail", Namespace: "mcp-sentinel", Generation: 2},
+		ObjectMeta: metav1.ObjectMeta{Name: "promtail", Namespace: "mcp-log-collector", Generation: 2},
 		Status: appsv1.DaemonSetStatus{
 			ObservedGeneration:     2,
 			DesiredNumberScheduled: 1,
@@ -83,7 +83,7 @@ func TestWaitForWorkloadRolloutAcceptsReadyDaemonSet(t *testing.T) {
 		},
 	})}
 
-	if err := WaitForWorkloadRollout(context.Background(), clients, "mcp-sentinel", "daemonset", "promtail", time.Second); err != nil {
+	if err := WaitForWorkloadRollout(context.Background(), clients, "mcp-log-collector", "daemonset", "promtail", time.Second); err != nil {
 		t.Fatalf("WaitForWorkloadRollout() error = %v", err)
 	}
 }

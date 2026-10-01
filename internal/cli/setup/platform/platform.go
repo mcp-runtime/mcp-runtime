@@ -570,7 +570,7 @@ type jsonPatchOperation struct {
 
 // analyticsFailedRollout records a failed rollout and optional tee capture from runRolloutWithOptionalDebugCapture.
 type analyticsFailedRollout struct {
-	kind, name, rolloutLog string
+	kind, name, namespace, rolloutLog string
 }
 
 // operatorEnvVar represents an environment variable for the operator.
