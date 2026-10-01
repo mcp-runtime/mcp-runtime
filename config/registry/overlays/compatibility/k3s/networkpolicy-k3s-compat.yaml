@@ -23,11 +23,6 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/name: traefik
-        # k3s ≥1.35 kube-router may not refresh namespace-based policy ipsets for new pods.
-        # In-cluster pod CIDRs (k3s 10.42.0.0/16, flannel 10.244.0.0/16) fall under 10.0.0.0/8.
-        # Public ingress remains gated by registry-admin-auth; adjust if your pod CIDR differs.
-        - ipBlock:
-            cidr: 10.0.0.0/8
       ports:
         - protocol: TCP
           port: 5000

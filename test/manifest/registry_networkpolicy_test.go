@@ -36,6 +36,29 @@ type networkPolicyEgressRule struct {
 type networkPolicyPeer struct {
 	PodSelector       *networkPolicySelector `yaml:"podSelector"`
 	NamespaceSelector *networkPolicySelector `yaml:"namespaceSelector"`
+	IPBlock           *struct {
+		CIDR string `yaml:"cidr"`
+	} `yaml:"ipBlock"`
+}
+
+func TestK3sRegistryPolicyCannotAdmitTenantPodCIDRs(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "config", "registry", "overlays", "compatibility", "k3s", "networkpolicy-k3s-compat.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var policy networkPolicyDoc
+	if err := yaml.Unmarshal(raw, &policy); err != nil {
+		t.Fatal(err)
+	}
+	if len(policy.Spec.Ingress) != 1 || len(policy.Spec.Ingress[0].From) != 1 {
+		t.Fatal("k3s registry policy must admit only one scoped ingress peer")
+	}
+	peer := policy.Spec.Ingress[0].From[0]
+	if peer.IPBlock != nil || peer.NamespaceSelector == nil || peer.PodSelector == nil ||
+		peer.NamespaceSelector.MatchLabels["kubernetes.io/metadata.name"] != "kube-system" ||
+		peer.PodSelector.MatchLabels["app.kubernetes.io/name"] != "traefik" {
+		t.Fatalf("k3s registry policy admits a source other than kube-system Traefik: %+v", peer)
+	}
 }
 
 type networkPolicySelector struct {

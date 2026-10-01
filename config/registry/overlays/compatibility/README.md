@@ -7,7 +7,7 @@ compatibility is layered here and applied at install time when setup detects it 
 
 | Path | When applied | Purpose |
 |------|----------------|---------|
-| `k3s/` | k3s clusters, or when Traefik runs in `kube-system` | Extra ingress NetworkPolicy for k3s Traefik placement and kube-router ipset workaround |
+| `k3s/` | k3s clusters, or when Traefik runs in `kube-system` | Extra ingress NetworkPolicy scoped to the Traefik pods in `kube-system` |
 
 Kind and other clusters that install repo-managed Traefik in the `traefik` namespace only
 need the base manifest.
