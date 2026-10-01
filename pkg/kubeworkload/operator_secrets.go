@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	OperatorSecretAccessName   = "mcp-runtime-operator-managed-secrets"
+	OperatorSecretAccessName   = "mcp-runtime-operator-managed-secrets" // #nosec G101 -- ClusterRole name, not a credential
 	OperatorServiceAccountName = "mcp-runtime-operator-controller-manager"
 	OperatorNamespace          = "mcp-runtime"
 	OperatorTrustBundleName    = "mcp-adapter-client-ca" // #nosec G101 -- object name, not a credential
