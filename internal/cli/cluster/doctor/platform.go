@@ -327,6 +327,7 @@ func checkSentinelPlatformAPIReadiness(kubectl core.KubectlRunner) DoctorCheck {
 		"sentinel platform API readiness",
 		doctorPlatformAPIService,
 		doctorPlatformAPIPort,
+		componentNamespace("platform-api"),
 	)
 }
 
@@ -336,24 +337,25 @@ func checkSentinelAnalyticsAPIReadiness(kubectl core.KubectlRunner) DoctorCheck 
 		"sentinel analytics API readiness",
 		doctorAnalyticsAPIService,
 		doctorAnalyticsAPIPort,
+		componentNamespace("analytics-api"),
 	)
 }
 
-func checkSentinelServiceHealthReadiness(kubectl core.KubectlRunner, checkName, service string, port int) DoctorCheck {
-	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", componentNamespace("platform-api"), "-o", "jsonpath={.metadata.name}"}); err != nil {
+func checkSentinelServiceHealthReadiness(kubectl core.KubectlRunner, checkName, service string, port int, namespace string) DoctorCheck {
+	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", namespace, "-o", "jsonpath={.metadata.name}"}); err != nil {
 		return DoctorCheck{
 			Name:   checkName,
 			OK:     true,
-			Detail: "namespace mcp-platform not found; skipping service readiness check",
+			Detail: fmt.Sprintf("namespace %s not found; skipping service readiness check", namespace),
 		}
 	}
-	pair, ready, err := doctorDeploymentReplicaStatus(kubectl, componentNamespace("platform-api"), service)
+	pair, ready, err := doctorDeploymentReplicaStatus(kubectl, namespace, service)
 	if err != nil {
 		return DoctorCheck{
 			Name:   checkName,
 			OK:     false,
 			Detail: fmt.Sprintf("failed reading deployment %s: %v", service, err),
-			Remedy: fmt.Sprintf("inspect `kubectl -n mcp-platform get deploy/%s`", service),
+			Remedy: fmt.Sprintf("inspect `kubectl -n %s get deploy/%s`", namespace, service),
 		}
 	}
 	if !ready {
@@ -361,11 +363,11 @@ func checkSentinelServiceHealthReadiness(kubectl core.KubectlRunner, checkName, 
 			Name:   checkName,
 			OK:     false,
 			Detail: fmt.Sprintf("%s replicas ready", pair),
-			Remedy: fmt.Sprintf("inspect `kubectl -n mcp-platform get pods -l app=%s`", service),
+			Remedy: fmt.Sprintf("inspect `kubectl -n %s get pods -l app=%s`", namespace, service),
 		}
 	}
 
-	baseURL := fmt.Sprintf("http://%s:%d", doctorServiceDNS(service, componentNamespace("platform-api")), port)
+	baseURL := fmt.Sprintf("http://%s:%d", doctorServiceDNS(service, namespace), port)
 	for _, path := range []string{"/health", "/ready"} {
 		status, probeErr := doctorCurlServiceEndpoint(kubectl, baseURL+path)
 		if probeErr != nil {
