@@ -36,7 +36,13 @@ data:
   prometheus.yml: |
     global:
       scrape_interval: 15s
+    rule_files:
+      - /etc/prometheus/rules.yml
     scrape_configs:
+      - job_name: prometheus
+        metrics_path: /prometheus/metrics
+        static_configs:
+          - targets: ["localhost:9090"]
       - job_name: mcp-platform-api
         static_configs:
           - targets: ["mcp-platform-api:9090"]
@@ -55,6 +61,60 @@ data:
       - job_name: clickhouse
         static_configs:
           - targets: ["clickhouse:9363"]
+      # Telemetry collectors: scraped so export and drop failures are visible.
+      - job_name: otel-collector
+        static_configs:
+          - targets: ["otel-collector:8888"]
+      - job_name: loki
+        static_configs:
+          - targets: ["loki:3100"]
+      - job_name: tempo
+        static_configs:
+          - targets: ["tempo:3200"]
+      - job_name: promtail
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: ["mcp-sentinel"]
+        relabel_configs:
+          - action: keep
+            source_labels: [__meta_kubernetes_pod_label_app]
+            regex: promtail
+          - action: replace
+            source_labels: [__meta_kubernetes_pod_ip]
+            target_label: __address__
+            regex: (.+)
+            replacement: "$1:9080"
+          - action: replace
+            source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+      # Opt-in discovery for platform Services (for example an instrumented
+      # auth or resource server): set prometheus.io/scrape: "true" and, when
+      # needed, prometheus.io/port and prometheus.io/path on the Service.
+      - job_name: mcp-sentinel-annotated-services
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names: ["mcp-sentinel"]
+        relabel_configs:
+          - action: keep
+            source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+            regex: "true"
+          - action: replace
+            source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+            target_label: __metrics_path__
+            regex: "(.+)"
+          - action: replace
+            source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+            target_label: __address__
+            regex: ([^:]+)(?::[0-9]+)?;([0-9]+)
+            replacement: "$1:$2"
+          - action: replace
+            source_labels: [__meta_kubernetes_service_name]
+            target_label: service
+          - action: replace
+            source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
       - job_name: mcp-gateway-sidecars
         kubernetes_sd_configs:
           - role: endpoints
@@ -86,6 +146,87 @@ data:
           - action: replace
             source_labels: [__meta_kubernetes_pod_name]
             target_label: pod
+  rules.yml: |
+    groups:
+      # Coverage contract: every job below must exist and be up. The
+      # required-target and uninstrumented series are info metrics (value 1)
+      # so dashboards can tell "absent" from "healthy" and from "zero traffic".
+      - name: mcp-scrape-coverage
+        rules:
+          - record: mcp:scrape_required_target:info
+            expr: label_replace(vector(1), "job", "mcp-platform-api", "", "")
+          - record: mcp:scrape_required_target:info
+            expr: label_replace(vector(1), "job", "mcp-runtime-api", "", "")
+          - record: mcp:scrape_required_target:info
+            expr: label_replace(vector(1), "job", "mcp-analytics-api", "", "")
+          - record: mcp:scrape_required_target:info
+            expr: label_replace(vector(1), "job", "mcp-sentinel-ingest", "", "")
+          - record: mcp:scrape_required_target:info
+            expr: label_replace(vector(1), "job", "mcp-sentinel-processor", "", "")
+          - record: mcp:scrape_required_target:info
+            expr: label_replace(vector(1), "job", "clickhouse", "", "")
+          - record: mcp:scrape_required_target:info
+            expr: label_replace(vector(1), "job", "prometheus", "", "")
+          - record: mcp:scrape_required_target:info
+            expr: label_replace(vector(1), "job", "otel-collector", "", "")
+          - record: mcp:scrape_required_target:info
+            expr: label_replace(vector(1), "job", "loki", "", "")
+          - record: mcp:scrape_required_target:info
+            expr: label_replace(vector(1), "job", "tempo", "", "")
+          - record: mcp:scrape_required_target:info
+            expr: label_replace(vector(1), "job", "promtail", "", "")
+          - record: mcp:scrape_uninstrumented_workload:info
+            expr: label_replace(label_replace(vector(1), "workload", "kafka", "", ""), "reason", "no_metrics_endpoint", "", "")
+          - record: mcp:scrape_uninstrumented_workload:info
+            expr: label_replace(label_replace(vector(1), "workload", "postgres", "", ""), "reason", "no_metrics_endpoint", "", "")
+          - record: mcp:scrape_uninstrumented_workload:info
+            expr: label_replace(label_replace(vector(1), "workload", "mcp-sentinel-ui", "", ""), "reason", "no_metrics_endpoint", "", "")
+          - record: mcp:scrape_uninstrumented_workload:info
+            expr: label_replace(label_replace(vector(1), "workload", "grafana", "", ""), "reason", "self_metrics_not_scraped", "", "")
+          - record: mcp:scrape_uninstrumented_workload:info
+            expr: label_replace(label_replace(vector(1), "workload", "mcp-auth-server", "", ""), "reason", "no_metrics_endpoint_see_gateway_oauth_outcomes", "", "")
+          - alert: MCPRequiredScrapeTargetAbsent
+            expr: mcp:scrape_required_target:info unless on (job) up
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Required scrape target {{ $labels.job }} is not discovered"
+          - alert: MCPRequiredScrapeTargetDown
+            expr: up{job=~"mcp-platform-api|mcp-runtime-api|mcp-analytics-api|mcp-sentinel-ingest|mcp-sentinel-processor|clickhouse|prometheus|otel-collector|loki|tempo|promtail"} == 0
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Required scrape target {{ $labels.job }} is down"
+      - name: mcp-oauth-and-telemetry
+        rules:
+          # Outcome is a bounded enum; no token, user, or request identifiers.
+          - record: mcp:gateway_oauth_failures:rate5m
+            expr: sum by (namespace, server, outcome) (rate(mcp_gateway_oauth_outcomes_total{outcome!="success"}[5m]))
+          - alert: MCPOAuthFailures
+            expr: sum by (namespace, server) (mcp:gateway_oauth_failures:rate5m) > 0
+            for: 10m
+            labels:
+              severity: info
+            annotations:
+              summary: "OAuth failures observed at the gateway for {{ $labels.namespace }}/{{ $labels.server }}"
+          - alert: MCPGatewayAnalyticsDrops
+            expr: increase(mcp_gateway_analytics_drop_total[10m]) > 0
+            labels:
+              severity: warning
+            annotations:
+              summary: "Gateway sidecar is dropping analytics events"
+          - alert: MCPTelemetryExportFailures
+            expr: |
+              sum by (job) (rate({__name__=~"otelcol_exporter_send_failed_(spans|metric_points|log_records)(_total)?"}[5m])) > 0
+              or sum by (job) (rate({__name__=~"promtail_dropped_entries(_total)?"}[5m])) > 0
+              or sum by (job) (rate({__name__=~"loki_discarded_samples(_total)?|tempo_discarded_spans(_total)?"}[5m])) > 0
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Telemetry collector {{ $labels.job }} is failing or dropping exports"
 ---
 apiVersion: v1
 kind: Service

@@ -58,6 +58,7 @@ type gatewayMetrics struct {
 	requestsTotal          *prometheus.CounterVec
 	policyDecisionsTotal   *prometheus.CounterVec
 	analyticsDropsTotal    prometheus.Counter
+	oauthOutcomesTotal     *prometheus.CounterVec
 	requestDurationSeconds *prometheus.HistogramVec
 	inflightRequests       *prometheus.GaugeVec
 	requestBytesTotal      *prometheus.CounterVec
@@ -88,6 +89,10 @@ func newGatewayMetrics(registerer prometheus.Registerer) *gatewayMetrics {
 			Name: "mcp_gateway_analytics_drop_total",
 			Help: "Total analytics events dropped by MCP gateway sidecars.",
 		}),
+		oauthOutcomesTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "mcp_gateway_oauth_outcomes_total",
+			Help: "OAuth bearer-token authentication outcomes at MCP gateway sidecars. The outcome label is a bounded enum.",
+		}, []string{"namespace", "server", "outcome"}),
 		requestDurationSeconds: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "mcp_gateway_request_duration_seconds",
 			Help:    "End-to-end request duration observed by MCP gateway sidecars.",
@@ -120,6 +125,7 @@ func newGatewayMetrics(registerer prometheus.Registerer) *gatewayMetrics {
 			m.requestsTotal,
 			m.policyDecisionsTotal,
 			m.analyticsDropsTotal,
+			m.oauthOutcomesTotal,
 			m.requestDurationSeconds,
 			m.inflightRequests,
 			m.requestBytesTotal,
@@ -136,6 +142,36 @@ func (m *gatewayMetrics) recordAnalyticsDrop() {
 		return
 	}
 	m.analyticsDropsTotal.Inc()
+}
+
+// oauthOutcomes is the closed set of values for the outcome label. Anything
+// else collapses to "other" so token, user, or request data can never become
+// a label value.
+var oauthOutcomes = map[string]bool{
+	"success":                    true,
+	"missing_bearer_token":       true,
+	"invalid_token":              true,
+	"oauth_provider_unavailable": true,
+	"oauth_config_missing":       true,
+	"oauth_issuer_missing":       true,
+	"oauth_audience_missing":     true,
+}
+
+func metricOAuthOutcome(allowed bool, reason string) string {
+	if allowed {
+		return "success"
+	}
+	if oauthOutcomes[reason] && reason != "success" {
+		return reason
+	}
+	return "other"
+}
+
+func (m *gatewayMetrics) recordOAuthOutcome(scope gatewayMetricScope, allowed bool, reason string) {
+	if m == nil {
+		return
+	}
+	m.oauthOutcomesTotal.WithLabelValues(scope.Namespace, scope.Server, metricOAuthOutcome(allowed, reason)).Inc()
 }
 
 func (s *gatewayServer) metricScope(policy *policypkg.Document) gatewayMetricScope {
