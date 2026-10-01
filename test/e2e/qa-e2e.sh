@@ -968,6 +968,18 @@ recover_traefik_tls_port_forward_if_needed() {
   wait_port "${TRAEFIK_TLS_PORT}" 30
 }
 
+# recover_traefik_port_forwards_if_needed restores the HTTP forward and, once
+# started, the TLS forward. Adapter-proxied checks dial Traefik websecure
+# through the TLS forward, so retry loops must recover both.
+recover_traefik_port_forwards_if_needed() {
+  local rc=0
+  recover_traefik_port_forward_if_needed || rc=1
+  if [[ -n "${TRAEFIK_TLS_PORT_FORWARD_PID:-}" ]]; then
+    recover_traefik_tls_port_forward_if_needed || rc=1
+  fi
+  return "${rc}"
+}
+
 ensure_traefik_tls_port_forward() {
   if [[ -n "${TRAEFIK_TLS_PORT_FORWARD_PID:-}" ]] && ! port_is_listening "${TRAEFIK_TLS_PORT}"; then
     recover_traefik_tls_port_forward_if_needed
@@ -2323,7 +2335,7 @@ PY
       echo "[mcp] observed initialize returning ${expected_status}"
       return 0
     fi
-    recover_traefik_port_forward_if_needed || true
+    recover_traefik_port_forwards_if_needed || true
     sleep 2
   done
 
@@ -2462,7 +2474,7 @@ PY
       echo "[mcp] observed ${method} ${url} returning ${expected_status}"
       return 0
     fi
-    recover_traefik_port_forward_if_needed || true
+    recover_traefik_port_forwards_if_needed || true
     sleep 2
   done
 
@@ -2599,7 +2611,7 @@ PY
         continue
       fi
     fi
-    recover_traefik_port_forward_if_needed || true
+    recover_traefik_port_forwards_if_needed || true
     sleep 2
   done
 
@@ -4699,17 +4711,16 @@ if checkpoint_enabled "oauth"; then
   echo "[registry][pass] public registry catalog requires admin auth"
 
   start_mcp_ingress_header_proxies
-  if scenario_selected "trust"; then
-    ensure_trust_session_proxy
-  fi
+  # Header proxies no longer carry X-MCP identity, so session-backed ingress
+  # checks need the certificate adapter even when the trust scenario is not
+  # selected (for example, path-selected smoke-auth runs).
+  ensure_trust_session_proxy
   wait_ports_parallel \
     "${MCP_CURL_ANON_PORT}" \
     "${MCP_CURL_IDENTITY_PORT}" \
     "${MCP_CURL_SESSION_PORT}" \
     "${MCP_CURL_BAD_SESSION_PORT}"
-  if scenario_selected "trust"; then
-    wait_port "${MCP_SERVICE_SESSION_PORT}"
-  fi
+  wait_port "${MCP_SERVICE_SESSION_PORT}"
 
   refresh_mcp_proxy_urls
   if scenario_selected "trust"; then

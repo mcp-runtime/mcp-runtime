@@ -46,7 +46,10 @@ func checkRegistryReachableFromCluster(kubectl core.KubectlRunner) DoctorCheck {
 	image := "curlimages/curl:8.7.1"
 	registryURL := doctorRegistryServiceURL(kubectl)
 	curlArgs := []string{
-		"-skSI", "--connect-timeout", "5", "--max-time", "15",
+		// A newly started probe can hit the registry before its pod network path
+		// is usable. HEAD is safe to retry; persistent failures still fail.
+		"-skSI", "--retry", "5", "--retry-all-errors", "--retry-delay", "2", "--retry-max-time", "30",
+		"--connect-timeout", "5", "--max-time", "15",
 		registryURL,
 	}
 	defer func() {
