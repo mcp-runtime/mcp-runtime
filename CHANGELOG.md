@@ -12,6 +12,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 - Setup ends with a short operational smoke gate (nodes Ready, Bound PVCs, no Pending blockers, Postgres, platform-api `/health`+`/ready`, Sentinel rollout health, and an authenticated API probe). Failures fail setup; use `mcp-runtime cluster diagnostics` for deeper follow-up.
 - One-command macOS, Linux, and Windows CLI installers from the Getting Started and Quickstart pages; installers detect the platform and install the matching release binary to a user-local directory. The Windows installer also adds its directory to the user's `PATH`.
 
+### Security
+
+- Setup validates the bundled `mcp-runtime-ca` workload CA before use (key/cert match, CA constraints, validity). Production setup now fails on a missing, invalid, expired, or under-180-day CA instead of silently generating or accepting it; test mode still generates a missing CA and warns near expiry. Rotation and backup guidance is in `docs/cli.md`. Splitting the registry and workload roots is not yet done ([#535](https://github.com/mcp-runtime/mcp-runtime/issues/535)). Migration: production installs using `--mtls-cluster-issuer mcp-runtime-ca` must have the CA Secret present beforehand.
+
 ## [0.4.1] - 2026-09-29
 
 ### Fixed

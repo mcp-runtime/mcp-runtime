@@ -91,8 +91,8 @@ func setupWorkloadPKI(logger *zap.Logger, plan setupplan.Plan) error {
 	// it is the selected issuer (test mode defaults to it; prod can name it
 	// explicitly). Otherwise the issuer is enterprise-managed and must exist.
 	if issuer == setupplan.DefaultTestMTLSClusterIssuer {
-		if _, err := ensureCASecretClientGo(); err != nil {
-			return core.WrapWithSentinel(core.ErrCASecretNotFound, err, "create managed workload CA")
+		if err := ensureManagedWorkloadCA(plan, time.Now()); err != nil {
+			return err
 		}
 		// Reusing an already-ready managed issuer is important on long-lived
 		// contributor clusters: client-go's generic merge can reject an
@@ -543,6 +543,50 @@ func checkNamedClusterIssuerClientGo(name string) error {
 	if err := k8sclient.CheckClusterIssuer(context.Background(), clients, name); err != nil {
 		return core.WrapWithSentinel(core.ErrClusterIssuerNotFound, err, fmt.Sprintf("ClusterIssuer %q not found. Install your org issuer first (cert-manager) or fix --tls-cluster-issuer / MCP_TLS_CLUSTER_ISSUER: %v", name, err))
 	}
+	return nil
+}
+
+// ensureManagedWorkloadCA gates the bundled mcp-runtime-ca root.
+//
+// Test mode keeps the convenience of generating a missing CA. Production never
+// silently mints a new root (a lost Secret would otherwise re-key trust without
+// an overlap window); it requires an existing, validated CA restored from
+// backup or supplied by the operator. Invalid or expired CAs always fail;
+// near-expiry fails in production and warns in test mode.
+func ensureManagedWorkloadCA(plan setupplan.Plan, now time.Time) error {
+	clients, err := platformKubernetesClients()
+	if err != nil {
+		return err
+	}
+	secret, err := clients.Clientset.CoreV1().Secrets(certmanager.CertManagerNamespace).Get(context.Background(), certmanager.CertCASecretName, metav1.GetOptions{})
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			return core.WrapWithSentinel(core.ErrCASecretNotFound, err, "read managed workload CA Secret")
+		}
+		if !plan.TestMode {
+			return core.NewWithSentinel(core.ErrCASecretNotFound, fmt.Sprintf(
+				"managed workload CA Secret %s/%s is missing. Production setup will not generate a new root. Restore it from your encrypted backup, create it from your CA (kubectl create secret tls %s --cert=ca.crt --key=ca.key -n %s), or use an enterprise issuer via --mtls-cluster-issuer; see docs/cli.md (Bundled workload CA lifecycle)",
+				certmanager.CertManagerNamespace, certmanager.CertCASecretName, certmanager.CertCASecretName, certmanager.CertManagerNamespace))
+		}
+		if _, err := ensureCASecretClientGo(); err != nil {
+			return core.WrapWithSentinel(core.ErrCASecretNotFound, err, "create managed workload CA")
+		}
+		return nil
+	}
+	health, err := certmanager.ValidateCAKeyPair(secret.Data["tls.crt"], secret.Data["tls.key"], now)
+	if err != nil {
+		return core.WrapWithSentinel(core.ErrCASecretInvalid, err, fmt.Sprintf("managed workload CA %s/%s is not usable: %v. Restore a valid CA from backup or rotate it per docs/cli.md (Bundled workload CA lifecycle)", certmanager.CertManagerNamespace, certmanager.CertCASecretName, err))
+	}
+	days := int(health.Remaining.Hours() / 24)
+	if health.NearExpiry {
+		msg := fmt.Sprintf("managed workload CA expires %s (%d days remaining, minimum %d); rotate with dual trust per docs/cli.md (Bundled workload CA lifecycle)", health.NotAfter.UTC().Format(time.RFC3339), days, int(certmanager.MinCARemainingLifetime.Hours()/24))
+		if !plan.TestMode {
+			return core.NewWithSentinel(core.ErrCANearExpiry, msg)
+		}
+		core.Warn(msg)
+		return nil
+	}
+	core.Info(fmt.Sprintf("Managed workload CA healthy: %d days remaining", days))
 	return nil
 }
 
