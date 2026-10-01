@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	_ "github.com/lib/pq" // registers the "postgres" database/sql driver
+	"github.com/lib/pq"
 )
 
 const (
@@ -181,13 +181,50 @@ func newPostgresSessionBackend(ctx context.Context, db *sql.DB, secret string) (
 	if err != nil {
 		return nil, err
 	}
-	if _, err := db.ExecContext(ctx, createSessionTableSQL); err != nil {
-		return nil, fmt.Errorf("ensure ui_sessions table: %w", err)
-	}
-	if _, err := db.ExecContext(ctx, createSessionIndexSQL); err != nil {
-		return nil, fmt.Errorf("ensure ui_sessions index: %w", err)
+	if err := ensureSessionSchema(ctx, db); err != nil {
+		return nil, err
 	}
 	return &postgresSessionBackend{db: db, aead: aead}, nil
+}
+
+// Two UI replicas can run CREATE TABLE IF NOT EXISTS together. Postgres can
+// still raise a unique violation on the type catalog for the loser. Retrying
+// lets that replica observe the table the winner created.
+func ensureSessionSchema(ctx context.Context, db *sql.DB) error {
+	statements := []struct {
+		query string
+		what  string
+	}{
+		{createSessionTableSQL, "ui_sessions table"},
+		{createSessionIndexSQL, "ui_sessions index"},
+	}
+	for _, statement := range statements {
+		var err error
+		for attempt := 0; attempt < 5; attempt++ {
+			if _, err = db.ExecContext(ctx, statement.query); err == nil {
+				break
+			}
+			if !concurrentSchemaRace(err) {
+				return fmt.Errorf("ensure %s: %w", statement.what, err)
+			}
+			timer := time.NewTimer(time.Duration(attempt+1) * 50 * time.Millisecond)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return fmt.Errorf("ensure %s: %w", statement.what, ctx.Err())
+			case <-timer.C:
+			}
+		}
+		if err != nil {
+			return fmt.Errorf("ensure %s: %w", statement.what, err)
+		}
+	}
+	return nil
+}
+
+func concurrentSchemaRace(err error) bool {
+	var pqErr *pq.Error
+	return errors.As(err, &pqErr) && string(pqErr.Code) == "23505"
 }
 
 func (p *postgresSessionBackend) seal(sess uiSession) ([]byte, error) {

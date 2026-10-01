@@ -15,6 +15,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 // fakeSessionDB is an in-process stand-in for the ui_sessions table. It is a
@@ -317,5 +319,17 @@ func TestBuildSessionBackendConfig(t *testing.T) {
 	db, _ := openFakeSessionDB(t)
 	if _, err := newPostgresSessionBackend(ctx, db, "short"); err == nil {
 		t.Fatal("short encryption key must fail")
+	}
+}
+
+func TestConcurrentSchemaRace(t *testing.T) {
+	if !concurrentSchemaRace(&pq.Error{Code: "23505"}) {
+		t.Fatal("unique violation should be retried")
+	}
+	if concurrentSchemaRace(&pq.Error{Code: "42P01"}) {
+		t.Fatal("a missing relation should not be retried")
+	}
+	if concurrentSchemaRace(errors.New("dial failed")) {
+		t.Fatal("a generic error should not be retried")
 	}
 }
