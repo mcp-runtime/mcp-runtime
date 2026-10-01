@@ -248,12 +248,12 @@ auto-approves requests to built-in issuers by default. Any other principal able
 to create a `CertificateRequest` for that issuer could therefore obtain a
 certificate with a forged SPIFFE URI outside the runtime API's session checks.
 Outside `--test-mode`, setup refuses `MCP_ADAPTER_CERTIFICATES=true` unless
-cert-manager approver-policy is installed (it looks for the
-`certificaterequestpolicies.policy.cert-manager.io` CRD) or you set
-`MCP_WORKLOAD_ISSUER_APPROVAL_ACK=true` to assert that another approver gates
-the issuer (Staging E2E sets this for its disposable VM). The CRD check proves
-only that approver-policy is installed, not that its policies are correct; the
-policy should allow only the runtime API service account, `digital signature` +
+`MCP_WORKLOAD_ISSUER_APPROVAL_ACK=true` asserts that an effective approver gates
+the issuer (Staging E2E sets this for its disposable VM). Installing the
+approver-policy CRD alone does not establish a policy or disable cert-manager's
+default auto-approver; either condition can leave forged requests approvable.
+Before acknowledging the gate, verify that the policy allows only the runtime
+API service account, `digital signature` +
 `client auth` usages, and the `spiffe://<trust-domain>/ns/<ns>/session/<name>`
 URI shape, and the default approver should be disabled for this issuer only after
 that policy is tested (keep public and internal TLS issuance working, and roll
