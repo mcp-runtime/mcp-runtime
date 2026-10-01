@@ -467,6 +467,9 @@ func (s *DeploymentService) ensureManagedNamespace(ctx context.Context, namespac
 	if s == nil || s.k8sClients == nil || strings.TrimSpace(namespace) == "" {
 		return nil
 	}
+	if kubeworkload.OperatorSecretNamespaceProtected(namespace) {
+		return fmt.Errorf("managed MCPServer namespace %q is reserved for platform infrastructure", namespace)
+	}
 	base := s.k8sClients.Clientset
 	current, err := base.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
@@ -518,32 +521,7 @@ const operatorNamespaceSecretAccessName = "mcp-runtime-operator-managed-secrets"
 // Secret permissions; this binding lets it reconcile server-local certificates
 // and registry pull credentials without reaching unrelated platform Secrets.
 func ensureNamespaceOperatorSecretAccess(ctx context.Context, client kubernetes.Interface, namespace string) error {
-	if operatorSecretNamespaceProtected(namespace) {
-		return nil
-	}
-	binding := &rbacv1.RoleBinding{
-		ObjectMeta: metav1.ObjectMeta{Name: operatorNamespaceSecretAccessName, Namespace: namespace},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     operatorNamespaceSecretAccessName,
-		},
-		Subjects: []rbacv1.Subject{{
-			Kind:      rbacv1.ServiceAccountKind,
-			Name:      "mcp-runtime-operator-controller-manager",
-			Namespace: "mcp-runtime",
-		}},
-	}
-	return upsertRoleBinding(ctx, client, binding)
-}
-
-func operatorSecretNamespaceProtected(namespace string) bool {
-	switch strings.TrimSpace(namespace) {
-	case sentinel.DefaultNamespace, registryNamespace, "mcp-runtime", "cert-manager", "kube-system", "kube-public", "traefik":
-		return true
-	default:
-		return false
-	}
+	return kubeworkload.EnsureOperatorSecretAccess(ctx, client, namespace)
 }
 
 // A newly created RoleBinding can be visible before the API server's RBAC

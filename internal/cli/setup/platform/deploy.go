@@ -21,6 +21,7 @@ import (
 	"mcp-runtime/internal/cli/registry/config"
 	setupplan "mcp-runtime/internal/cli/setup/plan"
 	"mcp-runtime/pkg/k8sclient"
+	"mcp-runtime/pkg/kubeworkload"
 	"mcp-runtime/pkg/manifest"
 )
 
@@ -132,6 +133,12 @@ func ensureOperatorSecretAccessBindingsClientGo() error {
 	if err != nil {
 		return fmt.Errorf("list MCPServers for Secret RBAC migration: %w", err)
 	}
+	// Include provisioned namespaces with no current MCPServer so redeploying
+	// into an existing team remains possible after the RBAC migration.
+	managed, err := clients.Clientset.CoreV1().Namespaces().List(context.Background(), metav1.ListOptions{LabelSelector: "platform.mcpruntime.org/managed=true"})
+	if err != nil {
+		return fmt.Errorf("list managed namespaces for Secret RBAC migration: %w", err)
+	}
 	namespaceSet := make(map[string]struct{}, len(servers.Items)+1)
 	namespaceSet[core.NamespaceMCPServers] = struct{}{}
 	for i := range servers.Items {
@@ -142,26 +149,29 @@ func ensureOperatorSecretAccessBindingsClientGo() error {
 			namespaceSet[namespace] = struct{}{}
 		}
 	}
+	for _, ns := range managed.Items {
+		if !isProtectedOperatorSecretNamespace(ns.Name) {
+			namespaceSet[ns.Name] = struct{}{}
+		}
+	}
 	namespaces := make([]string, 0, len(namespaceSet))
 	for namespace := range namespaceSet {
 		namespaces = append(namespaces, namespace)
 	}
 	sort.Strings(namespaces)
 	for _, namespace := range namespaces {
-		if _, err := k8sclient.ApplyManifestFile(context.Background(), clients, "config/rbac/operator_secret_access_binding.yaml", namespace); err != nil {
+		if err := kubeworkload.EnsureOperatorSecretAccess(context.Background(), clients.Clientset, namespace); err != nil {
 			return fmt.Errorf("bind operator Secret access in namespace %q: %w", namespace, err)
 		}
+	}
+	if err := kubeworkload.EnsureOperatorTrustBundleAccess(context.Background(), clients.Clientset, strings.TrimSpace(os.Getenv("MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE"))); err != nil {
+		return fmt.Errorf("bind operator public trust bundle access: %w", err)
 	}
 	return nil
 }
 
 func isProtectedOperatorSecretNamespace(namespace string) bool {
-	switch strings.TrimSpace(namespace) {
-	case "mcp-sentinel", "registry", "mcp-runtime", "cert-manager", "kube-system", "kube-public", "traefik":
-		return true
-	default:
-		return false
-	}
+	return kubeworkload.OperatorSecretNamespaceProtected(namespace)
 }
 
 func verifySetup(logger *zap.Logger, usingExternalRegistry bool, deps SetupDeps) error {
@@ -496,8 +506,8 @@ func deployOperatorManifestsWithClientGo(logger *zap.Logger, operatorImage, gate
 		return wrappedErr
 	}
 	for _, path := range []string{
+		"config/rbac/managed_server_namespace.yaml",
 		"config/rbac/service_account.yaml",
-		"config/rbac/role.yaml",
 		"config/rbac/operator_secret_access.yaml",
 		"config/rbac/operator_secret_access_binding.yaml",
 		"config/rbac/role_binding.yaml",
@@ -518,6 +528,11 @@ func deployOperatorManifestsWithClientGo(logger *zap.Logger, operatorImage, gate
 			core.LogStructuredError(logger, wrappedErr, "Failed to scope operator Secret access")
 		}
 		return wrappedErr
+	}
+	// Grant replacement access before stripping the old cluster-wide rule.
+	// If migration fails, keep the old role intact and let setup be retried.
+	if err := applyManifestFile("config/rbac/role.yaml", "", os.Stdout); err != nil {
+		return core.WrapWithSentinel(core.ErrApplyRBACFailed, err, fmt.Sprintf("failed to narrow operator RBAC: %v", err))
 	}
 	core.Info("Reapplied operator ClusterRole mcp-runtime-operator-role from config/rbac/role.yaml; run `mcp-runtime cluster doctor` if MCPServer creates ever appear unreconciled")
 
