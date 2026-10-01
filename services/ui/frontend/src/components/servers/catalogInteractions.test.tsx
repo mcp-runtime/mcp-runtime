@@ -22,7 +22,7 @@ const SERVERS = {
       name: "workspace-assistant",
       namespace: "mcp-servers",
       ready: "1/1",
-      status: "Running",
+      status: "Ready",
       description: "Workspace helper",
       endpoint: "http://localhost:18080/oauth-example-go-2025-11-25/mcp",
       image: "registry/workspace-assistant:1.2.0",
