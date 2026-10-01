@@ -11,15 +11,17 @@ This document defines the work and evidence required to close F1–F12.
 
 | Work | PR / branch | State |
 | --- | --- | --- |
-| Operator Secret scope, related to #540 and F2 | [#550](https://github.com/mcp-runtime/mcp-runtime/pull/550), `security/operator_secret_rbac`, `31148165` | Draft; generator, provisioning, and authorization checks pending. |
-| Collector admission boundary, F1 | [#551](https://github.com/mcp-runtime/mcp-runtime/pull/551), `refactor/namespace-admission-policy`, `050f5ef5` | Draft; bootstrap, cutover, admission, and log-delivery checks pending. |
+| Component inventory and layout resolver, F5/F12 | [#553](https://github.com/mcp-runtime/mcp-runtime/pull/553), `platform/component_inventory` | Reviewable P01 foundation; persisted discovery and integration gates remain. |
+| Operator Secret scope, related to #540 and F2 | [#550](https://github.com/mcp-runtime/mcp-runtime/pull/550), `security/operator_secret_rbac` | Draft; direct access, named trust bundle and provisioning tests pass. Indirect authority/live authorization gates remain. |
+| Collector admission boundary, F1 | [#551](https://github.com/mcp-runtime/mcp-runtime/pull/551), `refactor/namespace-admission-policy` | Draft; bootstrap/cutover ordering tests pass. Live delivery/admission and inventory/lifecycle integration remain. |
 | Credential worktree | `refactor/namespace-credential-boundaries` | Reserved locally; no implementation commit or PR yet. |
-| Remaining findings | PR sequence below | Planned; no completion is implied by this plan. |
+| P02, P04–P07, P09–P10 and remaining P01/P03/P08 scope | PR sequence below | Still planned; these prerequisites are not completed. |
+| Main namespace migration, P11 | After prerequisite review and merges | Deferred; no migration PR yet. |
 
-The two implementation branches were based on `76553f38`. Refresh them against
-current main and the relevant prerequisites before marking them ready. Main now
-includes the post-setup operational smoke gate from #545; namespace changes must
-preserve that check as well as standalone diagnostics.
+Both security drafts have been refreshed against `14ebdb29`, preserving the
+post-setup smoke gate from #545. #551 still needs integration with #553's
+inventory and an explicit intermediate layout record before collector movement
+can pass the layout/migration gates. None of these PRs closes the parent issue.
 
 ## Ownership and compatibility decisions
 
@@ -70,7 +72,7 @@ after that dependency merges. Keep unrelated rows out of each other's diffs.
 
 | ID | Scope and findings | Depends on | Completion evidence |
 | --- | --- | --- | --- |
-| P01 | Canonical component, owner, namespace, capability and dependency inventory; versioned legacy/target resolver (F5, F12) | P00 | Setup/update, CLI and API status/logs/restart/port-forward consume one source; legacy, target, partial and external-install fixtures resolve consistently; conflicting ownership is rejected. |
+| P01 | [#553](https://github.com/mcp-runtime/mcp-runtime/pull/553) foundation: canonical component, owner, namespace, capability and dependency inventory; versioned legacy/target resolver (F5, F12) | P00 | Setup/update, CLI and API status/logs/restart/port-forward consume one source; legacy, target, partial and external-install fixtures resolve consistently; conflicting ownership is rejected. |
 | P02 | Split shared credentials/config by owner and consumer while retaining current placement (F2) | P01 | Preserve existing values on upgrade; migrate only required keys; tested synchronization and rotation; unrelated consumers cannot read the resulting Secret objects; legacy fallback has an explicit removal gate. |
 | P03 | Narrow service/helper/tenant RBAC and namespace authority, incorporating #550 (F2) | P01, P02; #550 can land independently if its own gates pass | Allowed/denied capability matrix includes direct Secret reads and indirect access via workloads, service accounts, impersonation, bind and namespace labels. Generator output stays narrow. |
 | P04 | Credential-consumer rollout and maintenance plans (F3) | P01, P02 | A telemetry-only update leaves unrelated platform pod-template generations unchanged; dry-run, execution, retry and rollback target the same affected consumers. |
@@ -87,7 +89,8 @@ F10 does not block the initial namespace split: keeping `mcp-runtime` retains it
 existing isolation and avoids an unnecessary webhook/leader migration. P12 is
 explicitly deferred unless the naming change is still useful after P11.
 
-P01 is the next implementation PR. P02/P03/P04 can be reviewed while P05/P06 are
+The P01 inventory/resolver foundation is open as #553; persisted discovery and
+setup/update gates still need implementation. P02/P03/P04 can be reviewed while P05/P06 are
 developed, but their merge dependencies remain as listed. Do not treat the early
 existence of #551 as evidence that collector lifecycle prerequisites are done.
 
@@ -192,35 +195,39 @@ measure restore drills against them before P11 can migrate that dataset.
 
 ### #550 — operator Secret access
 
-- The annotation in `internal/operator/controller.go` still grants broad Secret
-  verbs. Update the generator source and check regenerated RBAC so regeneration
-  cannot undo the manifest restriction.
-- Test migration ordering: install scoped access before removing legacy access;
-  cover existing empty managed namespaces, team/catalog provisioning and direct
-  manifests. Verify all added assets are available in packaged CLI installs.
-- Audit all named Secret reads and protected namespaces. Prove access to the CA
-  private key and unrelated Secrets is denied, including indirect workload
-  access, while reconciliation, TLS and registry pulls still succeed.
-- Current evidence: the default Kustomize bundle renders with the scoped binding
-  in `mcp-servers`. This is not an authorization or reconciliation test.
+- The broad Secret generator marker has been removed. Contract tests reject
+  Secret permissions in the cluster-bound role and cluster bindings of the
+  managed-secret role. Live/generated-install gates still apply.
+- Setup now grants replacement access before removing legacy cluster access,
+  including empty managed namespaces. Runtime API rejects reserved namespaces
+  before provisioning; default direct manifests create `mcp-servers` and its
+  binding. Packaged installs and real API-server migration need verification.
+- The configured TLS namespace gets a pre-created public trust bundle and a
+  named get/update/patch Role, preserving adapter issuance without broad Secret
+  create there. Reconciliation waits until the bundle contains roots.
+- Direct scoped-access, reserved-namespace, provisioning, trust-bundle and
+  operator tests passed, as did runtime API module tests, builds and targeted vet.
+- Indirect workload/ServiceAccount/Certificate authority remains broader than
+  Secret API authority. Full CA-key isolation is not established by this PR.
 
 ### #551 — collector namespace
 
-- The ingress bundle retains `traefik-watch` resources in `mcp-sentinel` after
-  removing that bundle's Namespace declaration. Verify and fix namespace
-  creation order on a clean install, including analytics-disabled paths.
-- The current patch changes the existing collector ClusterRoleBinding and
-  source Pod Security labels before replacement health is known. Complete the
-  cutover/resume/rollback design before relying on its late resource cleanup.
-- Verify all application/helper/optional workloads satisfy restricted admission,
-  reserve the collector namespace, and include it in lifecycle inventories.
-- Prove log delivery and cursor/duplication behavior during migration and
-  rollback. A ready DaemonSet alone does not prove end-to-end collection.
-- Current evidence: YAML parsing and whitespace checks passed in the original
-  implementation; a static contract test exists but has not run.
+- Supported setup ensures the source namespace before ingress references it.
+  Fresh namespaces start restricted; legacy admission labels are preserved
+  until cutover. Source policy application is deferred during analytics setup.
+- The destination uses a separate binding. After successful rollouts, foreground
+  deletion waits for the old collector before source binding cleanup and
+  admission tightening. Interrupted/retry ordering has fake-client coverage.
+- Restricted admission for every app/helper/storage variant, namespace/lifecycle
+  reservations and diagnostics/cleanup coverage remain gates. #550 supplies
+  tenant namespace reservation; #553 requires placement integration.
+- Loki DNS no longer assumes `cluster.local`. Delivery, cursor/duplication and
+  rollback still need disposable-cluster evidence; readiness alone is insufficient.
+- Targeted tests, CLI build, formatting, whitespace checks and vet passed.
 
-These are source-review follow-ups, not results from a live cluster audit. Neither
-draft should automatically close #548 or claim its full security acceptance gate.
+These are source/fake-client results, not a live cluster audit. Neither draft
+should automatically close #548 or claim full security acceptance. Keep the
+main refactoring PR separate until its prerequisites have been reviewed and merged.
 
 ## Related issues and scope control
 
@@ -265,7 +272,9 @@ Use an empty temporary kubeconfig for unit tests and commit hooks, per
 `AGENTS.md`. Use explicit disposable cluster kubeconfigs for integration/E2E.
 Do not use ambient production credentials during validation.
 
-Plan preparation ran read-only source review and a local Kustomize render. Go
-and gofmt were unavailable; no Go suite, live cluster validation, or security
-scanner result is claimed. Documentation-only P00 needs link/format checks;
-it does not require a running cluster or change an installation.
+Initial plan preparation used source review and a Kustomize render. A local
+Go 1.26.6 toolchain is now available. Implementation PR descriptions record the
+checks above. #553's broad root unit/golden/manifest suite has one existing
+host-dependent kubeconfig-path failure, reproduced outside that branch. A C
+compiler is absent, so race checks remain for CI. No live cluster validation or
+security scanner result is claimed. P00 remains documentation-only.
