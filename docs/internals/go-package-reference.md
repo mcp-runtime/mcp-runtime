@@ -2986,6 +2986,9 @@ const (
 
 	// DefaultAnalyticsNamespace is the namespace for the bundled mcp-sentinel stack.
 	DefaultAnalyticsNamespace = "mcp-sentinel"
+
+	// LogCollectorNamespace isolates the node log collector and its hostPath access.
+	LogCollectorNamespace = mcpdefaults.LogCollectorNamespace
 )
     This file defines constants used across the CLI, including:
       - Kubernetes namespace names
