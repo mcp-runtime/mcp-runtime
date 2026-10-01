@@ -10,10 +10,12 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 
 	_ "go.uber.org/automaxprocs" // align GOMAXPROCS with container CPU quota
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -176,6 +178,12 @@ func newManagerOptions(cfg *operatorConfig) ctrl.Options {
 		HealthProbeBindAddress: cfg.probeAddr,
 		LeaderElection:         cfg.enableLeaderElection,
 		LeaderElectionID:       "mcp-runtime-operator.mcpruntime.org",
+		Client: client.Options{Cache: &client.CacheOptions{
+			// Secrets contain signing keys and application credentials. The
+			// reconciler reads only named Secrets directly, so do not maintain a
+			// cluster-wide Secret informer/cache.
+			DisableFor: []client.Object{&corev1.Secret{}},
+		}},
 	}
 }
 

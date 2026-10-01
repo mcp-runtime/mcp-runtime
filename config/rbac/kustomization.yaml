@@ -1,5 +1,6 @@
 resources:
 - role.yaml
+- operator_secret_access.yaml
+- operator_secret_access_binding.yaml
 - role_binding.yaml
 - service_account.yaml
-

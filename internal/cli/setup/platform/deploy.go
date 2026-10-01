@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"mcp-runtime/internal/cli/certmanager"
 	"mcp-runtime/internal/cli/core"
@@ -114,6 +116,52 @@ func ensureOperatorImagePullSecret(extRegistry *config.ExternalRegistryConfig, r
 		return "", err
 	}
 	return secretName, nil
+}
+
+// ensureOperatorSecretAccessBindingsClientGo applies namespace-scoped Secret
+// access for every existing MCPServer namespace before the operator rolls out.
+// New namespaces receive the same binding from runtime-api provisioning.
+func ensureOperatorSecretAccessBindingsClientGo() error {
+	clients, err := platformKubernetesClients()
+	if err != nil {
+		return err
+	}
+	servers, err := clients.Dynamic.Resource(schema.GroupVersionResource{
+		Group: "mcpruntime.org", Version: "v1alpha1", Resource: "mcpservers",
+	}).List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("list MCPServers for Secret RBAC migration: %w", err)
+	}
+	namespaceSet := make(map[string]struct{}, len(servers.Items)+1)
+	namespaceSet[core.NamespaceMCPServers] = struct{}{}
+	for i := range servers.Items {
+		if namespace := strings.TrimSpace(servers.Items[i].GetNamespace()); namespace != "" {
+			if isProtectedOperatorSecretNamespace(namespace) {
+				continue
+			}
+			namespaceSet[namespace] = struct{}{}
+		}
+	}
+	namespaces := make([]string, 0, len(namespaceSet))
+	for namespace := range namespaceSet {
+		namespaces = append(namespaces, namespace)
+	}
+	sort.Strings(namespaces)
+	for _, namespace := range namespaces {
+		if _, err := k8sclient.ApplyManifestFile(context.Background(), clients, "config/rbac/operator_secret_access_binding.yaml", namespace); err != nil {
+			return fmt.Errorf("bind operator Secret access in namespace %q: %w", namespace, err)
+		}
+	}
+	return nil
+}
+
+func isProtectedOperatorSecretNamespace(namespace string) bool {
+	switch strings.TrimSpace(namespace) {
+	case "mcp-sentinel", "registry", "mcp-runtime", "cert-manager", "kube-system", "kube-public", "traefik":
+		return true
+	default:
+		return false
+	}
 }
 
 func verifySetup(logger *zap.Logger, usingExternalRegistry bool, deps SetupDeps) error {
@@ -450,6 +498,8 @@ func deployOperatorManifestsWithClientGo(logger *zap.Logger, operatorImage, gate
 	for _, path := range []string{
 		"config/rbac/service_account.yaml",
 		"config/rbac/role.yaml",
+		"config/rbac/operator_secret_access.yaml",
+		"config/rbac/operator_secret_access_binding.yaml",
 		"config/rbac/role_binding.yaml",
 	} {
 		if err := applyManifestFile(path, "", os.Stdout); err != nil {
@@ -460,6 +510,14 @@ func deployOperatorManifestsWithClientGo(logger *zap.Logger, operatorImage, gate
 			}
 			return wrappedErr
 		}
+	}
+	if err := ensureOperatorSecretAccessBindingsClientGo(); err != nil {
+		wrappedErr := core.WrapWithSentinel(core.ErrApplyRBACFailed, err, fmt.Sprintf("failed to scope operator Secret access to MCPServer namespaces: %v", err))
+		core.Error("Failed to scope operator Secret access")
+		if logger != nil {
+			core.LogStructuredError(logger, wrappedErr, "Failed to scope operator Secret access")
+		}
+		return wrappedErr
 	}
 	core.Info("Reapplied operator ClusterRole mcp-runtime-operator-role from config/rbac/role.yaml; run `mcp-runtime cluster doctor` if MCPServer creates ever appear unreconciled")
 

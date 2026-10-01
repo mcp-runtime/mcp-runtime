@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Security
+
+- Operator Secret permissions are now granted only in MCPServer namespaces, and Secret reads bypass the controller cache. Runtime-managed namespaces receive a scoped binding automatically; setup backfills existing server namespaces ([#540](https://github.com/mcp-runtime/mcp-runtime/issues/540)).
+
 ## [0.4.1] - 2026-09-29
 
 ### Fixed
