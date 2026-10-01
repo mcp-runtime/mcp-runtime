@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"mcp-runtime/internal/cli/certmanager"
+	clusterdoctor "mcp-runtime/internal/cli/cluster/doctor"
 	"mcp-runtime/internal/cli/core"
 	"mcp-runtime/internal/cli/kube"
 	"mcp-runtime/internal/cli/registry/config"
@@ -234,7 +235,30 @@ func verifySetup(logger *zap.Logger, usingExternalRegistry bool, deps SetupDeps)
 		return wrappedErr
 	}
 
+	if deps.RunPostSetupSmoke != nil {
+		core.Info("Running post-setup operational smoke checks")
+		if err := deps.RunPostSetupSmoke(); err != nil {
+			wrappedErr := core.WrapWithSentinelAndContext(
+				core.ErrSetupStepFailed,
+				err,
+				fmt.Sprintf("post-setup operational smoke failed: %v", err),
+				map[string]any{"component": "post-setup-smoke", "step": "verify"},
+			)
+			core.Error("Post-setup operational smoke failed")
+			core.LogStructuredError(logger, wrappedErr, "Post-setup operational smoke failed")
+			return wrappedErr
+		}
+	}
+
 	core.Success("Verification complete")
+	return nil
+}
+
+func runPostSetupOperationalSmoke() error {
+	report := clusterdoctor.RunPostSetupSmokeAndPrint(core.DefaultKubectlClient())
+	if !report.AllOK() {
+		return core.NewSetupStepFailedError()
+	}
 	return nil
 }
 

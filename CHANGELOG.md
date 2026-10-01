@@ -11,6 +11,11 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 - Operator tenant Secret permissions are scoped to MCPServer namespaces, and Secret reads bypass the controller cache. Runtime-managed namespaces receive a scoped binding automatically; setup backfills existing managed namespaces. The configured TLS namespace grants named read/update access only to the public adapter trust bundle ([#540](https://github.com/mcp-runtime/mcp-runtime/issues/540)).
 
+### Added
+
+- Setup ends with a short operational smoke gate (nodes Ready, Bound PVCs, no Pending blockers, Postgres, platform-api `/health`+`/ready`, Sentinel rollout health, and an authenticated API probe). Failures fail setup; use `mcp-runtime cluster diagnostics` for deeper follow-up.
+- One-command macOS, Linux, and Windows CLI installers from the Getting Started and Quickstart pages; installers detect the platform and install the matching release binary to a user-local directory. The Windows installer also adds its directory to the user's `PATH`.
+
 ## [0.4.1] - 2026-09-29
 
 ### Fixed

@@ -1368,6 +1368,33 @@ func TestCheckRegistryImagePullDiagnostics(t *testing.T) {
 	})
 }
 
+func TestDoctorPostSetupCheckSpecsAreOperationalBasics(t *testing.T) {
+	kubectl := core.NewTestKubectlClient(&core.MockExecutor{
+		CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
+			return &core.MockCommand{}
+		},
+	})
+	specs := doctorPostSetupCheckSpecs(kubectl)
+	want := []string{
+		"Kubernetes nodes ready",
+		"persistent volume claims",
+		"pending pods",
+		"sentinel secrets",
+		"sentinel Postgres credential drift",
+		"sentinel platform API readiness",
+		"sentinel workload rollout health",
+		"sentinel API auth probe",
+	}
+	if len(specs) != len(want) {
+		t.Fatalf("post-setup smoke check count = %d, want %d", len(specs), len(want))
+	}
+	for i, name := range want {
+		if specs[i].Name != name {
+			t.Fatalf("post-setup smoke check[%d] = %q, want %q", i, specs[i].Name, name)
+		}
+	}
+}
+
 func TestRunDoctorAggregates(t *testing.T) {
 	mock := &core.MockExecutor{
 		CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
