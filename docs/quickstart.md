@@ -83,7 +83,7 @@ SERVER_PID=$!
 
 mcp-runtime server init workspace-demo \
   --from-server http://localhost:8088
-# Discovered: aaa-ping, add, create_task, draft_release_note, echo, lower, slugify, upper
+# Discovered: aaa-ping, add, create_task, draft_release_note, echo, lower, slugify, upper, whoami
 
 kill $SERVER_PID
 ```

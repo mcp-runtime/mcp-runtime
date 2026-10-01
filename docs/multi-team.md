@@ -82,6 +82,9 @@ For an existing platform user, find their user ID in the platform UI and run
 `mcp-runtime team user add <team-slug> <user-id> --role member` (or set the role
 to `owner`). This changes only the team membership and does not reset the user's
 password. Platform admins and team owners can manage members in their teams.
+A saved login token keeps the membership from the moment it was issued, so
+run `mcp-runtime auth login` again before `server build`, `server push`, or
+`server deploy` for that team.
 
 `team init` is **deprecated** and rejects at runtime. Use `team create` above
 for the normal platform-backed flow. The managed namespace shape that

@@ -615,6 +615,10 @@ MCP_PLATFORM_API_PROFILE=admin mcp-runtime team user add acme <user-id> --role m
 MCP_PLATFORM_API_PROFILE=admin mcp-runtime team user list acme
 ```
 
+A saved login token keeps the membership from the moment it was issued. Run
+`mcp-runtime auth login` again before `server build`, `server push`, or
+`server deploy` for that team.
+
 Team users log in with:
 
 ```bash
