@@ -22,6 +22,11 @@ func ensureImageViaCache(component, localImage string, buildFn func() error) err
 		return buildFn()
 	}
 	opts := imagecache.OptionsFromEnv()
+	platform, err := resolveSetupImagePlatformClientGo()
+	if err != nil {
+		return fmt.Errorf("resolve image cache target platform: %w", err)
+	}
+	opts.Platform = platform
 	opts.Progress = func(msg string) { core.Info(msg) }
 	_, err = imagecache.EnsureLocalImage(context.Background(), root, component, localImage, opts, buildFn)
 	return err

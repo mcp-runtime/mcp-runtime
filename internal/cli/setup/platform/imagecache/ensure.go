@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 
 	"mcp-runtime/internal/platformrelease"
@@ -27,6 +28,8 @@ type Options struct {
 	// Registry is the GHCR prefix without trailing slash, e.g.
 	// ghcr.io/mcp-runtime/mcp-runtime. Empty uses DefaultRegistry().
 	Registry string
+	// Platform is the architecture of the image being built or reused.
+	Platform string
 	// Push enables pushing newly built images to GHCR.
 	Push bool
 	// Progress receives human-readable status lines (may be nil).
@@ -77,19 +80,27 @@ func DefaultRegistry() string {
 	return fmt.Sprintf("ghcr.io/%s/mcp-runtime", owner)
 }
 
-// CacheRef builds ghcr.io/.../<component>:<hash>.
-func CacheRef(registry, component, hash string) string {
+// CacheRef builds ghcr.io/.../<component>:<hash>-<architecture>.
+func CacheRef(registry, component, hash, platform string) string {
 	reg := strings.TrimRight(strings.TrimSpace(registry), "/")
 	if reg == "" {
 		reg = DefaultRegistry()
 	}
-	return fmt.Sprintf("%s/%s:%s", reg, component, hash)
+	return fmt.Sprintf("%s/%s:%s-%s", reg, component, hash, strings.TrimPrefix(platform, "linux/"))
 }
 
 // OptionsFromEnv fills Registry and Push from environment defaults.
 func OptionsFromEnv() Options {
+	platform := strings.TrimSpace(os.Getenv("MCP_IMAGE_PLATFORM"))
+	if platform == "" {
+		platform = strings.TrimSpace(os.Getenv("DOCKER_DEFAULT_PLATFORM"))
+	}
+	if platform == "" {
+		platform = "linux/" + runtime.GOARCH
+	}
 	return Options{
 		Registry: DefaultRegistry(),
+		Platform: platform,
 		Push:     PushEnabled(),
 	}
 }
@@ -97,6 +108,9 @@ func OptionsFromEnv() Options {
 // EnsureLocalImage makes localImage available: on GHCR hash hit pull+retag;
 // otherwise run buildFn then optionally push the hash-tagged ref to GHCR.
 func EnsureLocalImage(ctx context.Context, repoRoot, component, localImage string, opts Options, buildFn func() error) (Result, error) {
+	if opts.Platform != "linux/amd64" && opts.Platform != "linux/arm64" {
+		return Result{}, fmt.Errorf("unsupported image cache platform %q", opts.Platform)
+	}
 	if _, ok := Specs[component]; !ok {
 		return Result{}, fmt.Errorf("unknown image cache component %q", component)
 	}
@@ -107,7 +121,7 @@ func EnsureLocalImage(ctx context.Context, repoRoot, component, localImage strin
 	if progress == nil {
 		progress = func(string) {}
 	}
-	hash, err := ContentHash(repoRoot, component)
+	hash, err := ContentHashForPlatform(repoRoot, component, opts.Platform)
 	if err != nil {
 		return Result{}, err
 	}
@@ -115,7 +129,7 @@ func EnsureLocalImage(ctx context.Context, repoRoot, component, localImage strin
 	if registry == "" {
 		registry = DefaultRegistry()
 	}
-	cacheRef := CacheRef(registry, component, hash)
+	cacheRef := CacheRef(registry, component, hash, opts.Platform)
 	if err := validateImageReference("cache image", cacheRef); err != nil {
 		return Result{}, err
 	}

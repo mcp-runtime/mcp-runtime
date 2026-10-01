@@ -65,6 +65,16 @@ if ! verify_local_target; then
   exit 1
 fi
 
+# The workflow sends its short-lived GHCR token through SSH stdin only after
+# the disposable-target guard passes. Keep it out of command arguments, logs,
+# the environment, and the persistent VM configuration.
+STAGING_GHCR_CONFIG_DIR=""
+E2E_GHCR_TOKEN=""
+if [[ "${E2E_GHCR_AUTH_STDIN:-0}" == "1" ]]; then
+  IFS= read -r E2E_GHCR_TOKEN || fail "GHCR token was not provided on stdin"
+  [[ -n "${E2E_GHCR_TOKEN}" ]] || fail "GHCR token was empty"
+fi
+
 mkdir -p "${ARTIFACT_DIR}" "${WORK_DIR}"
 chmod 700 "${BACKUP_DIR}" "${ARTIFACT_DIR}" "${WORK_DIR}"
 
@@ -380,6 +390,12 @@ ensure_platform_admin_config() {
 }
 
 stage_setup() {
+  if [[ -n "${E2E_GHCR_TOKEN}" ]]; then
+    STAGING_GHCR_CONFIG_DIR="$(mktemp -d /tmp/mcp-e2e-ghcr.XXXXXX)"
+    export DOCKER_CONFIG="${STAGING_GHCR_CONFIG_DIR}"
+    printf '%s' "${E2E_GHCR_TOKEN}" | docker login ghcr.io -u "${E2E_GHCR_USER:-mcp-runtime}" --password-stdin >/dev/null
+    E2E_GHCR_TOKEN=""
+  fi
   local args=(
     setup
     --strict-prod
@@ -446,6 +462,9 @@ cleanup() {
     # The summary must be written before teardown removes WORK_DIR, so record
     # teardown in its own stage and re-render afterwards.
     staging_run_stage teardown soft "k3s/Docker teardown did not complete; the next run may start on a dirty VM" teardown_vm
+  fi
+  if [[ -n "${STAGING_GHCR_CONFIG_DIR}" ]]; then
+    rm -rf "${STAGING_GHCR_CONFIG_DIR}"
   fi
   local summary_rc=0
   staging_finish "${RUN_ID}" || summary_rc=1

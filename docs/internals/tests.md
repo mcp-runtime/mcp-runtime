@@ -88,12 +88,16 @@ publishes cache misses; Staging E2E uses the same tags without a write credentia
 |-----|---------|
 | `E2E_IMAGE_CACHE=1` | Enable pull-or-build in QA prebuild and setup; enabled by default in both E2E runners |
 | `MCP_SETUP_IMAGE_CACHE=1` | Same cache inside `setup` image publish, including Staging E2E's strict production setup |
-| `E2E_GHCR_PUSH=1` | After a cache miss build, push `ghcr.io/<owner>/mcp-runtime/<component>:<hash>` |
+| `E2E_GHCR_PUSH=1` | After a cache miss build, push `ghcr.io/<owner>/mcp-runtime/<component>:<hash>-<architecture>` |
 | `E2E_IMAGE_CACHE_REGISTRY` | Override registry prefix (default `ghcr.io/<owner>/mcp-runtime`) |
 | `E2E_IMAGE_CACHE=0` | Force-disable even if setup cache is set |
 
-Hashes cover each component’s Dockerfile plus the source trees it copies (see
-`internal/cli/setup/platform/imagecache`). Cluster tags stay `:latest` in
+Each hash covers the component's Dockerfile, `.dockerignore`, module files,
+and the Go files in its transitive import graph for the target architecture.
+The UI hash also covers its frontend files. An edit to an unused package
+does not rebuild that service; an edit to an imported shared package rebuilds
+every service that imports it (see `internal/cli/setup/platform/imagecache`).
+Cluster tags stay `:latest` in
 test-mode; only GHCR uses the hash tag. Forks without `packages: write` to the
 parent org can pull existing cache entries but cannot publish misses. Bust the cache with
 `E2E_IMAGE_CACHE=0` or by changing a hashed input file.

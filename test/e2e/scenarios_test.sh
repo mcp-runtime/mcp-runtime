@@ -166,6 +166,13 @@ for path in (
     assert path in workflow, f"staging E2E push trigger is missing {path}"
 assert "RUN_MULTITENANCY: ${{ github.event_name == 'push' || inputs.run-multitenancy }}" in workflow
 assert "FRESH_CERTIFICATE: ${{ github.event_name == 'workflow_dispatch' && inputs.fresh-certificate }}" in workflow
+assert "  packages: read" in workflow, "staging must be allowed to pull private GHCR cache images"
+assert workflow.index("Verify disposable target") < workflow.index("E2E_GHCR_AUTH_STDIN=1"), (
+    "the VM must pass the disposable-target guard before receiving a GHCR token"
+)
+remote_workflow = pathlib.Path(sys.argv[1]).with_name("staging-e2e-remote.yaml").read_text(encoding="utf-8")
+assert "  packages: read" in remote_workflow
+assert remote_workflow.index("Verify disposable target") < remote_workflow.index("Log in to GHCR for cached images")
 print("[pass] staging E2E main-push trigger and event defaults")
 
 staging_docs = pathlib.Path(sys.argv[3]).read_text(encoding="utf-8")

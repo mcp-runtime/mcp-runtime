@@ -13,8 +13,10 @@ func TestContentHashStableAndSensitive(t *testing.T) {
 	mustWrite(t, filepath.Join(root, "go.mod"), "module example\n")
 	mustWrite(t, filepath.Join(root, "go.sum"), "")
 	mustWrite(t, filepath.Join(root, "api", "doc.go"), "package api\n")
-	mustWrite(t, filepath.Join(root, "pkg", "doc.go"), "package pkg\n")
-	mustWrite(t, filepath.Join(root, "services", "ingest", "main.go"), "package main\n")
+	mustWrite(t, filepath.Join(root, "pkg", "used", "used.go"), "package used\n")
+	mustWrite(t, filepath.Join(root, "pkg", "unused", "unused.go"), "package unused\n")
+	mustWrite(t, filepath.Join(root, "services", "ingest", "main.go"), "package main\nimport _ \"example/pkg/used\"\n")
+	mustWrite(t, filepath.Join(root, "test", "e2e", "registry.Dockerfile"), "FROM registry:2.8.3\n")
 
 	h1, err := ContentHash(root, "ingest")
 	if err != nil {
@@ -30,14 +32,68 @@ func TestContentHashStableAndSensitive(t *testing.T) {
 	if len(h1) != hashHexLen {
 		t.Fatalf("hash length %d, want %d", len(h1), hashHexLen)
 	}
+	mustWrite(t, filepath.Join(root, "pkg", "unused", "unused.go"), "package unused\n// patchset changes another package\n")
+	if got, err := ContentHash(root, "ingest"); err != nil || got != h1 {
+		t.Fatalf("unrelated package changed ingest hash: got %q, err %v, want %q", got, err, h1)
+	}
+	mustWrite(t, filepath.Join(root, "pkg", "used", "used.go"), "package used\n// patchset changes an import\n")
+	hUsed, err := ContentHash(root, "ingest")
+	if err != nil || hUsed == h1 {
+		t.Fatalf("imported package did not change ingest hash: got %q, err %v", hUsed, err)
+	}
+	registryHash, err := ContentHash(root, "e2e-registry")
+	if err != nil {
+		t.Fatalf("registry ContentHash: %v", err)
+	}
 
 	mustWrite(t, filepath.Join(root, "services", "ingest", "main.go"), "package main\n// change\n")
 	h3, err := ContentHash(root, "ingest")
 	if err != nil {
 		t.Fatalf("ContentHash after change: %v", err)
 	}
-	if h3 == h1 {
+	if h3 == hUsed {
 		t.Fatalf("hash did not change after source edit")
+	}
+	if got, err := ContentHash(root, "e2e-registry"); err != nil || got != registryHash {
+		t.Fatalf("unrelated registry hash changed: got %q, err %v, want %q", got, err, registryHash)
+	}
+
+	mustWrite(t, filepath.Join(root, ".dockerignore"), "pkg/generated/\n")
+	h4, err := ContentHash(root, "ingest")
+	if err != nil {
+		t.Fatalf("ContentHash after .dockerignore change: %v", err)
+	}
+	if h4 == h3 {
+		t.Fatal("hash did not change after .dockerignore change")
+	}
+	if got, err := ContentHash(root, "e2e-registry"); err != nil || got == registryHash {
+		t.Fatalf("shared .dockerignore change did not invalidate registry: got %q, err %v", got, err)
+	}
+}
+
+func TestContentHashTracksTargetArchitecture(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "go.mod"), "module example\n")
+	mustWrite(t, filepath.Join(root, "services", "ingest", "Dockerfile"), "FROM scratch\n")
+	mustWrite(t, filepath.Join(root, "services", "ingest", "main.go"), "package main\n")
+	mustWrite(t, filepath.Join(root, "services", "ingest", "amd64.go"), "//go:build amd64\n\npackage main\n")
+	mustWrite(t, filepath.Join(root, "services", "ingest", "arm64.go"), "//go:build arm64\n\npackage main\n")
+	amdBefore, err := ContentHashForPlatform(root, "ingest", "linux/amd64")
+	if err != nil {
+		t.Fatal(err)
+	}
+	armBefore, err := ContentHashForPlatform(root, "ingest", "linux/arm64")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(t, filepath.Join(root, "services", "ingest", "amd64.go"), "//go:build amd64\n\npackage main\n// changed\n")
+	amdAfter, err := ContentHashForPlatform(root, "ingest", "linux/amd64")
+	if err != nil || amdAfter == amdBefore {
+		t.Fatalf("amd64 source change did not invalidate amd64: %q, %v", amdAfter, err)
+	}
+	armAfter, err := ContentHashForPlatform(root, "ingest", "linux/arm64")
+	if err != nil || armAfter != armBefore {
+		t.Fatalf("amd64 source change invalidated arm64: %q, %v", armAfter, err)
 	}
 }
 
@@ -65,6 +121,7 @@ func TestEnsureLocalImageReuseAndBuild(t *testing.T) {
 	var builds int
 	opts := Options{
 		Registry: "ghcr.io/test/mcp-runtime",
+		Platform: "linux/amd64",
 		Push:     true,
 		ManifestExists: func(_ context.Context, image string) (bool, error) {
 			return true, nil
@@ -99,6 +156,12 @@ func TestEnsureLocalImageReuseAndBuild(t *testing.T) {
 	if len(pulled) != 1 || len(pushed) != 0 {
 		t.Fatalf("pulled=%v pushed=%v", pulled, pushed)
 	}
+	if res.CacheRef != "ghcr.io/test/mcp-runtime/e2e-registry:"+res.Hash+"-amd64" {
+		t.Fatalf("cache reference %q does not include target architecture", res.CacheRef)
+	}
+	if armRef := CacheRef(opts.Registry, "e2e-registry", res.Hash, "linux/arm64"); armRef == res.CacheRef {
+		t.Fatal("different target architectures share a cache reference")
+	}
 
 	opts.ManifestExists = func(_ context.Context, image string) (bool, error) {
 		return false, nil
@@ -128,6 +191,7 @@ func TestEnsureLocalImageRejectsInvalidReferencesBeforeCallingDocker(t *testing.
 		t.Run(image, func(t *testing.T) {
 			called := false
 			_, err := EnsureLocalImage(context.Background(), root, "e2e-registry", image, Options{
+				Platform: "linux/amd64",
 				ManifestExists: func(context.Context, string) (bool, error) {
 					called = true
 					return false, nil
