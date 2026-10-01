@@ -721,6 +721,26 @@ func TestCheckRegistryReachableFromCluster(t *testing.T) {
 			t.Fatal("expected failure when helper pod errors")
 		}
 	})
+
+	t.Run("reports failed probe diagnostics", func(t *testing.T) {
+		mock := &core.MockExecutor{
+			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
+				switch {
+				case len(spec.Args) > 0 && spec.Args[0] == "get" && contains(spec.Args, "jsonpath={.status.phase}"):
+					return &core.MockCommand{OutputData: []byte("Failed")}
+				case len(spec.Args) > 0 && spec.Args[0] == "get" && contains(spec.Args, "jsonpath={.status.containerStatuses[0].state.terminated.reason}|{.status.containerStatuses[0].state.terminated.exitCode}|{.status.containerStatuses[0].state.terminated.message}"):
+					return &core.MockCommand{OutputData: []byte("Error|6|")}
+				case len(spec.Args) > 0 && spec.Args[0] == "logs":
+					return &core.MockCommand{OutputData: []byte("curl: (6) Could not resolve host: registry.registry.svc.cluster.local")}
+				}
+				return &core.MockCommand{}
+			},
+		}
+		check := checkRegistryReachableFromCluster(core.NewTestKubectlClient(mock))
+		if check.OK || !strings.Contains(check.Detail, "Error|6") || !strings.Contains(check.Detail, "Could not resolve host") {
+			t.Fatalf("expected failed probe diagnostics, got %#v", check)
+		}
+	})
 }
 
 func TestParseImagePullCandidates(t *testing.T) {
@@ -2621,8 +2641,8 @@ func TestRegistryReachabilityUsesHTTPSForInternalTLSRegistry(t *testing.T) {
 	if !argContains(runArgs, "https://registry.registry.svc.cluster.local:5000/v2/") {
 		t.Fatalf("registry probe should use HTTPS when registry-internal-tls exists, got args=%v", runArgs)
 	}
-	if !argContains(runArgs, "-skI") {
-		t.Fatalf("registry probe should allow the internal CA probe with -k, got args=%v", runArgs)
+	if !argContains(runArgs, "-skSI") {
+		t.Fatalf("registry probe should show curl errors while allowing the internal CA probe with -k, got args=%v", runArgs)
 	}
 }
 

@@ -46,7 +46,7 @@ func checkRegistryReachableFromCluster(kubectl core.KubectlRunner) DoctorCheck {
 	image := "curlimages/curl:8.7.1"
 	registryURL := doctorRegistryServiceURL(kubectl)
 	curlArgs := []string{
-		"-skI", "--connect-timeout", "5", "--max-time", "15",
+		"-skSI", "--connect-timeout", "5", "--max-time", "15",
 		registryURL,
 	}
 	defer func() {
@@ -82,10 +82,19 @@ func checkRegistryReachableFromCluster(kubectl core.KubectlRunner) DoctorCheck {
 		}
 	}
 	if err := waitForDoctorPodSucceeded(kubectl, podName, "registry", 90*time.Second); err != nil {
-		logs, _ := readKubectlOutput(kubectl, []string{"logs", podName, "-n", "registry", "--tail=50"})
+		logs, logsErr := readKubectlOutput(kubectl, []string{"logs", podName, "-n", "registry", "--tail=50"})
+		termination, _ := readKubectlOutput(kubectl, []string{
+			"get", "pod", podName, "-n", "registry", "-o",
+			"jsonpath={.status.containerStatuses[0].state.terminated.reason}|{.status.containerStatuses[0].state.terminated.exitCode}|{.status.containerStatuses[0].state.terminated.message}",
+		})
 		detail := fmt.Sprintf("helper pod did not succeed: %v", err)
+		if termination = strings.Trim(termination, " |\n\t"); termination != "" {
+			detail += "; container termination: " + termination
+		}
 		if strings.TrimSpace(logs) != "" {
 			detail += ": " + strings.TrimSpace(logs)
+		} else if logsErr != nil {
+			detail += "; logs unavailable: " + logsErr.Error()
 		}
 		return DoctorCheck{
 			Name:   "registry reachability (in-cluster)",
