@@ -80,13 +80,14 @@ image tags already published to the local registry.
 
 ### Content-hash GHCR image cache
 
-CI QA E2E (and optional local runs) can skip rebuilding unchanged platform
-images by pulling content-hash tags from GitHub Container Registry:
+CI QA E2E and disposable-VM Staging E2E can skip rebuilding unchanged platform
+images by pulling content-hash tags from GitHub Container Registry. QA E2E
+publishes cache misses; Staging E2E uses the same tags without a write credential:
 
 | Env | Meaning |
 |-----|---------|
-| `E2E_IMAGE_CACHE=1` | Enable pull-or-build in `qa-e2e.sh` via `hack/e2e-image-cache` |
-| `MCP_SETUP_IMAGE_CACHE=1` | Same cache inside `setup --test-mode` image publish |
+| `E2E_IMAGE_CACHE=1` | Enable pull-or-build in QA prebuild and setup; enabled by default in both E2E runners |
+| `MCP_SETUP_IMAGE_CACHE=1` | Same cache inside `setup` image publish, including Staging E2E's strict production setup |
 | `E2E_GHCR_PUSH=1` | After a cache miss build, push `ghcr.io/<owner>/mcp-runtime/<component>:<hash>` |
 | `E2E_IMAGE_CACHE_REGISTRY` | Override registry prefix (default `ghcr.io/<owner>/mcp-runtime`) |
 | `E2E_IMAGE_CACHE=0` | Force-disable even if setup cache is set |
@@ -94,7 +95,7 @@ images by pulling content-hash tags from GitHub Container Registry:
 Hashes cover each component’s Dockerfile plus the source trees it copies (see
 `internal/cli/setup/platform/imagecache`). Cluster tags stay `:latest` in
 test-mode; only GHCR uses the hash tag. Forks without `packages: write` to the
-parent org fall back to a full local build. Bust the cache with
+parent org can pull existing cache entries but cannot publish misses. Bust the cache with
 `E2E_IMAGE_CACHE=0` or by changing a hashed input file.
 
 `E2E_DEEP_REQUEST_FLOWS=1` is for pre-release sweeps, not normal PR feedback.

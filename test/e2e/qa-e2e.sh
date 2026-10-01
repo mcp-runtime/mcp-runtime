@@ -3523,12 +3523,11 @@ build_and_publish_image() {
   local dockerfile="$2"
   local context_dir="$3"
 
-  # Do not use the local mirror as a cache for images built from this checkout.
-  # When setup runs, the platform was not ready (or needed reconfiguration),
-  # and reusing a matching :latest tag can deploy code from an older checkout.
-  # Docker's layer cache still avoids repeating unchanged build work.
-  echo "[image] building ${image}"
-  docker build -t "${image}" -f "${dockerfile}" "${context_dir}"
+  # Reuse only a GHCR image keyed by this checkout's content. Mutable tags in
+  # the local mirror can contain code from a different checkout.
+  "${SENTINEL_ROOT}/bin/e2e-image-cache" ensure \
+    --image "${image}" --dockerfile "${dockerfile}" \
+    --context "${context_dir}" --root "${SENTINEL_ROOT}"
   publish_image_to_local_registry "${image}"
 }
 
@@ -3883,6 +3882,7 @@ if platform_cache_ready; then
   fi
 fi
 if [[ "${PLATFORM_CACHE_READY}" != "1" ]]; then
+  go build -o "${SENTINEL_ROOT}/bin/e2e-image-cache" ./hack/e2e-image-cache
   mirror_upstream_images_parallel \
     "registry:2.8.3" \
     "traefik:v2.10" \

@@ -179,6 +179,12 @@ build_image = kind[build_start:build_end]
 assert "pull_cached_image" not in build_image, (
     "images built from the checkout must not be replaced with stale local-mirror tags"
 )
+assert 'bin/e2e-image-cache' in build_image, "QA images must use the content-hash GHCR cache"
+for runner in ("staging-vm.sh", "staging-remote.sh"):
+    staging_script = pathlib.Path(sys.argv[2]).parent / runner
+    assert 'E2E_IMAGE_CACHE:-1' in staging_script.read_text(encoding="utf-8"), (
+        f"{runner} must enable the content-hash GHCR cache"
+    )
 assert "prune_kind_platform_images" in kind, "setup must evict stale node-local platform image tags"
 assert "restart_kind_platform_deployments" in kind, "setup must restart deployments to pull refreshed image tags"
 setup_branch = kind.index('echo "[setup] running platform setup in test mode')

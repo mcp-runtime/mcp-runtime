@@ -33,6 +33,11 @@ reachable. k3s already lists the node's public IP in the API server
 certificate SANs, so the fetched kubeconfig only needs its loopback server URL
 rewritten.
 
+On the disposable VM, setup reuses content-hash platform images from GHCR
+when available. Cache misses build locally; the VM does not publish to GHCR.
+QA E2E publishes the same cache tags. Set `E2E_IMAGE_CACHE=0` for a run that
+must rebuild every platform image.
+
 ## Safety: the disposable-target guard
 
 The suite installs and uninstalls k3s, prunes every Docker image, and wipes
