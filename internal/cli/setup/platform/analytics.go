@@ -292,7 +292,7 @@ func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap
 	}
 
 	core.Info("Applying mcp-sentinel managed secrets")
-	secretManifest, err := renderAnalyticsSecretManifest(kubectl)
+	secretManifest, err := renderCredentialBundleClientGo()
 	if err != nil {
 		return err
 	}
@@ -1100,7 +1100,7 @@ func renderAnalyticsSecretManifest(kubectl core.KubectlRunner) (string, error) {
 }
 
 func renderAnalyticsSecretManifestClientGo() (string, error) {
-	return renderAnalyticsSecretManifestWithReader(existingSecretDataValueClientGo)
+	return renderCredentialBundleClientGo()
 }
 
 type analyticsSecretValueReader func(namespace, name, key string) (string, error)

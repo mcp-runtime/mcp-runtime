@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Changed
+
+- Setup gives API, UI, ingest, Grafana and Postgres workloads consumer-specific credential Secrets, preserving installed values and retaining the legacy Secret as a compatibility mirror ([#548](https://github.com/mcp-runtime/mcp-runtime/issues/548)).
+
 ### Added
 
 - Setup ends with a short operational smoke gate (nodes Ready, Bound PVCs, no Pending blockers, Postgres, platform-api `/health`+`/ready`, Sentinel rollout health, and an authenticated API probe). Failures fail setup; use `mcp-runtime cluster diagnostics` for deeper follow-up.

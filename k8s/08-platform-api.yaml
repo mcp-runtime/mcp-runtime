@@ -62,30 +62,30 @@ spec:
             - name: API_KEYS
               valueFrom:
                 secretKeyRef:
-                  name: mcp-sentinel-secrets
+                  name: mcp-platform-api-credentials
                   key: API_KEYS
             - name: ADMIN_API_KEYS
               valueFrom:
                 secretKeyRef:
-                  name: mcp-sentinel-secrets
+                  name: mcp-platform-api-credentials
                   key: ADMIN_API_KEYS
                   optional: true
             - name: POSTGRES_DSN
               valueFrom:
                 secretKeyRef:
-                  name: mcp-sentinel-secrets
+                  name: mcp-platform-api-credentials
                   key: POSTGRES_DSN
                   optional: true
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: mcp-sentinel-secrets
+                  name: mcp-platform-api-credentials
                   key: JWT_SECRET
                   optional: true
             - name: INTERNAL_AUTH_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: mcp-sentinel-secrets
+                  name: mcp-platform-api-credentials
                   key: INTERNAL_AUTH_TOKEN
                   optional: true
             - name: RUNTIME_CONTROL_URL
@@ -93,49 +93,49 @@ spec:
             - name: ADMIN_USERS
               valueFrom:
                 secretKeyRef:
-                  name: mcp-sentinel-secrets
+                  name: mcp-platform-api-credentials
                   key: ADMIN_USERS
                   optional: true
             - name: PLATFORM_ADMIN_EMAIL
               valueFrom:
                 secretKeyRef:
-                  name: mcp-sentinel-secrets
+                  name: mcp-platform-api-credentials
                   key: PLATFORM_ADMIN_EMAIL
                   optional: true
             - name: PLATFORM_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: mcp-sentinel-secrets
+                  name: mcp-platform-api-credentials
                   key: PLATFORM_ADMIN_PASSWORD
                   optional: true
             - name: PLATFORM_DEV_LOGIN_ENABLED
               valueFrom:
                 secretKeyRef:
-                  name: mcp-sentinel-secrets
+                  name: mcp-platform-api-credentials
                   key: PLATFORM_DEV_LOGIN_ENABLED
                   optional: true
             - name: PLATFORM_DEV_USER_EMAIL
               valueFrom:
                 secretKeyRef:
-                  name: mcp-sentinel-secrets
+                  name: mcp-platform-api-credentials
                   key: PLATFORM_DEV_USER_EMAIL
                   optional: true
             - name: PLATFORM_DEV_USER_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: mcp-sentinel-secrets
+                  name: mcp-platform-api-credentials
                   key: PLATFORM_DEV_USER_PASSWORD
                   optional: true
             - name: PLATFORM_DEV_ADMIN_EMAIL
               valueFrom:
                 secretKeyRef:
-                  name: mcp-sentinel-secrets
+                  name: mcp-platform-api-credentials
                   key: PLATFORM_DEV_ADMIN_EMAIL
                   optional: true
             - name: PLATFORM_DEV_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: mcp-sentinel-secrets
+                  name: mcp-platform-api-credentials
                   key: PLATFORM_DEV_ADMIN_PASSWORD
                   optional: true
             - name: OTEL_SERVICE_NAME
