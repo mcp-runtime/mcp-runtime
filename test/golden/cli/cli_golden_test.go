@@ -53,6 +53,7 @@ func TestCLIHelpGoldens(t *testing.T) {
 		{name: "sentinel_help", args: []string{"sentinel", "--help"}, golden: "mcp-runtime_sentinel_help.golden"},
 		{name: "sentinel_logs_help", args: []string{"sentinel", "logs", "--help"}, golden: "mcp-runtime_sentinel_logs_help.golden"},
 		{name: "sentinel_port_forward_help", args: []string{"sentinel", "port-forward", "--help"}, golden: "mcp-runtime_sentinel_port_forward_help.golden"},
+		{name: "sentinel_grafana_help", args: []string{"sentinel", "grafana", "--help"}, golden: "mcp-runtime_sentinel_grafana_help.golden"},
 		{name: "server_help", args: []string{"server", "--help"}, golden: "mcp-runtime_server_help.golden"},
 		{name: "server_apply_help", args: []string{"server", "apply", "--help"}, golden: "mcp-runtime_server_apply_help.golden"},
 		{name: "server_init_help", args: []string{"server", "init", "--help"}, golden: "mcp-runtime_server_init_help.golden"},

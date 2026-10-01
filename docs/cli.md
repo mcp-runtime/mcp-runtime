@@ -646,6 +646,10 @@ KUBECONFIG=~/.kube/config mcp-runtime sentinel logs ingest --tail 200
 KUBECONFIG=~/.kube/config mcp-runtime sentinel restart gateway
 KUBECONFIG=~/.kube/config mcp-runtime sentinel restart --all
 
+# Grafana admin credential drift: read-only check, then deliberate recovery
+KUBECONFIG=~/.kube/config mcp-runtime sentinel grafana check
+KUBECONFIG=~/.kube/config mcp-runtime sentinel grafana reset-admin-password --yes
+
 # Port-forward a component locally
 KUBECONFIG=~/.kube/config mcp-runtime sentinel port-forward ui
 KUBECONFIG=~/.kube/config mcp-runtime sentinel port-forward grafana

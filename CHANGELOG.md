@@ -9,6 +9,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Added
 
+- `mcp-runtime sentinel grafana check` (read-only) detects when Grafana's persisted admin account rejects the credentials in `mcp-sentinel-secrets`, distinguishing Grafana login from the platform ingress gate. `sentinel grafana reset-admin-password --yes` recovers deliberately: it runs only on detected drift, backs up the Grafana database first, passes the password over stdin inside the pod, and verifies access. Related #500.
 - Setup ends with a short operational smoke gate (nodes Ready, Bound PVCs, no Pending blockers, Postgres, platform-api `/health`+`/ready`, Sentinel rollout health, and an authenticated API probe). Failures fail setup; use `mcp-runtime cluster diagnostics` for deeper follow-up.
 - One-command macOS, Linux, and Windows CLI installers from the Getting Started and Quickstart pages; installers detect the platform and install the matching release binary to a user-local directory. The Windows installer also adds its directory to the user's `PATH`.
 
