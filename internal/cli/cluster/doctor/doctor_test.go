@@ -2757,7 +2757,59 @@ func TestCheckSentinelStalePods(t *testing.T) {
 {"metadata":{"name":"job-pod","ownerReferences":[{"kind":"Job"}]},"status":{"phase":"Succeeded"}}
 ]}`)
 		if !check.OK {
-			t.Fatalf("expected OK, got %q", check.Detail)
+		t.Fatalf("expected OK, got %q", check.Detail)
 		}
 	})
+}
+
+func TestCheckSentinelGrafanaProvisioning(t *testing.T) {
+	const goodDS = "apiVersion: 1\ndatasources:\n  - name: Prometheus\n    type: prometheus\n    uid: prometheus\n"
+	const noUIDDS = "apiVersion: 1\ndatasources:\n  - name: Prometheus\n    type: prometheus\n"
+	const goodDash = `{"uid": "mcp-server", "panels": []}`
+	const goodDeploy = `{"spec":{"template":{"spec":{"volumes":[
+		{"configMap":{"name":"grafana-datasources"}},
+		{"configMap":{"name":"grafana-dashboards","items":[{"key":"dashboard-provider.yaml"}]}},
+		{"configMap":{"name":"grafana-dashboards","items":[{"key":"mcp-server.json"}]}}]}}}}`
+	const datasourceOnlyDeploy = `{"spec":{"template":{"spec":{"volumes":[{"configMap":{"name":"grafana-datasources"}}]}}}}`
+
+	run := func(ds, dash, deploy string) DoctorCheck {
+		mock := &core.MockExecutor{
+			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
+				args := strings.Join(spec.Args, " ")
+				switch {
+				case strings.Contains(args, "get namespace"):
+					return &core.MockCommand{OutputData: []byte("mcp-sentinel")}
+				case strings.Contains(args, "get deployment grafana") && strings.Contains(args, "jsonpath"):
+					return &core.MockCommand{OutputData: []byte("grafana")}
+				case strings.Contains(args, "get deployment grafana"):
+					return &core.MockCommand{OutputData: []byte(deploy)}
+				case strings.Contains(args, "grafana-datasources"):
+					if ds == "" {
+						return &core.MockCommand{OutputData: []byte("not found"), RunErr: errors.New("not found")}
+					}
+					return &core.MockCommand{OutputData: []byte(ds)}
+				case strings.Contains(args, "grafana-dashboards"):
+					return &core.MockCommand{OutputData: []byte(dash)}
+				}
+				return &core.MockCommand{}
+			},
+		}
+		return checkSentinelGrafanaProvisioning(core.NewTestKubectlClient(mock))
+	}
+
+	if c := run(goodDS, goodDash, goodDeploy); !c.OK {
+		t.Fatalf("expected OK, got %q", c.Detail)
+	}
+	for name, tc := range map[string]struct{ ds, dash, deploy, want string }{
+		"datasource uid drift": {noUIDDS, goodDash, goodDeploy, "Data source not found"},
+		"datasource missing":   {"", goodDash, goodDeploy, "Data source not found"},
+		"dashboard missing":    {goodDS, "", goodDeploy, "Dashboard not found"},
+		"dashboard wrong uid":  {goodDS, `{"uid":"other"}`, goodDeploy, "dashboard uid"},
+		"mounts missing":       {goodDS, goodDash, datasourceOnlyDeploy, "mcp-server.json"},
+	} {
+		c := run(tc.ds, tc.dash, tc.deploy)
+		if c.OK || !strings.Contains(c.Detail, tc.want) || c.Remedy == "" {
+			t.Errorf("%s: got OK=%v detail=%q remedy=%q, want failure containing %q", name, c.OK, c.Detail, c.Remedy, tc.want)
+		}
+	}
 }
