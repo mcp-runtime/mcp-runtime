@@ -70,6 +70,7 @@ Package v1alpha1 contains API Schema definitions for the MCP server resource.
 - [`Constants`](#api-types-constants)
 - [`Variables`](#api-types-variables)
 - [`func BoolPtr(v bool) *bool`](#api-types-func-boolptr-v-bool-bool)
+- [`func EndpointUsesRetiredNamespace(raw string) bool`](#api-types-func-endpointusesretirednamespace-raw-string-bool)
 - [`func GatewayIsEnabled(gateway *GatewayConfig) bool`](#api-types-func-gatewayisenabled-gateway-gatewayconfig-bool)
 - [`func ProtectedResourceMetadataURL(resource string) string`](#api-types-func-protectedresourcemetadataurl-resource-string-string)
 - [`type AnalyticsConfig struct`](#api-types-type-analyticsconfig-struct)
@@ -239,6 +240,15 @@ var (
 ```text
 func BoolPtr(v bool) *bool
     BoolPtr returns a pointer to v for optional CRD boolean fields.
+
+```
+
+<a id="api-types-func-endpointusesretirednamespace-raw-string-bool"></a>
+```text
+func EndpointUsesRetiredNamespace(raw string) bool
+    EndpointUsesRetiredNamespace reports whether raw is a URL aimed at the
+    removed combined platform namespace. Callers replace those values with the
+    current service DNS. A collector outside that namespace is left unchanged.
 
 ```
 

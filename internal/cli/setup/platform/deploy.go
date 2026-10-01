@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
 	"mcp-runtime/internal/cli/certmanager"
 	clusterdoctor "mcp-runtime/internal/cli/cluster/doctor"
 	"mcp-runtime/internal/cli/core"
@@ -1099,7 +1100,10 @@ func operatorEnvOverrides(gatewayProxyImage, existingGatewayOTLPEndpoint string)
 	if gatewayOTLPEndpoint == "" {
 		gatewayOTLPEndpoint = strings.TrimSpace(existingGatewayOTLPEndpoint)
 	}
-	if gatewayOTLPEndpoint == "" {
+	// A collector address left in the removed combined namespace cannot receive
+	// traces. Replace it with the current otel-collector Service. An operator
+	// who set a different collector keeps that value.
+	if gatewayOTLPEndpoint == "" || mcpv1alpha1.EndpointUsesRetiredNamespace(gatewayOTLPEndpoint) {
 		gatewayOTLPEndpoint = defaultGatewayOTELExporterOTLPEndpointForCluster()
 	}
 	envVars = append(envVars, operatorEnvVar{Name: gatewayOTELExporterOTLPEndpointEnv, Value: gatewayOTLPEndpoint})

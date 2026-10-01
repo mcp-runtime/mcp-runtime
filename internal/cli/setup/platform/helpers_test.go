@@ -752,6 +752,12 @@ func TestOperatorEnvOverrides(t *testing.T) {
 		requireOperatorEnvVarNonEmpty(t, got, "MCP_REGISTRY_ENDPOINT")
 	})
 
+	t.Run("replaces a retired gateway otel endpoint with the current collector", func(t *testing.T) {
+		core.DefaultCLIConfig = &core.CLIConfig{}
+		got := operatorEnvOverrides("", "http://otel-collector.mcp-sentinel.svc.cluster.local:4318")
+		requireOperatorEnvVar(t, got, "MCP_GATEWAY_OTEL_EXPORTER_OTLP_ENDPOINT", defaultGatewayOTELExporterOTLPEndpoint)
+	})
+
 	t.Run("preserves existing gateway otel endpoint when configured", func(t *testing.T) {
 		core.DefaultCLIConfig = &core.CLIConfig{}
 		got := operatorEnvOverrides("", "http://custom-collector.mcp-observability.svc.cluster.local:4318")
