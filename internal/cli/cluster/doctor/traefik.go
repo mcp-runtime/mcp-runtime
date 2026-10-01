@@ -648,12 +648,25 @@ func checkDoctorACMEHTTP01Exposure(kubectl core.KubectlRunner, distro Distributi
 	}
 }
 
+// registryDeniedByPolicy reports whether curl resolved the registry host but
+// could not connect (timeout or refusal), which is how a NetworkPolicy deny
+// appears. A resolution failure is never treated as a deny.
+func registryDeniedByPolicy(logs string) bool {
+	if strings.Contains(logs, "Could not resolve host") || strings.Contains(logs, "curl: (6)") {
+		return false
+	}
+	return strings.Contains(logs, "curl: (28)") || strings.Contains(logs, "curl: (7)") ||
+		strings.Contains(logs, "Connection timed out") || strings.Contains(logs, "Connection refused")
+}
+
 func checkMCPServersDNSAndNetwork(kubectl core.KubectlRunner) DoctorCheck {
 	podName := fmt.Sprintf("mcp-runtime-doctor-dns-%d", time.Now().UnixNano())
 	image := "curlimages/curl:8.7.1"
 	registryURL := doctorRegistryServiceURL(kubectl)
+	// -S keeps curl's error text so a policy-blocked connection can be told
+	// apart from a DNS failure.
 	curlArgs := []string{
-		"-skI", "--connect-timeout", "5", "--max-time", "15",
+		"-skIS", "--connect-timeout", "5", "--max-time", "15",
 		registryURL,
 	}
 	defer func() {
@@ -686,6 +699,15 @@ func checkMCPServersDNSAndNetwork(kubectl core.KubectlRunner) DoctorCheck {
 	}
 	if err := waitForDoctorPodSucceeded(kubectl, podName, doctorMCPServersNamespace, 90*time.Second); err != nil {
 		logs, _ := readKubectlOutput(kubectl, []string{"logs", podName, "-n", doctorMCPServersNamespace, "--tail=50"})
+		if registryDeniedByPolicy(logs) {
+			// Tenant namespaces are intentionally denied registry access; image
+			// pulls go through the kubelet, so DNS resolving is what must work.
+			return DoctorCheck{
+				Name:   "mcp-servers DNS/network",
+				OK:     true,
+				Detail: "registry Service name resolves from mcp-servers; direct pod access is blocked by NetworkPolicy (expected)",
+			}
+		}
 		detail := fmt.Sprintf("helper pod did not succeed: %v", err)
 		if strings.TrimSpace(logs) != "" {
 			detail += ": " + strings.TrimSpace(logs)

@@ -2561,6 +2561,39 @@ func TestCheckMCPServersDNSAndNetworkReadsCompletedPodLogs(t *testing.T) {
 	}
 }
 
+func TestCheckMCPServersDNSAndNetworkTreatsPolicyDenyAsExpected(t *testing.T) {
+	run := func(logs string) DoctorCheck {
+		mock := &core.MockExecutor{
+			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
+				switch {
+				case len(spec.Args) > 0 && spec.Args[0] == "run":
+					return &core.MockCommand{}
+				case len(spec.Args) > 0 && spec.Args[0] == "get" && contains(spec.Args, "jsonpath={.status.phase}"):
+					return &core.MockCommand{OutputData: []byte("Failed")}
+				case len(spec.Args) > 0 && spec.Args[0] == "logs":
+					return &core.MockCommand{OutputData: []byte(logs)}
+				case len(spec.Args) > 0 && spec.Args[0] == "delete":
+					return &core.MockCommand{}
+				}
+				return &core.MockCommand{OutputErr: fmt.Errorf("unexpected command: %v", spec.Args)}
+			},
+		}
+		return checkMCPServersDNSAndNetwork(core.NewTestKubectlClient(mock))
+	}
+	if c := run("curl: (28) Connection timed out after 5001 milliseconds"); !c.OK {
+		t.Fatalf("a NetworkPolicy deny after DNS resolves should pass, got %q", c.Detail)
+	}
+	if c := run("curl: (7) Failed to connect to registry port 5000: Connection refused"); !c.OK {
+		t.Fatalf("a refused connection after DNS resolves should pass, got %q", c.Detail)
+	}
+	if c := run("curl: (6) Could not resolve host: registry.registry.svc.cluster.local"); c.OK {
+		t.Fatal("a DNS failure must still fail the check")
+	}
+	if c := run(""); c.OK {
+		t.Fatal("an unexplained helper pod failure must still fail the check")
+	}
+}
+
 func TestRegistryReachabilityUsesHTTPSForInternalTLSRegistry(t *testing.T) {
 	var runArgs []string
 	mock := &core.MockExecutor{
