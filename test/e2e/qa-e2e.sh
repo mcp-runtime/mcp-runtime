@@ -2698,14 +2698,10 @@ run_ui_auth_http_flows() {
   python3 test/e2e/ui_auth_flows.py
 }
 
-HTTP_FLOWS_RAN=0
 run_selected_http_flow_scenarios() {
   local run_api=0
   local run_ui=0
 
-  if [[ "${HTTP_FLOWS_RAN}" -eq 1 ]]; then
-    return 0
-  fi
   if scenario_selected "multitenancy" || { scenario_selected "api-platform" && ! deep_request_flows_enabled; }; then
     run_api=1
   fi
@@ -2715,7 +2711,6 @@ run_selected_http_flow_scenarios() {
   if [[ "${run_api}" -eq 0 && "${run_ui}" -eq 0 ]]; then
     return 0
   fi
-  HTTP_FLOWS_RAN=1
 
   if [[ "${run_api}" -eq 1 ]]; then
     ensure_api_port_forward
@@ -4521,8 +4516,6 @@ print(json.dumps({"email": os.environ["PLATFORM_ADMIN_EMAIL"], "password": os.en
     env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime access session list --namespace mcp-servers >/dev/null
     env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime access session get "${SESSION_ID}" --namespace mcp-servers >/dev/null
   fi
-
-  run_selected_http_flow_scenarios
 
   if scenario_selected "trust"; then
     refresh_kind_kubeconfig || true
