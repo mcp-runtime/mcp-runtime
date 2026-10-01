@@ -137,7 +137,7 @@ func (s *AccessService) HandleAdapterCertificate(w http.ResponseWriter, r *http.
 		writeAPIError(w, http.StatusForbidden, "adapter session is too close to expiry")
 		return
 	}
-	certificate, caBundle, err := s.issueSessionCertificateDER(r.Context(), req.Namespace, req.Session, csrDER, duration)
+	certificate, caBundle, err := s.issueSessionCertificateDER(r.Context(), req.Namespace, req.Session, csrDER, expectedSPIFFEID, duration)
 	if err != nil {
 		writeAPIError(w, http.StatusServiceUnavailable, "issue adapter certificate", err)
 		return
@@ -163,6 +163,7 @@ func (s *AccessService) issueSessionCertificateDER(
 	ctx context.Context,
 	namespace, sessionName string,
 	csrDER []byte,
+	expectedSPIFFEID string,
 	duration time.Duration,
 ) (string, string, error) {
 	if s.k8sClients == nil || s.k8sClients.Dynamic == nil {
@@ -206,7 +207,17 @@ func (s *AccessService) issueSessionCertificateDER(
 
 	waitCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	return waitForIssuedAdapterCertificate(waitCtx, s, namespace, created.GetName())
+	certificate, caBundle, err := waitForIssuedAdapterCertificate(waitCtx, s, namespace, created.GetName())
+	if err != nil {
+		return "", "", err
+	}
+	// Defense in depth: never hand back a certificate the workload issuer
+	// signed with a different identity, key, usage, or lifetime than the
+	// session-bound CSR we submitted, whatever the issuer's approval policy.
+	if err := certauth.ValidateIssuedCertificatePEM(certificate, csrDER, expectedSPIFFEID, duration, time.Now()); err != nil {
+		return "", "", fmt.Errorf("reject issued certificate: %w", err)
+	}
+	return certificate, caBundle, nil
 }
 
 func waitForIssuedAdapterCertificate(ctx context.Context, s *AccessService, namespace, name string) (string, string, error) {

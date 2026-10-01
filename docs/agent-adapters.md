@@ -242,6 +242,25 @@ the platform's SPIFFE trust domain. Production must configure both
 `MCP_TRUST_DOMAIN` and `MCP_SETUP_MTLS_CLUSTER_ISSUER`; test mode defaults the
 issuer to `mcp-runtime-ca`.
 
+**Approval gate.** The runtime API creates the session certificate as a
+cert-manager `CertificateRequest` against the workload issuer, and cert-manager
+auto-approves requests to built-in issuers by default. Any other principal able
+to create a `CertificateRequest` for that issuer could therefore obtain a
+certificate with a forged SPIFFE URI outside the runtime API's session checks.
+Outside `--test-mode`, setup refuses `MCP_ADAPTER_CERTIFICATES=true` unless
+cert-manager approver-policy is installed (it looks for the
+`certificaterequestpolicies.policy.cert-manager.io` CRD) or you set
+`MCP_WORKLOAD_ISSUER_APPROVAL_ACK=true` to assert that another approver gates
+the issuer (Staging E2E sets this for its disposable VM). The CRD check proves
+only that approver-policy is installed, not that its policies are correct; the
+policy should allow only the runtime API service account, `digital signature` +
+`client auth` usages, and the `spiffe://<trust-domain>/ns/<ns>/session/<name>`
+URI shape, and the default approver should be disabled for this issuer only after
+that policy is tested (keep public and internal TLS issuance working, and roll
+back by re-enabling the default approver). The runtime API also rejects any
+issued certificate whose URI, key, usages, or lifetime differ from the submitted
+CSR, and its ClusterRole only grants `create` and `get` on `CertificateRequests`.
+
 OAuth is independent. Omit `spec.auth` for a cert-only governed route; add
 `spec.auth` only when direct clients (or adapters calling an OAuth-enabled
 target) need a bearer. Do not apply empty `auth: {}` unless you intend to turn

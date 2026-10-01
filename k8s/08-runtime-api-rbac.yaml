@@ -11,10 +11,14 @@ metadata:
   name: mcp-runtime-api
 rules:
   # Authenticated external adapters submit CSRs; the API can create and read
-  # only cert-manager CertificateRequests, never private-key Secrets.
+  # only cert-manager CertificateRequests, never private-key Secrets. It only
+  # creates a request and polls that one by name, so list/watch (which would
+  # expose every team's CSRs) are intentionally not granted. Pair this with a
+  # workload-issuer approval policy before enabling adapter certificates; see
+  # docs/agent-adapters.md.
   - apiGroups: ["cert-manager.io"]
     resources: ["certificaterequests"]
-    verbs: ["create", "get", "list", "watch"]
+    verbs: ["create", "get"]
   - apiGroups: ["mcpruntime.org"]
     resources: ["mcpaccessgrants", "mcpagentsessions"]
     verbs: ["get", "list", "watch"]

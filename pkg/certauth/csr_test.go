@@ -5,10 +5,13 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/pem"
+	"math/big"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestBuildSessionCSR(t *testing.T) {
@@ -77,4 +80,67 @@ func TestWritePrivateFileRejectsTraversal(t *testing.T) {
 	if err := WritePrivateFile(dir, "../escape", []byte("nope"), 0o600); err == nil {
 		t.Fatal("WritePrivateFile() allowed path traversal")
 	}
+}
+
+func issueTestCert(t *testing.T, csrDER []byte, mutate func(*x509.Certificate)) string {
+	t.Helper()
+	csr, err := x509.ParseCertificateRequest(csrDER)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	caTmpl := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "ca"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign}
+	leaf := &x509.Certificate{
+		SerialNumber: big.NewInt(2), NotBefore: time.Now().Add(-time.Minute), NotAfter: time.Now().Add(time.Hour),
+		URIs: csr.URIs, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+	if mutate != nil {
+		mutate(leaf)
+	}
+	der, err := x509.CreateCertificate(rand.Reader, leaf, caTmpl, csr.PublicKey, caKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
+}
+
+func TestValidateIssuedCertificatePEM(t *testing.T) {
+	_, csrPEM, spiffe, err := BuildSessionCSR("example.org", "team-a", "s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	csrDER, err := ValidateCSRPEM(string(csrPEM), spiffe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	forged, _ := url.Parse("spiffe://example.org/ns/traefik/sa/traefik")
+	cases := map[string]struct {
+		mutate  func(*x509.Certificate)
+		wantErr bool
+	}{
+		"exact":          {},
+		"forged uri":     {func(c *x509.Certificate) { c.URIs = []*url.URL{forged} }, true},
+		"extra uri":      {func(c *x509.Certificate) { c.URIs = append(c.URIs, forged) }, true},
+		"dns san":        {func(c *x509.Certificate) { c.DNSNames = []string{"x.example.org"} }, true},
+		"server auth":    {func(c *x509.Certificate) { c.ExtKeyUsage = append(c.ExtKeyUsage, x509.ExtKeyUsageServerAuth) }, true},
+		"ca":             {func(c *x509.Certificate) { c.IsCA = true; c.BasicConstraintsValid = true }, true},
+		"too long lived": {func(c *x509.Certificate) { c.NotAfter = time.Now().Add(48 * time.Hour) }, true},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			certPEM := issueTestCert(t, csrDER, tc.mutate)
+			err := ValidateIssuedCertificatePEM(certPEM, csrDER, spiffe, time.Hour, time.Now())
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("error = %v, wantErr %v", err, tc.wantErr)
+			}
+		})
+	}
+	t.Run("different key", func(t *testing.T) {
+		_, otherCSR, _, _ := BuildSessionCSR("example.org", "team-a", "s1")
+		otherDER, _ := ValidateCSRPEM(string(otherCSR), spiffe)
+		certPEM := issueTestCert(t, otherDER, nil)
+		if err := ValidateIssuedCertificatePEM(certPEM, csrDER, spiffe, time.Hour, time.Now()); err == nil {
+			t.Fatal("accepted certificate for a different key")
+		}
+	})
 }
