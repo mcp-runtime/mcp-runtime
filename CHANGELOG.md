@@ -12,6 +12,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 - Setup ends with a short operational smoke gate (nodes Ready, Bound PVCs, no Pending blockers, Postgres, platform-api `/health`+`/ready`, Sentinel rollout health, and an authenticated API probe). Failures fail setup; use `mcp-runtime cluster diagnostics` for deeper follow-up.
 - One-command macOS, Linux, and Windows CLI installers from the Getting Started and Quickstart pages; installers detect the platform and install the matching release binary to a user-local directory. The Windows installer also adds its directory to the user's `PATH`.
 
+### Security
+
+- Adapter certificates are gated on a workload-issuer approval policy: outside `--test-mode`, setup refuses `MCP_ADAPTER_CERTIFICATES=true` unless cert-manager approver-policy is installed or `MCP_WORKLOAD_ISSUER_APPROVAL_ACK=true` acknowledges another approver. The runtime API now rejects issued certificates whose SPIFFE URI, key, usage, or lifetime differ from the submitted CSR, and its ClusterRole no longer grants `list`/`watch` on `CertificateRequests`. Operators enabling adapter certificates on a cluster without approver-policy must set the acknowledgement; adapter issuance is off by default ([#538](https://github.com/mcp-runtime/mcp-runtime/issues/538)).
+
 ## [0.4.1] - 2026-09-29
 
 ### Fixed

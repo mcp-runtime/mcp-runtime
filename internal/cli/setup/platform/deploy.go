@@ -443,6 +443,9 @@ func deployOperatorManifestsWithClientGo(logger *zap.Logger, operatorImage, gate
 	if err := validateAdapterCertificateIngressIdentity(); err != nil {
 		return err
 	}
+	if err := validateWorkloadIssuerApprovalGate(); err != nil {
+		return err
+	}
 	if err := ensureRepoManagedTraefikMiddlewareResourcesClientGo(logger); err != nil {
 		return err
 	}
@@ -618,6 +621,9 @@ func renderOperatorManagerManifest(operatorImage, gatewayProxyImage string, oper
 // It applies CRD, RBAC, and manager manifests directly, replacing the image name and injecting operator args/env.
 func deployOperatorManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap.Logger, operatorImage, gatewayProxyImage string, operatorArgs []string, imagePullSecretName string) error {
 	if err := validateAdapterCertificateIngressIdentity(); err != nil {
+		return err
+	}
+	if err := validateWorkloadIssuerApprovalGate(); err != nil {
 		return err
 	}
 	if err := ensureRepoManagedTraefikMiddlewareResources(kubectl, logger); err != nil {
