@@ -2369,6 +2369,47 @@ func TestGrafanaPrometheusDatasourceUsesRoutePrefix(t *testing.T) {
 	}
 }
 
+// TestGrafanaProvisioningContract pins the identifiers that server-card
+// Grafana deep links depend on (runtime-api emits /grafana/d/mcp-server/...):
+// the dashboard uid, the Prometheus datasource uid its panels reference, and
+// the Grafana mounts that provision both.
+func TestGrafanaProvisioningContract(t *testing.T) {
+	read := func(name string) string {
+		t.Helper()
+		b, err := os.ReadFile("../../../../k8s/" + name)
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		return string(b)
+	}
+	if !strings.Contains(read("19-grafana-datasources.yaml"), "type: prometheus\n        uid: prometheus\n") {
+		t.Errorf("Prometheus datasource must pin uid: prometheus")
+	}
+	dashboards := read("21-grafana-dashboards.yaml")
+	if !strings.Contains(dashboards, `"uid": "mcp-server"`) {
+		t.Errorf("dashboard must declare uid mcp-server")
+	}
+	if !strings.Contains(dashboards, `"uid": "prometheus"`) {
+		t.Errorf("dashboard panels must reference datasource uid prometheus")
+	}
+	grafana := read("12-grafana.yaml")
+	for _, want := range []string{"name: grafana-datasources", "key: dashboard-provider.yaml", "key: mcp-server.json"} {
+		if !strings.Contains(grafana, want) {
+			t.Errorf("grafana deployment missing %q", want)
+		}
+	}
+	manifests := analyticsServiceManifests("k8s/04-postgres.yaml")
+	for _, want := range []string{"k8s/19-grafana-datasources.yaml", "k8s/21-grafana-dashboards.yaml", "k8s/12-grafana.yaml"} {
+		found := false
+		for _, m := range manifests {
+			found = found || m == want
+		}
+		if !found {
+			t.Errorf("analyticsServiceManifests missing %s", want)
+		}
+	}
+}
+
 func TestPrometheusScrapesProcessorMetricsPort(t *testing.T) {
 	content, err := os.ReadFile("../../../../k8s/11-prometheus.yaml")
 	if err != nil {
