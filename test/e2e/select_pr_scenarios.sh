@@ -43,7 +43,7 @@ classify_path() {
   local path="$1"
 
   case "${path}" in
-    ""|README.md|docs/*|website/*)
+    ""|AGENTS.md|CHANGELOG.md|README.md|docs/*|website/*)
       return
       ;;
     test/e2e/staging-*.sh|test/e2e/staging_lib_test.sh|test/e2e/lib/staging.sh|test/e2e/lib/cluster-wait.sh|.github/workflows/staging-e2e*.yaml)

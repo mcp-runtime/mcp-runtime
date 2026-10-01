@@ -38,6 +38,8 @@ jobs:
               - '!articles/**'
               - '!docs/**'
               - '!website/**'
+              - '!AGENTS.md'
+              - '!CHANGELOG.md'
               - '!README.md'
             articles:
               - 'articles/**'
@@ -193,10 +195,10 @@ jobs:
   qa-e2e:
     name: QA E2E
     runs-on: ubuntu-24.04
-    # Staging E2E covers relevant main pushes after merge.
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
-    # Start after lint only so QA E2E overlaps unit/integration tests on the runner queue.
-    needs: [lint]
+    # Staging E2E covers relevant main pushes; documentation-only PRs do not change the runtime.
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && needs['changed-paths'].outputs.code == 'true')
+    # Start after lint and path detection so QA E2E overlaps unit/integration tests.
+    needs: [lint, changed-paths]
     timeout-minutes: 90
     permissions:
       contents: read

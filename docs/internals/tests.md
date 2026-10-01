@@ -166,7 +166,9 @@ contains the gateway service, `mcp-sentinel-ingest`, `mcp-sentinel-processor`,
 and the `kafka.produce`, `kafka.consume`, `clickhouse.insert_event`, and
 `clickhouse.insert_batch` spans.
 
-Normal PRs run short QA E2E with `smoke-auth` as the baseline, then
+PRs with runtime or CI changes run short QA E2E with `smoke-auth` as the baseline;
+documentation-only PRs skip the Kind job. `CHANGELOG.md` and `AGENTS.md` do not
+force all scenarios when changed alongside code. For code PRs,
 `.github/workflows/ci.yaml` calls `test/e2e/select_pr_scenarios.sh` to add
 targeted scenarios based on the changed files. API, UI, adapter, CLI, OAuth,
 observability, and multi-tenancy changes get the matching request-path mode;
@@ -194,7 +196,7 @@ The main CI workflow runs:
 - service module tests
 - generated file drift
 - repository SBOM generation
-- path-selected short QA E2E on PRs and manual CI runs
+- path-selected short QA E2E on code PRs and manual CI runs
 
 Relevant pushes to `main` after merge run Staging E2E on the disposable VM;
 the CI QA E2E job is skipped on main pushes. QA E2E still uses Kind for its
