@@ -497,6 +497,20 @@ func deployOperatorManifests(logger *zap.Logger, operatorImage, gatewayProxyImag
 	return deployOperatorManifestsWithClientGo(logger, operatorImage, gatewayProxyImage, operatorArgs, imagePullSecretName)
 }
 
+// operatorRBACManifests are applied directly by setup. config/rbac/role.yaml is
+// reapplied separately after Secret access migration. Every other resource in
+// config/rbac/kustomization.yaml must be listed here, or a namespace-local
+// binding can reference a role that setup never created.
+var operatorRBACManifests = []string{
+	"config/rbac/managed_server_namespace.yaml",
+	"config/rbac/service_account.yaml",
+	"config/rbac/operator_secret_access.yaml",
+	"config/rbac/operator_secret_access_binding.yaml",
+	"config/rbac/operator_workload_access.yaml",
+	"config/rbac/operator_workload_access_binding.yaml",
+	"config/rbac/role_binding.yaml",
+}
+
 func deployOperatorManifestsWithClientGo(logger *zap.Logger, operatorImage, gatewayProxyImage string, operatorArgs []string, imagePullSecretName string) error {
 	if err := validateAdapterCertificateIngressIdentity(); err != nil {
 		return err
@@ -529,13 +543,7 @@ func deployOperatorManifestsWithClientGo(logger *zap.Logger, operatorImage, gate
 		}
 		return wrappedErr
 	}
-	for _, path := range []string{
-		"config/rbac/managed_server_namespace.yaml",
-		"config/rbac/service_account.yaml",
-		"config/rbac/operator_secret_access.yaml",
-		"config/rbac/operator_secret_access_binding.yaml",
-		"config/rbac/role_binding.yaml",
-	} {
+	for _, path := range operatorRBACManifests {
 		if err := applyManifestFile(path, "", os.Stdout); err != nil {
 			wrappedErr := core.WrapWithSentinel(core.ErrApplyRBACFailed, err, fmt.Sprintf("failed to apply RBAC: %v", err))
 			core.Error("Failed to apply RBAC")
