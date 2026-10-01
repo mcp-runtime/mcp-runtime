@@ -5,6 +5,7 @@ Usage:
 
 Available Commands:
   events       Show recent Kubernetes events for mcp-sentinel
+  grafana      Diagnose and recover bundled Grafana admin credentials
   logs         View logs for a mcp-sentinel component
   port-forward Port-forward a common mcp-sentinel service
   restart      Restart one or all mcp-sentinel workloads

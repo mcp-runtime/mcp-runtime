@@ -120,6 +120,23 @@ and traces in one place. Grafana remains protected by the platform admin
 forward-auth route. Platform health also links to Grafana; it does not expose a
 separate Prometheus UI link.
 
+Grafana has two independent authentication layers: the platform ingress gate
+(`sentinel-admin-auth`) and Grafana's own persisted admin account. Passing the
+gate does not prove the Grafana login works, and changing the bootstrap
+password in `mcp-sentinel-secrets` does not update an existing persisted
+account. A browser that clears the gate but then sees `password-auth.failed`
+indicates credential drift. Diagnose it read-only with
+`mcp-runtime sentinel grafana check`, which probes from inside the Grafana pod
+(so it bypasses the gate and reports only the Grafana login layer) and never
+resets anything. Recover deliberately with
+`mcp-runtime sentinel grafana reset-admin-password --yes`: it runs only when
+drift is detected, copies the Grafana database inside the pod volume to
+`/var/lib/grafana/backups/` first, passes the configured password to the Grafana
+CLI over stdin inside the pod, verifies authenticated API access, and preserves
+dashboards and datasources. It overwrites any password an operator set inside
+Grafana. Keep working credentials and the Grafana URL only in your private
+operator `infra.env`.
+
 ### Scoped user observability
 
 The Servers workspace links to gateway metrics only for MCP Servers with
@@ -440,6 +457,10 @@ mcp-runtime sentinel port-forward grafana
 # Restart
 mcp-runtime sentinel restart gateway
 mcp-runtime sentinel restart --all
+
+# Grafana admin credential drift (see Admin Grafana access)
+mcp-runtime sentinel grafana check
+mcp-runtime sentinel grafana reset-admin-password --yes
 ```
 
 `sentinel events` is a Kubernetes event view for the `mcp-sentinel` namespace.

@@ -87,6 +87,32 @@ func NewWithManager(mgr *SentinelManager) *cobra.Command {
 	}
 	restartCmd.Flags().BoolVar(&restartAll, "all", false, "Restart every mcp-sentinel workload")
 
-	cmd.AddCommand(statusCmd, logsCmd, eventsCmd, portForwardCmd, restartCmd)
+	grafanaCmd := &cobra.Command{
+		Use:   "grafana",
+		Short: "Diagnose and recover bundled Grafana admin credentials",
+		Long:  "Diagnose and recover the bundled Grafana admin account. The platform ingress gate and Grafana's own login are separate layers: these commands probe from inside the Grafana pod, so they report only the Grafana login layer.",
+	}
+	grafanaCheckCmd := &cobra.Command{
+		Use:   "check",
+		Short: "Check that Grafana accepts the configured admin credentials (read-only)",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return mgr.ShowGrafanaCheck()
+		},
+	}
+	var resetYes bool
+	grafanaResetCmd := &cobra.Command{
+		Use:   "reset-admin-password",
+		Short: "Back up Grafana and reset the persisted admin password to the configured value",
+		Long:  "Reset the persisted Grafana admin password to the value in mcp-sentinel-secrets. Runs only when drift is detected, backs up the Grafana database first, passes the password to the Grafana CLI over stdin inside the pod, and verifies authenticated API access afterwards. Dashboards and datasources are preserved.",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return mgr.ResetGrafanaAdminPassword(resetYes)
+		},
+	}
+	grafanaResetCmd.Flags().BoolVar(&resetYes, "yes", false, "Confirm the backup and reset")
+	grafanaCmd.AddCommand(grafanaCheckCmd, grafanaResetCmd)
+
+	cmd.AddCommand(statusCmd, logsCmd, eventsCmd, portForwardCmd, restartCmd, grafanaCmd)
 	return cmd
 }
