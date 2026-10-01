@@ -21,6 +21,10 @@ spec:
   policyTypes:
     - Ingress
   ingress:
+    # Tenant workload namespaces (mcp-servers*, platform-managed team
+    # namespaces) are intentionally absent: the internal registry has no
+    # registry-native auth, and node image pulls come from the kubelet, not
+    # from tenant pods. Only platform control-plane callers may reach it.
     - from:
         - podSelector: {}
         - namespaceSelector:
@@ -32,18 +36,6 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: mcp-runtime
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: mcp-servers
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: mcp-servers-org
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: mcp-servers-public
-        - namespaceSelector:
-            matchLabels:
-              platform.mcpruntime.org/managed: "true"
       ports:
         - protocol: TCP
           port: 5000

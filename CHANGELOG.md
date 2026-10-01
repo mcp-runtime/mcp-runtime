@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Security
+
+- The internal registry NetworkPolicy no longer admits tenant workload namespaces (`mcp-servers*` and platform-managed team namespaces), closing the unauthenticated in-cluster registry read/write path from tenant pods on the base manifests. Node pulls and platform publish paths are unchanged. Registry-native authentication and the k3s compatibility overlay's pod-CIDR allowance remain open follow-ups ([#531](https://github.com/mcp-runtime/mcp-runtime/issues/531)).
+
 ### Added
 
 - Setup ends with a short operational smoke gate (nodes Ready, Bound PVCs, no Pending blockers, Postgres, platform-api `/health`+`/ready`, Sentinel rollout health, and an authenticated API probe). Failures fail setup; use `mcp-runtime cluster diagnostics` for deeper follow-up.
