@@ -44,6 +44,12 @@ for attempt in {1..45}; do
   if docker exec "$container" wget -q -O /dev/null \
     http://127.0.0.1:8080/github.com/mcp-runtime/mcp-runtime/pkg/access; then
     echo "Pkgsite is serving MCP Runtime packages on localhost:${listen_port}"
+    # Keep this image and one rollback image; each main build has a unique tag.
+    while IFS= read -r old_image; do
+      if [[ "$old_image" != "$image" && "$old_image" != "$previous_image" ]]; then
+        docker image rm "$old_image" >/dev/null 2>&1 || true
+      fi
+    done < <(docker image ls mcp-runtime-pkgsite --format '{{.Repository}}:{{.Tag}}')
     exit 0
   fi
   sleep 2
