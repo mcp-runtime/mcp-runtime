@@ -77,6 +77,7 @@ nav:
       - CLI: cli.md
       - API: api.md
       - API Authn/Authz Matrix: security/authz-matrix.md
+      - Go Packages: https://docs.pkg.mcpruntime.org/github.com/mcp-runtime/mcp-runtime
   - Learn:
       - Overview: learn/README.md
       - "Module 1: Core Concepts": learn/module-1-concepts.md
@@ -96,6 +97,7 @@ nav:
       - Request Flows: internals/request-flows.md
       - Namespace Refactor Plan: internals/namespace-refactor-plan.md
       - Go Package Reference: internals/go-package-reference.md
+      - Hosting Go Package Docs: internals/pkgsite.md
       - CLI Internals: internals/internal-cli.md
       - Operator Internals: internals/cmd-operator.md
       - Component Inventory: internals/component-inventory.md
