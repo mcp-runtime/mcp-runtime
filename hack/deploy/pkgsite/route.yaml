@@ -1,0 +1,60 @@
+# Public route for docs.pkg.mcpruntime.org on the production k3s cluster.
+# The pkgsite container runs on the docs host (163.61.31.14) at host port 8083,
+# like MkDocs (8081), the website (8080), and articles (8082), which the
+# web/web Ingress routes the same way: a selectorless Service plus a manual
+# EndpointSlice. This route is separate so applying it never edits web/web.
+#
+#   KUBECONFIG=<prod file> kubectl apply -f hack/deploy/pkgsite/route.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: pkgsite
+  namespace: web
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: 8083
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: pkgsite
+  namespace: web
+  labels:
+    kubernetes.io/service-name: pkgsite
+addressType: IPv4
+endpoints:
+  - addresses:
+      - 163.61.31.14
+ports:
+  - name: http
+    port: 8083
+    protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pkgsite
+  namespace: web
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: docs.pkg.mcpruntime.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pkgsite
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - docs.pkg.mcpruntime.org
+      secretName: docs-pkg-tls
