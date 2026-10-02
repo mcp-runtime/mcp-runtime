@@ -113,8 +113,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # One entry per services/*/go.mod, matching the CI service test loop.
         service:
-          - api
+          - platform-api
+          - runtime-api
+          - analytics-api
           - ingest
           - processor
           - mcp-gateway
