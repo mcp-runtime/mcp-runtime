@@ -119,12 +119,17 @@ namespace_placement_verify() {
       namespace_placement_fail "Traefik still watches mcp-sentinel: ${args}"
       failed=1
     fi
-    for name in mcp-platform mcp-observability mcp-servers; do
-      if [[ "${args}" != *"${name}"* ]]; then
-        namespace_placement_fail "Traefik watch list is missing ${name}: ${args}"
-        failed=1
-      fi
-    done
+    # Only a namespace-scoped Traefik needs these names. k3s's bundled Traefik
+    # in kube-system has no --providers.*.namespaces flag and watches all
+    # namespaces, so there is no list to check.
+    if [[ "${args}" == *".namespaces="* ]]; then
+      for name in mcp-platform mcp-observability mcp-servers; do
+        if [[ "${args}" != *"${name}"* ]]; then
+          namespace_placement_fail "Traefik watch list is missing ${name}: ${args}"
+          failed=1
+        fi
+      done
+    fi
   fi
 
   [[ "${failed}" -eq 0 ]]

@@ -67,10 +67,22 @@ install_fake_kubectl() {
       return
     fi
     if [[ "$1" == "get" && "$2" == "deployment" && "$3" == "traefik" ]]; then
-      if [[ "$5" == "traefik" ]]; then
-        printf '%s' '--providers.kubernetesingress.namespaces=registry,mcp-platform,mcp-observability,mcp-servers'
-        return 0
-      fi
+      case "${FAKE_KUBECTL_MODE}:$5" in
+        k3s-traefik:kube-system)
+          # k3s bundled Traefik: no namespace flag, so it watches everything.
+          printf '%s' '["--providers.kubernetesingress","--providers.kubernetescrd","--providers.kubernetesingress.ingressendpoint.publishedservice=kube-system/traefik"]'
+          return 0
+          ;;
+        k3s-traefik:*) return 1 ;;
+        traefik-missing-servers:traefik)
+          printf '%s' '--providers.kubernetesingress.namespaces=registry,mcp-platform,mcp-observability'
+          return 0
+          ;;
+        *:traefik)
+          printf '%s' '--providers.kubernetesingress.namespaces=registry,mcp-platform,mcp-observability,mcp-servers'
+          return 0
+          ;;
+      esac
       return 1
     fi
     if [[ "$*" == *jsonpath=* ]]; then
@@ -108,6 +120,8 @@ run_mode "clean install placement" clean yes
 run_mode "refuses the old namespace" legacy-namespace no
 run_mode "refuses a second platform certificate" tls-in-observability no
 run_mode "refuses a missing observability workload" missing-ingest no
+run_mode "accepts k3s Traefik watching every namespace" k3s-traefik yes
+run_mode "refuses a scoped Traefik missing mcp-servers" traefik-missing-servers no
 
 if [[ "${FAILURES}" -ne 0 ]]; then
   printf '%s\n' "${FAILURES} namespace placement checks failed" >&2
