@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Added
+
+- Self-hosted Go package browsing for the root, service, and example modules at `docs.pkg.mcpruntime.org`, with package links from the docs site and a deployment smoke check ([#574](https://github.com/mcp-runtime/mcp-runtime/pull/574)).
+
 ### Changed
 
 - Pull-request QA E2E runs on the disposable VM. Each component keeps one local Docker image, tagged `latest` and labeled with the checkout content hash. The next run reuses that image when the hash matches and replaces it when the hash changes. GitHub Container Registry is not used for this job, and `timing.txt` records elapsed seconds so later runs can be compared. A pull request runs `smoke-auth` plus the one scenario for the files it changes. The full scenario matrix stays on the pre-release workflow.

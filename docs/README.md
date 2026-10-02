@@ -20,6 +20,7 @@ them.
     <a class="docs-button" href="architecture/">Architecture</a>
     <a class="docs-button" href="getting-started/">Self-host</a>
     <a class="docs-button" href="api/">API reference</a>
+    <a class="docs-button" href="https://docs.pkg.mcpruntime.org/github.com/mcp-runtime/mcp-runtime">Go packages</a>
   </div>
   </div>
 </section>
