@@ -65,7 +65,7 @@ Production readiness checklist:
   `--tls-cluster-issuer` for an enterprise CA, or a preinstalled issuer.
 - Review Sentinel sizing, retention, auth, Kubernetes API access, and
   observability integration before enabling it on production traffic; see
-  [Sentinel Kubernetes awareness and hardening](sentinel.md#kubernetes-awareness-and-hardening).
+  [Platform service Kubernetes awareness and hardening](platform-services.md#kubernetes-awareness-and-hardening).
 - Run `./bin/mcp-runtime setup --with-tls --strict-prod` for production-style
   validation, or document why a non-strict setup is intentional.
 
@@ -180,8 +180,8 @@ for Sentinel workloads and a separate `mcp-runtime/mcp-runtime-registry-pull-cre
 Secret for the operator Deployment. If you intentionally roll platform
 workloads from an already-authenticated public registry, set
 `MCP_PLATFORM_IMAGE_PULL_SECRET=<secret-name>` before setup; the Secret must
-exist in `mcp-runtime` for the operator and in `mcp-sentinel` for Sentinel
-workloads.
+exist in `mcp-runtime` for the operator, in `mcp-platform` for control-plane
+workloads, and in `mcp-observability` for the telemetry stack.
 
 If you configured the registry with `registry provision` or environment
 variables first, run setup with production validation:
@@ -269,8 +269,8 @@ another Certificate already references `registry-tls`, remove the stale owner
 before applying TLS again.
 
 The platform UI hostname is separate. `platform.<domain>` is owned by the
-`mcp-sentinel-platform-ui` Ingress in the `mcp-sentinel` namespace, and
-cert-manager writes that certificate into the `mcp-sentinel-platform-tls`
+`mcp-platform-ui` Ingress in the `mcp-platform` namespace, and
+cert-manager writes that certificate into the `mcp-platform-tls`
 Secret in the same namespace. `registry-cert` does not contain
 `platform.<domain>`.
 
@@ -282,8 +282,8 @@ kubectl get secret registry-tls -n registry \
   -o jsonpath='{.data.tls\.crt}' | base64 -d | \
   openssl x509 -noout -text | grep -A1 "Subject Alternative Name"
 
-kubectl get ingress mcp-sentinel-platform-ui -n mcp-sentinel -o yaml
-kubectl get secret mcp-sentinel-platform-tls -n mcp-sentinel \
+kubectl get ingress mcp-platform-ui -n mcp-platform -o yaml
+kubectl get secret mcp-platform-tls -n mcp-platform \
   -o jsonpath='{.data.tls\.crt}' | base64 -d | \
   openssl x509 -noout -text | grep -A1 "Subject Alternative Name"
 ```
@@ -357,8 +357,9 @@ Inspect the deployment and the managed secret before you debug the database or
 auth path:
 
 ```bash
-kubectl get deploy mcp-platform-api mcp-runtime-api mcp-analytics-api -n mcp-sentinel -o yaml
-kubectl get secret mcp-sentinel-secrets -n mcp-sentinel -o yaml
+kubectl get deploy mcp-platform-api mcp-runtime-api -n mcp-platform -o yaml
+kubectl get deploy mcp-analytics-api -n mcp-observability -o yaml
+kubectl get secret mcp-platform-api-credentials -n mcp-platform -o yaml
 ```
 
 Both values must be present for the initial seed to succeed. Remove or rotate
@@ -373,8 +374,10 @@ and delete the PVCs you intend to wipe.
 Typical destructive reset flow:
 
 ```bash
-kubectl scale statefulset clickhouse kafka loki tempo mcp-sentinel-postgres \
-  -n mcp-sentinel --replicas=0
+kubectl scale statefulset clickhouse kafka loki tempo \
+  -n mcp-observability --replicas=0
+kubectl scale statefulset mcp-postgres \
+  -n mcp-platform --replicas=0
 
 kubectl delete pvc \
   data-clickhouse-0 \
@@ -383,15 +386,15 @@ kubectl delete pvc \
   kafka-data-kafka-2 \
   data-loki-0 \
   data-tempo-0 \
-  data-mcp-sentinel-postgres-0 \
-  -n mcp-sentinel
+  -n mcp-observability
+kubectl delete pvc data-mcp-postgres-0 -n mcp-platform
 ```
 
 Important distinctions:
 
-- Preserve `mcp-sentinel-secrets` unless you intentionally want new API keys,
+- Preserve the owner credential Secrets in `mcp-platform` and `mcp-observability` unless you intentionally want new API keys,
   JWT secrets, and platform bootstrap values.
-- Preserve `mcp-sentinel-platform-tls` unless you want to reissue the platform
+- Preserve `mcp-platform-tls` unless you want to reissue the platform
   certificate.
 - Preserve `registry/registry-storage` unless you intentionally want to wipe the
   image registry too.

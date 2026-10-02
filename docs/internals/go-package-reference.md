@@ -70,6 +70,7 @@ Package v1alpha1 contains API Schema definitions for the MCP server resource.
 - [`Constants`](#api-types-constants)
 - [`Variables`](#api-types-variables)
 - [`func BoolPtr(v bool) *bool`](#api-types-func-boolptr-v-bool-bool)
+- [`func EndpointUsesRetiredNamespace(raw string) bool`](#api-types-func-endpointusesretirednamespace-raw-string-bool)
 - [`func GatewayIsEnabled(gateway *GatewayConfig) bool`](#api-types-func-gatewayisenabled-gateway-gatewayconfig-bool)
 - [`func ProtectedResourceMetadataURL(resource string) string`](#api-types-func-protectedresourcemetadataurl-resource-string-string)
 - [`type AnalyticsConfig struct`](#api-types-type-analyticsconfig-struct)
@@ -239,6 +240,15 @@ var (
 ```text
 func BoolPtr(v bool) *bool
     BoolPtr returns a pointer to v for optional CRD boolean fields.
+
+```
+
+<a id="api-types-func-endpointusesretirednamespace-raw-string-bool"></a>
+```text
+func EndpointUsesRetiredNamespace(raw string) bool
+    EndpointUsesRetiredNamespace reports whether raw is a URL aimed at the
+    removed combined platform namespace. Callers replace those values with the
+    current service DNS. A collector outside that namespace is left unchanged.
 
 ```
 
@@ -2857,6 +2867,7 @@ kubectl clients, terminal output, and test doubles.
 
 - [`Constants`](#cli-core-constants)
 - [`Variables`](#cli-core-variables)
+- [`func ComponentNamespace(key string) string`](#cli-core-func-componentnamespace-key-string-string)
 - [`func Cyan(msg string) string`](#cli-core-func-cyan-msg-string-string)
 - [`func Error(msg string)`](#cli-core-func-error-msg-string)
 - [`func GetAnalyticsIngestURLOverride() string`](#cli-core-func-getanalyticsingesturloverride-string)
@@ -2984,8 +2995,11 @@ const (
 	// NamespaceMCPServers is the default namespace for MCP server deployments.
 	NamespaceMCPServers = mcpdefaults.MCPServersNamespace
 
-	// DefaultAnalyticsNamespace is the namespace for the bundled mcp-sentinel stack.
-	DefaultAnalyticsNamespace = "mcp-sentinel"
+	// PlatformNamespace holds control-plane services.
+	PlatformNamespace = platforminventory.PlatformNamespace
+
+	// ObservabilityNamespace holds the event pipeline and telemetry stack.
+	ObservabilityNamespace = platforminventory.ObservabilityNamespace
 
 	// LogCollectorNamespace isolates the node log collector and its hostPath access.
 	LogCollectorNamespace = mcpdefaults.LogCollectorNamespace
@@ -3306,6 +3320,13 @@ var ValidK8sName = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 
 <a id="cli-core-functions"></a>
 ### Functions
+
+<a id="cli-core-func-componentnamespace-key-string-string"></a>
+```text
+func ComponentNamespace(key string) string
+    ComponentNamespace returns the install namespace for a catalog component.
+
+```
 
 <a id="cli-core-func-cyan-msg-string-string"></a>
 ```text
@@ -5228,7 +5249,7 @@ type ImagePublishRecord struct {
 type PlatformClient struct {
 	// Has unexported fields.
 }
-    PlatformClient calls the mcp-sentinel API with an API key.
+    PlatformClient calls the platform API with an API key.
 
 ```
 
@@ -6426,8 +6447,7 @@ go doc -all ./internal/cli/setup/ingressmanifest
 <a id="cli-setup-ingress-manifests-overview"></a>
 ### Overview
 
-Package ingressmanifest builds YAML for the host-based Sentinel platform UI
-Ingress.
+Package ingressmanifest builds YAML for the host-based platform UI Ingress.
 
 ### Jump To
 
@@ -6441,8 +6461,9 @@ Ingress.
 ### Index
 
 - [`Constants`](#cli-setup-ingress-manifests-constants)
-- [`func RenderPlatformUIIngress(host, issuerName string, tlsEnabled bool, analyticsNamespace string) string`](#cli-setup-ingress-manifests-func-renderplatformuiingress-host-issuername-string-tlsenabled-bool-analyticsnamespace-string-string)
+- [`func RenderPlatformUIIngress(host, issuerName string, tlsEnabled bool, platformNamespace, observabilityNamespace string) string`](#cli-setup-ingress-manifests-func-renderplatformuiingress-host-issuername-string-tlsenabled-bool-platformnamespace-observabilitynamespace-string-string)
 - [`type APIPath struct`](#cli-setup-ingress-manifests-type-apipath-struct)
+- [`func ObservabilityAPIPaths() []APIPath`](#cli-setup-ingress-manifests-func-observabilityapipaths-apipath)
 - [`func PlatformAPIPaths() []APIPath`](#cli-setup-ingress-manifests-func-platformapipaths-apipath)
 
 <a id="cli-setup-ingress-manifests-constants"></a>
@@ -6451,40 +6472,43 @@ Ingress.
 ```text
 const (
 	// PlatformIngressName is the Kubernetes Ingress resource name for the dashboard.
-	PlatformIngressName = "mcp-sentinel-platform-ui"
-	// PlatformObservabilityIngressName is the admin-gated platform Ingress for observability tools.
-	PlatformObservabilityIngressName = "mcp-sentinel-platform-observability"
+	PlatformIngressName = "mcp-platform-ui"
+	// PlatformObservabilityIngressName is the admin-gated platform Ingress for Grafana.
+	PlatformObservabilityIngressName = "mcp-platform-observability"
+	// PlatformAnalyticsIngressName is the public Ingress for analytics-api.
+	PlatformAnalyticsIngressName = "mcp-platform-analytics"
 	// PlatformHTTPRedirectIngressName is the HTTP-only redirect Ingress resource name.
-	PlatformHTTPRedirectIngressName = "mcp-sentinel-platform-ui-http"
+	PlatformHTTPRedirectIngressName = "mcp-platform-ui-http"
 	// PlatformTLSSecretName is the TLS secret name used when TLS is enabled.
-	PlatformTLSSecretName = "mcp-sentinel-platform-tls"
+	PlatformTLSSecretName = "mcp-platform-tls" // #nosec G101 -- Kubernetes Secret name, not a credential.
 )
 ```
 
 <a id="cli-setup-ingress-manifests-functions"></a>
 ### Functions
 
-<a id="cli-setup-ingress-manifests-func-renderplatformuiingress-host-issuername-string-tlsenabled-bool-analyticsnamespace-string-string"></a>
+<a id="cli-setup-ingress-manifests-func-renderplatformuiingress-host-issuername-string-tlsenabled-bool-platformnamespace-observabilitynamespace-string-string"></a>
 ```text
-func RenderPlatformUIIngress(host, issuerName string, tlsEnabled bool, analyticsNamespace string) string
-    RenderPlatformUIIngress emits an Ingress that maps platform.<domain> to the
-    dashboard UI and /api/v1/* to the split API services. Server-side UI auth
-    still uses API_UPSTREAM against platform-api. A separate admin-gated Ingress
-    Ingress on the same host for /grafana. The observability Ingress uses the
-    repo-managed sentinel-admin-auth@file Traefik middleware so Grafana is
-    reachable from admin UI links without exposing it raw on the public platform
-    host. Prometheus stays internal as Grafana's metrics datasource and is not
-    exposed as a direct public route.
+func RenderPlatformUIIngress(host, issuerName string, tlsEnabled bool, platformNamespace, observabilityNamespace string) string
+    RenderPlatformUIIngress emits Ingresses for platform.<domain>. The UI,
+    platform-api, and runtime-api Ingress is created in platformNamespace.
+    Grafana and analytics-api routes are created in observabilityNamespace,
+    beside those Services. Server-side UI auth still uses API_UPSTREAM
+    against platform-api. The observability Ingress uses the repo-managed
+    sentinel-admin-auth@file Traefik middleware so Grafana is reachable
+    from admin UI links without exposing it raw on the public platform host.
+    Prometheus stays internal as Grafana's metrics datasource and is not exposed
+    as a direct public route.
 
-    When issuerName is set, a TLS section and cert-manager annotation
-    are added so cert-manager's ingress-shim provisions a Certificate for
-    platform.<domain> into the mcp-sentinel-platform-tls Secret in the same
-    namespace as the UI Ingress. The observability Ingress references the same
-    TLS Secret without a cert-manager annotation to avoid a second Certificate
-    owner. A third Ingress on the `web` entrypoint is also emitted so HTTP
-    requests to the same host hit the UI service, which redirects to HTTPS.
-    (We can't rely on Traefik's entrypoint-level redirect because the prod
-    overlay disables it to keep HTTP-01 ACME challenges working on first issue.)
+    When issuerName is set, only the platform Ingress gets a TLS section and
+    cert-manager annotation. Ingress-shim then creates one Certificate named
+    mcp-platform-tls in platformNamespace. The observability Ingress does not
+    name a Secret and does not request a Certificate: a TLS Secret cannot be
+    mounted across namespaces, and a second Certificate would open another ACME
+    order for the same hostname. Traefik serves that host from the certificate
+    loaded by the platform Ingress. An HTTP Ingress on the web entrypoint
+    sends plain requests to the UI, which redirects to HTTPS. The prod overlay
+    disables Traefik's entrypoint redirect so HTTP-01 challenges keep working.
 ```
 
 <a id="cli-setup-ingress-manifests-types"></a>
@@ -6503,10 +6527,18 @@ type APIPath struct {
 
 ```
 
+<a id="cli-setup-ingress-manifests-func-observabilityapipaths-apipath"></a>
+```text
+func ObservabilityAPIPaths() []APIPath
+    ObservabilityAPIPaths returns observability-namespace ingress rules.
+
+```
+
 <a id="cli-setup-ingress-manifests-func-platformapipaths-apipath"></a>
 ```text
 func PlatformAPIPaths() []APIPath
-    PlatformAPIPaths returns ingress rules ordered most-specific first.
+    PlatformAPIPaths returns platform-namespace ingress rules, most-specific
+    first.
 ```
 
 <a id="cli-setup-plan"></a>

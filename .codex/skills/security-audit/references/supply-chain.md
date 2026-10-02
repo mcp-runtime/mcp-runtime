@@ -58,10 +58,10 @@ docker build --pull -f services/runtime-api/Dockerfile -t mcp-runtime-api:audit 
 docker build --pull -f services/platform-api/Dockerfile -t mcp-platform-api:audit .
 docker build --pull -f services/runtime-api/Dockerfile -t mcp-runtime-api:audit .
 docker build --pull -f services/analytics-api/Dockerfile -t mcp-analytics-api:audit .
-docker build --pull -f services/ui/Dockerfile -t mcp-sentinel-ui:audit .
-docker build --pull -f services/ingest/Dockerfile -t mcp-sentinel-ingest:audit .
-docker build --pull -f services/processor/Dockerfile -t mcp-sentinel-processor:audit .
-docker build --pull -f services/mcp-gateway/Dockerfile -t mcp-sentinel-mcp-gateway:audit .
+docker build --pull -f services/ui/Dockerfile -t mcp-ui:audit .
+docker build --pull -f services/ingest/Dockerfile -t mcp-ingest:audit .
+docker build --pull -f services/processor/Dockerfile -t mcp-processor:audit .
+docker build --pull -f services/mcp-gateway/Dockerfile -t mcp-gateway:audit .
 docker build --pull -f services/oauth-server/Dockerfile -t mcp-oauth-server:audit .
 
 # Or use the repo helper — NOTE: as of this audit hack/trivy-sentinel-images.sh
@@ -71,9 +71,9 @@ docker build --pull -f services/oauth-server/Dockerfile -t mcp-oauth-server:audi
 bash hack/trivy-sentinel-images.sh
 
 for img in mcp-runtime-operator:audit mcp-platform-api:audit mcp-runtime-api:audit \
-           mcp-analytics-api:audit mcp-sentinel-ui:audit \
-           mcp-sentinel-ingest:audit mcp-sentinel-processor:audit \
-           mcp-sentinel-mcp-gateway:audit mcp-oauth-server:audit; do
+           mcp-analytics-api:audit mcp-ui:audit \
+           mcp-ingest:audit mcp-processor:audit \
+           mcp-gateway:audit mcp-oauth-server:audit; do
   trivy image --exit-code 0 --severity CRITICAL,HIGH --ignore-unfixed \
               --vuln-type os,library --format table "$img"
 done
@@ -103,8 +103,8 @@ should match it). Locally run `syft`:
 go install github.com/anchore/syft/cmd/syft@latest
 
 for img in mcp-runtime-operator:audit mcp-platform-api:audit mcp-runtime-api:audit \
-           mcp-analytics-api:audit mcp-sentinel-ui:audit mcp-sentinel-ingest:audit \
-           mcp-sentinel-processor:audit mcp-sentinel-mcp-gateway:audit \
+           mcp-analytics-api:audit mcp-ui:audit mcp-ingest:audit \
+           mcp-processor:audit mcp-gateway:audit \
            mcp-oauth-server:audit; do
   out=$(echo "$img" | tr ':/' '__').spdx.json
   syft "$img" -o spdx-json="/tmp/$out"

@@ -28,8 +28,8 @@ git clone https://github.com/mcp-runtime/mcp-runtime
 cd mcp-runtime/examples/oauth-example-go-2025-11-25
 ```
 
-This is a Go MCP server with 8 tools: `echo`, `add`, `upper`, `lower`,
-`create_task`, `draft_release_note`, `slugify`, `aaa-ping`.
+This is a Go MCP server with 9 tools: `echo`, `add`, `upper`, `lower`,
+`create_task`, `draft_release_note`, `slugify`, `aaa-ping`, `whoami`.
 
 ## Step 3: Discover tools and scaffold metadata
 
@@ -42,7 +42,7 @@ SERVER_PID=$!
 mcp-runtime server init my-server \
   --from-server http://localhost:8088
 # Discovered: aaa-ping, add, create_task, draft_release_note,
-#             echo, lower, slugify, upper
+#             echo, lower, slugify, upper, whoami
 
 kill $SERVER_PID
 ```
@@ -136,9 +136,14 @@ mcp-runtime adapter proxy \
 
 Point Claude Desktop, Cursor, or any MCP client at `http://127.0.0.1:8099`.
 
-Call the `echo` tool; it succeeds. Call `create_task`; the gateway denies it
-because it is not in the grant. If you configure OAuth on the server, the MCP
-client must also send its bearer token through the adapter.
+The adapter enrolls a session certificate whenever the platform has a workload
+issuer. The gateway accepts that certificate as identity only when
+`MCP_ADAPTER_CERTIFICATES=true`. The live `mcp.mcpruntime.org` routes leave
+the setting off, so `initialize` succeeds and an allow-list `tools/call`
+returns `401` `missing_identity`. On a platform with the setting on, `echo`
+succeeds and `create_task` is denied because it is not in the grant. If you
+configure OAuth on the server, the MCP client must also send its bearer token
+through the adapter.
 
 ## Step 9: See it in analytics
 

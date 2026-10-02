@@ -213,13 +213,13 @@ func TestMCPServerDefaultWithOptions(t *testing.T) {
 
 	server.DefaultWithOptions(MCPServerDefaultOptions{
 		DefaultIngressHost:        "mcp.example.com",
-		DefaultAnalyticsIngestURL: "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events",
+		DefaultAnalyticsIngestURL: "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events",
 	})
 
 	if server.Spec.IngressHost != "mcp.example.com" {
 		t.Fatalf("expected ingressHost default from options, got %q", server.Spec.IngressHost)
 	}
-	if server.Spec.Analytics == nil || server.Spec.Analytics.IngestURL != "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events" {
+	if server.Spec.Analytics == nil || server.Spec.Analytics.IngestURL != "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events" {
 		t.Fatalf("expected analytics ingest URL default from options, got %#v", server.Spec.Analytics)
 	}
 }
@@ -282,6 +282,39 @@ func TestMCPServerDefaultAnalyticsWhenIngestURLConfigured(t *testing.T) {
 	})
 	if server.Spec.Analytics == nil || server.Spec.Analytics.IngestURL != "http://ingest.example/events" {
 		t.Fatalf("expected analytics ingest URL from options; got %#v", server.Spec.Analytics)
+	}
+}
+
+func TestMCPServerDefaultReplacesRetiredIngestURL(t *testing.T) {
+	server := &MCPServer{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-server"},
+		Spec: MCPServerSpec{
+			Image:   "example.com/mcp-server",
+			Gateway: &GatewayConfig{Enabled: BoolPtr(true)},
+			Analytics: &AnalyticsConfig{
+				IngestURL: "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events",
+			},
+		},
+	}
+	const current = "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events"
+	server.DefaultWithOptions(MCPServerDefaultOptions{DefaultAnalyticsIngestURL: current})
+	if server.Spec.Analytics.IngestURL != current {
+		t.Fatalf("ingest URL = %q, want %q", server.Spec.Analytics.IngestURL, current)
+	}
+
+	custom := &MCPServer{
+		ObjectMeta: metav1.ObjectMeta{Name: "custom"},
+		Spec: MCPServerSpec{
+			Image:   "example.com/mcp-server",
+			Gateway: &GatewayConfig{Enabled: BoolPtr(true)},
+			Analytics: &AnalyticsConfig{
+				IngestURL: "https://ingest.example/events",
+			},
+		},
+	}
+	custom.DefaultWithOptions(MCPServerDefaultOptions{DefaultAnalyticsIngestURL: current})
+	if custom.Spec.Analytics.IngestURL != "https://ingest.example/events" {
+		t.Fatalf("custom ingest URL = %q", custom.Spec.Analytics.IngestURL)
 	}
 }
 

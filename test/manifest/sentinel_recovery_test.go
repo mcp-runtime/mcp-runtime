@@ -12,7 +12,7 @@ import (
 )
 
 // Contract tests for the eviction/restart recovery hardening of the
-// mcp-sentinel stack (issues #71 and #72). They pin the manifest properties
+// platform stack (issues #71 and #72). They pin the manifest properties
 // that make recovery deterministic without any placement changes.
 
 type recoveryProbe struct {
@@ -92,7 +92,7 @@ func TestSentinelPriorityClassesOrderDataAboveServices(t *testing.T) {
 		}
 		values[doc.Metadata.Name] = doc.Value
 	}
-	data, services := values["mcp-sentinel-data"], values["mcp-sentinel-services"]
+	data, services := values["mcp-shared-data"], values["mcp-shared-services"]
 	if data == 0 || services == 0 {
 		t.Fatalf("missing priority classes: %v", values)
 	}
@@ -110,15 +110,15 @@ func TestSentinelStatefulStoresAreEvictionResilient(t *testing.T) {
 		{"03-clickhouse-hostpath.yaml", "clickhouse"},
 		{"05-kafka.yaml", "kafka"},
 		{"05-kafka-hostpath.yaml", "kafka"},
-		{"20-postgres.yaml", "mcp-sentinel-postgres"},
-		{"20-postgres-hostpath.yaml", "mcp-sentinel-postgres"},
+		{"20-postgres.yaml", "mcp-postgres"},
+		{"20-postgres-hostpath.yaml", "mcp-postgres"},
 	}
 	for _, store := range stores {
 		t.Run(store.manifest, func(t *testing.T) {
 			sts := recoveryWorkload(t, store.manifest, "StatefulSet", store.name)
 			pod := sts.Spec.Template.Spec
-			if pod.PriorityClassName != "mcp-sentinel-data" {
-				t.Fatalf("priorityClassName = %q, want mcp-sentinel-data", pod.PriorityClassName)
+			if pod.PriorityClassName != "mcp-shared-data" {
+				t.Fatalf("priorityClassName = %q, want mcp-shared-data", pod.PriorityClassName)
 			}
 			if sts.Spec.PVCRetention.WhenDeleted != "Retain" || sts.Spec.PVCRetention.WhenScaled != "Retain" {
 				t.Fatalf("persistentVolumeClaimRetentionPolicy = %+v, want Retain/Retain", sts.Spec.PVCRetention)
@@ -163,10 +163,10 @@ func TestSentinelSlowStartStoresHaveStartupProbes(t *testing.T) {
 func TestSentinelPipelineWorkloadsRecoverFromTransientPullAndBrokerLoss(t *testing.T) {
 	for _, manifest := range []string{"06-ingest.yaml", "07-processor.yaml"} {
 		name := strings.TrimSuffix(strings.SplitN(manifest, "-", 2)[1], ".yaml")
-		deploy := recoveryWorkload(t, manifest, "Deployment", "mcp-sentinel-"+name)
+		deploy := recoveryWorkload(t, manifest, "Deployment", "mcp-"+name)
 		pod := deploy.Spec.Template.Spec
-		if pod.PriorityClassName != "mcp-sentinel-services" {
-			t.Fatalf("%s priorityClassName = %q, want mcp-sentinel-services", manifest, pod.PriorityClassName)
+		if pod.PriorityClassName != "mcp-shared-services" {
+			t.Fatalf("%s priorityClassName = %q, want mcp-shared-services", manifest, pod.PriorityClassName)
 		}
 		c := pod.Containers[0]
 		// Always would make every restart depend on the registry being up, which
@@ -188,17 +188,29 @@ func TestSentinelPipelineWorkloadsRecoverFromTransientPullAndBrokerLoss(t *testi
 	}
 }
 
+func TestSentinelUIStartupProbeCoversPostgresWait(t *testing.T) {
+	// The UI listens only after its session store opens, and setup applies
+	// Postgres after the UI. Liveness must not count that two-minute wait.
+	c := recoveryWorkload(t, "09-ui.yaml", "Deployment", "mcp-ui").Spec.Template.Spec.Containers[0]
+	if c.StartupProbe == nil {
+		t.Fatal("09-ui.yaml missing startupProbe; liveness would restart a UI waiting on Postgres")
+	}
+	if window := c.StartupProbe.FailureThreshold * c.StartupProbe.PeriodSeconds; window <= 120 {
+		t.Fatalf("09-ui.yaml startup window %ds must exceed the 120s session store wait", window)
+	}
+}
+
 func TestSentinelServiceDeploymentsUseServicesPriorityClass(t *testing.T) {
 	for manifest, deployment := range map[string]string{
 		"08-analytics-api.yaml": "mcp-analytics-api",
 		"08-platform-api.yaml":  "mcp-platform-api",
 		"08-runtime-api.yaml":   "mcp-runtime-api",
-		"09-ui.yaml":            "mcp-sentinel-ui",
-		"10-gateway.yaml":       "mcp-sentinel-gateway",
+		"09-ui.yaml":            "mcp-ui",
+		"10-gateway.yaml":       "mcp-platform-gateway",
 	} {
 		deploy := recoveryWorkload(t, manifest, "Deployment", deployment)
-		if got := deploy.Spec.Template.Spec.PriorityClassName; got != "mcp-sentinel-services" {
-			t.Fatalf("%s priorityClassName = %q, want mcp-sentinel-services", manifest, got)
+		if got := deploy.Spec.Template.Spec.PriorityClassName; got != "mcp-shared-services" {
+			t.Fatalf("%s priorityClassName = %q, want mcp-shared-services", manifest, got)
 		}
 	}
 }
@@ -214,8 +226,8 @@ func TestSentinelRecoveryHardeningKeepsPlacementUnchanged(t *testing.T) {
 	}
 	for _, f := range []struct{ manifest, kind, name string }{
 		{"03-clickhouse.yaml", "StatefulSet", "clickhouse"},
-		{"06-ingest.yaml", "Deployment", "mcp-sentinel-ingest"},
-		{"07-processor.yaml", "Deployment", "mcp-sentinel-processor"},
+		{"06-ingest.yaml", "Deployment", "mcp-ingest"},
+		{"07-processor.yaml", "Deployment", "mcp-processor"},
 	} {
 		if recoveryWorkload(t, f.manifest, f.kind, f.name).Spec.Template.Spec.NodeSelector != nil {
 			t.Fatalf("%s must not gain a nodeSelector", f.manifest)

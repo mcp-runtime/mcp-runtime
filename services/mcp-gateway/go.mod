@@ -1,4 +1,4 @@
-module mcp-sentinel-mcp-gateway
+module mcp-gateway
 
 go 1.26.6
 

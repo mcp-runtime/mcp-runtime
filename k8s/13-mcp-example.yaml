@@ -1,11 +1,11 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: workspace-assistant-server
-  namespace: mcp-sentinel
+  name: oauth-example-go-2025-11-25-standalone
+  namespace: mcp-servers
 spec:
   selector:
-    app: workspace-assistant-server
+    app: oauth-example-go-2025-11-25-standalone
   ports:
     - name: http
       port: 8090
@@ -14,23 +14,23 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: workspace-assistant-server
-  namespace: mcp-sentinel
+  name: oauth-example-go-2025-11-25-standalone
+  namespace: mcp-servers
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: workspace-assistant-server
+      app: oauth-example-go-2025-11-25-standalone
   template:
     metadata:
       labels:
-        app: workspace-assistant-server
+        app: oauth-example-go-2025-11-25-standalone
     spec:
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
       containers:
-        - name: workspace-assistant-server
+        - name: oauth-example-go-2025-11-25-standalone
           image: oauth-example-go-2025-11-25:latest
           imagePullPolicy: IfNotPresent
           securityContext:

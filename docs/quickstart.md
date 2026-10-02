@@ -1,8 +1,12 @@
 # Quickstart
 
-Deploy a governed MCP server and connect an MCP client to it, using the live
+Deploy a governed MCP server on the live
 [platform.mcpruntime.org](https://platform.mcpruntime.org) instance. You do not
-need a Kubernetes cluster. It takes about 10 minutes.
+need a Kubernetes cluster. It takes about 10 minutes. Login, image publish,
+deploy, grants, and adapter certificate enrollment work on that instance.
+A non-OAuth allow-list `tools/call` is identified only when the operator has
+set `MCP_ADAPTER_CERTIFICATES=true`; the live instance leaves that off, so the
+gateway denies the call with `missing_identity`.
 
 To self-host MCP Runtime on your own cluster, see [Getting Started](getting-started.md).
 
@@ -83,7 +87,7 @@ SERVER_PID=$!
 
 mcp-runtime server init workspace-demo \
   --from-server http://localhost:8088
-# Discovered: aaa-ping, add, create_task, draft_release_note, echo, lower, slugify, upper
+# Discovered: aaa-ping, add, create_task, draft_release_note, echo, lower, slugify, upper, whoami
 
 kill $SERVER_PID
 ```
@@ -156,11 +160,16 @@ mcp-runtime adapter proxy \
 ```
 
 Point **Claude Desktop**, **Cursor**, or any MCP client at `http://127.0.0.1:8099`.
-This quickstart does not configure `spec.auth`, so the route uses the adapter
-certificate without an OAuth bearer. Call the `echo` or `add` tool. The
-allow-list policy created by `server init` checks the grant and required session
-on each tool call. If you enable OAuth for the server, the client must send its
-bearer through the adapter; see [Agent adapters](agent-adapters.md).
+This quickstart does not configure `spec.auth`. The adapter still enrolls a
+session certificate when the platform has a workload issuer. The gateway uses
+that certificate as the caller identity only after the operator sets
+`MCP_ADAPTER_CERTIFICATES=true`, which makes Traefik verify it and assert the
+SPIFFE id. Until then a plain Ingress does not ask for a client certificate,
+`initialize` succeeds, and an allow-list `tools/call` returns `401`
+`missing_identity`. With the setting on, call `echo` or `add`. The allow-list
+policy from `server init` checks the grant and required session on each tool
+call. If you enable OAuth for the server, the client must also send its bearer
+through the adapter; see [Agent adapters](agent-adapters.md).
 
 ## 5. See it in the analytics
 

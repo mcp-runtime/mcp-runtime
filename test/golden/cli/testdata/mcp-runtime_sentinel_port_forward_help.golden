@@ -1,4 +1,4 @@
-Port-forward a common mcp-sentinel service
+Port-forward a common platform service
 
 Usage:
   mcp-runtime sentinel port-forward [target] [flags]

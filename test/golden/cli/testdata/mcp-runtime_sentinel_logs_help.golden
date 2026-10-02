@@ -1,4 +1,4 @@
-View logs for a mcp-sentinel component
+View logs for a platform component
 
 Usage:
   mcp-runtime sentinel logs [component] [flags]

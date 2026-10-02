@@ -21,6 +21,7 @@ import (
 	"gopkg.in/yaml.v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
@@ -503,7 +504,7 @@ func TestGetGatewayProxyImage(t *testing.T) {
 		core.DefaultCLIConfig.GatewayProxyImage = ""
 		ext := &config.ExternalRegistryConfig{URL: "registry.example.com/"}
 		got := getGatewayProxyImage(ext)
-		if got != "registry.example.com/mcp-sentinel-mcp-gateway:latest" {
+		if got != "registry.example.com/mcp-gateway:latest" {
 			t.Fatalf("unexpected external registry image: %q", got)
 		}
 	})
@@ -512,7 +513,7 @@ func TestGetGatewayProxyImage(t *testing.T) {
 		core.DefaultCLIConfig.GatewayProxyImage = ""
 		swapKubernetesClientsForTest(t, platformTestClientsWithRegistryService(5000))
 		got := getGatewayProxyImage(nil)
-		if got != "registry.registry.svc.cluster.local:5000/mcp-sentinel-mcp-gateway:latest" {
+		if got != "registry.registry.svc.cluster.local:5000/mcp-gateway:latest" {
 			t.Fatalf("unexpected platform registry image: %q", got)
 		}
 	})
@@ -522,7 +523,7 @@ func TestGetGatewayProxyImage(t *testing.T) {
 		t.Setenv("MCP_RUNTIME_TEST_MODE", "")
 		ext := &config.ExternalRegistryConfig{URL: "registry.example.com/"}
 		got := getGatewayProxyImage(ext)
-		if got != "registry.example.com/mcp-sentinel-mcp-gateway:deadbeef" {
+		if got != "registry.example.com/mcp-gateway:deadbeef" {
 			t.Fatalf("unexpected versioned image: %q", got)
 		}
 	})
@@ -555,7 +556,7 @@ func TestPlatformImageDefaultsUseInternalRegistryWithPlatformDomain(t *testing.T
 		t.Fatalf("operator image = %q, want internal registry service DNS", gotOperator)
 	}
 	gotGateway := getGatewayProxyImage(nil)
-	if gotGateway != "registry.registry.svc.cluster.local:5000/mcp-sentinel-mcp-gateway:latest" {
+	if gotGateway != "registry.registry.svc.cluster.local:5000/mcp-gateway:latest" {
 		t.Fatalf("gateway image = %q, want internal registry service DNS", gotGateway)
 	}
 	gotAPI := analyticsImageFor(nil, "mcp-platform-api")
@@ -569,7 +570,13 @@ func TestApplyPlatformIngressPrunesPathBasedSentinelIngresses(t *testing.T) {
 	t.Cleanup(func() { core.DefaultCLIConfig = origConfig })
 	core.DefaultCLIConfig = &core.CLIConfig{PlatformIngressHost: "platform.example.com"}
 
-	clients := platformTestClientsWithIngresses(pathBasedSentinelIngressNames...)
+	objects := make([]runtime.Object, 0, len(pathBasedPlatformIngresses))
+	for _, ingress := range pathBasedPlatformIngresses {
+		objects = append(objects, &networkingv1.Ingress{
+			ObjectMeta: metav1.ObjectMeta{Name: ingress.name, Namespace: core.ComponentNamespace(ingress.component)},
+		})
+	}
+	clients := newPlatformKubernetesTestClients(objects, nil)
 	swapKubernetesClientsForTest(t, clients)
 
 	if err := applyPlatformIngressIfConfigured(); err != nil {
@@ -577,8 +584,8 @@ func TestApplyPlatformIngressPrunesPathBasedSentinelIngresses(t *testing.T) {
 	}
 
 	assertPlatformIngressAppliedForTest(t, clients, "platform.example.com")
-	for _, name := range pathBasedSentinelIngressNames {
-		assertIngressDeletedForTest(t, clients, core.DefaultAnalyticsNamespace, name)
+	for _, ingress := range pathBasedPlatformIngresses {
+		assertIngressDeletedForTest(t, clients, core.ComponentNamespace(ingress.component), ingress.name)
 	}
 }
 
@@ -698,13 +705,13 @@ func TestOperatorEnvOverrides(t *testing.T) {
 	})
 
 	t.Run("includes explicit internal OAuth issuer outside test mode", func(t *testing.T) {
-		t.Setenv("OAUTH_INTERNAL_ISSUER_URL", "http://mcp-auth-server.mcp-sentinel.svc.cluster.local:8080")
+		t.Setenv("OAUTH_INTERNAL_ISSUER_URL", "http://mcp-auth-server.mcp-platform.svc.cluster.local:8080")
 		prevTestMode := operatorSetupTestMode
 		operatorSetupTestMode = func() bool { return false }
 		t.Cleanup(func() { operatorSetupTestMode = prevTestMode })
 		core.DefaultCLIConfig = &core.CLIConfig{}
 		got := operatorEnvOverrides("", "")
-		requireOperatorEnvVar(t, got, "OAUTH_INTERNAL_ISSUER_URL", "http://mcp-auth-server.mcp-sentinel.svc.cluster.local:8080")
+		requireOperatorEnvVar(t, got, "OAUTH_INTERNAL_ISSUER_URL", "http://mcp-auth-server.mcp-platform.svc.cluster.local:8080")
 	})
 
 	t.Run("returns empty when no gateway override is set", func(t *testing.T) {
@@ -743,6 +750,12 @@ func TestOperatorEnvOverrides(t *testing.T) {
 		requireOperatorEnvVar(t, got, "MCP_GATEWAY_OTEL_EXPORTER_OTLP_ENDPOINT", defaultGatewayOTELExporterOTLPEndpoint)
 		requireOperatorEnvVar(t, got, "MCP_SENTINEL_INGEST_URL", "http://custom-analytics-ingest")
 		requireOperatorEnvVarNonEmpty(t, got, "MCP_REGISTRY_ENDPOINT")
+	})
+
+	t.Run("replaces a retired gateway otel endpoint with the current collector", func(t *testing.T) {
+		core.DefaultCLIConfig = &core.CLIConfig{}
+		got := operatorEnvOverrides("", "http://otel-collector.mcp-sentinel.svc.cluster.local:4318")
+		requireOperatorEnvVar(t, got, "MCP_GATEWAY_OTEL_EXPORTER_OTLP_ENDPOINT", defaultGatewayOTELExporterOTLPEndpoint)
 	})
 
 	t.Run("preserves existing gateway otel endpoint when configured", func(t *testing.T) {
@@ -1125,7 +1138,7 @@ func TestEnsureAnalyticsImagePullSecret(t *testing.T) {
 				cmd.RunFunc = func() error {
 					if cmd.StdinR != nil {
 						data, _ := io.ReadAll(cmd.StdinR)
-						manifest = string(data)
+						manifest += string(data)
 					}
 					return nil
 				}
@@ -1142,8 +1155,8 @@ func TestEnsureAnalyticsImagePullSecret(t *testing.T) {
 	if secretName != defaultRegistrySecretName {
 		t.Fatalf("expected secret name %q, got %q", defaultRegistrySecretName, secretName)
 	}
-	if !strings.Contains(manifest, "namespace: "+core.DefaultAnalyticsNamespace) {
-		t.Fatalf("expected analytics namespace in secret manifest, got %q", manifest)
+	if !strings.Contains(manifest, "namespace: "+core.ComponentNamespace("platform-api")) || !strings.Contains(manifest, "namespace: "+core.ComponentNamespace("analytics-api")) {
+		t.Fatalf("expected platform and observability namespaces in secret manifests, got %q", manifest)
 	}
 	if !strings.Contains(manifest, "kubernetes.io/dockerconfigjson") {
 		t.Fatalf("expected dockerconfigjson secret manifest, got %q", manifest)
@@ -1166,7 +1179,7 @@ func TestEnsureAnalyticsImagePullSecretForBundledPublicRegistry(t *testing.T) {
 	mock := &core.MockExecutor{
 		CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
 			cmd := &core.MockCommand{Args: spec.Args}
-			if contains(spec.Args, "get") && contains(spec.Args, "secret") && contains(spec.Args, "mcp-sentinel-secrets") {
+			if contains(spec.Args, "get") && contains(spec.Args, "secret") && contains(spec.Args, "mcp-ui-credentials") {
 				cmd.OutputData = []byte(base64.StdEncoding.EncodeToString([]byte("admin-key")))
 				return cmd
 			}
@@ -1174,7 +1187,7 @@ func TestEnsureAnalyticsImagePullSecretForBundledPublicRegistry(t *testing.T) {
 				cmd.RunFunc = func() error {
 					if cmd.StdinR != nil {
 						data, _ := io.ReadAll(cmd.StdinR)
-						manifest = string(data)
+						manifest += string(data)
 					}
 					return nil
 				}
@@ -1193,8 +1206,8 @@ func TestEnsureAnalyticsImagePullSecretForBundledPublicRegistry(t *testing.T) {
 	if secretName != defaultRegistrySecretName {
 		t.Fatalf("expected secret name %q, got %q", defaultRegistrySecretName, secretName)
 	}
-	if !strings.Contains(manifest, "namespace: "+core.DefaultAnalyticsNamespace) {
-		t.Fatalf("expected analytics namespace in secret manifest, got %q", manifest)
+	if !strings.Contains(manifest, "namespace: "+core.ComponentNamespace("platform-api")) || !strings.Contains(manifest, "namespace: "+core.ComponentNamespace("analytics-api")) {
+		t.Fatalf("expected platform and observability namespaces in secret manifests, got %q", manifest)
 	}
 	if !strings.Contains(manifest, "kubernetes.io/dockerconfigjson") {
 		t.Fatalf("expected public registry dockerconfigjson secret, got %q", manifest)
@@ -1409,7 +1422,7 @@ func TestRenderAnalyticsSecretManifestEscapesPostgresCredentialsInDSN(t *testing
 	data := secretStringDataFromManifest(t, manifest)
 
 	encodedUserInfo := url.UserPassword("user@runtime", `pa:ss?/#[%]`).String()
-	want := "postgres://" + encodedUserInfo + "@mcp-sentinel-postgres.mcp-sentinel.svc.cluster.local:5432/mcp_runtime?sslmode=disable"
+	want := "postgres://" + encodedUserInfo + "@mcp-postgres.mcp-platform.svc.cluster.local:5432/mcp_runtime?sslmode=disable"
 	if data["POSTGRES_DSN"] != want {
 		t.Fatalf("expected encoded postgres DSN %q, got %q", want, data["POSTGRES_DSN"])
 	}
@@ -1421,7 +1434,7 @@ func TestRenderAnalyticsSecretManifestGeneratesKeysWhenMissing(t *testing.T) {
 			if contains(spec.Args, "get") && contains(spec.Args, "secret") {
 				return &core.MockCommand{
 					Args:       spec.Args,
-					OutputData: []byte("Error from server (NotFound): secrets \"mcp-sentinel-secrets\" not found"),
+					OutputData: []byte("Error from server (NotFound): secrets \"mcp-platform-api-credentials\" not found"),
 					OutputErr:  errors.New("not found"),
 				}
 			}
@@ -1477,7 +1490,7 @@ func TestRenderAnalyticsSecretManifestSeedsDevLoginsInTestMode(t *testing.T) {
 			if contains(spec.Args, "get") && contains(spec.Args, "secret") {
 				return &core.MockCommand{
 					Args:       spec.Args,
-					OutputData: []byte("Error from server (NotFound): secrets \"mcp-sentinel-secrets\" not found"),
+					OutputData: []byte("Error from server (NotFound): secrets \"mcp-platform-api-credentials\" not found"),
 					OutputErr:  errors.New("not found"),
 				}
 			}
@@ -1558,8 +1571,8 @@ func TestRenderAnalyticsConfigManifestInjectsMTLSClusterIssuer(t *testing.T) {
 	rendered, err := renderAnalyticsConfigManifest(kubectl, `apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: mcp-sentinel-config
-  namespace: mcp-sentinel
+  name: mcp-shared-config
+  namespace: mcp-platform
 data:
   MCP_MTLS_CLUSTER_ISSUER: ""
   PLATFORM_MODE: "tenant"
@@ -1582,7 +1595,7 @@ data:
 func TestRenderAnalyticsConfigManifestPreservesExistingPublicOAuthConfig(t *testing.T) {
 	mock := &core.MockExecutor{
 		CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
-			if commandHasArgs(spec, "get", "configmap", "mcp-sentinel-config", "-n", "mcp-sentinel", "-o", "json") {
+			if commandHasArgs(spec, "get", "configmap", "mcp-shared-config", "-n", core.ComponentNamespace("platform-api"), "-o", "json") {
 				return &core.MockCommand{
 					Args:       spec.Args,
 					OutputData: []byte(`{"data":{"GOOGLE_CLIENT_ID":"client.apps.googleusercontent.com","OIDC_ISSUER":"https://accounts.google.com","OIDC_AUDIENCE":"client.apps.googleusercontent.com","OIDC_JWKS_URL":"https://www.googleapis.com/oauth2/v3/certs","PLATFORM_MODE":"public"}}`),
@@ -1596,8 +1609,8 @@ func TestRenderAnalyticsConfigManifestPreservesExistingPublicOAuthConfig(t *test
 	rendered, err := renderAnalyticsConfigManifest(kubectl, `apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: mcp-sentinel-config
-  namespace: mcp-sentinel
+  name: mcp-shared-config
+  namespace: mcp-platform
 data:
   GOOGLE_CLIENT_ID: ""
   OIDC_ISSUER: ""
@@ -1621,7 +1634,7 @@ data:
 	if payload.APIVersion != "v1" || payload.Kind != "ConfigMap" {
 		t.Fatalf("expected manifest envelope to be preserved, got apiVersion=%q kind=%q", payload.APIVersion, payload.Kind)
 	}
-	if got := payload.Metadata["name"]; got != "mcp-sentinel-config" {
+	if got := payload.Metadata["name"]; got != "mcp-shared-config" {
 		t.Fatalf("expected metadata.name to be preserved, got %#v", got)
 	}
 	if got := payload.Data["GOOGLE_CLIENT_ID"]; got != "client.apps.googleusercontent.com" {
@@ -1639,8 +1652,8 @@ func TestRenderAnalyticsConfigManifestUsesGoogleEnvOnCleanInstall(t *testing.T) 
 	rendered, err := renderAnalyticsConfigManifest(kubectl, `apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: mcp-sentinel-config
-  namespace: mcp-sentinel
+  name: mcp-shared-config
+  namespace: mcp-platform
 data:
   GOOGLE_CLIENT_ID: ""
   OIDC_ISSUER: ""
@@ -1690,8 +1703,8 @@ func TestRenderAnalyticsConfigManifestDetectsK3sTraefikNamespace(t *testing.T) {
 	rendered, err := renderAnalyticsConfigManifest(kubectl, `apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: mcp-sentinel-config
-  namespace: mcp-sentinel
+  name: mcp-shared-config
+  namespace: mcp-platform
 data:
   PLATFORM_TRAEFIK_NAMESPACE: ""
 `, setupplan.PlatformModePublic, AnalyticsImageSet{})
@@ -1724,8 +1737,8 @@ func TestRenderAnalyticsConfigManifestPreservesExplicitTeamTraefikWatch(t *testi
 	rendered, err := renderAnalyticsConfigManifest(kubectl, `apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: mcp-sentinel-config
-  namespace: mcp-sentinel
+  name: mcp-shared-config
+  namespace: mcp-platform
 data:
   PLATFORM_TRAEFIK_NAMESPACE: kube-system
   PLATFORM_TEAM_TRAEFIK_WATCH: required
@@ -1748,7 +1761,7 @@ data:
 func TestRenderAnalyticsConfigManifestAppliesExplicitPlatformMode(t *testing.T) {
 	mock := &core.MockExecutor{
 		CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
-			if commandHasArgs(spec, "get", "configmap", "mcp-sentinel-config", "-n", "mcp-sentinel", "-o", "json") {
+			if commandHasArgs(spec, "get", "configmap", "mcp-shared-config", "-n", core.ComponentNamespace("platform-api"), "-o", "json") {
 				return &core.MockCommand{
 					Args:       spec.Args,
 					OutputData: []byte(`{"data":{"PLATFORM_MODE":"public"}}`),
@@ -1762,8 +1775,8 @@ func TestRenderAnalyticsConfigManifestAppliesExplicitPlatformMode(t *testing.T) 
 	rendered, err := renderAnalyticsConfigManifest(kubectl, `apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: mcp-sentinel-config
-  namespace: mcp-sentinel
+  name: mcp-shared-config
+  namespace: mcp-platform
 data:
   PLATFORM_MODE: "tenant"
 `, setupplan.PlatformModeOrg, AnalyticsImageSet{})
@@ -1791,7 +1804,7 @@ func TestRenderAnalyticsConfigManifestSetsRegistryResolutionEnv(t *testing.T) {
 	}
 	mock := &core.MockExecutor{
 		CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
-			if commandHasArgs(spec, "get", "configmap", "mcp-sentinel-config", "-n", "mcp-sentinel", "-o", "json") {
+			if commandHasArgs(spec, "get", "configmap", "mcp-shared-config", "-n", core.ComponentNamespace("platform-api"), "-o", "json") {
 				return &core.MockCommand{Args: spec.Args, OutputData: []byte(`{"data":{}}`)}
 			}
 			return &core.MockCommand{Args: spec.Args}
@@ -1802,8 +1815,8 @@ func TestRenderAnalyticsConfigManifestSetsRegistryResolutionEnv(t *testing.T) {
 	rendered, err := renderAnalyticsConfigManifest(kubectl, `apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: mcp-sentinel-config
-  namespace: mcp-sentinel
+  name: mcp-shared-config
+  namespace: mcp-platform
 data:
   PLATFORM_MODE: "tenant"
   PLATFORM_REGISTRY_URL: ""
@@ -1834,10 +1847,10 @@ data:
 func TestRenderAnalyticsConfigManifestHandlesMissingConfigMap(t *testing.T) {
 	mock := &core.MockExecutor{
 		CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
-			if commandHasArgs(spec, "get", "configmap", "mcp-sentinel-config", "-n", "mcp-sentinel", "-o", "json") {
+			if commandHasArgs(spec, "get", "configmap", "mcp-shared-config", "-n", core.ComponentNamespace("platform-api"), "-o", "json") {
 				return &core.MockCommand{
 					Args:       spec.Args,
-					OutputData: []byte("Error from server (NotFound): configmaps \"mcp-sentinel-config\" not found"),
+					OutputData: []byte("Error from server (NotFound): configmaps \"mcp-shared-config\" not found"),
 					OutputErr:  errors.New("exit status 1"),
 				}
 			}
@@ -1849,8 +1862,8 @@ func TestRenderAnalyticsConfigManifestHandlesMissingConfigMap(t *testing.T) {
 	rendered, err := renderAnalyticsConfigManifest(kubectl, `apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: mcp-sentinel-config
-  namespace: mcp-sentinel
+  name: mcp-shared-config
+  namespace: mcp-platform
 data:
   PLATFORM_MODE: "tenant"
 `, setupplan.PlatformModeTenant, AnalyticsImageSet{})
@@ -1873,7 +1886,7 @@ func TestRenderAnalyticsConfigManifestHandlesEmptyConfigMapOutput(t *testing.T) 
 	mock := &core.MockExecutor{
 		CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
 			cmd := &core.MockCommand{Args: spec.Args}
-			if commandHasArgs(spec, "get", "configmap", "mcp-sentinel-config", "-n", core.DefaultAnalyticsNamespace, "-o", "json") {
+			if commandHasArgs(spec, "get", "configmap", "mcp-shared-config", "-n", core.ComponentNamespace("platform-api"), "-o", "json") {
 				cmd.OutputData = []byte("")
 			}
 			return cmd
@@ -1884,7 +1897,7 @@ func TestRenderAnalyticsConfigManifestHandlesEmptyConfigMapOutput(t *testing.T) 
 	rendered, err := renderAnalyticsConfigManifest(kubectl, `apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: mcp-sentinel-config
+  name: mcp-shared-config
 data:
   PLATFORM_MODE: "tenant"
 `, setupplan.PlatformModeTenant, AnalyticsImageSet{})
@@ -1945,12 +1958,12 @@ func TestPrepareAnalyticsImagesUsesTestModeImageSet(t *testing.T) {
 	}
 
 	want := AnalyticsImageSet{
-		Ingest:       "registry.example.com/mcp-sentinel-ingest:latest",
+		Ingest:       "registry.example.com/mcp-ingest:latest",
 		PlatformAPI:  "registry.example.com/mcp-platform-api:latest",
 		RuntimeAPI:   "registry.example.com/mcp-runtime-api:latest",
 		AnalyticsAPI: "registry.example.com/mcp-analytics-api:latest",
-		Processor:    "registry.example.com/mcp-sentinel-processor:latest",
-		UI:           "registry.example.com/mcp-sentinel-ui:latest",
+		Processor:    "registry.example.com/mcp-processor:latest",
+		UI:           "registry.example.com/mcp-ui:latest",
 		DoctorSmoke:  "registry.example.com/mcp-runtime-doctor-smoke:latest",
 	}
 	if got != want {
@@ -1979,7 +1992,7 @@ func TestPrepareDeploymentImagesParallelBuildsStartsBothBuilds(t *testing.T) {
 			return "registry.example.com/mcp-runtime-operator:latest"
 		},
 		GatewayProxyImageFor: func(_ *config.ExternalRegistryConfig) string {
-			return "registry.example.com/mcp-sentinel-mcp-gateway:latest"
+			return "registry.example.com/mcp-gateway:latest"
 		},
 		BuildOperatorImage: func(string) error {
 			started <- "operator"
@@ -2026,7 +2039,7 @@ func TestPrepareDeploymentImagesParallelBuildsPreparesInternalRegistryOnce(t *te
 			return "registry.example.com/mcp-runtime-operator:latest"
 		},
 		GatewayProxyImageFor: func(_ *config.ExternalRegistryConfig) string {
-			return "registry.example.com/mcp-sentinel-mcp-gateway:latest"
+			return "registry.example.com/mcp-gateway:latest"
 		},
 		BuildOperatorImage:     func(string) error { return nil },
 		BuildGatewayProxyImage: func(string) error { return nil },
@@ -2051,7 +2064,7 @@ func TestPrepareDeploymentImagesParallelBuildsPreparesInternalRegistryOnce(t *te
 	if operatorImage != "registry.local:5000/mcp-runtime-operator:latest" {
 		t.Fatalf("operator image = %q, want internal registry image", operatorImage)
 	}
-	if gatewayProxyImage != "registry.local:5000/mcp-sentinel-mcp-gateway:latest" {
+	if gatewayProxyImage != "registry.local:5000/mcp-gateway:latest" {
 		t.Fatalf("gateway proxy image = %q, want internal registry image", gatewayProxyImage)
 	}
 	if got := atomic.LoadInt32(&ensureCalls); got != 1 {
@@ -2122,12 +2135,12 @@ func TestPrepareAnalyticsImagesParallelBuildsPreparesInternalRegistryOnce(t *tes
 	}
 
 	want := AnalyticsImageSet{
-		Ingest:       "registry.local:5000/mcp-sentinel-ingest:latest",
+		Ingest:       "registry.local:5000/mcp-ingest:latest",
 		PlatformAPI:  "registry.local:5000/mcp-platform-api:latest",
 		RuntimeAPI:   "registry.local:5000/mcp-runtime-api:latest",
 		AnalyticsAPI: "registry.local:5000/mcp-analytics-api:latest",
-		Processor:    "registry.local:5000/mcp-sentinel-processor:latest",
-		UI:           "registry.local:5000/mcp-sentinel-ui:latest",
+		Processor:    "registry.local:5000/mcp-processor:latest",
+		UI:           "registry.local:5000/mcp-ui:latest",
 		DoctorSmoke:  "registry.local:5000/mcp-runtime-doctor-smoke:latest",
 	}
 	if got != want {
@@ -2146,14 +2159,14 @@ func TestRenderAnalyticsManifestInjectsImagePullSecrets(t *testing.T) {
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: mcp-sentinel-ingest
+  name: mcp-ingest
 spec:
   template:
     spec:
       # keep containers comment
       containers:
         - name: ingest
-          image: mcp-sentinel-ingest:latest
+          image: mcp-ingest:latest
 ---
 apiVersion: apps/v1
 kind: DaemonSet
@@ -2167,11 +2180,11 @@ spec:
           image: grafana/promtail:2.9.4
 `
 
-	rendered, err := renderAnalyticsManifest(content, AnalyticsImageSet{Ingest: "registry.example.com/mcp-sentinel-ingest:latest"}, defaultRegistrySecretName, setupplan.PlatformModeTenant)
+	rendered, err := renderAnalyticsManifest(content, AnalyticsImageSet{Ingest: "registry.example.com/mcp-ingest:latest"}, defaultRegistrySecretName, setupplan.PlatformModeTenant)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(rendered, "image: registry.example.com/mcp-sentinel-ingest:latest") {
+	if !strings.Contains(rendered, "image: registry.example.com/mcp-ingest:latest") {
 		t.Fatalf("expected image replacement, got %s", rendered)
 	}
 	if !strings.Contains(rendered, "imagePullSecrets:") || !strings.Contains(rendered, "name: "+defaultRegistrySecretName) {
@@ -2183,12 +2196,12 @@ spec:
 }
 
 func TestRenderAnalyticsManifestPullsRepublishedLatestUI(t *testing.T) {
-	content := "          image: mcp-sentinel-ui:latest\n          imagePullPolicy: IfNotPresent\n"
+	content := "          image: mcp-ui:latest\n          imagePullPolicy: IfNotPresent\n"
 	for _, tc := range []struct {
 		image, wantPolicy string
 	}{
-		{"registry.registry.svc.cluster.local:5000/mcp-sentinel-ui:latest", "Always"},
-		{"registry.registry.svc.cluster.local:5000/mcp-sentinel-ui@sha256:abc123", "IfNotPresent"},
+		{"registry.registry.svc.cluster.local:5000/mcp-ui:latest", "Always"},
+		{"registry.registry.svc.cluster.local:5000/mcp-ui@sha256:abc123", "IfNotPresent"},
 	} {
 		rendered, err := renderAnalyticsManifest(content, AnalyticsImageSet{UI: tc.image}, "", setupplan.PlatformModeTenant)
 		if err != nil {
@@ -2247,7 +2260,7 @@ func TestDeployAnalyticsManifestsWithKubectl_RecreatesInitializationJobs(t *test
 	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/test\n"), 0o644); err != nil {
 		t.Fatalf("failed to write go.mod: %v", err)
 	}
-	manifestContent := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: fixture\n  namespace: mcp-sentinel\n"
+	manifestContent := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: fixture\n  namespace: mcp-platform\n"
 	for _, name := range []string{
 		"00-namespace.yaml",
 		"00-priority-classes.yaml",
@@ -2296,7 +2309,7 @@ func TestDeployAnalyticsManifestsWithKubectl_RecreatesInitializationJobs(t *test
 		CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
 			cmd := &core.MockCommand{Args: spec.Args}
 			if contains(spec.Args, "get") && contains(spec.Args, "secret") {
-				cmd.OutputData = []byte("Error from server (NotFound): secrets \"mcp-sentinel-secrets\" not found")
+				cmd.OutputData = []byte("Error from server (NotFound): secrets \"mcp-platform-api-credentials\" not found")
 				cmd.OutputErr = errors.New("not found")
 			}
 			if contains(spec.Args, "delete") && contains(spec.Args, "job/clickhouse-init") {
@@ -2322,12 +2335,12 @@ func TestDeployAnalyticsManifestsWithKubectl_RecreatesInitializationJobs(t *test
 	kubectl := core.NewTestKubectlClient(mock)
 
 	err = deployAnalyticsManifestsWithKubectl(kubectl, zap.NewNop(), AnalyticsImageSet{
-		Ingest:       "example.com/mcp-sentinel-ingest:latest",
+		Ingest:       "example.com/mcp-ingest:latest",
 		PlatformAPI:  "example.com/mcp-platform-api:latest",
 		RuntimeAPI:   "example.com/mcp-runtime-api:latest",
 		AnalyticsAPI: "example.com/mcp-analytics-api:latest",
-		Processor:    "example.com/mcp-sentinel-processor:latest",
-		UI:           "example.com/mcp-sentinel-ui:latest",
+		Processor:    "example.com/mcp-processor:latest",
+		UI:           "example.com/mcp-ui:latest",
 	}, "", setupplan.PlatformModeTenant)
 	if err != nil {
 		t.Fatalf("deployAnalyticsManifestsWithKubectl returned error: %v", err)
@@ -2416,10 +2429,10 @@ func TestPrometheusScrapesProcessorMetricsPort(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read prometheus manifest: %v", err)
 	}
-	if !strings.Contains(string(content), `targets: ["mcp-sentinel-processor:9102"]`) {
+	if !strings.Contains(string(content), `targets: ["mcp-processor:9102"]`) {
 		t.Fatalf("expected Prometheus to scrape processor metrics port 9102, got:\n%s", content)
 	}
-	if strings.Contains(string(content), `targets: ["mcp-sentinel-processor:9092"]`) {
+	if strings.Contains(string(content), `targets: ["mcp-processor:9092"]`) {
 		t.Fatalf("Prometheus still scrapes stale processor port 9092:\n%s", content)
 	}
 }
@@ -2445,9 +2458,9 @@ func TestPrometheusScrapesSplitAPIJobs(t *testing.T) {
 	text := string(content)
 	for _, want := range []string{
 		"job_name: mcp-platform-api",
-		`targets: ["mcp-platform-api:9090"]`,
+		`targets: ["mcp-platform-api.mcp-platform.svc.cluster.local:9090"]`,
 		"job_name: mcp-runtime-api",
-		`targets: ["mcp-runtime-api:9094"]`,
+		`targets: ["mcp-runtime-api.mcp-platform.svc.cluster.local:9094"]`,
 		"job_name: mcp-analytics-api",
 		`targets: ["mcp-analytics-api:9095"]`,
 	} {
@@ -2455,8 +2468,8 @@ func TestPrometheusScrapesSplitAPIJobs(t *testing.T) {
 			t.Fatalf("expected Prometheus config to include %q, got:\n%s", want, text)
 		}
 	}
-	if strings.Contains(text, `job_name: mcp-sentinel-api`) {
-		t.Fatalf("Prometheus still references monolith mcp-sentinel-api scrape job:\n%s", text)
+	if strings.Contains(text, `job_name: mcp-api`) {
+		t.Fatalf("Prometheus still references monolith mcp-api scrape job:\n%s", text)
 	}
 }
 
@@ -2469,7 +2482,7 @@ func TestPrometheusDiscoversGatewaySidecarMetrics(t *testing.T) {
 	for _, want := range []string{
 		"kind: ServiceAccount",
 		"name: prometheus",
-		"name: mcp-sentinel-prometheus-discovery",
+		"name: mcp-prometheus-discovery",
 		"resources: [\"endpoints\", \"pods\", \"services\"]",
 		"job_name: mcp-gateway-sidecars",
 		"role: endpoints",
@@ -2561,7 +2574,7 @@ func TestDeployAnalyticsManifestsReturnsRolloutFailures(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/test\n"), 0o644); err != nil {
 		t.Fatalf("failed to write go.mod: %v", err)
 	}
-	manifestContent := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: fixture\n  namespace: mcp-sentinel\n"
+	manifestContent := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: fixture\n  namespace: mcp-platform\n"
 	for _, name := range []string{
 		"00-namespace.yaml",
 		"00-priority-classes.yaml",
@@ -2616,7 +2629,7 @@ func TestDeployAnalyticsManifestsReturnsRolloutFailures(t *testing.T) {
 					}
 				}
 			case contains(spec.Args, "get") && contains(spec.Args, "secret"):
-				cmd.OutputData = []byte("Error from server (NotFound): secrets \"mcp-sentinel-secrets\" not found")
+				cmd.OutputData = []byte("Error from server (NotFound): secrets \"mcp-platform-api-credentials\" not found")
 				cmd.OutputErr = errors.New("not found")
 			case contains(spec.Args, "rollout") && contains(spec.Args, "deployment/mcp-platform-api"):
 				cmd.RunErr = errors.New("image pull failed")
@@ -2627,12 +2640,12 @@ func TestDeployAnalyticsManifestsReturnsRolloutFailures(t *testing.T) {
 	kubectl := core.NewTestKubectlClient(mock)
 
 	err = deployAnalyticsManifestsWithKubectl(kubectl, zap.NewNop(), AnalyticsImageSet{
-		Ingest:       "example.com/mcp-sentinel-ingest:latest",
+		Ingest:       "example.com/mcp-ingest:latest",
 		PlatformAPI:  "example.com/mcp-platform-api:latest",
 		RuntimeAPI:   "example.com/mcp-runtime-api:latest",
 		AnalyticsAPI: "example.com/mcp-analytics-api:latest",
-		Processor:    "example.com/mcp-sentinel-processor:latest",
-		UI:           "example.com/mcp-sentinel-ui:latest",
+		Processor:    "example.com/mcp-processor:latest",
+		UI:           "example.com/mcp-ui:latest",
 	}, "", setupplan.PlatformModeTenant)
 	if err == nil {
 		t.Fatal("expected rollout failure")
@@ -2663,7 +2676,7 @@ func TestDeployAnalyticsManifestsWithKubectl_HostpathUsesHostpathManifests(t *te
 	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/test\n"), 0o644); err != nil {
 		t.Fatalf("failed to write go.mod: %v", err)
 	}
-	manifestContent := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: fixture\n  namespace: mcp-sentinel\n"
+	manifestContent := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: fixture\n  namespace: mcp-platform\n"
 	for _, name := range []string{
 		"00-namespace.yaml",
 		"00-priority-classes.yaml",
@@ -2687,7 +2700,7 @@ func TestDeployAnalyticsManifestsWithKubectl_HostpathUsesHostpathManifests(t *te
 		CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
 			cmd := &core.MockCommand{Args: spec.Args}
 			if contains(spec.Args, "get") && contains(spec.Args, "secret") {
-				cmd.OutputData = []byte("Error from server (NotFound): secrets \"mcp-sentinel-secrets\" not found")
+				cmd.OutputData = []byte("Error from server (NotFound): secrets \"mcp-platform-api-credentials\" not found")
 				cmd.OutputErr = errors.New("not found")
 			}
 			if contains(spec.Args, "rollout") && contains(spec.Args, "statefulset") && contains(spec.Args, "clickhouse") {
@@ -2699,12 +2712,12 @@ func TestDeployAnalyticsManifestsWithKubectl_HostpathUsesHostpathManifests(t *te
 	kubectl := core.NewTestKubectlClient(mock)
 
 	err = deployAnalyticsManifestsWithKubectl(kubectl, zap.NewNop(), AnalyticsImageSet{
-		Ingest:       "example.com/mcp-sentinel-ingest:latest",
+		Ingest:       "example.com/mcp-ingest:latest",
 		PlatformAPI:  "example.com/mcp-platform-api:latest",
 		RuntimeAPI:   "example.com/mcp-runtime-api:latest",
 		AnalyticsAPI: "example.com/mcp-analytics-api:latest",
-		Processor:    "example.com/mcp-sentinel-processor:latest",
-		UI:           "example.com/mcp-sentinel-ui:latest",
+		Processor:    "example.com/mcp-processor:latest",
+		UI:           "example.com/mcp-ui:latest",
 	}, setupplan.StorageModeHostpath, setupplan.PlatformModeTenant)
 	if err == nil {
 		t.Fatal("expected failure from rollout timeout")
@@ -2735,7 +2748,7 @@ func TestDeployAnalyticsManifestsWithKubectl_WaitsForPostgresStatefulSet(t *test
 	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/test\n"), 0o644); err != nil {
 		t.Fatalf("failed to write go.mod: %v", err)
 	}
-	manifestContent := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: fixture\n  namespace: mcp-sentinel\n"
+	manifestContent := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: fixture\n  namespace: mcp-platform\n"
 	for _, name := range []string{
 		"00-namespace.yaml",
 		"00-priority-classes.yaml",
@@ -2778,10 +2791,10 @@ func TestDeployAnalyticsManifestsWithKubectl_WaitsForPostgresStatefulSet(t *test
 		CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
 			cmd := &core.MockCommand{Args: spec.Args}
 			if contains(spec.Args, "get") && contains(spec.Args, "secret") {
-				cmd.OutputData = []byte("Error from server (NotFound): secrets \"mcp-sentinel-secrets\" not found")
+				cmd.OutputData = []byte("Error from server (NotFound): secrets \"mcp-platform-api-credentials\" not found")
 				cmd.OutputErr = errors.New("not found")
 			}
-			if contains(spec.Args, "rollout") && contains(spec.Args, "statefulset/mcp-sentinel-postgres") {
+			if contains(spec.Args, "rollout") && contains(spec.Args, "statefulset/mcp-postgres") {
 				sawPostgresStatefulSet = true
 				cmd.RunErr = errors.New("rollout timeout")
 			}
@@ -2791,20 +2804,20 @@ func TestDeployAnalyticsManifestsWithKubectl_WaitsForPostgresStatefulSet(t *test
 	kubectl := core.NewTestKubectlClient(mock)
 
 	err = deployAnalyticsManifestsWithKubectl(kubectl, zap.NewNop(), AnalyticsImageSet{
-		Ingest:       "example.com/mcp-sentinel-ingest:latest",
+		Ingest:       "example.com/mcp-ingest:latest",
 		PlatformAPI:  "example.com/mcp-platform-api:latest",
 		RuntimeAPI:   "example.com/mcp-runtime-api:latest",
 		AnalyticsAPI: "example.com/mcp-analytics-api:latest",
-		Processor:    "example.com/mcp-sentinel-processor:latest",
-		UI:           "example.com/mcp-sentinel-ui:latest",
+		Processor:    "example.com/mcp-processor:latest",
+		UI:           "example.com/mcp-ui:latest",
 	}, "", setupplan.PlatformModeTenant)
 	if err == nil {
 		t.Fatal("expected failure from postgres rollout timeout")
 	}
 	if !sawPostgresStatefulSet {
-		t.Fatal("expected setup to wait on statefulset/mcp-sentinel-postgres")
+		t.Fatal("expected setup to wait on statefulset/mcp-postgres")
 	}
-	if !strings.Contains(err.Error(), "statefulset/mcp-sentinel-postgres") {
+	if !strings.Contains(err.Error(), "statefulset/mcp-postgres") {
 		t.Fatalf("expected statefulset postgres in error, got %v", err)
 	}
 }
@@ -3108,7 +3121,7 @@ func TestDeployOperatorManifestsWithKubectl(t *testing.T) {
 	swapDefaultKubectlClientForTest(t, kubectl)
 
 	operatorImage := "registry.example.com/mcp-runtime-operator:dev"
-	gatewayProxyImage := "registry.example.com/mcp-sentinel-mcp-gateway:dev"
+	gatewayProxyImage := "registry.example.com/mcp-gateway:dev"
 	operatorArgs := []string{
 		"--metrics-bind-address=:9090",
 		"--health-probe-bind-address=:9091",
@@ -3804,7 +3817,7 @@ func TestRecoverKafkaClusterIDMismatchWithKubectlRefusesDestructiveReset(t *test
 			commands = append(commands, append([]string(nil), spec.Args...))
 			cmd := &core.MockCommand{Args: spec.Args}
 			switch {
-			case slices.Equal(spec.Args, []string{"logs", kafkaPodName, "-n", core.DefaultAnalyticsNamespace, "-c", kafkaPodContainer}):
+			case slices.Equal(spec.Args, []string{"logs", kafkaPodName, "-n", core.ComponentNamespace("kafka"), "-c", kafkaPodContainer}):
 				cmd.OutputData = []byte(`kafka.common.InconsistentClusterIdException: The Cluster ID a doesn't match stored clusterId Some(b) in meta.properties`)
 			}
 			return cmd
@@ -3822,7 +3835,7 @@ func TestRecoverKafkaClusterIDMismatchWithKubectlRefusesDestructiveReset(t *test
 	if !strings.Contains(err.Error(), "will not delete persistent volume") {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	want := [][]string{{"logs", kafkaPodName, "-n", core.DefaultAnalyticsNamespace, "-c", kafkaPodContainer}}
+	want := [][]string{{"logs", kafkaPodName, "-n", core.ComponentNamespace("kafka"), "-c", kafkaPodContainer}}
 	if !slices.EqualFunc(commands, want, func(got, want []string) bool {
 		return slices.Equal(got, want)
 	}) {
@@ -3892,8 +3905,8 @@ func TestRenderAnalyticsManifestPullsRepublishedLatestIngestAndProcessor(t *test
 		manifest, repo string
 		set            func(string) AnalyticsImageSet
 	}{
-		{"k8s/06-ingest.yaml", "mcp-sentinel-ingest", func(i string) AnalyticsImageSet { return AnalyticsImageSet{Ingest: i} }},
-		{"k8s/07-processor.yaml", "mcp-sentinel-processor", func(i string) AnalyticsImageSet { return AnalyticsImageSet{Processor: i} }},
+		{"k8s/06-ingest.yaml", "mcp-ingest", func(i string) AnalyticsImageSet { return AnalyticsImageSet{Ingest: i} }},
+		{"k8s/07-processor.yaml", "mcp-processor", func(i string) AnalyticsImageSet { return AnalyticsImageSet{Processor: i} }},
 	} {
 		raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", tc.manifest))
 		if err != nil {

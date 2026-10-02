@@ -170,7 +170,7 @@ requests remain on the owning API ingress and are not accepted by the BFF.
 sequenceDiagram
     participant Browser
     participant Ingress as Traefik
-    participant UI as mcp-sentinel-ui
+    participant UI as UI in mcp-platform
     participant Platform as mcp-platform-api
     participant Runtime as mcp-runtime-api
     participant DB as Postgres
@@ -321,15 +321,14 @@ Primary request paths:
 ## Observability And Admin
 
 Observability uses both direct service routes and platform-guarded public routes.
-Grafana and Prometheus public ingress paths are protected by UI admin forward
-auth.
+The public `/grafana` path is protected by the UI admin check. Prometheus stays
+off the public ingress.
 
 ```mermaid
 flowchart LR
     Browser["Browser or API client"] --> Ingress["Traefik / platform ingress"]
-    Ingress --> Auth["sentinel-admin-auth\nUI /auth/admin-check"]
+    Ingress --> Auth["UI admin check\n/auth/admin-check"]
     Auth --> Grafana["/grafana"]
-    Auth --> Prometheus["/prometheus"]
     Gateway["mcp-gateway"] --> Ingest["ingest /events"]
     Ingest --> Kafka
     Kafka --> Processor
@@ -352,7 +351,7 @@ Primary request paths:
 
 | Use case | Entry point | Components crossed | Primary contracts | E2E scenario |
 |---|---|---|---|---|
-| Bootstrap/install platform | `mcp-runtime bootstrap`, `setup` | CLI, Docker, registry, K8s, Traefik, API, UI, operator, Sentinel services | manifests, setup plan, image refs, rollouts | `smoke-auth`, `all` |
+| Bootstrap/install platform | `mcp-runtime bootstrap`, `setup` | CLI, Docker, registry, K8s, Traefik, API, UI, operator, platform services | manifests, setup plan, image refs, rollouts | `smoke-auth`, `all` |
 | Check platform health | `status`, `cluster doctor`, service `/health` | CLI, K8s, API/UI/ingest/processor/gateway health routes | workload status, secrets, ingress, registry | `smoke-auth`, `observability` |
 | Log in to platform from CLI | `mcp-runtime auth login` | CLI, API, Postgres, authfile | JWT/API token, platform URL | `cli-platform`, `api-platform` |
 | Browser login/logout | UI `/auth/*` | browser, UI, API key/session store | `mcp_ui_session`, admin check | `ui-auth` |

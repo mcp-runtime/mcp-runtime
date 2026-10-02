@@ -39,8 +39,8 @@ Usage: hack/deploy/mcpruntime-org/clean.sh --yes [--restore-platform] [--no-back
 
 Platform backup scope (platform functioning only):
   - TLS Secrets + cert-manager Certificate CRs + letsencrypt-prod ClusterIssuer
-  - mcp-sentinel-config (OIDC, Traefik namespace, registry host, platform flags)
-  - mcp-sentinel-secrets bootstrap keys (API/UI/ingest/Grafana/DB passwords)
+  - mcp-shared-config (OIDC, Traefik namespace, registry host, platform flags)
+  - owner credential Secrets (API, UI, ingest, Grafana, Postgres)
   - mcp-auth connector/signing/TLS secrets and Keycloak admin/TLS secrets when present
 
 NOT backed up (intentional reset on clean):
@@ -141,7 +141,8 @@ Next steps:
   2. Ensure config/deployments/mcpruntime-org.env exports GOOGLE_CLIENT_ID (and OIDC_* if used).
   3. hack/deploy/mcpruntime-org/setup.sh
      (restores platform-runtime backup automatically when $MCP_TLS_BACKUP_ROOT/latest exists)
-  4. kubectl rollout restart deployment/mcp-platform-api deployment/mcp-runtime-api deployment/mcp-analytics-api deployment/mcp-sentinel-ui -n mcp-sentinel
+  4. kubectl -n mcp-platform rollout restart deployment/mcp-platform-api deployment/mcp-runtime-api deployment/mcp-ui
+     kubectl -n mcp-observability rollout restart deployment/mcp-analytics-api
   5. hack/deploy/mcpruntime-org/multitenancy-test.sh   # PLATFORM_URL / MCP_URL / REGISTRY_HOST
 
 For code-only changes without a wipe: hack/deploy/mcpruntime-org/rollout.sh

@@ -238,16 +238,16 @@ func checkOperatorRegistryEndpoint(kubectl core.KubectlRunner) DoctorCheck {
 }
 
 func checkSentinelKafkaReadiness(kubectl core.KubectlRunner) DoctorCheck {
-	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", doctorSentinelNamespace, "-o", "jsonpath={.metadata.name}"}); err != nil {
-		return DoctorCheck{Name: "sentinel Kafka readiness", OK: true, Detail: "namespace mcp-sentinel not found; skipping Kafka readiness"}
+	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", componentNamespace("kafka"), "-o", "jsonpath={.metadata.name}"}); err != nil {
+		return DoctorCheck{Name: "sentinel Kafka readiness", OK: true, Detail: "namespace mcp-observability not found; skipping Kafka readiness"}
 	}
-	pair, ready, err := doctorStatefulSetReplicaStatus(kubectl, doctorSentinelNamespace, "kafka")
+	pair, ready, err := doctorStatefulSetReplicaStatus(kubectl, componentNamespace("kafka"), "kafka")
 	if err != nil {
 		return DoctorCheck{
 			Name:   "sentinel Kafka readiness",
 			OK:     false,
 			Detail: err.Error(),
-			Remedy: "inspect Kafka rollout, logs, and PVC state in mcp-sentinel",
+			Remedy: "inspect Kafka rollout, logs, and PVC state in mcp-observability",
 		}
 	}
 	if !ready {
@@ -255,7 +255,7 @@ func checkSentinelKafkaReadiness(kubectl core.KubectlRunner) DoctorCheck {
 			Name:   "sentinel Kafka readiness",
 			OK:     false,
 			Detail: fmt.Sprintf("%s replicas ready", pair),
-			Remedy: "inspect `kubectl -n mcp-sentinel get pods`, `kubectl -n mcp-sentinel logs kafka-0 --previous`, and the Kafka PVC state",
+			Remedy: "inspect `kubectl -n mcp-observability get pods`, `kubectl -n mcp-observability logs kafka-0 --previous`, and the Kafka PVC state",
 		}
 	}
 	return DoctorCheck{
@@ -266,16 +266,16 @@ func checkSentinelKafkaReadiness(kubectl core.KubectlRunner) DoctorCheck {
 }
 
 func checkSentinelIngestReadiness(kubectl core.KubectlRunner) DoctorCheck {
-	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", doctorSentinelNamespace, "-o", "jsonpath={.metadata.name}"}); err != nil {
-		return DoctorCheck{Name: "sentinel ingest readiness", OK: true, Detail: "namespace mcp-sentinel not found; skipping ingest readiness"}
+	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", componentNamespace("ingest"), "-o", "jsonpath={.metadata.name}"}); err != nil {
+		return DoctorCheck{Name: "sentinel ingest readiness", OK: true, Detail: "namespace mcp-observability not found; skipping ingest readiness"}
 	}
-	pair, ready, err := doctorDeploymentReplicaStatus(kubectl, doctorSentinelNamespace, "mcp-sentinel-ingest")
+	pair, ready, err := doctorDeploymentReplicaStatus(kubectl, componentNamespace("ingest"), "mcp-ingest")
 	if err != nil {
 		return DoctorCheck{
 			Name:   "sentinel ingest readiness",
 			OK:     false,
 			Detail: err.Error(),
-			Remedy: "inspect the ingest deployment and pod logs in mcp-sentinel",
+			Remedy: "inspect the ingest deployment and pod logs in mcp-observability",
 		}
 	}
 	if !ready {
@@ -283,7 +283,7 @@ func checkSentinelIngestReadiness(kubectl core.KubectlRunner) DoctorCheck {
 			Name:   "sentinel ingest readiness",
 			OK:     false,
 			Detail: fmt.Sprintf("%s replicas ready", pair),
-			Remedy: "inspect `kubectl -n mcp-sentinel get pods`, `kubectl -n mcp-sentinel logs deploy/mcp-sentinel-ingest`, and Kafka readiness",
+			Remedy: "inspect `kubectl -n mcp-observability get pods`, `kubectl -n mcp-observability logs deploy/mcp-ingest`, and Kafka readiness",
 		}
 	}
 	return DoctorCheck{
@@ -294,19 +294,19 @@ func checkSentinelIngestReadiness(kubectl core.KubectlRunner) DoctorCheck {
 }
 
 func checkRuntimeAPIImageDisplayRefs(kubectl core.KubectlRunner) DoctorCheck {
-	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", doctorSentinelNamespace, "-o", "jsonpath={.metadata.name}"}); err != nil {
+	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", componentNamespace("platform-api"), "-o", "jsonpath={.metadata.name}"}); err != nil {
 		return DoctorCheck{
 			Name:   "runtime API image display refs",
 			OK:     true,
-			Detail: "namespace mcp-sentinel not found; skipping runtime API image display check",
+			Detail: "namespace mcp-platform not found; skipping runtime API image display check",
 		}
 	}
-	apiKeyB64, err := readKubectlOutput(kubectl, []string{"get", "secret", "mcp-sentinel-secrets", "-n", doctorSentinelNamespace, "-o", "jsonpath={.data.UI_API_KEY}"})
+	uiSecret, apiKeyB64, err := readOwnedSecret(kubectl, "UI_API_KEY")
 	if err != nil {
 		return DoctorCheck{
 			Name:   "runtime API image display refs",
 			OK:     false,
-			Detail: "UI_API_KEY not available in mcp-sentinel-secrets",
+			Detail: "UI_API_KEY not available in " + uiSecret,
 			Remedy: "configure UI_API_KEY before probing runtime API responses",
 		}
 	}
@@ -315,8 +315,8 @@ func checkRuntimeAPIImageDisplayRefs(kubectl core.KubectlRunner) DoctorCheck {
 		return DoctorCheck{
 			Name:   "runtime API image display refs",
 			OK:     false,
-			Detail: fmt.Sprintf("UI_API_KEY in mcp-sentinel-secrets is not valid base64: %v", err),
-			Remedy: "patch mcp-sentinel-secrets with valid Kubernetes secret data for UI_API_KEY",
+			Detail: fmt.Sprintf("UI_API_KEY in %s is not valid base64: %v", uiSecret, err),
+			Remedy: "patch " + uiSecret + " with valid Kubernetes secret data for UI_API_KEY",
 		}
 	}
 	apiKey = strings.TrimSpace(apiKey)
@@ -325,24 +325,24 @@ func checkRuntimeAPIImageDisplayRefs(kubectl core.KubectlRunner) DoctorCheck {
 			Name:   "runtime API image display refs",
 			OK:     false,
 			Detail: "UI_API_KEY decoded to empty value",
-			Remedy: "set non-empty UI_API_KEY in mcp-sentinel-secrets",
+			Remedy: "set non-empty UI_API_KEY in " + uiSecret,
 		}
 	}
 
 	podName := fmt.Sprintf("doctor-runtime-servers-%d", time.Now().UnixNano())
 	image := "curlimages/curl:8.7.1"
 	defer func() {
-		_ = kubectl.Run([]string{"delete", "pod", podName, "-n", doctorSentinelNamespace, "--ignore-not-found"})
+		_ = kubectl.Run([]string{"delete", "pod", podName, "-n", componentNamespace("platform-api"), "--ignore-not-found"})
 	}()
 	cmd, cmdErr := kubectl.CommandArgs([]string{
 		"run", podName,
-		"-n", doctorSentinelNamespace,
+		"-n", componentNamespace("platform-api"),
 		"--restart=Never",
 		"--image=" + image,
 		"--overrides=" + restrictedRunOverrides(podName, image, "sh", "-c", fmt.Sprintf(
 			"status=$(curl -sS -o doctor-response.json -w '%%{http_code}' --connect-timeout 5 --max-time 20 -H %q %q); cat doctor-response.json; printf '\\nHTTP_STATUS=%%s\\n' \"$status\"",
 			"x-api-key: "+apiKey,
-			fmt.Sprintf("http://%s:%d/api/v1/runtime/servers", doctorServiceDNS(doctorRuntimeAPIService, doctorSentinelNamespace), doctorRuntimeAPIPort),
+			fmt.Sprintf("http://%s:%d/api/v1/runtime/servers", doctorServiceDNS(doctorRuntimeAPIService, componentNamespace("platform-api")), doctorRuntimeAPIPort),
 		)),
 	})
 	if cmdErr != nil {
@@ -362,8 +362,8 @@ func checkRuntimeAPIImageDisplayRefs(kubectl core.KubectlRunner) DoctorCheck {
 			Remedy: "verify sentinel API deployment/service and UI_API_KEY config",
 		}
 	}
-	if err := waitForDoctorPodSucceeded(kubectl, podName, doctorSentinelNamespace, 90*time.Second); err != nil {
-		logs, _ := readKubectlOutput(kubectl, []string{"logs", podName, "-n", doctorSentinelNamespace, "--tail=80"})
+	if err := waitForDoctorPodSucceeded(kubectl, podName, componentNamespace("platform-api"), 90*time.Second); err != nil {
+		logs, _ := readKubectlOutput(kubectl, []string{"logs", podName, "-n", componentNamespace("platform-api"), "--tail=80"})
 		detail := fmt.Sprintf("runtime API probe pod did not complete: %v", err)
 		if strings.TrimSpace(logs) != "" {
 			detail += ": " + strings.TrimSpace(logs)
@@ -375,7 +375,7 @@ func checkRuntimeAPIImageDisplayRefs(kubectl core.KubectlRunner) DoctorCheck {
 			Remedy: "verify sentinel API deployment/service and runtime API route availability",
 		}
 	}
-	out, logsErr := readKubectlOutput(kubectl, []string{"logs", podName, "-n", doctorSentinelNamespace})
+	out, logsErr := readKubectlOutput(kubectl, []string{"logs", podName, "-n", componentNamespace("platform-api")})
 	if logsErr != nil {
 		return DoctorCheck{
 			Name:   "runtime API image display refs",

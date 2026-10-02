@@ -47,7 +47,7 @@ Admin (`admin@mcpruntime.org` / `admin@123`):
 API-key login:
 
 ```bash
-UI_KEY="$(kubectl get secret mcp-sentinel-secrets -n mcp-sentinel -o jsonpath='{.data.UI_API_KEY}' | base64 -d)"
+UI_KEY="$(kubectl get secret mcp-ui-credentials -n mcp-platform -o jsonpath='{.data.UI_API_KEY}' | base64 -d)"
 test -n "$UI_KEY" || { echo "FAIL: UI_API_KEY is empty"; exit 1; }
 ```
 

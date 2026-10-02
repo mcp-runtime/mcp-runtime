@@ -190,7 +190,7 @@ default. Override the path with `MCP_DEPLOY_ENV=/path/to/other.env`. See
 | `MCP_SETUP_TLS_CLUSTER_ISSUER` | `letsencrypt-prod` | ClusterIssuer name on reruns. **Do not** pass `--acme-email` when this issuer already exists. |
 | `MCP_SETUP_SKIP_CERT_MANAGER_INSTALL` | unset | Set to `1` when cert-manager is already installed (typical reruns). |
 
-#### k3s Traefik integration (written to `mcp-sentinel-config`)
+#### k3s Traefik integration (written to `mcp-shared-config`)
 
 | Variable | Typical value | Purpose |
 |----------|---------------|---------|
@@ -477,7 +477,7 @@ Manual TLS-only backup (legacy):
 ```bash
 kubectl get secret registry-tls -n registry -o yaml \
   > /tmp/registry-tls-backup.yaml 2>/dev/null || true
-kubectl get secret mcp-sentinel-platform-tls -n mcp-sentinel -o yaml \
+kubectl get secret mcp-platform-tls -n mcp-platform -o yaml \
   > /tmp/platform-tls-backup.yaml 2>/dev/null || true
 ```
 
@@ -556,7 +556,7 @@ MCP_SETUP_WAIT_TIMEOUT=900 MCP_CERT_TIMEOUT=15m \
 ### Reruns / upgrades (reuse existing certs to avoid LE rate limits)
 
 When cert-manager already issued `registry-cert` and
-`mcp-sentinel-platform-tls`, **do not** pass `--acme-email` again. Use the saved
+`mcp-platform-tls`, **do not** pass `--acme-email` again. Use the saved
 profile and helper script:
 
 ```bash
@@ -571,7 +571,7 @@ hack/deploy/mcpruntime-org/rollout.sh
 ```
 
 That rebuilds/pushes the three split API images (`mcp-platform-api`,
-`mcp-runtime-api`, `mcp-analytics-api`), `mcp-sentinel-ui`, and the doctor
+`mcp-runtime-api`, `mcp-analytics-api`), `mcp-ui`, and the doctor
 smoke image, patches the production registry/Traefik settings and pull secret,
 then waits for rollouts. It does not run setup or request certificates.
 
@@ -703,7 +703,7 @@ without that flag, set the admin email env var above.
   `platform.` hostnames. Do not also export a registry ClusterIP as
   `MCP_REGISTRY_ENDPOINT`.
 - `MCP_PLATFORM_ADMIN_EMAIL`: required by non-test-mode setup validation;
-  seeds the platform admin account in the `mcp-sentinel-secrets` Secret.
+  seeds the platform admin account in `mcp-platform-api-credentials`.
 - `--ingress none`: k3s already runs Traefik in `kube-system`, so setup skips
   the second ingress stack. Setup sets `PLATFORM_TRAEFIK_NAMESPACE=kube-system`
   and `PLATFORM_TEAM_TRAEFIK_WATCH=disabled` so `team create` does not patch
@@ -741,20 +741,21 @@ kubectl wait pod -n cert-manager --all --for=condition=Ready --timeout=120s
 
 # Confirm TLS certs are Ready
 kubectl get certificate registry-cert -n registry
-kubectl get certificate -n mcp-sentinel
+kubectl get certificate -n mcp-platform
 
-# Check Sentinel pods
-kubectl get pods -n mcp-sentinel
+# Check platform and telemetry pods
+kubectl get pods -n mcp-platform
+kubectl get pods -n mcp-observability
 ```
 
-Expected: all mcp-sentinel pods `1/1 Running`, certificate `READY=True`.
+Expected: platform and telemetry pods `1/1 Running`, certificate `READY=True`.
 
 ## Tenant push and deploy smoke test
 
 After setup, verify a non-admin team member can publish and deploy:
 
 ```bash
-ADMIN_KEY="$(kubectl get secret mcp-sentinel-secrets -n mcp-sentinel \
+ADMIN_KEY="$(kubectl get secret mcp-platform-api-credentials -n mcp-platform \
   -o jsonpath='{.data.ADMIN_API_KEYS}' | base64 -d | cut -d, -f1)"
 
 # Admin: create team + user
@@ -801,7 +802,7 @@ that metadata into the platform request so governed `tools/call` requests can
 authorize side effects.
 
 If `team create` returns `500 failed to provision team namespace`, confirm
-`PLATFORM_TEAM_TRAEFIK_WATCH=disabled` is present in `mcp-sentinel-config`
+`PLATFORM_TEAM_TRAEFIK_WATCH=disabled` is present in `mcp-shared-config`
 (or set it in `config/deployments/mcpruntime-org.env` before rerunning setup).
 
 ## Multi-tenancy end-to-end test
@@ -860,7 +861,7 @@ install, for example by a registry apply from a shell that lacks
 `MCP_PLATFORM_DOMAIN`, or by `kubectl apply -f config/registry/base/ingress.yaml`
 (the QA E2E cache refresh) against the wrong context. The apply replaces
 `spec.rules` but keeps the existing `spec.tls`. Setup now resolves the host from
-the live Ingress TLS host and `mcp-sentinel-config`, and refuses to apply a
+the live Ingress TLS host and `mcp-shared-config`, and refuses to apply a
 `registry.local` rule host over a public Ingress. Fix a live cluster with the
 command doctor prints:
 

@@ -4,7 +4,7 @@ import "testing"
 
 func TestDoctorServiceDNSUsesConfiguredClusterDomain(t *testing.T) {
 	t.Setenv("MCP_CLUSTER_DOMAIN", "corp.example.")
-	if got, want := doctorServiceDNS("mcp-runtime-api", "mcp-sentinel"), "mcp-runtime-api.mcp-sentinel.svc.corp.example"; got != want {
+	if got, want := doctorServiceDNS("mcp-runtime-api", "mcp-platform"), "mcp-runtime-api.mcp-platform.svc.corp.example"; got != want {
 		t.Fatalf("service DNS = %q, want %q", got, want)
 	}
 }

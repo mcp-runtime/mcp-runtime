@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	defaultRuntimeUpstream   = "http://mcp-runtime-api.mcp-sentinel.svc.cluster.local:8084"
-	defaultAnalyticsUpstream = "http://mcp-analytics-api.mcp-sentinel.svc.cluster.local:8085"
+	defaultRuntimeUpstream   = "http://mcp-runtime-api.mcp-platform.svc.cluster.local:8084"
+	defaultAnalyticsUpstream = "http://mcp-analytics-api.mcp-observability.svc.cluster.local:8085"
 	uiSessionAPIPrefix       = "/api/ui/v1"
 	sessionProxyTimeout      = 15 * time.Second
 )

@@ -8,7 +8,7 @@ what they may do, and which component enforces the decision**.
 
 | Identity plane | Identity shape | Used for | Enforced by |
 |---|---|---|---|
-| Platform | User or service principal with role, subject, teams, and namespaces | UI, CLI, and platform API operations | Split Sentinel API services (`platform-api`, `runtime-api`, `analytics-api`) |
+| Platform | User or service principal with role, subject, teams, and namespaces | UI, CLI, and platform API operations | `platform-api`, `runtime-api`, and `analytics-api` |
 | Agent governance | `humanID + agentID + teamID + sessionID` | MCP `tools/call` authorization | MCP gateway |
 | Kubernetes workload | ServiceAccount plus RBAC bindings | Reading and changing cluster resources | Kubernetes API server |
 
@@ -18,7 +18,7 @@ from any Kubernetes ServiceAccount.
 
 ## Platform identity: who controls the platform
 
-The split Sentinel API services authenticate a request using one of these credentials:
+platform-api, runtime-api, and analytics-api authenticate a request using one of these credentials:
 
 - A browser or CLI bearer token issued after local or OIDC login
 - A user-owned API key sent as `x-api-key`
@@ -56,7 +56,7 @@ administrator/internal-only. Normal users obtain a session through the adapter
 session endpoint.
 
 See the complete endpoint matrix in
-[Sentinel API authn/authz matrix](security/authz-matrix.md).
+[API authn/authz matrix](security/authz-matrix.md).
 
 ### Trusted ingress and client IP
 
@@ -145,15 +145,15 @@ emerging workload identity guidance provide useful context; an OAuth client
 registration or `client_id` does not automatically create a managed agent.
 
 Direct clients use OAuth only when the target server configures `spec.auth`.
-An adapter presents its session-bound client certificate during the HTTPS
-handshake; Traefik verifies the certificate and the gateway resolves its
-session identity for grant/session authorization. On an OAuth-enabled target,
-the adapter also forwards a bearer on each HTTP request, and its subject must
-match the session human identity. Certificate identity and OAuth are separate
-credentials.
-Adapter certificates are opt-in (`MCP_ADAPTER_CERTIFICATES=true`) and
-require the platform-wide `MCP_MTLS_CLUSTER_ISSUER` and `MCP_TRUST_DOMAIN`
-settings.
+When `MCP_ADAPTER_CERTIFICATES=true`, an adapter presents its session-bound
+client certificate during the HTTPS handshake; Traefik verifies the certificate
+and the gateway resolves its session identity for grant/session authorization.
+On an OAuth-enabled target, the adapter also forwards a bearer on each HTTP
+request, and its subject must match the session human identity. Certificate
+identity and OAuth are separate credentials. The ingress switch is opt-in.
+Enrollment uses the platform-wide `MCP_MTLS_CLUSTER_ISSUER` and
+`MCP_TRUST_DOMAIN` settings and does not by itself make Traefik request the
+certificate.
 For the adapter request flow, including how one certificate can accompany
 different per-request OAuth tokens, see
 [Certificate identity and OAuth tokens](agent-adapters.md#certificate-identity-and-oauth-tokens).

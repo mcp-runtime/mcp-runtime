@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: kafka-headless
-  namespace: mcp-sentinel
+  namespace: mcp-observability
 spec:
   clusterIP: None
   publishNotReadyAddresses: true
@@ -20,7 +20,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: kafka
-  namespace: mcp-sentinel
+  namespace: mcp-observability
 spec:
   selector:
     app: kafka
@@ -33,7 +33,7 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: kafka
-  namespace: mcp-sentinel
+  namespace: mcp-observability
 spec:
   minAvailable: 2
   selector:
@@ -44,7 +44,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: kafka
-  namespace: mcp-sentinel
+  namespace: mcp-observability
   annotations:
     mcpruntime.org/kafka-mode: kraft
 spec:
@@ -62,7 +62,7 @@ spec:
       labels:
         app: kafka
     spec:
-      priorityClassName: mcp-sentinel-data
+      priorityClassName: mcp-shared-data
       terminationGracePeriodSeconds: 120
       automountServiceAccountToken: false
       enableServiceLinks: false
@@ -90,7 +90,7 @@ spec:
             - -ec
             - |
               export KAFKA_NODE_ID="${HOSTNAME##*-}"
-              export KAFKA_ADVERTISED_LISTENERS="PLAINTEXT://${HOSTNAME}.kafka-headless.mcp-sentinel.svc.cluster.local:9092"
+              export KAFKA_ADVERTISED_LISTENERS="PLAINTEXT://${HOSTNAME}.kafka-headless.mcp-observability.svc.cluster.local:9092"
               exec /etc/confluent/docker/run
           securityContext:
             allowPrivilegeEscalation: false
@@ -111,7 +111,7 @@ spec:
             - name: KAFKA_PROCESS_ROLES
               value: broker,controller
             - name: KAFKA_CONTROLLER_QUORUM_VOTERS
-              value: 0@kafka-0.kafka-headless.mcp-sentinel.svc.cluster.local:9093,1@kafka-1.kafka-headless.mcp-sentinel.svc.cluster.local:9093,2@kafka-2.kafka-headless.mcp-sentinel.svc.cluster.local:9093
+              value: 0@kafka-0.kafka-headless.mcp-observability.svc.cluster.local:9093,1@kafka-1.kafka-headless.mcp-observability.svc.cluster.local:9093,2@kafka-2.kafka-headless.mcp-observability.svc.cluster.local:9093
             - name: KAFKA_LISTENERS
               value: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
             - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP

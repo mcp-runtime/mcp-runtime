@@ -15,13 +15,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"mcp-runtime/pkg/registrypush"
+	"mcp-runtime/pkg/sentinel"
 )
 
 const (
 	registryPushTransferPath         = "/internal/registry-push/tar"
 	registryPushTransferLabelKey     = "mcp-runtime.org/registry-push-transfer"
 	registryPushTransferSecretPrefix = "registry-push-transfer-"
-	defaultTransferNamespace         = "mcp-sentinel"
+	defaultTransferNamespace         = sentinel.PlatformNamespace
 )
 
 type registryPushTransferRecord struct {

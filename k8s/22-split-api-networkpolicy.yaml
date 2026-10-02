@@ -2,7 +2,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: mcp-runtime-api-platform-egress
-  namespace: mcp-sentinel
+  namespace: mcp-platform
 spec:
   podSelector:
     matchLabels:
@@ -18,14 +18,20 @@ spec:
         - protocol: TCP
           port: 8080
     - to:
-        - podSelector:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: mcp-observability
+          podSelector:
             matchLabels:
               app: clickhouse
       ports:
         - protocol: TCP
           port: 9000
     - to:
-        - podSelector:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: mcp-observability
+          podSelector:
             matchLabels:
               app: otel-collector
       ports:
@@ -34,21 +40,15 @@ spec:
         - protocol: TCP
           port: 4317
     - to:
-        - podSelector:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: mcp-observability
+          podSelector:
             matchLabels:
               app: prometheus
       ports:
         - protocol: TCP
           port: 9090
-    # The Kubernetes API server is not reachable by pod selector on every
-    # distribution: k3s runs it as an embedded host process with no Pod at all,
-    # and kubeadm runs it as a static pod in kube-system labelled
-    # component: kube-apiserver, not component: apiserver in default. Selecting
-    # it by label therefore matches nothing and silently denies API egress,
-    # which breaks registry push (it resolves namespaces through the API).
-    # Allow the service-facing 443 and the host-facing 6443 port. k3s exposes
-    # the kubernetes ClusterIP on 443 but forwards to its embedded API server
-    # on 6443 before the network policy is evaluated on some CNIs.
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0
@@ -74,7 +74,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: mcp-analytics-api-platform-egress
-  namespace: mcp-sentinel
+  namespace: mcp-observability
 spec:
   podSelector:
     matchLabels:
@@ -83,7 +83,10 @@ spec:
     - Egress
   egress:
     - to:
-        - podSelector:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: mcp-platform
+          podSelector:
             matchLabels:
               app: mcp-platform-api
       ports:
@@ -122,7 +125,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: mcp-platform-api-egress
-  namespace: mcp-sentinel
+  namespace: mcp-platform
 spec:
   podSelector:
     matchLabels:
@@ -140,12 +143,15 @@ spec:
     - to:
         - podSelector:
             matchLabels:
-              app: mcp-sentinel-postgres
+              app: mcp-postgres
       ports:
         - protocol: TCP
           port: 5432
     - to:
-        - podSelector:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: mcp-observability
+          podSelector:
             matchLabels:
               app: otel-collector
       ports:

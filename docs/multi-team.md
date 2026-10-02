@@ -82,6 +82,9 @@ For an existing platform user, find their user ID in the platform UI and run
 `mcp-runtime team user add <team-slug> <user-id> --role member` (or set the role
 to `owner`). This changes only the team membership and does not reset the user's
 password. Platform admins and team owners can manage members in their teams.
+A saved login token keeps the membership from the moment it was issued, so
+run `mcp-runtime auth login` again before `server build`, `server push`, or
+`server deploy` for that team.
 
 `team init` is **deprecated** and rejects at runtime. Use `team create` above
 for the normal platform-backed flow. The managed namespace shape that
@@ -227,9 +230,10 @@ only grants and sessions whose `serverRef` points at the target server. Missing
 
 ## Ingress controller watch scope
 
-The bundled Traefik manifests watch only `registry`, `mcp-sentinel`,
-`mcp-servers`, `mcp-servers-org`, and `mcp-servers-public` by default so Traefik
-does not need broad namespace access. If MCP servers live in team namespaces,
+The bundled Traefik manifests watch only `registry`, `mcp-platform`,
+`mcp-observability`, `mcp-log-collector`, `mcp-servers`, `mcp-servers-org`, and
+`mcp-servers-public` by default so Traefik does not need broad namespace access.
+If MCP servers live in team namespaces,
 update the ingress controller watch list, bind the Traefik watch role in each
 team namespace, and allow ingress-controller traffic through the namespace
 NetworkPolicy. The platform API `team create` flow performs those changes for
@@ -239,7 +243,7 @@ the repo-managed `traefik/traefik` Deployment when
 For the bundled Traefik overlay, extend the argument:
 
 ```text
---providers.kubernetesingress.namespaces=registry,mcp-sentinel,mcp-servers,mcp-servers-org,mcp-servers-public,mcp-team-acme,mcp-team-globex
+--providers.kubernetesingress.namespaces=registry,mcp-platform,mcp-observability,mcp-log-collector,mcp-servers,mcp-servers-org,mcp-servers-public,mcp-team-acme,mcp-team-globex
 ```
 
 External ingress controllers need equivalent namespace watch, RBAC, and

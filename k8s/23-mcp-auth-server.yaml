@@ -1,6 +1,6 @@
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
-metadata: {name: mcp-auth-server-strip-prefix, namespace: mcp-sentinel}
+metadata: {name: mcp-auth-server-strip-prefix, namespace: mcp-platform}
 spec:
   stripPrefix:
     prefixes: [/mcp-auth]
@@ -9,7 +9,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mcp-auth-server
-  namespace: mcp-sentinel
+  namespace: mcp-platform
 spec:
   replicas: 1
   selector: {matchLabels: {app: mcp-auth-server}}
@@ -85,7 +85,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: mcp-auth-server-data
-  namespace: mcp-sentinel
+  namespace: mcp-platform
 spec:
   accessModes: [ReadWriteOnce]
   resources:
@@ -96,7 +96,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: mcp-auth-server
-  namespace: mcp-sentinel
+  namespace: mcp-platform
 spec:
   selector: {app: mcp-auth-server}
   ports: [{name: http, port: 8080, targetPort: 8080}]
@@ -105,9 +105,9 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: mcp-auth-server
-  namespace: mcp-sentinel
+  namespace: mcp-platform
   annotations:
-    traefik.ingress.kubernetes.io/router.middlewares: mcp-sentinel-mcp-auth-server-strip-prefix@kubernetescrd
+    traefik.ingress.kubernetes.io/router.middlewares: mcp-platform-mcp-auth-server-strip-prefix@kubernetescrd
 spec:
   ingressClassName: traefik
 # Rendered by internal/cli/setup/platform/mcp_auth_server.go. The placeholder
@@ -140,7 +140,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: mcp-auth-server-egress
-  namespace: mcp-sentinel
+  namespace: mcp-platform
 spec:
   podSelector:
     matchLabels:
@@ -185,7 +185,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: mcp-auth-server-ingress
-  namespace: mcp-sentinel
+  namespace: mcp-platform
 spec:
   podSelector:
     matchLabels:

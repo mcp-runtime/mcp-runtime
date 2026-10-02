@@ -75,8 +75,8 @@ IMAGE="registry.registry.svc.cluster.local:5000/<repo>:ui-qa-$(date +%s)"
 docker build --platform="linux/${NODE_ARCH}" -t "$IMAGE" -f "$DOCKERFILE" .
 docker image inspect "$IMAGE" --format '{{.Os}}/{{.Architecture}}'
 kind load docker-image "$IMAGE" --name mcp-runtime
-kubectl set image -n mcp-sentinel deploy/"$DEPLOYMENT" "$CONTAINER=$IMAGE"
-kubectl rollout status -n mcp-sentinel deploy/"$DEPLOYMENT" --timeout=180s
+kubectl set image -n mcp-platform deploy/"$DEPLOYMENT" "$CONTAINER=$IMAGE"
+kubectl rollout status -n mcp-platform deploy/"$DEPLOYMENT" --timeout=180s
 ```
 
 `kind load docker-image` can load the wrong architecture into containerd. A UI
@@ -349,13 +349,13 @@ test: **when** `MCP_PLATFORM_DOMAIN` is set, the public platform ingress must
 not expose Grafana or Prometheus.
 
 ```bash
-kubectl get ingress -n mcp-sentinel -o yaml \
-  | yq '.items[] | select(.metadata.name=="mcp-sentinel-platform-ui") | .spec.rules' 2>/dev/null \
-  || kubectl get ingress -n mcp-sentinel mcp-sentinel-platform-ui -o yaml \
+kubectl get ingress -n mcp-platform -o yaml \
+  | yq '.items[] | select(.metadata.name=="mcp-platform-ui") | .spec.rules' 2>/dev/null \
+  || kubectl get ingress -n mcp-platform mcp-platform-ui -o yaml \
        | grep -E 'path:|grafana|prometheus'
 ```
 
-If `mcp-sentinel-platform-ui` does not exist, mark this sub-suite **N/A in
+If `mcp-platform-ui` does not exist, mark this sub-suite **N/A in
 test mode** and recommend a `MCP_PLATFORM_DOMAIN=*` rerun.
 
 ## Step 9 - Safe mutation and cleanup

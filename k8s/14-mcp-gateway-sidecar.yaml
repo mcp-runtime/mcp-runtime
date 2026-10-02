@@ -1,11 +1,11 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: workspace-assistant-sidecar
-  namespace: mcp-sentinel
+  name: oauth-example-go-2025-11-25-gateway
+  namespace: mcp-servers
 spec:
   selector:
-    app: workspace-assistant-sidecar
+    app: oauth-example-go-2025-11-25-gateway
   ports:
     - name: http
       port: 8091
@@ -14,17 +14,17 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: workspace-assistant-sidecar
-  namespace: mcp-sentinel
+  name: oauth-example-go-2025-11-25-gateway
+  namespace: mcp-servers
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: workspace-assistant-sidecar
+      app: oauth-example-go-2025-11-25-gateway
   template:
     metadata:
       labels:
-        app: workspace-assistant-sidecar
+        app: oauth-example-go-2025-11-25-gateway
     spec:
       automountServiceAccountToken: false
       securityContext:
@@ -48,7 +48,7 @@ spec:
             - name: PORT
               value: "8090"
         - name: mcp-gateway
-          image: mcp-sentinel-mcp-gateway:latest
+          image: mcp-gateway:latest
           imagePullPolicy: IfNotPresent
           resources:
             requests:
@@ -73,37 +73,20 @@ spec:
               value: "8091"
             - name: UPSTREAM_URL
               value: "http://127.0.0.1:8090"
-            - name: ANALYTICS_INGEST_URL
-              value: "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events"
-            - name: ANALYTICS_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: mcp-ingest-credentials
-                  key: INGEST_API_KEYS
-            - name: ANALYTICS_SOURCE
-              value: "mcp-gateway"
             - name: MCP_SERVER_NAME
-              value: "workspace-assistant-sidecar"
+              value: "oauth-example-go-2025-11-25-gateway"
             - name: MCP_SERVER_NAMESPACE
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
-            - name: MCP_CLUSTER_NAME
-              valueFrom:
-                configMapKeyRef:
-                  name: mcp-sentinel-config
-                  key: MCP_CLUSTER_NAME
             - name: STRIP_PREFIX
               value: "/mcp-auto"
             - name: POLICY_MODE
               value: "observe"
             - name: OTEL_SERVICE_NAME
-              value: workspace-assistant-gateway
+              value: oauth-example-go-2025-11-25-gateway
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              valueFrom:
-                configMapKeyRef:
-                  name: mcp-sentinel-config
-                  key: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.mcp-observability.svc:4318"
           readinessProbe:
             httpGet:
               path: /health

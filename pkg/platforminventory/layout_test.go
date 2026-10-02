@@ -2,73 +2,79 @@ package platforminventory
 
 import "testing"
 
-func TestLayoutResolution(t *testing.T) {
-	legacy, err := ResolveLayout(nil, map[string][]string{"platform-api": {"mcp-sentinel"}, "operator": {"mcp-runtime"}})
-	if err != nil || legacy.Name != LegacyLayout {
-		t.Fatalf("legacy discovery: %+v, %v", legacy, err)
-	}
-	separated, _ := NewLayout(SeparatedLayout)
-	for key, want := range map[string]string{"platform-api": "mcp-platform", "postgres": "mcp-platform", "gateway": "mcp-platform", "analytics-api": "mcp-observability", "clickhouse": "mcp-observability", "promtail": "mcp-log-collector", "operator": "mcp-runtime", "registry": "registry", "traefik": "traefik", "cert-manager-controller": "cert-manager", "doctor-smoke": ""} {
-		c, err := separated.Component(key)
-		if err != nil || c.Namespace != want {
-			t.Fatalf("%s = %q, %v; want %q", key, c.Namespace, err, want)
+func TestOwnerPlacement(t *testing.T) {
+	for key, want := range map[string]string{
+		"platform-api":            PlatformNamespace,
+		"postgres":                PlatformNamespace,
+		"gateway":                 PlatformNamespace,
+		"ui":                      PlatformNamespace,
+		"analytics-api":           ObservabilityNamespace,
+		"clickhouse":              ObservabilityNamespace,
+		"ingest":                  ObservabilityNamespace,
+		"promtail":                LogCollectorNamespace,
+		"operator":                OperatorNamespace,
+		"registry":                "registry",
+		"traefik":                 "traefik",
+		"cert-manager-controller": "cert-manager",
+	} {
+		component, err := Lookup(key)
+		if !err || component.Namespace != want {
+			t.Fatalf("%s namespace = %q, ok=%v; want %q", key, component.Namespace, err, want)
 		}
 	}
-	got, err := ResolveLayout(&separated, map[string][]string{"platform-api": {"mcp-platform"}})
-	if err != nil {
-		t.Fatal(err)
+	smoke, ok := Lookup("doctor-smoke")
+	if !ok || smoke.Namespace != "" {
+		t.Fatalf("image-only component = %+v", smoke)
 	}
-	got.Namespaces[Platform] = "changed"
-	if separated.Namespaces[Platform] != "mcp-platform" {
-		t.Fatal("resolution aliases caller record")
-	}
-	c, _ := Lookup("platform-api")
-	if c.Namespace != "mcp-sentinel" {
-		t.Fatal("resolving a layout changed current defaults")
+	seen := map[string]Owner{}
+	for owner, namespace := range OwnerNamespaces() {
+		if other, ok := seen[namespace]; ok {
+			t.Fatalf("owners %s and %s share %s", owner, other, namespace)
+		}
+		seen[namespace] = owner
 	}
 }
 
-func TestLayoutRejectsAmbiguityAndDrift(t *testing.T) {
-	separated, _ := NewLayout(SeparatedLayout)
-	for _, tt := range []struct {
-		name     string
-		record   *Layout
-		observed map[string][]string
-	}{
-		{"missing record after move", nil, map[string][]string{"platform-api": {"mcp-platform"}}},
-		{"both placements", nil, map[string][]string{"platform-api": {"mcp-sentinel", "mcp-platform"}}},
-		{"partial migration", &separated, map[string][]string{"platform-api": {"mcp-sentinel"}}},
-		{"unknown component", nil, map[string][]string{"rogue": {"mcp-sentinel"}}},
-		{"image has workload", nil, map[string][]string{"doctor-smoke": {"mcp-runtime"}}},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			if _, err := ResolveLayout(tt.record, tt.observed); err == nil {
-				t.Fatal("accepted unsafe discovery")
-			}
-		})
+func TestCredentialPlacementFollowsOwningSet(t *testing.T) {
+	namespace, name, ok := CredentialPlacement("UI_API_KEY")
+	if !ok || name != "mcp-ui-credentials" || namespace != PlatformNamespace {
+		t.Fatalf("UI_API_KEY placement = %s/%s ok=%v", namespace, name, ok)
+	}
+	namespace, name, ok = CredentialPlacement("INGEST_API_KEYS")
+	if !ok || name != "mcp-ingest-credentials" || namespace != ObservabilityNamespace {
+		t.Fatalf("INGEST_API_KEYS placement = %s/%s ok=%v", namespace, name, ok)
+	}
+	if _, _, ok := CredentialPlacement("NOT_A_KEY"); ok {
+		t.Fatal("unknown key reported an owner")
 	}
 }
 
-func TestLayoutValidation(t *testing.T) {
-	for _, mutate := range []func(*Layout){
-		func(l *Layout) { l.Version++ },
-		func(l *Layout) { l.Name = "unknown" },
-		func(l *Layout) { delete(l.Namespaces, Platform) },
-		func(l *Layout) { l.Namespaces["unknown"] = "unknown" },
-		func(l *Layout) { l.Namespaces[Platform] = "INVALID" },
-		func(l *Layout) { l.Namespaces[Platform] = l.Namespaces[Observability] },
-		func(l *Layout) { l.Namespaces[Operator] = "mcp-system" },
-		func(l *Layout) { l.Namespaces[Registry] = "new-registry" },
-	} {
-		l, _ := NewLayout(SeparatedLayout)
-		mutate(&l)
-		if err := l.Validate(); err == nil {
-			t.Fatalf("accepted malformed record: %+v", l)
+func TestCredentialSetNamespaceFollowsConsumer(t *testing.T) {
+	for _, set := range CredentialSets() {
+		if set.Namespace() == "" {
+			t.Fatalf("credential set %s has no namespace", set.Name)
 		}
 	}
-	l, _ := NewLayout(LegacyLayout)
-	l.Namespaces[Platform] = "mcp-platform"
-	if err := l.Validate(); err == nil {
-		t.Fatal("accepted modified legacy record")
+	for _, set := range CredentialSets() {
+		if set.Name == "mcp-grafana-credentials" && set.Namespace() != ObservabilityNamespace {
+			t.Fatalf("grafana credentials namespace = %s", set.Namespace())
+		}
+		if set.Name == "mcp-postgres-credentials" && set.Namespace() != PlatformNamespace {
+			t.Fatalf("postgres credentials namespace = %s", set.Namespace())
+		}
+	}
+}
+
+func TestServiceHostUsesOwnerPlacement(t *testing.T) {
+	host, err := ServiceHost("runtime-api", 8084)
+	if err != nil || host != "mcp-runtime-api."+PlatformNamespace+".svc.cluster.local:8084" {
+		t.Fatalf("runtime host = %q, %v", host, err)
+	}
+	host, err = ServiceHost("clickhouse", 9000)
+	if err != nil || host != "clickhouse."+ObservabilityNamespace+".svc.cluster.local:9000" {
+		t.Fatalf("clickhouse host = %q, %v", host, err)
+	}
+	if _, err := ServiceHost("doctor-smoke", 1); err == nil {
+		t.Fatal("image-only component returned a service host")
 	}
 }

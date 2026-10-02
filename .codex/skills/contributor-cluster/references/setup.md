@@ -135,7 +135,7 @@ kubectl get pods -A | grep -Ev 'Running|Completed' || echo OK
 
 If `cluster doctor` reports admin/UI/ingest key mismatches, roll
 `mcp-platform-api`, `mcp-runtime-api`, `mcp-analytics-api`, UI, ingest,
-and gateway deployments after patching `mcp-sentinel-secrets`
+and gateway deployments after patching the owner credential Secrets
 (see `CLAUDE.md` → API keys). Do not paper over a `Degraded` reading.
 
 If `clickhouse-0` or any `kafka-N` pod is `CrashLoopBackOff` with a high
@@ -203,11 +203,11 @@ servers:
     gateway: { enabled: true }
     analytics:
       enabled: true
-      ingestURL: http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events
+      ingestURL: http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events
       apiKeySecretRef: { name: oauth-example-go-2025-11-25-gateway-analytics, key: api-key }
 EOF
 
-API_KEY="$(kubectl get secret mcp-sentinel-secrets -n mcp-sentinel \
+API_KEY="$(kubectl get secret mcp-ingest-credentials -n mcp-observability \
   -o jsonpath='{.data.INGEST_API_KEYS}' | base64 -d | cut -d, -f1)"
 kubectl create secret generic oauth-example-go-2025-11-25-gateway-analytics -n mcp-servers \
   --from-literal=api-key="$API_KEY" \

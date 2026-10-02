@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	bundledOAuthNamespace  = "mcp-sentinel"
+	bundledOAuthNamespace  = "mcp-platform"
 	bundledOAuthDeployment = "mcp-auth-server"
 )
 

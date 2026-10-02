@@ -1,15 +1,15 @@
-Inspect and operate the bundled mcp-sentinel analytics, gateway, and observability stack. These commands require admin/operator Kubernetes access with kubectl; normal users should use the platform API and dashboard instead.
+Inspect and operate the bundled platform analytics, gateway, and observability stack. These commands require admin/operator Kubernetes access with kubectl; normal users should use the platform API and dashboard instead.
 
 Usage:
   mcp-runtime sentinel [command]
 
 Available Commands:
-  events       Show recent Kubernetes events for mcp-sentinel
+  events       Show recent Kubernetes events for the platform namespaces
   grafana      Diagnose and recover bundled Grafana admin credentials
-  logs         View logs for a mcp-sentinel component
-  port-forward Port-forward a common mcp-sentinel service
-  restart      Restart one or all mcp-sentinel workloads
-  status       Show mcp-sentinel stack status
+  logs         View logs for a platform component
+  port-forward Port-forward a common platform service
+  restart      Restart one or all platform workloads
+  status       Show platform stack status
 
 Flags:
   -h, --help   help for sentinel

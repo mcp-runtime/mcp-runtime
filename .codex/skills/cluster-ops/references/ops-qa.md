@@ -164,6 +164,12 @@ about behavior).
 ./bin/mcp-runtime server logs nonexistent --namespace mcp-servers 2>&1 | head -5
 ```
 
+After setup, confirm `daemonset/promtail` remains ready in
+`mcp-log-collector` and that `sentinel events` includes
+`mcp-observability` and `mcp-log-collector`. The shared ConfigMap's OTel and
+Prometheus endpoints must resolve from both `mcp-platform` and
+`mcp-observability`.
+
 Any error that prints a bare Cobra usage dump (no `Error:` framing) is a
 finding; route the report back to `internal/cli/core/errors.go` and
 `pkg/errx/`.
@@ -214,7 +220,7 @@ MCP_SETUP_WAIT_TIMEOUT=900 \
 ./bin/mcp-runtime cluster doctor
 kubectl get ingress -A
 curl -fsS -o /dev/null -w "%{http_code}\n" http://localhost:18080/    # 200
-ADMIN_KEY=$(kubectl get secret mcp-sentinel-secrets -n mcp-sentinel -o jsonpath='{.data.ADMIN_API_KEYS}' | base64 -d | cut -d, -f1)
+ADMIN_KEY=$(kubectl get secret mcp-platform-api-credentials -n mcp-platform -o jsonpath='{.data.ADMIN_API_KEYS}' | base64 -d | cut -d, -f1)
 curl -fsS -o /dev/null -w "%{http_code}\n" \
   -H "x-api-key: $ADMIN_KEY" http://localhost:18080/api/v1/dashboard/summary  # 200
 curl -fsS -o /dev/null -w "%{http_code}\n" http://localhost:18080/oauth-example-go-2025-11-25-gateway/mcp # 405/406 expected (POST-only)
@@ -245,9 +251,9 @@ REGISTRY=registry.registry.svc.cluster.local:5000
 docker build -t "$LOCAL_IMAGE" -f "$DOCKERFILE" "$BUILD_CONTEXT"
 ./bin/mcp-runtime admin registry push --image "$LOCAL_IMAGE" --name "$IMAGE_REPO" \
   --mode in-cluster --namespace registry
-kubectl -n mcp-sentinel set image "deployment/$DEPLOYMENT" \
+kubectl -n mcp-platform set image "deployment/$DEPLOYMENT" \
   "$CONTAINER=$REGISTRY/$IMAGE_REPO:$TAG"
-kubectl -n mcp-sentinel rollout status "deployment/$DEPLOYMENT" --timeout=120s
+kubectl -n mcp-platform rollout status "deployment/$DEPLOYMENT" --timeout=120s
 ```
 
 For `services/mcp-gateway/**` changes, also update operator env
@@ -276,10 +282,10 @@ kubectl -n mcp-runtime rollout status \
   deploy/mcp-runtime-operator-controller-manager --timeout=120s
 
 # Bounce runtime-api mid grant-apply.
-kubectl -n mcp-sentinel scale deploy/mcp-runtime-api --replicas=0
+kubectl -n mcp-platform scale deploy/mcp-runtime-api --replicas=0
 kubectl apply -f /tmp/workspace-assistant-access.yaml
-kubectl -n mcp-sentinel scale deploy/mcp-runtime-api --replicas=1
-kubectl -n mcp-sentinel rollout status deploy/mcp-runtime-api --timeout=90s
+kubectl -n mcp-platform scale deploy/mcp-runtime-api --replicas=1
+kubectl -n mcp-platform rollout status deploy/mcp-runtime-api --timeout=90s
 ./bin/mcp-runtime server policy inspect oauth-example-go-2025-11-25-gateway --namespace mcp-servers \
   | grep -q local-session
 ```

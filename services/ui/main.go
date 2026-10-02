@@ -110,7 +110,7 @@ func main() {
 	apiKey := strings.TrimSpace(os.Getenv("API_KEY"))
 	apiKeys := strings.TrimSpace(os.Getenv("API_KEYS"))
 	adminAPIKeys := strings.TrimSpace(os.Getenv("ADMIN_API_KEYS"))
-	apiUpstream := serviceutil.EnvOr("API_UPSTREAM", "http://mcp-platform-api.mcp-sentinel.svc.cluster.local:8080")
+	apiUpstream := serviceutil.EnvOr("API_UPSTREAM", "http://mcp-platform-api.mcp-platform.svc.cluster.local:8080")
 	if apiKey == "" && apiKeys == "" {
 		log.Printf("WARNING: neither API_KEY nor API_KEYS is set; UI API-key login is disabled")
 	}
@@ -124,7 +124,7 @@ func main() {
 		log.Fatalf("invalid API, runtime, or analytics upstream: %v", err)
 	}
 
-	shutdown, err := serviceutil.InitTracer("mcp-sentinel-ui")
+	shutdown, err := serviceutil.InitTracer("mcp-ui")
 	if err != nil {
 		log.Printf("otel init failed: %v", err)
 	} else {
@@ -135,7 +135,7 @@ func main() {
 		}()
 	}
 
-	log.Printf("mcp-sentinel-ui listening on :%s", port)
+	log.Printf("mcp-ui listening on :%s", port)
 	httpsMode := serviceutil.EnvOr("UI_REQUIRE_HTTPS", "auto")
 	secured := securityHeadersMiddleware(httpsRedirectMiddleware(mux, httpsMode))
 	handler := otelhttp.NewHandler(serviceutil.LogRequests(secured), "http.server")

@@ -9,7 +9,7 @@ import (
 // ImageRef is a parsed OCI image reference.
 type ImageRef struct {
 	// Registry is the registry host (with optional port); empty when the
-	// reference is relative (for example "mcp-sentinel-ui:v1").
+	// reference is relative (for example "mcp-ui:v1").
 	Registry string
 	// Path is the repository path without the registry host.
 	Path   string

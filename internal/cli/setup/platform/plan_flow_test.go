@@ -761,7 +761,7 @@ func TestSetupPlatformWithDeps_ExternalRegistry(t *testing.T) {
 		},
 		GatewayProxyImageFor: func(*config.ExternalRegistryConfig) string {
 			rec.add("gateway-image")
-			return "registry.example.com/mcp-sentinel-mcp-gateway:latest"
+			return "registry.example.com/mcp-gateway:latest"
 		},
 	}
 
@@ -844,7 +844,7 @@ func TestSetupPlatformWithDeps_InternalRegistryTLS(t *testing.T) {
 		},
 		GatewayProxyImageFor: func(*config.ExternalRegistryConfig) string {
 			rec.add("gateway-image")
-			return "registry.local/mcp-sentinel-mcp-gateway:latest"
+			return "registry.local/mcp-gateway:latest"
 		},
 	}
 
@@ -941,7 +941,7 @@ func TestSetupPlatformWithDeps_ExternalRegistryTLS(t *testing.T) {
 		},
 		GatewayProxyImageFor: func(*config.ExternalRegistryConfig) string {
 			rec.add("gateway-image")
-			return "registry.example.com/mcp-sentinel-mcp-gateway:latest"
+			return "registry.example.com/mcp-gateway:latest"
 		},
 	}
 
@@ -1024,7 +1024,7 @@ func TestSetupPlatformWithDeps_DiagnosticsOnRegistryWaitFailure(t *testing.T) {
 			return "registry.local/mcp-runtime-operator:latest"
 		},
 		GatewayProxyImageFor: func(*config.ExternalRegistryConfig) string {
-			return "registry.local/mcp-sentinel-mcp-gateway:latest"
+			return "registry.local/mcp-gateway:latest"
 		},
 	}
 
@@ -1091,7 +1091,7 @@ func TestSetupPlatformWithDeps_DiagnosticsOnOperatorWaitFailure(t *testing.T) {
 			return "registry.example.com/mcp-runtime-operator:latest"
 		},
 		GatewayProxyImageFor: func(*config.ExternalRegistryConfig) string {
-			return "registry.example.com/mcp-sentinel-mcp-gateway:latest"
+			return "registry.example.com/mcp-gateway:latest"
 		},
 	}
 
@@ -1159,7 +1159,7 @@ func TestSetupPlatformWithDeps_CRDCheckFailure(t *testing.T) {
 			return "registry.example.com/mcp-runtime-operator:latest"
 		},
 		GatewayProxyImageFor: func(*config.ExternalRegistryConfig) string {
-			return "registry.example.com/mcp-sentinel-mcp-gateway:latest"
+			return "registry.example.com/mcp-gateway:latest"
 		},
 	}
 
@@ -1227,7 +1227,7 @@ func TestSetupPlatformWithDeps_InternalRegistryPushFailure(t *testing.T) {
 			return "registry.local/mcp-runtime-operator:latest"
 		},
 		GatewayProxyImageFor: func(*config.ExternalRegistryConfig) string {
-			return "registry.local/mcp-sentinel-mcp-gateway:latest"
+			return "registry.local/mcp-gateway:latest"
 		},
 	}
 
@@ -1308,7 +1308,7 @@ func TestSetupPlatformWithDeps_RegistryAuthReenabledOnFailure(t *testing.T) {
 			return "registry.prod.example.com/mcp-runtime-operator:latest"
 		},
 		GatewayProxyImageFor: func(*config.ExternalRegistryConfig) string {
-			return "registry.prod.example.com/mcp-sentinel-mcp-gateway:latest"
+			return "registry.prod.example.com/mcp-gateway:latest"
 		},
 	}
 
@@ -1388,7 +1388,7 @@ func TestSetupPlatformWithDeps_CatalogNamespace(t *testing.T) {
 					return "registry.local/mcp-runtime-operator:latest"
 				},
 				GatewayProxyImageFor: func(*config.ExternalRegistryConfig) string {
-					return "registry.local/mcp-sentinel-mcp-gateway:latest"
+					return "registry.local/mcp-gateway:latest"
 				},
 				EnsureCatalogNamespace: func(ns string, labels map[string]string) error {
 					calls++

@@ -55,7 +55,7 @@ func acmeServerURL(staging bool) string {
 
 // acmeTLSDNSNames returns the SANs for the unified registry Certificate in the
 // registry namespace. The platform UI hostname is intentionally NOT included:
-// the platform Ingress in the mcp-sentinel namespace owns its own cert via
+// the platform Ingress in the mcp-platform namespace owns its own cert via
 // cert-manager's ingress-shim because Kubernetes Ingress resources cannot
 // reference TLS Secrets across namespaces. Adding the platform host here would
 // cause a redundant ACME order for the same name on every renewal.

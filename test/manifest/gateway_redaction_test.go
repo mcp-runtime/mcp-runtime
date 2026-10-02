@@ -39,21 +39,21 @@ func TestSentinelGatewayRedactionScope(t *testing.T) {
 		if err != nil {
 			t.Fatalf("decode gateway manifest: %v", err)
 		}
-		if doc.Kind == "Ingress" && doc.Metadata.Namespace == "mcp-sentinel" {
+		if doc.Kind == "Ingress" && (doc.Metadata.Namespace == "mcp-platform" || doc.Metadata.Namespace == "mcp-observability") {
 			ingresses[doc.Metadata.Name] = doc.Metadata.Annotations
 		}
 	}
 
 	for name, annotations := range ingresses {
 		middlewares := annotations[middlewareAnnotation]
-		if name != "mcp-sentinel-gateway-ingest" && strings.Contains(middlewares, "pii-redactor") {
+		if name != "mcp-platform-gateway-ingest" && strings.Contains(middlewares, "pii-redactor") {
 			t.Fatalf("%s must not use pii-redactor; control-plane API and UI fields must stay exact", name)
 		}
 	}
 
-	ingestAnnotations, ok := ingresses["mcp-sentinel-gateway-ingest"]
+	ingestAnnotations, ok := ingresses["mcp-platform-gateway-ingest"]
 	if !ok {
-		t.Fatal("mcp-sentinel-gateway-ingest ingress not found")
+		t.Fatal("mcp-platform-gateway-ingest ingress not found")
 	}
 	if middlewares := ingestAnnotations[middlewareAnnotation]; !strings.Contains(middlewares, "pii-redactor@file") {
 		t.Fatalf("ingest middleware = %q, want pii-redactor@file", middlewares)

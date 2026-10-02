@@ -152,10 +152,10 @@ func setupTLSProvidedSecretsWithKubectl(kubectl core.KubectlRunner, plan setuppl
 		checks = append(checks, struct{ namespace, name, purpose string }{core.NamespaceRegistry, certmanager.RegistryTLSSecretName, "registry"})
 	}
 	if strings.TrimSpace(core.GetPlatformIngressHost()) != "" {
-		checks = append(checks, struct{ namespace, name, purpose string }{core.DefaultAnalyticsNamespace, ingressmanifest.PlatformTLSSecretName, "platform"})
+		checks = append(checks, struct{ namespace, name, purpose string }{core.ComponentNamespace("gateway"), ingressmanifest.PlatformTLSSecretName, "platform"})
 	}
 	if plan.DeployMCPAuthServer && !plan.TestMode {
-		checks = append(checks, struct{ namespace, name, purpose string }{core.DefaultAnalyticsNamespace, plan.MCPAuthTLSSecret, "mcp-auth"})
+		checks = append(checks, struct{ namespace, name, purpose string }{core.ComponentNamespace("mcp-auth"), plan.MCPAuthTLSSecret, "mcp-auth"})
 	}
 	for _, check := range checks {
 		if err := checkTLSSecretWithKubectl(kubectl, check.namespace, check.name, check.purpose); err != nil {
@@ -639,19 +639,20 @@ func setupMCPAuthTLSClientGo(logger *zap.Logger, plan setupplan.Plan, issuerName
 	if err != nil {
 		return err
 	}
-	if err := ensureNamespaceWithLabels(core.DefaultAnalyticsNamespace, nil); err != nil {
+	authNamespace := core.ComponentNamespace("mcp-auth")
+	if err := ensureNamespaceWithLabels(authNamespace, nil); err != nil {
 		return err
 	}
 	const certificateName = "mcp-auth-server-cert"
 	core.Info("Applying Certificate for bundled mcp-auth")
-	if err := applyCertificateClientGo(certificateName, plan.MCPAuthTLSSecret, core.DefaultAnalyticsNamespace, []string{authHost}, nil, issuerName); err != nil {
+	if err := applyCertificateClientGo(certificateName, plan.MCPAuthTLSSecret, authNamespace, []string{authHost}, nil, issuerName); err != nil {
 		return wrapApplyCertificateError(err, logger, certificateName)
 	}
 	certTimeout := core.GetCertTimeout()
 	if certTimeout < 5*time.Minute {
 		certTimeout = 5 * time.Minute
 	}
-	if err := waitForCertificateReadyClientGo(certificateName, core.DefaultAnalyticsNamespace, certTimeout, logger, "mcp-auth certificate"); err != nil {
+	if err := waitForCertificateReadyClientGo(certificateName, authNamespace, certTimeout, logger, "mcp-auth certificate"); err != nil {
 		return err
 	}
 	core.Success("mcp-auth certificate issued successfully")

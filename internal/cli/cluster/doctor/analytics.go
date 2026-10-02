@@ -87,12 +87,12 @@ func checkGatewayAnalyticsCredentials(kubectl core.KubectlRunner) DoctorCheck {
 }
 
 func checkSentinelWorkloadHealth(kubectl core.KubectlRunner) DoctorCheck {
-	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", doctorSentinelNamespace, "-o", "jsonpath={.metadata.name}"}); err != nil {
-		return DoctorCheck{Name: "sentinel workload rollout health", OK: true, Detail: "namespace mcp-sentinel not found; skipping workload checks"}
+	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", componentNamespace("platform-api"), "-o", "jsonpath={.metadata.name}"}); err != nil {
+		return DoctorCheck{Name: "sentinel workload rollout health", OK: true, Detail: "namespace mcp-platform not found; skipping workload checks"}
 	}
-	deployments, err := readKubectlOutput(kubectl, []string{"get", "deploy", "-n", doctorSentinelNamespace, "-o", "json"})
+	deployments, err := readKubectlOutput(kubectl, []string{"get", "deploy", "-n", componentNamespace("platform-api"), "-o", "json"})
 	if err != nil {
-		return DoctorCheck{Name: "sentinel workload rollout health", OK: false, Detail: fmt.Sprintf("failed listing sentinel deployments: %v", err), Remedy: "check Kubernetes API access and inspect `kubectl -n mcp-sentinel get deploy`"}
+		return DoctorCheck{Name: "sentinel workload rollout health", OK: false, Detail: fmt.Sprintf("failed listing sentinel deployments: %v", err), Remedy: "check Kubernetes API access and inspect `kubectl -n mcp-platform get deploy`"}
 	}
 	var list struct {
 		Items []struct {
@@ -123,9 +123,9 @@ func checkSentinelWorkloadHealth(kubectl core.KubectlRunner) DoctorCheck {
 			}
 		}
 	}
-	pods, err := readKubectlOutput(kubectl, []string{"get", "pods", "-n", doctorSentinelNamespace, "-o", "json"})
+	pods, err := readKubectlOutput(kubectl, []string{"get", "pods", "-n", componentNamespace("platform-api"), "-o", "json"})
 	if err != nil {
-		return DoctorCheck{Name: "sentinel workload rollout health", OK: false, Detail: fmt.Sprintf("failed listing sentinel pods: %v", err), Remedy: "inspect `kubectl -n mcp-sentinel get pods`"}
+		return DoctorCheck{Name: "sentinel workload rollout health", OK: false, Detail: fmt.Sprintf("failed listing sentinel pods: %v", err), Remedy: "inspect `kubectl -n mcp-platform get pods`"}
 	}
 	var podList struct {
 		Items []struct {
@@ -169,12 +169,12 @@ func checkSentinelWorkloadHealth(kubectl core.KubectlRunner) DoctorCheck {
 
 func checkSentinelStalePods(kubectl core.KubectlRunner) DoctorCheck {
 	const name = "sentinel stale pods"
-	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", doctorSentinelNamespace, "-o", "jsonpath={.metadata.name}"}); err != nil {
-		return DoctorCheck{Name: name, OK: true, Detail: "namespace mcp-sentinel not found; skipping stale pod check"}
+	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", componentNamespace("platform-api"), "-o", "jsonpath={.metadata.name}"}); err != nil {
+		return DoctorCheck{Name: name, OK: true, Detail: "namespace mcp-platform not found; skipping stale pod check"}
 	}
-	pods, err := readKubectlOutput(kubectl, []string{"get", "pods", "-n", doctorSentinelNamespace, "-o", "json"})
+	pods, err := readKubectlOutput(kubectl, []string{"get", "pods", "-n", componentNamespace("platform-api"), "-o", "json"})
 	if err != nil {
-		return DoctorCheck{Name: name, OK: false, Detail: fmt.Sprintf("failed listing sentinel pods: %v", err), Remedy: "inspect `kubectl -n mcp-sentinel get pods`"}
+		return DoctorCheck{Name: name, OK: false, Detail: fmt.Sprintf("failed listing sentinel pods: %v", err), Remedy: "inspect `kubectl -n mcp-platform get pods`"}
 	}
 	var podList struct {
 		Items []struct {
@@ -215,33 +215,33 @@ func checkSentinelStalePods(kubectl core.KubectlRunner) DoctorCheck {
 		}
 	}
 	if len(stale) == 0 {
-		return DoctorCheck{Name: name, OK: true, Detail: "no Failed, Evicted, or orphaned Completed pods in mcp-sentinel"}
+		return DoctorCheck{Name: name, OK: true, Detail: "no Failed, Evicted, or orphaned Completed pods in mcp-platform"}
 	}
 	return DoctorCheck{
 		Name:   name,
 		OK:     false,
 		Detail: fmt.Sprintf("%d stale terminated pod(s) left by eviction or restart churn: %s", len(stale), strings.Join(limitStrings(stale, 6), "; ")),
-		Remedy: "rerun `mcp-runtime setup` (it prunes terminated pods), or run `kubectl -n mcp-sentinel delete pod --field-selector=status.phase=Failed`",
+		Remedy: "rerun `mcp-runtime setup` (it prunes terminated pods), or run `kubectl -n mcp-platform delete pod --field-selector=status.phase=Failed`",
 	}
 }
 
 func checkSentinelPostgresCredentialDrift(kubectl core.KubectlRunner) DoctorCheck {
-	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", doctorSentinelNamespace, "-o", "jsonpath={.metadata.name}"}); err != nil {
-		return DoctorCheck{Name: "sentinel Postgres credential drift", OK: true, Detail: "namespace mcp-sentinel not found; skipping database credential check"}
+	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", componentNamespace("platform-api"), "-o", "jsonpath={.metadata.name}"}); err != nil {
+		return DoctorCheck{Name: "sentinel Postgres credential drift", OK: true, Detail: "namespace mcp-platform not found; skipping database credential check"}
 	}
-	encoded, err := readKubectlOutput(kubectl, []string{"get", "secret", "mcp-sentinel-secrets", "-n", doctorSentinelNamespace, "-o", "jsonpath={.data.POSTGRES_PASSWORD}"})
+	postgresSecret, encoded, err := readOwnedSecret(kubectl, "POSTGRES_PASSWORD")
 	if err != nil {
-		return DoctorCheck{Name: "sentinel Postgres credential drift", OK: false, Detail: "POSTGRES_PASSWORD is missing from mcp-sentinel-secrets", Remedy: "rerun setup so the managed database Secret is rendered and synchronized"}
+		return DoctorCheck{Name: "sentinel Postgres credential drift", OK: false, Detail: "POSTGRES_PASSWORD is missing from " + postgresSecret, Remedy: "rerun setup so the managed database Secret is rendered and synchronized"}
 	}
 	expected, err := decodeBase64(encoded)
 	if err != nil || strings.TrimSpace(expected) == "" {
-		return DoctorCheck{Name: "sentinel Postgres credential drift", OK: false, Detail: "POSTGRES_PASSWORD is empty or invalid in mcp-sentinel-secrets", Remedy: "set a non-empty POSTGRES_PASSWORD and rerun setup"}
+		return DoctorCheck{Name: "sentinel Postgres credential drift", OK: false, Detail: "POSTGRES_PASSWORD is empty or invalid in " + postgresSecret, Remedy: "set a non-empty POSTGRES_PASSWORD and rerun setup"}
 	}
-	pod, err := readKubectlOutput(kubectl, []string{"get", "pods", "-n", doctorSentinelNamespace, "-l", "app=mcp-sentinel-postgres", "-o", "jsonpath={.items[0].metadata.name}"})
+	pod, err := readKubectlOutput(kubectl, []string{"get", "pods", "-n", componentNamespace("postgres"), "-l", "app=mcp-postgres", "-o", "jsonpath={.items[0].metadata.name}"})
 	if err != nil || strings.TrimSpace(pod) == "" {
-		return DoctorCheck{Name: "sentinel Postgres credential drift", OK: false, Detail: "no running Postgres pod was found", Remedy: "inspect `kubectl -n mcp-sentinel get pods -l app=mcp-sentinel-postgres`"}
+		return DoctorCheck{Name: "sentinel Postgres credential drift", OK: false, Detail: "no running Postgres pod was found", Remedy: "inspect `kubectl -n mcp-platform get pods -l app=mcp-postgres`"}
 	}
-	probe, err := kubectl.CommandArgs([]string{"exec", "-i", "-n", doctorSentinelNamespace, strings.TrimSpace(pod), "--", "sh", "-c", `IFS= read -r MCP_EXPECTED_PASSWORD || exit 1; PGPASSWORD="$MCP_EXPECTED_PASSWORD" psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -Atqc 'select 1'`})
+	probe, err := kubectl.CommandArgs([]string{"exec", "-i", "-n", componentNamespace("postgres"), strings.TrimSpace(pod), "--", "sh", "-c", `IFS= read -r MCP_EXPECTED_PASSWORD || exit 1; PGPASSWORD="$MCP_EXPECTED_PASSWORD" psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -Atqc 'select 1'`})
 	if err == nil {
 		probe.SetStdin(strings.NewReader(expected + "\n"))
 	}

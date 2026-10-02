@@ -148,7 +148,7 @@ func TestApplyManifestYAMLRecreatesStatefulSetOnImmutableUpdate(t *testing.T) {
 		"kind":       "StatefulSet",
 		"metadata": map[string]any{
 			"name":            "kafka",
-			"namespace":       "mcp-sentinel",
+			"namespace":       "mcp-observability",
 			"resourceVersion": "1",
 		},
 		"spec": map[string]any{
@@ -175,7 +175,7 @@ func TestApplyManifestYAMLRecreatesStatefulSetOnImmutableUpdate(t *testing.T) {
 kind: StatefulSet
 metadata:
   name: kafka
-  namespace: mcp-sentinel
+  namespace: mcp-observability
 spec:
   serviceName: kafka-headless
   podManagementPolicy: Parallel
@@ -191,7 +191,7 @@ spec:
       containers:
         - name: kafka
           image: example/kafka:latest
-`), "mcp-sentinel")
+`), "mcp-observability")
 	if err != nil {
 		t.Fatalf("ApplyManifestYAML() error = %v", err)
 	}

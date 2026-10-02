@@ -7,7 +7,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -104,16 +103,6 @@ func newPlatformKubernetesTestClients(clientObjects []runtime.Object, dynamicObj
 	}
 }
 
-func platformTestClientsWithIngresses(names ...string) *k8sclient.Clients {
-	objects := make([]runtime.Object, 0, len(names))
-	for _, name := range names {
-		objects = append(objects, &networkingv1.Ingress{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: core.DefaultAnalyticsNamespace},
-		})
-	}
-	return newPlatformKubernetesTestClients(objects, nil)
-}
-
 func platformTestClientsWithTraefikDeployment(namespace string) *k8sclient.Clients {
 	return newPlatformKubernetesTestClients([]runtime.Object{
 		&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "traefik", Namespace: namespace}},
@@ -162,8 +151,8 @@ func platformTestClientsWithCRD(name string) *k8sclient.Clients {
 func assertPlatformIngressAppliedForTest(t *testing.T, clients *k8sclient.Clients, host string) {
 	t.Helper()
 	ingress, err := clients.Dynamic.Resource(platformIngressGVR).
-		Namespace(core.DefaultAnalyticsNamespace).
-		Get(context.Background(), "mcp-sentinel-platform-ui", metav1.GetOptions{})
+		Namespace(core.ComponentNamespace("platform-api")).
+		Get(context.Background(), "mcp-platform-ui", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("expected platform UI ingress apply: %v", err)
 	}

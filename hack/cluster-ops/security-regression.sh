@@ -27,7 +27,8 @@ TEST_KUBECONFIG="${TEST_KUBECONFIG:-${KUBECONFIG:-$HOME/.kube/test-mcp-runtime-c
 export KUBECONFIG="$TEST_KUBECONFIG"
 BASE_URL="${BASE_URL:-http://localhost:18080}"
 SUITES="${SUITES:-A,E,F,G,I}"
-NS_SENTINEL="${NS_SENTINEL:-mcp-sentinel}"
+NS_PLATFORM="${NS_PLATFORM:-mcp-platform}"
+NS_OBSERVABILITY="${NS_OBSERVABILITY:-mcp-observability}"
 
 pass=0
 fail=0
@@ -58,12 +59,12 @@ if ! curl -fsS -o /dev/null --connect-timeout 2 "${BASE_URL}/" 2>/dev/null; then
   exit 1
 fi
 
-ADMIN_KEY="$(kubectl get secret mcp-sentinel-secrets -n "$NS_SENTINEL" \
+ADMIN_KEY="$(kubectl get secret mcp-platform-api-credentials -n "$NS_PLATFORM" \
   -o jsonpath='{.data.ADMIN_API_KEYS}' | base64 -d | cut -d, -f1)"
-INGEST_KEY="$(kubectl get secret mcp-sentinel-secrets -n "$NS_SENTINEL" \
+INGEST_KEY="$(kubectl get secret mcp-ingest-credentials -n "$NS_OBSERVABILITY" \
   -o jsonpath='{.data.INGEST_API_KEYS}' | base64 -d | cut -d, -f1)"
 if [[ -z "$ADMIN_KEY" || -z "$INGEST_KEY" ]]; then
-  log "FAIL could not read ADMIN_API_KEYS / INGEST_API_KEYS from mcp-sentinel-secrets"
+  log "FAIL could not read ADMIN_API_KEYS / INGEST_API_KEYS from owner Secrets"
   exit 1
 fi
 
@@ -182,7 +183,7 @@ if suite_enabled I; then
   log "=== suite I: live-log secret scan ==="
   hits=0
   pattern='Bearer [A-Za-z0-9._-]{20,}|sk-[A-Za-z0-9]{16,}|eyJ[A-Za-z0-9._-]{20,}|x-api-key:[[:space:]]*[A-Za-z0-9_-]{12,}'
-  for ns in mcp-runtime mcp-sentinel mcp-servers traefik registry; do
+  for ns in mcp-runtime mcp-platform mcp-observability mcp-log-collector mcp-servers traefik registry; do
     if ! kubectl get ns "$ns" >/dev/null 2>&1; then
       continue
     fi

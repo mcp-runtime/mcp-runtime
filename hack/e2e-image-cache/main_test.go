@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -32,7 +33,14 @@ func TestExplicitOperatorDockerfileUsesDockerBuild(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(args), "build --platform=linux/amd64 -t docker.io/library/mcp-runtime-operator:latest -f "+filepath.Join(root, "Dockerfile.operator")) {
+	platform := os.Getenv("MCP_IMAGE_PLATFORM")
+	if platform == "" {
+		platform = os.Getenv("DOCKER_DEFAULT_PLATFORM")
+	}
+	if platform == "" {
+		platform = "linux/" + runtime.GOARCH
+	}
+	if !strings.Contains(string(args), "build --platform="+platform+" -t docker.io/library/mcp-runtime-operator:latest -f "+filepath.Join(root, "Dockerfile.operator")) {
 		t.Fatalf("unexpected Docker arguments: %s", args)
 	}
 }

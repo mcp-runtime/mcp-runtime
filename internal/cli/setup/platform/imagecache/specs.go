@@ -132,9 +132,9 @@ func ComponentFromLocalImage(image string) string {
 		return "operator"
 	case "mcp-runtime-registry":
 		return "e2e-registry"
-	case "mcp-sentinel-mcp-gateway":
+	case "mcp-gateway":
 		return "gateway-proxy"
-	case "mcp-sentinel-ingest":
+	case "mcp-ingest":
 		return "ingest"
 	case "mcp-platform-api":
 		return "platform-api"
@@ -142,9 +142,9 @@ func ComponentFromLocalImage(image string) string {
 		return "runtime-api"
 	case "mcp-analytics-api":
 		return "analytics-api"
-	case "mcp-sentinel-processor":
+	case "mcp-processor":
 		return "processor"
-	case "mcp-sentinel-ui":
+	case "mcp-ui":
 		return "ui"
 	case "mcp-runtime-doctor-smoke":
 		return "doctor-smoke"

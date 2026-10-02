@@ -13,7 +13,7 @@ spec:
   storageClassName: local-path
   persistentVolumeReclaimPolicy: Retain
   claimRef:
-    namespace: mcp-sentinel
+    namespace: mcp-observability
     name: data-clickhouse-0
   local:
     path: /var/lib/mcp-runtime/clickhouse
@@ -30,7 +30,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: clickhouse-prometheus-config
-  namespace: mcp-sentinel
+  namespace: mcp-observability
 data:
   prometheus.xml: |
     <clickhouse>
@@ -47,7 +47,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: clickhouse
-  namespace: mcp-sentinel
+  namespace: mcp-observability
 spec:
   selector:
     app: clickhouse
@@ -66,7 +66,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: clickhouse
-  namespace: mcp-sentinel
+  namespace: mcp-observability
 spec:
   serviceName: clickhouse
   persistentVolumeClaimRetentionPolicy:
@@ -81,7 +81,7 @@ spec:
       labels:
         app: clickhouse
     spec:
-      priorityClassName: mcp-sentinel-data
+      priorityClassName: mcp-shared-data
       terminationGracePeriodSeconds: 60
       automountServiceAccountToken: false
       securityContext:
@@ -147,7 +147,7 @@ spec:
             - name: CLICKHOUSE_DB
               valueFrom:
                 configMapKeyRef:
-                  name: mcp-sentinel-config
+                  name: mcp-shared-config
                   key: CLICKHOUSE_DB
           resources:
             requests:

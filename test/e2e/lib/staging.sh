@@ -21,6 +21,9 @@
 # here prints secret values; tokens are passed through the environment and
 # never written into the artifact directory.
 
+# shellcheck source=namespace-placement.sh
+source "$(dirname "${BASH_SOURCE[0]}")/namespace-placement.sh"
+
 STAGING_LOG_PREFIX="${STAGING_LOG_PREFIX:-staging-e2e}"
 STAGING_MARKER_MAGIC="mcp-runtime-disposable-e2e-vm"
 STAGING_DEFAULT_SUFFIX="e2e.mcpruntime.org"
@@ -42,6 +45,16 @@ staging_flag_enabled() {
     1 | true | yes | on) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+# staging_prune_docker_keeping_qa_images drops unused Docker images and caps
+# BuildKit cache. Images labeled mcp-runtime.e2e-content-hash are the single
+# latest QA build of each component and must survive so the next run can
+# compare against them.
+staging_prune_docker_keeping_qa_images() {
+  command -v docker >/dev/null 2>&1 || return 0
+  docker image prune -af --filter 'label!=mcp-runtime.e2e-content-hash' || true
+  docker builder prune -af --keep-storage "${E2E_DOCKER_BUILD_CACHE_MAX:-8GB}" || true
 }
 
 staging_lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
@@ -532,7 +545,7 @@ staging_finish() {
 # ---------------------------------------------------------------------------
 
 staging_platform_namespaces() {
-  printf '%s\n' mcp-runtime mcp-sentinel registry cert-manager mcp-servers traefik kube-system
+  printf '%s\n' mcp-runtime mcp-platform mcp-observability mcp-log-collector registry cert-manager mcp-servers traefik kube-system
 }
 
 staging_collect_diagnostics() {
@@ -556,7 +569,7 @@ staging_collect_diagnostics() {
   kubectl get secrets -A >"${out}/secret-names.txt" 2>&1 || true
   kubectl get mcpservers -A -o yaml >"${out}/mcpservers.yaml" 2>&1 || true
   kubectl get mcpaccessgrants,mcpagentsessions -A >"${out}/grants-sessions.txt" 2>&1 || true
-  kubectl get configmap mcp-sentinel-config -n mcp-sentinel -o yaml >"${out}/mcp-sentinel-config.yaml" 2>&1 || true
+  kubectl get configmap mcp-shared-config -n mcp-platform -o yaml >"${out}/mcp-shared-config.yaml" 2>&1 || true
   while IFS= read -r ns; do
     kubectl get namespace "${ns}" >/dev/null 2>&1 || continue
     kubectl -n "${ns}" get pods -o wide >"${out}/${ns}-pods.txt" 2>&1 || true
@@ -567,7 +580,7 @@ staging_collect_diagnostics() {
     done
   done < <(staging_platform_namespaces)
   local pair secret_ns secret_name
-  for pair in registry/registry-tls mcp-sentinel/mcp-sentinel-platform-tls; do
+  for pair in registry/registry-tls mcp-platform/mcp-platform-tls; do
     secret_ns="${pair%%/*}"
     secret_name="${pair##*/}"
     kubectl -n "${secret_ns}" get secret "${secret_name}" -o jsonpath='{.data.tls\.crt}' 2>/dev/null |
@@ -687,7 +700,7 @@ staging_check_diagnostics() {
 staging_check_rollouts() {
   local ns kind name failed=0 traefik_ns
   traefik_ns="$(staging_traefik_namespace || true)"
-  for ns in mcp-runtime mcp-sentinel registry cert-manager ${traefik_ns}; do
+  for ns in mcp-runtime mcp-platform mcp-observability mcp-log-collector registry cert-manager ${traefik_ns}; do
     if ! kubectl get namespace "${ns}" >/dev/null 2>&1; then
       staging_err "namespace ${ns} is missing"
       failed=1
@@ -776,7 +789,7 @@ staging_check_certificates() {
   mcp_host="$(staging_url_host "${MCP_URL}")"
   platform_host="$(staging_url_host "${PLATFORM_URL}")"
   for entry in "registry|registry-cert|registry-tls|${REGISTRY_HOST} ${mcp_host}" \
-    "mcp-sentinel|mcp-sentinel-platform-tls|mcp-sentinel-platform-tls|${platform_host}"; do
+    "mcp-platform|mcp-platform-tls|mcp-platform-tls|${platform_host}"; do
     IFS='|' read -r ns cert secret hosts <<<"${entry}"
     if ! kubectl -n "${ns}" wait --for=condition=Ready "certificate/${cert}" --timeout=300s; then
       staging_err "Certificate ${ns}/${cert} is not Ready"
@@ -858,7 +871,7 @@ staging_check_fresh_certificate() {
   if ! staging_acme_staging && ! staging_flag_enabled "${E2E_FRESH_CERT_ALLOW_PRODUCTION_CA:-0}"; then
     staging_skip "fresh issuance is limited to the staging CA (set E2E_FRESH_CERT_ALLOW_PRODUCTION_CA=1 to override)"
   fi
-  local host issuer name ns=mcp-sentinel platform_ips host_ips
+  local host issuer name ns=mcp-platform platform_ips host_ips
   host="$(staging_fresh_host)"
   issuer="$(staging_expected_issuer)"
   name="e2e-fresh-$(printf '%s' "${host%%.*}" | cut -c5-)"
@@ -920,7 +933,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: mcp-sentinel-ui
+                name: mcp-ui
                 port:
                   number: 8082
 EOF
@@ -967,13 +980,13 @@ staging_check_platform_login() {
   if [[ -z "${token}" ]] || [[ "$(curl --silent --output /dev/null --write-out '%{http_code}' \
     -H "x-api-key: ${token}" -H "authorization: Bearer ${token}" "${PLATFORM_URL}/api/v1/auth/me")" != "200" ]]; then
     local encoded
-    encoded="$(kubectl get secret mcp-sentinel-secrets -n mcp-sentinel -o jsonpath='{.data.ADMIN_API_KEYS}' 2>/dev/null || true)"
+    encoded="$(kubectl get secret mcp-platform-api-credentials -n mcp-platform -o jsonpath='{.data.ADMIN_API_KEYS}' 2>/dev/null || true)"
     token="$(printf '%s' "${encoded}" | base64 --decode 2>/dev/null | cut -d',' -f1 | tr -d '\r\n')"
     [[ -n "${token}" ]] || {
       staging_err "setup did not produce an ADMIN_API_KEYS value and no E2E_PLATFORM_API_TOKEN was accepted"
       return 1
     }
-    staging_log "using the first generated admin API key from mcp-sentinel-secrets"
+    staging_log "using the first generated admin API key from mcp-platform-api-credentials"
   fi
   staging_state_set E2E_PLATFORM_API_TOKEN "${token}"
   export E2E_PLATFORM_API_TOKEN="${token}"
@@ -1132,7 +1145,7 @@ staging_check_registry_auth() {
 # the provisioned pull secret, and a pod without that secret is refused.
 staging_check_image_pulls() {
   local failed=0 ns deploy image secrets
-  for ns in mcp-runtime mcp-sentinel; do
+  for ns in mcp-runtime mcp-platform mcp-observability; do
     for deploy in $(kubectl -n "${ns}" get deploy -o name); do
       image="$(kubectl -n "${ns}" get "${deploy}" -o jsonpath='{.spec.template.spec.containers[0].image}')"
       [[ "${image}" == "${REGISTRY_HOST}/"* ]] || continue
@@ -1150,8 +1163,8 @@ staging_check_image_pulls() {
     -o jsonpath='{.spec.template.spec.containers[0].image}')"
   local sa=staging-e2e-pull-probe pod_ok=staging-e2e-pull-authorized pod_denied=staging-e2e-pull-anonymous
   # shellcheck disable=SC2064
-  trap "kubectl -n mcp-sentinel delete pod ${pod_ok} ${pod_denied} --ignore-not-found --wait=false >/dev/null 2>&1; kubectl -n mcp-sentinel delete sa ${sa} --ignore-not-found >/dev/null 2>&1 || true" EXIT
-  kubectl -n mcp-sentinel create serviceaccount "${sa}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+  trap "kubectl -n mcp-platform delete pod ${pod_ok} ${pod_denied} --ignore-not-found --wait=false >/dev/null 2>&1; kubectl -n mcp-platform delete sa ${sa} --ignore-not-found >/dev/null 2>&1 || true" EXIT
+  kubectl -n mcp-platform create serviceaccount "${sa}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
   local pod secret_block
   for pod in "${pod_ok}" "${pod_denied}"; do
     secret_block=""
@@ -1161,7 +1174,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: ${pod}
-  namespace: mcp-sentinel
+  namespace: mcp-platform
   labels:
     app.kubernetes.io/managed-by: staging-e2e
 spec:
@@ -1191,20 +1204,20 @@ EOF
   done
   local deadline=$((SECONDS + 180)) ok_id="" denied_reason=""
   while ((SECONDS < deadline)); do
-    ok_id="$(kubectl -n mcp-sentinel get pod "${pod_ok}" -o jsonpath='{.status.containerStatuses[0].imageID}' 2>/dev/null || true)"
-    denied_reason="$(kubectl -n mcp-sentinel get pod "${pod_denied}" -o jsonpath='{.status.containerStatuses[0].state.waiting.reason}' 2>/dev/null || true)"
+    ok_id="$(kubectl -n mcp-platform get pod "${pod_ok}" -o jsonpath='{.status.containerStatuses[0].imageID}' 2>/dev/null || true)"
+    denied_reason="$(kubectl -n mcp-platform get pod "${pod_denied}" -o jsonpath='{.status.containerStatuses[0].state.waiting.reason}' 2>/dev/null || true)"
     if [[ -n "${ok_id}" && ( "${denied_reason}" == "ErrImagePull" || "${denied_reason}" == "ImagePullBackOff" ) ]]; then
       break
     fi
     sleep 5
   done
-  kubectl -n mcp-sentinel get events --field-selector "involvedObject.name=${pod_denied}" -o custom-columns=REASON:.reason,MESSAGE:.message 2>/dev/null |
+  kubectl -n mcp-platform get events --field-selector "involvedObject.name=${pod_denied}" -o custom-columns=REASON:.reason,MESSAGE:.message 2>/dev/null |
     sed -E 's/(Basic|Bearer) [A-Za-z0-9+/=._-]+/\1 <redacted>/g' | tail -5 || true
   if [[ -n "${ok_id}" ]]; then
     staging_log "authorized in-cluster pull ok (${ok_id##*@})"
   else
     staging_err "authorized in-cluster pull of ${image} did not complete"
-    kubectl -n mcp-sentinel describe pod "${pod_ok}" | tail -20 >&2 || true
+    kubectl -n mcp-platform describe pod "${pod_ok}" | tail -20 >&2 || true
     failed=1
   fi
   if [[ "${denied_reason}" == "ErrImagePull" || "${denied_reason}" == "ImagePullBackOff" ]]; then
@@ -1245,7 +1258,7 @@ staging_check_ui() {
 
 staging_check_oidc() {
   local oidc_issuer
-  oidc_issuer="$(kubectl -n mcp-sentinel get configmap mcp-sentinel-config -o jsonpath='{.data.OIDC_ISSUER}' 2>/dev/null || true)"
+  oidc_issuer="$(kubectl -n mcp-platform get configmap mcp-shared-config -o jsonpath='{.data.OIDC_ISSUER}' 2>/dev/null || true)"
   staging_log "platform OIDC issuer configured: ${oidc_issuer:-<none>}"
   if ! staging_flag_enabled "${E2E_WITH_MCP_AUTH:-0}"; then
     staging_skip "E2E_WITH_MCP_AUTH is not enabled in e2e.env, so the mcp-auth/Keycloak OAuth path is not installed on this run"
@@ -1381,7 +1394,7 @@ staging_adapter_diagnostics() {
     kubectl -n "${ns}" logs "deploy/${server}" --all-containers --prefix --tail=300 >"${out}/${server}.log" 2>&1 || true
   done
   kubectl -n mcp-runtime logs deploy/mcp-runtime-operator-controller-manager --tail=400 >"${out}/operator.log" 2>&1 || true
-  kubectl -n mcp-sentinel logs deploy/mcp-runtime-api --tail=400 >"${out}/runtime-api.log" 2>&1 || true
+  kubectl -n mcp-platform logs deploy/mcp-runtime-api --tail=400 >"${out}/runtime-api.log" 2>&1 || true
   local traefik_ns
   traefik_ns="$(staging_traefik_namespace 2>/dev/null || true)"
   [[ -z "${traefik_ns}" ]] || kubectl -n "${traefik_ns}" logs deploy/traefik --tail=300 >"${out}/traefik.log" 2>&1 || true
@@ -1703,7 +1716,7 @@ staging_check_adapter_enrollment() {
     staging_skip "adapter enroll is not supported on this ref"
   fi
   local issuer
-  issuer="$(kubectl -n mcp-sentinel get configmap mcp-sentinel-config -o jsonpath='{.data.MCP_MTLS_CLUSTER_ISSUER}' 2>/dev/null || true)"
+  issuer="$(kubectl -n mcp-platform get configmap mcp-shared-config -o jsonpath='{.data.MCP_MTLS_CLUSTER_ISSUER}' 2>/dev/null || true)"
   if [[ -z "${issuer}" ]]; then
     staging_skip "setup ran without --mtls-cluster-issuer (E2E_MTLS_CLUSTER_ISSUER empty), so adapter certificates are not enabled"
   fi
@@ -1714,7 +1727,7 @@ staging_check_adapter_enrollment() {
   local operator_issuer trust platform_trust tls_ns
   operator_issuer="$(staging_operator_env MCP_MTLS_CLUSTER_ISSUER)"
   trust="$(staging_operator_env MCP_TRUST_DOMAIN)"
-  platform_trust="$(kubectl -n mcp-sentinel get configmap mcp-sentinel-config -o jsonpath='{.data.MCP_TRUST_DOMAIN}' 2>/dev/null || true)"
+  platform_trust="$(kubectl -n mcp-platform get configmap mcp-shared-config -o jsonpath='{.data.MCP_TRUST_DOMAIN}' 2>/dev/null || true)"
   tls_ns="$(staging_operator_env MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE)"
   staging_log "workload issuer ${issuer}; trust domain operator=${trust:-<empty>} platform=${platform_trust:-<empty>}; client-auth TLSOption namespace ${tls_ns:-<none>}"
   [[ "${operator_issuer}" == "${issuer}" ]] || {
@@ -1722,7 +1735,7 @@ staging_check_adapter_enrollment() {
     return 1
   }
   [[ -n "${trust}" && "${trust}" == "${platform_trust}" ]] || {
-    staging_err "MCP_TRUST_DOMAIN must be set and equal on the operator (${trust:-<empty>}) and in mcp-sentinel-config (${platform_trust:-<empty>}); setup did not receive it"
+    staging_err "MCP_TRUST_DOMAIN must be set and equal on the operator (${trust:-<empty>}) and in mcp-shared-config (${platform_trust:-<empty>}); setup did not receive it"
     return 1
   }
   [[ -n "${tls_ns}" ]] || {
@@ -1730,9 +1743,9 @@ staging_check_adapter_enrollment() {
     return 1
   }
   local image
-  image="$(kubectl -n mcp-sentinel get configmap mcp-sentinel-config -o jsonpath='{.data.MCP_DOCTOR_SMOKE_IMAGE}' 2>/dev/null || true)"
+  image="$(kubectl -n mcp-platform get configmap mcp-shared-config -o jsonpath='{.data.MCP_DOCTOR_SMOKE_IMAGE}' 2>/dev/null || true)"
   [[ -n "${image}" ]] || {
-    staging_err "mcp-sentinel-config has no MCP_DOCTOR_SMOKE_IMAGE to run as the upstream server"
+    staging_err "mcp-shared-config has no MCP_DOCTOR_SMOKE_IMAGE to run as the upstream server"
     return 1
   }
   local image_repo="${image}" image_tag=latest
@@ -1759,7 +1772,7 @@ staging_check_adapter_enrollment() {
     staging_log "tenant service account ${MT_ACME_NS}/${sa} cannot create CertificateRequests"
   done
   decision="$(staging_auth_can_i create certificaterequests.cert-manager.io \
-    -n "${MT_ACME_NS}" --as=system:serviceaccount:mcp-sentinel:mcp-runtime-api)" || return 1
+    -n "${MT_ACME_NS}" --as=system:serviceaccount:mcp-platform:mcp-runtime-api)" || return 1
   if [[ "${decision}" != "yes" ]]; then
     staging_err "runtime API service account CertificateRequest create decision: ${decision}, want yes"
     return 1
@@ -1785,7 +1798,7 @@ staging_check_adapter_enrollment() {
   # shellcheck disable=SC2064 # expand the names now; the trap runs after they go out of scope
   trap "staging_adapter_cleanup \$? '${ns}' '${tls_ns}' '${grant}' '${pull}' '${certs}' '${session_file}' '${server}' '${wrong}' '${oauth_server}' '${oauth_wrong}'" EXIT
 
-  kubectl -n mcp-sentinel get secret mcp-runtime-registry-pull -o json |
+  kubectl -n mcp-platform get secret mcp-runtime-registry-pull -o json |
     jq --arg name "${pull}" --arg ns "${ns}" \
       '{apiVersion, kind, type, data, metadata: {name: $name, namespace: $ns, labels: {"app.kubernetes.io/managed-by": "staging-e2e"}}}' |
     kubectl apply -f - >/dev/null
@@ -1940,7 +1953,7 @@ staging_check_analytics() {
   count="$(jq '(.events // .data // .) | if type == "array" then length else 0 end' "${dir}/analytics-events.json")"
   staging_log "analytics API returned ${count} event(s)"
   local ch
-  ch="$(kubectl -n mcp-sentinel exec statefulset/clickhouse -- clickhouse-client \
+  ch="$(kubectl -n mcp-observability exec statefulset/clickhouse -- clickhouse-client \
     --query "SELECT count() FROM mcp.events" 2>/dev/null | tr -d '[:space:]' || true)"
   staging_log "ClickHouse mcp.events rows: ${ch:-unavailable}"
   if [[ "$(staging_stage_status multitenancy)" != "passed" ]]; then
@@ -1953,7 +1966,7 @@ staging_check_analytics() {
     return 1
   }
   local server_rows
-  server_rows="$(kubectl -n mcp-sentinel exec statefulset/clickhouse -- clickhouse-client \
+  server_rows="$(kubectl -n mcp-observability exec statefulset/clickhouse -- clickhouse-client \
     --query "SELECT count() FROM mcp.events WHERE server = '${MT_ACME_SERVER}'" | tr -d '[:space:]')"
   staging_log "ClickHouse rows for ${MT_ACME_SERVER}: ${server_rows}"
   [[ "${server_rows}" =~ ^[0-9]+$ && "${server_rows}" -gt 0 ]] || {
@@ -1967,6 +1980,13 @@ staging_run_platform_stages() {
   STAGING_MT_RUN_ID="${STAGING_MT_RUN_ID:-mt$(printf '%s' "${RUN_ID}" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9' | tail -c 10)}"
   STAGING_MT_CONFIG_DIR="${STAGING_MT_CONFIG_DIR:-${WORK_DIR}/mcpruntime-config}"
   export STAGING_MT_RUN_ID STAGING_MT_CONFIG_DIR
+  # Keep the e2e login out of ~/.mcpruntime. QA E2E runs Kind on the same VM
+  # and would otherwise send its CLI calls to platform.e2e.*.
+  MCP_RUNTIME_CONFIG_DIR="${STAGING_CLI_CONFIG_DIR:-${WORK_DIR}/cli-config}"
+  mkdir -p "${MCP_RUNTIME_CONFIG_DIR}"
+  chmod 700 "${MCP_RUNTIME_CONFIG_DIR}"
+  export MCP_RUNTIME_CONFIG_DIR
+  staging_run_stage namespace-placement critical "a workload, owner Secret, shared ConfigMap, or service URL is still aimed at the old combined namespace" namespace_placement_verify
   staging_run_stage diagnostics soft "setup finished but cluster diagnostics/doctor report unmet checks; read the failing check names" staging_check_diagnostics
   staging_run_stage rollouts soft "a platform deployment is not Ready or a pod is stuck in image pull/crash loop; see diagnostics/<ns>-pods-describe.txt" staging_check_rollouts
   staging_run_stage cluster-issuer soft "the ACME ClusterIssuer is not Ready (account registration failed or wrong directory); see diagnostics/clusterissuers.yaml" staging_check_cluster_issuer
@@ -1978,7 +1998,7 @@ staging_run_platform_stages() {
   staging_run_stage registry-route soft "https://registry.<domain>/v2/ is not 401: the registry Ingress rule host no longer matches its TLS host (Traefik 404); run mcp-runtime cluster doctor" staging_check_registry_route
   staging_run_stage registry-auth soft "registry forward-auth is not enforcing (anonymous allowed) or rejects valid credentials; see traefik and mcp-platform-api logs" staging_check_registry_auth
   staging_run_stage image-pulls soft "a workload lacks mcp-runtime-registry-pull, or the node cannot pull from the public registry (x509/auth)" staging_check_image_pulls
-  staging_run_stage ui soft "the platform UI ingress or mcp-sentinel-ui is down" staging_check_ui
+  staging_run_stage ui soft "the platform UI ingress or mcp-ui is down" staging_check_ui
   staging_run_stage oidc soft "mcp-auth discovery/JWKS or the Keycloak issuer is unreachable" staging_check_oidc
   staging_run_stage multitenancy soft "a tenant build/push/deploy, grant, adapter call, or event check failed; read multitenancy.log from the bottom" staging_check_multitenancy
   staging_run_stage adapter-enrollment soft "adapter HTTPS certificate enrollment failed: setup did not pass MCP_ADAPTER_CERTIFICATES/MCP_TRUST_DOMAIN/MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE to the operator, the cert-only IngressRoute/TLSOption/gateway certificate never converged (adapter-enrollment/operator.log, traefik-crs.yaml, certificates-describe.txt), the CertificateRequest was not signed or the session not owned (adapter-enrollment/runtime-api.log), the gateway rejected the SPIFFE identity, or (when E2E_MCP_OAUTH_ACCESS_TOKEN is set) the OAuth+cert cell failed" staging_check_adapter_enrollment

@@ -127,7 +127,7 @@ hostnames instead; see [Deployment Targets](../deployment-targets.md).
 | User | `test@mcpruntime.org` | `test@123` |
 | Admin | `admin@mcpruntime.org` | `admin@123` |
 
-These are controlled by `PLATFORM_DEV_*` keys in the `mcp-sentinel-secrets`
+These are controlled by `PLATFORM_DEV_*` keys in `mcp-platform-api-credentials`
 Secret. They are for local debugging only.
 
 The shared contributor cluster used for tenant-isolation smoke testing also has
@@ -195,7 +195,7 @@ read should return `403`.
 
 ```bash
 kubectl get pods -n mcp-runtime -o wide
-kubectl get pods -n mcp-sentinel -o wide
+kubectl get pods -n mcp-platform -o wide
 kubectl get mcpservers -A \
   -o custom-columns='NAMESPACE:.metadata.namespace,NAME:.metadata.name,TEAM:.spec.teamID,PATH:.spec.ingressPath,READY:.status.deploymentReady,GW:.status.gatewayReady'
 kubectl get mcpaccessgrant,mcpagentsession -A -o wide

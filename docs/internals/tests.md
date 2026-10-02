@@ -73,16 +73,32 @@ gateway cookie auth/static routes; `adapter-proxy` covers platform-issued
 adapter sessions plus the local adapter proxy MCP path; `cli-platform` covers
 the platform-backed CLI request flow.
 
-`E2E_CACHE_MODE=1` is for repeated local debugging. It implies
-`E2E_KEEP_CLUSTER=1`, reuses the existing Kind cluster and local registry when
-present, skips platform setup if the core platform is already ready, and reuses
-image tags already published to the local registry.
+`E2E_CACHE_MODE=1` is for repeated runs on one machine. It implies
+`E2E_KEEP_CLUSTER=1` and reuses the existing Kind cluster and upstream-image
+mirror. Platform setup runs when the platform is not ready or an image hash
+misses. It is skipped only when the platform is ready and every component
+matches the last build.
+
+### Local latest image cache
+
+Pull-request QA E2E runs on the disposable VM (`test/e2e/qa-vm.sh`) and does
+not use GitHub Container Registry. The runner installs Go, kind, and kubectl
+when they are missing. Docker must already be running. Each component keeps one local Docker tag,
+`:latest`, labeled `mcp-runtime.e2e-content-hash`. The next run compares the
+checkout hash to that label: a match reuses the image, a miss rebuilds and
+replaces the same tag. Dangling previous image IDs are pruned. BuildKit cache
+is capped (`E2E_DOCKER_BUILD_CACHE_MAX`, default 8GB) when Staging E2E reclaims
+disk, and those labeled images are kept.
+
+Set `E2E_IMAGE_CACHE=local` for this mode. `E2E_IMAGE_CACHE=0` builds every
+image. The job summary records `elapsed_seconds` in `timing.txt` so successive
+pull requests can be compared.
 
 ### Content-hash GHCR image cache
 
-CI QA E2E and disposable-VM Staging E2E can skip rebuilding unchanged platform
-images by pulling content-hash tags from GitHub Container Registry. QA E2E
-publishes cache misses; Staging E2E uses the same tags without a write credential:
+Pre-release regression and Staging E2E can still skip rebuilding unchanged
+platform images by pulling content-hash tags from GitHub Container Registry.
+Staging E2E uses those tags without a write credential:
 
 | Env | Meaning |
 |-----|---------|
@@ -162,7 +178,7 @@ observability paths.
 
 The `observability` scenario validates the trace backend through both direct
 Tempo and Grafana's Tempo datasource. It must find a single request trace that
-contains the gateway service, `mcp-sentinel-ingest`, `mcp-sentinel-processor`,
+contains the gateway service, `mcp-ingest`, `mcp-processor`,
 and the `kafka.produce`, `kafka.consume`, `clickhouse.insert_event`, and
 `clickhouse.insert_batch` spans.
 
@@ -173,7 +189,9 @@ For code PRs,
 `.github/workflows/ci.yaml` calls `test/e2e/select_pr_scenarios.sh` to add
 targeted scenarios based on the changed files. API, UI, adapter, CLI, OAuth,
 observability, and multi-tenancy changes get the matching request-path mode;
-shared or unknown code paths fall back to `all` so CI stays conservative. The
+shared install paths (API types, operator, manifests, module files, and the
+E2E harness) stay on `smoke-auth`, which is the setup and placement check.
+The manual pre-release workflow is what runs every scenario. The
 `multitenancy` scenario checks that two team users can read only their own team
 and namespace and that their registry credentials cannot access the other
 team's repositories. Staging E2E separately exercises the full tenant image
@@ -200,8 +218,8 @@ The main CI workflow runs:
 - path-selected short QA E2E on code PRs and manual CI runs
 
 Relevant pushes to `main` after merge run Staging E2E on the disposable VM;
-the CI QA E2E job is skipped on main pushes. QA E2E still uses Kind for its
-local test-mode cluster.
+the CI QA E2E job is skipped on main pushes. Pull-request QA E2E runs Kind
+test-mode on that same VM and reuses the last local image for each component.
 
 The manual Pre-release Regression workflow adds full QA E2E in tenant, org,
 and public platform modes, cache replay, benchmarks, repository/operator-image

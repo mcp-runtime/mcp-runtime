@@ -12,12 +12,12 @@
 
 PLATFORM_UPDATE_DEPLOYMENTS=(
   "mcp-runtime/mcp-runtime-operator-controller-manager"
-  "mcp-sentinel/mcp-platform-api"
-  "mcp-sentinel/mcp-runtime-api"
-  "mcp-sentinel/mcp-analytics-api"
-  "mcp-sentinel/mcp-sentinel-ingest"
-  "mcp-sentinel/mcp-sentinel-processor"
-  "mcp-sentinel/mcp-sentinel-ui"
+  "mcp-platform/mcp-platform-api"
+  "mcp-platform/mcp-runtime-api"
+  "mcp-observability/mcp-analytics-api"
+  "mcp-observability/mcp-ingest"
+  "mcp-observability/mcp-processor"
+  "mcp-platform/mcp-ui"
 )
 
 platform_update_generations() {
@@ -57,10 +57,14 @@ platform_update_write_manifest() {
     fi
     local pair component deploy container image digest
     for pair in platform-api:mcp-platform-api:platform-api runtime-api:mcp-runtime-api:runtime-api \
-      analytics-api:mcp-analytics-api:analytics-api ingest:mcp-sentinel-ingest:ingest \
-      processor:mcp-sentinel-processor:processor ui:mcp-sentinel-ui:ui; do
+      analytics-api:mcp-analytics-api:analytics-api ingest:mcp-ingest:ingest \
+      processor:mcp-processor:processor ui:mcp-ui:ui; do
       IFS=: read -r component deploy container <<<"${pair}"
-      image="$(kubectl get deployment "${deploy}" -n mcp-sentinel -o jsonpath="{.spec.template.spec.containers[?(@.name==\"${container}\")].image}")"
+      ns=mcp-platform
+      case "${deploy}" in
+        mcp-analytics-api|mcp-ingest|mcp-processor) ns=mcp-observability ;;
+      esac
+      image="$(kubectl get deployment "${deploy}" -n "${ns}" -o jsonpath="{.spec.template.spec.containers[?(@.name==\"${container}\")].image}")"
       digest=""
       if [[ "${component}" == "ui" ]]; then
         digest="${ui_digest}"
@@ -100,7 +104,7 @@ run_e2e_platform_update_scenario() {
   refresh_kind_kubeconfig
 
   local original_ui_image
-  original_ui_image="$(kubectl get deployment mcp-sentinel-ui -n mcp-sentinel -o jsonpath='{.spec.template.spec.containers[?(@.name=="ui")].image}')"
+  original_ui_image="$(kubectl get deployment mcp-ui -n mcp-platform -o jsonpath='{.spec.template.spec.containers[?(@.name=="ui")].image}')"
 
   echo "[platform-update] up-to-date manifest produces an all-unchanged plan and no rollout"
   platform_update_write_manifest "${dir}/current.json"
@@ -129,7 +133,7 @@ run_e2e_platform_update_scenario() {
 
   echo "[platform-update] pinning ui to its running digest rolls out only ui"
   local ui_digest
-  ui_digest="$(kubectl get pods -n mcp-sentinel -l app=mcp-sentinel-ui -o jsonpath='{range .items[*]}{range .status.containerStatuses[?(@.name=="ui")]}{.imageID}{"\n"}{end}{end}' | grep -o 'sha256:[a-f0-9]\{64\}' | sort -u)"
+  ui_digest="$(kubectl get pods -n mcp-platform -l app=mcp-ui -o jsonpath='{range .items[*]}{range .status.containerStatuses[?(@.name=="ui")]}{.imageID}{"\n"}{end}{end}' | grep -o 'sha256:[a-f0-9]\{64\}' | sort -u)"
   if [[ -z "${ui_digest}" || "$(wc -l <<<"${ui_digest}" | tr -d ' ')" != "1" ]]; then
     echo "[platform-update] could not resolve a single running ui digest: '${ui_digest}'" >&2
     return 1
@@ -142,9 +146,9 @@ run_e2e_platform_update_scenario() {
     return 1
   fi
   platform_update_cli --release-manifest "${dir}/pinned.json" --yes --timeout 300s | tee "${dir}/apply-pinned.txt"
-  platform_update_assert_generations "${before}" "mcp-sentinel/mcp-sentinel-ui"
-  kubectl get deployment mcp-sentinel-ui -n mcp-sentinel -o jsonpath='{.spec.template.spec.containers[?(@.name=="ui")].image}' | grep -Fq "@${ui_digest}"
-  kubectl get deployment mcp-sentinel-ui -n mcp-sentinel -o jsonpath='{.metadata.annotations.mcpruntime\.org/previous-image\.ui}' | grep -Fxq "${original_ui_image}"
+  platform_update_assert_generations "${before}" "mcp-platform/mcp-ui"
+  kubectl get deployment mcp-ui -n mcp-platform -o jsonpath='{.spec.template.spec.containers[?(@.name=="ui")].image}' | grep -Fq "@${ui_digest}"
+  kubectl get deployment mcp-ui -n mcp-platform -o jsonpath='{.metadata.annotations.mcpruntime\.org/previous-image\.ui}' | grep -Fxq "${original_ui_image}"
 
   echo "[platform-update] rerun of the same manifest is a no-op"
   local after_pin
@@ -154,7 +158,7 @@ run_e2e_platform_update_scenario() {
   platform_update_assert_generations "${after_pin}"
 
   echo "[platform-update] restoring original ui image"
-  kubectl set image deployment/mcp-sentinel-ui -n mcp-sentinel "ui=${original_ui_image}" >/dev/null
-  kubectl annotate deployment/mcp-sentinel-ui -n mcp-sentinel mcpruntime.org/previous-image.ui- mcpruntime.org/platform-version- >/dev/null
-  rollout_status_with_logs mcp-sentinel deploy mcp-sentinel-ui 300s
+  kubectl set image deployment/mcp-ui -n mcp-platform "ui=${original_ui_image}" >/dev/null
+  kubectl annotate deployment/mcp-ui -n mcp-platform mcpruntime.org/previous-image.ui- mcpruntime.org/platform-version- >/dev/null
+  rollout_status_with_logs mcp-platform deploy mcp-ui 300s
 }

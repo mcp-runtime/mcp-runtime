@@ -24,7 +24,7 @@ import (
 const mcpAuthSigningKeyPath = "/etc/mcp-auth-key/private-key.pem"
 
 func mcpAuthInternalIssuerURLForCluster() string {
-	return "http://" + clusterServiceDNS("mcp-auth-server", "mcp-sentinel") + ":8080"
+	return "http://" + clusterServiceDNS("mcp-auth-server", "mcp-platform") + ":8080"
 }
 
 // DefaultMCPAuthIssuerURL derives the bundled server's fixed public route from
@@ -159,17 +159,17 @@ func checkMCPAuthPrerequisites(signingKeySecret string, testMode bool) error {
 			name:   "mcp-auth signing key",
 			secret: signingKeySecret,
 			key:    "private-key.pem",
-			remedy: "create the Secret with an RSA PEM key under private-key.pem in namespace mcp-sentinel before setup",
+			remedy: "create the Secret with an RSA PEM key under private-key.pem in namespace mcp-platform before setup",
 		},
 	} {
 		keyPath := strings.ReplaceAll(prerequisite.key, ".", `\.`)
-		cmd, err := kubectl.CommandArgs([]string{"get", "secret", prerequisite.secret, "-n", "mcp-sentinel", "-o", "jsonpath={.data." + keyPath + "}"})
+		cmd, err := kubectl.CommandArgs([]string{"get", "secret", prerequisite.secret, "-n", "mcp-platform", "-o", "jsonpath={.data." + keyPath + "}"})
 		if err != nil {
 			return fmt.Errorf("prepare %s Secret check: %w", prerequisite.name, err)
 		}
 		value, err := cmd.Output()
 		if err != nil {
-			return fmt.Errorf("%s Secret %q is not available in namespace %q: %w; %s", prerequisite.name, prerequisite.secret, "mcp-sentinel", err, prerequisite.remedy)
+			return fmt.Errorf("%s Secret %q is not available in namespace %q: %w; %s", prerequisite.name, prerequisite.secret, "mcp-platform", err, prerequisite.remedy)
 		}
 		if strings.TrimSpace(string(value)) == "" {
 			return fmt.Errorf("%s Secret %q is missing non-empty data key %q; %s", prerequisite.name, prerequisite.secret, prerequisite.key, prerequisite.remedy)
@@ -334,7 +334,7 @@ func mcpAuthResourceURLs(configured []string, issuer string, testMode bool) ([]s
 }
 
 func renderMCPAuthConnectorConfigMap(connectorJSON []byte) string {
-	configMap := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: mcp-auth-connectors\n  namespace: mcp-sentinel\ndata:\n  connectors.json: |\n"
+	configMap := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: mcp-auth-connectors\n  namespace: mcp-platform\ndata:\n  connectors.json: |\n"
 	for _, line := range strings.Split(strings.TrimRight(string(connectorJSON), "\n"), "\n") {
 		configMap += "    " + line + "\n"
 	}
@@ -356,7 +356,7 @@ func renderMCPAuthConnectorSecret(values map[string]string) (string, error) {
 	}
 	sort.Strings(names)
 	// This is a manifest template; it contains no credential or secret value.
-	secret := "apiVersion: v1\nkind: Secret\nmetadata:\n  name: mcp-auth-connector-secrets\n  namespace: mcp-sentinel\nstringData:\n" // #nosec G101 -- Kubernetes kind/name is not a credential.
+	secret := "apiVersion: v1\nkind: Secret\nmetadata:\n  name: mcp-auth-connector-secrets\n  namespace: mcp-platform\nstringData:\n" // #nosec G101 -- Kubernetes kind/name is not a credential.
 	for _, name := range names {
 		encoded, err := json.Marshal(values[name])
 		if err != nil {

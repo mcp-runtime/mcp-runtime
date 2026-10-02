@@ -16,15 +16,15 @@ var requiredScrapeJobs = []string{
 	"mcp-platform-api",
 	"mcp-runtime-api",
 	"mcp-analytics-api",
-	"mcp-sentinel-ingest",
-	"mcp-sentinel-processor",
+	"mcp-ingest",
+	"mcp-processor",
 	"clickhouse",
 	"prometheus",
 	"otel-collector",
 	"loki",
 	"tempo",
 	"promtail",
-	"mcp-sentinel-annotated-services",
+	"mcp-annotated-services",
 	"mcp-gateway-sidecars",
 }
 
@@ -107,7 +107,7 @@ func TestPrometheusScrapeCoverageContract(t *testing.T) {
 	// Every required scrape job except the discovery-based ones must be
 	// declared in the required-target inventory so its absence alerts.
 	for _, job := range requiredScrapeJobs {
-		if strings.HasPrefix(job, "mcp-sentinel-annotated-services") || job == "mcp-gateway-sidecars" {
+		if strings.HasPrefix(job, "mcp-annotated-services") || job == "mcp-gateway-sidecars" {
 			continue
 		}
 		want := `label_replace(vector(1), "job", "` + job + `", "", "")`
@@ -130,7 +130,7 @@ func TestPrometheusScrapeCoverageContract(t *testing.T) {
 		t.Errorf("MCPOAuthFailures must be built on the OAuth outcome recording rule")
 	}
 	// Workloads without metrics must be listed, not silently absent.
-	for _, workload := range []string{"kafka", "postgres", "mcp-sentinel-ui", "mcp-auth-server"} {
+	for _, workload := range []string{"kafka", "postgres", "mcp-ui", "mcp-auth-server"} {
 		found := false
 		for _, expr := range uninstrumented {
 			if strings.Contains(expr, `"`+workload+`"`) {

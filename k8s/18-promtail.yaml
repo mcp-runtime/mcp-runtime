@@ -40,7 +40,7 @@ data:
     positions:
       filename: /run/promtail/positions.yaml
     clients:
-      - url: http://loki.mcp-sentinel.svc:3100/loki/api/v1/push
+      - url: http://loki.mcp-observability.svc:3100/loki/api/v1/push
     # -config.expand-env is on: write literal dollar signs as $$.
     scrape_configs:
       # Primary job: Kubernetes metadata for every namespace (mcp-servers and
@@ -99,7 +99,7 @@ data:
             separator: /
             target_label: __path__
             replacement: /var/log/pods/*$$1/*.log
-      # Fallback for the platform namespace that does not depend on API
+      # Fallback for platform namespaces that does not depend on API
       # discovery. Labels come from the CRI file path so coverage gaps in
       # discovery remain distinguishable (job=static-pods).
       - job_name: static-pods
@@ -107,7 +107,19 @@ data:
           - targets: ["localhost"]
             labels:
               job: static-pods
-              __path__: /var/log/pods/mcp-sentinel_*/*/*.log
+              __path__: /var/log/pods/mcp-platform_*/*/*.log
+          - targets: ["localhost"]
+            labels:
+              job: static-pods
+              __path__: /var/log/pods/mcp-observability_*/*/*.log
+          - targets: ["localhost"]
+            labels:
+              job: static-pods
+              __path__: /var/log/pods/mcp-runtime_*/*/*.log
+          - targets: ["localhost"]
+            labels:
+              job: static-pods
+              __path__: /var/log/pods/mcp-servers_*/*/*.log
         pipeline_stages:
           - cri: {}
           - regex:

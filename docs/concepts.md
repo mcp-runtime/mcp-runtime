@@ -23,7 +23,7 @@ tools and admits visiting agents:
 | Clearance printed on the badge | **Trust level** (`low` / `medium` / `high`) | A ceiling, never a grant of power on its own. |
 | "May look" vs "may edit" vs "may shred" | **Side effect** (`read` / `write` / `destructive`) | What the tool does to data, authorized separately from trust. |
 | The badge carrier who presents your certificate | **Adapter** | Local proxy that enrolls and refreshes a session-bound client certificate. |
-| Cameras and the logbook | **Sentinel** | Audit events, analytics, dashboards. |
+| Cameras and the logbook | **Audit and observability** | Audit events, analytics, dashboards in `mcp-observability`. |
 
 ## Platform trust model
 
@@ -340,7 +340,7 @@ Your server code needs no changes to support the gateway.
 
 !!! note "Two things are called \"gateway\""
     `mcp-gateway` is the per-server enforcement sidecar inside each MCP server pod.
-    The Sentinel `gateway` Deployment is the Traefik ingress in front of the
+    The platform gateway Deployment in `mcp-platform` is the Traefik ingress in front of the
     platform APIs, ingest, and UI. It routes traffic and makes no tool-call
     decisions.
 

@@ -61,17 +61,17 @@ func TestRegistryPushRBACIsNamespaceScoped(t *testing.T) {
 					foundClusterPodsExec = true
 				}
 			}
-		case doc.Kind == "Role" && doc.Metadata.Name == "mcp-runtime-api-registry-push" && doc.Metadata.Namespace == "mcp-sentinel":
+		case doc.Kind == "Role" && doc.Metadata.Name == "mcp-runtime-api-registry-push" && doc.Metadata.Namespace == "mcp-platform":
 			foundSentinelRole = true
 			for _, rule := range doc.Rules {
 				if containsAll(rule.Resources, "pods/exec") {
-					t.Fatalf("registry push role in mcp-sentinel must not grant pods/exec")
+					t.Fatalf("registry push role in mcp-platform must not grant pods/exec")
 				}
 			}
-		case doc.Kind == "RoleBinding" && doc.Metadata.Name == "mcp-runtime-api-registry-push" && doc.Metadata.Namespace == "mcp-sentinel":
+		case doc.Kind == "RoleBinding" && doc.Metadata.Name == "mcp-runtime-api-registry-push" && doc.Metadata.Namespace == "mcp-platform":
 			if doc.RoleRef.Kind == "Role" && doc.RoleRef.Name == "mcp-runtime-api-registry-push" {
 				for _, subject := range doc.Subjects {
-					if subject.Kind == "ServiceAccount" && subject.Name == "mcp-runtime-api" && subject.Namespace == "mcp-sentinel" {
+					if subject.Kind == "ServiceAccount" && subject.Name == "mcp-runtime-api" && subject.Namespace == "mcp-platform" {
 						foundSentinelRoleBinding = true
 					}
 				}
@@ -91,10 +91,10 @@ func TestRegistryPushRBACIsNamespaceScoped(t *testing.T) {
 		t.Fatal("registry namespace must not grant pods/exec for registry push")
 	}
 	if !foundSentinelRole {
-		t.Fatal("expected mcp-sentinel-scoped Role for API registry push helper access")
+		t.Fatal("expected Role for API registry push helper access")
 	}
 	if !foundSentinelRoleBinding {
-		t.Fatal("expected mcp-sentinel-scoped RoleBinding for API registry push helper access")
+		t.Fatal("expected RoleBinding for API registry push helper access")
 	}
 }
 

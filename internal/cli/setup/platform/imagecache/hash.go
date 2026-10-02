@@ -124,8 +124,8 @@ func goDependencyFiles(repoRoot, packageDir, platform string) ([]string, error) 
 		if pkg.Dir == "" {
 			continue
 		}
-		relDir, err := filepath.Rel(repoRoot, pkg.Dir)
-		if err != nil || relDir == ".." || strings.HasPrefix(relDir, ".."+string(filepath.Separator)) {
+		relDir, ok := repoRelativeDir(repoRoot, pkg.Dir)
+		if !ok {
 			continue // standard library or downloaded module
 		}
 		for _, group := range [][]string{pkg.GoFiles, pkg.CgoFiles, pkg.CFiles, pkg.CXXFiles, pkg.HFiles, pkg.SFiles, pkg.SysoFiles, pkg.EmbedFiles} {
@@ -135,6 +135,26 @@ func goDependencyFiles(repoRoot, packageDir, platform string) ([]string, error) 
 		}
 	}
 	return paths, nil
+}
+
+// repoRelativeDir reports dir relative to root. On macOS, Go reports module
+// directories through /private while the temp root is the /var symlink.
+func repoRelativeDir(root, dir string) (string, bool) {
+	root = resolveExistingPath(root)
+	dir = resolveExistingPath(dir)
+	rel, err := filepath.Rel(root, dir)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return rel, true
+}
+
+func resolveExistingPath(path string) string {
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return path
+	}
+	return resolved
 }
 
 func collectHashFiles(repoRoot string, paths []string) ([]string, error) {

@@ -26,7 +26,7 @@ import (
 var errForbiddenNamespace = errors.New("forbidden namespace")
 
 const (
-	defaultAnalyticsCredentialSourceSecretName = "mcp-sentinel-secrets"
+	defaultAnalyticsCredentialSourceSecretName = "mcp-runtime-ingest-credentials"
 	defaultAnalyticsCredentialSourceKey        = "INGEST_API_KEYS"
 	defaultAnalyticsCredentialKey              = "api-key"
 )
@@ -456,7 +456,7 @@ func (s *RuntimeServer) defaultAnalyticsAPIKey(ctx context.Context) (string, err
 	if s.k8sClients == nil {
 		return "", errors.New("kubernetes not available")
 	}
-	secret, err := s.k8sClients.Clientset.CoreV1().Secrets(sentinel.DefaultNamespace).Get(ctx, defaultAnalyticsCredentialSourceSecretName, metav1.GetOptions{})
+	secret, err := s.k8sClients.Clientset.CoreV1().Secrets(sentinel.PlatformNamespace).Get(ctx, defaultAnalyticsCredentialSourceSecretName, metav1.GetOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return "", nil

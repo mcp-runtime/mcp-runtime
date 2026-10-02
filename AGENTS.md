@@ -30,7 +30,7 @@ This file is the **onboarding index** for the MCP Runtime repo. It complements `
 | Access and policy | `pkg/access/`, `pkg/policy/` | Grant/session helpers; gateway policy contract |
 | Control-plane / K8s | `pkg/controlplane/`, `pkg/k8sclient/`, `pkg/kubeworkload/`, `pkg/manifest/`, `pkg/metadata/` | MCPServer ops, manifests, registry resolution |
 | Sentinel packages | `pkg/events/`, `pkg/clickhouse/`, `pkg/serviceutil/`, `pkg/sentinel/` | Events, analytics, service utilities |
-| Sentinel services | `services/platform-api`, `services/runtime-api`, `services/analytics-api`, `services/ui`, `services/ingest`, `services/processor`, `services/mcp-gateway`, … | Separate `go.mod` where present; Go 1.26 for shared imports |
+| Sentinel services | `services/platform-api`, `services/runtime-api`, `services/analytics-api`, `services/ui`, `services/ingest`, `services/processor`, `services/mcp-gateway`, … | Separate `go.mod` where present; Go 1.26 for shared imports. Namespaces come from `pkg/platforminventory`: `mcp-platform`, `mcp-observability`, `mcp-log-collector`. See `docs/namespaces.md`. |
 | Samples / install YAML | `examples/oauth-example-go-2025-11-25/`, `k8s/`, `config/` | Demo server; overlays and CRDs |
 | Team isolation | `docs/multi-team.md` | Namespaces, RBAC, ingress watch scope |
 | Deployment targets | `docs/deployment-targets.md`, `docs/k3s-on-prem-cluster.md` | Before distribution-specific runbooks |
@@ -105,7 +105,7 @@ Pre-commit: `pre-commit install`; full suite `pre-commit run --all-files` (sets 
 - Reuse the contributor cluster with `E2E_CACHE_MODE=1 E2E_SCENARIOS=smoke-auth bash test/e2e/qa-e2e.sh`, and set `CLUSTER_NAME=mcp-runtime E2E_CACHE_MODE=1 E2E_KEEP_CLUSTER=1`.
 - Sentinel: `go test -race -count=1 ./...` inside touched `services/*` dirs
 
-**CI** (`.github/workflows/ci.yaml`): gofmt, vet, staticcheck, unit/golden/service/integration tests; path-selected QA E2E on PRs and manual dispatch (`test/e2e/select_pr_scenarios.sh`). Relevant main pushes after merge run Staging E2E; QA E2E is skipped on main pushes. Pre-release: `.github/workflows/pre-release-regression.yaml`.
+**CI** (`.github/workflows/ci.yaml`): gofmt, vet, staticcheck, unit/golden/service/integration tests; path-selected QA E2E on same-repo PRs and manual dispatch (`test/e2e/select_pr_scenarios.sh`, `test/e2e/qa-vm.sh` on the disposable VM). QA keeps one local `:latest` image per component and does not use GitHub Container Registry. Relevant main pushes after merge run Staging E2E; QA E2E is skipped on main pushes. Pre-release: `.github/workflows/pre-release-regression.yaml`.
 
 **CLI docs sync:** when editing `docs/cli.md`, `docs/getting-started.md`, or command examples, copy wording from `./bin/mcp-runtime <group> <subcommand> --help`. Do not paraphrase from memory.
 
@@ -196,7 +196,12 @@ When work reveals a concrete maintainability or debuggability improvement, searc
 
 ```bash
 kubectl logs -n mcp-runtime deploy/mcp-runtime-operator-controller-manager
-kubectl logs -n mcp-sentinel deploy/<api|ingest|processor|ui|gateway>
+kubectl logs -n mcp-platform deploy/mcp-platform-api
+kubectl logs -n mcp-platform deploy/mcp-runtime-api
+kubectl logs -n mcp-platform deploy/mcp-ui
+kubectl logs -n mcp-observability deploy/mcp-analytics-api
+kubectl logs -n mcp-observability deploy/mcp-ingest
+kubectl logs -n mcp-observability deploy/mcp-processor
 ./bin/mcp-runtime status
 ```
 

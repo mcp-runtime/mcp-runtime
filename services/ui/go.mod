@@ -1,4 +1,4 @@
-module mcp-sentinel-ui
+module mcp-ui
 
 go 1.26.6
 

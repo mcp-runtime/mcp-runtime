@@ -131,14 +131,20 @@ func cmdEnsure(args []string) error {
 	if strings.TrimSpace(*platform) != "" {
 		opts.Platform = strings.TrimSpace(*platform)
 	}
-	if !imagecache.Enabled() {
+	buildFn := func() error {
 		return buildLocal(repoRoot, *image, df, ctxDir, useMake, opts.Platform)
+	}
+	if imagecache.LocalLatest() {
+		opts.Progress = func(msg string) { fmt.Fprintln(os.Stderr, msg) }
+		_, err = imagecache.EnsureLocalLatest(context.Background(), repoRoot, comp, *image, opts, buildFn)
+		return err
+	}
+	if !imagecache.Enabled() {
+		return buildFn()
 	}
 
 	opts.Progress = func(msg string) { fmt.Fprintln(os.Stderr, msg) }
-	_, err = imagecache.EnsureLocalImage(context.Background(), repoRoot, comp, *image, opts, func() error {
-		return buildLocal(repoRoot, *image, df, ctxDir, useMake, opts.Platform)
-	})
+	_, err = imagecache.EnsureLocalImage(context.Background(), repoRoot, comp, *image, opts, buildFn)
 	return err
 }
 

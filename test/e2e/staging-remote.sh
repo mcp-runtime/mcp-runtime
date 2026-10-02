@@ -111,15 +111,15 @@ persist_vm_env() {
 # re-issuing from Let's Encrypt on every run, and its rate limits make repeat
 # runs fail. Credentials are deliberately excluded. Setup generates fresh ones
 # and runs syncPostgresPasswordClientGo against the new database, so re-applying
-# an older mcp-sentinel-secrets afterwards would leave the API pods holding a
+# an older credential Secret afterwards would leave the API pods holding a
 # password the database no longer accepts.
 E2E_TLS_SNAPSHOT_FILES=(
   letsencrypt-prod-clusterissuer.yaml
   letsencrypt-staging-clusterissuer.yaml
   registry-tls.yaml
   registry-cert.yaml
-  mcp-sentinel-platform-tls.yaml
-  mcp-sentinel-platform-cert.yaml
+  mcp-platform-tls.yaml
+  mcp-platform-cert.yaml
 )
 LOCAL_SNAPSHOT_DIR="${WORK_DIR}/platform-runtime"
 VM_SNAPSHOT_DIR="${VM_BACKUP_DIR}/platform-runtime/tls"
@@ -142,15 +142,15 @@ snapshot_tls_state() {
   _grab letsencrypt-staging-clusterissuer.yaml get clusterissuer letsencrypt-staging
   _grab registry-tls.yaml get secret registry-tls -n registry
   _grab registry-cert.yaml get certificate registry-cert -n registry
-  _grab mcp-sentinel-platform-tls.yaml get secret mcp-sentinel-platform-tls -n mcp-sentinel
-  _grab mcp-sentinel-platform-cert.yaml get certificate mcp-sentinel-platform-tls -n mcp-sentinel
+  _grab mcp-platform-tls.yaml get secret mcp-platform-tls -n mcp-platform
+  _grab mcp-platform-cert.yaml get certificate mcp-platform-tls -n mcp-platform
 
   # A failed run can reach this with nothing issued yet. Publishing that would
   # replace a usable snapshot with an empty one, so only ship a capture that
   # actually holds the public certificates.
   if [[ ! -s "${LOCAL_SNAPSHOT_DIR}/registry-tls.yaml" ||
-    ! -s "${LOCAL_SNAPSHOT_DIR}/mcp-sentinel-platform-tls.yaml" ]]; then
-    staging_skip "TLS snapshot incomplete (${captured} object(s): registry-tls and mcp-sentinel-platform-tls are both required); keeping the previous snapshot"
+    ! -s "${LOCAL_SNAPSHOT_DIR}/mcp-platform-tls.yaml" ]]; then
+    staging_skip "TLS snapshot incomplete (${captured} object(s): registry-tls and mcp-platform-tls are both required); keeping the previous snapshot"
   fi
   vm_ssh "install -d -m 700 '${VM_SNAPSHOT_DIR}.new'" >/dev/null
   tar -C "${LOCAL_SNAPSHOT_DIR}" -czf - . |
@@ -173,7 +173,7 @@ restore_tls_state() {
   # avoiding the request. The secrets need namespaces, which setup has not
   # created yet.
   local namespace
-  for namespace in registry mcp-sentinel; do
+  for namespace in registry mcp-platform mcp-observability; do
     kubectl create namespace "${namespace}" --dry-run=client -o yaml 2>/dev/null | kubectl apply -f - >/dev/null
   done
 
@@ -192,7 +192,7 @@ restore_tls_state() {
   done
   log "restored ${restored} issued certificate secret(s); cert-manager will reuse them instead of asking ACME"
   local pem
-  for file in registry-tls mcp-sentinel-platform-tls; do
+  for file in registry-tls mcp-platform-tls; do
     [[ -s "${LOCAL_SNAPSHOT_DIR}/${file}.yaml" ]] || continue
     pem="${WORK_DIR}/snapshot-${file}.pem"
     awk '$1 == "tls.crt:" { print $2 }' "${LOCAL_SNAPSHOT_DIR}/${file}.yaml" | base64 --decode >"${pem}" 2>/dev/null || true
@@ -274,7 +274,10 @@ teardown_vm() {
   # anything sequenced after it is simply lost.
   vm_ssh "set -u
     rm -rf /opt/mcp-runtime-e2e /var/tmp/mcp-runtime-e2e-* /tmp/mcp-runtime-e2e.tgz /tmp/mcp-img-*.tar
-    if command -v docker >/dev/null 2>&1; then docker system prune -af --volumes || true; fi" \
+    if command -v docker >/dev/null 2>&1; then
+      docker image prune -af --filter 'label!=mcp-runtime.e2e-content-hash' || true
+      docker builder prune -af --keep-storage \"\${E2E_DOCKER_BUILD_CACHE_MAX:-8GB}\" || true
+    fi" \
     >"${ARTIFACT_DIR}/vm-cleanup.log" 2>&1 || true
 
   # Detach the k3s teardown so it survives the connection it kills, then
@@ -351,7 +354,10 @@ stage_k3s() {
     # Builds from earlier on-VM runs leave images behind, and the cluster's
     # ephemeral storage shares this disk. k3s uses containerd, so pruning Docker
     # never touches running workloads.
-    command -v docker >/dev/null 2>&1 && docker system prune -af >/dev/null 2>&1 || true
+    if command -v docker >/dev/null 2>&1; then
+      docker image prune -af --filter 'label!=mcp-runtime.e2e-content-hash' || true
+      docker builder prune -af --keep-storage \"\${E2E_DOCKER_BUILD_CACHE_MAX:-8GB}\" || true
+    fi
     if [ ! -f /etc/rancher/k3s/k3s.yaml ]; then
       curl -sfL https://get.k3s.io | sh -s - --write-kubeconfig-mode 644 --tls-san '${VM_HOST}'
     fi

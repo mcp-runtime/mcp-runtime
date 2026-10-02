@@ -1,27 +1,24 @@
 # Credential consumers
 
-`pkg/platforminventory.CredentialSets` owns the key allowlists for generated
-consumer Secrets. Setup renders the API, UI, ingest, Grafana, Postgres and
-bootstrap references in the existing namespace; it does not relocate data.
-Only declared keys are synchronized, and an undeclared key blocks rendering.
+`pkg/platforminventory.CredentialSets` is the allowlist of generated consumer
+Secrets. `CredentialPlacement` returns the Secret name and namespace for a key.
+Setup reads and writes that owner object.
 
-On the first upgrade, absent owner objects import installed legacy values.
-Afterwards setup snapshots owner objects once and uses their values, including
-intentional empty optional keys. Required credentials missing from an existing
-owner fail setup instead of generating replacements. Shared API authentication
-keys belong to the platform API set and are copied to runtime/analytics/UI only
-where declared. UI and ingest keys have separate owners. Postgres initialization
-credentials remain separate from the platform API's connection string.
+Each Secret is created in the namespace of its first consumer. The signing key
+has no consumer and stays in `mcp-platform`. Shared API authentication keys
+belong to `mcp-platform-api-credentials` and are copied only onto the consumer
+sets that declare them. UI session keys (`UI_SESSION_DATABASE_URL`,
+`UI_SESSION_ENCRYPTION_KEY`) and `UI_API_KEY` belong to `mcp-ui-credentials`.
+`INGEST_API_KEYS` belongs to `mcp-ingest-credentials` in `mcp-observability`;
+runtime-api receives its own copy in `mcp-runtime-ingest-credentials`. Postgres
+role credentials stay on `mcp-postgres-credentials`. The platform API connection
+string stays on `mcp-platform-api-credentials`.
 
-The legacy `mcp-sentinel-secrets` remains a synchronized compatibility mirror
-for existing pods, doctor/preflight paths and recovery. This phase does not remove
-its credentials or narrow broad Secret/workload API permissions. P03 must deny
-unrelated identities direct/indirect access. Remove the mirror only after every
-supported management/recovery reader uses canonical objects and upgrade/rollback
-checks demonstrate no remaining legacy references. Nonsecret configuration
-separation remains follow-up P02 scope.
+A rerun snapshots each owner Secret and keeps the stored value, including an
+intentional empty optional key. A required key that is present and empty fails
+setup instead of generating a replacement. An undeclared key blocks rendering.
 
-Rotation must keep shared copies consistent before consumers restart; P04
-supplies targeted rollout planning. Setup currently retains its existing rollout
-behavior. Grafana's persisted password and Postgres's database role still require
-their existing reconciliation procedures; Secret copies alone do not rotate stores.
+Grafana's persisted admin password and Postgres's database role still need
+their existing reconciliation procedures. Copying a Secret does not rotate
+those stores. The Grafana password is `GRAFANA_ADMIN_PASSWORD` in
+`mcp-grafana-credentials`.

@@ -161,7 +161,7 @@ func TestOperatorImageStepSetsContext(t *testing.T) {
 			return "registry.example.com/mcp-runtime-operator:latest"
 		},
 		GatewayProxyImageFor: func(_ *config.ExternalRegistryConfig) string {
-			return "registry.example.com/mcp-sentinel-mcp-gateway:latest"
+			return "registry.example.com/mcp-gateway:latest"
 		},
 		BuildOperatorImage:     func(string) error { return nil },
 		PushOperatorImage:      func(string) error { return nil },
@@ -176,7 +176,7 @@ func TestOperatorImageStepSetsContext(t *testing.T) {
 	if ctx.OperatorImage != "registry.example.com/mcp-runtime-operator:latest" {
 		t.Fatalf("expected operator image to be set, got %q", ctx.OperatorImage)
 	}
-	if ctx.GatewayProxyImage != "registry.example.com/mcp-sentinel-mcp-gateway:latest" {
+	if ctx.GatewayProxyImage != "registry.example.com/mcp-gateway:latest" {
 		t.Fatalf("expected gateway proxy image to be set, got %q", ctx.GatewayProxyImage)
 	}
 }
@@ -198,7 +198,7 @@ func TestOperatorImageStepTestModeBuildsAndPushesToRegistry(t *testing.T) {
 			return "registry.example.com/mcp-runtime-operator:latest"
 		},
 		GatewayProxyImageFor: func(_ *config.ExternalRegistryConfig) string {
-			return "registry.example.com/mcp-sentinel-mcp-gateway:latest"
+			return "registry.example.com/mcp-gateway:latest"
 		},
 		BuildOperatorImage: func(string) error { atomic.AddInt32(&buildCalls, 1); return nil },
 		PushOperatorImage:  func(string) error { atomic.AddInt32(&pushCalls, 1); return nil },
@@ -216,7 +216,7 @@ func TestOperatorImageStepTestModeBuildsAndPushesToRegistry(t *testing.T) {
 	if ctx.OperatorImage != "registry.example.com/mcp-runtime-operator:latest" {
 		t.Fatalf("expected test mode operator image to use registry, got %q", ctx.OperatorImage)
 	}
-	if ctx.GatewayProxyImage != "registry.example.com/mcp-sentinel-mcp-gateway:latest" {
+	if ctx.GatewayProxyImage != "registry.example.com/mcp-gateway:latest" {
 		t.Fatalf("expected test mode gateway image to use registry, got %q", ctx.GatewayProxyImage)
 	}
 	if atomic.LoadInt32(&buildCalls) != 1 {
@@ -239,7 +239,7 @@ func TestDeployOperatorStepCmdPassesOperatorArgs(t *testing.T) {
 			OperatorArgs: []string{"--metrics-bind-address=:9090", "--leader-elect=false"},
 		},
 		OperatorImage:         "registry.example.com/mcp-runtime-operator:latest",
-		GatewayProxyImage:     "registry.example.com/mcp-sentinel-mcp-gateway:latest",
+		GatewayProxyImage:     "registry.example.com/mcp-gateway:latest",
 		UsingExternalRegistry: false,
 	}
 	var gotArgs []string

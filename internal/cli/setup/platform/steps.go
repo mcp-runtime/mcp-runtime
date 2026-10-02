@@ -200,7 +200,7 @@ func (s mcpAuthServerStep) Run(logger *zap.Logger, deps SetupDeps, ctx *SetupCon
 	}
 	// An old ready auth pod may still serve an obsolete resource allowlist while
 	// the replacement crashes. Require the current revision before proceeding.
-	if err := deps.WaitForDeploymentRolledOut(logger, "mcp-auth-server", core.DefaultAnalyticsNamespace, "app=mcp-auth-server", analyticsRolloutTimeoutDuration()); err != nil {
+	if err := deps.WaitForDeploymentRolledOut(logger, "mcp-auth-server", core.ComponentNamespace("mcp-auth"), "app=mcp-auth-server", analyticsRolloutTimeoutDuration()); err != nil {
 		return fmt.Errorf("mcp-auth authorization server rollout: %w", err)
 	}
 	return deps.WaitForDeploymentRolledOut(logger, "mcp-runtime-operator-controller-manager", core.NamespaceMCPRuntime, "control-plane=controller-manager", deps.GetDeploymentTimeout())

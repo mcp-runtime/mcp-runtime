@@ -513,7 +513,7 @@ func ensureRegistryNamespaceForImagePush(deps SetupDeps, component string) error
 
 func assignAnalyticsImage(images *AnalyticsImageSet, repository, image string) {
 	switch repository {
-	case "mcp-sentinel-ingest":
+	case "mcp-ingest":
 		images.Ingest = image
 	case "mcp-platform-api":
 		images.PlatformAPI = image
@@ -521,9 +521,9 @@ func assignAnalyticsImage(images *AnalyticsImageSet, repository, image string) {
 		images.RuntimeAPI = image
 	case "mcp-analytics-api":
 		images.AnalyticsAPI = image
-	case "mcp-sentinel-processor":
+	case "mcp-processor":
 		images.Processor = image
-	case "mcp-sentinel-ui":
+	case "mcp-ui":
 		images.UI = image
 	case "mcp-runtime-doctor-smoke":
 		images.DoctorSmoke = image

@@ -71,7 +71,8 @@ nav:
       - k3s On-Prem Cluster: k3s-on-prem-cluster.md
       - k3s Deployment Runbook: k3s-deployment-runbook.md
       - Runtime: runtime.md
-      - Sentinel: sentinel.md
+      - Namespaces: namespaces.md
+      - Platform services: platform-services.md
       - Troubleshooting: troubleshooting.md
   - Reference:
       - CLI: cli.md
@@ -95,7 +96,6 @@ nav:
       - Overview: internals/README.md
       - API Types: internals/api-types.md
       - Request Flows: internals/request-flows.md
-      - Namespace Refactor Plan: internals/namespace-refactor-plan.md
       - Go Package Reference: internals/go-package-reference.md
       - Hosting Go Package Docs: internals/pkgsite.md
       - CLI Internals: internals/internal-cli.md

@@ -60,7 +60,8 @@ For a real production-style install on the disposable VM, use
 The contributor Kind flow installs a full local stack:
 
 - CRDs and the operator in `mcp-runtime`
-- Split Sentinel API services (`platform-api`, `runtime-api`, `analytics-api`), UI, ingest, processor, and gateway in `mcp-sentinel`
+- platform-api, runtime-api, UI, gateway, and Postgres in `mcp-platform`
+- analytics-api, ingest, processor, and the telemetry stores in `mcp-observability`
 - Traefik ingress on the local gateway path
 - A bundled registry for runtime images
 - `mcp-servers` as the legacy single-team/example MCP namespace

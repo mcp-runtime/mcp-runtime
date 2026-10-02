@@ -2,14 +2,14 @@
   path: /spec/template/spec/containers/0/args
   value:
     - --providers.kubernetesingress=true
-    - --providers.kubernetesingress.namespaces=registry,mcp-sentinel,mcp-servers,mcp-servers-org,mcp-servers-public
+    - --providers.kubernetesingress.namespaces=registry,mcp-platform,mcp-observability,mcp-servers,mcp-servers-org,mcp-servers-public
     # The mtls terminate+re-encrypt path is delivered entirely through Traefik
     # CRDs (IngressRoute + Middleware + TLSOption + ServersTransport). Without the
     # CRD provider Traefik ignores them and the mtls host 404s, so enable it for
     # the same server namespaces. web stays plaintext (no redirect) for the HTTP
     # test flows.
     - --providers.kubernetescrd=true
-    - --providers.kubernetescrd.namespaces=mcp-servers,mcp-servers-org,mcp-servers-public,mcp-sentinel
+    - --providers.kubernetescrd.namespaces=mcp-platform,mcp-observability,mcp-servers,mcp-servers-org,mcp-servers-public
     - --entrypoints.web.address=:8000
     - --entrypoints.web.forwardedHeaders.insecure=false
     - --entrypoints.websecure.address=:8443

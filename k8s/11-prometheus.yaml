@@ -2,13 +2,13 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: prometheus
-  namespace: mcp-sentinel
+  namespace: mcp-observability
 automountServiceAccountToken: true
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: mcp-sentinel-prometheus-discovery
+  name: mcp-prometheus-discovery
 rules:
   - apiGroups: [""]
     resources: ["endpoints", "pods", "services"]
@@ -17,21 +17,21 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: mcp-sentinel-prometheus-discovery
+  name: mcp-prometheus-discovery
 subjects:
   - kind: ServiceAccount
     name: prometheus
-    namespace: mcp-sentinel
+    namespace: mcp-observability
 roleRef:
   kind: ClusterRole
-  name: mcp-sentinel-prometheus-discovery
+  name: mcp-prometheus-discovery
   apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: prometheus-config
-  namespace: mcp-sentinel
+  namespace: mcp-observability
 data:
   prometheus.yml: |
     global:
@@ -45,19 +45,19 @@ data:
           - targets: ["localhost:9090"]
       - job_name: mcp-platform-api
         static_configs:
-          - targets: ["mcp-platform-api:9090"]
+          - targets: ["mcp-platform-api.mcp-platform.svc.cluster.local:9090"]
       - job_name: mcp-runtime-api
         static_configs:
-          - targets: ["mcp-runtime-api:9094"]
+          - targets: ["mcp-runtime-api.mcp-platform.svc.cluster.local:9094"]
       - job_name: mcp-analytics-api
         static_configs:
           - targets: ["mcp-analytics-api:9095"]
-      - job_name: mcp-sentinel-ingest
+      - job_name: mcp-ingest
         static_configs:
-          - targets: ["mcp-sentinel-ingest:9091"]
-      - job_name: mcp-sentinel-processor
+          - targets: ["mcp-ingest:9091"]
+      - job_name: mcp-processor
         static_configs:
-          - targets: ["mcp-sentinel-processor:9102"]
+          - targets: ["mcp-processor:9102"]
       - job_name: clickhouse
         static_configs:
           - targets: ["clickhouse:9363"]
@@ -75,7 +75,7 @@ data:
         kubernetes_sd_configs:
           - role: pod
             namespaces:
-              names: ["mcp-sentinel"]
+              names: ["mcp-log-collector"]
         relabel_configs:
           - action: keep
             source_labels: [__meta_kubernetes_pod_label_app]
@@ -91,11 +91,11 @@ data:
       # Opt-in discovery for platform Services (for example an instrumented
       # auth or resource server): set prometheus.io/scrape: "true" and, when
       # needed, prometheus.io/port and prometheus.io/path on the Service.
-      - job_name: mcp-sentinel-annotated-services
+      - job_name: mcp-annotated-services
         kubernetes_sd_configs:
           - role: endpoints
             namespaces:
-              names: ["mcp-sentinel"]
+              names: ["mcp-platform", "mcp-observability"]
         relabel_configs:
           - action: keep
             source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
@@ -160,9 +160,9 @@ data:
           - record: mcp:scrape_required_target:info
             expr: label_replace(vector(1), "job", "mcp-analytics-api", "", "")
           - record: mcp:scrape_required_target:info
-            expr: label_replace(vector(1), "job", "mcp-sentinel-ingest", "", "")
+            expr: label_replace(vector(1), "job", "mcp-ingest", "", "")
           - record: mcp:scrape_required_target:info
-            expr: label_replace(vector(1), "job", "mcp-sentinel-processor", "", "")
+            expr: label_replace(vector(1), "job", "mcp-processor", "", "")
           - record: mcp:scrape_required_target:info
             expr: label_replace(vector(1), "job", "clickhouse", "", "")
           - record: mcp:scrape_required_target:info
@@ -180,7 +180,7 @@ data:
           - record: mcp:scrape_uninstrumented_workload:info
             expr: label_replace(label_replace(vector(1), "workload", "postgres", "", ""), "reason", "no_metrics_endpoint", "", "")
           - record: mcp:scrape_uninstrumented_workload:info
-            expr: label_replace(label_replace(vector(1), "workload", "mcp-sentinel-ui", "", ""), "reason", "no_metrics_endpoint", "", "")
+            expr: label_replace(label_replace(vector(1), "workload", "mcp-ui", "", ""), "reason", "no_metrics_endpoint", "", "")
           - record: mcp:scrape_uninstrumented_workload:info
             expr: label_replace(label_replace(vector(1), "workload", "grafana", "", ""), "reason", "self_metrics_not_scraped", "", "")
           - record: mcp:scrape_uninstrumented_workload:info
@@ -193,7 +193,7 @@ data:
             annotations:
               summary: "Required scrape target {{ $labels.job }} is not discovered"
           - alert: MCPRequiredScrapeTargetDown
-            expr: up{job=~"mcp-platform-api|mcp-runtime-api|mcp-analytics-api|mcp-sentinel-ingest|mcp-sentinel-processor|clickhouse|prometheus|otel-collector|loki|tempo|promtail"} == 0
+            expr: up{job=~"mcp-platform-api|mcp-runtime-api|mcp-analytics-api|mcp-ingest|mcp-processor|clickhouse|prometheus|otel-collector|loki|tempo|promtail"} == 0
             for: 5m
             labels:
               severity: warning
@@ -232,7 +232,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: prometheus
-  namespace: mcp-sentinel
+  namespace: mcp-observability
 spec:
   selector:
     app: prometheus
@@ -245,7 +245,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: prometheus
-  namespace: mcp-sentinel
+  namespace: mcp-observability
 spec:
   replicas: 1
   selector:

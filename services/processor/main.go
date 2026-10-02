@@ -47,7 +47,7 @@ func init() {
 func main() {
 	brokers := strings.Split(serviceutil.EnvOr("KAFKA_BROKERS", "kafka:9092"), ",")
 	topic := serviceutil.EnvOr("KAFKA_TOPIC", "mcp.events")
-	groupID := serviceutil.EnvOr("KAFKA_GROUP", "mcp-sentinel-processor")
+	groupID := serviceutil.EnvOr("KAFKA_GROUP", "mcp-processor")
 	metricsPort := serviceutil.EnvOr("METRICS_PORT", "9102")
 
 	clickhouseAddr := serviceutil.EnvOr("CLICKHOUSE_ADDR", "clickhouse:9000")
@@ -98,7 +98,7 @@ func main() {
 		}
 	}()
 
-	shutdown, err := serviceutil.InitTracer("mcp-sentinel-processor")
+	shutdown, err := serviceutil.InitTracer("mcp-processor")
 	if err != nil {
 		log.Printf("otel init failed: %v", err)
 	} else {
@@ -109,10 +109,10 @@ func main() {
 		}()
 	}
 
-	log.Printf("mcp-sentinel-processor started")
+	log.Printf("mcp-processor started")
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	tracer := otel.Tracer("mcp-sentinel-processor")
+	tracer := otel.Tracer("mcp-processor")
 
 	ticker := time.NewTicker(flushInterval)
 	defer ticker.Stop()

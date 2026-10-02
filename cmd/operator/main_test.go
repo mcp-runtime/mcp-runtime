@@ -73,10 +73,10 @@ func TestGatewayOTLPEndpointFromEnv(t *testing.T) {
 
 	t.Run("returns configured endpoint", func(t *testing.T) {
 		env := map[string]string{
-			"MCP_GATEWAY_OTEL_EXPORTER_OTLP_ENDPOINT": "http://otel-collector.mcp-sentinel.svc.cluster.local:4318",
+			"MCP_GATEWAY_OTEL_EXPORTER_OTLP_ENDPOINT": "http://otel-collector.mcp-observability.svc.cluster.local:4318",
 		}
 		getenv := func(key string) string { return env[key] }
-		if got := gatewayOTLPEndpointFromEnv(getenv); got != "http://otel-collector.mcp-sentinel.svc.cluster.local:4318" {
+		if got := gatewayOTLPEndpointFromEnv(getenv); got != "http://otel-collector.mcp-observability.svc.cluster.local:4318" {
 			t.Fatalf("unexpected gateway otel endpoint: %q", got)
 		}
 	})
@@ -92,20 +92,20 @@ func TestAnalyticsIngestURLFromEnv(t *testing.T) {
 
 	t.Run("returns configured ingest url", func(t *testing.T) {
 		env := map[string]string{
-			"MCP_SENTINEL_INGEST_URL": "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events",
+			"MCP_SENTINEL_INGEST_URL": "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events",
 		}
 		getenv := func(key string) string { return env[key] }
-		if got := analyticsIngestURLFromEnv(getenv); got != "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events" {
+		if got := analyticsIngestURLFromEnv(getenv); got != "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events" {
 			t.Fatalf("unexpected analytics ingest url: %q", got)
 		}
 	})
 
 	t.Run("falls back to legacy analytics env", func(t *testing.T) {
 		env := map[string]string{
-			"MCP_ANALYTICS_INGEST_URL": "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events",
+			"MCP_ANALYTICS_INGEST_URL": "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events",
 		}
 		getenv := func(key string) string { return env[key] }
-		if got := analyticsIngestURLFromEnv(getenv); got != "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events" {
+		if got := analyticsIngestURLFromEnv(getenv); got != "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events" {
 			t.Fatalf("unexpected analytics ingest url from legacy env: %q", got)
 		}
 	})

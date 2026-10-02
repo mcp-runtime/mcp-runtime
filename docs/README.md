@@ -76,10 +76,11 @@ I have been reading the MCP SEPs for gateway and identity management patterns. T
 
 ## What MCP Runtime installs
 
-`mcp-runtime setup` installs the CRDs, runtime namespaces, an operator, registry
-integration, ingress wiring, and the bundled Sentinel stack. Sentinel includes
-the gateway request path, grant/session policy materialization, analytics
-ingest and processing, dashboard/API services, and observability components.
+`mcp-runtime setup` installs the CRDs, the namespaces in
+[Namespaces](namespaces.md), an operator, registry integration, ingress
+wiring, and the platform services. Those services include the gateway request
+path, grant/session policy materialization, analytics ingest and processing,
+dashboard and API services, and observability components.
 
 ## Comparison
 
@@ -103,7 +104,7 @@ investigate denied calls, and prepare compliance evidence.
 
 You need a running Kubernetes cluster and a workstation with the CLI
 prerequisites installed. `mcp-runtime setup` applies the runtime manifests,
-installs the operator and Sentinel services, and wires ingress and registry
+installs the operator and platform services, and wires ingress and registry
 resources for your environment.
 
 For provider-specific prerequisites such as container runtime registry trust,
@@ -124,7 +125,7 @@ preparation.
 <a class="docs-card" href="architecture/">
   <span class="docs-card-kicker">Understand</span>
   <strong>Architecture</strong>
-  <span>How the control plane, registry, broker, operator, and Sentinel services fit together.</span>
+  <span>How the control plane, registry, operator, and platform services fit together.</span>
 </a>
 </div>
 
@@ -165,9 +166,15 @@ preparation.
   <span>CRDs, reconciliation outputs, image resolution, ingress wiring, and rollout flow.</span>
 </a>
 
-<a class="docs-card" href="sentinel/">
+<a class="docs-card" href="namespaces/">
+  <span class="docs-card-kicker">Operate</span>
+  <strong>Namespaces</strong>
+  <span>Where the operator, control plane, telemetry, and MCP servers run.</span>
+</a>
+
+<a class="docs-card" href="platform-services/">
   <span class="docs-card-kicker">Observe</span>
-  <strong>Sentinel</strong>
+  <strong>Platform services</strong>
   <span>Gateway policy evaluation, analytics, audit events, and observability services.</span>
 </a>
 </div>

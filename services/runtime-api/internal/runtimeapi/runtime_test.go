@@ -26,6 +26,7 @@ import (
 	sentinelaccess "mcp-runtime/pkg/access"
 	"mcp-runtime/pkg/controlplane"
 	"mcp-runtime/pkg/k8sclient"
+	"mcp-runtime/pkg/sentinel"
 )
 
 func TestValidateGrantRequestDefaultsAndNormalizes(t *testing.T) {
@@ -1091,7 +1092,7 @@ func TestRuntimeServerApplyPublicScopeResolvesCatalogNamespace(t *testing.T) {
 func TestRuntimeServerApplyDefaultsGatewayAndExplicitAnalyticsSecret(t *testing.T) {
 	t.Setenv("PLATFORM_MODE", "public")
 	t.Setenv("PLATFORM_TEAM_TRAEFIK_WATCH", "disabled")
-	t.Setenv("MCP_SENTINEL_INGEST_URL", "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events")
+	t.Setenv("MCP_SENTINEL_INGEST_URL", "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events")
 	scheme := runtime.NewScheme()
 	if err := mcpv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("AddToScheme: %v", err)
@@ -1100,7 +1101,7 @@ func TestRuntimeServerApplyDefaultsGatewayAndExplicitAnalyticsSecret(t *testing.
 		k8sClients: &k8sclient.Clients{
 			Dynamic: dynamicfake.NewSimpleDynamicClient(scheme),
 			Clientset: kubernetesfake.NewSimpleClientset(&corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: defaultAnalyticsCredentialSourceSecretName, Namespace: "mcp-sentinel"},
+				ObjectMeta: metav1.ObjectMeta{Name: defaultAnalyticsCredentialSourceSecretName, Namespace: sentinel.PlatformNamespace},
 				Data: map[string][]byte{
 					defaultAnalyticsCredentialSourceKey: []byte("ingest-key-1,ingest-key-2"),
 				},
@@ -1112,7 +1113,7 @@ func TestRuntimeServerApplyDefaultsGatewayAndExplicitAnalyticsSecret(t *testing.
 		"scope": "public",
 		"spec": {
 			"image":"registry.example.com/public/demo",
-			"analytics":{"ingestURL":"http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events"}
+			"analytics":{"ingestURL":"http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events"}
 		}
 	}`)))
 	request = request.WithContext(withPrincipal(request.Context(), principal{
@@ -1152,7 +1153,7 @@ func TestRuntimeServerApplyDefaultsGatewayAndExplicitAnalyticsSecret(t *testing.
 func TestRuntimeServerApplyEnablesAnalyticsByDefault(t *testing.T) {
 	t.Setenv("PLATFORM_MODE", "public")
 	t.Setenv("PLATFORM_TEAM_TRAEFIK_WATCH", "disabled")
-	t.Setenv("MCP_SENTINEL_INGEST_URL", "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events")
+	t.Setenv("MCP_SENTINEL_INGEST_URL", "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events")
 	scheme := runtime.NewScheme()
 	if err := mcpv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("AddToScheme: %v", err)
@@ -1161,7 +1162,7 @@ func TestRuntimeServerApplyEnablesAnalyticsByDefault(t *testing.T) {
 		k8sClients: &k8sclient.Clients{
 			Dynamic: dynamicfake.NewSimpleDynamicClient(scheme),
 			Clientset: kubernetesfake.NewSimpleClientset(&corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: defaultAnalyticsCredentialSourceSecretName, Namespace: "mcp-sentinel"},
+				ObjectMeta: metav1.ObjectMeta{Name: defaultAnalyticsCredentialSourceSecretName, Namespace: sentinel.PlatformNamespace},
 				Data: map[string][]byte{
 					defaultAnalyticsCredentialSourceKey: []byte("ingest-key-1"),
 				},
@@ -1203,7 +1204,7 @@ func TestRuntimeServerApplyEnablesAnalyticsByDefault(t *testing.T) {
 func TestRuntimeServerApplyDefaultsAnalyticsSecretNameFitsDNSLabelLimit(t *testing.T) {
 	t.Setenv("PLATFORM_MODE", "public")
 	t.Setenv("PLATFORM_TEAM_TRAEFIK_WATCH", "disabled")
-	t.Setenv("MCP_SENTINEL_INGEST_URL", "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events")
+	t.Setenv("MCP_SENTINEL_INGEST_URL", "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events")
 	scheme := runtime.NewScheme()
 	if err := mcpv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("AddToScheme: %v", err)
@@ -1212,7 +1213,7 @@ func TestRuntimeServerApplyDefaultsAnalyticsSecretNameFitsDNSLabelLimit(t *testi
 		k8sClients: &k8sclient.Clients{
 			Dynamic: dynamicfake.NewSimpleDynamicClient(scheme),
 			Clientset: kubernetesfake.NewSimpleClientset(&corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: defaultAnalyticsCredentialSourceSecretName, Namespace: "mcp-sentinel"},
+				ObjectMeta: metav1.ObjectMeta{Name: defaultAnalyticsCredentialSourceSecretName, Namespace: sentinel.PlatformNamespace},
 				Data: map[string][]byte{
 					defaultAnalyticsCredentialSourceKey: []byte("ingest-key-1"),
 				},
@@ -1225,7 +1226,7 @@ func TestRuntimeServerApplyDefaultsAnalyticsSecretNameFitsDNSLabelLimit(t *testi
 		"scope": "public",
 		"spec": {
 			"image":"registry.example.com/public/demo",
-			"analytics":{"ingestURL":"http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events"}
+			"analytics":{"ingestURL":"http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events"}
 		}
 	}`)))
 	request = request.WithContext(withPrincipal(request.Context(), principal{
@@ -1256,7 +1257,7 @@ func TestRuntimeServerApplyDefaultsAnalyticsSecretNameFitsDNSLabelLimit(t *testi
 func TestRuntimeServerApplyAllowsMissingDefaultAnalyticsSecret(t *testing.T) {
 	t.Setenv("PLATFORM_MODE", "public")
 	t.Setenv("PLATFORM_TEAM_TRAEFIK_WATCH", "disabled")
-	t.Setenv("MCP_SENTINEL_INGEST_URL", "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events")
+	t.Setenv("MCP_SENTINEL_INGEST_URL", "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events")
 	scheme := runtime.NewScheme()
 	if err := mcpv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("AddToScheme: %v", err)
@@ -1297,9 +1298,9 @@ func TestRuntimeServerApplyAllowsMissingDefaultAnalyticsSecret(t *testing.T) {
 }
 
 func TestApplyPublishedServerDefaultsSkipsAnalyticsSecretWhenRBACRestricted(t *testing.T) {
-	t.Setenv("MCP_SENTINEL_INGEST_URL", "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events")
+	t.Setenv("MCP_SENTINEL_INGEST_URL", "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events")
 	client := kubernetesfake.NewSimpleClientset(&corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: defaultAnalyticsCredentialSourceSecretName, Namespace: "mcp-sentinel"},
+		ObjectMeta: metav1.ObjectMeta{Name: defaultAnalyticsCredentialSourceSecretName, Namespace: sentinel.PlatformNamespace},
 		Data: map[string][]byte{
 			defaultAnalyticsCredentialSourceKey: []byte("ingest-key-1"),
 		},
@@ -1316,7 +1317,7 @@ func TestApplyPublishedServerDefaultsSkipsAnalyticsSecretWhenRBACRestricted(t *t
 	}
 	spec := &mcpv1alpha1.MCPServerSpec{
 		Gateway:   &mcpv1alpha1.GatewayConfig{Enabled: mcpv1alpha1.BoolPtr(true)},
-		Analytics: &mcpv1alpha1.AnalyticsConfig{IngestURL: "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events"},
+		Analytics: &mcpv1alpha1.AnalyticsConfig{IngestURL: "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events"},
 	}
 
 	if err := server.applyPublishedServerDefaults(context.Background(), defaultPublicCatalogNamespace, "demo", spec); err != nil {
@@ -1330,7 +1331,7 @@ func TestApplyPublishedServerDefaultsSkipsAnalyticsSecretWhenRBACRestricted(t *t
 func TestRuntimeServerApplyPreservesExplicitGatewaySettings(t *testing.T) {
 	t.Setenv("PLATFORM_MODE", "public")
 	t.Setenv("PLATFORM_TEAM_TRAEFIK_WATCH", "disabled")
-	t.Setenv("MCP_SENTINEL_INGEST_URL", "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events")
+	t.Setenv("MCP_SENTINEL_INGEST_URL", "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events")
 	scheme := runtime.NewScheme()
 	if err := mcpv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("AddToScheme: %v", err)
@@ -1339,7 +1340,7 @@ func TestRuntimeServerApplyPreservesExplicitGatewaySettings(t *testing.T) {
 		k8sClients: &k8sclient.Clients{
 			Dynamic: dynamicfake.NewSimpleDynamicClient(scheme),
 			Clientset: kubernetesfake.NewSimpleClientset(&corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: defaultAnalyticsCredentialSourceSecretName, Namespace: "mcp-sentinel"},
+				ObjectMeta: metav1.ObjectMeta{Name: defaultAnalyticsCredentialSourceSecretName, Namespace: sentinel.PlatformNamespace},
 				Data: map[string][]byte{
 					defaultAnalyticsCredentialSourceKey: []byte("ingest-key-1"),
 				},
@@ -1381,7 +1382,7 @@ func TestRuntimeServerApplyPreservesExplicitGatewaySettings(t *testing.T) {
 func TestRuntimeServerApplyPreservesExplicitAnalyticsDisable(t *testing.T) {
 	t.Setenv("PLATFORM_MODE", "public")
 	t.Setenv("PLATFORM_TEAM_TRAEFIK_WATCH", "disabled")
-	t.Setenv("MCP_SENTINEL_INGEST_URL", "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events")
+	t.Setenv("MCP_SENTINEL_INGEST_URL", "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events")
 	scheme := runtime.NewScheme()
 	if err := mcpv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("AddToScheme: %v", err)
@@ -1390,7 +1391,7 @@ func TestRuntimeServerApplyPreservesExplicitAnalyticsDisable(t *testing.T) {
 		k8sClients: &k8sclient.Clients{
 			Dynamic: dynamicfake.NewSimpleDynamicClient(scheme),
 			Clientset: kubernetesfake.NewSimpleClientset(&corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: defaultAnalyticsCredentialSourceSecretName, Namespace: "mcp-sentinel"},
+				ObjectMeta: metav1.ObjectMeta{Name: defaultAnalyticsCredentialSourceSecretName, Namespace: sentinel.PlatformNamespace},
 				Data: map[string][]byte{
 					defaultAnalyticsCredentialSourceKey: []byte("ingest-key-1"),
 				},

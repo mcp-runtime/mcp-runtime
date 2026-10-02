@@ -27,7 +27,7 @@ func TestCheckMCPAuthDeploymentRequiresCurrentRollout(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			mock := &core.MockExecutor{CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
-				if strings.Join(spec.Args, " ") != "get deployment mcp-auth-server -n mcp-sentinel --ignore-not-found -o json" {
+				if strings.Join(spec.Args, " ") != "get deployment mcp-auth-server -n mcp-platform --ignore-not-found -o json" {
 					t.Fatalf("unexpected command: %v", spec.Args)
 				}
 				return &core.MockCommand{OutputData: []byte(tc.output), OutputErr: tc.err}

@@ -330,7 +330,7 @@ will use to push and pull container images.`,
 	cmd.Flags().BoolVar(&testMode, "test-mode", false, "Test mode for local Kind/dev installs; builds and pushes latest-tag runtime images, provisions a local workload mTLS issuer, and relaxes production guardrails")
 	cmd.Flags().BoolVar(&parallelBuilds, "parallel-builds", false, "Build and publish setup images in parallel; keeps cluster, registry, TLS, and rollout sequencing unchanged")
 	cmd.Flags().BoolVar(&strictProd, "strict-prod", false, "Require production-style registry and TLS validation for non-test setup")
-	cmd.Flags().BoolVar(&withoutAnalytics, "without-sentinel", false, "Skip deploying the bundled mcp-sentinel stack")
+	cmd.Flags().BoolVar(&withoutAnalytics, "without-sentinel", false, "Skip deploying the bundled platform stack")
 	cmd.Flags().BoolVar(&withMCPAuthServer, "with-mcp-auth-server", false, "Deploy the optional bundled mcp-auth authorization server; production requires a platform domain, connector, and TLS-enabled ingress")
 	cmd.Flags().StringVar(&mcpAuthServerImage, "mcp-auth-server-image", "docker.io/princekrroshan01/mcp-auth-server:latest", "Container image for the optional bundled mcp-auth authorization server")
 	cmd.Flags().StringVar(&mcpAuthIssuerURL, "mcp-auth-issuer-url", "", "Public HTTPS issuer URL for the bundled mcp-auth authorization server (defaults to https://auth.<MCP_PLATFORM_DOMAIN>/mcp-auth)")

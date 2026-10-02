@@ -37,9 +37,10 @@ Both staging runners authenticate to GHCR with the workflow's short-lived
 package-read token and reuse content-hash platform images when available.
 The on-VM runner passes that token over SSH stdin after the disposable-target
 guard and removes its temporary Docker credentials during cleanup. Cache misses
-build locally; Staging does not publish to GHCR. QA E2E publishes the same
-cache tags. Set `E2E_IMAGE_CACHE=0` for a run that must rebuild every platform
-image.
+build locally; Staging does not publish to GHCR. Pull-request QA E2E does not
+use GHCR: it keeps one local `:latest` image per component on the VM and
+compares the next checkout to that image's content-hash label. Set
+`E2E_IMAGE_CACHE=0` for a Staging run that must rebuild every platform image.
 
 ## Safety: the disposable-target guard
 
@@ -183,9 +184,9 @@ first; a failed critical stage skips the stages that depend on it.
 | `restore-snapshot` | TLS snapshot restored before setup so cert-manager reuses issued certificates |
 | `setup` | `setup --strict-prod --with-tls --acme-staging --registry-mode bundled-https --mtls-cluster-issuer ...` |
 | `diagnostics` | Post-setup `cluster diagnostics`, `cluster doctor`, `cluster status` |
-| `rollouts` | Every Deployment/StatefulSet in `mcp-runtime`, `mcp-sentinel`, `registry`, `cert-manager`, Traefik rolled out; no pod stuck in image pull or crash loop |
+| `rollouts` | Every Deployment/StatefulSet in `mcp-runtime`, `mcp-platform`, `mcp-observability`, `mcp-log-collector`, `registry`, `cert-manager`, Traefik rolled out; no pod stuck in image pull or crash loop |
 | `cluster-issuer` | ACME ClusterIssuer Ready and pointed at the staging (or production) directory |
-| `certificates` | `registry/registry-cert` and `mcp-sentinel/mcp-sentinel-platform-tls` Ready, expected issuer, SANs cover the hosts, not expiring |
+| `certificates` | `registry/registry-cert` and `mcp-platform/mcp-platform-tls` Ready, expected issuer, SANs cover the hosts, not expiring |
 | `tls-endpoints` | `openssl s_client` chain verification, hostname match, and staging issuer for platform/registry/mcp (and auth) |
 | `fresh-certificate` | Gated fresh issuance for a unique host, served and verified end to end |
 | `platform-login` | Admin token, `auth login`, `auth status`, `status`, `server list`, `registry info`, command help surfaces |

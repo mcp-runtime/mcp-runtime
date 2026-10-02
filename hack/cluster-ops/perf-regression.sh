@@ -26,7 +26,7 @@ PERF_CONCURRENCY="${PERF_CONCURRENCY:-8}"
 PERF_REGRESSION_PCT="${PERF_REGRESSION_PCT:-25}"
 PERF_OUT_DIR="${PERF_OUT_DIR:-/tmp/mcp-runtime-perf/$(git rev-parse --short HEAD 2>/dev/null || echo local)}"
 PERF_BASELINE_DIR="${PERF_BASELINE_DIR:-${HOME}/.cache/mcp-runtime-perf/baseline}"
-NS_SENTINEL="${NS_SENTINEL:-mcp-sentinel}"
+NS_PLATFORM="${NS_PLATFORM:-mcp-platform}"
 MCP_NS="${MCP_NS:-mcp-servers}"
 MCP_NAME="${MCP_NAME:-oauth-example-go-2025-11-25-gateway}"
 
@@ -174,7 +174,7 @@ if suite_enabled S3; then
   if ! curl -fsS -o /dev/null --connect-timeout 2 "${BASE_URL}/" 2>/dev/null; then
     log "SKIP S3: ${BASE_URL} not reachable"
   else
-    UI_KEY="$(kubectl get secret mcp-sentinel-secrets -n "$NS_SENTINEL" \
+    UI_KEY="$(kubectl get secret mcp-ui-credentials -n "$NS_PLATFORM" \
       -o jsonpath='{.data.UI_API_KEY}' | base64 -d)"
     python3 - "$PERF_OUT_DIR" "$PERF_SAMPLES" "$UI_KEY" "$BASE_URL" <<'PY'
 import json, sys, time, urllib.request

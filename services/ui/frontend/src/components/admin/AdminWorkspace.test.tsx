@@ -71,7 +71,7 @@ const COMPONENTS = {
     {
       key: "clickhouse",
       display: "ClickHouse",
-      namespace: "mcp-sentinel",
+      namespace: "mcp-observability",
       kind: "StatefulSet",
       resource: "clickhouse",
       status: "NotReady",

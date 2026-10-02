@@ -113,18 +113,18 @@ mcpruntime_org_backup_resource() {
 mcpruntime_org_backup_platform_auth_env() {
   local auth_file="$MCP_TLS_SNAPSHOT_DIR/platform-auth.env"
   if [[ "$MCP_TLS_DRY_RUN" == "1" ]]; then
-    echo "[dry-run] would export OIDC keys from mcp-sentinel-config -> platform-auth.env"
+    echo "[dry-run] would export OIDC keys from mcp-shared-config -> platform-auth.env"
     return 0
   fi
-  if ! mcpruntime_org_kubectl get configmap mcp-sentinel-config -n mcp-sentinel >/dev/null 2>&1; then
-    echo "skip platform-auth.env (mcp-sentinel-config missing)"
+  if ! mcpruntime_org_kubectl get configmap mcp-shared-config -n mcp-platform >/dev/null 2>&1; then
+    echo "skip platform-auth.env (mcp-shared-config missing)"
     return 0
   fi
   {
     echo "# Platform OIDC exports captured before clean ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
     echo "# Merge into config/deployments/mcpruntime-org.env when rerunning setup."
     for key in GOOGLE_CLIENT_ID MCP_GOOGLE_CLIENT_ID OIDC_ISSUER OIDC_AUDIENCE OIDC_JWKS_URL; do
-      val="$(mcpruntime_org_kubectl get configmap mcp-sentinel-config -n mcp-sentinel -o "jsonpath={.data.${key}}" 2>/dev/null || true)"
+      val="$(mcpruntime_org_kubectl get configmap mcp-shared-config -n mcp-platform -o "jsonpath={.data.${key}}" 2>/dev/null || true)"
       if [[ -n "$val" ]]; then
         printf 'export %s=%q\n' "$key" "$val"
       fi
@@ -141,20 +141,28 @@ mcpruntime_org_backup_platform_runtime() {
   fi
   echo "Platform-runtime backup root: $MCP_TLS_BACKUP_ROOT"
   mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/registry-tls.yaml" get secret registry-tls -n registry
-  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-sentinel-platform-tls.yaml" get secret mcp-sentinel-platform-tls -n mcp-sentinel
+  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-platform-tls.yaml" get secret mcp-platform-tls -n mcp-platform
   mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/registry-cert.yaml" get certificate registry-cert -n registry
-  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-sentinel-platform-cert.yaml" get certificate mcp-sentinel-platform-tls -n mcp-sentinel
+  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-platform-cert.yaml" get certificate mcp-platform-tls -n mcp-platform
   mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/letsencrypt-prod-clusterissuer.yaml" get clusterissuer letsencrypt-prod
-  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-sentinel-config.yaml" get configmap mcp-sentinel-config -n mcp-sentinel
-  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-sentinel-secrets.yaml" get secret mcp-sentinel-secrets -n mcp-sentinel
+  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-shared-config.yaml" get configmap mcp-shared-config -n mcp-platform
+  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-platform-api-credentials.yaml" get secret mcp-platform-api-credentials -n mcp-platform
+  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-ui-credentials.yaml" get secret mcp-ui-credentials -n mcp-platform
+  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-postgres-credentials.yaml" get secret mcp-postgres-credentials -n mcp-platform
+  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-runtime-api-credentials.yaml" get secret mcp-runtime-api-credentials -n mcp-platform
+  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-platform-signing-credentials.yaml" get secret mcp-platform-signing-credentials -n mcp-platform
+  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-runtime-ingest-credentials.yaml" get secret mcp-runtime-ingest-credentials -n mcp-platform
+  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-analytics-api-credentials.yaml" get secret mcp-analytics-api-credentials -n mcp-observability
+  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-ingest-credentials.yaml" get secret mcp-ingest-credentials -n mcp-observability
+  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-grafana-credentials.yaml" get secret mcp-grafana-credentials -n mcp-observability
   # Optional authorization-server and identity-provider credentials. Provider
   # database/realm state still requires the provider's own export workflow.
-  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-auth-connectors.yaml" get configmap mcp-auth-connectors -n mcp-sentinel
-  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-auth-connector-secrets.yaml" get secret mcp-auth-connector-secrets -n mcp-sentinel
-  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-auth-signing-key.yaml" get secret mcp-auth-signing-key -n mcp-sentinel
-  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-auth-server-tls.yaml" get secret mcp-auth-server-tls -n mcp-sentinel
-  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/keycloak-admin.yaml" get secret keycloak-admin -n mcp-sentinel
-  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/keycloak-tls.yaml" get secret keycloak-tls -n mcp-sentinel
+  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-auth-connectors.yaml" get configmap mcp-auth-connectors -n mcp-platform
+  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-auth-connector-secrets.yaml" get secret mcp-auth-connector-secrets -n mcp-platform
+  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-auth-signing-key.yaml" get secret mcp-auth-signing-key -n mcp-platform
+  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-auth-server-tls.yaml" get secret mcp-auth-server-tls -n mcp-platform
+  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/keycloak-admin.yaml" get secret keycloak-admin -n mcp-platform
+  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/keycloak-tls.yaml" get secret keycloak-tls -n mcp-platform
   mcpruntime_org_backup_platform_auth_env
   if [[ "${MCP_TLS_DEFER_PUBLISH:-0}" != "1" ]]; then
     mcpruntime_org_backup_publish_latest platform
@@ -244,7 +252,7 @@ mcpruntime_org_backup_warn_certificates() {
     return 0
   fi
   local had_tls_backup=0
-  for f in registry-tls.yaml mcp-sentinel-platform-tls.yaml; do
+  for f in registry-tls.yaml mcp-platform-tls.yaml; do
     if [[ -f "$MCP_TLS_SNAPSHOT_DIR/$f" ]]; then
       had_tls_backup=1
     fi
@@ -255,7 +263,7 @@ mcpruntime_org_backup_warn_certificates() {
     return 0
   fi
   local cert ns name ready
-  for cert in registry/registry-cert mcp-sentinel/mcp-sentinel-platform-tls; do
+  for cert in registry/registry-cert mcp-platform/mcp-platform-tls; do
     ns="${cert%%/*}"
     name="${cert##*/}"
     if ! mcpruntime_org_kubectl get certificate "$name" -n "$ns" >/dev/null 2>&1; then
@@ -278,11 +286,19 @@ mcpruntime_org_restore_platform_runtime() {
 
   mcpruntime_org_backup_strip_and_apply "$MCP_TLS_SNAPSHOT_DIR/letsencrypt-prod-clusterissuer.yaml" "letsencrypt-prod ClusterIssuer"
   mcpruntime_org_backup_strip_and_apply "$MCP_TLS_SNAPSHOT_DIR/registry-tls.yaml" "registry TLS secret"
-  mcpruntime_org_backup_strip_and_apply "$MCP_TLS_SNAPSHOT_DIR/mcp-sentinel-platform-tls.yaml" "platform UI TLS secret"
+  mcpruntime_org_backup_strip_and_apply "$MCP_TLS_SNAPSHOT_DIR/mcp-platform-tls.yaml" "platform UI TLS secret"
   mcpruntime_org_backup_strip_and_apply "$MCP_TLS_SNAPSHOT_DIR/registry-cert.yaml" "registry Certificate"
-  mcpruntime_org_backup_strip_and_apply "$MCP_TLS_SNAPSHOT_DIR/mcp-sentinel-platform-cert.yaml" "platform UI Certificate"
-  mcpruntime_org_backup_strip_and_apply "$MCP_TLS_SNAPSHOT_DIR/mcp-sentinel-config.yaml" "mcp-sentinel-config"
-  mcpruntime_org_backup_strip_and_apply "$MCP_TLS_SNAPSHOT_DIR/mcp-sentinel-secrets.yaml" "mcp-sentinel-secrets"
+  mcpruntime_org_backup_strip_and_apply "$MCP_TLS_SNAPSHOT_DIR/mcp-platform-cert.yaml" "platform UI Certificate"
+  mcpruntime_org_backup_strip_and_apply "$MCP_TLS_SNAPSHOT_DIR/mcp-shared-config.yaml" "mcp-shared-config"
+  mcpruntime_org_backup_strip_and_apply "$MCP_TLS_SNAPSHOT_DIR/mcp-platform-api-credentials.yaml" "mcp-platform-api-credentials"
+  mcpruntime_org_backup_strip_and_apply "$MCP_TLS_SNAPSHOT_DIR/mcp-ui-credentials.yaml" "mcp-ui-credentials"
+  mcpruntime_org_backup_strip_and_apply "$MCP_TLS_SNAPSHOT_DIR/mcp-postgres-credentials.yaml" "mcp-postgres-credentials"
+  mcpruntime_org_backup_strip_and_apply "$MCP_TLS_SNAPSHOT_DIR/mcp-runtime-api-credentials.yaml" "mcp-runtime-api-credentials"
+  mcpruntime_org_backup_strip_and_apply "$MCP_TLS_SNAPSHOT_DIR/mcp-platform-signing-credentials.yaml" "mcp-platform-signing-credentials"
+  mcpruntime_org_backup_strip_and_apply "$MCP_TLS_SNAPSHOT_DIR/mcp-runtime-ingest-credentials.yaml" "mcp-runtime-ingest-credentials"
+  mcpruntime_org_backup_strip_and_apply "$MCP_TLS_SNAPSHOT_DIR/mcp-analytics-api-credentials.yaml" "mcp-analytics-api-credentials"
+  mcpruntime_org_backup_strip_and_apply "$MCP_TLS_SNAPSHOT_DIR/mcp-ingest-credentials.yaml" "mcp-ingest-credentials"
+  mcpruntime_org_backup_strip_and_apply "$MCP_TLS_SNAPSHOT_DIR/mcp-grafana-credentials.yaml" "mcp-grafana-credentials"
   mcpruntime_org_backup_strip_and_apply "$MCP_TLS_SNAPSHOT_DIR/mcp-auth-connectors.yaml" "mcp-auth connectors"
   mcpruntime_org_backup_strip_and_apply "$MCP_TLS_SNAPSHOT_DIR/mcp-auth-connector-secrets.yaml" "mcp-auth connector secrets"
   mcpruntime_org_backup_strip_and_apply "$MCP_TLS_SNAPSHOT_DIR/mcp-auth-signing-key.yaml" "mcp-auth signing key"
@@ -300,12 +316,16 @@ mcpruntime_org_restore_platform_runtime() {
 
   if [[ "$MCP_TLS_DRY_RUN" != "1" ]]; then
     echo ""
-    echo "Restarting Sentinel API/UI so restored platform secrets and config take effect ..."
-    local deployment
-    for deployment in mcp-platform-api mcp-runtime-api mcp-analytics-api mcp-sentinel-ui; do
-      if mcpruntime_org_kubectl get deployment "$deployment" -n mcp-sentinel >/dev/null 2>&1; then
-        mcpruntime_org_kubectl rollout restart deployment "$deployment" -n mcp-sentinel >/dev/null
-        mcpruntime_org_kubectl rollout status deployment "$deployment" -n mcp-sentinel --timeout="${MCP_DEPLOYMENT_TIMEOUT:-180s}" >/dev/null
+    echo "Restarting API and UI deployments so restored secrets and config take effect ..."
+    local deployment ns
+    for deployment in mcp-platform-api mcp-runtime-api mcp-ui mcp-analytics-api; do
+      ns=mcp-platform
+      if [[ "$deployment" == "mcp-analytics-api" ]]; then
+        ns=mcp-observability
+      fi
+      if mcpruntime_org_kubectl get deployment "$deployment" -n "$ns" >/dev/null 2>&1; then
+        mcpruntime_org_kubectl rollout restart deployment "$deployment" -n "$ns" >/dev/null
+        mcpruntime_org_kubectl rollout status deployment "$deployment" -n "$ns" --timeout="${MCP_DEPLOYMENT_TIMEOUT:-180s}" >/dev/null
         echo "restarted $deployment"
       fi
     done

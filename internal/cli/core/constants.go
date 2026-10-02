@@ -1,6 +1,9 @@
 package core
 
-import "mcp-runtime/pkg/mcpdefaults"
+import (
+	"mcp-runtime/pkg/mcpdefaults"
+	"mcp-runtime/pkg/platforminventory"
+)
 
 // This file defines constants used across the CLI, including:
 //   - Kubernetes namespace names
@@ -17,8 +20,11 @@ const (
 	// NamespaceMCPServers is the default namespace for MCP server deployments.
 	NamespaceMCPServers = mcpdefaults.MCPServersNamespace
 
-	// DefaultAnalyticsNamespace is the namespace for the bundled mcp-sentinel stack.
-	DefaultAnalyticsNamespace = "mcp-sentinel"
+	// PlatformNamespace holds control-plane services.
+	PlatformNamespace = platforminventory.PlatformNamespace
+
+	// ObservabilityNamespace holds the event pipeline and telemetry stack.
+	ObservabilityNamespace = platforminventory.ObservabilityNamespace
 
 	// LogCollectorNamespace isolates the node log collector and its hostPath access.
 	LogCollectorNamespace = mcpdefaults.LogCollectorNamespace
@@ -74,3 +80,12 @@ const (
 	// SelectorManagedBy is the label selector for MCP-managed resources.
 	SelectorManagedBy = "app.kubernetes.io/managed-by=mcp-runtime"
 )
+
+// ComponentNamespace returns the install namespace for a catalog component.
+func ComponentNamespace(key string) string {
+	component, ok := platforminventory.Lookup(key)
+	if !ok {
+		return ""
+	}
+	return component.Namespace
+}

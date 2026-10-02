@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	sentinelaccess "mcp-runtime/pkg/access"
+	"mcp-runtime/pkg/platforminventory"
 )
 
 // ListNamespaces returns platform-managed namespace records for admin views.
@@ -457,7 +458,14 @@ func ValidateTeamNamespace(namespace string) error {
 	if strings.TrimSpace(namespace) == SharedCatalogNamespace {
 		return errors.New("shared catalog namespace is reserved")
 	}
-	reserved := []string{"default", "kube-system", "kube-public", "kube-node-lease", "mcp-runtime", "mcp-sentinel", "registry", "traefik"}
+	reserved := []string{
+		"default", "kube-system", "kube-public", "kube-node-lease",
+		platforminventory.OperatorNamespace,
+		platforminventory.PlatformNamespace,
+		platforminventory.ObservabilityNamespace,
+		platforminventory.LogCollectorNamespace,
+		"registry", "traefik",
+	}
 	for _, disallowed := range reserved {
 		if namespace == disallowed {
 			return fmt.Errorf("namespace %q is reserved", namespace)

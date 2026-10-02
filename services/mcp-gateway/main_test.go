@@ -145,12 +145,12 @@ func TestRewriteOAuthEndpointUsesInternalIssuer(t *testing.T) {
 	got, err := rewriteOAuthEndpoint(
 		"https://public.example.com/oauth/jwks.json",
 		"https://public.example.com/oauth",
-		"http://mcp-auth-server.mcp-sentinel.svc.cluster.local:8080/mcp-auth",
+		"http://mcp-auth-server.mcp-platform.svc.cluster.local:8080/mcp-auth",
 	)
 	if err != nil {
 		t.Fatalf("rewriteOAuthEndpoint() error = %v", err)
 	}
-	want := "http://mcp-auth-server.mcp-sentinel.svc.cluster.local:8080/mcp-auth/jwks.json"
+	want := "http://mcp-auth-server.mcp-platform.svc.cluster.local:8080/mcp-auth/jwks.json"
 	if got != want {
 		t.Fatalf("rewriteOAuthEndpoint() = %q, want %q", got, want)
 	}

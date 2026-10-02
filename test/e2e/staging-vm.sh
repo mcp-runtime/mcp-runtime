@@ -145,7 +145,7 @@ backup_platform_runtime() {
   # died before issuance silently replaces the last usable snapshot with an
   # empty one.
   if ! kubectl -n registry get secret registry-tls >/dev/null 2>&1 ||
-    ! kubectl -n mcp-sentinel get secret mcp-sentinel-platform-tls >/dev/null 2>&1; then
+    ! kubectl -n mcp-platform get secret mcp-platform-tls >/dev/null 2>&1; then
     staging_skip "public certificates are not issued yet; keeping the previous snapshot"
   fi
   load_platform_backup_helpers
@@ -321,7 +321,7 @@ stage_restore_hooks() {
 }
 
 # Runs before setup, not after. Restoring afterwards re-applied an older
-# mcp-sentinel-secrets over a database setup had just initialised with freshly
+# an older credential Secret over a database setup had just initialised with freshly
 # generated credentials, so the API pods came back holding a password the
 # database no longer accepted. Restoring first means setup treats these as the
 # existing state. It also lets cert-manager find already issued certificates,
@@ -334,7 +334,7 @@ stage_restore_snapshot() {
     staging_skip "no platform runtime snapshot on the VM; certificates will be issued fresh"
   fi
   local namespace
-  for namespace in registry mcp-sentinel; do
+  for namespace in registry mcp-platform mcp-observability; do
     kubectl create namespace "${namespace}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
   done
   load_platform_backup_helpers
@@ -344,8 +344,8 @@ stage_restore_snapshot() {
   # not need them.
   mcpruntime_org_restore_platform_runtime || log "some snapshot objects could not be applied before setup (expected for cert-manager kinds)"
   local file pem
-  for file in registry-tls mcp-sentinel-platform-tls; do
-    kubectl -n "$([[ ${file} == registry-tls ]] && echo registry || echo mcp-sentinel)" get secret "${file}" \
+  for file in registry-tls mcp-platform-tls; do
+    kubectl -n "$([[ ${file} == registry-tls ]] && echo registry || echo mcp-platform)" get secret "${file}" \
       -o jsonpath='{.data.tls\.crt}' 2>/dev/null | base64 --decode >"${WORK_DIR}/snapshot-${file}.pem" 2>/dev/null || continue
     pem="${WORK_DIR}/snapshot-${file}.pem"
     openssl x509 -in "${pem}" -noout -subject -issuer -enddate 2>/dev/null | sed "s/^/[snapshot ${file}] /" || true
@@ -438,7 +438,7 @@ teardown_vm() {
   # successive runs filled the disk until the kubelet evicted pods under
   # ephemeral-storage pressure.
   if command -v docker >/dev/null 2>&1; then
-    docker system prune -af --volumes >"${ARTIFACT_DIR}/docker-prune.log" 2>&1 || true
+    staging_prune_docker_keeping_qa_images >"${ARTIFACT_DIR}/docker-prune.log" 2>&1 || true
   fi
   # ROOT_DIR is the directory this script is running from, so it cannot be
   # removed here without risking bash's incremental reads of its own source.

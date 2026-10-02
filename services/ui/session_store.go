@@ -11,13 +11,14 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
-	_ "github.com/lib/pq" // registers the "postgres" database/sql driver
+	"github.com/lib/pq"
 )
 
 const (
@@ -181,13 +182,91 @@ func newPostgresSessionBackend(ctx context.Context, db *sql.DB, secret string) (
 	if err != nil {
 		return nil, err
 	}
-	if _, err := db.ExecContext(ctx, createSessionTableSQL); err != nil {
-		return nil, fmt.Errorf("ensure ui_sessions table: %w", err)
-	}
-	if _, err := db.ExecContext(ctx, createSessionIndexSQL); err != nil {
-		return nil, fmt.Errorf("ensure ui_sessions index: %w", err)
+	if err := ensureSessionSchema(ctx, db); err != nil {
+		return nil, err
 	}
 	return &postgresSessionBackend{db: db, aead: aead}, nil
+}
+
+// Two UI replicas can run CREATE TABLE IF NOT EXISTS together. Postgres can
+// still raise a unique violation on the type catalog for the loser. Retrying
+// lets that replica observe the table the winner created.
+func ensureSessionSchema(ctx context.Context, db *sql.DB) error {
+	statements := []struct {
+		query string
+		what  string
+	}{
+		{createSessionTableSQL, "ui_sessions table"},
+		{createSessionIndexSQL, "ui_sessions index"},
+	}
+	for _, statement := range statements {
+		var err error
+		announced := false
+		for attempt := 0; ; attempt++ {
+			if _, err = db.ExecContext(ctx, statement.query); err == nil {
+				break
+			}
+			switch {
+			case transientSessionConnect(err):
+				if !announced {
+					log.Printf("session store waiting for postgres: %v", err)
+					announced = true
+				}
+			case concurrentSchemaRace(err) && attempt < 4:
+			default:
+				return fmt.Errorf("ensure %s: %w", statement.what, err)
+			}
+			delay := 50 * time.Millisecond
+			if transientSessionConnect(err) {
+				delay = 500 * time.Millisecond
+			}
+			timer := time.NewTimer(delay)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return fmt.Errorf("ensure %s: %w", statement.what, err)
+			case <-timer.C:
+			}
+		}
+	}
+	return nil
+}
+
+// A headless Postgres Service has no DNS name until its pod is ready.
+// Exiting on that lookup makes both UI replicas crash and trips the setup
+// smoke check. Wait out the caller's deadline instead.
+func transientSessionConnect(err error) bool {
+	if err == nil {
+		return false
+	}
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return true
+	}
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		return true
+	}
+	msg := err.Error()
+	for _, needle := range []string{
+		"no such host",
+		"connection refused",
+		"connection reset",
+		"server misbehaving",
+		"i/o timeout",
+		"network is unreachable",
+		"temporary failure in name resolution",
+	} {
+		if strings.Contains(msg, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func concurrentSchemaRace(err error) bool {
+	var pqErr *pq.Error
+	return errors.As(err, &pqErr) && string(pqErr.Code) == "23505"
 }
 
 func (p *postgresSessionBackend) seal(sess uiSession) ([]byte, error) {
@@ -274,7 +353,7 @@ func buildSessionBackend(ctx context.Context, kind, dsn, key string) (sessionBac
 		}
 		db.SetMaxOpenConns(10)
 		db.SetConnMaxLifetime(30 * time.Minute)
-		pctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		pctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 		defer cancel()
 		backend, err := newPostgresSessionBackend(pctx, db, key)
 		if err != nil {

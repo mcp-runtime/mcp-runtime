@@ -22,7 +22,7 @@ const maxAPIBodyRead = 4 << 20
 // errPlatformNoBaseURL is returned when a token exists but the API base URL is missing.
 var errPlatformNoBaseURL = errors.New("set MCP_PLATFORM_API_URL or run mcp-runtime auth login with --api-url to use the platform API")
 
-// PlatformClient calls the mcp-sentinel API with an API key.
+// PlatformClient calls the platform API with an API key.
 type PlatformClient struct {
 	baseURL   string
 	token     string

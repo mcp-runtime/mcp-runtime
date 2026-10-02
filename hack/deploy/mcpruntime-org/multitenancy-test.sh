@@ -98,7 +98,7 @@ WORK_DIR="${WORK_DIR:-$TMP_ROOT/mcp-runtime-multitenancy-${RUN_ID}}"
 TAG="${TAG:-v0.1.0}"
 ADAPTER_LISTEN="${ADAPTER_LISTEN:-127.0.0.1:8299}"
 # In-cluster Sentinel ingest endpoint for gateway analytics; set empty to skip.
-ANALYTICS_INGEST_URL="${ANALYTICS_INGEST_URL-http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events}"
+ANALYTICS_INGEST_URL="${ANALYTICS_INGEST_URL-http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events}"
 
 SERVER_CONTEXT="${SERVER_CONTEXT:-$ROOT_DIR/examples/oauth-example-go-2025-11-25}"
 SERVER_DOCKERFILE="${SERVER_DOCKERFILE:-$SERVER_CONTEXT/Dockerfile}"

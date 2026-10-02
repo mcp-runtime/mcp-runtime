@@ -38,10 +38,10 @@ image_repo() {
     platform-api) echo "mcp-platform-api" ;;
     analytics-api) echo "mcp-analytics-api" ;;
     runtime-api) echo "mcp-runtime-api" ;;
-    ui) echo "mcp-sentinel-ui" ;;
-    ingest) echo "mcp-sentinel-ingest" ;;
-    processor) echo "mcp-sentinel-processor" ;;
-    mcp-gateway) echo "mcp-sentinel-mcp-gateway" ;;
+    ui) echo "mcp-ui" ;;
+    ingest) echo "mcp-ingest" ;;
+    processor) echo "mcp-processor" ;;
+    mcp-gateway) echo "mcp-gateway" ;;
     doctor-smoke) echo "mcp-runtime-doctor-smoke" ;;
     *) return 1 ;;
   esac

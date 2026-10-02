@@ -14,7 +14,9 @@ MCP_RUNTIME_PRESERVED_NAMESPACES=(
 
 MCP_RUNTIME_PLATFORM_NAMESPACES=(
   mcp-runtime
-  mcp-sentinel
+  mcp-platform
+  mcp-observability
+  mcp-log-collector
   registry
   traefik
 )
