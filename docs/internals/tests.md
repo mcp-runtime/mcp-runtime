@@ -81,24 +81,22 @@ matches the last build.
 
 ### Local latest image cache
 
-Pull-request QA E2E runs on the disposable VM (`test/e2e/qa-vm.sh`) and does
-not use GitHub Container Registry. The runner installs Go, kind, and kubectl
-when they are missing. Docker must already be running. Each component keeps one local Docker tag,
+For repeated runs on one machine (for example a contributor's Kind cluster),
+`E2E_IMAGE_CACHE=local` avoids GitHub Container Registry. Each component keeps one local Docker tag,
 `:latest`, labeled `mcp-runtime.e2e-content-hash`. The next run compares the
 checkout hash to that label: a match reuses the image, a miss rebuilds and
 replaces the same tag. Dangling previous image IDs are pruned. BuildKit cache
 is capped (`E2E_DOCKER_BUILD_CACHE_MAX`, default 8GB) when Staging E2E reclaims
 disk, and those labeled images are kept.
 
-Set `E2E_IMAGE_CACHE=local` for this mode. `E2E_IMAGE_CACHE=0` builds every
-image. The job summary records `elapsed_seconds` in `timing.txt` so successive
-pull requests can be compared.
+`E2E_IMAGE_CACHE=0` builds every image. Pull-request CI uses the GHCR cache
+below instead, because each GitHub runner starts with an empty Docker cache.
 
 ### Content-hash GHCR image cache
 
-Pre-release regression and Staging E2E can still skip rebuilding unchanged
-platform images by pulling content-hash tags from GitHub Container Registry.
-Staging E2E uses those tags without a write credential:
+Pull-request QA E2E, Pre-release Regression, and Staging E2E skip rebuilding
+unchanged platform images by pulling content-hash tags from GitHub Container
+Registry. QA E2E pushes a tag after each miss; Staging E2E only reads them:
 
 | Env | Meaning |
 |-----|---------|
@@ -217,9 +215,10 @@ The main CI workflow runs:
 - repository SBOM generation
 - path-selected short QA E2E on code PRs and manual CI runs
 
-Relevant pushes to `main` after merge run Staging E2E on the disposable VM;
-the CI QA E2E job is skipped on main pushes. Pull-request QA E2E runs Kind
-test-mode on that same VM and reuses the last local image for each component.
+Pull-request QA E2E runs Kind test-mode on a fresh GitHub runner. Each run uses
+its own cluster and registry names, so PRs run in parallel, and unchanged
+platform images come from the content-hash GHCR cache. Staging E2E runs on the
+disposable VM from Pre-release Regression, not on merges.
 
 The manual Pre-release Regression workflow adds full QA E2E in tenant, org,
 and public platform modes, cache replay, benchmarks, repository/operator-image

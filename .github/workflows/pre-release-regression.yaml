@@ -461,3 +461,20 @@ jobs:
           name: pre-release-qa-e2e-${{ matrix.platform_mode }}-artifacts
           path: .e2e-artifacts
           if-no-files-found: ignore
+
+  staging-e2e:
+    name: Staging E2E (disposable VM)
+    # The production install path (strict-prod setup, public TLS, bundled HTTPS
+    # registry, tenants) on the disposable VM. It runs here rather than on every
+    # merge; the called job holds the VM lock so only one run uses the VM.
+    needs:
+      - static
+      - root-tests
+      - service-tests
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/staging-e2e.yaml
+    with:
+      run-multitenancy: true
+    secrets: inherit

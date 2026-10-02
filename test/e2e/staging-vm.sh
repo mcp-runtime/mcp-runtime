@@ -287,12 +287,37 @@ stage_staging_roots() {
   staging_state_set STAGING_CA_BUNDLE /etc/ssl/certs/ca-certificates.crt
 }
 
+# The installer only says "see journalctl", and teardown uninstalls k3s, so
+# keep the service status, its journal, and the host state that leftover
+# workloads on the VM can exhaust (inotify instances, memory, containers).
+capture_k3s_start_failure() {
+  local out="${ARTIFACT_DIR}/diagnostics/k3s-service.txt"
+  mkdir -p "$(dirname "${out}")"
+  {
+    echo "## systemctl status k3s"
+    systemctl status k3s --no-pager 2>&1 || true
+    echo "## journalctl -u k3s (last 200 lines)"
+    journalctl -u k3s --no-pager -n 200 2>&1 || true
+    echo "## inotify limits"
+    sysctl fs.inotify.max_user_instances fs.inotify.max_user_watches 2>&1 || true
+    echo "## memory"
+    free -m 2>&1 || true
+    echo "## docker containers"
+    docker ps --format '{{.Names}}\t{{.Image}}\t{{.Status}}' 2>&1 || true
+  } >"${out}"
+  echo "--- last 40 lines of the k3s journal" >&2
+  journalctl -u k3s --no-pager -n 40 >&2 2>&1 || true
+}
+
 stage_k3s() {
   if [[ ! -f "${KUBECONFIG}" ]]; then
     log "installing k3s on the disposable VM"
     local installer="${WORK_DIR}/k3s-install.sh"
     staging_download_k3s_installer "${installer}" || fail "could not download the k3s installer from either official source"
-    sh "${installer}" --write-kubeconfig-mode 644
+    if ! sh "${installer}" --write-kubeconfig-mode 644; then
+      capture_k3s_start_failure
+      fail "the k3s service did not start; see diagnostics/k3s-service.txt"
+    fi
     for _ in {1..60}; do
       [[ -f "${KUBECONFIG}" ]] && break
       sleep 2

@@ -157,6 +157,27 @@ classify_path() {
       add_scenario "api-platform"
       return
       ;;
+    pkg/platformauth/*|pkg/authzmatrix/*)
+      # API key/bearer auth and the role matrix every API and the UI proxy use.
+      add_scenario "api-platform"
+      add_scenario "multitenancy"
+      add_scenario "ui-auth"
+      return
+      ;;
+    pkg/apihttp/*|pkg/internalapi/*|pkg/platform/*|pkg/publishscope/*|pkg/registrypush/*)
+      # Shared HTTP, DTO, publish-scope and registry-push code under the APIs.
+      add_scenario "api-platform"
+      return
+      ;;
+    pkg/oauthresource/*)
+      add_scenario "oauth"
+      return
+      ;;
+    pkg/authfile/*|pkg/runtimeconfig/*)
+      # The CLI's saved login and config paths.
+      add_scenario "cli-platform"
+      return
+      ;;
     services/ui/*)
       add_scenario "ui-auth"
       return

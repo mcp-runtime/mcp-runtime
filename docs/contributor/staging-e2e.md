@@ -226,12 +226,13 @@ only as an unexplained deployment timeout. On-VM run directories live in
 
 ## Running it
 
-Relevant changes pushed to `main` automatically run the **Staging E2E
-(Disposable VM)** workflow with the multi-tenancy flow enabled and the existing
-staging TLS snapshot. Pull requests do not receive the disposable-VM secrets.
-QA E2E runs on PRs or manual CI dispatch and is skipped on main pushes.
-Dispatch a workflow manually when you need staging evidence before merge or
-are iterating on a PR. The remote workflow keeps the repository on the runner;
+The **Pre-release Regression** workflow calls **Staging E2E (Disposable VM)**
+with the multi-tenancy flow enabled and the existing staging TLS snapshot.
+Merges to `main` do not run it. The job holds the `staging-e2e-disposable-vm`
+lock, so only one Staging run uses the VM at a time. Pull requests do not
+receive the disposable-VM secrets; QA E2E runs on GitHub runners instead.
+Dispatch a workflow manually when you need staging evidence before a release
+or are iterating on a PR. The remote workflow keeps the repository on the runner;
 the disposable-VM workflow packages it and runs it on the VM:
 
 ```bash

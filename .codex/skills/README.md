@@ -52,7 +52,7 @@ deterministic CI / Staging E2E / `test/e2e` over replaying long playbooks.
 3. `dashboard-browser-qa` requires browser evidence for UI changes.
 4. `security-audit` is judgment + scanner routing; prefer CI /
    `pre-release-regression.yaml` for gitleaks/gosec/Trivy/SBOM.
-5. Ship gate: CI green + Staging E2E (`docs/contributor/staging-e2e.md`), then
+5. Ship gate: CI green, then Pre-release Regression with Staging E2E (`docs/contributor/staging-e2e.md`), then
    the focused skill for the diff. No release-orchestrator skill.
 6. Docs drift: update nearest docs/AGENTS; golden/docs CI is deterministic.
 7. `scripts/validate_skill_evals.py` validates eval manifests.
