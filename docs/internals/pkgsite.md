@@ -18,17 +18,25 @@ another container already publishes the port, and restores the previous image
 if the new container does not serve the package page. The container runs as a non-root user with a
 read-only filesystem, a temporary build cache, and no added capabilities.
 
-Add a `docs.pkg.mcpruntime.org` host rule to the **same public reverse proxy**
-that already routes `docs.mcpruntime.org`. Use the docs host and port `8083`
-as the backend, and issue a certificate for the new hostname. A proxy on the
-same host can use `http://127.0.0.1:8083`; a remote or containerized proxy
-must use the address it already uses to reach the MkDocs host on port 8081.
-If the proxy is host-level Nginx, use
-[`reverse-proxy.nginx.example.conf`](https://github.com/mcp-runtime/mcp-runtime/blob/main/hack/deploy/pkgsite/reverse-proxy.nginx.example.conf)
-as a starting point. For another proxy, use its equivalent host rule and TLS
-configuration. DNS alone does not create the route. Restrict direct access to
-port 8083 with the same host firewall policy used for the MkDocs backend on
-port 8081; public traffic should use the HTTPS hostname.
+The public route lives on the production k3s cluster, whose Traefik also
+serves `docs.mcpruntime.org`. The docs host is that cluster's node, and the
+`web/web` Ingress reaches the MkDocs, website, and articles containers through
+selectorless Services with a manual EndpointSlice for each host port.
+[`hack/deploy/pkgsite/route.yaml`](https://github.com/mcp-runtime/mcp-runtime/blob/main/hack/deploy/pkgsite/route.yaml)
+adds the same for pkgsite: a `web/pkgsite` Service and EndpointSlice for port
+`8083`, and its own Ingress with a `letsencrypt-prod` certificate
+(`docs-pkg-tls`). It never edits `web/web`. Apply it once, with the production
+kubeconfig passed explicitly:
+
+```bash
+KUBECONFIG=<prod file> kubectl apply --dry-run=server -f hack/deploy/pkgsite/route.yaml
+KUBECONFIG=<prod file> kubectl apply -f hack/deploy/pkgsite/route.yaml
+KUBECONFIG=<prod file> kubectl get certificate docs-pkg-tls -n web
+```
+
+DNS alone does not create the route: without it the host returns Traefik's
+404 over HTTP and no certificate over HTTPS. Public traffic should use the
+HTTPS hostname rather than port 8083 directly.
 
 After the workflow deploys, check:
 
