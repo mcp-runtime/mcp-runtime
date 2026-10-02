@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -23,9 +24,10 @@ import (
 // database/sql driver that understands exactly the statements the Postgres
 // session backend issues.
 type fakeSessionDB struct {
-	mu      sync.Mutex
-	rows    map[string]fakeSessionRow
-	failAll bool
+	mu          sync.Mutex
+	rows        map[string]fakeSessionRow
+	failAll     bool
+	failConnect int
 }
 
 type fakeSessionRow struct {
@@ -69,6 +71,10 @@ func (s *fakeStmt) NumInput() int { return -1 }
 func (s *fakeStmt) Exec(args []driver.Value) (driver.Result, error) {
 	s.db.mu.Lock()
 	defer s.db.mu.Unlock()
+	if s.db.failConnect > 0 && (strings.HasPrefix(s.q, "CREATE TABLE") || strings.HasPrefix(s.q, "CREATE INDEX")) {
+		s.db.failConnect--
+		return nil, &net.DNSError{Err: "no such host", Name: "mcp-postgres.mcp-platform.svc.cluster.local", IsNotFound: true}
+	}
 	if s.db.failAll {
 		return nil, errors.New("database unavailable")
 	}
@@ -331,5 +337,27 @@ func TestConcurrentSchemaRace(t *testing.T) {
 	}
 	if concurrentSchemaRace(errors.New("dial failed")) {
 		t.Fatal("a generic error should not be retried")
+	}
+}
+
+func TestEnsureSessionSchemaWaitsForPostgresDNS(t *testing.T) {
+	db, fake := openFakeSessionDB(t)
+	fake.failConnect = 2
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := ensureSessionSchema(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	if fake.failConnect != 0 {
+		t.Fatalf("connect failures left = %d", fake.failConnect)
+	}
+}
+
+func TestTransientSessionConnect(t *testing.T) {
+	if !transientSessionConnect(&net.DNSError{Err: "no such host", IsNotFound: true}) {
+		t.Fatal("missing postgres DNS should be retried")
+	}
+	if transientSessionConnect(errors.New("database unavailable")) {
+		t.Fatal("a statement error should not be retried")
 	}
 }

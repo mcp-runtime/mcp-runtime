@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -200,26 +201,67 @@ func ensureSessionSchema(ctx context.Context, db *sql.DB) error {
 	}
 	for _, statement := range statements {
 		var err error
-		for attempt := 0; attempt < 5; attempt++ {
+		announced := false
+		for attempt := 0; ; attempt++ {
 			if _, err = db.ExecContext(ctx, statement.query); err == nil {
 				break
 			}
-			if !concurrentSchemaRace(err) {
+			switch {
+			case transientSessionConnect(err):
+				if !announced {
+					log.Printf("session store waiting for postgres: %v", err)
+					announced = true
+				}
+			case concurrentSchemaRace(err) && attempt < 4:
+			default:
 				return fmt.Errorf("ensure %s: %w", statement.what, err)
 			}
-			timer := time.NewTimer(time.Duration(attempt+1) * 50 * time.Millisecond)
+			delay := 50 * time.Millisecond
+			if transientSessionConnect(err) {
+				delay = 500 * time.Millisecond
+			}
+			timer := time.NewTimer(delay)
 			select {
 			case <-ctx.Done():
 				timer.Stop()
-				return fmt.Errorf("ensure %s: %w", statement.what, ctx.Err())
+				return fmt.Errorf("ensure %s: %w", statement.what, err)
 			case <-timer.C:
 			}
 		}
-		if err != nil {
-			return fmt.Errorf("ensure %s: %w", statement.what, err)
-		}
 	}
 	return nil
+}
+
+// A headless Postgres Service has no DNS name until its pod is ready.
+// Exiting on that lookup makes both UI replicas crash and trips the setup
+// smoke check. Wait out the caller's deadline instead.
+func transientSessionConnect(err error) bool {
+	if err == nil {
+		return false
+	}
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return true
+	}
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		return true
+	}
+	msg := err.Error()
+	for _, needle := range []string{
+		"no such host",
+		"connection refused",
+		"connection reset",
+		"server misbehaving",
+		"i/o timeout",
+		"network is unreachable",
+		"temporary failure in name resolution",
+	} {
+		if strings.Contains(msg, needle) {
+			return true
+		}
+	}
+	return false
 }
 
 func concurrentSchemaRace(err error) bool {
@@ -311,7 +353,7 @@ func buildSessionBackend(ctx context.Context, kind, dsn, key string) (sessionBac
 		}
 		db.SetMaxOpenConns(10)
 		db.SetConnMaxLifetime(30 * time.Minute)
-		pctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		pctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 		defer cancel()
 		backend, err := newPostgresSessionBackend(pctx, db, key)
 		if err != nil {
