@@ -72,6 +72,10 @@ unless their workflow has been adapted into `.codex/skills/`.
   `hack/cluster-ops/perf-regression.sh`,
   `hack/cluster-ops/k8s-hardening-check.sh` — then `cluster-ops` for judgment /
   troubleshooting. Prefer QA E2E / Staging E2E when already green for the commit.
+- **E2E failure diagnosis:** start with `cluster-ops` mode `troubleshoot` instead
+  of many ad-hoc Bash calls. It gives one structured health pass for QA E2E
+  (Kind), Staging E2E (k3s on the disposable VM), and platform API
+  connection/auth failures.
 - **Browser/UI QA:** `dashboard-browser-qa` for role-gating, tabs, console/network,
   and visual regressions.
 - **Docs / DevEx:** when CLI, setup, or user-facing behavior changes, update the
