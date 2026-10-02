@@ -13,7 +13,7 @@ This file is the **onboarding index** for the MCP Runtime repo. It complements `
 | Browser / Sentinel UI QA | `dashboard-browser-qa` |
 | MCP protocol version bump / spec audit | `mcp-protocol-compliance` (thin; not routine PRs) |
 | Security review (PR / platform / k8s / supply-chain) | `security-audit` |
-| Merge / ship / tag | CI green + Staging E2E (`docs/contributor/staging-e2e.md`); then the focused skill for the diff |
+| Merge / ship / tag | Merge on CI green (includes path-selected QA E2E). Ship/tag after Pre-release Regression, which runs Staging E2E (`docs/contributor/staging-e2e.md`); then the focused skill for the diff |
 | API / CRD / CLI design review | Focused skill for the surface; `.codex/skills/_shared/design-principles.md` for contract choices |
 | Docs / AGENTS / golden help drift | Update nearest docs when behavior changes; golden/docs CI is the deterministic check (no docs-sync skill) |
 | Post-setup health | Setup Step 6 now includes an operational smoke gate (nodes/PVCs/Postgres/platform-api/Sentinel/auth). Deeper installed-cluster diagnosis: `mcp-runtime cluster diagnostics` |
@@ -77,8 +77,9 @@ unless their workflow has been adapted into `.codex/skills/`.
 - **Docs / DevEx:** when CLI, setup, or user-facing behavior changes, update the
   nearest guide and AGENTS.md; copy CLI wording from `./bin/mcp-runtime … --help`;
   rely on golden help and docs CI for drift.
-- **Merge / ship / tag:** CI green + Staging E2E green (or run it for the change
-  surface; see `docs/contributor/staging-e2e.md` and `production-platform`).
+- **Merge / ship / tag:** merge on CI green. Before a release, run Pre-release
+  Regression; it includes Staging E2E on the disposable VM (see
+  `docs/contributor/staging-e2e.md` and `production-platform`).
   Then load the focused skill for the diff. No release-orchestrator skill.
 
 ## Build, test, and quality (before you push)
@@ -105,7 +106,7 @@ Pre-commit: `pre-commit install`; full suite `pre-commit run --all-files` (sets 
 - Reuse the contributor cluster with `E2E_CACHE_MODE=1 E2E_SCENARIOS=smoke-auth bash test/e2e/qa-e2e.sh`, and set `CLUSTER_NAME=mcp-runtime E2E_CACHE_MODE=1 E2E_KEEP_CLUSTER=1`.
 - Sentinel: `go test -race -count=1 ./...` inside touched `services/*` dirs
 
-**CI** (`.github/workflows/ci.yaml`): gofmt, vet, staticcheck, unit/golden/service/integration tests; path-selected QA E2E on same-repo PRs and manual dispatch (`test/e2e/select_pr_scenarios.sh`, `test/e2e/qa-vm.sh` on the disposable VM). QA keeps one local `:latest` image per component and does not use GitHub Container Registry. Relevant main pushes after merge run Staging E2E; QA E2E is skipped on main pushes. Pre-release: `.github/workflows/pre-release-regression.yaml`.
+**CI** (`.github/workflows/ci.yaml`): gofmt, vet, staticcheck, unit/golden/service/integration tests; path-selected QA E2E on PRs and manual dispatch (`test/e2e/select_pr_scenarios.sh`). QA E2E runs Kind on a fresh GitHub runner with unique cluster names, so PRs run in parallel, and reuses unchanged platform images from the content-hash GHCR cache. Staging E2E runs on the disposable VM from Pre-release Regression (`.github/workflows/pre-release-regression.yaml`) or by manual dispatch, one run at a time; it does not run on merges.
 
 **CLI docs sync:** when editing `docs/cli.md`, `docs/getting-started.md`, or command examples, copy wording from `./bin/mcp-runtime <group> <subcommand> --help`. Do not paraphrase from memory.
 

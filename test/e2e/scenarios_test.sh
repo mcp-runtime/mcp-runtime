@@ -173,17 +173,19 @@ import pathlib
 import sys
 
 workflow = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
-assert "  push:\n    branches: [main]\n    paths:" in workflow, "staging E2E must trigger on relevant pushes to main"
-for path in (
-    "'.github/workflows/staging-e2e-remote.yaml'",
-    "'services/**'",
-    "'internal/**'",
-    "'test/e2e/**'",
-    "'hack/deploy/mcpruntime-org/**'",
-):
-    assert path in workflow, f"staging E2E push trigger is missing {path}"
-assert "RUN_MULTITENANCY: ${{ github.event_name == 'push' || inputs.run-multitenancy }}" in workflow
-assert "FRESH_CERTIFICATE: ${{ github.event_name == 'workflow_dispatch' && inputs.fresh-certificate }}" in workflow
+# Staging E2E is a pre-release gate on the one disposable VM: no merge
+# trigger, called by Pre-release Regression, and one run at a time.
+on_block = workflow[workflow.index("\non:\n"):workflow.index("\njobs:\n")]
+assert "\n  push:" not in on_block, "staging E2E must not run on every merge to main"
+assert "\n  workflow_call:" in on_block and "\n  workflow_dispatch:" in on_block
+job = workflow[workflow.index("\n  staging-e2e:\n"):]
+assert "concurrency:\n      group: staging-e2e-disposable-vm\n      cancel-in-progress: false" in job, (
+    "the VM lock must be on the job so a called run still holds it"
+)
+assert "RUN_MULTITENANCY: ${{ inputs.run-multitenancy }}" in workflow
+assert "FRESH_CERTIFICATE: ${{ inputs.fresh-certificate }}" in workflow
+prerelease = pathlib.Path(sys.argv[1]).with_name("pre-release-regression.yaml").read_text(encoding="utf-8")
+assert "uses: ./.github/workflows/staging-e2e.yaml" in prerelease, "Pre-release Regression must run Staging E2E"
 assert "  packages: read" in workflow, "staging must be allowed to pull private GHCR cache images"
 assert workflow.index("Verify disposable target") < workflow.index("E2E_GHCR_AUTH_STDIN=1"), (
     "the VM must pass the disposable-target guard before receiving a GHCR token"
@@ -191,7 +193,7 @@ assert workflow.index("Verify disposable target") < workflow.index("E2E_GHCR_AUT
 remote_workflow = pathlib.Path(sys.argv[1]).with_name("staging-e2e-remote.yaml").read_text(encoding="utf-8")
 assert "  packages: read" in remote_workflow
 assert remote_workflow.index("Verify disposable target") < remote_workflow.index("Log in to GHCR for cached images")
-print("[pass] staging E2E main-push trigger and event defaults")
+print("[pass] staging E2E is a single-VM pre-release gate")
 
 staging_docs = pathlib.Path(sys.argv[3]).read_text(encoding="utf-8")
 assert "gh workflow run staging-e2e.yaml" in staging_docs, "staging E2E docs must name the on-VM workflow"
@@ -217,13 +219,16 @@ assert "pull_cached_image" not in build_image, (
     "images built from the checkout must not be replaced with stale local-mirror tags"
 )
 assert 'bin/e2e-image-cache' in build_image, "QA images must compare the checkout hash before rebuilding"
-qa_vm = pathlib.Path(sys.argv[2]).parent.joinpath("qa-vm.sh").read_text(encoding="utf-8")
-assert "install_kubectl_if_needed" in qa_vm, "VM QA must install kubectl when the disposable VM does not have it"
-assert "E2E_IMAGE_CACHE=local" in qa_vm, "VM QA must use the single local latest image"
-assert "E2E_GHCR_PUSH=0" in qa_vm, "VM QA must not push GitHub Container Registry cache tags"
-assert "test/e2e/qa-vm.sh" in ci_workflow, "PR QA E2E must run on the disposable VM"
-assert "docker/login-action" not in ci_workflow, "PR CI must not log in to GHCR for QA E2E"
-assert "E2E_GHCR_PUSH" not in ci_workflow, "PR CI must not publish GHCR cache tags"
+qa_job = ci_workflow[ci_workflow.index("\n  qa-e2e:\n"):ci_workflow.index("\n  benchmark:\n")]
+# QA E2E runs on GitHub runners so PRs do not queue behind one VM, and it must
+# not take the disposable VM's lock or touch the machine Staging E2E uses.
+assert "run: bash test/e2e/qa-e2e.sh" in qa_job, "PR QA E2E must run Kind on the GitHub runner"
+assert "staging-e2e-disposable-vm" not in qa_job, "PR QA E2E must not hold the Staging E2E VM lock"
+assert "E2E_VM_" not in qa_job, "PR QA E2E must not use disposable-VM credentials"
+assert "CLUSTER_NAME=mcp-e2e-${suffix}" in qa_job, "parallel QA runs need unique Kind cluster names"
+assert 'E2E_IMAGE_CACHE: "1"' in qa_job and 'E2E_GHCR_PUSH: "1"' in qa_job, (
+    "QA E2E must use and refresh the content-hash GHCR cache that Staging E2E reads"
+)
 for runner in ("staging-vm.sh", "staging-remote.sh"):
     staging_script = pathlib.Path(sys.argv[2]).parent / runner
     assert 'E2E_IMAGE_CACHE:-1' in staging_script.read_text(encoding="utf-8"), (
