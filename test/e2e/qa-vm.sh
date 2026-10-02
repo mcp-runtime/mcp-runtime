@@ -86,6 +86,17 @@ install_kind_if_needed() {
   chmod +x /usr/local/bin/kind
 }
 
+install_kubectl_if_needed() {
+  if command -v kubectl >/dev/null 2>&1; then
+    return 0
+  fi
+  echo "[qa-vm] installing kubectl"
+  curl --retry 5 --retry-delay 5 --retry-all-errors -fsSL \
+    -o /usr/local/bin/kubectl \
+    "https://dl.k8s.io/release/v1.34.1/bin/linux/amd64/kubectl"
+  chmod +x /usr/local/bin/kubectl
+}
+
 command -v docker >/dev/null 2>&1 || {
   echo "docker is not installed on the disposable VM" >&2
   exit 1
@@ -96,10 +107,7 @@ docker info >/dev/null 2>&1 || {
 }
 install_go_if_needed
 install_kind_if_needed
-command -v kubectl >/dev/null 2>&1 || {
-  echo "kubectl is not installed on the disposable VM" >&2
-  exit 1
-}
+install_kubectl_if_needed
 
 # Do not inherit the VM's k3s kubeconfig. qa-e2e.sh writes its own Kind file.
 unset KUBECONFIG

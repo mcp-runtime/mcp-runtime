@@ -210,6 +210,7 @@ assert "pull_cached_image" not in build_image, (
 )
 assert 'bin/e2e-image-cache' in build_image, "QA images must compare the checkout hash before rebuilding"
 qa_vm = pathlib.Path(sys.argv[2]).parent.joinpath("qa-vm.sh").read_text(encoding="utf-8")
+assert "install_kubectl_if_needed" in qa_vm, "VM QA must install kubectl when the disposable VM does not have it"
 assert "E2E_IMAGE_CACHE=local" in qa_vm, "VM QA must use the single local latest image"
 assert "E2E_GHCR_PUSH=0" in qa_vm, "VM QA must not push GitHub Container Registry cache tags"
 assert "test/e2e/qa-vm.sh" in ci_workflow, "PR QA E2E must run on the disposable VM"

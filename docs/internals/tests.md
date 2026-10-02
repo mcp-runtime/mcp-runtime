@@ -82,7 +82,8 @@ matches the last build.
 ### Local latest image cache
 
 Pull-request QA E2E runs on the disposable VM (`test/e2e/qa-vm.sh`) and does
-not use GitHub Container Registry. Each component keeps one local Docker tag,
+not use GitHub Container Registry. The runner installs Go, kind, and kubectl
+when they are missing. Docker must already be running. Each component keeps one local Docker tag,
 `:latest`, labeled `mcp-runtime.e2e-content-hash`. The next run compares the
 checkout hash to that label: a match reuses the image, a miss rebuilds and
 replaces the same tag. Dangling previous image IDs are pruned. BuildKit cache
