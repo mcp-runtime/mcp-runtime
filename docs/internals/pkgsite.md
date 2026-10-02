@@ -11,22 +11,23 @@ checked-in, reviewable snapshot of selected packages.
 
 The workflow builds a pkgsite `v0.5.0` image, checks a real package page in a
 temporary container, transfers that exact image over SSH, and starts it on
-host port `8082` on the docs host, matching the MkDocs container's host-port
-deployment. It reuses the existing `DOCS_DEPLOY_*`
-secrets. The remote script restores the previous image if the new container
-does not serve the package page. The container runs as a non-root user with a
+host port `8083` on the docs host, matching the MkDocs container's host-port
+deployment. MkDocs uses `8081` and the articles container uses `8082`. It
+reuses the existing `DOCS_DEPLOY_*` secrets. The remote script stops early if
+another container already publishes the port, and restores the previous image
+if the new container does not serve the package page. The container runs as a non-root user with a
 read-only filesystem, a temporary build cache, and no added capabilities.
 
 Add a `docs.pkg.mcpruntime.org` host rule to the **same public reverse proxy**
-that already routes `docs.mcpruntime.org`. Use the docs host and port `8082`
+that already routes `docs.mcpruntime.org`. Use the docs host and port `8083`
 as the backend, and issue a certificate for the new hostname. A proxy on the
-same host can use `http://127.0.0.1:8082`; a remote or containerized proxy
+same host can use `http://127.0.0.1:8083`; a remote or containerized proxy
 must use the address it already uses to reach the MkDocs host on port 8081.
 If the proxy is host-level Nginx, use
 [`reverse-proxy.nginx.example.conf`](https://github.com/mcp-runtime/mcp-runtime/blob/main/hack/deploy/pkgsite/reverse-proxy.nginx.example.conf)
 as a starting point. For another proxy, use its equivalent host rule and TLS
 configuration. DNS alone does not create the route. Restrict direct access to
-port 8082 with the same host firewall policy used for the MkDocs backend on
+port 8083 with the same host firewall policy used for the MkDocs backend on
 port 8081; public traffic should use the HTTPS hostname.
 
 After the workflow deploys, check:
@@ -41,7 +42,7 @@ On the docs host, read-only diagnostics are:
 ```bash
 docker ps --filter name=mcp-runtime-pkgsite
 docker logs --tail 80 mcp-runtime-pkgsite
-curl -fsSI http://127.0.0.1:8082/github.com/mcp-runtime/mcp-runtime/pkg/access
+curl -fsSI http://127.0.0.1:8083/github.com/mcp-runtime/mcp-runtime/pkg/access
 ```
 
 ## Package paths

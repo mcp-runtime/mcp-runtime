@@ -2,11 +2,19 @@
 set -euo pipefail
 
 # This script receives an image already loaded by the CI runner. The public
-# reverse proxy terminates TLS and forwards docs.pkg.mcpruntime.org to 8082.
+# reverse proxy terminates TLS and forwards docs.pkg.mcpruntime.org to 8083.
+# MkDocs uses 8081 and the articles container uses 8082 on the same host.
 image="${PKGSITE_IMAGE:?PKGSITE_IMAGE is required}"
 container=mcp-runtime-pkgsite
-listen_port=8082
+listen_port=8083
 previous_image=""
+
+# Fail before touching the running container if another one holds the port.
+port_owner="$(docker ps --filter "publish=${listen_port}" --format '{{.Names}}' | grep -vx "$container" || true)"
+if [[ -n "$port_owner" ]]; then
+  echo "Host port ${listen_port} is already published by: ${port_owner}" >&2
+  exit 1
+fi
 
 if docker container inspect "$container" >/dev/null 2>&1; then
   previous_image="$(docker inspect --format '{{.Config.Image}}' "$container")"
