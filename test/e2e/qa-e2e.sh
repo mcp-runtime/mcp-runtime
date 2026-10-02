@@ -520,6 +520,18 @@ PARALLEL_FAILED=0
 PARALLEL_SEQ=0
 STAGE_SEQ=0
 
+# `mcp-runtime sentinel port-forward` runs `kubectl port-forward` as a child
+# and does not pass SIGTERM on, so killing only the CLI left kubectl holding
+# its port. A cache-mode replay in the same job then failed with
+# "localhost:18103 is already in use". Stop the children first.
+stop_process_tree() {
+  local pid="$1"
+  [[ -n "${pid}" ]] || return 0
+  pkill -TERM -P "${pid}" >/dev/null 2>&1 || true
+  kill "${pid}" >/dev/null 2>&1 || true
+  wait "${pid}" 2>/dev/null || true
+}
+
 cleanup() {
   # Background parallel workers inherit this EXIT trap; never tear down the
   # cluster or delete the shared kubeconfig from a subshell.
@@ -536,8 +548,7 @@ cleanup() {
     fi
   fi
   for pid in "${PIDS[@]:-}"; do
-    kill "${pid}" >/dev/null 2>&1 || true
-    wait "${pid}" 2>/dev/null || true
+    stop_process_tree "${pid}"
   done
   if scenario_selected "adapter-certificates" && [[ -n "${KUBECONFIG_FILE:-}" && -f "${KUBECONFIG_FILE}" ]]; then
     KUBECONFIG="${KUBECONFIG_FILE}" kubectl delete mcpagentsession "${ADAPTER_CERT_SESSION}" \
@@ -4115,8 +4126,7 @@ if [[ -n "${_cli_pf_pid}" ]]; then
 fi
 wait_managed_port "${CLI_SENTINEL_API_PORT}" "${_cli_pf_pid}" "${WORKDIR}/sentinel-cli-port-forward.log" "sentinel CLI port-forward" 30
 if [[ -n "${_cli_pf_pid}" ]]; then
-  kill "${_cli_pf_pid}" >/dev/null 2>&1 || true
-  wait "${_cli_pf_pid}" 2>/dev/null || true
+  stop_process_tree "${_cli_pf_pid}"
 fi
 
 API_KEY="$(kubectl get secret mcp-ui-credentials -n mcp-platform -o jsonpath='{.data.UI_API_KEY}' | decode_base64)"
