@@ -188,6 +188,18 @@ func TestSentinelPipelineWorkloadsRecoverFromTransientPullAndBrokerLoss(t *testi
 	}
 }
 
+func TestSentinelUIStartupProbeCoversPostgresWait(t *testing.T) {
+	// The UI listens only after its session store opens, and setup applies
+	// Postgres after the UI. Liveness must not count that two-minute wait.
+	c := recoveryWorkload(t, "09-ui.yaml", "Deployment", "mcp-ui").Spec.Template.Spec.Containers[0]
+	if c.StartupProbe == nil {
+		t.Fatal("09-ui.yaml missing startupProbe; liveness would restart a UI waiting on Postgres")
+	}
+	if window := c.StartupProbe.FailureThreshold * c.StartupProbe.PeriodSeconds; window <= 120 {
+		t.Fatalf("09-ui.yaml startup window %ds must exceed the 120s session store wait", window)
+	}
+}
+
 func TestSentinelServiceDeploymentsUseServicesPriorityClass(t *testing.T) {
 	for manifest, deployment := range map[string]string{
 		"08-analytics-api.yaml": "mcp-analytics-api",

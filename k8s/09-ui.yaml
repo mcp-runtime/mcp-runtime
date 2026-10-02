@@ -96,6 +96,14 @@ spec:
             limits:
               cpu: 200m
               memory: 128Mi
+          # The UI listens only after the session store opens, and it waits up
+          # to two minutes for Postgres. Hold liveness off for that window.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8082
+            periodSeconds: 5
+            failureThreshold: 36
           readinessProbe:
             httpGet:
               path: /
