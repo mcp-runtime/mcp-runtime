@@ -197,14 +197,16 @@ jobs:
   qa-e2e:
     name: QA E2E
     runs-on: ubuntu-24.04
-    # Staging E2E covers relevant main pushes; documentation-only PRs do not change the runtime.
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && needs['changed-paths'].outputs.code == 'true')
-    # Start after lint and path detection so QA E2E overlaps unit/integration tests.
+    # Same-repo PRs only. Forks do not receive the disposable-VM credentials.
+    # Documentation-only PRs do not change the runtime. Shares the VM with Staging E2E.
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && needs['changed-paths'].outputs.code == 'true')
     needs: [lint, changed-paths]
+    concurrency:
+      group: staging-e2e-disposable-vm
+      cancel-in-progress: false
     timeout-minutes: 90
     permissions:
       contents: read
-      packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -248,102 +250,82 @@ jobs:
           echo "Changed files considered for E2E selection:"
           sed 's/^/  /' "${RUNNER_TEMP}/e2e-changed-files.txt"
 
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Log in to GHCR
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Ensure runner disk headroom
-        run: |
-          df -h /
-          available_bytes="$(df --output=avail -B1 / | tail -n 1 | tr -d '[:space:]')"
-          minimum_bytes=$((60 * 1024 * 1024 * 1024))
-          if (( available_bytes >= minimum_bytes )); then
-            echo "At least 60 GiB free; skipping runner cleanup"
-            exit 0
-          fi
-
-          echo "Less than 60 GiB free; removing unused runner toolchains"
-          sudo rm -rf \
-            /opt/ghc \
-            /opt/hostedtoolcache/CodeQL \
-            /usr/local/lib/android \
-            /usr/local/share/boost \
-            /usr/share/dotnet
-          docker system prune -af --volumes || true
-          df -h /
-
       - name: Validate E2E scenario selectors
         run: bash test/e2e/scenarios_test.sh
 
       - name: Test staging E2E target guard and stage runner
         run: bash test/e2e/staging_lib_test.sh
 
-      - name: Install kubectl
-        run: |
-          curl --retry 5 --retry-delay 5 --retry-all-errors -fsSL -o kubectl "https://dl.k8s.io/release/v1.34.1/bin/linux/amd64/kubectl"
-          chmod +x kubectl
-          sudo mv kubectl /usr/local/bin/kubectl
+      - name: Install SSH client
+        run: sudo apt-get update && sudo apt-get install -y sshpass
 
-      - name: Install kind
-        run: |
-          curl --retry 5 --retry-delay 5 --retry-all-errors -fsSL -o kind "https://github.com/kubernetes-sigs/kind/releases/download/v0.30.0/kind-linux-amd64"
-          chmod +x kind
-          sudo mv kind /usr/local/bin/kind
-
-      - name: Show tool versions
-        run: |
-          docker version
-          kubectl version --client
-          kind version
-          python3 --version
-
-      - name: Configure E2E resource names
-        run: |
-          suffix="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          port=$((20000 + ((GITHUB_RUN_ID + GITHUB_RUN_ATTEMPT) % 20000)))
-          {
-            echo "CLUSTER_NAME=mcp-e2e-${suffix}"
-            echo "LOCAL_REGISTRY_NAME=mcp-e2e-registry-${suffix}"
-            echo "LOCAL_REGISTRY_PORT=${port}"
-          } >> "${GITHUB_ENV}"
-
-      - name: Run QA E2E
+      - name: Configure pinned VM host key
         env:
-          E2E_ARTIFACT_DIR: ${{ github.workspace }}/.e2e-artifacts/qa
-          # Mirror stays single-worker to avoid registry push contention on shared runners.
-          E2E_IMAGE_MIRROR_PARALLELISM: "1"
-          # Local image builds are CPU-bound; two workers matches docs/internals/tests.md guidance.
-          E2E_IMAGE_BUILD_PARALLELISM: "2"
-          E2E_IMAGE_PREP_PARALLELISM: "2"
-          E2E_EXAMPLE_DEPLOY_PARALLELISM: "3"
-          E2E_GRANT_RULE_PARALLELISM: "4"
-          E2E_HTTP_FLOW_PARALLELISM: "2"
-          # One primary MCP server; multitenancy reuses it as tenant-a and adds at most tenant-b.
-          E2E_MAX_MCP_SERVERS: "2"
-          # Content-hash GHCR cache: pull unchanged platform images; build+push on miss.
-          E2E_IMAGE_CACHE: "1"
-          E2E_GHCR_PUSH: "1"
-          MCP_SETUP_IMAGE_CACHE: "1"
-          E2E_IMAGE_CACHE_REGISTRY: ghcr.io/${{ github.repository_owner }}/mcp-runtime
-          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
-          # PR CI: shorter policy wait budget than local default 90 (still ~90s per stuck wait).
-          MCP_POLICY_WAIT_TRIES: "45"
-          MCP_HTTP_TIMEOUT: "15"
-          RAW_REQUEST_TRIES: "8"
-        run: bash test/e2e/qa-e2e.sh
+          E2E_VM_KNOWN_HOSTS: ${{ secrets.E2E_VM_KNOWN_HOSTS }}
+        run: |
+          test -n "${E2E_VM_KNOWN_HOSTS}"
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "${E2E_VM_KNOWN_HOSTS}" > ~/.ssh/mcp-runtime-e2e-known-hosts
+          chmod 600 ~/.ssh/mcp-runtime-e2e-known-hosts
 
-      - name: Report runner disk use
+      - name: Verify disposable target
+        env:
+          E2E_VM_HOST: ${{ secrets.E2E_VM_HOST }}
+          E2E_VM_USER: ${{ secrets.E2E_VM_USER }}
+          SSHPASS: ${{ secrets.E2E_VM_PASSWORD }}
+          E2E_VM_KNOWN_HOSTS: /home/runner/.ssh/mcp-runtime-e2e-known-hosts
+        run: bash test/e2e/staging-target.sh check
+
+      - name: Package repository
+        run: |
+          tar --exclude=.git --exclude='*/node_modules' \
+            -czf /tmp/mcp-runtime-qa.tgz .
+
+      - name: Upload repository to disposable VM
+        env:
+          SSHPASS: ${{ secrets.E2E_VM_PASSWORD }}
+        run: |
+          sshpass -e scp \
+            -o UserKnownHostsFile="$HOME/.ssh/mcp-runtime-e2e-known-hosts" -o StrictHostKeyChecking=yes \
+            /tmp/mcp-runtime-qa.tgz \
+            "${{ secrets.E2E_VM_USER }}@${{ secrets.E2E_VM_HOST }}:/tmp/mcp-runtime-qa.tgz"
+
+      - name: Run QA E2E on the disposable VM
+        env:
+          SSHPASS: ${{ secrets.E2E_VM_PASSWORD }}
+          E2E_RUN_ID: gh-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          if ! [[ "${E2E_SCENARIOS}" =~ ^[a-z0-9,-]+$ ]]; then
+            echo "refusing to forward scenario list: ${E2E_SCENARIOS}" >&2
+            exit 1
+          fi
+          sshpass -e ssh \
+            -o UserKnownHostsFile="$HOME/.ssh/mcp-runtime-e2e-known-hosts" -o StrictHostKeyChecking=yes \
+            -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -o TCPKeepAlive=yes \
+            "${{ secrets.E2E_VM_USER }}@${{ secrets.E2E_VM_HOST }}" \
+            "set -eu; rm -rf /opt/mcp-runtime-qa; mkdir -p /opt/mcp-runtime-qa; tar -xzf /tmp/mcp-runtime-qa.tgz -C /opt/mcp-runtime-qa; E2E_RUN_ID='${E2E_RUN_ID}' E2E_SCENARIOS='${E2E_SCENARIOS}' E2E_MAX_MCP_SERVERS=2 E2E_IMAGE_MIRROR_PARALLELISM=1 E2E_IMAGE_BUILD_PARALLELISM=2 E2E_IMAGE_PREP_PARALLELISM=2 MCP_POLICY_WAIT_TRIES=45 MCP_HTTP_TIMEOUT=15 RAW_REQUEST_TRIES=8 bash /opt/mcp-runtime-qa/test/e2e/qa-vm.sh"
+
+      - name: Collect QA E2E artifacts
         if: always()
-        run: df -h /
+        env:
+          SSHPASS: ${{ secrets.E2E_VM_PASSWORD }}
+          E2E_RUN_ID: gh-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          mkdir -p .e2e-artifacts/qa
+          sshpass -e scp -r \
+            -o UserKnownHostsFile="$HOME/.ssh/mcp-runtime-e2e-known-hosts" -o StrictHostKeyChecking=yes \
+            "${{ secrets.E2E_VM_USER }}@${{ secrets.E2E_VM_HOST }}:/var/lib/mcp-runtime-e2e-backup/qa-runs/${E2E_RUN_ID}" \
+            .e2e-artifacts/qa/ || true
+          if [ -f ".e2e-artifacts/qa/${E2E_RUN_ID}/timing.txt" ]; then
+            {
+              echo "### QA E2E on the disposable VM"
+              echo
+              echo '```'
+              cat ".e2e-artifacts/qa/${E2E_RUN_ID}/timing.txt"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Upload e2e artifacts
         if: always()

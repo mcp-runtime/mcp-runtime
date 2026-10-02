@@ -981,16 +981,20 @@ recover_traefik_port_forwards_if_needed() {
 }
 
 ensure_traefik_tls_port_forward() {
-  if [[ -n "${TRAEFIK_TLS_PORT_FORWARD_PID:-}" ]] && ! port_is_listening "${TRAEFIK_TLS_PORT}"; then
+  if [[ -n "${TRAEFIK_TLS_PORT_FORWARD_PID:-}" ]] && {
+    ! kill -0 "${TRAEFIK_TLS_PORT_FORWARD_PID}" >/dev/null 2>&1 || ! port_is_listening "${TRAEFIK_TLS_PORT}"
+  }; then
     recover_traefik_tls_port_forward_if_needed
     return
   fi
   if [[ -z "${TRAEFIK_TLS_PORT_FORWARD_PID:-}" ]]; then
-    port_forward_bg traefik traefik "${TRAEFIK_TLS_PORT}" 8443 "${WORKDIR}/traefik-tls-port-forward.log"
+    port_forward_bg traefik traefik "${TRAEFIK_TLS_PORT}" 8443 "${WORKDIR}/traefik-tls-port-forward.log" || return 1
     TRAEFIK_TLS_PORT_FORWARD_PID="${LAST_MANAGED_PID}"
     TRAEFIK_TLS_PORT_FORWARD_RESTARTS=0
   fi
-  wait_port "${TRAEFIK_TLS_PORT}"
+  if ! wait_port "${TRAEFIK_TLS_PORT}" 15; then
+    recover_traefik_tls_port_forward_if_needed
+  fi
 }
 
 ensure_traefik_port_forward() {
@@ -1036,6 +1040,17 @@ restart_traefik_port_forward_force() {
   TRAEFIK_PORT_FORWARD_PID=""
   stop_listener_on_port "${TRAEFIK_PORT}"
   ensure_traefik_port_forward
+  # The TLS forward can stay attached to a Traefik pod that is going away while
+  # the new HTTP forward lands on the replacement. Restart it with HTTP.
+  if [[ -n "${TRAEFIK_TLS_PORT_FORWARD_PID:-}" ]]; then
+    if kill -0 "${TRAEFIK_TLS_PORT_FORWARD_PID}" 2>/dev/null; then
+      kill "${TRAEFIK_TLS_PORT_FORWARD_PID}" 2>/dev/null || true
+      wait "${TRAEFIK_TLS_PORT_FORWARD_PID}" 2>/dev/null || true
+    fi
+    TRAEFIK_TLS_PORT_FORWARD_PID=""
+    stop_listener_on_port "${TRAEFIK_TLS_PORT}"
+    ensure_traefik_tls_port_forward
+  fi
 }
 
 start_mcp_ingress_header_proxies() {
@@ -3912,31 +3927,42 @@ if platform_cache_ready; then
     PLATFORM_CACHE_READY=0
   fi
 fi
-if [[ "${PLATFORM_CACHE_READY}" != "1" ]]; then
-  go build -o "${SENTINEL_ROOT}/bin/e2e-image-cache" ./hack/e2e-image-cache
-  mirror_upstream_images_parallel \
-    "registry:2.8.3" \
-    "traefik:v2.10" \
-    "traefik:v3.0" \
-    "clickhouse/clickhouse-server:23.8" \
-    "confluentinc/cp-kafka:7.5.1" \
-    "prom/prometheus:v2.49.1" \
-    "otel/opentelemetry-collector:0.92.0" \
-    "grafana/tempo:2.3.1" \
-    "grafana/loki:2.9.4" \
-    "grafana/promtail:2.9.4" \
-    "grafana/grafana:10.2.3" \
-    "nginx:1.27-alpine"
-  build_and_publish_images_parallel \
-    "docker.io/library/mcp-runtime-operator:latest" "Dockerfile.operator" "." \
-    "${TEST_MODE_REGISTRY_IMAGE}" "test/e2e/registry.Dockerfile" "." \
-    "docker.io/library/mcp-gateway:latest" "${SENTINEL_ROOT}/services/mcp-gateway/Dockerfile" "${SENTINEL_ROOT}" \
-    "docker.io/library/mcp-ingest:latest" "${SENTINEL_ROOT}/services/ingest/Dockerfile" "${SENTINEL_ROOT}" \
-    "docker.io/library/mcp-platform-api:latest" "${SENTINEL_ROOT}/services/platform-api/Dockerfile" "${SENTINEL_ROOT}" \
-    "docker.io/library/mcp-runtime-api:latest" "${SENTINEL_ROOT}/services/runtime-api/Dockerfile" "${SENTINEL_ROOT}" \
-    "docker.io/library/mcp-analytics-api:latest" "${SENTINEL_ROOT}/services/analytics-api/Dockerfile" "${SENTINEL_ROOT}" \
-    "docker.io/library/mcp-processor:latest" "${SENTINEL_ROOT}/services/processor/Dockerfile" "${SENTINEL_ROOT}" \
-    "docker.io/library/mcp-ui:latest" "${SENTINEL_ROOT}/services/ui/Dockerfile" "${SENTINEL_ROOT}"
+# Compare each component to the single local :latest image (or the GHCR hash
+# tag, when that cache is on). A warm cluster must not skip this: the previous
+# tag can belong to another checkout.
+go build -o "${SENTINEL_ROOT}/bin/e2e-image-cache" ./hack/e2e-image-cache
+mirror_upstream_images_parallel \
+  "registry:2.8.3" \
+  "traefik:v2.10" \
+  "traefik:v3.0" \
+  "clickhouse/clickhouse-server:23.8" \
+  "confluentinc/cp-kafka:7.5.1" \
+  "prom/prometheus:v2.49.1" \
+  "otel/opentelemetry-collector:0.92.0" \
+  "grafana/tempo:2.3.1" \
+  "grafana/loki:2.9.4" \
+  "grafana/promtail:2.9.4" \
+  "grafana/grafana:10.2.3" \
+  "nginx:1.27-alpine"
+build_and_publish_images_parallel \
+  "docker.io/library/mcp-runtime-operator:latest" "Dockerfile.operator" "." \
+  "${TEST_MODE_REGISTRY_IMAGE}" "test/e2e/registry.Dockerfile" "." \
+  "docker.io/library/mcp-gateway:latest" "${SENTINEL_ROOT}/services/mcp-gateway/Dockerfile" "${SENTINEL_ROOT}" \
+  "docker.io/library/mcp-ingest:latest" "${SENTINEL_ROOT}/services/ingest/Dockerfile" "${SENTINEL_ROOT}" \
+  "docker.io/library/mcp-platform-api:latest" "${SENTINEL_ROOT}/services/platform-api/Dockerfile" "${SENTINEL_ROOT}" \
+  "docker.io/library/mcp-runtime-api:latest" "${SENTINEL_ROOT}/services/runtime-api/Dockerfile" "${SENTINEL_ROOT}" \
+  "docker.io/library/mcp-analytics-api:latest" "${SENTINEL_ROOT}/services/analytics-api/Dockerfile" "${SENTINEL_ROOT}" \
+  "docker.io/library/mcp-processor:latest" "${SENTINEL_ROOT}/services/processor/Dockerfile" "${SENTINEL_ROOT}" \
+  "docker.io/library/mcp-ui:latest" "${SENTINEL_ROOT}/services/ui/Dockerfile" "${SENTINEL_ROOT}"
+docker image prune -f >/dev/null 2>&1 || true
+
+image_rebuilt=0
+if [[ "${E2E_IMAGE_CACHE:-}" == "local" || "${E2E_IMAGE_CACHE:-}" == "1" || "${MCP_SETUP_IMAGE_CACHE:-}" == "1" ]]; then
+  if grep -Rqs 'cache miss' "${STAGE_LOG_DIR}"; then
+    image_rebuilt=1
+  fi
+else
+  image_rebuilt=1
 fi
 
 export MCP_SETUP_WAIT_TIMEOUT="${MCP_SETUP_WAIT_TIMEOUT:-900}"
@@ -3944,10 +3970,13 @@ export MCP_DEPLOYMENT_TIMEOUT="${MCP_DEPLOYMENT_TIMEOUT:-900s}"
 export MCP_REGISTRY_ENDPOINT="${MCP_REGISTRY_ENDPOINT:-registry.registry.svc.cluster.local:5000}"
 export MCP_INGRESS_READINESS_MODE="${MCP_INGRESS_READINESS_MODE:-permissive}"
 export MCP_GATEWAY_OTEL_EXPORTER_OTLP_ENDPOINT="${MCP_GATEWAY_OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector.mcp-observability.svc.cluster.local:4318}"
-if [[ "${PLATFORM_CACHE_READY}" == "1" ]]; then
+if [[ "${PLATFORM_CACHE_READY}" == "1" && "${image_rebuilt}" == "0" ]]; then
   refresh_cached_platform_ingress_contract
-  echo "[setup] skipping platform setup because E2E_CACHE_MODE=1 found a ready platform"
+  echo "[setup] skipping platform setup because the platform is ready and every image matches the last build"
 else
+  if [[ "${image_rebuilt}" == "1" ]]; then
+    echo "[cache] an image changed since the last build; running setup"
+  fi
   echo "[setup] running platform setup in test mode (platform mode: ${E2E_PLATFORM_MODE})"
   # Test-mode setup publishes mutable :latest tags into the in-cluster registry.
   # Kind's IfNotPresent policy can otherwise keep using an older node-local tag

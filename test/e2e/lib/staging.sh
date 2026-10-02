@@ -47,6 +47,16 @@ staging_flag_enabled() {
   esac
 }
 
+# staging_prune_docker_keeping_qa_images drops unused Docker images and caps
+# BuildKit cache. Images labeled mcp-runtime.e2e-content-hash are the single
+# latest QA build of each component and must survive so the next run can
+# compare against them.
+staging_prune_docker_keeping_qa_images() {
+  command -v docker >/dev/null 2>&1 || return 0
+  docker image prune -af --filter 'label!=mcp-runtime.e2e-content-hash' || true
+  docker builder prune -af --keep-storage "${E2E_DOCKER_BUILD_CACHE_MAX:-8GB}" || true
+}
+
 staging_lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
 
 # ---------------------------------------------------------------------------

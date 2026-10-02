@@ -105,7 +105,7 @@ Pre-commit: `pre-commit install`; full suite `pre-commit run --all-files` (sets 
 - Reuse the contributor cluster with `E2E_CACHE_MODE=1 E2E_SCENARIOS=smoke-auth bash test/e2e/qa-e2e.sh`, and set `CLUSTER_NAME=mcp-runtime E2E_CACHE_MODE=1 E2E_KEEP_CLUSTER=1`.
 - Sentinel: `go test -race -count=1 ./...` inside touched `services/*` dirs
 
-**CI** (`.github/workflows/ci.yaml`): gofmt, vet, staticcheck, unit/golden/service/integration tests; path-selected QA E2E on PRs and manual dispatch (`test/e2e/select_pr_scenarios.sh`). Relevant main pushes after merge run Staging E2E; QA E2E is skipped on main pushes. Pre-release: `.github/workflows/pre-release-regression.yaml`.
+**CI** (`.github/workflows/ci.yaml`): gofmt, vet, staticcheck, unit/golden/service/integration tests; path-selected QA E2E on same-repo PRs and manual dispatch (`test/e2e/select_pr_scenarios.sh`, `test/e2e/qa-vm.sh` on the disposable VM). QA keeps one local `:latest` image per component and does not use GitHub Container Registry. Relevant main pushes after merge run Staging E2E; QA E2E is skipped on main pushes. Pre-release: `.github/workflows/pre-release-regression.yaml`.
 
 **CLI docs sync:** when editing `docs/cli.md`, `docs/getting-started.md`, or command examples, copy wording from `./bin/mcp-runtime <group> <subcommand> --help`. Do not paraphrase from memory.
 

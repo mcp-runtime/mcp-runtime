@@ -438,7 +438,7 @@ teardown_vm() {
   # successive runs filled the disk until the kubelet evicted pods under
   # ephemeral-storage pressure.
   if command -v docker >/dev/null 2>&1; then
-    docker system prune -af --volumes >"${ARTIFACT_DIR}/docker-prune.log" 2>&1 || true
+    staging_prune_docker_keeping_qa_images >"${ARTIFACT_DIR}/docker-prune.log" 2>&1 || true
   fi
   # ROOT_DIR is the directory this script is running from, so it cannot be
   # removed here without risking bash's incremental reads of its own source.

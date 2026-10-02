@@ -205,7 +205,13 @@ build_image = kind[build_start:build_end]
 assert "pull_cached_image" not in build_image, (
     "images built from the checkout must not be replaced with stale local-mirror tags"
 )
-assert 'bin/e2e-image-cache' in build_image, "QA images must use the content-hash GHCR cache"
+assert 'bin/e2e-image-cache' in build_image, "QA images must compare the checkout hash before rebuilding"
+qa_vm = pathlib.Path(sys.argv[2]).parent.joinpath("qa-vm.sh").read_text(encoding="utf-8")
+assert "E2E_IMAGE_CACHE=local" in qa_vm, "VM QA must use the single local latest image"
+assert "E2E_GHCR_PUSH=0" in qa_vm, "VM QA must not push GitHub Container Registry cache tags"
+assert "test/e2e/qa-vm.sh" in ci_workflow, "PR QA E2E must run on the disposable VM"
+assert "docker/login-action" not in ci_workflow, "PR CI must not log in to GHCR for QA E2E"
+assert "E2E_GHCR_PUSH" not in ci_workflow, "PR CI must not publish GHCR cache tags"
 for runner in ("staging-vm.sh", "staging-remote.sh"):
     staging_script = pathlib.Path(sys.argv[2]).parent / runner
     assert 'E2E_IMAGE_CACHE:-1' in staging_script.read_text(encoding="utf-8"), (

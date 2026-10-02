@@ -226,6 +226,13 @@ func TestEnabledAndRegistry(t *testing.T) {
 	if !Enabled() {
 		t.Fatal("expected enabled with E2E_IMAGE_CACHE=1")
 	}
+	t.Setenv(envImageCache, "local")
+	if Enabled() {
+		t.Fatal("E2E_IMAGE_CACHE=local must not enable GHCR")
+	}
+	if !LocalLatest() {
+		t.Fatal("expected local latest mode")
+	}
 
 	t.Setenv(envImageCacheRegistry, "")
 	t.Setenv(envRepoOwner, "acme")
@@ -235,6 +242,55 @@ func TestEnabledAndRegistry(t *testing.T) {
 	t.Setenv(envImageCacheRegistry, "ghcr.io/acme/cache/")
 	if got := DefaultRegistry(); got != "ghcr.io/acme/cache" {
 		t.Fatalf("override DefaultRegistry=%q", got)
+	}
+}
+
+func TestEnsureLocalLatestKeepsOneImage(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "test", "e2e", "registry.Dockerfile"), "FROM registry:2.8.3\n")
+
+	var builds, stamps, prunes int
+	labels := map[string]string{}
+	opts := Options{
+		Platform: "linux/amd64",
+		InspectLabel: func(_ context.Context, image, label string) (string, bool, error) {
+			value, ok := labels[image+"\x00"+label]
+			return value, ok, nil
+		},
+		StampLabel: func(_ context.Context, image, label, value string) error {
+			stamps++
+			labels[image+"\x00"+label] = value
+			return nil
+		},
+		PruneDangling: func(context.Context) error {
+			prunes++
+			return nil
+		},
+	}
+
+	res, err := EnsureLocalLatest(context.Background(), root, "e2e-registry", "mcp-runtime-registry:latest", opts, func() error {
+		builds++
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("miss: %v", err)
+	}
+	if res.Action != ActionBuild || builds != 1 || stamps != 1 || prunes != 1 {
+		t.Fatalf("miss action=%s builds=%d stamps=%d prunes=%d", res.Action, builds, stamps, prunes)
+	}
+	if labels["mcp-runtime-registry:latest\x00"+ContentHashLabel] != res.Hash {
+		t.Fatalf("stamped hash %q, want %q", labels["mcp-runtime-registry:latest\x00"+ContentHashLabel], res.Hash)
+	}
+
+	res, err = EnsureLocalLatest(context.Background(), root, "e2e-registry", "mcp-runtime-registry:latest", opts, func() error {
+		builds++
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("hit: %v", err)
+	}
+	if res.Action != ActionReuse || builds != 1 || stamps != 1 {
+		t.Fatalf("hit action=%s builds=%d stamps=%d", res.Action, builds, stamps)
 	}
 }
 

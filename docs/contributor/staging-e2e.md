@@ -37,9 +37,10 @@ Both staging runners authenticate to GHCR with the workflow's short-lived
 package-read token and reuse content-hash platform images when available.
 The on-VM runner passes that token over SSH stdin after the disposable-target
 guard and removes its temporary Docker credentials during cleanup. Cache misses
-build locally; Staging does not publish to GHCR. QA E2E publishes the same
-cache tags. Set `E2E_IMAGE_CACHE=0` for a run that must rebuild every platform
-image.
+build locally; Staging does not publish to GHCR. Pull-request QA E2E does not
+use GHCR: it keeps one local `:latest` image per component on the VM and
+compares the next checkout to that image's content-hash label. Set
+`E2E_IMAGE_CACHE=0` for a Staging run that must rebuild every platform image.
 
 ## Safety: the disposable-target guard
 

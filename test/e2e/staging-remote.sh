@@ -274,7 +274,10 @@ teardown_vm() {
   # anything sequenced after it is simply lost.
   vm_ssh "set -u
     rm -rf /opt/mcp-runtime-e2e /var/tmp/mcp-runtime-e2e-* /tmp/mcp-runtime-e2e.tgz /tmp/mcp-img-*.tar
-    if command -v docker >/dev/null 2>&1; then docker system prune -af --volumes || true; fi" \
+    if command -v docker >/dev/null 2>&1; then
+      docker image prune -af --filter 'label!=mcp-runtime.e2e-content-hash' || true
+      docker builder prune -af --keep-storage \"\${E2E_DOCKER_BUILD_CACHE_MAX:-8GB}\" || true
+    fi" \
     >"${ARTIFACT_DIR}/vm-cleanup.log" 2>&1 || true
 
   # Detach the k3s teardown so it survives the connection it kills, then
@@ -351,7 +354,10 @@ stage_k3s() {
     # Builds from earlier on-VM runs leave images behind, and the cluster's
     # ephemeral storage shares this disk. k3s uses containerd, so pruning Docker
     # never touches running workloads.
-    command -v docker >/dev/null 2>&1 && docker system prune -af >/dev/null 2>&1 || true
+    if command -v docker >/dev/null 2>&1; then
+      docker image prune -af --filter 'label!=mcp-runtime.e2e-content-hash' || true
+      docker builder prune -af --keep-storage \"\${E2E_DOCKER_BUILD_CACHE_MAX:-8GB}\" || true
+    fi
     if [ ! -f /etc/rancher/k3s/k3s.yaml ]; then
       curl -sfL https://get.k3s.io | sh -s - --write-kubeconfig-mode 644 --tls-san '${VM_HOST}'
     fi

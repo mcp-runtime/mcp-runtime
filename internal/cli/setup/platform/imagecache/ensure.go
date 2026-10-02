@@ -16,6 +16,10 @@ const (
 	ActionReuse = "reuse"
 	ActionBuild = "build"
 
+	// ContentHashLabel is stored on the single local :latest image. The next
+	// run compares the checkout hash to this label and rebuilds only on a miss.
+	ContentHashLabel = "mcp-runtime.e2e-content-hash"
+
 	envImageCache         = "E2E_IMAGE_CACHE"
 	envSetupImageCache    = "MCP_SETUP_IMAGE_CACHE"
 	envGHCRPush           = "E2E_GHCR_PUSH"
@@ -42,6 +46,9 @@ type Options struct {
 	Pull           func(ctx context.Context, image string) error
 	Tag            func(ctx context.Context, source, target string) error
 	PushImage      func(ctx context.Context, image string) error
+	InspectLabel   func(ctx context.Context, image, label string) (value string, found bool, err error)
+	StampLabel     func(ctx context.Context, image, label, value string) error
+	PruneDangling  func(ctx context.Context) error
 }
 
 // Result describes whether EnsureLocalImage reused or built.
@@ -55,12 +62,22 @@ type Result struct {
 // Enabled reports whether content-hash GHCR caching is turned on.
 // Opt in with E2E_IMAGE_CACHE=1 or MCP_SETUP_IMAGE_CACHE=1.
 // E2E_IMAGE_CACHE=0 disables even when setup cache is set.
+// E2E_IMAGE_CACHE=local is the VM Docker cache and is not GHCR.
 func Enabled() bool {
-	if strings.TrimSpace(os.Getenv(envImageCache)) == "0" {
+	switch strings.TrimSpace(os.Getenv(envImageCache)) {
+	case "0", "local":
 		return false
+	case "1":
+		return true
+	default:
+		return strings.TrimSpace(os.Getenv(envSetupImageCache)) == "1"
 	}
-	return strings.TrimSpace(os.Getenv(envImageCache)) == "1" ||
-		strings.TrimSpace(os.Getenv(envSetupImageCache)) == "1"
+}
+
+// LocalLatest reports whether reuse compares the checkout hash to the single
+// local Docker image instead of a registry of historical tags.
+func LocalLatest() bool {
+	return strings.TrimSpace(os.Getenv(envImageCache)) == "local"
 }
 
 // PushEnabled reports whether newly built images should be pushed to GHCR.
@@ -186,6 +203,107 @@ func EnsureLocalImage(ctx context.Context, repoRoot, component, localImage strin
 	}
 	result.Action = ActionBuild
 	return result, nil
+}
+
+// EnsureLocalLatest reuses localImage when its content-hash label matches this
+// checkout. A miss builds once, stamps that same tag, and drops the previous
+// dangling image. No registry and no historical tags are kept.
+func EnsureLocalLatest(ctx context.Context, repoRoot, component, localImage string, opts Options, buildFn func() error) (Result, error) {
+	if opts.Platform != "linux/amd64" && opts.Platform != "linux/arm64" {
+		return Result{}, fmt.Errorf("unsupported image cache platform %q", opts.Platform)
+	}
+	if _, ok := Specs[component]; !ok {
+		return Result{}, fmt.Errorf("unknown image cache component %q", component)
+	}
+	if err := validateImageReference("local image", localImage); err != nil {
+		return Result{}, err
+	}
+	progress := opts.Progress
+	if progress == nil {
+		progress = func(string) {}
+	}
+	hash, err := ContentHashForPlatform(repoRoot, component, opts.Platform)
+	if err != nil {
+		return Result{}, err
+	}
+	result := Result{Hash: hash, LocalImage: localImage}
+
+	inspect := opts.InspectLabel
+	if inspect == nil {
+		inspect = dockerInspectLabel
+	}
+	stamp := opts.StampLabel
+	if stamp == nil {
+		stamp = dockerStampLabel
+	}
+	prune := opts.PruneDangling
+	if prune == nil {
+		prune = dockerPruneDangling
+	}
+
+	got, found, inspectErr := inspect(ctx, localImage, ContentHashLabel)
+	if inspectErr != nil {
+		progress(fmt.Sprintf("[image] local cache probe failed for %s (%s): %v; building", component, hash, inspectErr))
+	} else if found && got == hash {
+		progress(fmt.Sprintf("[image] local cache hit %s %s", component, hash))
+		result.Action = ActionReuse
+		return result, nil
+	}
+
+	progress(fmt.Sprintf("[image] local cache miss %s %s; building", component, hash))
+	if buildFn == nil {
+		return Result{}, fmt.Errorf("build function required for local cache miss on %s", component)
+	}
+	if err := buildFn(); err != nil {
+		return Result{}, err
+	}
+	if err := stamp(ctx, localImage, ContentHashLabel, hash); err != nil {
+		return Result{}, fmt.Errorf("stamp %s on %s: %w", ContentHashLabel, localImage, err)
+	}
+	if err := prune(ctx); err != nil {
+		progress(fmt.Sprintf("[image] dangling image prune failed: %v", err))
+	}
+	result.Action = ActionBuild
+	return result, nil
+}
+
+func dockerInspectLabel(ctx context.Context, image, label string) (string, bool, error) {
+	// #nosec G204 -- image and label are validated or constant; no shell is used.
+	cmd := exec.CommandContext(ctx, "docker", "image", "inspect", "--format", fmt.Sprintf(`{{ index .Config.Labels %q }}`, label), image)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		text := strings.ToLower(string(output) + err.Error())
+		if strings.Contains(text, "no such image") || strings.Contains(text, "no such object") {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("docker image inspect %s: %w\n%s", image, err, strings.TrimSpace(string(output)))
+	}
+	value := strings.TrimSpace(string(output))
+	if value == "" || value == "<no value>" {
+		return "", false, nil
+	}
+	return value, true, nil
+}
+
+func dockerStampLabel(ctx context.Context, image, label, value string) error {
+	// A one-layer stamp replaces :latest in place. The previous image ID becomes
+	// dangling and is removed, so the daemon keeps a single version.
+	dockerfile := fmt.Sprintf("FROM %s\nLABEL %s=%s\n", image, label, value)
+	// #nosec G204 -- image is validated before this call; no shell is used.
+	cmd := exec.CommandContext(ctx, "docker", "build", "-t", image, "-")
+	cmd.Stdin = strings.NewReader(dockerfile)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("docker build label stamp %s: %w\n%s", image, err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func dockerPruneDangling(ctx context.Context) error {
+	cmd := exec.CommandContext(ctx, "docker", "image", "prune", "-f")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("docker image prune: %w\n%s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 func dockerManifestExists(ctx context.Context, image string) (bool, error) {
