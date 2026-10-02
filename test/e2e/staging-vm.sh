@@ -309,8 +309,37 @@ capture_k3s_start_failure() {
   journalctl -u k3s --no-pager -n 40 >&2 2>&1 || true
 }
 
+# k3s exited with "failed to create image import watcher ... too many open
+# files" while a Kind cluster from the retired VM-based QA E2E was still
+# running: its kubelet and containerd held most of the default 128 inotify
+# instances. Staging owns this VM, so clear leftover Kind clusters and raise
+# the inotify limits to the values k3s and kind recommend before installing.
+prepare_host_for_k3s() {
+  local leftovers
+  leftovers="$(docker ps -aq --filter label=io.x-k8s.kind.cluster 2>/dev/null || true)"
+  if [[ -n "${leftovers}" ]]; then
+    log "removing leftover Kind cluster containers: $(docker ps -a --filter label=io.x-k8s.kind.cluster --format '{{.Names}}' | tr '\n' ' ')"
+    # shellcheck disable=SC2086
+    docker rm -f ${leftovers} >/dev/null
+  fi
+  # The VM-based QA run kept its local image mirror beside the Kind node.
+  docker rm -f mcp-qa-vm-mirror >/dev/null 2>&1 || true
+
+  local key want have
+  for key in fs.inotify.max_user_instances:1024 fs.inotify.max_user_watches:524288; do
+    want="${key#*:}"
+    key="${key%%:*}"
+    have="$(sysctl -n "${key}" 2>/dev/null || echo 0)"
+    if ((have < want)); then
+      log "raising ${key} from ${have} to ${want}"
+      sysctl -qw "${key}=${want}"
+    fi
+  done
+}
+
 stage_k3s() {
   if [[ ! -f "${KUBECONFIG}" ]]; then
+    prepare_host_for_k3s
     log "installing k3s on the disposable VM"
     local installer="${WORK_DIR}/k3s-install.sh"
     staging_download_k3s_installer "${installer}" || fail "could not download the k3s installer from either official source"
