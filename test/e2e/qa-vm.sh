@@ -112,6 +112,16 @@ install_kubectl_if_needed
 # Do not inherit the VM's k3s kubeconfig. qa-e2e.sh writes its own Kind file.
 unset KUBECONFIG
 
+# Staging E2E shares this machine and logs the CLI in to platform.e2e.*.
+# QA targets its own Kind cluster, so each run starts with an empty CLI
+# profile and none of the public platform host overrides.
+export MCP_RUNTIME_CONFIG_DIR="${ARTIFACT_DIR}/cli-config"
+mkdir -p "${MCP_RUNTIME_CONFIG_DIR}"
+chmod 700 "${MCP_RUNTIME_CONFIG_DIR}"
+unset MCP_PLATFORM_DOMAIN MCP_PLATFORM_API_PROFILE MCP_PLATFORM_API_TOKEN \
+  MCP_REGISTRY_HOST MCP_REGISTRY_INGRESS_HOST MCP_REGISTRY_ENDPOINT \
+  MCP_AUTH_ISSUER_URL MCP_TRUST_DOMAIN
+
 export E2E_CACHE_MODE=1
 export E2E_KEEP_CLUSTER=1
 export E2E_IMAGE_CACHE=local

@@ -1980,6 +1980,12 @@ staging_run_platform_stages() {
   STAGING_MT_RUN_ID="${STAGING_MT_RUN_ID:-mt$(printf '%s' "${RUN_ID}" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9' | tail -c 10)}"
   STAGING_MT_CONFIG_DIR="${STAGING_MT_CONFIG_DIR:-${WORK_DIR}/mcpruntime-config}"
   export STAGING_MT_RUN_ID STAGING_MT_CONFIG_DIR
+  # Keep the e2e login out of ~/.mcpruntime. QA E2E runs Kind on the same VM
+  # and would otherwise send its CLI calls to platform.e2e.*.
+  MCP_RUNTIME_CONFIG_DIR="${STAGING_CLI_CONFIG_DIR:-${WORK_DIR}/cli-config}"
+  mkdir -p "${MCP_RUNTIME_CONFIG_DIR}"
+  chmod 700 "${MCP_RUNTIME_CONFIG_DIR}"
+  export MCP_RUNTIME_CONFIG_DIR
   staging_run_stage namespace-placement critical "a workload, owner Secret, shared ConfigMap, or service URL is still aimed at the old combined namespace" namespace_placement_verify
   staging_run_stage diagnostics soft "setup finished but cluster diagnostics/doctor report unmet checks; read the failing check names" staging_check_diagnostics
   staging_run_stage rollouts soft "a platform deployment is not Ready or a pod is stuck in image pull/crash loop; see diagnostics/<ns>-pods-describe.txt" staging_check_rollouts

@@ -4002,7 +4002,16 @@ echo "[cache] resetting Traefik namespace watches before E2E flows"
 reset_traefik_namespace_watches
 
 echo "[cli] checking platform status commands"
-./bin/mcp-runtime status
+./bin/mcp-runtime status | tee "${WORKDIR}/cli-status.raw"
+# status colours its table even when piped; strip the escapes before matching.
+sed $'s/\x1b\\[[0-9;]*m//g' "${WORKDIR}/cli-status.raw" >"${WORKDIR}/cli-status.txt"
+# QA has no saved login, so status must read the Kind cluster. A remote
+# profile (for example Staging's platform.e2e.* login) shows up as ERROR.
+assert_file_contains "Not logged in" "${WORKDIR}/cli-status.txt"
+if grep -E -q '\|[[:space:]]+ERROR[[:space:]]+\|' "${WORKDIR}/cli-status.txt"; then
+  echo "[assert][fail] mcp-runtime status reported an ERROR row" >&2
+  exit 1
+fi
 ./bin/mcp-runtime cluster status
 ./bin/mcp-runtime registry status
 ./bin/mcp-runtime registry info
