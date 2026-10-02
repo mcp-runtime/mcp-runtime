@@ -715,12 +715,18 @@ assert_file_contains() {
   local needle="$1"
   local file="$2"
 
-  if command -v rg >/dev/null 2>&1; then
-    rg -F -q -- "${needle}" "${file}"
-    return
+  if grep -F -q -- "${needle}" "${file}" 2>/dev/null; then
+    return 0
   fi
-
-  grep -F -q -- "${needle}" "${file}"
+  # A bare non-zero exit here ended several CI runs with no message.
+  echo "[assert][fail] ${file} does not contain: ${needle}" >&2
+  if [[ -f "${file}" ]]; then
+    echo "--- last 40 lines of ${file}" >&2
+    tail -n 40 "${file}" >&2
+  else
+    echo "--- ${file} does not exist" >&2
+  fi
+  return 1
 }
 
 run_cli_help_sweep() {
@@ -2728,10 +2734,12 @@ run_selected_http_flow_scenarios() {
   local run_api=0
   local run_ui=0
 
-  if scenario_selected "multitenancy" || { scenario_selected "api-platform" && ! deep_request_flows_enabled; }; then
+  # Deep mode used to hand these flows to request_flow_routes.py, but nothing
+  # has run that script since #263. Pre-release runs them like any PR.
+  if scenario_selected "multitenancy" || scenario_selected "api-platform"; then
     run_api=1
   fi
-  if scenario_selected "ui-auth" && ! deep_request_flows_enabled; then
+  if scenario_selected "ui-auth"; then
     run_ui=1
   fi
   if [[ "${run_api}" -eq 0 && "${run_ui}" -eq 0 ]]; then
