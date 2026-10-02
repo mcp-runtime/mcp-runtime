@@ -215,6 +215,16 @@ assert "changed_files=( ${{ steps.e2e_changes.outputs.changed_files }} )" not in
 )
 print("[pass] CI path exclusions and selector input are guarded")
 
+# Pre-release service tests must track the service modules. A stale entry
+# (services/api after the API split) failed the job and skipped E2E.
+root = pathlib.Path(sys.argv[4]).parents[2]
+prerelease = pathlib.Path(sys.argv[4]).with_name("pre-release-regression.yaml").read_text(encoding="utf-8")
+matrix_block = prerelease[prerelease.index("\n  service-tests:\n"):prerelease.index("\n    steps:", prerelease.index("\n  service-tests:\n"))]
+listed = {line.strip()[2:] for line in matrix_block.splitlines() if line.strip().startswith("- ")}
+modules = {path.parent.name for path in root.glob("services/*/go.mod")}
+assert listed == modules, f"pre-release service matrix {sorted(listed)} != service modules {sorted(modules)}"
+print("[pass] pre-release service test matrix matches services/*/go.mod")
+
 kind = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")
 build_start = kind.index("build_and_publish_image() {")
 build_end = kind.index("\n}\n", build_start)
