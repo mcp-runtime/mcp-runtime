@@ -288,8 +288,8 @@ stage_staging_roots() {
 }
 
 # The installer only says "see journalctl", and teardown uninstalls k3s, so
-# keep the service status, its journal, and the host state that QA E2E's kept
-# Kind cluster can exhaust (inotify instances, memory, running containers).
+# keep the service status, its journal, and the host state that leftover
+# workloads on the VM can exhaust (inotify instances, memory, containers).
 capture_k3s_start_failure() {
   local out="${ARTIFACT_DIR}/diagnostics/k3s-service.txt"
   mkdir -p "$(dirname "${out}")"
