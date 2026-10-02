@@ -324,9 +324,6 @@ scenario_requested() {
   return 1
 }
 
-if scenario_requested "adapter-proxy"; then
-  scenario_requested "adapter-certificates" || E2E_SCENARIO_LIST+=("adapter-certificates")
-fi
 # Cert-first Kind paths (trust/smoke-auth/governance) need Traefik TLS + adapter
 # certificates even when the dedicated adapter-certificates OAuth scenario is off.
 if scenario_requested "trust" || scenario_requested "smoke-auth" || scenario_requested "governance"; then

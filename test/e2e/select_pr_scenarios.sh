@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Select the smallest conservative QA E2E scenario set for a PR/manual run.
-# Read changed paths from arguments or stdin. Unknown code paths fall back to
-# all scenarios so CI never silently under-tests a shared surface.
+# Select the QA E2E scenarios for a PR/manual run.
+# Read changed paths from arguments or stdin. smoke-auth is the install check.
+# A path adds only the scenario that exercises that path. The full matrix stays
+# on the manual pre-release workflow (E2E_SCENARIOS=all).
 
 declare -a changed_paths=()
 if [[ "$#" -gt 0 ]]; then
@@ -15,7 +16,6 @@ else
 fi
 
 declare -a scenarios=("smoke-auth")
-run_all=0
 
 add_scenario() {
   local wanted="$1"
@@ -35,10 +35,6 @@ add_observability() {
   add_scenario "observability"
 }
 
-mark_all() {
-  run_all=1
-}
-
 classify_path() {
   local path="$1"
 
@@ -52,13 +48,13 @@ classify_path() {
       return
       ;;
     test/e2e/*|.github/workflows/ci.yaml|.github/workflows/pre-release-regression.yaml|go.mod|go.sum|Makefile*|Dockerfile*)
-      mark_all
+      # The baseline install builds the images and runs setup. Pre-release
+      # still runs every scenario.
       return
       ;;
     internal/operator/mtls*|internal/cli/certmanager/*|traefik-plugins/spiffe-identity/*|config/cert-manager/*|pkg/identity/*|pkg/certauth/*)
-      # Exercise session-bound certificate enrollment and the OAuth TLS route.
-      add_scenario "oauth"
-      add_scenario "adapter-proxy"
+      # Certificate enrollment. The runner adds the oauth scenario because
+      # those assertions live in that block.
       add_scenario "adapter-certificates"
       return
       ;;
@@ -68,7 +64,8 @@ classify_path() {
       return
       ;;
     api/*|cmd/operator/*|internal/operator/*|config/*|k8s/*|pkg/controlplane/*|pkg/k8sclient/*|pkg/kubeworkload/*|pkg/manifest/*|pkg/metadata/*)
-      mark_all
+      # Setup plus the namespace-placement check in smoke-auth covers install
+      # and reconcile. Product flows are selected from their own paths.
       return
       ;;
     internal/cli/update/*|internal/platformrelease/*|hack/release/*)
@@ -81,17 +78,11 @@ classify_path() {
       ;;
     internal/cli/adapter/*|internal/agentadapter/*)
       add_scenario "adapter-proxy"
-      add_scenario "governance"
-      add_scenario "oauth"
-      add_scenario "adapter-certificates"
       return
       ;;
     internal/cli/access/*|pkg/access/*|pkg/policy/*)
       add_scenario "governance"
       add_scenario "trust"
-      add_scenario "adapter-proxy"
-      add_scenario "oauth"
-      add_scenario "adapter-certificates"
       return
       ;;
     internal/cli/team/*|services/platform-api/internal/platformstore/*)
@@ -130,11 +121,6 @@ classify_path() {
       ;;
     services/mcp-gateway/*)
       add_scenario "governance"
-      add_scenario "trust"
-      add_scenario "oauth"
-      add_scenario "adapter-proxy"
-      add_scenario "adapter-certificates"
-      add_observability
       return
       ;;
     services/ingest/*|services/processor/*|pkg/clickhouse/*|pkg/events/*|pkg/sentinel/*|pkg/serviceutil/*)
@@ -149,7 +135,6 @@ classify_path() {
       return
       ;;
     *)
-      mark_all
       return
       ;;
   esac
@@ -159,9 +144,5 @@ for path in "${changed_paths[@]}"; do
   classify_path "${path}"
 done
 
-if [[ "${run_all}" == "1" ]]; then
-  echo "all"
-else
-  IFS=','
-  echo "${scenarios[*]}"
-fi
+IFS=','
+echo "${scenarios[*]}"

@@ -188,7 +188,9 @@ For code PRs,
 `.github/workflows/ci.yaml` calls `test/e2e/select_pr_scenarios.sh` to add
 targeted scenarios based on the changed files. API, UI, adapter, CLI, OAuth,
 observability, and multi-tenancy changes get the matching request-path mode;
-shared or unknown code paths fall back to `all` so CI stays conservative. The
+shared install paths (API types, operator, manifests, module files, and the
+E2E harness) stay on `smoke-auth`, which is the setup and placement check.
+The manual pre-release workflow is what runs every scenario. The
 `multitenancy` scenario checks that two team users can read only their own team
 and namespace and that their registry credentials cannot access the other
 team's repositories. Staging E2E separately exercises the full tenant image

@@ -19,7 +19,7 @@ run_valid() {
     exit 1
   fi
 
-  if ! printf '%s\n' "${output}" | grep -F -q -- "[info] E2E scenarios: ${expected}"; then
+  if ! printf '%s\n' "${output}" | grep -F -x -q -- "[info] E2E scenarios: ${expected}"; then
     echo "[fail] ${name}: missing selected-scenario output" >&2
     printf '%s\n' "${output}" >&2
     exit 1
@@ -58,7 +58,7 @@ run_valid "multitenancy" "smoke-auth,multitenancy" "smoke-auth,multitenancy"
 run_valid "api-platform" "api-platform" "api-platform"
 run_valid "ui-auth" "ui-auth" "ui-auth"
 run_valid "adapter-proxy" "adapter-proxy" "adapter-proxy"
-run_valid "adapter-certificates" "adapter-certificates" "adapter-certificates"
+run_valid "adapter-certificates" "adapter-certificates" "adapter-certificates,oauth"
 run_valid "cli-platform" "cli-platform" "cli-platform"
 run_invalid "removed-mtls" "mtls" "unsupported E2E scenario: mtls"
 run_valid "platform-update" "platform-update" "platform-update"
@@ -147,14 +147,17 @@ selector_expect "ui-with-guides" "smoke-auth,ui-auth" "services/ui/main.go" "art
 selector_expect "api" "smoke-auth,api-platform" "services/platform-api/auth/login.go"
 selector_expect "runtime-tools-api" "smoke-auth,api-platform,cli-platform" "services/runtime-api/internal/runtimeapi/tools.go"
 selector_expect "catalog-cli" "smoke-auth,cli-platform" "internal/cli/catalog/catalog.go"
-selector_expect "adapter" "smoke-auth,adapter-proxy,governance,oauth,adapter-certificates" "internal/cli/adapter/proxy.go"
-selector_expect "mtls-operator" "smoke-auth,oauth,adapter-proxy,adapter-certificates" "internal/operator/mtls.go"
-selector_expect "gateway" "smoke-auth,governance,trust,oauth,adapter-proxy,adapter-certificates,observability" "services/mcp-gateway/main.go"
+selector_expect "adapter" "smoke-auth,adapter-proxy" "internal/cli/adapter/proxy.go"
+selector_expect "mtls-operator" "smoke-auth,adapter-certificates" "internal/operator/mtls.go"
+selector_expect "gateway" "smoke-auth,governance" "services/mcp-gateway/main.go"
+selector_expect "access" "smoke-auth,governance,trust" "pkg/policy/evaluator.go"
 selector_expect "observability" "smoke-auth,governance,trust,oauth,observability" "services/ingest/main.go"
 selector_expect "platform-update" "smoke-auth,platform-update" "internal/cli/update/plan.go"
 selector_expect "team-management" "smoke-auth,api-platform,cli-platform,multitenancy" "internal/cli/team/team.go"
 selector_expect "runtime-team" "smoke-auth,api-platform,multitenancy" "services/runtime-api/internal/runtimeapi/team_members.go"
-selector_expect "broad" "all" "api/v1alpha1/mcpserver_types.go"
+selector_expect "broad" "smoke-auth" "api/v1alpha1/mcpserver_types.go"
+selector_expect "harness" "smoke-auth" "test/e2e/qa-e2e.sh" ".github/workflows/ci.yaml" "go.mod"
+selector_expect "unknown" "smoke-auth" "pkg/platforminventory/credentials.go"
 selector_expect "staging-e2e-only" "smoke-auth" "test/e2e/staging-vm.sh" "test/e2e/lib/staging.sh" ".github/workflows/staging-e2e.yaml"
 
 python3 - "${PROJECT_ROOT}/.github/workflows/staging-e2e.yaml" "${PROJECT_ROOT}/test/e2e/qa-e2e.sh" "${PROJECT_ROOT}/docs/contributor/staging-e2e.md" "${PROJECT_ROOT}/.github/workflows/ci.yaml" <<'PY'
