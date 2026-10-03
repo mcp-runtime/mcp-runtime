@@ -56,7 +56,7 @@ Cluster-level checks must use guarded Kind or disposable staging targets; see
 |----------|--------------------|--------|
 | #533 | Failed gateway rollout keeps last-good route | untested |
 | #532 | Gateway-enabled TypeScript OAuth example | untested |
-| #531 | Internal registry isolation for tenants | untested |
+| #531 | Internal registry isolation for tenants | partial |
 | #501 | OAuth refresh-token replay coordination | untested |
 | #540 | Operator cannot read the workload CA key | untested |
 | #538 | Workload CertificateRequest gating | partial (CSR SAN validation only) |

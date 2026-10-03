@@ -40,6 +40,8 @@ func (s *apiServer) registerRoutes(mux *http.ServeMux) {
 	}))
 
 	register("/registry/authz", http.HandlerFunc(s.handleRegistryAuthz))
+	register("/registry/token", http.HandlerFunc(s.handleRegistryToken))
+	register("/registry/pull-credentials", adminOnly(http.HandlerFunc(s.handleRegistryPullCredentials)))
 	register("/auth/login", http.HandlerFunc(s.handleLogin))
 	register("/auth/oidc", http.HandlerFunc(s.handleOIDCLogin))
 	routes := platformRoutes{

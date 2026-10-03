@@ -5,6 +5,7 @@ Usage:
   mcp-runtime registry [command]
 
 Available Commands:
+  enable-auth Enable repository-scoped authentication on the bundled registry
   info        Show registry information
   provision   Configure an external registry
   status      Check registry status

@@ -5079,8 +5079,10 @@ _No package overview is documented._
 - [`func (c *PlatformClient) ApplyRuntimeServer(ctx context.Context, name, namespace string, spec mcpv1alpha1.MCPServerSpec) (ServerListItem, error)`](#cli-platform-api-func-c-platformclient-applyruntimeserver-ctx-context-context-name-namespace-string-spec-mcpv1alpha1-mcpserverspec-serverlistitem-error)
 - [`func (c *PlatformClient) ApplyRuntimeServerWithScope(ctx context.Context, name, namespace, scope string, spec mcpv1alpha1.MCPServerSpec) (ServerListItem, error)`](#cli-platform-api-func-c-platformclient-applyruntimeserverwithscope-ctx-context-context-name-namespace-scope-string-spec-mcpv1alpha1-mcpserverspec-serverlistitem-error)
 - [`func (c *PlatformClient) ApplyRuntimeServerWithScopeUpdate(ctx context.Context, name, namespace, scope string, spec mcpv1alpha1.MCPServerSpec, update bool) (ServerListItem, error)`](#cli-platform-api-func-c-platformclient-applyruntimeserverwithscopeupdate-ctx-context-context-name-namespace-scope-string-spec-mcpv1alpha1-mcpserverspec-update-bool-serverlistitem-error)
+- [`func (c *PlatformClient) CheckRegistryAdmin(ctx context.Context) error`](#cli-platform-api-func-c-platformclient-checkregistryadmin-ctx-context-context-error)
 - [`func (c *PlatformClient) CreateAdapterSession(ctx context.Context, req AdapterSessionRequest) (AdapterSession, error)`](#cli-platform-api-func-c-platformclient-createadaptersession-ctx-context-context-req-adaptersessionrequest-adaptersession-error)
 - [`func (c *PlatformClient) CreateAgent(ctx context.Context, teamSlug, name string) (Agent, error)`](#cli-platform-api-func-c-platformclient-createagent-ctx-context-context-teamslug-name-string-agent-error)
+- [`func (c *PlatformClient) CreateRegistryPullCredential(ctx context.Context, scope registryauth.PullScope) (RegistryPullCredential, error)`](#cli-platform-api-func-c-platformclient-createregistrypullcredential-ctx-context-context-scope-registryauth-pullscope-registrypullcredential-error)
 - [`func (c *PlatformClient) CreateTeam(ctx context.Context, slug, name string) (Team, error)`](#cli-platform-api-func-c-platformclient-createteam-ctx-context-context-slug-name-string-team-error)
 - [`func (c *PlatformClient) CreateTeamUser(ctx context.Context, slug, email, password, role string) (TeamMembership, error)`](#cli-platform-api-func-c-platformclient-createteamuser-ctx-context-context-slug-email-password-role-string-teammembership-error)
 - [`func (c *PlatformClient) CreateUser(ctx context.Context, email, password, role string) (PlatformUser, error)`](#cli-platform-api-func-c-platformclient-createuser-ctx-context-context-email-password-role-string-platformuser-error)
@@ -5113,6 +5115,7 @@ _No package overview is documented._
 - [`func (c *PlatformClient) ValidateCredentials(ctx context.Context) error`](#cli-platform-api-func-c-platformclient-validatecredentials-ctx-context-context-error)
 - [`type PlatformUser struct`](#cli-platform-api-type-platformuser-struct)
 - [`type Principal struct`](#cli-platform-api-type-principal-struct)
+- [`type RegistryPullCredential struct`](#cli-platform-api-type-registrypullcredential-struct)
 - [`type RuntimeToolRow struct`](#cli-platform-api-type-runtimetoolrow-struct)
 - [`type ServerListItem struct`](#cli-platform-api-type-serverlistitem-struct)
 - [`type Team struct`](#cli-platform-api-type-team-struct)
@@ -5295,6 +5298,12 @@ func (c *PlatformClient) ApplyRuntimeServerWithScopeUpdate(ctx context.Context, 
 
 ```
 
+<a id="cli-platform-api-func-c-platformclient-checkregistryadmin-ctx-context-context-error"></a>
+```text
+func (c *PlatformClient) CheckRegistryAdmin(ctx context.Context) error
+
+```
+
 <a id="cli-platform-api-func-c-platformclient-createadaptersession-ctx-context-context-req-adaptersessionrequest-adaptersession-error"></a>
 ```text
 func (c *PlatformClient) CreateAdapterSession(ctx context.Context, req AdapterSessionRequest) (AdapterSession, error)
@@ -5307,6 +5316,12 @@ func (c *PlatformClient) CreateAdapterSession(ctx context.Context, req AdapterSe
 <a id="cli-platform-api-func-c-platformclient-createagent-ctx-context-context-teamslug-name-string-agent-error"></a>
 ```text
 func (c *PlatformClient) CreateAgent(ctx context.Context, teamSlug, name string) (Agent, error)
+
+```
+
+<a id="cli-platform-api-func-c-platformclient-createregistrypullcredential-ctx-context-context-scope-registryauth-pullscope-registrypullcredential-error"></a>
+```text
+func (c *PlatformClient) CreateRegistryPullCredential(ctx context.Context, scope registryauth.PullScope) (RegistryPullCredential, error)
 
 ```
 
@@ -5512,6 +5527,17 @@ type Principal struct {
 	Namespace         string   `json:"namespace,omitempty"`
 	AllowedNamespaces []string `json:"allowedNamespaces,omitempty"`
 	Teams             []Team   `json:"teams,omitempty"`
+}
+
+```
+
+<a id="cli-platform-api-type-registrypullcredential-struct"></a>
+```text
+type RegistryPullCredential struct {
+	ID        string    `json:"id"`
+	Username  string    `json:"username"`
+	Password  string    `json:"password"`
+	ExpiresAt time.Time `json:"expires_at"`
 }
 
 ```

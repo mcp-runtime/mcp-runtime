@@ -15,6 +15,7 @@ import (
 
 	"mcp-platform-api/registry"
 	"mcp-runtime/pkg/platformauth"
+	"mcp-runtime/pkg/registryauth"
 	"mcp-runtime/pkg/serviceutil"
 	"mcp-runtime/pkg/svcboot"
 )
@@ -27,6 +28,7 @@ type apiServer struct {
 	oidcIssuer        string
 	oidcAudience      string
 	userKeys          userAPIKeyStore
+	registrySigner    *registryauth.Signer
 	registryAuth      registryCredentialAuthenticator
 	registryAuthz     *registry.AuthzConfig
 	registryAuthzOnce sync.Once
@@ -149,6 +151,22 @@ func main() {
 		AdminAPIKeys:    adminAPIKeys,
 		UserKeyResolver: userResolver,
 		OIDC:            server.oidcVerifier(),
+	}
+
+	keyPath, certPath := os.Getenv("REGISTRY_TOKEN_SIGNING_KEY_FILE"), os.Getenv("REGISTRY_TOKEN_SIGNING_CERT_FILE")
+	if keyPath != "" || certPath != "" {
+		key, err := os.ReadFile(keyPath)
+		if err != nil {
+			log.Fatal("registry signing key unavailable")
+		}
+		cert, err := os.ReadFile(certPath)
+		if err != nil {
+			log.Fatal("registry signing certificate unavailable")
+		}
+		server.registrySigner, err = registryauth.NewSigner(key, cert)
+		if err != nil {
+			log.Fatal("registry signing material invalid")
+		}
 	}
 
 	mux := http.NewServeMux()

@@ -670,6 +670,20 @@ spec:
                 name: mcp-platform-api
                 port:
                   number: 8080
+          - path: /api/v1/registry/pull-credentials
+            pathType: Exact
+            backend:
+              service:
+                name: mcp-platform-api
+                port:
+                  number: 8080
+          - path: /api/v1/registry/token
+            pathType: Exact
+            backend:
+              service:
+                name: mcp-platform-api
+                port:
+                  number: 8080
           - path: /api/v1/registry/authz
             pathType: Prefix
             backend:
