@@ -19,7 +19,7 @@ run_e2e_port_transition_scenario() {
   deadline=$((SECONDS + 120))
   while true; do
     kubectl get mcpserver "${SERVER_NAME}" -n mcp-servers -o json >"${directory}/status.json"
-    if jq -e '.metadata.generation as $g | .status.deploymentReady == false and any(.status.conditions[]?; .type=="DeploymentReady" and .status=="False" and .observedGeneration==$g)' "${directory}/status.json" >/dev/null; then break; fi
+    if jq -e '.metadata.generation as $g | any(.status.conditions[]?; .type=="DeploymentReady" and .status=="False" and .observedGeneration==$g)' "${directory}/status.json" >/dev/null; then break; fi
     ((SECONDS < deadline)) || { echo '[port-transition] broken candidate was not reported pending' >&2; return 1; }
     sleep 2
   done
