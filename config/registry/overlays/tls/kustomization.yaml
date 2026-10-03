@@ -4,4 +4,9 @@ resources:
   - ../../base
 patchesStrategicMerge:
   - ingress-tls.yaml
-  - service-clusterip.yaml
+patches:
+  - path: service-clusterip.yaml
+    target:
+      version: v1
+      kind: Service
+      name: registry

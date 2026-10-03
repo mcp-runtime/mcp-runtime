@@ -6,13 +6,13 @@ import (
 	"strings"
 	"testing"
 
+	jsonpatch "github.com/evanphx/json-patch/v5"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	"sigs.k8s.io/yaml"
 )
 
-// Exercise Kubernetes strategic-merge semantics, including deleting the
-// inherited nodePort. Checking only type would leave a forbidden stale port.
+// Verify explicit JSON-patch removal of the inherited nodePort. Kustomize can
+// discard null deletions when nested overlays merge a Service again.
 func TestHTTPSRegistryOverlaysRemoveBackendNodePort(t *testing.T) {
 	root := "../../../../config/registry"
 	read := func(path string) []byte {
@@ -32,7 +32,11 @@ func TestHTTPSRegistryOverlaysRemoveBackendNodePort(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		merged, err := strategicpatch.StrategicMergePatch(base, patch, corev1.Service{})
+		decoded, err := jsonpatch.DecodePatch(patch)
+		if err != nil {
+			t.Fatal(err)
+		}
+		merged, err := decoded.Apply(base)
 		if err != nil {
 			t.Fatal(err)
 		}
