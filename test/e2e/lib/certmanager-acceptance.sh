@@ -34,11 +34,10 @@ run_certmanager_issuance_acceptance() {
   fi
   kubectl get secret "${probe}" -n mcp-servers -o 'jsonpath={.data.tls\.crt}' \
     | decode_base64 >"${WORKDIR}/certmanager-probe-public.crt"
-  openssl x509 -in "${WORKDIR}/certmanager-probe-public.crt" -noout -checkhost qa-issuance.invalid
   openssl x509 -in "${WORKDIR}/certmanager-probe-public.crt" -noout -checkend 120
   kubectl get secret "${ca_secret}" -n cert-manager -o 'jsonpath={.data.tls\.crt}' \
     | decode_base64 >"${WORKDIR}/certmanager-workload-public.crt"
-  openssl verify -CAfile "${WORKDIR}/certmanager-workload-public.crt" "${WORKDIR}/certmanager-probe-public.crt"
+  openssl verify -verify_hostname qa-issuance.invalid -CAfile "${WORKDIR}/certmanager-workload-public.crt" "${WORKDIR}/certmanager-probe-public.crt"
   ca_after="$(certmanager_public_fingerprint cert-manager "${ca_secret}")"
   if [[ -n "${public_before}" ]]; then public_after="$(certmanager_public_fingerprint mcp-platform mcp-platform-tls)"; fi
   [[ "${ca_before}" == "${ca_after}" && "${public_before}" == "${public_after}" ]] || {
