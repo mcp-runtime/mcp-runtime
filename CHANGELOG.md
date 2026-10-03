@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Fixed
+
+- Gateway-enabled OAuth apps receive the derived issuer and public resource audience, and the TypeScript example listens on the reconciled upstream path while retaining bearer validation ([#532](https://github.com/mcp-runtime/mcp-runtime/issues/532)).
+
 ## [0.5.0] - 2026-10-02
 
 This release moves the platform into owner namespaces. There is no in-place
