@@ -2,6 +2,9 @@ package operator
 
 import (
 	"context"
+	discoveryv1 "k8s.io/api/discovery/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -42,7 +45,7 @@ func (r *MCPServerReconciler) checkCanaryDeploymentReady(ctx context.Context, mc
 		}
 		return false, err
 	}
-	return controlplane.DeploymentReady(*deployment, 0), nil
+	return deploymentRevisionReady(deployment, 0), nil
 }
 func (r *MCPServerReconciler) checkDeploymentReady(ctx context.Context, mcpServer *mcpv1alpha1.MCPServer) (bool, error) {
 	deployment := &appsv1.Deployment{}
@@ -53,7 +56,7 @@ func (r *MCPServerReconciler) checkDeploymentReady(ctx context.Context, mcpServe
 		return false, err
 	}
 
-	return controlplane.DeploymentReady(*deployment, 1), nil
+	return deploymentRevisionReady(deployment, 1), nil
 }
 
 func (r *MCPServerReconciler) checkServiceReady(ctx context.Context, mcpServer *mcpv1alpha1.MCPServer) (bool, error) {
@@ -65,7 +68,34 @@ func (r *MCPServerReconciler) checkServiceReady(ctx context.Context, mcpServer *
 		return false, err
 	}
 
-	return service.Spec.ClusterIP != "", nil
+	if service.Spec.ClusterIP == "" {
+		return false, nil
+	}
+	port := servingPort(mcpServer)
+	if len(service.Spec.Ports) == 0 || service.Spec.Ports[0].TargetPort != intstr.FromInt32(port) {
+		return false, nil
+	}
+	slices := &discoveryv1.EndpointSliceList{}
+	if err := r.List(ctx, slices, client.InNamespace(mcpServer.Namespace), client.MatchingLabels{discoveryv1.LabelServiceName: service.Name}); err != nil {
+		return false, err
+	}
+	for _, slice := range slices.Items {
+		matches := false
+		for _, endpointPort := range slice.Ports {
+			if endpointPort.Name != nil && *endpointPort.Name == "http" && endpointPort.Port != nil && *endpointPort.Port == port {
+				matches = true
+			}
+		}
+		if !matches {
+			continue
+		}
+		for _, endpoint := range slice.Endpoints {
+			if len(endpoint.Addresses) > 0 && endpoint.Conditions.Ready != nil && *endpoint.Conditions.Ready && (endpoint.Conditions.Terminating == nil || !*endpoint.Conditions.Terminating) {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 func (r *MCPServerReconciler) checkIngressReady(ctx context.Context, mcpServer *mcpv1alpha1.MCPServer) (bool, error) {
@@ -151,4 +181,14 @@ func (r *MCPServerReconciler) updateStatus(ctx context.Context, mcpServer *mcpv1
 			logger.Error(err, "Failed to update MCPServer status", "resourceVersion", latest.ResourceVersion)
 		}
 	}
+}
+
+// Old ready replicas cannot establish readiness for the current template.
+func deploymentRevisionReady(deployment *appsv1.Deployment, defaultReplicas int32) bool {
+	desired := controlplane.DeploymentDesiredReplicas(*deployment, defaultReplicas)
+	return deployment.Status.ObservedGeneration >= deployment.Generation &&
+		deployment.Status.UpdatedReplicas == desired &&
+		deployment.Status.ReadyReplicas == desired &&
+		deployment.Status.AvailableReplicas == desired &&
+		deployment.Status.Replicas == desired
 }

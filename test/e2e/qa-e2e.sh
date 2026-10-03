@@ -6712,6 +6712,11 @@ fi
 
 fi
 
+if scenario_selected "smoke-auth"; then
+  source "${PROJECT_ROOT}/test/e2e/scenarios/port-transition.sh"
+  run_e2e_port_transition_scenario
+fi
+
 if scenario_selected "platform-update"; then
   run_e2e_platform_update_scenario
 fi

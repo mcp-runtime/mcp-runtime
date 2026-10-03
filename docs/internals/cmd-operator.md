@@ -126,3 +126,8 @@ Run:
 go test ./internal/operator/... -race -count=1
 go test ./test/integration/... -count=1
 ```
+
+The disposable Kind smoke-auth scenario also injects a missing gateway image
+while changing its port. It checks the persisted Service route, pending status,
+successful MCP calls before and after an operator restart, and promotion after
+a fixed candidate becomes ready (`test/e2e/scenarios/port-transition.sh`).

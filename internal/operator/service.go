@@ -2,12 +2,16 @@ package operator
 
 import (
 	"context"
+	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -17,10 +21,7 @@ import (
 func (r *MCPServerReconciler) reconcileService(ctx context.Context, mcpServer *mcpv1alpha1.MCPServer) error {
 	logger := log.FromContext(ctx)
 	ensureGatewaySpec(mcpServer)
-	targetPort := mcpServer.Spec.Port
-	if gatewayEnabled(mcpServer) {
-		targetPort = mcpServer.Spec.Gateway.Port
-	}
+	targetPort := servingPort(mcpServer)
 
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -30,6 +31,15 @@ func (r *MCPServerReconciler) reconcileService(ctx context.Context, mcpServer *m
 	}
 
 	op, err := ctrl.CreateOrUpdate(ctx, r.Client, service, func() error {
+		// Existing routes remain untouched until a stable candidate can accept
+		// traffic on the new port. This is persisted in the Service itself, so
+		// restarting the operator does not lose the last serving route.
+		if service.ResourceVersion != "" && len(service.Spec.Ports) > 0 && service.Spec.Ports[0].TargetPort != intstr.FromInt32(targetPort) {
+			ready, err := r.hasReadyServingPod(ctx, mcpServer)
+			if err != nil || !ready {
+				return err
+			}
+		}
 		labels := map[string]string{
 			LabelApp:       mcpServer.Name,
 			LabelManagedBy: LabelManagedByValue,
@@ -61,11 +71,16 @@ func (r *MCPServerReconciler) reconcileService(ctx context.Context, mcpServer *m
 			})
 		}
 
-		service.Spec = corev1.ServiceSpec{
-			Type:     corev1.ServiceTypeClusterIP,
-			Selector: labels,
-			Ports:    ports,
+		selector := map[string]string{LabelApp: mcpServer.Name, LabelManagedBy: LabelManagedByValue}
+		// On a new service or a port transition exclude old revisions that
+		// lack the desired listener. Preserve legacy selectors on upgrades
+		// that do not change ports; their declared listener is compatible.
+		if service.ResourceVersion == "" || service.Spec.Selector[servingPortLabel] != "" || (len(service.Spec.Ports) > 0 && service.Spec.Ports[0].TargetPort != intstr.FromInt32(targetPort)) {
+			selector[servingPortLabel] = strconv.Itoa(int(targetPort))
 		}
+		service.Spec.Type = corev1.ServiceTypeClusterIP
+		service.Spec.Selector = selector
+		service.Spec.Ports = ports
 
 		if err := ctrl.SetControllerReference(mcpServer, service, r.Scheme); err != nil {
 			return err
@@ -83,4 +98,64 @@ func (r *MCPServerReconciler) reconcileService(ctx context.Context, mcpServer *m
 	}
 
 	return nil
+}
+
+const servingPortLabel = "mcpruntime.org/serving-port"
+
+func servingPort(server *mcpv1alpha1.MCPServer) int32 {
+	if gatewayEnabled(server) {
+		return server.Spec.Gateway.Port
+	}
+	return server.Spec.Port
+}
+
+// A port-changing rollout cannot drain the old revision before a candidate
+// serves. Override even Recreate or an explicit maxUnavailable for this step.
+func (r *MCPServerReconciler) servingDeploymentStrategy(ctx context.Context, server *mcpv1alpha1.MCPServer) (appsv1.DeploymentStrategy, error) {
+	strategy := deploymentStrategy(server)
+	service := &corev1.Service{}
+	if err := r.Get(ctx, types.NamespacedName{Name: server.Name, Namespace: server.Namespace}, service); err != nil {
+		if errors.IsNotFound(err) {
+			return strategy, nil
+		}
+		return strategy, err
+	}
+	if len(service.Spec.Ports) > 0 && service.Spec.Ports[0].TargetPort != intstr.FromInt32(servingPort(server)) {
+		zero, one := intstr.FromInt(0), intstr.FromInt(1)
+		strategy = appsv1.DeploymentStrategy{Type: appsv1.RollingUpdateDeploymentStrategyType, RollingUpdate: &appsv1.RollingUpdateDeployment{MaxUnavailable: &zero, MaxSurge: &one}}
+	}
+	return strategy, nil
+}
+
+func (r *MCPServerReconciler) hasReadyServingPod(ctx context.Context, server *mcpv1alpha1.MCPServer) (bool, error) {
+	track := "stable"
+	if desiredStableReplicas(server) == 0 && canaryEnabled(server) {
+		track = "canary"
+	}
+	pods := &corev1.PodList{}
+	if err := r.List(ctx, pods, client.InNamespace(server.Namespace), client.MatchingLabels{LabelApp: server.Name, LabelManagedBy: LabelManagedByValue, servingPortLabel: strconv.Itoa(int(servingPort(server))), "mcpruntime.org/rollout-track": track}); err != nil {
+		return false, err
+	}
+	for _, pod := range pods.Items {
+		if pod.DeletionTimestamp != nil || pod.Status.Phase != corev1.PodRunning {
+			continue
+		}
+		declaresPort := false
+		for _, container := range pod.Spec.Containers {
+			for _, port := range container.Ports {
+				if port.ContainerPort == servingPort(server) {
+					declaresPort = true
+				}
+			}
+		}
+		if !declaresPort {
+			continue
+		}
+		for _, condition := range pod.Status.Conditions {
+			if condition.Type == corev1.PodReady && condition.Status == corev1.ConditionTrue {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }

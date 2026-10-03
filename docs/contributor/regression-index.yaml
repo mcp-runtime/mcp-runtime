@@ -17,12 +17,24 @@ incidents:
     protected_behavior: >-
       A broken gateway candidate never replaces the serving route and is not reported Ready;
       a fixed candidate promotes; operator restart mid-transition recovers.
-    status: untested
+    status: partial
+    checks:
+      - kind: go-test
+        path: internal/operator/port_transition_test.go
+        name: TestPortTransitionRetainsLastRouteAndPromotesReadyCandidate
+        command: go test ./internal/operator -run 'TestPortTransition|TestDeploymentRevisionReadiness|TestServiceReadinessRequires' -count=1
+        ci_job: ci.yaml#test
+      - kind: e2e-scenario
+        path: test/e2e/scenarios/port-transition.sh
+        name: run_e2e_port_transition_scenario
+        command: E2E_SCENARIOS=smoke-auth bash test/e2e/qa-e2e.sh
+        ci_job: ci.yaml#qa-e2e
+    gap: Live Kind checks are implemented and run by QA CI; local live execution is not yet verified.
     waiver:
       owner: Agent-Hellboy
       follow_up: "https://github.com/mcp-runtime/mcp-runtime/issues/546"
       expires: "2026-12-31"
-      blocker: No failed-rollout Kind QA E2E scenario exists yet.
+      blocker: Await a successful failed-rollout QA run against this implementation.
   - id: "532"
     title: Fix gateway-enabled TypeScript OAuth example crash
     protected_behavior: >-

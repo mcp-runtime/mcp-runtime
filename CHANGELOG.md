@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Fixed
+
+- MCPServer port-changing rollouts retain the existing Service route until a Ready candidate declares the new listener, use a zero-unavailable rollout during the transition, and select only compatible pods after switching. Readiness requires current Deployment replicas and ready EndpointSlices on the requested port ([#533](https://github.com/mcp-runtime/mcp-runtime/issues/533)).
+
 ## [0.5.0] - 2026-10-02
 
 This release moves the platform into owner namespaces. There is no in-place
