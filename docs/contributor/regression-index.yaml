@@ -90,7 +90,14 @@ incidents:
   - id: "534"
     title: Upgrade unsupported cert-manager on Kubernetes 1.36
     protected_behavior: Installer version checks and certificate issuance on supported cert-manager/Kubernetes versions.
-    status: untested
+    status: partial
+    checks:
+      - kind: go-test
+        path: internal/cli/cluster/doctor/certmanager_compatibility_test.go
+        name: TestCertManagerSupportMatrix
+        command: go test ./internal/cli/cluster/doctor -run TestCertManager -count=1
+        ci_job: ci.yaml#test
+    gap: Covers install pin, version compatibility, and component drift; staged issuance/renewal and Secret preservation are not yet verified.
     waiver:
       owner: Agent-Hellboy
       follow_up: "https://github.com/mcp-runtime/mcp-runtime/issues/546"
