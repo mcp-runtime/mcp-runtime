@@ -1,0 +1,12 @@
+# HTTPS registry access goes through the authenticated ingress or the private
+# Service endpoint. Do not expose the unauthenticated backend on every node.
+apiVersion: v1
+kind: Service
+metadata:
+  name: registry
+  namespace: registry
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5000
+      nodePort: null

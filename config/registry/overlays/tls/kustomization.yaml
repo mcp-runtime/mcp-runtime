@@ -4,3 +4,4 @@ resources:
   - ../../base
 patchesStrategicMerge:
   - ingress-tls.yaml
+  - service-clusterip.yaml

@@ -4,3 +4,4 @@ resources:
   - ../hostpath
 patches:
   - path: ingress-tls.yaml
+  - path: service-clusterip.yaml

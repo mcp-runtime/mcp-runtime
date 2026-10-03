@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Security
+
+- HTTPS registry overlays no longer expose the unauthenticated backend through NodePort 32000. Before upgrading, migrate any node mirrors using that port to the supported HTTPS pull endpoint and verify CA trust and fresh pulls. HTTP lab overlays retain their NodePort. Internal repository-scoped authentication remains pending ([#531](https://github.com/mcp-runtime/mcp-runtime/issues/531)).
+
 ## [0.5.0] - 2026-10-02
 
 This release moves the platform into owner namespaces. There is no in-place
