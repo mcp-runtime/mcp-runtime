@@ -24,9 +24,9 @@ import (
 	"mcp-runtime/pkg/registryauth"
 )
 
-const nativeSignerSecret = "mcp-registry-token-signer"
+const nativeSignerSecret = "mcp-registry-token-signer" // #nosec G101 -- Kubernetes Secret name, not credential material.
 const nativeRootSecret = "registry-token-root"
-const nativePullSecret = "mcp-runtime-registry-pull"
+const nativePullSecret = "mcp-runtime-registry-pull" // #nosec G101 -- Kubernetes Secret name, not credential material.
 const nativeManagedLabel = "mcpruntime.org/registry-auth"
 
 type nativeAuthOptions struct {
