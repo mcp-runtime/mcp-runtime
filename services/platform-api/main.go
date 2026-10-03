@@ -155,11 +155,11 @@ func main() {
 
 	keyPath, certPath := os.Getenv("REGISTRY_TOKEN_SIGNING_KEY_FILE"), os.Getenv("REGISTRY_TOKEN_SIGNING_CERT_FILE")
 	if keyPath != "" || certPath != "" {
-		key, err := os.ReadFile(keyPath)
+		key, err := os.ReadFile(keyPath) // #nosec G304 G703 -- operator-configured mounted signing Secret path, never request input.
 		if err != nil {
 			log.Fatal("registry signing key unavailable")
 		}
-		cert, err := os.ReadFile(certPath)
+		cert, err := os.ReadFile(certPath) // #nosec G304 G703 -- operator-configured mounted public certificate path, never request input.
 		if err != nil {
 			log.Fatal("registry signing certificate unavailable")
 		}
