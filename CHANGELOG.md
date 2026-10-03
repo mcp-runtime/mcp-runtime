@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Security
+
+- Add opt-in native Distribution authentication with `registry enable-auth`: repository-scoped five-minute tokens, namespace-bound read-only node credentials, trusted publication helpers, legacy copied-admin-key rotation with resumable recovery, and ClusterIP-only exposure. Activation requires updated API images and an external/public platform-api bootstrap image ([#531](https://github.com/mcp-runtime/mcp-runtime/issues/531)).
+
 ## [0.5.0] - 2026-10-02
 
 This release moves the platform into owner namespaces. There is no in-place

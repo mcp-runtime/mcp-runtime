@@ -16,6 +16,8 @@ func PlatformAPIPaths() []APIPath {
 		{Path: "/api/v1/admin/audit", PathType: "Prefix", Service: "mcp-platform-api", Port: 8080},
 		{Path: "/api/v1/auth", PathType: "Prefix", Service: "mcp-platform-api", Port: 8080},
 		{Path: "/api/v1/users", PathType: "Prefix", Service: "mcp-platform-api", Port: 8080},
+		{Path: "/api/v1/registry/pull-credentials", PathType: "Exact", Service: "mcp-platform-api", Port: 8080},
+		{Path: "/api/v1/registry/token", PathType: "Exact", Service: "mcp-platform-api", Port: 8080},
 		{Path: "/api/v1/registry/authz", PathType: "Prefix", Service: "mcp-platform-api", Port: 8080},
 		{Path: "/api/v1/user/registry-credentials", PathType: "Prefix", Service: "mcp-platform-api", Port: 8080},
 		{Path: "/api/v1/user/activity", PathType: "Prefix", Service: "mcp-platform-api", Port: 8080},

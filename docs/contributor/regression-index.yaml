@@ -39,12 +39,27 @@ incidents:
     protected_behavior: >-
       Team workloads cannot anonymously list/read protected repositories or upload images;
       cross-team access is denied while authorized publish and node pulls keep working.
-    status: untested
+    status: partial
+    checks:
+      - kind: go-test
+        path: services/platform-api/registry/token_distribution_test.go
+        name: TestDistributionEnforcesNativeRegistryScopes
+        command: cd services/platform-api && MCP_REGISTRY_NATIVE_E2E=1 go test ./registry -run TestDistributionEnforcesNativeRegistryScopes -count=1
+        ci_job: ci.yaml#native-registry-acceptance
+      - kind: go-test
+        path: services/platform-api/test/integration/team_slug_test.go
+        name: TestRegistryPullCredentialsRevocationAndExpiry
+        command: cd services/platform-api && go test ./test/integration -run TestRegistryPullCredentialsRevocationAndExpiry -count=1
+        ci_job: ci.yaml#native-registry-acceptance
+    gap: >-
+      Live Distribution and PostgreSQL checks prove backend repository enforcement,
+      complete publication and read-only retrieval, and credential revocation/expiry.
+      Full Kubernetes CLI activation and kubelet pulls are not yet exercised together.
     waiver:
       owner: Agent-Hellboy
       follow_up: "https://github.com/mcp-runtime/mcp-runtime/issues/546"
       expires: "2026-12-31"
-      blocker: Needs a Kind QA E2E registry-isolation scenario with disposable repositories.
+      blocker: Needs a Kind QA E2E activation scenario with kubelet pulls after credential migration.
   - id: "501"
     title: Buddy OAuth refresh-token replay causes repeated credential revocation
     protected_behavior: >-

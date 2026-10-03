@@ -165,6 +165,12 @@ func PrincipalCanAccessRegistryPath(p apiauth.Principal, r *http.Request, cfg *A
 	if !ok {
 		return false
 	}
+	if source := RegistryMountSource(r); source != "" {
+		sourceScope, _, ok := strings.Cut(source, "/")
+		if !ok || !PrincipalCanAccessRegistryScope(p, sourceScope, cfg) {
+			return false
+		}
+	}
 	if scope == "" {
 		return true
 	}
@@ -202,4 +208,20 @@ func (cfg *AuthzConfig) sharedCatalogWritableForUsers() bool {
 	default:
 		return false
 	}
+}
+
+// RegistryMountSource preserves the source repository query for cross-repository
+// blob mounts. Both source pull and destination push must be authorized.
+func RegistryMountSource(r *http.Request) string {
+	for _, key := range []string{"X-Forwarded-Uri", "X-Forwarded-URL"} {
+		if raw := r.Header.Get(key); raw != "" {
+			if u, err := url.Parse(raw); err == nil && strings.HasPrefix(u.Path, "/v2/") {
+				return u.Query().Get("from")
+			}
+		}
+	}
+	if r.URL != nil {
+		return r.URL.Query().Get("from")
+	}
+	return ""
 }
