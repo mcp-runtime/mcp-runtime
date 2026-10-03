@@ -940,3 +940,11 @@ kubectl apply -f /tmp/platform-tls-backup.yaml
 ```
 
 Check current usage at <https://crt.sh/?q=mcpruntime.org>.
+
+The disposable Kind QA harness now adds fresh certificate issuance to its
+adapter-certificate scenario. It reapplies the supported certificate setup,
+issues a one-hour test certificate, verifies its SAN, validity and workload CA
+chain, and compares public workload-CA/platform-TLS fingerprints before and
+afterward. The fixture never reads private keys. This covers fresh issuance and
+preservation during reapplication; the minor-by-minor upgrade and renewal
+procedure still needs a disposable staging run.
