@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Security
+
+- Fresh cert-manager installs use v1.21.2 instead of the retired v1.16.2; TLS doctor checks flag unsupported Kubernetes/version pairs and inconsistent controller/webhook/cainjector versions. Existing installations remain unchanged and require staged minor upgrades with certificate/Secret backups ([#534](https://github.com/mcp-runtime/mcp-runtime/issues/534)).
+
 ## [0.5.0] - 2026-10-02
 
 This release moves the platform into owner namespaces. There is no in-place
