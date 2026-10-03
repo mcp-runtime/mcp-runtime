@@ -17,7 +17,14 @@ incidents:
     protected_behavior: >-
       A broken gateway candidate never replaces the serving route and is not reported Ready;
       a fixed candidate promotes; operator restart mid-transition recovers.
-    status: untested
+    status: partial
+    checks:
+      - kind: go-test
+        path: internal/operator/port_transition_test.go
+        name: TestPortTransitionRetainsLastRouteAndPromotesReadyCandidate
+        command: go test ./internal/operator -run 'TestPortTransition|TestDeploymentRevisionReadiness|TestServiceReadinessRequires' -count=1
+        ci_job: ci.yaml#test
+    gap: Unit tests cover retained routes, promotion, restart, and readiness; live traffic continuity remains unverified.
     waiver:
       owner: Agent-Hellboy
       follow_up: "https://github.com/mcp-runtime/mcp-runtime/issues/546"
