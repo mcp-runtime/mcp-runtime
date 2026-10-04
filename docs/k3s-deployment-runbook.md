@@ -301,8 +301,11 @@ curl -fsS https://auth.mcpruntime.org/.well-known/oauth-authorization-server/mcp
 ssh devbox1 'docker ps --filter name=demo-keycloak; docker logs demo-keycloak --tail 30'
 ```
 
-The connector file references the Keycloak issuer and client but never stores
-the client secret:
+For the `mcpruntime.org` demo, use the tracked
+[`connector file`](../config/deployments/mcpruntime-org-keycloak-connectors.json)
+and set `MCP_SETUP_MCP_AUTH_CONNECTORS_FILE=config/deployments/mcpruntime-org-keycloak-connectors.json`
+in the private deployment env file. It references the Keycloak issuer and client
+but never stores the client secret. The relevant fields are:
 
 ```json
 {
