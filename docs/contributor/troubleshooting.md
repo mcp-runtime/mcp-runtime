@@ -18,11 +18,12 @@ If it returns servers:
 
    ```bash
    kubectl get deploy mcp-platform-api mcp-runtime-api mcp-ui -n mcp-platform \
+     -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.template.spec.containers[0].image}{"\n"}{end}'
    kubectl get deploy mcp-analytics-api -n mcp-observability \
      -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.template.spec.containers[0].image}{"\n"}{end}'
    ```
 
-2. Roll both Deployments after patching auth or catalog code.
+2. Verify the API and UI rollouts after updating auth or catalog code.
 
    ```bash
    kubectl rollout status deployment/mcp-platform-api -n mcp-platform --timeout=90s

@@ -26,7 +26,22 @@ them.
 </section>
 </div>
 
-OAuth setup and identity-provider configuration: [MCP authorization](mcp-authorization.md).
+## Which setup should I use?
+
+| Setup | Use it when | Time to first server |
+|---|---|---|
+| **Live platform** (`platform.mcpruntime.org`) | Evaluating, no infrastructure, just want to try it | 10 min |
+| **Local Kind cluster** (`--test-mode`) | Contributing to the repo, CI, quick local demo | 30 min |
+| **k3s on-prem** | Production on your own hardware | 2–4 hours |
+| **EKS / GKE / AKS** | Production in cloud | 1–2 hours |
+
+## Start here
+
+1. [Hosted Quickstart](hosted-quickstart.md): install the CLI and try an existing platform.
+2. [Self-host MCP Runtime](self-hosting.md): prepare a cluster and install the platform.
+3. [Guided tutorials](learn/README.md): learn concepts, deploy a server, and set up teams.
+
+OAuth setup and identity-provider configuration: [MCP authorization](mcp-oauth.md).
 
 ## How it works
 
@@ -41,9 +56,9 @@ OAuth setup and identity-provider configuration: [MCP authorization](mcp-authori
   before forwarding it. It emits an audit event with the decision. Observe mode
   forwards calls without enforcing policy.
 
-See [Concepts](concepts.md) for details.
+See [Concepts](core-concepts.md) for details.
 
-## Deploy an MCP server in 5 commands
+## Deploy an MCP server
 
 ```bash
 mcp-runtime auth login --api-url https://platform.mcpruntime.org
@@ -54,8 +69,10 @@ mcp-runtime server push --image registry.mcpruntime.org/myteam/my-server:v1 --sc
 mcp-runtime server deploy my-server --scope tenant --metadata-dir .mcp
 ```
 
+Run these commands from your server’s source directory, with a Dockerfile
+and Docker running. Use the exact image reference printed by the build command.
 The CLI generates the Kubernetes resources. To connect a client, run the
-[adapter](agent-adapters.md) and point Claude Desktop, Cursor, or any MCP client
+[adapter](connect-clients.md) and point Claude Desktop, Cursor, or any MCP client
 at it. The adapter presents a session-bound client certificate the gateway
 uses for grant and session checks (and forwards OAuth when the target enables it).
 
@@ -119,7 +136,7 @@ preparation.
 <a class="docs-card" href="getting-started/">
   <span class="docs-card-kicker">Start here</span>
   <strong>Get started</strong>
-  <span>Build the CLI, install the stack, deploy your first server, and observe live traffic.</span>
+  <span>Install the CLI, prepare your cluster, configure the platform, and verify health.</span>
 </a>
 
 <a class="docs-card" href="architecture/">
@@ -194,15 +211,6 @@ preparation.
   <span>MCPServer, MCPAccessGrant, MCPAgentSession fields and HTTP endpoints.</span>
 </a>
 </div>
-
-## Which setup should I use?
-
-| Setup | Use it when | Time to first server |
-|---|---|---|
-| **Live platform** (`platform.mcpruntime.org`) | Evaluating, no infrastructure, just want to try it | 10 min |
-| **Local Kind cluster** (`--test-mode`) | Contributing to the repo, CI, quick local demo | 30 min |
-| **k3s on-prem** | Production on your own hardware | 2–4 hours |
-| **EKS / GKE / AKS** | Production in cloud | 1–2 hours |
 
 ## Project status
 

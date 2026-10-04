@@ -14,7 +14,7 @@ source. Nothing here describes shipped behavior beyond the "What MCP Runtime
 already has" table, and the numbered items, milestones, and example YAML are
 sketches. Any implementation must be designed against MCP Runtime's existing
 CRDs, policy contract, sidecar model, and Sentinel services, and reviewed with
-the `design-principles` skill before it becomes a contract.
+the shared `.codex/skills/_shared/design-principles.md` guide before it becomes a contract.
 
 ## Sources reviewed
 
@@ -74,7 +74,7 @@ Likely ownership:
 - `services/runtime-api/internal/runtimeapi/live_inventory.go`
 - `services/runtime-api/internal/runtimeapi/tools.go`
 - `api/v1alpha1/mcpserver_types.go`
-- `services/ui/static/app.js`
+- `services/ui/frontend/` and the generated `services/ui/static/` bundle
 
 #### 2. Method-level policy beyond `tools/call`
 

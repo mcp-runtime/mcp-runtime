@@ -52,9 +52,9 @@ flowchart LR
     Ingest -->|mcp.events topic| Kafka[(Kafka)]
     Kafka --> Processor
     Processor -->|batch insert| CH[(ClickHouse)]
-    CH --> API
-    API --> UI
-    API --> Graf[Grafana]
+    API[analytics-api] -->|query| CH
+    UI[Platform UI] -->|read via session BFF| API
+    Graf[Grafana] --> Telemetry[Prometheus, Tempo, Loki]
 ```
 
 1. **Gateway evaluates the request.** Authenticates optional OAuth or a verified adapter certificate, loads policy from the operator-rendered ConfigMap, and calls the shared `pkg/policy` evaluator for allow / deny at `tools/call` time. The evaluator checks both trust and the tool's declared side-effect class.
@@ -225,7 +225,7 @@ stable error envelopes.
 JWT `aud` values: `platform-api`, `runtime-api`, `analytics-api` (`pkg/platformauth`).
 Login at `POST /api/v1/auth/login` issues tokens accepted by all three services.
 
-Route tables and request bodies live in [API reference](api.md). Per-service
+Route tables and request bodies live in [API reference](api-reference.md). Per-service
 OpenAPI specs: `services/platform-api/openapi.yaml`,
 `services/runtime-api/openapi.yaml`, `services/analytics-api/openapi.yaml`.
 Per-service CI runs OpenAPI response validation tests against those specs.
@@ -243,7 +243,7 @@ Restart request body examples (runtime-api admin operations):
 ```
 
 Grant/session apply bodies and CRD field details are in the
-[API reference](api.md#runtime-governance-api).
+[API reference](api-reference.md#runtime-governance-api).
 
 ### UI service
 
@@ -344,7 +344,7 @@ is the token issuer and resource-owner login boundary.
 
 ## Governance UI walkthrough
 
-The UI's **Governance** tab creates and operates the same `MCPAccessGrant` and `MCPAgentSession` resources the CLI manages. The same flows are available via the Runtime Governance API ([API → Runtime Governance](api.md#runtime-governance-api)).
+The UI's **Governance** tab creates and operates the same `MCPAccessGrant` and `MCPAgentSession` resources the CLI manages. The same flows are available via the Runtime Governance API ([API → Runtime Governance](api-reference.md#runtime-governance-api)).
 
 | Action | What it does |
 |---|---|
@@ -378,7 +378,7 @@ for delegated cross-team access.
 ## Verifying per-server policy isolation
 
 Verify that one server's rendered gateway policy does not apply to another
-server. For the team namespace model, see [Multi-team isolation](multi-team.md).
+server. For the team namespace model, see [Multi-team isolation](teams-and-access.md).
 
 The operator renders a per-server policy ConfigMap
 (`<server>-gateway-policy`) holding only the grants and sessions whose
@@ -475,7 +475,7 @@ mcp-runtime sentinel grafana reset-admin-password --yes
 Use `/api/v1/events` with query filters when you need the request/audit
 events emitted by `mcp-gateway`.
 
-See [CLI → sentinel](cli.md#sentinel) for component keys and flag details.
+See [CLI → sentinel](cli-reference.md#sentinel) for component keys and flag details.
 
 ## Repository structure note
 
@@ -483,5 +483,5 @@ Services live in `services/`, manifests in `k8s/`, and shared libraries in `pkg/
 
 ## Next
 
-- [API → Runtime Governance API](api.md#runtime-governance-api): the HTTP surface the UI uses.
+- [API → Runtime Governance API](api-reference.md#runtime-governance-api): the HTTP surface the UI uses.
 - [Architecture](architecture.md): how the proxy fits into the request path.

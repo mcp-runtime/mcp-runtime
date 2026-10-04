@@ -16,7 +16,7 @@ user-facing commands and scripts over private shortcuts.
 - Readiness/debug guide: `docs/cluster-readiness.md`
 - Scripts (canonical): `hack/deploy/mcpruntime-org/{backup,setup,clean,restore,rollout,multitenancy-test}.sh`
 - Script index: `hack/README.md`
-- User path: `docs/quickstart.md` (published CLI install, hosted platform login,
+- User path: `docs/hosted-quickstart.md` (published CLI install, hosted platform login,
   server publish, grant, adapter, and analytics UI)
 - CLI release workflow: `.github/workflows/release.yaml`
 
@@ -231,7 +231,7 @@ change the default test context. The production profile remains the source for
 the domain and other deployment settings.
 
 The user-facing release check is separate from the rollout command. Follow
-`docs/quickstart.md` with the candidate CLI, then verify the same server,
+`docs/hosted-quickstart.md` with the candidate CLI, then verify the same server,
 connect configuration, and Analytics → Tools output in the hosted UI. The
 GitHub release workflow only publishes CLI binaries; do not publish a new CLI
 or mcp-auth release until these checks pass.

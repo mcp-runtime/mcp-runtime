@@ -1,26 +1,41 @@
 # Getting Started
 
 Install MCP Runtime on your own Kubernetes cluster. To try the platform without
-a cluster, use the [Quickstart](quickstart.md).
+a cluster, use the [Quickstart](hosted-quickstart.md).
+
+## Choose your path
+
+- **Try the hosted platform:** follow the [Quickstart](hosted-quickstart.md); no cluster is required.
+- **Self-host on an existing cluster:** install the CLI, check cluster readiness,
+  then follow the production-style setup below.
+- **Contribute on local Kind:** use the [Contributor Guide](contributor/README.md)
+  and [Local Kind and Test Mode](contributor/local-kind.md).
 
 ## Prerequisites
 
-- Go `1.26+` (matches the repository `go.mod` files)
-- `make`
-- Docker or a Docker-compatible client, with the daemon running and reachable
-- `kubectl` on `PATH`, configured for the target cluster
-- `curl`, `jq`, and `python3` for documented dev and traffic-generation flows
-- `kind` for the contributor test-mode cluster in step 3
-- A Kubernetes cluster (k3s, kind, minikube, Docker Desktop Kubernetes, EKS, GKE, AKS, or equivalent). If you are choosing a target, start with [Deployment Targets](deployment-targets.md), then use [Cluster Readiness](cluster-readiness.md) for distribution-specific prep.
+For a release CLI install, you need `curl` or `wget` on macOS/Linux, or
+PowerShell on Windows. Go and Make are only needed when building from source.
 
-Host bootstrap:
+To install the platform, you also need:
+
+- Docker or a Docker-compatible client, with the daemon running and reachable
+- `kubectl` on `PATH`, configured for the intended target cluster
+- A running Kubernetes cluster with DNS, storage, and ingress prepared.
+  Start with [Deployment Targets](deployment-targets.md), then
+  [Cluster Readiness](cluster-readiness.md).
+
+Contributor and example workflows also use Go `1.26+`, Make, `curl`, `jq`,
+Python 3, and Kind for local test-mode clusters. Run the repository's dependency
+checks from a source checkout:
 
 ```bash
 make deps-install              # best-effort install for supported macOS/Linux hosts
 STRICT_DEPS_CHECK=1 make deps-check
 ```
 
-`make deps-install` is intentionally best-effort: it can install some packages with Homebrew or apt, but it cannot enable Docker Desktop, create cloud credentials, or configure your kubeconfig. Re-run `STRICT_DEPS_CHECK=1 make deps-check` until the required host tools pass.
+These checks cannot start Docker Desktop, create cloud credentials, or configure
+your kubeconfig. The [Contributor Guide](contributor/README.md) owns source
+checkout and local cluster setup.
 
 ## 1. Install the CLI
 
@@ -50,7 +65,13 @@ without `sudo`. Windows installs to a user-local directory and adds it to your
 user `PATH`; open a new terminal after installation. Pin a
 specific release by setting `MCP_RUNTIME_VERSION` to its tag before running the
 installer. For example, run `export MCP_RUNTIME_VERSION=vX.Y.Z` on macOS/Linux
-or `$env:MCP_RUNTIME_VERSION='vX.Y.Z'` in PowerShell. Browse all binaries on the
+or `$env:MCP_RUNTIME_VERSION='vX.Y.Z'` in PowerShell.
+
+The macOS/Linux installer logs detection, download, and installation steps,
+shows download progress, and retries failed transfers. Color is automatic in a
+terminal; set `NO_COLOR=1` to disable it.
+
+Browse all binaries on the
 [latest GitHub release](https://github.com/mcp-runtime/mcp-runtime/releases/latest).
 If macOS or Linux cannot find `mcp-runtime`, add `~/.local/bin` to your shell's
 `PATH`, for example with `export PATH="$HOME/.local/bin:$PATH"`.
@@ -64,13 +85,15 @@ make build
 
 This produces `./bin/mcp-runtime` with version metadata from
 `git describe --tags --match 'v*'`, the current commit, and UTC build time.
+For source builds, add the checkout’s `bin` directory to `PATH` with
+`export PATH="$PWD/bin:$PATH"` to run the commands below.
 Release binaries use the release tag exactly. Override with
 `VERSION=<tag> make build` when needed.
 
 ## 2. Confirm cluster readiness
 
 ```bash
-./bin/mcp-runtime bootstrap
+mcp-runtime bootstrap
 ```
 
 Before setup, confirm the target Kubernetes cluster is ready for registry
@@ -92,42 +115,7 @@ install bundled CoreDNS / local-path on k3s. After setup, run `cluster diagnosti
 to validate the installed MCP Runtime resources, registry pulls, ingress,
 Sentinel, and operator readiness.
 
-## 3. Contributor test-mode cluster (local Kind)
-
-For local development, CI, or contributing to the repo, use the Kind-based
-test-mode path. The contributor docs own this path completely:
-
-- [Contributor Guide](contributor/README.md)
-- [Local Kind and Test Mode](contributor/local-kind.md)
-
-Quick path (requires `kind` on `PATH`; the linked guide creates an isolated
-test kubeconfig so this does not use the ambient or production context):
-
-```bash
-make deps && make build
-# Follow Local Kind and Test Mode to create/export the test kubeconfig first.
-export KUBECONFIG="$HOME/.kube/test-mcp-runtime-config"
-./bin/mcp-runtime bootstrap
-./bin/mcp-runtime cluster doctor
-./bin/mcp-runtime setup --test-mode --ingress-manifest config/ingress/overlays/http
-kubectl port-forward -n traefik svc/traefik 18080:8000 18443:8443
-./bin/mcp-runtime cluster diagnostics
-```
-
-See [Local Kind and Test Mode](contributor/local-kind.md) for fresh-device and
-existing-cluster instructions, including the isolated kubeconfig setup.
-
-`bootstrap` and `cluster doctor` run before setup: `bootstrap` reports (and on
-k3s can install) missing cluster prerequisites, `cluster doctor` checks nodes,
-storage, ingress, DNS, and TLS readiness. `cluster diagnostics` runs after setup
-to validate what was installed.
-
-Local surfaces: platform `http://localhost:18080/`, plain Ingress MCP
-`http://localhost:18080/<server-name>/mcp`, adapter-certificate MCP
-`https://localhost:18443/<server-name>/mcp` (use `-k` for the local default
-cert when `MCP_ADAPTER_CERTIFICATES=true`).
-
-## 4. Production-style install
+## 3. Choose production-style setup { #4-production-style-install }
 
 Use this path for any cluster you intend to keep.
 That includes staging, internal shared clusters, externally reachable installs,
@@ -148,14 +136,14 @@ Read these first:
 - [Deployment Targets](deployment-targets.md)
 - [Cluster readiness](cluster-readiness.md)
 - [Platform service Kubernetes awareness and hardening](platform-services.md#kubernetes-awareness-and-hardening)
-- [Multi-team isolation](multi-team.md) if multiple teams will publish or govern servers on one cluster
+- [Multi-team isolation](teams-and-access.md) if multiple teams will publish or govern servers on one cluster
 
 For production-oriented setup, choose the registry path explicitly. With a
 provisioned registry:
 
 ```bash
-./bin/mcp-runtime bootstrap
-./bin/mcp-runtime setup --registry-mode external --external-registry-url registry.example.com --with-tls --strict-prod
+mcp-runtime bootstrap
+mcp-runtime setup --registry-mode external --external-registry-url registry.example.com --with-tls --strict-prod
 ```
 
 With the bundled registry serving internal HTTPS, setup generates an internal
@@ -164,8 +152,8 @@ ClusterIssuer. Configure every node to trust that CA for image pulls. Public
 ingress TLS can still use ACME:
 
 ```bash
-./bin/mcp-runtime bootstrap
-./bin/mcp-runtime setup --registry-mode bundled-https --with-tls --acme-email ops@example.com --strict-prod
+mcp-runtime bootstrap
+mcp-runtime setup --registry-mode bundled-https --with-tls --acme-email ops@example.com --strict-prod
 ```
 
 If you want hostnames derived from one domain, set:
@@ -173,7 +161,7 @@ If you want hostnames derived from one domain, set:
 ```bash
 export MCP_PLATFORM_DOMAIN=example.com
 export MCP_PLATFORM_ADMIN_EMAIL=admin@example.com
-./bin/mcp-runtime setup --registry-mode external --external-registry-url registry.example.com --with-tls --strict-prod
+mcp-runtime setup --registry-mode external --external-registry-url registry.example.com --with-tls --strict-prod
 ```
 
 That derives:
@@ -186,8 +174,8 @@ If you already have an external registry, provision it before setup so the
 cluster pulls from the same hardened image host you intend to keep:
 
 ```bash
-./bin/mcp-runtime registry provision --url registry.example.com
-./bin/mcp-runtime setup --registry-mode external --with-tls --strict-prod
+mcp-runtime registry provision --url registry.example.com
+mcp-runtime setup --registry-mode external --with-tls --strict-prod
 ```
 
 For public/TLS setup, setup validates the host env even without
@@ -216,7 +204,7 @@ If you use an internal CA instead of ACME, install the issuer first and point
 setup at it:
 
 ```bash
-./bin/mcp-runtime setup --with-tls --tls-cluster-issuer <issuer-name> --strict-prod
+mcp-runtime setup --with-tls --tls-cluster-issuer <issuer-name> --strict-prod
 ```
 
 What `--strict-prod` is for:
@@ -230,11 +218,11 @@ Do not use the contributor `--test-mode` flow as a production install guide.
 local cert-manager workload CA for mTLS tests and still builds
 and pushes local images and assumes the contributor registry and ingress shape.
 
-## 5. Install the platform stack
+## 4. Configure and install the platform stack { #5-install-the-platform-stack }
 
-```bash
-./bin/mcp-runtime setup
-```
+Run the `setup` command selected in step 3 with any additional configuration
+below. The examples are alternatives; do not rerun bare `setup` after your
+configured install.
 
 `setup` installs the platform pieces companies need for MCP operations: CRDs,
 `mcp-runtime` and catalog namespaces, the internal Docker registry, ingress
@@ -259,7 +247,7 @@ Google issuer and JWKS URL when those values are not set explicitly:
 ```bash
 export GOOGLE_CLIENT_ID=<client>.apps.googleusercontent.com
 export MCP_PLATFORM_ADMIN_EMAIL=admin@example.com
-./bin/mcp-runtime setup --with-tls --platform-mode public
+mcp-runtime setup --with-tls --platform-mode public
 ```
 
 For a non-Google OIDC provider, set `OIDC_ISSUER`, `OIDC_AUDIENCE`, and
@@ -272,17 +260,17 @@ install and provision one namespace per team with `mcp-runtime team create
 `spec.teamID` and `subject.teamID` directly in YAML; an explicit foreign
 `subject.teamID` delegates access to another team while the gateway still
 matches every non-empty subject field. See
-[Multi-team isolation](multi-team.md).
+[Multi-team isolation](teams-and-access.md).
 
 Common variants:
 
 ```bash
-./bin/mcp-runtime setup --with-tls            # cert-manager TLS for the registry
-./bin/mcp-runtime setup --platform-mode public # public preview catalog namespace
-./bin/mcp-runtime setup --without-sentinel    # skip the request-path stack
-./bin/mcp-runtime setup --test-mode           # local Kind/dev build+push path
-./bin/mcp-runtime setup --storage-mode hostpath # single-node cluster with no dynamic provisioner
-./bin/mcp-runtime setup --parallel-builds     # build and publish setup images in parallel
+mcp-runtime setup --with-tls            # cert-manager TLS for the registry
+mcp-runtime setup --platform-mode public # public preview catalog namespace
+mcp-runtime setup --without-sentinel    # skip the request-path stack
+mcp-runtime setup --test-mode           # local Kind/dev build+push path
+mcp-runtime setup --storage-mode hostpath # single-node cluster with no dynamic provisioner
+mcp-runtime setup --parallel-builds     # build and publish setup images in parallel
 ```
 
 Defaults if you pass nothing: `--ingress traefik`, `--ingress-manifest
@@ -293,26 +281,28 @@ registry, TLS, and rollout sequencing stay the same.
 
 To enable optional adapter client certificates on gateway server routes, add
 `--mtls-cluster-issuer <cluster-issuer>` alongside `--with-tls`. Name an
-enterprise cert-manager issuer, or the bundled `mcp-runtime-ca` to have setup
-provision one; `--test-mode` defaults to `mcp-runtime-ca`. Set
+enterprise cert-manager issuer. In test mode, setup provisions the bundled
+`mcp-runtime-ca` by default; outside test mode, that CA must already exist and
+pass setup validation. Production certificate issuance also requires an
+approval policy; see the linked adapter guide. Set
 `MCP_ADAPTER_CERTIFICATES=true` to turn the feature on; production must also
 set `MCP_TRUST_DOMAIN` (for example `mcpruntime.org`). OAuth remains optional:
 omit `spec.auth` for cert-only routes, or add `spec.auth` when direct clients
 need a bearer. See
-[Agent Adapters](agent-adapters.md#enterprise-mtls-and-spiffe).
+[Agent Adapters](connect-clients.md#enterprise-mtls-and-spiffe).
 
 The bundled mcp-auth authorization server is optional and off by default. Check
-the provider with `./bin/mcp-runtime auth provider-check --issuer-url <issuer>`,
+the provider with `mcp-runtime auth provider-check --issuer-url <issuer>`,
 then enable it with `--with-mcp-auth-server`; outside test mode it also needs
 `--mcp-auth-signing-key-secret`. The issuer defaults to
 `https://auth.<MCP_PLATFORM_DOMAIN>/mcp-auth`, and the operator reconciles
 resource audiences from OAuth MCPServers. With managed TLS, setup provisions the auth
 issuer certificate automatically; `--mcp-auth-tls-secret` is only an optional
 override for externally managed certificates. See
-[MCP authorization](mcp-authorization.md).
+[MCP authorization](mcp-oauth.md).
 
 Every setup flag and its default is listed in the
-[CLI reference](cli.md#setup).
+[CLI reference](cli-reference.md#setup).
 
 ### Local development notes
 
@@ -320,7 +310,7 @@ For Kind or other local setups where traffic reaches Traefik through `kubectl po
 
 ```bash
 export MCP_INGRESS_READINESS_MODE=permissive
-./bin/mcp-runtime setup --test-mode --ingress-manifest config/ingress/overlays/http
+mcp-runtime setup --test-mode --ingress-manifest config/ingress/overlays/http
 kubectl port-forward -n traefik svc/traefik 18080:8000 18443:8443
 ```
 
@@ -337,26 +327,27 @@ IngressRoute on `websecure` only — probe them at
     ready. Keep `strict` for production clusters that rely on published
     load-balancer status.
 
-## 6. Confirm health
+## 5. Confirm health { #6-confirm-health }
 
 ```bash
-./bin/mcp-runtime status
-./bin/mcp-runtime cluster status
-./bin/mcp-runtime registry status
-./bin/mcp-runtime sentinel status
+mcp-runtime status
+mcp-runtime cluster status
+mcp-runtime registry status
+mcp-runtime sentinel status
 ```
 
-## 7. Deploy your first server
+## 6. Deploy your first server { #7-deploy-your-first-server }
 
 The server deploy flow (init → validate → build → push → deploy → grant → adapter)
 is covered step-by-step in the learning modules:
 
-- [Module 2: Your first governed server](learn/module-2-first-server.md): end-to-end hands-on
-- [Module 3: Multi-team setup](learn/module-3-multi-team.md): two teams, cross-team grants
+- [Module 2: Your first governed server](learn/02-first-governed-server.md): end-to-end hands-on
+- [Module 3: Multi-team setup](learn/03-multi-team-access.md): two teams, cross-team grants
 
 Quick reference:
 
 ```bash
+mcp-runtime auth login --api-url <platform-url>
 mcp-runtime server init my-server --from-server http://localhost:8088
 mcp-runtime server validate --metadata-dir .mcp
 mcp-runtime server build image my-server --tag v1
@@ -364,29 +355,65 @@ mcp-runtime server push --image ... --scope tenant
 mcp-runtime server deploy my-server --scope tenant --metadata-dir .mcp
 ```
 
-## 8. Observe live traffic and policy
+## 7. Observe live traffic and policy { #8-observe-live-traffic-and-policy }
 
 Use the platform dashboard and API first:
 
 ```bash
-./bin/mcp-runtime auth login --api-url <platform-url>
-./bin/mcp-runtime status
+mcp-runtime auth login --api-url <platform-url>
+mcp-runtime status
 # Dashboard: http://localhost:18080/ (Kind) or https://platform.<domain>/
 ```
 
 Admin/operator kubectl diagnostics (`sentinel *` requires admin cluster access):
 
 ```bash
-./bin/mcp-runtime sentinel port-forward ui          # Governance + dashboard
-./bin/mcp-runtime sentinel port-forward grafana     # Metrics + traces + logs
-./bin/mcp-runtime sentinel logs gateway --follow    # Tail the proxy
+mcp-runtime sentinel port-forward ui          # Governance + dashboard
+mcp-runtime sentinel port-forward grafana     # Metrics + traces + logs
+mcp-runtime sentinel logs gateway --follow    # Tail the proxy
 ```
+
+## Local alternative: contributor test-mode cluster (Kind) { #3-contributor-test-mode-cluster-local-kind }
+
+For local development, CI, or contributing to the repo, use the Kind-based
+test-mode path. The contributor docs own this path completely:
+
+- [Contributor Guide](contributor/README.md)
+- [Local Kind and Test Mode](contributor/local-kind.md)
+
+Quick path (requires `kind` on `PATH`; the linked guide creates an isolated
+test kubeconfig so this does not use the ambient or production context):
+
+```bash
+make deps && make build
+export PATH="$PWD/bin:$PATH"
+# Follow Local Kind and Test Mode to create/export the test kubeconfig first.
+export KUBECONFIG="$HOME/.kube/test-mcp-runtime-config"
+mcp-runtime bootstrap
+mcp-runtime cluster doctor
+mcp-runtime setup --test-mode --ingress-manifest config/ingress/overlays/http
+kubectl port-forward -n traefik svc/traefik 18080:8000 18443:8443
+mcp-runtime cluster diagnostics
+```
+
+See [Local Kind and Test Mode](contributor/local-kind.md) for fresh-device and
+existing-cluster instructions, including the isolated kubeconfig setup.
+
+`bootstrap` and `cluster doctor` run before setup: `bootstrap` reports (and on
+k3s can install) missing cluster prerequisites, `cluster doctor` checks nodes,
+storage, ingress, DNS, and TLS readiness. `cluster diagnostics` runs after setup
+to validate what was installed.
+
+Local surfaces: platform `http://localhost:18080/`, plain Ingress MCP
+`http://localhost:18080/<server-name>/mcp`, adapter-certificate MCP
+`https://localhost:18443/<server-name>/mcp` (use `-k` for the local default
+cert when `MCP_ADAPTER_CERTIFICATES=true`).
 
 ## End-to-end flow
 
 ```mermaid
 flowchart LR
-    A[Build CLI<br/>make build] --> B[bootstrap + setup]
+    A[Install CLI] --> B[bootstrap + setup]
     B --> C[auth login]
     C --> D[server init<br/>build, push, deploy]
     D --> E[grant init + apply]
@@ -398,10 +425,10 @@ flowchart LR
 ## Next steps
 
 - [Publish an MCP Server](publish-mcp-server.md): write manifests or `.mcp` metadata, build, push, deploy, and verify.
-- [Multi-team isolation](multi-team.md): team IDs, namespaces, RBAC, and ingress guidance.
+- [Multi-team isolation](teams-and-access.md): team IDs, namespaces, RBAC, and ingress guidance.
 - [Architecture](architecture.md): how the pieces fit together.
-- [CLI](cli.md): full command reference.
-- [API](api.md): every CRD field and HTTP endpoint.
+- [CLI](cli-reference.md): full command reference.
+- [API](api-reference.md): every CRD field and HTTP endpoint.
 - [Platform services](platform-services.md): request-path governance, audit, observability.
 
-**Next:** [Concepts](concepts.md): understand Grants, Sessions, Trust levels, and Side effects before deploying servers.
+For background on grants, sessions, trust, and side effects, see [Concepts](core-concepts.md).

@@ -28,7 +28,7 @@ On every call, a gateway in front of the server checks the caller's identity, se
 
 A public preview runs at [platform.mcpruntime.org](https://platform.mcpruntime.org/). The same stack installs into your own cluster with `mcp-runtime setup`.
 
-- [Website](https://mcpruntime.org/) · [Docs](https://docs.mcpruntime.org/) ([`docs/`](docs/)) · [API reference](https://docs.mcpruntime.org/api) · [Articles](https://articles.mcpruntime.org/)
+- [Website](https://mcpruntime.org/) · [Docs](https://docs.mcpruntime.org/) ([`docs/`](docs/)) · [API reference](https://docs.mcpruntime.org/api-reference) · [Articles](https://articles.mcpruntime.org/)
 - Running or evaluating an internal MCP platform? Open a [GitHub issue](https://github.com/mcp-runtime/mcp-runtime/issues) with your use case, cluster shape, or integration feedback.
 
 > [!CAUTION]
@@ -50,7 +50,7 @@ A public preview runs at [platform.mcpruntime.org](https://platform.mcpruntime.o
 - `mcp-runtime adapter proxy` for governed Streamable HTTP agent integrations.
   It enrolls a session-bound client certificate with
   `--server <name> --agent <id>` once an enabled grant exists; `--auto-refresh`
-  renews the certificate (see [Agent Adapter](docs/agent-adapters.md))
+  renews the certificate (see [Agent Adapter](docs/connect-clients.md))
 - Platform UI for authenticated MCP catalog browsing, platform state, and web operations
 - `MCPServer`, `MCPAccessGrant`, and `MCPAgentSession` CRDs
 - Kubernetes operator for `Deployment`, `Service`, `Ingress`, and policy materialization
@@ -61,6 +61,65 @@ A public preview runs at [platform.mcpruntime.org](https://platform.mcpruntime.o
   telemetry stack run in `mcp-observability`. Promtail runs in
   `mcp-log-collector`. MCP servers stay in `mcp-servers`, `mcp-servers-org`,
   `mcp-servers-public`, or `mcp-team-{slug}`. See [Namespaces](docs/namespaces.md).
+
+## Requirements
+
+Using the hosted platform requires the CLI; release installation needs `curl`
+or `wget` on macOS/Linux, or PowerShell on Windows.
+
+For self-hosting and source/contributor workflows, host tools include:
+
+- Go `1.26+` and Make for source builds and contributor workflows (release CLI installs do not need them)
+- Docker or a Docker-compatible client, with the daemon running
+- `kubectl` on `PATH`, configured for the target cluster
+- `curl`, `jq`, and `python3` for documented dev and traffic-generation flows
+- `kind` for local Kind-based clusters
+
+Cluster prerequisites:
+
+- A running Kubernetes cluster: kind, k3s, minikube, Docker Desktop Kubernetes, EKS, GKE, AKS, or equivalent
+- Working DNS, default storage class, ingress, and load-balancing path for your distribution
+- See [`docs/deployment-targets.md`](docs/deployment-targets.md) to choose the install shape, then [`docs/cluster-readiness.md`](docs/cluster-readiness.md) before running production-like installs
+
+`mcp-runtime setup` installs the platform stack, including Sentinel services such as ClickHouse and Kafka. You do not install those separately for the default flow.
+
+## Quick start
+
+Install the CLI on macOS or Linux (the installer detects your OS and CPU):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mcp-runtime/mcp-runtime/main/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
+mcp-runtime --version
+```
+
+For Windows, installation options, and your first hosted deployment, follow the
+[Quickstart](docs/hosted-quickstart.md). No Kubernetes cluster is needed to use the
+hosted platform.
+
+To install the platform on your own cluster, follow
+[Getting Started](docs/self-hosting.md). Choose a
+[deployment target](docs/deployment-targets.md) and check
+[cluster readiness](docs/cluster-readiness.md) before setup.
+
+To build from source or run a disposable local Kind cluster, start with the
+[Contributor Guide](docs/contributor/README.md).
+
+## Common commands
+
+```bash
+./bin/mcp-runtime bootstrap              # preflight cluster prerequisites
+./bin/mcp-runtime setup                  # install platform stack
+./bin/mcp-runtime status                 # show platform health
+./bin/mcp-runtime auth login --api-url <platform-url>   # save platform credentials
+./bin/mcp-runtime team create acme --name "Acme Corp"   # create a team namespace (admin)
+./bin/mcp-runtime registry status        # inspect registry
+./bin/mcp-runtime server status          # inspect MCP servers
+./bin/mcp-runtime catalog tools          # search tools across visible servers
+./bin/mcp-runtime access grant list      # inspect access grants
+./bin/mcp-runtime adapter proxy --server <name> --agent <id> --auto-refresh   # connect an MCP client
+./bin/mcp-runtime sentinel status        # inspect Sentinel stack
+```
 
 ## Comparison
 
@@ -118,69 +177,6 @@ cluster and enforce who may call which tool, with what trust and consent.
 Another project may fit better if your main need is broad SaaS integrations,
 model routing and spend controls, API-to-MCP conversion, remote zero-trust
 networking, or a full agent/chat product.
-
-## Requirements
-
-Host tools:
-
-- Go `1.26+` (matches the repository `go.mod` files)
-- Make
-- Docker or a Docker-compatible client, with the daemon running
-- `kubectl` on `PATH`, configured for the target cluster
-- `curl`, `jq`, and `python3` for documented dev and traffic-generation flows
-- `kind` for local Kind-based clusters
-
-Cluster prerequisites:
-
-- A running Kubernetes cluster: kind, k3s, minikube, Docker Desktop Kubernetes, EKS, GKE, AKS, or equivalent
-- Working DNS, default storage class, ingress, and load-balancing path for your distribution
-- See [`docs/deployment-targets.md`](docs/deployment-targets.md) to choose the install shape, then [`docs/cluster-readiness.md`](docs/cluster-readiness.md) before running production-like installs
-
-`mcp-runtime setup` installs the platform stack, including Sentinel services such as ClickHouse and Kafka. You do not install those separately for the default flow.
-
-## Quick start
-
-```bash
-make deps-install              # best-effort host install where supported
-STRICT_DEPS_CHECK=1 make deps-check
-make deps
-make build
-
-./bin/mcp-runtime bootstrap
-./bin/mcp-runtime setup
-./bin/mcp-runtime status
-```
-
-Notes:
-
-- `make deps-install` is best-effort. It cannot start Docker Desktop, create cloud credentials, or configure kubeconfig for you.
-- `make deps` checks host tools and downloads Go modules. It does not create a Kubernetes cluster.
-- `make build` produces `./bin/mcp-runtime` with version metadata from
-  `git describe --tags --match 'v*'`, the current commit, and UTC build time.
-  Release binaries use the release tag exactly. Override with
-  `VERSION=<tag> make build` when needed.
-- Contributors who want a disposable local Kind install should start with the
-  maintained [`docs/contributor/`](docs/contributor/README.md) guide. The
-  shorter entry summary remains in
-  [`docs/getting-started.md`](docs/getting-started.md#3-contributor-test-mode-cluster).
-- To exercise agent-side governance against a real MCP route, use the
-  [Go example's grant/session workflow](examples/oauth-example-go-2025-11-25/README-oauth-example-go-2025-11-25.md#governance).
-
-## Common commands
-
-```bash
-./bin/mcp-runtime bootstrap              # preflight cluster prerequisites
-./bin/mcp-runtime setup                  # install platform stack
-./bin/mcp-runtime status                 # show platform health
-./bin/mcp-runtime auth login --api-url <platform-url>   # save platform credentials
-./bin/mcp-runtime team create acme --name "Acme Corp"   # create a team namespace (admin)
-./bin/mcp-runtime registry status        # inspect registry
-./bin/mcp-runtime server status          # inspect MCP servers
-./bin/mcp-runtime catalog tools          # search tools across visible servers
-./bin/mcp-runtime access grant list      # inspect access grants
-./bin/mcp-runtime adapter proxy --server <name> --agent <id> --auto-refresh   # connect an MCP client
-./bin/mcp-runtime sentinel status        # inspect Sentinel stack
-```
 
 ## Development checks
 

@@ -543,9 +543,11 @@ cp config/deployments/mcpruntime-org.env.example config/deployments/mcpruntime-o
 
 export MCP_PLATFORM_ADMIN_EMAIL=admin@example.com
 
+PROD_KUBECONFIG="$HOME/.kube/prod-mcp-runtime-config"
 MCP_SETUP_WAIT_TIMEOUT=900 MCP_CERT_TIMEOUT=15m \
 ./bin/mcp-runtime setup \
-  --kubeconfig "$KUBECONFIG" \
+  --env-file config/deployments/mcpruntime-org.env \
+  --kubeconfig "$PROD_KUBECONFIG" \
   --with-tls \
   --acme-email ops@example.com \
   --ingress none \
@@ -658,10 +660,13 @@ Verify the user path after rollout:
 1. Install the candidate CLI built from the selected Runtime ref and confirm
    `mcp-runtime --version` reports that commit. After release publication,
    verify the `releases/latest` binary download reports the release tag.
-2. Follow [Quickstart](quickstart.md) against
+2. Follow [Quickstart](hosted-quickstart.md) against
    `https://platform.mcpruntime.org`: log in, build/push/deploy a temporary
-   `qa-audit-*` server, create a grant, call a tool through the adapter, and
-   confirm the request appears under **Analytics → Tools** in the platform UI.
+   `qa-audit-*` server, create a grant, and verify the adapter result matches
+   the configured identity mode. The hosted preview currently leaves adapter
+   identity verification off, so its allow-list call returns `missing_identity`.
+   Verify a successful governed call separately on the guarded staging target
+   with adapter certificates enabled.
 3. Check the signed-out platform page and signed-in role-gated UI with browser
    evidence. Use only temporary `qa-audit-*` resources and clean them up.
 4. Verify `mcp-runtime status`, server listing, deployment readiness, and
@@ -682,7 +687,7 @@ Equivalent manual command:
 ```bash
 set -a && source config/deployments/mcpruntime-org.env && set +a
 MCP_SETUP_WAIT_TIMEOUT=900 ./bin/mcp-runtime setup \
-  --kubeconfig "$KUBECONFIG" \
+  --kubeconfig "$PROD_KUBECONFIG" \
   --with-tls \
   --tls-cluster-issuer letsencrypt-prod \
   --skip-cert-manager-install \
@@ -691,8 +696,10 @@ MCP_SETUP_WAIT_TIMEOUT=900 ./bin/mcp-runtime setup \
   --platform-mode tenant
 ```
 
-**Why no `--test-mode`:** CI does not publish pre-built container images, so
-every deployment builds operator/gateway/Sentinel images from the source tree.
+**Why no `--test-mode`:** production installs must retain their configured
+registry, DNS, TLS, credentials, and workload issuer policy. Test mode is the
+local Kind/CI installation shape. CI’s content-hash image cache is separate
+from release publication; setup can reuse cached images when configured.
 Without `--test-mode`, setup requires `MCP_PLATFORM_ADMIN_EMAIL` and is
 otherwise identical. At run time, `--test-mode` only sets
 `MCP_RUNTIME_TEST_MODE=1` inside deployed pods. For a production deployment

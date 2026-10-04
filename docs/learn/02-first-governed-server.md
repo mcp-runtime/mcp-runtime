@@ -4,11 +4,21 @@ Deploy an MCP server, create a grant, connect a client, and watch live traffic
 in the analytics dashboard.
 
 **Prerequisites:**
+
 - Module 1 completed (you understand Grants, Sessions, and the gateway)
 - `mcp-runtime` CLI installed from the [latest GitHub release](https://github.com/mcp-runtime/mcp-runtime/releases/latest)
-- Account on the live platform (`platform.mcpruntime.org`) or a local cluster running
+- Account and team membership on an existing platform, or a local cluster running
+- Git, Go `1.26+`, and Docker with its daemon running for the example build
+
+The hosted platform leaves adapter-certificate identity off: allow-list tool
+calls return `missing_identity`. To complete the successful governed-call
+exercise, use a platform with `MCP_ADAPTER_CERTIFICATES=true`. See the
+[Quickstart](../hosted-quickstart.md) for the hosted path’s limits.
 
 ## Step 1: Log in
+
+For a self-hosted instance, replace the API URL below with your platform URL
+and use its MCP route in step 8.
 
 ```bash
 mcp-runtime auth login \
@@ -38,6 +48,7 @@ Run the server locally so `server init` can call its `tools/list` endpoint:
 ```bash
 go run . &
 SERVER_PID=$!
+# Wait for the listening log and confirm http://localhost:8088/health.
 
 mcp-runtime server init my-server \
   --from-server http://localhost:8088
@@ -177,4 +188,4 @@ mcp-runtime access session list --namespace mcp-team-myteam
 mcp-runtime access session revoke <session-name> --namespace mcp-team-myteam
 ```
 
-**Next:** [Module 3: Multi-team production setup](module-3-multi-team.md)
+**Next:** [Module 3: Multi-team production setup](03-multi-team-access.md)

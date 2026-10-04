@@ -9,7 +9,7 @@ watch permission is needed. Keep the scoped role separate from generated RBAC.
 Supported setup backfills existing server namespaces and platform-managed empty
 namespaces before removing the old cluster-wide Secret rule. Runtime API
 provisioning grants access for new managed namespaces. Infrastructure namespaces,
-including the proposed platform/observability/collector domains, cannot receive
+including the platform, observability, and collector namespaces, cannot receive
 this tenant binding. The direct installation bundle creates the default
 `mcp-servers` namespace and its binding; administrators installing tenant
 manifests directly must arrange the corresponding namespace-local binding.

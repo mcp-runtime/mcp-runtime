@@ -99,23 +99,32 @@ sequenceDiagram
     participant G as MCP gateway
     participant S as MCP server
 
-    A->>P: Authenticate; issue or reuse authorized session
-    P-->>A: Session-bound certificate
-    A->>T: Establish HTTPS; present certificate in TLS handshake
+    A->>P: Authenticate and issue or reuse authorized session
+    P-->>A: Session identity and expiry
+    A->>A: Generate private key and CSR
+    A->>P: Enroll certificate for the session
+    P-->>A: Signed certificate and CA bundle
+    A->>T: Establish HTTPS and present certificate in TLS handshake
     Note over A,T: The certificate represents one MCPAgentSession
     C1->>A: MCP request + bearer token A
     A->>T: Forward request + token A on authenticated connection
     T->>G: Request + verified certificate identity + token A
-    G->>G: Resolve session; validate token and subject
+    G->>G: Resolve session and validate token and subject
     G->>S: Authorized request + token A
-    S-->>C1: MCP response
+    S-->>G: MCP response
+    G-->>T: MCP response
+    T-->>A: MCP response
+    A-->>C1: MCP response
 
     C2->>A: MCP request + bearer token B
     A->>T: Forward request + token B on authenticated connection
     T->>G: Request + same certificate identity + token B
-    G->>G: Resolve same session; validate token and subject
+    G->>G: Resolve same session and validate token and subject
     G->>S: Authorized request + token B
-    S-->>C2: MCP response
+    S-->>G: MCP response
+    G-->>T: MCP response
+    T-->>A: MCP response
+    A-->>C2: MCP response
 ```
 
 This works when both OAuth tokens are valid for the target MCP resource and

@@ -8,7 +8,7 @@ A non-OAuth allow-list `tools/call` is identified only when the operator has
 set `MCP_ADAPTER_CERTIFICATES=true`; the live instance leaves that off, so the
 gateway denies the call with `missing_identity`.
 
-To self-host MCP Runtime on your own cluster, see [Getting Started](getting-started.md).
+To self-host MCP Runtime on your own cluster, see [Getting Started](self-hosting.md).
 
 ## 1. Install the CLI
 
@@ -38,7 +38,13 @@ To self-host MCP Runtime on your own cluster, see [Getting Started](getting-star
     Open a new terminal after installation.
 
 Pin a specific release by setting `MCP_RUNTIME_VERSION` to its tag before
-running the installer. Browse all binaries on the
+running the installer.
+
+The macOS/Linux installer logs detection, download, and installation steps,
+shows download progress, and retries failed transfers. Color is automatic in a
+terminal; set `NO_COLOR=1` to disable it.
+
+Browse all binaries on the
 [latest GitHub release](https://github.com/mcp-runtime/mcp-runtime/releases/latest).
 If macOS or Linux cannot find `mcp-runtime`, add `~/.local/bin` to your shell's
 `PATH`, for example with `export PATH="$HOME/.local/bin:$PATH"`.
@@ -59,7 +65,7 @@ does not need a local install.
 
 Get credentials from the [live platform](https://platform.mcpruntime.org) or use
 an existing account. You need a team and a user account. Ask your platform
-admin, or [self-host MCP Runtime](getting-started.md) to create your own.
+admin, or [self-host MCP Runtime](self-hosting.md) to create your own.
 
 ```bash
 mcp-runtime auth login \
@@ -71,6 +77,10 @@ mcp-runtime auth status    # confirm the profile is active
 ```
 
 ## 3. Deploy an example server
+
+This example needs Git, Go `1.26+`, and Docker with its daemon running.
+These are example build prerequisites; installing the release CLI does not
+require Go.
 
 Clone the repo to get the example server source:
 
@@ -84,6 +94,7 @@ Run it locally to discover its tool names, then scaffold the metadata:
 ```bash
 go run . &
 SERVER_PID=$!
+# Wait for the listening log and confirm http://localhost:8088/health.
 
 mcp-runtime server init workspace-demo \
   --from-server http://localhost:8088
@@ -169,7 +180,7 @@ SPIFFE id. Until then a plain Ingress does not ask for a client certificate,
 `missing_identity`. With the setting on, call `echo` or `add`. The allow-list
 policy from `server init` checks the grant and required session on each tool
 call. If you enable OAuth for the server, the client must also send its bearer
-through the adapter; see [Agent adapters](agent-adapters.md).
+through the adapter; see [Agent adapters](connect-clients.md).
 
 ## 5. See it in the analytics
 
@@ -184,7 +195,7 @@ the CLI; it does not require a separate server install.
 
 ## What's next
 
-- [Concepts](concepts.md): understand Grants, Sessions, Trust levels, and Side effects
+- [Concepts](core-concepts.md): understand Grants, Sessions, Trust levels, and Side effects
 - [Publish an MCP Server](publish-mcp-server.md): full build, push, deploy guide
-- [Getting Started](getting-started.md): self-host MCP Runtime on your own Kubernetes cluster
-- [CLI reference](cli.md): every command with flags and examples
+- [Getting Started](self-hosting.md): self-host MCP Runtime on your own Kubernetes cluster
+- [CLI reference](cli-reference.md): every command with flags and examples

@@ -7,6 +7,11 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Changed
+
+- CLI installation on macOS/Linux reports each step with terminal colors and download progress, bounds stalled transfers, and explains download or destination failures. Set `NO_COLOR` to disable colors.
+- Documentation starts with hosted and self-hosted paths, followed by task guides, operations, concepts, and reference. Self-hosting instructions distinguish release installs from source builds and avoid an extra unconfigured setup run. Pages use descriptive filenames, with redirects preserving published URLs.
+
 ## [0.5.0] - 2026-10-02
 
 This release moves the platform into owner namespaces. There is no in-place
@@ -45,7 +50,7 @@ upgrade from 0.4.x; see the migration note under **Changed**.
 ### Security
 
 - Adapter certificates require a workload-issuer approval policy. Outside `--test-mode`, setup refuses `MCP_ADAPTER_CERTIFICATES=true` unless cert-manager approver-policy is installed or `MCP_WORKLOAD_ISSUER_APPROVAL_ACK=true` acknowledges another approver. The runtime API rejects an issued certificate whose SPIFFE URI, key, usage, or lifetime differs from the submitted CSR, and its ClusterRole no longer grants `list` or `watch` on CertificateRequests. Adapter issuance stays off by default ([#538](https://github.com/mcp-runtime/mcp-runtime/issues/538)).
-- Setup validates the bundled `mcp-runtime-ca` workload CA before use (key and certificate match, CA constraints, validity). Production setup fails on a missing, invalid, expired, or under-180-day CA instead of generating or accepting it; test mode still generates a missing CA and warns near expiry. Migration: production installs using `--mtls-cluster-issuer mcp-runtime-ca` must have the CA Secret in place before setup. Rotation and backup guidance is in `docs/cli.md` ([#535](https://github.com/mcp-runtime/mcp-runtime/issues/535)).
+- Setup validates the bundled `mcp-runtime-ca` workload CA before use (key and certificate match, CA constraints, validity). Production setup fails on a missing, invalid, expired, or under-180-day CA instead of generating or accepting it; test mode still generates a missing CA and warns near expiry. Migration: production installs using `--mtls-cluster-issuer mcp-runtime-ca` must have the CA Secret in place before setup. Rotation and backup guidance is in `docs/cli-reference.md` ([#535](https://github.com/mcp-runtime/mcp-runtime/issues/535)).
 - Operator Secret permissions are scoped to MCPServer namespaces, and Secret reads bypass the controller cache. Runtime-managed namespaces get a scoped binding automatically, and setup backfills existing ones. The TLS namespace grants named read and update access only to the public adapter trust bundle ([#540](https://github.com/mcp-runtime/mcp-runtime/issues/540)).
 - Platform application workloads run under restricted Pod Security admission. Node log collection runs in `mcp-log-collector`, the only namespace with the hostPath exception ([#548](https://github.com/mcp-runtime/mcp-runtime/issues/548)).
 - The internal registry NetworkPolicy no longer admits tenant workload namespaces (`mcp-servers*` and team namespaces), closing the unauthenticated in-cluster registry read and write path from tenant pods. Node pulls and platform publish paths are unchanged. Registry-native authentication remains a follow-up ([#531](https://github.com/mcp-runtime/mcp-runtime/issues/531)).

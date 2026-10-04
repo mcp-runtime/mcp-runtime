@@ -32,7 +32,7 @@ This file is the **onboarding index** for the MCP Runtime repo. It complements `
 | Sentinel packages | `pkg/events/`, `pkg/clickhouse/`, `pkg/serviceutil/`, `pkg/sentinel/` | Events, analytics, service utilities |
 | Sentinel services | `services/platform-api`, `services/runtime-api`, `services/analytics-api`, `services/ui`, `services/ingest`, `services/processor`, `services/mcp-gateway`, … | Separate `go.mod` where present; Go 1.26 for shared imports. Namespaces come from `pkg/platforminventory`: `mcp-platform`, `mcp-observability`, `mcp-log-collector`. See `docs/namespaces.md`. |
 | Samples / install YAML | `examples/oauth-example-go-2025-11-25/`, `k8s/`, `config/` | Demo server; overlays and CRDs |
-| Team isolation | `docs/multi-team.md` | Namespaces, RBAC, ingress watch scope |
+| Team isolation | `docs/teams-and-access.md` | Namespaces, RBAC, ingress watch scope |
 | Deployment targets | `docs/deployment-targets.md`, `docs/k3s-on-prem-cluster.md` | Before distribution-specific runbooks |
 | E2E | `test/e2e/`, `test/integration/` | Kind script; envtest integration; Staging E2E on the disposable VM (`test/e2e/staging-*.sh`, `docs/contributor/staging-e2e.md`) |
 | Agent skills | `.codex/skills/`, `.claude/skills` → `../.codex/skills` | Canonical skills tree |
@@ -112,7 +112,13 @@ Pre-commit: `pre-commit install`; full suite `pre-commit run --all-files` (sets 
 
 **CI** (`.github/workflows/ci.yaml`): gofmt, vet, staticcheck, unit/golden/service/integration tests; path-selected QA E2E on PRs and manual dispatch (`test/e2e/select_pr_scenarios.sh`). QA E2E runs Kind on a fresh GitHub runner with unique cluster names, so PRs run in parallel, and reuses unchanged platform images from the content-hash GHCR cache. Staging E2E runs on the disposable VM from Pre-release Regression (`.github/workflows/pre-release-regression.yaml`) or by manual dispatch, one run at a time; it does not run on merges.
 
-**CLI docs sync:** when editing `docs/cli.md`, `docs/getting-started.md`, or command examples, copy wording from `./bin/mcp-runtime <group> <subcommand> --help`. Do not paraphrase from memory.
+**Docs reading order:** `docs/mkdocs.yml` owns navigation: start here → use
+MCP Runtime → self-host and operate → concepts → reference → contributors and
+internals. Keep `docs/README.md` and `docs/llms.txt` aligned. Release-install
+examples use `mcp-runtime` on `PATH`; `./bin/mcp-runtime` is for source builds.
+Preserve existing heading anchors when reorganizing linked guides.
+
+**CLI docs sync:** when editing `docs/cli-reference.md`, `docs/self-hosting.md`, or command examples, copy wording from `./bin/mcp-runtime <group> <subcommand> --help`. Do not paraphrase from memory.
 
 **Kubernetes deployment QA:** when a test environment supports the platform API,
 exercise the user-facing CLI flow (`server build image` → `server push` →
@@ -216,7 +222,7 @@ Grafana: dev ingress `/grafana` or `https://platform.<domain>/grafana` (admin). 
 
 - `README.md`: product overview
 - `k8s/`, `config/crd/bases/`
-- https://mcpruntime.org/docs/ and https://mcpruntime.org/docs/api
+- https://mcpruntime.org/docs/ and https://mcpruntime.org/docs/api-reference
 - `examples/oauth-example-go-2025-11-25/`
 
 ---

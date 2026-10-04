@@ -86,7 +86,7 @@ clients can use one adapter with different tokens only when each token is valid
 for the same MCP resource and identifies the same human as the certificate-bound
 session. If a token includes a team claim, it must also match the session's team.
 Different Runtime agent identities need separate sessions and certificates. See
-[Certificate identity and OAuth tokens](agent-adapters.md#certificate-identity-and-oauth-tokens)
+[Certificate identity and OAuth tokens](connect-clients.md#certificate-identity-and-oauth-tokens)
 for the request sequence.
 
 The gateway is the tool-call enforcement point when the server uses allow-list
@@ -185,7 +185,7 @@ MCPAccessGrant
 ```
 
 Grants are created with `mcp-runtime access grant init` and applied with
-`mcp-runtime access grant apply`. See [CLI reference: access](cli.md#access).
+`mcp-runtime access grant apply`. See [CLI reference: access](cli-reference.md#access).
 
 ## MCPAgentSession
 

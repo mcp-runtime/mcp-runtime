@@ -139,7 +139,7 @@ selector_expect() {
   echo "[pass] selector-${name}"
 }
 
-selector_expect "docs-only" "smoke-auth" "docs/internals/tests.md"
+selector_expect "docs-only" "smoke-auth" "docs/internals/testing.md"
 selector_expect "changelog-only" "smoke-auth" "CHANGELOG.md"
 selector_expect "ui" "smoke-auth,ui-auth" "services/ui/main.go"
 selector_expect "ui-with-changelog" "smoke-auth,ui-auth" "services/ui/main.go" "CHANGELOG.md"

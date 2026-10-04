@@ -16,7 +16,6 @@
 
 ## Makefiles
 - `Makefile` exposes high-level tasks (fmt, lint, test, build) for the CLI binary.
-- `Makefile.runtime` bundles runtime-specific build/install tasks.
 - `Makefile.operator` builds operator manifests, docker image, and runs controller-gen tools; used by setup/build scripts.
 
 ## Dockerfiles
@@ -29,6 +28,6 @@
 - `test/e2e/qa-e2e.sh` creates a kind cluster, builds/pushes test images through the registry flow, and runs e2e validation; `test/e2e/run-in-docker.sh` runs e2e flows inside Docker.
 
 ## Other assets
-- `LICENSE` (MIT), `README.md` project overview, and `Dockerfile.operator`/`Makefile.operator` referenced above.
+- `LICENSE` (Apache License 2.0), `README.md` project overview, and `Dockerfile.operator`/`Makefile.operator` referenced above.
 - `config/ingress/base/traefik.yaml` includes values for deploying Traefik via Kustomize.
 - `config/ingress/overlays/http/service-ports.patch.yaml` etc. tweak ports and args for different ingress modes.

@@ -9,7 +9,7 @@ Kubernetes resources, and two runtime components.
     grant is the rule in the security handbook, and a session is today's visitor
     badge. The agent directory is the building's register of approved service
     identities. The full mapping is in
-    [Concepts: the whole thing, as a building](../concepts.md#the-whole-thing-as-a-building).
+    [Concepts: the whole thing, as a building](../core-concepts.md#the-whole-thing-as-a-building).
 
 ## What problem is MCP Runtime solving?
 
@@ -42,7 +42,7 @@ replace the managed agent ID.
 Team owners and platform admins create agents. Members can see active agents
 covered by an applicable grant or their own active session. List them with
 `mcp-runtime agent list <team-slug> --status active`; use the ID shown in the
-output. See [Managed agents](../concepts.md#managed-agents) for deactivation
+output. See [Managed agents](../core-concepts.md#managed-agents) for deactivation
 and access details. The ID is like a directory number: it gives policy and
 audit records a stable name, while the certificate or OAuth token proves the
 request's authentication.
@@ -164,7 +164,7 @@ cannot inspect the server code to verify those declarations.
 
 `server init` uses allow-list policy with a default deny decision. For a staged
 rollout, `policy.mode: observe` records policy decisions but lets calls through.
-See [Policy engine](../concepts.md#policy-engine) for the full evaluation flow.
+See [Policy engine](../core-concepts.md#policy-engine) for the full evaluation flow.
 
 ## The decision table
 
@@ -211,4 +211,4 @@ Before Module 2, make sure you can answer:
 3. Why do tool names in `.mcp/servers.yaml` have to match the server's actual implementation?
 4. What does `maxTrust: low` on a Grant mean when the Session has `consentedTrust: high`?
 
-**Next:** [Module 2: Your first governed server](module-2-first-server.md)
+**Next:** [Module 2: Your first governed server](02-first-governed-server.md)
