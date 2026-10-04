@@ -7,10 +7,12 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-04
+
 ### Changed
 
-- CLI installation on macOS/Linux reports each step with terminal colors and download progress, bounds stalled transfers, and explains download or destination failures. Set `NO_COLOR` to disable colors.
-- Documentation starts with hosted and self-hosted paths, followed by task guides, operations, concepts, and reference. Self-hosting instructions distinguish release installs from source builds and avoid an extra unconfigured setup run. Pages use descriptive filenames, with redirects preserving published URLs.
+- CLI installation on macOS/Linux reports each step with terminal colors and download progress, bounds stalled transfers, and explains download or destination failures. Set `NO_COLOR` to disable colors ([#586](https://github.com/mcp-runtime/mcp-runtime/pull/586)).
+- Documentation starts with hosted and self-hosted paths, followed by task guides, operations, concepts, and reference. Self-hosting instructions distinguish release installs from source builds and avoid an extra unconfigured setup run. Pages use descriptive filenames, with redirects preserving published URLs ([#586](https://github.com/mcp-runtime/mcp-runtime/pull/586)).
 
 ## [0.5.0] - 2026-10-02
 
@@ -100,7 +102,8 @@ upgrade from 0.4.x; see the migration note under **Changed**.
 
 - Targeted platform updates through `mcp-runtime update`, including embedded CRD updates and `--build` to build/push missing component images before rollout ([#491](https://github.com/mcp-runtime/mcp-runtime/pull/491)).
 
-[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.3.2...v0.4.0
