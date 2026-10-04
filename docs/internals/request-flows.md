@@ -391,7 +391,7 @@ Primary request paths:
 | Direct ingest event | `POST /events` | ingest, auth, Kafka, processor, ClickHouse | event envelope and API key auth | `observability` |
 | View Grafana/Prometheus | `/grafana/*`, `/prometheus/*` | ingress, UI admin-check, Grafana/Prometheus | cookie/API-key admin forward auth | `ui-auth`, `observability` |
 | Admin audit/operations | `/api/v1/admin/*` | API, Postgres, K8s, audit store | admin role checks, audit payloads | `api-platform` |
-| Pre-release full sweep | manual workflow | static checks, tests, Kind modes, registry, API, UI, CLI, MCP, cache replay | tenant/org/public behavior, cache reuse | `all` with `E2E_DEEP_REQUEST_FLOWS=1` |
+| Pre-release regression | manual workflow | static checks, tests, security scans, Staging E2E on disposable k3s | production setup, TLS, registry, tenant deployment and governed calls | `staging-e2e.yaml` with multi-tenancy enabled |
 
 ## Coverage Guidance
 
@@ -400,7 +400,9 @@ plane. If a change touches shared contracts, generated manifests, API auth,
 policy evaluation, or namespace scoping, prefer the broader scenario or let CI
 fall back to `all`.
 
-For pre-release, cover every row in the matrix through `E2E_SCENARIOS=all` with
-`E2E_DEEP_REQUEST_FLOWS=1`, in tenant, org, and public platform modes. Include
-one cache replay so setup reuse, image reuse, adapter deterministic session
-reuse, and retained cluster state are exercised before release.
+For pre-release, run Pre-release Regression: Staging E2E is its only cluster
+suite. Staging currently uses tenant platform mode and exercises the production
+install and tenant journey. Use focused PR Kind scenarios for changed request
+paths. Run additional full Kind sweeps with `E2E_SCENARIOS=all` and
+`E2E_DEEP_REQUEST_FLOWS=1` when org/public modes or cache reuse need explicit
+coverage; these sweeps are not automatic pre-release jobs.

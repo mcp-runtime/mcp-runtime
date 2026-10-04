@@ -110,7 +110,7 @@ Pre-commit: `pre-commit install`; full suite `pre-commit run --all-files` (sets 
 - Reuse the contributor cluster with `E2E_CACHE_MODE=1 E2E_SCENARIOS=smoke-auth bash test/e2e/qa-e2e.sh`, and set `CLUSTER_NAME=mcp-runtime E2E_CACHE_MODE=1 E2E_KEEP_CLUSTER=1`.
 - Sentinel: `go test -race -count=1 ./...` inside touched `services/*` dirs
 
-**CI** (`.github/workflows/ci.yaml`): gofmt, vet, staticcheck, unit/golden/service/integration tests; path-selected QA E2E on PRs and manual dispatch (`test/e2e/select_pr_scenarios.sh`). QA E2E runs Kind on a fresh GitHub runner with unique cluster names, so PRs run in parallel, and reuses unchanged platform images from the content-hash GHCR cache. Staging E2E runs on the disposable VM from Pre-release Regression (`.github/workflows/pre-release-regression.yaml`) or by manual dispatch, one run at a time; it does not run on merges.
+**CI** (`.github/workflows/ci.yaml`): gofmt, vet, staticcheck, unit/golden/service/integration tests; path-selected QA E2E on PRs and manual dispatch (`test/e2e/select_pr_scenarios.sh`). QA E2E runs Kind on a fresh GitHub runner with unique cluster names, so PRs run in parallel, and reuses unchanged platform images from the content-hash GHCR cache. Staging E2E runs on the disposable VM from Pre-release Regression (`.github/workflows/pre-release-regression.yaml`) or by manual dispatch, one run at a time; it does not run on merges. Staging is the only cluster suite in Pre-release Regression; Kind QA stays in PR CI.
 
 **Docs reading order:** `docs/mkdocs.yml` owns navigation: start here → use
 MCP Runtime → self-host and operate → concepts → reference → contributors and

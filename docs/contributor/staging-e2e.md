@@ -228,6 +228,8 @@ only as an unexplained deployment timeout. On-VM run directories live in
 
 The **Pre-release Regression** workflow calls **Staging E2E (Disposable VM)**
 with the multi-tenancy flow enabled and the existing staging TLS snapshot.
+Staging is the only cluster suite in Pre-release Regression; Kind QA stays in
+PR CI. The staging setup currently uses tenant platform mode.
 Merges to `main` do not run it. The job holds the `staging-e2e-disposable-vm`
 lock, so only one Staging run uses the VM at a time. Pull requests do not
 receive the disposable-VM secrets; QA E2E runs on GitHub runners instead.
