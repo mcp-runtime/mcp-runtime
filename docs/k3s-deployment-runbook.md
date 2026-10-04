@@ -273,70 +273,33 @@ named `mcp-auth`. Configure this exact upstream callback URI:
 https://auth.<domain>/mcp-auth/identity/callback
 ```
 
-For the `mcpruntime.org` demo, Keycloak runs separately from Runtime setup in
-the `mcp-sentinel` namespace. Its declarative workload, Service, Ingress, and
-Certificate are in
-[`config/deployments/mcpruntime-org-keycloak.yaml`](../config/deployments/mcpruntime-org-keycloak.yaml).
-The demo uses Keycloak `26.3.3` with a retained H2 data volume; this is a
-single-instance demo configuration. The manifest references `keycloak-admin`
-and `keycloak-tls` Secrets but contains no credentials. Cert-manager renews
-`keycloak-tls` through the `letsencrypt-prod` ClusterIssuer. Keep port 8443
-available on the Service: the current mcp-auth connector calls
-`keycloak.mcp-sentinel.svc.cluster.local:8443` with TLS server name
-`keycloak.mcpruntime.org` for token exchange and JWKS retrieval.
+For the `mcpruntime.org` demo, Keycloak is a separate Docker service on the
+Buddy VM (`devbox1`, `103.181.176.61`). Its
+[`Compose file`](../config/deployments/mcpruntime-org-keycloak-compose.yaml)
+mounts the retained realm database at `/opt/keycloak/data` and caps Keycloak
+at 900 MiB on this 2 GiB VM. This H2 configuration is for a single-instance
+demo. The existing Caddy instance on that VM serves
+`keycloak.mcpruntime.org` using the
+[`Caddy site`](../config/deployments/mcpruntime-org-keycloak.Caddyfile) and
+obtains and renews its Let's Encrypt certificate. The DNS A record for
+`keycloak.mcpruntime.org` must point to `103.181.176.61`.
 
-Runtime setup does not deploy or restore this external identity provider. A
-missing Keycloak Ingress makes Traefik serve its default self-signed certificate
-and return 404 for `keycloak.mcpruntime.org`; if the Ingress exists while the
-pod is starting, requests return 503. Before recovering the demo, inspect the
-Keycloak resources and copy the retained data directory off-host. The current
-retained PV is `pvc-14f67d25-97e3-43a6-8b6f-16e6ea8befa7`, whose local path
-holds the `mcp-runtime` realm. The recovery manifest names this PV explicitly
-so a new, empty volume cannot silently replace the realm. If its old claim is
-`Released`, clear only the stale `spec.claimRef`, then apply the manifest and
-confirm `keycloak-data` binds to that exact PV. Restore the `keycloak-admin`
-and `keycloak-tls` Secrets into `mcp-sentinel` from the secure snapshot or the
-retained `mcp-platform` copies before starting the Deployment. For a fresh
-demo with no retained PV, remove `spec.volumeName` from the manifest and
-provision new realm, client, and users.
-
-For the current demo's retained PV, run this only after confirming its path
-contains the expected Keycloak data and its phase is `Released`:
-
-```bash
-PROD_KUBECONFIG="$HOME/.kube/prod-mcp-runtime-config"
-kubectl --kubeconfig "$PROD_KUBECONFIG" --context prod-mcp-runtime \
-  get pv pvc-14f67d25-97e3-43a6-8b6f-16e6ea8befa7 -o yaml
-kubectl --kubeconfig "$PROD_KUBECONFIG" --context prod-mcp-runtime \
-  create namespace mcp-sentinel --dry-run=client -o yaml | \
-  kubectl --kubeconfig "$PROD_KUBECONFIG" --context prod-mcp-runtime apply -f -
-for secret in keycloak-admin keycloak-tls; do
-  kubectl --kubeconfig "$PROD_KUBECONFIG" --context prod-mcp-runtime \
-    -n mcp-platform get secret "$secret" -o json | \
-    jq 'del(.metadata.uid,.metadata.resourceVersion,.metadata.creationTimestamp,.metadata.managedFields,.metadata.namespace) | .metadata.namespace="mcp-sentinel"' | \
-    kubectl --kubeconfig "$PROD_KUBECONFIG" --context prod-mcp-runtime apply -f -
-done
-kubectl --kubeconfig "$PROD_KUBECONFIG" --context prod-mcp-runtime \
-  patch pv pvc-14f67d25-97e3-43a6-8b6f-16e6ea8befa7 \
-  --type=merge -p '{"spec":{"claimRef":null}}'
-kubectl --kubeconfig "$PROD_KUBECONFIG" --context prod-mcp-runtime \
-  apply -f config/deployments/mcpruntime-org-keycloak.yaml
-```
-
-Verify both the public login route and the internal TLS route after recovery:
+Runtime setup does not deploy, back up, or restore this identity provider.
+Back up `/opt/keycloak/data` while the Keycloak container is stopped, and keep
+the client secret outside the Compose and Caddy files. Start the service with
+`docker compose -f /opt/keycloak/compose.yaml up -d` on `devbox1`; append the
+Caddy site to `/opt/workspace/Caddyfile`, validate it with `caddy validate`,
+and reload Caddy. Keep the existing `workspace.mcpruntime.org` site in place.
+The mcp-auth connector should use the public HTTPS token and JWKS endpoints,
+without `mcp-sentinel.svc.cluster.local` references. A direct public discovery
+check proves Keycloak is reachable; verify an authorization-code callback as
+well to prove mcp-auth can exchange a code.
 
 ```bash
 curl -fsS https://keycloak.mcpruntime.org/realms/mcp-runtime/.well-known/openid-configuration
 curl -fsS https://auth.mcpruntime.org/.well-known/oauth-authorization-server/mcp-auth
-KUBECONFIG="$HOME/.kube/prod-mcp-runtime-config" \
-  kubectl --context prod-mcp-runtime -n mcp-sentinel get deploy,svc,ingress,pvc,certificate
+ssh devbox1 'docker ps --filter name=demo-keycloak; docker logs demo-keycloak --tail 30'
 ```
-
-Both discovery requests must return 200 over trusted HTTPS, the Keycloak pod
-must be Ready, the Certificate must be Ready, and the authorization endpoint
-must render the `mcp-auth` login page using the callback above. Test internal
-TLS from a cluster client with SNI `keycloak.mcpruntime.org`; public discovery
-alone does not prove mcp-auth can exchange authorization codes.
 
 The connector file references the Keycloak issuer and client but never stores
 the client secret:
@@ -436,10 +399,15 @@ A full snapshot includes namespaced and cluster-scoped Kubernetes objects,
 CRDs, Secrets, grants, sessions, PV/PVC specs, a consistent SQLite online
 backup of the K3s control-plane database, `/etc/rancher/k3s`, K3s server
 credentials, and every file under `/var/lib/rancher/k3s/storage`. That volume
-archive includes Postgres, ClickHouse, Kafka, Keycloak, mcp-auth,
+archive includes Postgres, ClickHouse, Kafka, mcp-auth,
 observability, and registry data. It also contains the TLS and platform
 config/Secret files used by the existing setup restore path, plus a SHA-256
 manifest.
+
+The demo Keycloak database and Caddy certificate now live on `devbox1`, so
+this K3s backup does not cover them. Stop `demo-keycloak` for a consistent
+backup of `/opt/keycloak/data`; back up the Caddy config and `/opt/workspace/caddy_data`
+on that VM separately.
 
 The bundle is **not encrypted by the backup command**; file permissions reduce
 local access but do not protect it from device loss or disk compromise. Encrypt

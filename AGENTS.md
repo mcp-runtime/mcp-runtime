@@ -34,7 +34,7 @@ This file is the **onboarding index** for the MCP Runtime repo. It complements `
 | Samples / install YAML | `examples/oauth-example-go-2025-11-25/`, `k8s/`, `config/` | Demo server; overlays and CRDs |
 | Team isolation | `docs/teams-and-access.md` | Namespaces, RBAC, ingress watch scope |
 | Deployment targets | `docs/deployment-targets.md`, `docs/k3s-on-prem-cluster.md` | Before distribution-specific runbooks |
-| Demo Keycloak identity provider | `config/deployments/mcpruntime-org-keycloak.yaml`, `docs/k3s-deployment-runbook.md` | External to Runtime setup; retain its realm PV and TLS Secret during demo recovery |
+| Demo Keycloak identity provider | `config/deployments/mcpruntime-org-keycloak-compose.yaml`, `docs/k3s-deployment-runbook.md` | Separate Docker/Caddy service on the Buddy VM; retain its realm data during recovery |
 | E2E | `test/e2e/`, `test/integration/` | Kind script; envtest integration; Staging E2E on the disposable VM (`test/e2e/staging-*.sh`, `docs/contributor/staging-e2e.md`) |
 | Agent skills | `.codex/skills/`, `.claude/skills` → `../.codex/skills` | Canonical skills tree |
 
