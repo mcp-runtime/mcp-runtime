@@ -1,0 +1,143 @@
+# Current mcpruntime.org demo Keycloak deployment. Credentials are separate
+# Kubernetes Secrets; never add their values to this file. The fixed volumeName
+# reconnects the retained H2 realm database after the 2026-10-01 namespace reset.
+# For a fresh demo with no retained PV, remove volumeName before applying.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mcp-sentinel
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: keycloak-data
+  namespace: mcp-sentinel
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: local-path
+  volumeName: pvc-14f67d25-97e3-43a6-8b6f-16e6ea8befa7
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: mcp-sentinel
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:26.3.3
+          args: [start-dev]
+          env:
+            - name: KC_HOSTNAME
+              value: https://keycloak.mcpruntime.org
+            - name: KC_PROXY_HEADERS
+              value: xforwarded
+            - name: KC_HTTP_ENABLED
+              value: "true"
+            - name: KC_HTTPS_CERTIFICATE_FILE
+              value: /etc/keycloak-tls/tls.crt
+            - name: KC_HTTPS_CERTIFICATE_KEY_FILE
+              value: /etc/keycloak-tls/tls.key
+            - name: KC_BOOTSTRAP_ADMIN_USERNAME
+              value: admin
+            - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-admin
+                  key: password
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: https
+              containerPort: 8443
+          readinessProbe:
+            httpGet:
+              path: /realms/master/.well-known/openid-configuration
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              memory: 1Gi
+          volumeMounts:
+            - name: data
+              mountPath: /opt/keycloak/data
+            - name: tls
+              mountPath: /etc/keycloak-tls
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: keycloak-data
+        - name: tls
+          secret:
+            secretName: keycloak-tls
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  namespace: mcp-sentinel
+spec:
+  selector:
+    app: keycloak
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+    - name: https
+      port: 8443
+      targetPort: https
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: keycloak
+  namespace: mcp-sentinel
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: keycloak.mcpruntime.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak
+                port:
+                  name: http
+  tls:
+    - hosts: [keycloak.mcpruntime.org]
+      secretName: keycloak-tls
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: keycloak-cert
+  namespace: mcp-sentinel
+spec:
+  secretName: keycloak-tls
+  dnsNames: [keycloak.mcpruntime.org]
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
