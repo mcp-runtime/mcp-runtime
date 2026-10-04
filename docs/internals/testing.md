@@ -114,7 +114,7 @@ below instead, because each GitHub runner starts with an empty Docker cache.
 
 ### Content-hash GHCR image cache
 
-Pull-request QA E2E, Pre-release Regression, and Staging E2E skip rebuilding
+Pull-request QA E2E and Staging E2E skip rebuilding
 unchanged platform images by pulling content-hash tags from GitHub Container
 Registry. QA E2E pushes a tag after each miss; Staging E2E only reads them:
 
@@ -136,7 +136,7 @@ test-mode; only GHCR uses the hash tag. Forks without `packages: write` to the
 parent org can pull existing cache entries but cannot publish misses. Bust the cache with
 `E2E_IMAGE_CACHE=0` or by changing a hashed input file.
 
-`E2E_DEEP_REQUEST_FLOWS=1` is for pre-release sweeps, not normal PR feedback.
+`E2E_DEEP_REQUEST_FLOWS=1` is for explicit full Kind sweeps, not normal PR feedback.
 It requires `E2E_SCENARIOS=all` and adds broader CLI help, adapter proxy,
 platform API, UI auth, registry authz, team, deployment, and item-level runtime
 request flows.
@@ -164,7 +164,7 @@ Traefik `websecure` at `https://127.0.0.1:18443/...` (insecure TLS skip for the
 local default cert); plain Ingress and platform routes stay on
 `http://127.0.0.1:18080/...`.
 Set `E2E_MAX_MCP_SERVERS=0` locally for unlimited servers during full
-`E2E_SCENARIOS=all` pre-release runs.
+explicit `E2E_SCENARIOS=all` Kind runs.
 
 **What runs in parallel (safe):** local Docker image builds and registry mirroring
 (`E2E_IMAGE_BUILD_PARALLELISM`, `E2E_IMAGE_MIRROR_PARALLELISM`); read-only grant
@@ -209,14 +209,14 @@ targeted scenarios based on the changed files. API, UI, adapter, CLI, OAuth,
 observability, and multi-tenancy changes get the matching request-path mode;
 shared install paths (API types, operator, manifests, module files, and the
 E2E harness) stay on `smoke-auth`, which is the setup and placement check.
-The manual pre-release workflow is what runs every scenario. The
-`multitenancy` scenario checks that two team users can read only their own team
-and namespace and that their registry credentials cannot access the other
-team's repositories. Staging E2E separately exercises the full tenant image
-build, push, deploy, and adapter path. The manual Pre-release Regression
-workflow runs full QA E2E with
-`E2E_SCENARIOS=all` and `E2E_DEEP_REQUEST_FLOWS=1` across tenant, org, and
-public platform modes, plus a tenant cache-mode replay when requested.
+The `multitenancy` scenario checks that two team users can read only their own
+team and namespace and that their registry credentials cannot access the other
+team's repositories. Pre-release Regression uses Staging E2E as its only cluster
+suite; staging exercises the production setup, TLS, registry, tenant image
+build, push, deploy, and adapter path on the disposable VM. It currently uses
+tenant platform mode, not a tenant/org/public matrix. Full Kind sweeps and cache
+replay remain available by running `test/e2e/qa-e2e.sh` explicitly against an
+isolated Kind target.
 
 The script writes artifacts when `E2E_ARTIFACT_DIR` is set. In CI, those
 artifacts are uploaded from `.e2e-artifacts/qa`.
@@ -240,13 +240,14 @@ its own cluster and registry names, so PRs run in parallel, and unchanged
 platform images come from the content-hash GHCR cache. Staging E2E runs on the
 disposable VM from Pre-release Regression, not on merges.
 
-The manual Pre-release Regression workflow adds full QA E2E in tenant, org,
-and public platform modes, cache replay, benchmarks, repository/operator-image
-SBOMs, gosec, Gitleaks, and Trivy scans. Security workflows add pinned gosec,
+The manual Pre-release Regression workflow runs Staging E2E, benchmarks,
+repository/operator-image SBOMs, gosec, Gitleaks, and Trivy scans alongside
+static, unit, integration, and service checks. Kind QA runs in PR CI rather
+than being repeated in pre-release. Security workflows add pinned gosec,
 Trivy repository/image scans with SARIF upload, pinned Gitleaks secret
 scanning, operator-image SBOM artifacts, and pull-request dependency review.
 
-Use the [request-flow matrix](request-flows.md#use-case-matrix) to confirm a pre-release run exercises every user-facing control-plane, runtime, registry, policy, analytics, and tenant flow.
+Use the [request-flow matrix](request-flows.md#use-case-matrix) to choose additional focused QA when a change needs coverage beyond the staging journey.
 
 ## Pre-commit Hooks
 

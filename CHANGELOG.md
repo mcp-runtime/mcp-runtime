@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Changed
+
+- Pre-release Regression uses Staging E2E as its only cluster suite, avoiding repeated Kind tenant/org/public runs and cache replay. Static, unit, integration, service, benchmark, and security checks remain; Kind QA stays in PR CI.
+
 ## [0.5.1] - 2026-10-04
 
 ### Changed
