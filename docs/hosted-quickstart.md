@@ -1,4 +1,4 @@
-# Quickstart
+# Hosted Quickstart
 
 Deploy a governed MCP server on the live
 [platform.mcpruntime.org](https://platform.mcpruntime.org) instance. You do not

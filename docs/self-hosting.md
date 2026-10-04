@@ -1,4 +1,4 @@
-# Getting Started
+# Self-Hosting MCP Runtime
 
 Install MCP Runtime on your own Kubernetes cluster. To try the platform without
 a cluster, use the [Quickstart](hosted-quickstart.md).

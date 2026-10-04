@@ -15,11 +15,11 @@ them.
   <p class="docs-lead">Build and push an MCP server image, deploy it as an <code>MCPServer</code> resource, and control which agents may call which tools with grants and sessions.</p>
 
   <div class="docs-actions">
-    <a class="docs-button docs-button-primary" href="quickstart/">Try in 10 min</a>
-    <a class="docs-button" href="concepts/">Concepts</a>
+    <a class="docs-button docs-button-primary" href="hosted-quickstart/">Try in 10 min</a>
+    <a class="docs-button" href="core-concepts/">Concepts</a>
     <a class="docs-button" href="architecture/">Architecture</a>
-    <a class="docs-button" href="getting-started/">Self-host</a>
-    <a class="docs-button" href="api/">API reference</a>
+    <a class="docs-button" href="self-hosting/">Self-host</a>
+    <a class="docs-button" href="api-reference/">API reference</a>
     <a class="docs-button" href="https://docs.pkg.mcpruntime.org/github.com/mcp-runtime/mcp-runtime">Go packages</a>
   </div>
   </div>
@@ -28,12 +28,26 @@ them.
 
 ## Which setup should I use?
 
-| Setup | Use it when | Time to first server |
-|---|---|---|
-| **Live platform** (`platform.mcpruntime.org`) | Evaluating, no infrastructure, just want to try it | 10 min |
-| **Local Kind cluster** (`--test-mode`) | Contributing to the repo, CI, quick local demo | 30 min |
-| **k3s on-prem** | Production on your own hardware | 2–4 hours |
-| **EKS / GKE / AKS** | Production in cloud | 1–2 hours |
+| Your goal | Start with | Have ready | Success check |
+|---|---|---|---|
+| Try an existing platform | [Hosted quickstart](hosted-quickstart.md) | Platform account and team; Git, Go, and Docker for the example | Login succeeds and your deployed server becomes ready |
+| Run MCP Runtime on your own cluster | [Self-hosting](self-hosting.md) | Prepared Kubernetes cluster, Docker, and kubectl | Setup passes its smoke gate and authenticated platform access works |
+| Develop or test changes locally | [Local Kind and test mode](contributor/local-kind.md) | Source checkout and contributor prerequisites | Local setup and cluster health checks pass |
+| Learn grants and client identity | [Guided tutorials](learn/README.md) | Running platform; adapter-certificate identity for successful governed calls | An allowed tool call succeeds and a denied call is rejected |
+
+### Where to go next
+
+After deployment, [connect a client](connect-clients.md). To control who can
+call tools, read [identity and authorization](identity-and-authorization.md)
+and work through [multi-team access](learn/03-multi-team-access.md). For routine
+administration, use [runtime operations](runtime-operations.md).
+
+A ready server confirms deployment; a successful governed tool call also needs
+a matching grant, valid session, and verified client identity. The
+[hosted quickstart](hosted-quickstart.md) explains the public instance's identity
+limitation. If a call fails, start with the matching error in
+[troubleshooting](troubleshooting.md), then check the
+[CLI reference](cli-reference.md) for the command's flags.
 
 ## Start here
 
@@ -133,7 +147,7 @@ preparation.
 ## Where to go next
 
 <div class="docs-grid docs-grid-2">
-<a class="docs-card" href="getting-started/">
+<a class="docs-card" href="self-hosting/">
   <span class="docs-card-kicker">Start here</span>
   <strong>Get started</strong>
   <span>Install the CLI, prepare your cluster, configure the platform, and verify health.</span>
@@ -205,7 +219,7 @@ preparation.
   <span>Every command with flags, examples, and a full end-to-end walkthrough.</span>
 </a>
 
-<a class="docs-card" href="api/">
+<a class="docs-card" href="api-reference/">
   <span class="docs-card-kicker">API</span>
   <strong>API and CRDs</strong>
   <span>MCPServer, MCPAccessGrant, MCPAgentSession fields and HTTP endpoints.</span>
