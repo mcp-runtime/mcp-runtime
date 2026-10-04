@@ -46,7 +46,7 @@ Each key lives on the Secret that owns it, in that owner's namespace.
 | `mcp-runtime-ingest-credentials` | `mcp-platform` | Ingest key copy read by runtime-api |
 
 The bundled Traefik allowlist is `registry`, `mcp-platform`,
-`mcp-observability`, `mcp-servers`, `mcp-servers-org`, and
+`mcp-observability`, `mcp-log-collector`, `mcp-servers`, `mcp-servers-org`, and
 `mcp-servers-public`. Team create appends `mcp-team-{slug}` only when the
 Traefik Deployment already has `--providers.kubernetesingress.namespaces`.
 k3s Traefik in `kube-system` watches every namespace and is left unchanged.

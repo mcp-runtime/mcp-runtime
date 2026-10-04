@@ -194,15 +194,18 @@ From your workstation, copy the kubeconfig from the server node, replace
 private:
 
 ```bash
-scp root@<cp-node-ip>:/etc/rancher/k3s/k3s.yaml ./mcp-k3s.yaml
-sed -i.bak 's/127.0.0.1/<cp-node-ip>/g' ./mcp-k3s.yaml
-chmod 0600 ./mcp-k3s.yaml
-export KUBECONFIG=$PWD/mcp-k3s.yaml
-kubectl get nodes -o wide
+install -d -m 700 "$HOME/.kube"
+PROD_KUBECONFIG="$HOME/.kube/prod-mcp-runtime-config"
+scp root@<cp-node-ip>:/etc/rancher/k3s/k3s.yaml "$PROD_KUBECONFIG"
+sed -i.bak 's/127.0.0.1/<cp-node-ip>/g' "$PROD_KUBECONFIG"
+chmod 0600 "$PROD_KUBECONFIG"
+kubectl --kubeconfig "$PROD_KUBECONFIG" get nodes -o wide
 ```
 
 For macOS, the `sed -i.bak` form works with the default BSD `sed`.
 Treat the kubeconfig as a cluster-admin credential and do not commit it.
+Keep production out of the default kubeconfig and do not export it as the
+ambient `KUBECONFIG`; pass the production file explicitly on each command.
 
 ## Pin ServiceLB to the ingress node
 
@@ -212,7 +215,7 @@ demo, keep ports 80 and 443 on one known public ingress node.
 Label the ingress node:
 
 ```bash
-kubectl label node mcp-ingress-1 \
+kubectl --kubeconfig "$PROD_KUBECONFIG" label node mcp-ingress-1 \
   svccontroller.k3s.cattle.io/enablelb=true \
   ingress.mcpruntime.org/public=true \
   node-role.mcpruntime.org/public-ingress=true
@@ -222,13 +225,13 @@ If another node was labeled for ServiceLB during earlier testing, remove the
 ServiceLB label from it:
 
 ```bash
-kubectl label node <node-name> svccontroller.k3s.cattle.io/enablelb- --overwrite
+kubectl --kubeconfig "$PROD_KUBECONFIG" label node <node-name> svccontroller.k3s.cattle.io/enablelb- --overwrite
 ```
 
 Verify the `svclb-traefik` pods land only on the ingress node:
 
 ```bash
-kubectl -n kube-system get pods -o wide \
+kubectl --kubeconfig "$PROD_KUBECONFIG" -n kube-system get pods -o wide \
   -l svccontroller.k3s.cattle.io/svcname=traefik
 ```
 
@@ -236,7 +239,7 @@ If one node also serves non-Kubernetes docs or a website with Docker/nginx, keep
 that node out of Kubernetes scheduling:
 
 ```bash
-kubectl cordon <docs-node-name>
+kubectl --kubeconfig "$PROD_KUBECONFIG" cordon <docs-node-name>
 ```
 
 A cordoned node stays in the cluster, but no new pods are scheduled on it.
@@ -246,10 +249,10 @@ A cordoned node stays in the cluster, but no new pods are scheduled on it.
 Before installing MCP Runtime, verify the cluster shape:
 
 ```bash
-kubectl get nodes -o wide
-kubectl get storageclass
-kubectl -n kube-system get pods
-kubectl get ingressclass
+kubectl --kubeconfig "$PROD_KUBECONFIG" get nodes -o wide
+kubectl --kubeconfig "$PROD_KUBECONFIG" get storageclass
+kubectl --kubeconfig "$PROD_KUBECONFIG" -n kube-system get pods
+kubectl --kubeconfig "$PROD_KUBECONFIG" get ingressclass
 ```
 
 Check DNS from your workstation and from inside the cluster:
@@ -259,7 +262,7 @@ dig +short platform.example.com
 dig +short registry.example.com
 dig +short mcp.example.com
 
-kubectl run dns-check --rm -i --restart=Never --image=busybox:1.36 -- \
+kubectl --kubeconfig "$PROD_KUBECONFIG" run dns-check --rm -i --restart=Never --image=busybox:1.36 -- \
   nslookup platform.example.com
 ```
 
@@ -298,7 +301,7 @@ Run setup:
 # k3s ships Traefik in kube-system, so use --ingress none to avoid a second stack.
 # Pass --kubeconfig explicitly when multiple kubeconfigs exist on the workstation.
 MCP_SETUP_WAIT_TIMEOUT=1200 ./bin/mcp-runtime setup \
-  --kubeconfig "$KUBECONFIG" \
+  --kubeconfig "$PROD_KUBECONFIG" \
   --platform-mode public \
   --registry-mode bundled-https \
   --storage-mode dynamic \
@@ -365,11 +368,11 @@ the PEM files outside the repository and shell history. Kubernetes Secrets are
 namespace-scoped, so import the pair once for each Runtime ingress namespace:
 
 ```bash
-kubectl -n registry create secret tls registry-tls \
+kubectl --kubeconfig "$PROD_KUBECONFIG" -n registry create secret tls registry-tls \
   --cert=/secure/fullchain.pem --key=/secure/privkey.pem \
   --dry-run=client -o yaml | kubectl apply -f -
 
-kubectl -n mcp-platform create secret tls mcp-platform-tls \
+kubectl --kubeconfig "$PROD_KUBECONFIG" -n mcp-platform create secret tls mcp-platform-tls \
   --cert=/secure/fullchain.pem --key=/secure/privkey.pem \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
@@ -400,9 +403,9 @@ Run the platform checks:
 ```bash
 ./bin/mcp-runtime status
 ./bin/mcp-runtime cluster diagnostics
-kubectl get pods -A
-kubectl get ingress -A
-kubectl get certificate -A
+kubectl --kubeconfig "$PROD_KUBECONFIG" get pods -A
+kubectl --kubeconfig "$PROD_KUBECONFIG" get ingress -A
+kubectl --kubeconfig "$PROD_KUBECONFIG" get certificate -A
 ```
 
 Check the public routes:

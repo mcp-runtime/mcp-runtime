@@ -20,24 +20,20 @@ Traefik ingress (`internal/cli/setup/ingressmanifest/paths.go`, `k8s/10-gateway.
 
 Platform login (`POST /api/v1/auth/login`) issues JWTs whose `aud` claim includes `platform-api`, `runtime-api`, and `analytics-api` so one bearer token works across the split surface (`pkg/platformauth`).
 
-Each API service also serves unauthenticated `GET /health` and `GET /ready` outside `/api/v1`. `/ready` reports dependency health and returns `503` when it is missing: Postgres for platform-api, the Kubernetes client for runtime-api, and ClickHouse for analytics-api. The `mcp-gateway` sidecar has its own `/health`, `/ready`, `/config/status`, and `/metrics` endpoints; see [`docs/runtime.md`](runtime.md#gateway-policy-snapshots).
+Each API service also serves unauthenticated `GET /health` and `GET /ready` outside `/api/v1`. `/ready` reports dependency health and returns `503` when it is missing: Postgres for platform-api, the Kubernetes client for runtime-api, and ClickHouse for analytics-api. The `mcp-gateway` sidecar has its own `/health`, `/ready`, `/config/status`, and `/metrics` endpoints; see [`docs/runtime-operations.md`](runtime-operations.md#gateway-policy-snapshots).
 
 ```mermaid
 flowchart LR
-    subgraph CRDs
-        Server[MCPServer]
-        Grant[MCPAccessGrant]
-        Session[MCPAgentSession]
-    end
-    subgraph HTTP["Platform HTTP APIs /api/v1"]
-        Plat[platform-api auth admin registry]
-        Run[runtime-api governance]
-        Ana[analytics-api events stats]
-    end
-    CRDs -- rendered into --> Policy[Policy ConfigMap]
+    Resources[MCPServer, MCPAccessGrant, MCPAgentSession] --> Operator
+    Operator --> Policy[Policy ConfigMap]
     Policy --> Gateway[mcp-gateway]
-    Gateway -->|audit| Ana
-    Run --> CRDs
+    Client[MCP client or adapter] --> Gateway
+    Gateway --> Server[MCP application]
+    Gateway -->|audit event| Ingest
+    Ingest --> Kafka --> Processor --> CH[(ClickHouse)]
+    Ana[analytics-api] -->|query| CH
+    Run[runtime-api] -->|create or update| Resources
+    Run -->|resolve principal| Plat[platform-api]
 ```
 
 ## Core resources
@@ -70,7 +66,7 @@ flowchart LR
 
 ### Validation rules in code
 
-- Analytics emission requires `gateway.enabled`. To opt out per server, set `analytics.disabled: true` or omit the analytics block.
+- Analytics emission requires the gateway. To opt out per server, set `analytics.disabled: true`; omitting the block may inherit operator defaults.
 - `gateway.port` must differ from `spec.port`.
 - Every listed `tools[]` entry must declare `sideEffect`. A tool called at runtime that the server never declared has no side effect to check, so the gateway fails closed with `403 tool_side_effect_unknown`.
 - Canary rollouts require positive `canaryReplicas` strictly less than total replicas.
@@ -120,6 +116,7 @@ spec:
       requiredTrust: high
       sideEffect: destructive
       riskLevel: high
+  replicas: 2
   rollout:
     strategy: Canary
     canaryReplicas: 1
@@ -140,7 +137,7 @@ webhook emits a warning): the gateway matches any authenticated principal for
 the server, while adapter session creation still requires subject alignment
 with the caller. A grant with only `subject.teamID` applies to any authenticated
 principal from that team when trusted header or OAuth team identity is present.
-See [Multi-team isolation](multi-team.md).
+See [Multi-team isolation](teams-and-access.md).
 
 The platform API enforces the namespace boundary for access writes. Grants and
 sessions must live in the same namespace as their `serverRef`; non-admin
@@ -323,20 +320,25 @@ is present.
 ```mermaid
 sequenceDiagram
     participant Client
+    participant Ingress as Traefik
     participant Gateway as mcp-gateway
     participant Server as MCP server
-    Client->>Gateway: POST /payments/mcp tools/call
-    Note right of Gateway: Verify OAuth token; verify adapter certificate when present
-    Gateway->>Gateway: Lookup grant + session
-    Gateway->>Gateway: Check sideEffect + min(grant.maxTrust, session.consentedTrust)
+    participant Ingest
+    Client->>Ingress: POST /payments/mcp tools/call
+    Ingress->>Gateway: Request with verified adapter identity when enabled
+    Note right of Gateway: Validate bearer only for OAuth-enabled targets
+    Gateway->>Gateway: Resolve identity, grant, and required session
+    Gateway->>Gateway: Check tool rule, side effect, and effective trust
     alt allowed
-        Gateway->>Server: forward with validated bearer
-        Server-->>Gateway: response
-        Gateway-->>Client: response
+        Gateway->>Server: Forward MCP request and validated bearer when configured
+        Server-->>Gateway: MCP response
+        Gateway-->>Ingress: MCP response
+        Ingress-->>Client: MCP response
     else denied
-        Gateway-->>Client: 403 + audit reason
+        Gateway-->>Ingress: 401 identity/session failure or 403 policy denial
+        Ingress-->>Client: Error response with denial reason
     end
-    Gateway-->>+Ingest: audit event
+    Gateway->>Ingest: Audit event when analytics is enabled
 ```
 
 - **Enforcement point:** authorization is evaluated at `call_tool` / `tools/call`, not at discovery time.
@@ -408,7 +410,7 @@ DELETE /api/v1/runtime/servers/{namespace}/{name} # Retire one MCPServer
 GET  /api/v1/runtime/server-events?namespace=&server= # Recent analytics events for one administered server
 GET  /api/v1/runtime/grants               # List MCPAccessGrant resources
 GET  /api/v1/runtime/grants/{namespace}/{name}   # Get one MCPAccessGrant
-POST /api/v1/runtime/grants               # Create or update an MCPAccessGrant (x-api-key)
+POST /api/v1/runtime/grants               # Authorized server/team owner or admin create/update
 DELETE /api/v1/runtime/grants/{namespace}/{name} # Delete one MCPAccessGrant
 GET  /api/v1/runtime/sessions             # List MCPAgentSession resources
 GET  /api/v1/runtime/sessions/{namespace}/{name} # Get one MCPAgentSession
@@ -424,9 +426,9 @@ GET  /api/v1/runtime/teams/{team}         # Team metadata (admin/member)
 GET  /api/v1/runtime/teams/{team}/members # List team memberships (admin/member)
 PUT  /api/v1/runtime/teams/{team}/members/{userID} # Admin/team-owner membership upsert
 DELETE /api/v1/runtime/teams/{team}/members/{userID}
-GET  /api/v1/runtime/teams/{team}/agents # List/search team agents (admin/member)
+GET  /api/v1/runtime/teams/{team}/agents # Admin/owner full view, member visibility scoped by grants/sessions
 POST /api/v1/runtime/teams/{team}/agents # Create agent (admin/team owner)
-GET  /api/v1/runtime/agents/{id} # Read agent (admin/team member)
+GET  /api/v1/runtime/agents/{id} # Read agent subject to team and grant/session visibility
 PATCH /api/v1/runtime/agents/{id} # Rename agent (admin/team owner)
 POST /api/v1/runtime/agents/{id}/deactivate # Deactivate agent (admin/team owner)
 POST /api/v1/runtime/agents/{id}/reactivate # Reactivate agent (admin/team owner)
@@ -477,7 +479,7 @@ and `PLATFORM_MCP_PUSH_COOLDOWN` (Go duration such as `30m`, default `0s` to
 disable). A quota or cooldown denial returns `429` with an error; cooldown
 responses include `next_allowed_at` and `Retry-After`. `GET /api/v1/runtime/servers`
 includes `publish_policy` so UI clients can show the active limit and count.
-Server list/get responses keep CRD `tools`, `prompts`, `resources`, and
+Server list/get responses keep CRD `tools`, `prompts`, `mcpResources`, and
 `tasks` as governance metadata and add `liveInventory` from the running MCP
 server when runtime-api's short-TTL gateway probe has completed. On a cold
 cache miss or probe failure, `liveInventory` is `null` and
@@ -508,7 +510,7 @@ identify the human principal that should own the `MCPAgentSession`.
   "allowedSideEffects": ["read", "destructive"],
   "policyVersion": "v1",
   "toolRules": [
-    {"name": "read_invoice", "decision": "allow"},
+    {"name": "list_invoices", "decision": "allow"},
     {"name": "refund_invoice", "decision": "allow", "requiredTrust": "high"}
   ]
 }

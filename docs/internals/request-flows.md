@@ -89,6 +89,7 @@ sequenceDiagram
     Server-->>Gateway: MCP result
     Gateway-->>Client: initialize response with Mcp-Session-Id
     Client->>Ingress: POST /{server}/mcp tools/call
+    Ingress->>Gateway: Request with verified identity when configured
     Gateway->>Policy: match identity, session, grant, trust, side effect, tool rule
     alt allowed
         Gateway->>Server: forward JSON-RPC request
@@ -145,7 +146,13 @@ sequenceDiagram
     Adapter->>Traefik: forward MCP request with client certificate (+ bearer when OAuth is enabled)
     Traefik->>Gateway: verify certificate and inject trusted SPIFFE identity
     Gateway->>Gateway: resolve the SPIFFE identity against session and grant policy
-    Gateway->>Server: allow and proxy, or deny from policy
+    alt policy allows
+        Gateway->>Server: Proxy the authorized MCP request
+    else policy denies
+        Gateway-->>Traefik: 401 or 403 with denial reason
+        Traefik-->>Adapter: Error response
+        Adapter-->>Agent: Error response
+    end
 ```
 
 Primary request paths:
@@ -179,7 +186,11 @@ sequenceDiagram
 
     Browser->>Ingress: GET /
     Ingress->>UI: static app shell
-    Browser->>UI: POST /auth/login
+    Browser->>Ingress: POST /auth/login
+    Ingress->>UI: Login request
+    UI->>Platform: POST /api/v1/auth/login
+    Platform->>DB: Validate password and load identity
+    Platform-->>UI: Platform credential
     UI-->>Browser: mcp_ui_session cookie
     Browser->>Ingress: GET /api/ui/v1/runtime/servers
     Ingress->>UI: session BFF
@@ -206,7 +217,7 @@ Primary request paths:
 - API auth: `/api/v1/auth/login`, `/api/v1/auth/signup`, `/api/v1/auth/oidc`,
   `/api/v1/auth/me`
 - Dashboard and analytics: `/api/v1/dashboard/summary`, `/api/v1/events`,
-  `/api/v1/events`, `/api/v1/stats`, `/api/v1/sources`, `/api/v1/event-types`,
+  `/api/v1/stats`, `/api/v1/sources`, `/api/v1/event-types`,
   `/api/v1/analytics/usage`, `/api/v1/user/analytics/usage`
 
 ## Policy And Access Resources
@@ -219,6 +230,7 @@ sequenceDiagram
     participant API as runtime-api
     participant K8s as Kubernetes API
     participant Operator
+    participant Policy as Mounted policy ConfigMap
     participant Gateway
     participant Client as MCP client
 
@@ -226,8 +238,9 @@ sequenceDiagram
     API->>K8s: apply MCPAccessGrant or MCPAgentSession
     K8s-->>Operator: watch grant/session
     Operator->>K8s: write {server}-gateway-policy ConfigMap
-    Client->>Gateway: tools/call with identity/session headers
-    Gateway->>K8s: read mounted or cached policy file
+    K8s-->>Policy: Project the ConfigMap into the pod
+    Client->>Gateway: tools/call with ingress-verified identity when configured
+    Gateway->>Policy: Read local policy snapshot
     Gateway-->>Client: allow, tool_not_granted, session_not_found, revoked, expired, trust denied
 ```
 

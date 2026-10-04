@@ -5,8 +5,11 @@ control cross-team access with explicit grants. Production deployments use
 the same isolation model.
 
 **Prerequisites:**
+
 - Module 2 completed (you have deployed a server and understand grants)
 - Admin credentials on the platform
+- Git, Go `1.26+`, and Docker for the example build
+- Adapter-certificate identity enabled on the platform for successful tool calls
 
 MCP Runtime is alpha software. This walkthrough covers team namespaces,
 cross-team grants, and scoped sessions, but it does not certify a deployment
@@ -70,7 +73,9 @@ Scaffold metadata from the running server, validate, build, push, deploy:
 
 ```bash
 cd examples/oauth-example-go-2025-11-25
-go run . &; SERVER_PID=$!
+go run . &
+SERVER_PID=$!
+# Wait for the listening log and confirm http://localhost:8088/health.
 mcp-runtime server init payments --from-server http://localhost:8088
 kill $SERVER_PID
 
@@ -130,7 +135,8 @@ mcp-runtime access grant list --namespace mcp-team-acme
 ```
 
 The grant lives in Acme's namespace, next to the server, and is scoped to
-Globex's team ID. Only Globex's agents can use it.
+Globex's team ID. It matches the selected Globex agent and team; other Globex agents do not
+match this grant.
 
 ## Step 5: Bob connects through the adapter (Globex)
 
@@ -138,7 +144,11 @@ The adapter asks the platform to create or reuse Bob's session for the granted
 agent. You do not need a separate session manifest for this flow.
 
 ```bash
-mcp-runtime auth use bob   # bob@globex.com
+mcp-runtime auth login \
+  --api-url https://platform.example.com \
+  --email bob@globex.com --password 'bob456' \
+  --profile bob
+mcp-runtime auth use bob
 
 mcp-runtime adapter proxy \
   --runtime-url https://mcp.example.com/payments/mcp \
@@ -156,13 +166,16 @@ enforces the cross-team grant.
 
 Alice's payments server denies callers without a grant. To confirm:
 
-1. Have Bob try to call a tool without the grant:
+1. Alice disables the grant (Bob cannot administer Acme’s grant):
+
    ```bash
-   mcp-runtime access grant delete payments-to-globex --namespace mcp-team-acme
+   MCP_PLATFORM_API_PROFILE=alice mcp-runtime access grant disable payments-to-globex \
+     --namespace mcp-team-acme
    ```
 2. Wait about 10 seconds for the gateway to load the updated policy, then Bob's
    next tool call is denied.
-3. Re-apply the grant to restore access.
+3. Alice restores access with `MCP_PLATFORM_API_PROFILE=alice mcp-runtime
+   access grant enable payments-to-globex --namespace mcp-team-acme`.
 
 Namespace isolation gives Bob no Kubernetes RBAC access to Acme's namespace.
 The gateway enforces the grant; network policy alone does not.
@@ -171,9 +184,11 @@ The gateway enforces the grant; network policy alone does not.
 
 Open the platform dashboard → **Analytics → Tools**.
 
-The rows show:
+The event records distinguish server ownership from caller identity:
+
 - User: `bob@globex.com`
-- Team: `globex`
+- Server/resource team (`team_id`): Acme
+- Caller team (`subject_team_id`): Globex
 - Agent: `$AGENT_ID` (the directory also shows its display name)
 - Server: `payments` (Acme's server)
 
@@ -198,7 +213,7 @@ allowed.
 
 **You have completed the MCP Runtime learning path.**
 
-- [CLI reference](../cli.md): every command
-- [API reference](../api.md): CRD fields
+- [CLI reference](../cli-reference.md): every command
+- [API reference](../api-reference.md): CRD fields
 - [Troubleshooting](../troubleshooting.md): common errors
 - [Contribute](../contributor/README.md): help build MCP Runtime

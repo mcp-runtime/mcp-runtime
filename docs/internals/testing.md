@@ -4,6 +4,23 @@ This page maps the main test suites to the code they protect. Prefer the
 narrowest suite while iterating, then broaden before pushing when the change
 touches shared contracts.
 
+## Isolate unit tests from live clusters
+
+Before running Go tests, pre-commit, or a commit whose hooks run tests, use an
+empty kubeconfig in a subshell so tests cannot reach the contributor or
+production cluster:
+
+```bash
+(
+  export KUBECONFIG=$(mktemp)
+  trap 'rm -f "$KUBECONFIG"' EXIT
+  go test ./... -count=1 -race
+)
+```
+
+Run integration tests with envtest assets. Run live E2E separately with the
+explicit isolated Kind kubeconfig from the contributor guide.
+
 ## Fast Package Tests
 
 | Surface | Tests | Use when |
@@ -50,9 +67,12 @@ servers, exercises MCP requests, and verifies governance/observability paths.
 
 For the component-level request paths behind each scenario, see [Request Flows](request-flows.md).
 
-Useful local runs:
+Useful local runs (first prepare the cluster with
+[Local Kind and Test Mode](../contributor/local-kind.md)):
 
 ```bash
+export KUBECONFIG="$HOME/.kube/test-mcp-runtime-config"
+export CLUSTER_NAME=mcp-runtime
 E2E_SCENARIOS=smoke-auth bash test/e2e/qa-e2e.sh
 E2E_SCENARIOS=api-platform bash test/e2e/qa-e2e.sh
 E2E_SCENARIOS=ui-auth bash test/e2e/qa-e2e.sh

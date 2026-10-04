@@ -20,16 +20,20 @@ on the day-to-day loop for contributors.
    ```bash
    make deps
    make build
-   go test ./internal/cli/... ./internal/operator/... -count=1
+   (
+     export KUBECONFIG=$(mktemp)  # isolate tests from real clusters
+     trap 'rm -f "$KUBECONFIG"' EXIT
+     go test ./internal/cli/... ./internal/operator/... -count=1
+   )
    ```
 
 3. Use a disposable Kind cluster for platform, UI, operator, registry, gateway,
    and Sentinel changes.
 
-Start with [Local Kind and Test Mode](local-kind.md).
+   Start with [Local Kind and Test Mode](local-kind.md).
 
-For a real production-style install on the disposable VM, use
-[Staging E2E](staging-e2e.md).
+   For a production-style install on the disposable VM, use
+   [Staging E2E](staging-e2e.md).
 
 4. Rebuild only the changed service while iterating.
 

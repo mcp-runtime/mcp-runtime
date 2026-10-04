@@ -3,7 +3,7 @@
 Pick a Kubernetes target and install shape for MCP Runtime on common
 self-managed and managed distributions.
 
-- [Getting Started](getting-started.md) has the step-by-step install flow.
+- [Getting Started](self-hosting.md) has the step-by-step install flow.
 - [Cluster Readiness](cluster-readiness.md) has the detailed registry,
   container runtime, DNS, ingress, TLS, and failure-mode checks.
 
@@ -414,4 +414,4 @@ curl -k -I -H "x-api-key: $ADMIN_API_KEY" https://registry.<domain>/v2/
 ```
 
 Then continue with [Getting Started - Deploy your first
-server](getting-started.md#7-deploy-your-first-server).
+server](self-hosting.md#7-deploy-your-first-server).
