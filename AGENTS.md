@@ -145,6 +145,45 @@ failed platform API flow and re-run the CLI/UI journey before accepting it.
 - **Secrets:** this is an alpha repo, so do not add real credentials to the tree.
 - **Skills:** keep `.claude/skills` linked to `../.codex/skills`. After non-trivial changes, update affected `.codex/skills/*/SKILL.md` files when workflows or gotchas shift. Prefer extending `references/` (for example `cluster-ops/references/` or `dashboard-browser-qa/references/`) instead of growing `SKILL.md` past ~250–400 lines.
 
+## Release policy before the first external customer
+
+Current deployment phase (confirmed 2026-10-05): the only customer deployment
+is our own hosted reference platform at `platform.mcpruntime.org`. Apply this
+policy to all releases until the project has its first external customer
+deployment and this section is updated.
+
+- Breaking changes are allowed. Target the current architecture and contracts;
+  do not add legacy compatibility layers, dual-version APIs or schemas,
+  backfill frameworks, or in-place upgrade paths just to support earlier
+  releases of our own platform.
+- The release deployment model is **backup → fresh setup → restore required
+  data → verify** on the reference platform. Document that procedure instead
+  of designing a general customer migration system.
+- Release instructions must identify the exact revision, install configuration,
+  backup contents and location, clean setup steps, restore steps, and recovery
+  procedure. Include platform databases, registry images, required Secrets and
+  certificates, and the separately hosted identity provider's data and TLS
+  state where applicable. Keep backup material and credentials out of git and
+  logs.
+- Rehearse fresh installation and recovery on disposable infrastructure before
+  resetting the reference platform. Check that required data can be restored
+  into the new model; document any manual recovery or intentional data reset
+  explicitly. A backup alone is not proof of recoverability.
+- Verify login, image publishing and pulls, server deployment, agent enrollment,
+  grants and sessions, allowed/denied tool calls, and audit/observability after
+  setup and recovery. Existing CI, security, and Pre-release Regression gates
+  still apply.
+- Record breaking contracts, configuration changes, and fresh-install/recovery
+  requirements in the changelog and release notes. Breaking `0.x` releases use
+  a new minor version.
+
+When the first external customer is onboarded, update this policy and define
+upgrade, compatibility, and data-migration commitments for that customer's
+deployed version before the next breaking release. This policy sets release
+planning and implementation scope; it does not authorize an unrequested reset
+of the hosted platform. Follow the existing production guardrails for actual
+deployment work.
+
 ## Changelog maintenance
 
 `CHANGELOG.md` follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
@@ -152,9 +191,10 @@ and [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 (reviewed 2026-09-29). Write concise, curated entries describing effects on
 users/operators, rather than copying commit logs. Add entries under `Unreleased`
 using only applicable `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, or
-`Security` headings. Link the relevant issue/PR and explain migration steps for
-compatibility changes. Features, behavior/config/default changes, removals,
-user-visible fixes, and security fixes need entries. Internal refactors,
+`Security` headings. Link the relevant issue/PR and explain upgrade or fresh
+setup/recovery requirements according to the release policy above. Features,
+behavior/config/default changes, removals, user-visible fixes, and security
+fixes need entries. Internal refactors,
 test-only work, and spelling/formatting changes can skip an entry when the PR
 explains why; operational CI/setup fixes need one when they affect contributors.
 
@@ -162,7 +202,8 @@ Before publishing a release, move its `Unreleased` entries into a dated
 `[X.Y.Z] - YYYY-MM-DD` section, retain an empty `Unreleased` section, and update
 version comparison links. Keep releases newest first and omit empty categories.
 Use the changelog to prepare GitHub release notes. While versions are `0.x`,
-put breaking changes in a new minor version and call out the migration.
+put breaking changes in a new minor version and document the required release
+deployment procedure.
 Correct factual errors in released notes with traceable context; do not rewrite
 published tag contents or invent historical entries without source evidence.
 
