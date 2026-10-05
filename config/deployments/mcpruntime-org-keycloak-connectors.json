@@ -1,0 +1,30 @@
+{
+  "keycloak": {
+    "issuer": "https://keycloak.mcpruntime.org/realms/mcp-runtime",
+    "authorization_endpoint": "https://keycloak.mcpruntime.org/realms/mcp-runtime/protocol/openid-connect/auth",
+    "token_endpoint": "https://keycloak.mcpruntime.org/realms/mcp-runtime/protocol/openid-connect/token",
+    "jwks_uri": "https://keycloak.mcpruntime.org/realms/mcp-runtime/protocol/openid-connect/certs",
+    "client_id": "mcp-auth",
+    "client_secret_env": "KEYCLOAK_CLIENT_SECRET",
+    "scopes": [
+      "openid",
+      "profile",
+      "email"
+    ],
+    "mcp_scopes": [
+      "tools:read"
+    ],
+    "identity_claims": [
+      "preferred_username"
+    ],
+    "token_endpoint_auth_method": "client_secret_post",
+    "allowed_upstream_callback_uris": [
+      "https://auth.mcpruntime.org/mcp-auth/identity/callback"
+    ],
+    "downstream_token_strategy": "upstream_session",
+    "exchange_client_id": "mcp-auth",
+    "token_endpoint_internal": "https://keycloak.mcpruntime.org/realms/mcp-runtime/protocol/openid-connect/token",
+    "token_endpoint_server_name": "keycloak.mcpruntime.org",
+    "jwks_uri_internal": "https://keycloak.mcpruntime.org/realms/mcp-runtime/protocol/openid-connect/certs"
+  }
+}

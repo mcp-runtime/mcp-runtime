@@ -155,14 +155,12 @@ mcpruntime_org_backup_platform_runtime() {
   mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-analytics-api-credentials.yaml" get secret mcp-analytics-api-credentials -n mcp-observability
   mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-ingest-credentials.yaml" get secret mcp-ingest-credentials -n mcp-observability
   mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-grafana-credentials.yaml" get secret mcp-grafana-credentials -n mcp-observability
-  # Optional authorization-server and identity-provider credentials. Provider
-  # database/realm state still requires the provider's own export workflow.
+  # Optional authorization-server credentials. The demo identity provider now
+  # runs on a separate VM and needs its own data and Caddy backup.
   mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-auth-connectors.yaml" get configmap mcp-auth-connectors -n mcp-platform
   mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-auth-connector-secrets.yaml" get secret mcp-auth-connector-secrets -n mcp-platform
   mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-auth-signing-key.yaml" get secret mcp-auth-signing-key -n mcp-platform
   mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/mcp-auth-server-tls.yaml" get secret mcp-auth-server-tls -n mcp-platform
-  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/keycloak-admin.yaml" get secret keycloak-admin -n mcp-platform
-  mcpruntime_org_backup_resource "$MCP_TLS_SNAPSHOT_DIR/keycloak-tls.yaml" get secret keycloak-tls -n mcp-platform
   mcpruntime_org_backup_platform_auth_env
   if [[ "${MCP_TLS_DEFER_PUBLISH:-0}" != "1" ]]; then
     mcpruntime_org_backup_publish_latest platform
@@ -303,8 +301,6 @@ mcpruntime_org_restore_platform_runtime() {
   mcpruntime_org_backup_strip_and_apply "$MCP_TLS_SNAPSHOT_DIR/mcp-auth-connector-secrets.yaml" "mcp-auth connector secrets"
   mcpruntime_org_backup_strip_and_apply "$MCP_TLS_SNAPSHOT_DIR/mcp-auth-signing-key.yaml" "mcp-auth signing key"
   mcpruntime_org_backup_strip_and_apply "$MCP_TLS_SNAPSHOT_DIR/mcp-auth-server-tls.yaml" "mcp-auth TLS secret"
-  mcpruntime_org_backup_strip_and_apply "$MCP_TLS_SNAPSHOT_DIR/keycloak-admin.yaml" "Keycloak admin secret"
-  mcpruntime_org_backup_strip_and_apply "$MCP_TLS_SNAPSHOT_DIR/keycloak-tls.yaml" "Keycloak TLS secret"
 
   mcpruntime_org_backup_warn_certificates
 

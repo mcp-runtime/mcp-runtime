@@ -7,9 +7,16 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-10-05
+
 ### Changed
 
-- Pre-release Regression uses Staging E2E as its only cluster suite, avoiding repeated Kind tenant/org/public runs and cache replay. Static, unit, integration, service, benchmark, and security checks remain; Kind QA stays in PR CI.
+- The reference deployment's demo Keycloak identity provider runs as a separate Docker/Caddy service with its own Let's Encrypt certificate, so a Runtime namespace reset does not remove it. K3s backups no longer include its old Kubernetes Secrets; back up Keycloak's realm data and Caddy state on the Buddy VM separately before recovery ([#589](https://github.com/mcp-runtime/mcp-runtime/pull/589)).
+- Pre-release Regression uses Staging E2E as its only cluster suite, avoiding repeated Kind tenant/org/public runs and cache replay. Static, unit, integration, service, benchmark, and security checks remain; Kind QA stays in PR CI ([#588](https://github.com/mcp-runtime/mcp-runtime/pull/588)).
+
+### Fixed
+
+- The reference deployment includes a tracked, non-secret Keycloak connector configuration with public HTTPS token and JWKS endpoints. Setup reruns using that configuration preserve the working login endpoints after the identity provider moves to its separate VM; the client secret remains supplied through the deployment environment ([#589](https://github.com/mcp-runtime/mcp-runtime/pull/589)).
 
 ## [0.5.1] - 2026-10-04
 
@@ -106,7 +113,8 @@ upgrade from 0.4.x; see the migration note under **Changed**.
 
 - Targeted platform updates through `mcp-runtime update`, including embedded CRD updates and `--build` to build/push missing component images before rollout ([#491](https://github.com/mcp-runtime/mcp-runtime/pull/491)).
 
-[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.4.0...v0.4.1

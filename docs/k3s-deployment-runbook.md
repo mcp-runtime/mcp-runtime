@@ -273,8 +273,39 @@ named `mcp-auth`. Configure this exact upstream callback URI:
 https://auth.<domain>/mcp-auth/identity/callback
 ```
 
-The connector file references the Keycloak issuer and client but never stores
-the client secret:
+For the `mcpruntime.org` demo, Keycloak is a separate Docker service on the
+Buddy VM (`devbox1`, `103.181.176.61`). Its
+[`Compose file`](../config/deployments/mcpruntime-org-keycloak-compose.yaml)
+mounts the retained realm database at `/opt/keycloak/data` and caps Keycloak
+at 900 MiB on this 2 GiB VM. This H2 configuration is for a single-instance
+demo. The existing Caddy instance on that VM serves
+`keycloak.mcpruntime.org` using the
+[`Caddy site`](../config/deployments/mcpruntime-org-keycloak.Caddyfile) and
+obtains and renews its Let's Encrypt certificate. The DNS A record for
+`keycloak.mcpruntime.org` must point to `103.181.176.61`.
+
+Runtime setup does not deploy, back up, or restore this identity provider.
+Back up `/opt/keycloak/data` while the Keycloak container is stopped, and keep
+the client secret outside the Compose and Caddy files. Start the service with
+`docker compose -f /opt/keycloak/compose.yaml up -d` on `devbox1`; append the
+Caddy site to `/opt/workspace/Caddyfile`, validate it with `caddy validate`,
+and reload Caddy. Keep the existing `workspace.mcpruntime.org` site in place.
+The mcp-auth connector should use the public HTTPS token and JWKS endpoints,
+without `mcp-sentinel.svc.cluster.local` references. A direct public discovery
+check proves Keycloak is reachable; verify an authorization-code callback as
+well to prove mcp-auth can exchange a code.
+
+```bash
+curl -fsS https://keycloak.mcpruntime.org/realms/mcp-runtime/.well-known/openid-configuration
+curl -fsS https://auth.mcpruntime.org/.well-known/oauth-authorization-server/mcp-auth
+ssh devbox1 'docker ps --filter name=demo-keycloak; docker logs demo-keycloak --tail 30'
+```
+
+For the `mcpruntime.org` demo, use the tracked
+[`connector file`](../config/deployments/mcpruntime-org-keycloak-connectors.json)
+and set `MCP_SETUP_MCP_AUTH_CONNECTORS_FILE=config/deployments/mcpruntime-org-keycloak-connectors.json`
+in the private deployment env file. It references the Keycloak issuer and client
+but never stores the client secret. The relevant fields are:
 
 ```json
 {
@@ -371,10 +402,15 @@ A full snapshot includes namespaced and cluster-scoped Kubernetes objects,
 CRDs, Secrets, grants, sessions, PV/PVC specs, a consistent SQLite online
 backup of the K3s control-plane database, `/etc/rancher/k3s`, K3s server
 credentials, and every file under `/var/lib/rancher/k3s/storage`. That volume
-archive includes Postgres, ClickHouse, Kafka, Keycloak, mcp-auth,
+archive includes Postgres, ClickHouse, Kafka, mcp-auth,
 observability, and registry data. It also contains the TLS and platform
 config/Secret files used by the existing setup restore path, plus a SHA-256
 manifest.
+
+The demo Keycloak database and Caddy certificate now live on `devbox1`, so
+this K3s backup does not cover them. Stop `demo-keycloak` for a consistent
+backup of `/opt/keycloak/data`; back up the Caddy config and `/opt/workspace/caddy_data`
+on that VM separately.
 
 The bundle is **not encrypted by the backup command**; file permissions reduce
 local access but do not protect it from device loss or disk compromise. Encrypt
