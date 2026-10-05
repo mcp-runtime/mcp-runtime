@@ -210,5 +210,5 @@ compatibility separately from pod readiness. Ready controller pods do not prove
 that their Kubernetes version is supported. The reviewed table recognizes
 1.20 (Kubernetes 1.32–1.35) and 1.21 (1.33–1.36) as of 2026-10-03; unknown
 image tags or mismatched controller/webhook/cainjector patches are reported.
-Follow `docs/k3s-deployment-runbook.md` for staged minor upgrades and encrypted
+Follow `docs/reference-deployment.md#upgrading-an-existing-cert-manager-installation` for staged minor upgrades and encrypted
 Secret backups. Setup's fresh-install pin does not upgrade an existing install.

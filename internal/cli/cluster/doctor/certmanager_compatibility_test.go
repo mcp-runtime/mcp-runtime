@@ -16,6 +16,9 @@ func TestCertManagerSupportMatrix(t *testing.T) {
 	}{
 		{"quay.io/jetstack/cert-manager-controller:v1.16.2", "v1.36.4+k3s1", false},
 		{"quay.io/jetstack/cert-manager-controller:v1.21.2", "v1.36.4+k3s1", true},
+		{"quay.io/jetstack/cert-manager-controller:v1.21.2", "v1.33.5-eks-113cf36", true},
+		{"quay.io/jetstack/cert-manager-controller:v1.21.2", "v1.34.1-gke.1200000", true},
+		{"quay.io/jetstack/cert-manager-controller:v1.21.2", "v1.32.9-eks-113cf36", false},
 		{"quay.io/jetstack/cert-manager-controller:v1.20.3", "v1.36.4", false},
 		{"quay.io/jetstack/cert-manager-controller:v1.20.3", "v1.32.0", true},
 		{"quay.io/jetstack/cert-manager-controller:v1.21.2", "v1.32.0", false},

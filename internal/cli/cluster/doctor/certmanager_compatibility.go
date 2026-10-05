@@ -38,14 +38,17 @@ func certManagerVersionCompatible(image, kubernetesVersion string) (string, erro
 	default:
 		return tag, fmt.Errorf("cert-manager %s is retired or outside the reviewed support matrix", tag)
 	}
-	if k.Major() != 1 || k.Minor() < low || k.Minor() > high || k.PreRelease() != "" {
+	// Only major.minor is compared: managed distributions report vendor
+	// suffixes (v1.33.5-eks-113cf36, v1.33.5-gke.1200000) that parse as
+	// prereleases but are supported releases.
+	if k.Major() != 1 || k.Minor() < low || k.Minor() > high {
 		return tag, fmt.Errorf("cert-manager %s supports Kubernetes 1.%d–1.%d; cluster is %s", tag, low, high, kubernetesVersion)
 	}
 	return cm.String(), nil
 }
 
 func checkCertManagerCompatibility(kubectl core.KubectlRunner) DoctorCheck {
-	check := DoctorCheck{Name: "cert-manager compatibility", Remedy: "back up cert-manager resources and Secrets; rehearse one-minor-at-a-time upgrades using docs/k3s-deployment-runbook.md"}
+	check := DoctorCheck{Name: "cert-manager compatibility", Remedy: "back up cert-manager resources and Secrets; rehearse one-minor-at-a-time upgrades using docs/reference-deployment.md#upgrading-an-existing-cert-manager-installation"}
 	if !doctorTLSPreflightRequested() {
 		check.OK = true
 		check.Detail = "TLS preflight not requested; skipping cert-manager compatibility"
