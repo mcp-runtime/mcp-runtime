@@ -32,7 +32,10 @@ run_e2e_port_transition_scenario() {
   rollout_status_with_logs mcp-runtime deploy mcp-runtime-operator-controller-manager 180s
   for _ in 1 2 3 4 5; do
     port_transition_assert_old_route "${directory}"
-    wait_for_mcp_tool_result "${MCP_SESSION_URL}" aaa-ping '{}' 200 pong 1 '' port-transition-retained
+    if ! wait_for_mcp_tool_result "${MCP_SESSION_URL}" aaa-ping '{}' 200 pong 1 '' port-transition-retained; then
+      port_transition_capture_route "${directory}/retained-failed"
+      return 1
+    fi
     sleep 2
   done
   jq --argjson port "${candidate_port}" --arg image "${gateway_image}" \
