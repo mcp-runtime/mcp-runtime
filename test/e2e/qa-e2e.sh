@@ -361,14 +361,20 @@ server_proxy_paths_selected() {
   scenario_selected "trust" || scenario_selected "observability"
 }
 
-oauth_proxy_paths_selected() {
-  (scenario_selected "oauth" || scenario_selected "observability") && ! scenario_selected "adapter-certificates"
+# With adapter certificates enabled the gateway serves mTLS only, so OAuth
+# probes must use the Traefik TLS route instead of a plain port-forward.
+oauth_uses_tls_ingress() {
+  scenario_selected "adapter-certificates" || [[ "${MCP_ADAPTER_CERTIFICATES:-}" == "true" ]]
 }
 
-if scenario_selected "adapter-certificates" && [[ -z "${OAUTH_AUDIENCE_CONFIGURED}" ]]; then
+oauth_proxy_paths_selected() {
+  (scenario_selected "oauth" || scenario_selected "observability") && ! oauth_uses_tls_ingress
+}
+
+if oauth_uses_tls_ingress && [[ -z "${OAUTH_AUDIENCE_CONFIGURED}" ]]; then
   OAUTH_AUDIENCE="https://${OAUTH_SERVER_HOST}:${TRAEFIK_TLS_PORT}/${OAUTH_SERVER_NAME}/mcp"
 fi
-if scenario_selected "adapter-certificates" && [[ -z "${GO_OAUTH_STANDALONE_AUDIENCE_CONFIGURED}" ]]; then
+if oauth_uses_tls_ingress && [[ -z "${GO_OAUTH_STANDALONE_AUDIENCE_CONFIGURED}" ]]; then
   GO_OAUTH_STANDALONE_AUDIENCE="https://${GO_EXAMPLE_SERVER_HOST}:${TRAEFIK_TLS_PORT}${GO_EXAMPLE_STANDALONE_ROUTE}"
 fi
 
@@ -5246,7 +5252,7 @@ EOF
 
   OAUTH_PROXY_UPSTREAM_ORIGIN="http://127.0.0.1:${TRAEFIK_PORT}"
   OAUTH_HEADER_PROXY_ARGS=(--host-header "${OAUTH_SERVER_HOST}")
-  if scenario_selected "adapter-certificates"; then
+  if oauth_uses_tls_ingress; then
     ensure_traefik_tls_port_forward
     OAUTH_PROXY_UPSTREAM_ORIGIN="https://127.0.0.1:${TRAEFIK_TLS_PORT}"
     OAUTH_HEADER_PROXY_ARGS+=(--insecure-upstream)
@@ -5288,7 +5294,7 @@ EOF
 
   OAUTH_INGRESS_PATH="/${OAUTH_SERVER_NAME}/mcp"
   MCP_OAUTH_DIRECT_ORIGIN="http://127.0.0.1:${TRAEFIK_PORT}"
-  if scenario_selected "adapter-certificates"; then
+  if oauth_uses_tls_ingress; then
     # The anonymous relay preserves per-request Authorization headers; the
     # valid-token relay would override missing-token challenge probes.
     MCP_OAUTH_DIRECT_ORIGIN="http://127.0.0.1:${MCP_CURL_OAUTH_ANON_PORT}"
