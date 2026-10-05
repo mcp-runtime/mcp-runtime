@@ -1,4 +1,4 @@
-Run post-setup diagnostics for the Kubernetes distribution, MCP Runtime services, registry, image pulls, Sentinel dependencies, authentication, and MCPServer reconciliation. Each failure includes a targeted remediation. Setup already runs a shorter operational smoke gate (nodes, PVCs, Postgres, platform-api, Sentinel rollouts, auth probe); use this command for deeper follow-up.
+Run post-setup diagnostics for the Kubernetes distribution, MCP Runtime services, registry, image pulls, platform dependencies, authentication, and MCPServer reconciliation. Each failure includes a targeted remediation. Setup already runs a shorter operational smoke gate (nodes, PVCs, Postgres, platform-api, platform rollouts, auth probe); use this command for deeper follow-up.
 
 Usage:
   mcp-runtime cluster diagnostics [flags]

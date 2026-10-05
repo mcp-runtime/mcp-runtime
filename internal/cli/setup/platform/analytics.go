@@ -104,11 +104,11 @@ func analyticsServiceManifests(postgresManifest string) []string {
 	return manifests
 }
 
-// pruneStaleSentinelPodsClientGo removes Failed/Evicted/ContainerStatusUnknown
+// pruneStalePlatformPodsClientGo removes Failed/Evicted/ContainerStatusUnknown
 // pods left behind by eviction churn so they do not obscure real platform
 // state during recovery. It is best-effort: a failure is reported but never
 // blocks setup.
-func pruneStaleSentinelPodsClientGo() {
+func pruneStalePlatformPodsClientGo() {
 	clients, err := platformKubernetesClients()
 	if err != nil {
 		core.Warn(fmt.Sprintf("Could not prune stale platform pods: %v", err))
@@ -202,7 +202,7 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 	if err := ensureAnalyticsHostpathDirs(storageMode); err != nil {
 		return err
 	}
-	pruneStaleSentinelPodsClientGo()
+	pruneStalePlatformPodsClientGo()
 	if err := reconcileKafkaStatefulSetForKRaftUpgradeClientGo(); err != nil {
 		return err
 	}
@@ -218,10 +218,10 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 	}
 
 	if err := waitForRolloutStatusWithClientGo("statefulset", "clickhouse", core.ComponentNamespace("clickhouse"), rolloutTimeoutDuration); err != nil {
-		return mcpSentinelDependencyRolloutFailed(core.DefaultKubectlClient(), err, "statefulset", "clickhouse", core.ComponentNamespace("clickhouse"), "storage (clickhouse)")
+		return mcpPlatformDependencyRolloutFailed(core.DefaultKubectlClient(), err, "statefulset", "clickhouse", core.ComponentNamespace("clickhouse"), "storage (clickhouse)")
 	}
 	if err := waitForKafkaRolloutClientGo(logger, rolloutTimeoutDuration, storageMode); err != nil {
-		return mcpSentinelDependencyRolloutFailed(core.DefaultKubectlClient(), err, "statefulset", "kafka", core.ComponentNamespace("kafka"), "messaging (kafka)")
+		return mcpPlatformDependencyRolloutFailed(core.DefaultKubectlClient(), err, "statefulset", "kafka", core.ComponentNamespace("kafka"), "messaging (kafka)")
 	}
 	if err := initializeKafkaTopicsClientGo(images, imagePullSecretName, platformMode, rolloutTimeoutDuration); err != nil {
 		return err
@@ -229,13 +229,13 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 
 	core.Info("Initializing ClickHouse schema")
 	if err := deleteJobIfExistsClientGo("clickhouse-init", core.ComponentNamespace("clickhouse")); err != nil {
-		return core.WrapWithSentinel(core.ErrSetupDeleteClickHouseInitJobFailed, err, fmt.Sprintf("delete existing clickhouse init job: %v", err))
+		return core.WrapWithBase(core.ErrSetupDeleteClickHouseInitJobFailed, err, fmt.Sprintf("delete existing clickhouse init job: %v", err))
 	}
 	if err := applyRenderedManifestClientGo("k8s/04-clickhouse-init.yaml", images, imagePullSecretName, platformMode); err != nil {
 		return err
 	}
 	if err := waitForJobCompletionClientGo("clickhouse-init", core.ComponentNamespace("clickhouse"), rolloutTimeoutDuration); err != nil {
-		return mcpSentinelDependencyJobFailed(core.DefaultKubectlClient(), err, "clickhouse-init", core.ComponentNamespace("clickhouse"), "clickhouse init schema")
+		return mcpPlatformDependencyJobFailed(core.DefaultKubectlClient(), err, "clickhouse-init", core.ComponentNamespace("clickhouse"), "clickhouse init schema")
 	}
 
 	core.Info("Applying analytics services")
@@ -286,7 +286,7 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 
 	printAnalyticsRolloutDiagnostics(core.DefaultKubectlClient())
 	summary := strings.Join(rolloutFailures, "; ")
-	cause := core.NewWithSentinel(core.ErrSetupAnalyticsRolloutFailed, summary)
+	cause := core.NewWithBase(core.ErrSetupAnalyticsRolloutFailed, summary)
 	msg := fmt.Sprintf("analytics components failed to roll out: %s", summary)
 	ctx := map[string]any{"component": "platform", "rollout_failures": summary}
 	if core.IsDebugMode() {
@@ -294,7 +294,7 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 			ctx["diagnostics"] = trimDiagnosticsString(diag)
 		}
 	}
-	return core.WrapWithSentinelAndContext(core.ErrOperatorDeploymentFailed, cause, msg, ctx)
+	return core.WrapWithBaseAndContext(core.ErrOperatorDeploymentFailed, cause, msg, ctx)
 }
 
 func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap.Logger, images AnalyticsImageSet, storageMode, platformMode string) error {
@@ -369,10 +369,10 @@ func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap
 	}
 
 	if err := waitForRolloutStatusWithKubectl(kubectl, "statefulset", "clickhouse", core.ComponentNamespace("clickhouse"), rolloutTimeout); err != nil {
-		return mcpSentinelDependencyRolloutFailed(kubectl, err, "statefulset", "clickhouse", core.ComponentNamespace("clickhouse"), "storage (clickhouse)")
+		return mcpPlatformDependencyRolloutFailed(kubectl, err, "statefulset", "clickhouse", core.ComponentNamespace("clickhouse"), "storage (clickhouse)")
 	}
 	if err := waitForKafkaRolloutWithKubectl(kubectl, rolloutTimeout, storageMode); err != nil {
-		return mcpSentinelDependencyRolloutFailed(kubectl, err, "statefulset", "kafka", core.ComponentNamespace("kafka"), "messaging (kafka)")
+		return mcpPlatformDependencyRolloutFailed(kubectl, err, "statefulset", "kafka", core.ComponentNamespace("kafka"), "messaging (kafka)")
 	}
 	if err := initializeKafkaTopicsWithKubectl(kubectl, images, imagePullSecretName, platformMode, rolloutTimeout); err != nil {
 		return err
@@ -380,13 +380,13 @@ func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap
 
 	core.Info("Initializing ClickHouse schema")
 	if err := deleteJobIfExistsWithKubectl(kubectl, "clickhouse-init", core.ComponentNamespace("clickhouse")); err != nil {
-		return core.WrapWithSentinel(core.ErrSetupDeleteClickHouseInitJobFailed, err, fmt.Sprintf("delete existing clickhouse init job: %v", err))
+		return core.WrapWithBase(core.ErrSetupDeleteClickHouseInitJobFailed, err, fmt.Sprintf("delete existing clickhouse init job: %v", err))
 	}
 	if err := applyRenderedManifest(kubectl, "k8s/04-clickhouse-init.yaml", images, imagePullSecretName, platformMode); err != nil {
 		return err
 	}
 	if err := waitForJobCompletionWithKubectl(kubectl, "clickhouse-init", core.ComponentNamespace("clickhouse"), rolloutTimeout); err != nil {
-		return mcpSentinelDependencyJobFailed(kubectl, err, "clickhouse-init", core.ComponentNamespace("clickhouse"), "clickhouse init schema")
+		return mcpPlatformDependencyJobFailed(kubectl, err, "clickhouse-init", core.ComponentNamespace("clickhouse"), "clickhouse init schema")
 	}
 
 	core.Info("Applying analytics services")
@@ -440,7 +440,7 @@ func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap
 
 	printAnalyticsRolloutDiagnostics(kubectl)
 	summary := strings.Join(rolloutFailures, "; ")
-	cause := core.NewWithSentinel(core.ErrSetupAnalyticsRolloutFailed, summary)
+	cause := core.NewWithBase(core.ErrSetupAnalyticsRolloutFailed, summary)
 	msg := fmt.Sprintf("analytics components failed to roll out: %s", summary)
 	ctx := map[string]any{"component": "platform", "rollout_failures": summary}
 	if core.IsDebugMode() {
@@ -448,7 +448,7 @@ func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap
 			ctx["diagnostics"] = trimDiagnosticsString(diag)
 		}
 	}
-	return core.WrapWithSentinelAndContext(core.ErrOperatorDeploymentFailed, cause, msg, ctx)
+	return core.WrapWithBaseAndContext(core.ErrOperatorDeploymentFailed, cause, msg, ctx)
 }
 
 // ensureRuntimeKubernetesAPIEgressClientGo adds the discovered Kubernetes API
@@ -673,7 +673,7 @@ func initializeKafkaTopicsClientGo(images AnalyticsImageSet, imagePullSecretName
 		return err
 	}
 	if err := waitForJobCompletionClientGo(kafkaTopicInitJob, core.ComponentNamespace("kafka"), timeout); err != nil {
-		return mcpSentinelDependencyJobFailed(core.DefaultKubectlClient(), err, kafkaTopicInitJob, core.ComponentNamespace("kafka"), "Kafka topic initialization")
+		return mcpPlatformDependencyJobFailed(core.DefaultKubectlClient(), err, kafkaTopicInitJob, core.ComponentNamespace("kafka"), "Kafka topic initialization")
 	}
 	return nil
 }
@@ -686,7 +686,7 @@ func initializeKafkaTopicsWithKubectl(kubectl core.KubectlRunner, images Analyti
 		return err
 	}
 	if err := waitForJobCompletionWithKubectl(kubectl, kafkaTopicInitJob, core.ComponentNamespace("kafka"), timeout); err != nil {
-		return mcpSentinelDependencyJobFailed(kubectl, err, kafkaTopicInitJob, core.ComponentNamespace("kafka"), "Kafka topic initialization")
+		return mcpPlatformDependencyJobFailed(kubectl, err, kafkaTopicInitJob, core.ComponentNamespace("kafka"), "Kafka topic initialization")
 	}
 	return nil
 }
@@ -750,12 +750,12 @@ func buildAnalyticsRolloutDebugDetail(kubectl core.KubectlRunner, failed []analy
 func applyRenderedManifest(kubectl core.KubectlRunner, manifestPath string, images AnalyticsImageSet, imagePullSecretName, platformMode string) error {
 	resolvedManifestPath, err := assetpath.ResolveRepoAssetPath(manifestPath)
 	if err != nil {
-		return core.WrapWithSentinel(core.ErrReadManagerYAMLFailed, err, fmt.Sprintf("failed to resolve manifest %s: %v", manifestPath, err))
+		return core.WrapWithBase(core.ErrReadManagerYAMLFailed, err, fmt.Sprintf("failed to resolve manifest %s: %v", manifestPath, err))
 	}
 
 	content, err := kube.ReadFileAtPath(resolvedManifestPath)
 	if err != nil {
-		return core.WrapWithSentinel(core.ErrReadManagerYAMLFailed, err, fmt.Sprintf("failed to read manifest %s: %v", resolvedManifestPath, err))
+		return core.WrapWithBase(core.ErrReadManagerYAMLFailed, err, fmt.Sprintf("failed to read manifest %s: %v", resolvedManifestPath, err))
 	}
 	rendered := ""
 	if manifestPath == "k8s/01-config.yaml" {
@@ -764,7 +764,7 @@ func applyRenderedManifest(kubectl core.KubectlRunner, manifestPath string, imag
 		rendered, err = renderAnalyticsManifest(string(content), images, imagePullSecretName, platformMode)
 	}
 	if err != nil {
-		return core.WrapWithSentinel(core.ErrSetupRenderManifestFailed, err, fmt.Sprintf("render manifest %s: %v", manifestPath, err))
+		return core.WrapWithBase(core.ErrSetupRenderManifestFailed, err, fmt.Sprintf("render manifest %s: %v", manifestPath, err))
 	}
 	rendered, err = stampDependencyRevisionsClientGo(rendered)
 	if err != nil {
@@ -776,12 +776,12 @@ func applyRenderedManifest(kubectl core.KubectlRunner, manifestPath string, imag
 func applyRenderedManifestClientGo(manifestPath string, images AnalyticsImageSet, imagePullSecretName, platformMode string) error {
 	resolvedManifestPath, err := assetpath.ResolveRepoAssetPath(manifestPath)
 	if err != nil {
-		return core.WrapWithSentinel(core.ErrReadManagerYAMLFailed, err, fmt.Sprintf("failed to resolve manifest %s: %v", manifestPath, err))
+		return core.WrapWithBase(core.ErrReadManagerYAMLFailed, err, fmt.Sprintf("failed to resolve manifest %s: %v", manifestPath, err))
 	}
 
 	content, err := kube.ReadFileAtPath(resolvedManifestPath)
 	if err != nil {
-		return core.WrapWithSentinel(core.ErrReadManagerYAMLFailed, err, fmt.Sprintf("failed to read manifest %s: %v", resolvedManifestPath, err))
+		return core.WrapWithBase(core.ErrReadManagerYAMLFailed, err, fmt.Sprintf("failed to read manifest %s: %v", resolvedManifestPath, err))
 	}
 	rendered := ""
 	if manifestPath == "k8s/01-config.yaml" {
@@ -790,7 +790,7 @@ func applyRenderedManifestClientGo(manifestPath string, images AnalyticsImageSet
 		rendered, err = renderAnalyticsManifest(string(content), images, imagePullSecretName, platformMode)
 	}
 	if err != nil {
-		return core.WrapWithSentinel(core.ErrSetupRenderManifestFailed, err, fmt.Sprintf("render manifest %s: %v", manifestPath, err))
+		return core.WrapWithBase(core.ErrSetupRenderManifestFailed, err, fmt.Sprintf("render manifest %s: %v", manifestPath, err))
 	}
 	rendered, err = stampDependencyRevisionsClientGo(rendered)
 	if err != nil {
@@ -809,9 +809,9 @@ func applyPlatformIngressIfConfigured() error {
 	manifest := ingressmanifest.RenderPlatformUIIngress(host, issuerName, issuerName != "" || core.GetProvidedTLSSecrets(), platformNamespace, core.ComponentNamespace("grafana"))
 	core.Info(fmt.Sprintf("Applying platform UI ingress for %s", host))
 	if err := applyManifestYAML(manifest, "", os.Stdout); err != nil {
-		return core.WrapWithSentinel(core.ErrSetupApplyPlatformUIIngressFailed, err, fmt.Sprintf("apply platform UI ingress: %v", err))
+		return core.WrapWithBase(core.ErrSetupApplyPlatformUIIngressFailed, err, fmt.Sprintf("apply platform UI ingress: %v", err))
 	}
-	if err := removePathBasedSentinelIngresses(); err != nil {
+	if err := removePathBasedPlatformIngresses(); err != nil {
 		return err
 	}
 	if issuerName == "" {
@@ -824,7 +824,7 @@ func applyPlatformIngressIfConfigured() error {
 	return waitForCertificateReadyClientGo(ingressmanifest.PlatformTLSSecretName, platformNamespace, certTimeout, nil, "platform certificate")
 }
 
-func removePathBasedSentinelIngresses() error {
+func removePathBasedPlatformIngresses() error {
 	clients, err := platformKubernetesClients()
 	if err != nil {
 		return err
@@ -833,7 +833,7 @@ func removePathBasedSentinelIngresses() error {
 		namespace := core.ComponentNamespace(ingress.component)
 		err := clients.Clientset.NetworkingV1().Ingresses(namespace).Delete(context.Background(), ingress.name, metav1.DeleteOptions{})
 		if err != nil && !apierrors.IsNotFound(err) {
-			return core.WrapWithSentinel(core.ErrSetupRemovePathBasedSentinelIngressesFailed, err, fmt.Sprintf("remove path-based platform ingress %s/%s for public platform host: %v", namespace, ingress.name, err))
+			return core.WrapWithBase(core.ErrSetupRemovePathBasedPlatformIngressesFailed, err, fmt.Sprintf("remove path-based platform ingress %s/%s for public platform host: %v", namespace, ingress.name, err))
 		}
 	}
 	return nil
@@ -973,7 +973,7 @@ func renderAnalyticsConfigManifestWithReaders(content, platformMode string, imag
 
 	var manifest configMapManifest
 	if err := yaml.Unmarshal([]byte(content), &manifest); err != nil {
-		return "", core.WrapWithSentinel(core.ErrSetupDecodeAnalyticsConfigManifestFailed, err, fmt.Sprintf("decode analytics config manifest: %v", err))
+		return "", core.WrapWithBase(core.ErrSetupDecodeAnalyticsConfigManifestFailed, err, fmt.Sprintf("decode analytics config manifest: %v", err))
 	}
 	if manifest.Data == nil {
 		manifest.Data = map[string]string{}
@@ -985,7 +985,7 @@ func renderAnalyticsConfigManifestWithReaders(content, platformMode string, imag
 	}
 	for _, key := range []string{
 		"GOOGLE_CLIENT_ID",
-		"MCP_SENTINEL_INGEST_URL",
+		"MCP_ANALYTICS_INGEST_URL",
 		"OIDC_ISSUER",
 		"OIDC_AUDIENCE",
 		"OIDC_JWKS_URL",
@@ -1070,7 +1070,7 @@ func renderAnalyticsConfigManifestWithReaders(content, platformMode string, imag
 		manifest.Metadata["name"] = platforminventory.SharedConfigName
 		rendered, err := yaml.Marshal(manifest)
 		if err != nil {
-			return "", core.WrapWithSentinel(core.ErrSetupEncodeAnalyticsConfigManifestFailed, err, fmt.Sprintf("encode analytics config manifest: %v", err))
+			return "", core.WrapWithBase(core.ErrSetupEncodeAnalyticsConfigManifestFailed, err, fmt.Sprintf("encode analytics config manifest: %v", err))
 		}
 		if i > 0 {
 			out.WriteString("---\n")
@@ -1140,7 +1140,7 @@ func existingConfigMapData(kubectl core.KubectlRunner, namespace, name string) (
 		if strings.Contains(detail, "not found") || strings.Contains(detail, "notfound") {
 			return map[string]string{}, nil
 		}
-		return nil, core.WrapWithSentinel(core.ErrSetupReadConfigMapFailed, err, fmt.Sprintf("read configmap %s/%s: %v", namespace, name, err))
+		return nil, core.WrapWithBase(core.ErrSetupReadConfigMapFailed, err, fmt.Sprintf("read configmap %s/%s: %v", namespace, name, err))
 	}
 	if strings.TrimSpace(string(out)) == "" {
 		return map[string]string{}, nil
@@ -1149,7 +1149,7 @@ func existingConfigMapData(kubectl core.KubectlRunner, namespace, name string) (
 		Data map[string]string `json:"data"`
 	}
 	if err := json.Unmarshal(out, &payload); err != nil {
-		return nil, core.WrapWithSentinel(core.ErrSetupDecodeConfigMapFailed, err, fmt.Sprintf("decode configmap %s/%s: %v", namespace, name, err))
+		return nil, core.WrapWithBase(core.ErrSetupDecodeConfigMapFailed, err, fmt.Sprintf("decode configmap %s/%s: %v", namespace, name, err))
 	}
 	if payload.Data == nil {
 		return map[string]string{}, nil
@@ -1164,7 +1164,7 @@ func existingConfigMapDataClientGo(namespace, name string) (map[string]string, e
 	}
 	data, err := k8sclient.ConfigMapData(context.Background(), clients, namespace, name)
 	if err != nil {
-		return nil, core.WrapWithSentinel(core.ErrSetupReadConfigMapFailed, err, fmt.Sprintf("read configmap %s/%s: %v", namespace, name, err))
+		return nil, core.WrapWithBase(core.ErrSetupReadConfigMapFailed, err, fmt.Sprintf("read configmap %s/%s: %v", namespace, name, err))
 	}
 	return data, nil
 }
@@ -1196,7 +1196,7 @@ func renderAnalyticsSecretManifestWithReader(readSecret analyticsSecretValueRead
 	}
 	apiKeys, err := existingSecretDataValueOrRandomWithReader(readSecret, apiNamespace, apiSecret, "API_KEYS", 16)
 	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
+		return "", core.WrapWithBase(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
 	ingestNamespace, ingestSecret, err := ownedCredential("INGEST_API_KEYS")
 	if err != nil {
@@ -1204,7 +1204,7 @@ func renderAnalyticsSecretManifestWithReader(readSecret analyticsSecretValueRead
 	}
 	ingestAPIKeys, err := existingSecretDataValueOrRandomWithReader(readSecret, ingestNamespace, ingestSecret, "INGEST_API_KEYS", 16)
 	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
+		return "", core.WrapWithBase(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
 	uiNamespace, uiSecret, err := ownedCredential("UI_API_KEY")
 	if err != nil {
@@ -1212,7 +1212,7 @@ func renderAnalyticsSecretManifestWithReader(readSecret analyticsSecretValueRead
 	}
 	uiAPIKey, err := existingSecretDataValueOrRandomWithReader(readSecret, uiNamespace, uiSecret, "UI_API_KEY", 16)
 	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
+		return "", core.WrapWithBase(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
 	apiKeys = ensureCSVIncludes(apiKeys, uiAPIKey)
 	adminNamespace, adminSecret, err := ownedCredential("ADMIN_API_KEYS")
@@ -1221,7 +1221,7 @@ func renderAnalyticsSecretManifestWithReader(readSecret analyticsSecretValueRead
 	}
 	adminAPIKeys, err := readSecret(adminNamespace, adminSecret, "ADMIN_API_KEYS")
 	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
+		return "", core.WrapWithBase(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
 	adminAPIKeys = ensureCSVIncludes(adminAPIKeys, uiAPIKey)
 	grafanaNamespace, grafanaSecret, err := ownedCredential("GRAFANA_ADMIN_PASSWORD")
@@ -1230,7 +1230,7 @@ func renderAnalyticsSecretManifestWithReader(readSecret analyticsSecretValueRead
 	}
 	grafanaPassword, err := existingSecretDataValueOrRandomWithReader(readSecret, grafanaNamespace, grafanaSecret, "GRAFANA_ADMIN_PASSWORD", 16)
 	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
+		return "", core.WrapWithBase(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
 	postgresNamespace, postgresSecret, err := ownedCredential("POSTGRES_USER")
 	if err != nil {
@@ -1238,15 +1238,15 @@ func renderAnalyticsSecretManifestWithReader(readSecret analyticsSecretValueRead
 	}
 	postgresUser, err := existingSecretDataValueOrDefaultWithReader(readSecret, postgresNamespace, postgresSecret, "POSTGRES_USER", "mcp_runtime")
 	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
+		return "", core.WrapWithBase(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
 	postgresPassword, err := existingSecretDataValueOrRandomWithReader(readSecret, postgresNamespace, postgresSecret, "POSTGRES_PASSWORD", 16)
 	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
+		return "", core.WrapWithBase(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
 	postgresDB, err := existingSecretDataValueOrDefaultWithReader(readSecret, postgresNamespace, postgresSecret, "POSTGRES_DB", "mcp_runtime")
 	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
+		return "", core.WrapWithBase(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
 	dsnNamespace, dsnSecret, err := ownedCredential("POSTGRES_DSN")
 	if err != nil {
@@ -1254,7 +1254,7 @@ func renderAnalyticsSecretManifestWithReader(readSecret analyticsSecretValueRead
 	}
 	postgresDSN, err := readSecret(dsnNamespace, dsnSecret, "POSTGRES_DSN")
 	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
+		return "", core.WrapWithBase(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
 	if postgresDSN == "" {
 		postgresDSN = fmt.Sprintf(
@@ -1270,7 +1270,7 @@ func renderAnalyticsSecretManifestWithReader(readSecret analyticsSecretValueRead
 	}
 	jwtSecret, err := existingSecretDataValueOrRandomWithReader(readSecret, jwtNamespace, jwtSecretName, "JWT_SECRET", 32)
 	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
+		return "", core.WrapWithBase(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
 	tokenNamespace, tokenSecret, err := ownedCredential("INTERNAL_AUTH_TOKEN")
 	if err != nil {
@@ -1278,7 +1278,7 @@ func renderAnalyticsSecretManifestWithReader(readSecret analyticsSecretValueRead
 	}
 	internalAuthToken, err := existingSecretDataValueOrRandomWithReader(readSecret, tokenNamespace, tokenSecret, "INTERNAL_AUTH_TOKEN", 32)
 	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
+		return "", core.WrapWithBase(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
 	oauthNamespace, oauthSecret, err := ownedCredential("OAUTH_PRIVATE_KEY")
 	if err != nil {
@@ -1286,7 +1286,7 @@ func renderAnalyticsSecretManifestWithReader(readSecret analyticsSecretValueRead
 	}
 	oauthPrivateKey, err := readSecret(oauthNamespace, oauthSecret, "OAUTH_PRIVATE_KEY")
 	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
+		return "", core.WrapWithBase(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
 	if override := setupSecretEnvValue("MCP_OAUTH_PRIVATE_KEY", "OAUTH_PRIVATE_KEY"); override != "" {
 		oauthPrivateKey = override
@@ -1294,20 +1294,20 @@ func renderAnalyticsSecretManifestWithReader(readSecret analyticsSecretValueRead
 	if strings.TrimSpace(oauthPrivateKey) == "" {
 		oauthPrivateKey, err = generateOAuthPrivateKey()
 		if err != nil {
-			return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("generate OAuth signing key: %v", err))
+			return "", core.WrapWithBase(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("generate OAuth signing key: %v", err))
 		}
 	}
 	platformAdminEmail, err := readSecret(apiNamespace, apiSecret, "PLATFORM_ADMIN_EMAIL")
 	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
+		return "", core.WrapWithBase(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
 	platformAdminPassword, err := readSecret(apiNamespace, apiSecret, "PLATFORM_ADMIN_PASSWORD")
 	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
+		return "", core.WrapWithBase(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
 	adminUsers, err := readSecret(apiNamespace, apiSecret, "ADMIN_USERS")
 	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
+		return "", core.WrapWithBase(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
 	envPlatformAdminEmail := setupSecretEnvValue("MCP_PLATFORM_ADMIN_EMAIL", "PLATFORM_ADMIN_EMAIL")
 	envPlatformAdminPassword := setupSecretEnvValue("MCP_PLATFORM_ADMIN_PASSWORD", "PLATFORM_ADMIN_PASSWORD")
@@ -1332,19 +1332,19 @@ func renderAnalyticsSecretManifestWithReader(readSecret analyticsSecretValueRead
 	platformDevLoginEnabled := ""
 	platformDevUserEmail, err := readSecret(apiNamespace, apiSecret, "PLATFORM_DEV_USER_EMAIL")
 	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
+		return "", core.WrapWithBase(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
 	platformDevUserPassword, err := readSecret(apiNamespace, apiSecret, "PLATFORM_DEV_USER_PASSWORD")
 	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
+		return "", core.WrapWithBase(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
 	platformDevAdminEmail, err := readSecret(apiNamespace, apiSecret, "PLATFORM_DEV_ADMIN_EMAIL")
 	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
+		return "", core.WrapWithBase(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
 	platformDevAdminPassword, err := readSecret(apiNamespace, apiSecret, "PLATFORM_DEV_ADMIN_PASSWORD")
 	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
+		return "", core.WrapWithBase(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
 	if os.Getenv("MCP_RUNTIME_TEST_MODE") == "1" {
 		platformDevLoginEnabled = "true"
@@ -1391,11 +1391,11 @@ func renderAnalyticsSecretManifestWithReader(readSecret analyticsSecretValueRead
 	}
 	sessionKey, err := existingSecretDataValueOrRandomWithReader(readSecret, sessionNamespace, sessionSecret, "UI_SESSION_ENCRYPTION_KEY", 32)
 	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
+		return "", core.WrapWithBase(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
 	sessionURL, err := readSecret(sessionNamespace, sessionSecret, "UI_SESSION_DATABASE_URL")
 	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
+		return "", core.WrapWithBase(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to read analytics secrets: %v", err))
 	}
 	if sessionURL == "" {
 		sessionURL = postgresDSN
@@ -1425,7 +1425,7 @@ func renderAnalyticsSecretManifestWithReader(readSecret analyticsSecretValueRead
 	}
 	rendered, err := yaml.Marshal(secretManifest)
 	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to render analytics secrets: %v", err))
+		return "", core.WrapWithBase(core.ErrRenderSecretManifestFailed, err, fmt.Sprintf("failed to render analytics secrets: %v", err))
 	}
 	return string(rendered), nil
 }
@@ -1740,7 +1740,7 @@ func existingSecretDataValue(kubectl core.KubectlRunner, namespace, name, key st
 		if strings.Contains(lower, "not found") || strings.Contains(lower, "notfound") {
 			return "", nil
 		}
-		return "", core.WrapWithSentinel(core.ErrSetupReadSecretKeyFailed, err, fmt.Sprintf("read secret %s/%s key %s: %v", namespace, name, key, err))
+		return "", core.WrapWithBase(core.ErrSetupReadSecretKeyFailed, err, fmt.Sprintf("read secret %s/%s key %s: %v", namespace, name, key, err))
 	}
 	if trimmed == "" {
 		return "", nil
@@ -1748,7 +1748,7 @@ func existingSecretDataValue(kubectl core.KubectlRunner, namespace, name, key st
 
 	decoded, err := base64.StdEncoding.DecodeString(trimmed)
 	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrSetupDecodeSecretKeyFailed, err, fmt.Sprintf("decode secret %s/%s key %s: %v", namespace, name, key, err))
+		return "", core.WrapWithBase(core.ErrSetupDecodeSecretKeyFailed, err, fmt.Sprintf("decode secret %s/%s key %s: %v", namespace, name, key, err))
 	}
 	return string(decoded), nil
 }
@@ -1760,7 +1760,7 @@ func existingSecretDataValueClientGo(namespace, name, key string) (string, error
 	}
 	value, err := k8sclient.SecretStringDataValue(context.Background(), clients, namespace, name, key)
 	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrSetupReadSecretKeyFailed, err, fmt.Sprintf("read secret %s/%s key %s: %v", namespace, name, key, err))
+		return "", core.WrapWithBase(core.ErrSetupReadSecretKeyFailed, err, fmt.Sprintf("read secret %s/%s key %s: %v", namespace, name, key, err))
 	}
 	return value, nil
 }

@@ -7,15 +7,15 @@ import (
 	"mcp-runtime/internal/cli/core"
 )
 
-func TestSentinelAPIReadinessUsesOwnerNamespace(t *testing.T) {
+func TestPlatformAPIReadinessUsesOwnerNamespace(t *testing.T) {
 	tests := []struct {
 		name      string
 		namespace string
 		service   string
 		check     func(core.KubectlRunner) DoctorCheck
 	}{
-		{"platform API", "mcp-platform", doctorPlatformAPIService, checkSentinelPlatformAPIReadiness},
-		{"analytics API", "mcp-observability", doctorAnalyticsAPIService, checkSentinelAnalyticsAPIReadiness},
+		{"platform API", "mcp-platform", doctorPlatformAPIService, checkPlatformPlatformAPIReadiness},
+		{"analytics API", "mcp-observability", doctorAnalyticsAPIService, checkPlatformAnalyticsAPIReadiness},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

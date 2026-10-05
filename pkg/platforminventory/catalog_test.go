@@ -53,10 +53,10 @@ func TestCatalogCopiesNestedMetadata(t *testing.T) {
 	}
 }
 
-func TestSentinelManagementSurfaceIsStable(t *testing.T) {
+func TestPlatformManagementSurfaceIsStable(t *testing.T) {
 	want := []string{"clickhouse", "kafka", "ingest", "platform-api", "runtime-api", "analytics-api", "processor", "ui", "gateway", "prometheus", "grafana", "otel-collector", "tempo", "loki", "promtail"}
 	var got []string
-	for _, c := range SentinelComponents(false) {
+	for _, c := range PlatformComponents(false) {
 		got = append(got, c.Key)
 		if c.Kind != "" && c.Namespace != ownerNamespace[c.Owner] {
 			t.Fatalf("unexpected component placement: %+v", c)
@@ -65,7 +65,7 @@ func TestSentinelManagementSurfaceIsStable(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("management surface changed: %v", got)
 	}
-	withOperator := SentinelComponents(true)
+	withOperator := PlatformComponents(true)
 	if len(withOperator) != 16 || withOperator[0].Key != "operator" {
 		t.Fatalf("public status surface changed: %+v", withOperator)
 	}

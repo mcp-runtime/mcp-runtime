@@ -12,29 +12,29 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtimeaccess "mcp-runtime-api/internal/runtimeapi/access"
-	sentinelaccess "mcp-runtime/pkg/access"
+	mcpaccess "mcp-runtime/pkg/access"
 )
 
 func validateSessionRequest(req *accessSessionRequest) error {
 	req.Name = strings.TrimSpace(req.Name)
 	req.Namespace = runtimeaccess.DefaultAccessNamespace(req.Namespace)
-	req.ServerRef.Name = sentinelaccess.ServerName(strings.TrimSpace(string(req.ServerRef.Name)))
-	req.ServerRef.Namespace = sentinelaccess.Namespace(strings.TrimSpace(string(req.ServerRef.Namespace)))
-	req.Subject.HumanID = sentinelaccess.HumanID(strings.TrimSpace(string(req.Subject.HumanID)))
-	req.Subject.AgentID = sentinelaccess.AgentID(strings.TrimSpace(string(req.Subject.AgentID)))
-	req.Subject.TeamID = sentinelaccess.TeamID(strings.TrimSpace(string(req.Subject.TeamID)))
+	req.ServerRef.Name = mcpaccess.ServerName(strings.TrimSpace(string(req.ServerRef.Name)))
+	req.ServerRef.Namespace = mcpaccess.Namespace(strings.TrimSpace(string(req.ServerRef.Namespace)))
+	req.Subject.HumanID = mcpaccess.HumanID(strings.TrimSpace(string(req.Subject.HumanID)))
+	req.Subject.AgentID = mcpaccess.AgentID(strings.TrimSpace(string(req.Subject.AgentID)))
+	req.Subject.TeamID = mcpaccess.TeamID(strings.TrimSpace(string(req.Subject.TeamID)))
 	req.PolicyVersion = runtimeaccess.DefaultPolicyVersion(req.PolicyVersion)
 	req.ConsentedTrust = runtimeaccess.NormalizeTrust(req.ConsentedTrust)
-	if err := sentinelaccess.ValidateResourceName("name", req.Name); err != nil {
+	if err := mcpaccess.ValidateResourceName("name", req.Name); err != nil {
 		return err
 	}
-	if err := sentinelaccess.ValidateResourceName("namespace", req.Namespace); err != nil {
+	if err := mcpaccess.ValidateResourceName("namespace", req.Namespace); err != nil {
 		return err
 	}
-	if err := sentinelaccess.ValidateResourceName("serverRef.name", string(req.ServerRef.Name)); err != nil {
+	if err := mcpaccess.ValidateResourceName("serverRef.name", string(req.ServerRef.Name)); err != nil {
 		return err
 	}
-	if err := sentinelaccess.ValidateOptionalResourceName("serverRef.namespace", string(req.ServerRef.Namespace)); err != nil {
+	if err := mcpaccess.ValidateOptionalResourceName("serverRef.namespace", string(req.ServerRef.Namespace)); err != nil {
 		return err
 	}
 	if req.Subject.HumanID == "" && req.Subject.AgentID == "" && req.Subject.TeamID == "" {
@@ -72,12 +72,12 @@ func (s *AccessService) handleRuntimeSessionList(w http.ResponseWriter, r *http.
 	p, filterByPrincipal := principalFromContext(ctx)
 	filterByPrincipal = filterByPrincipal && p.Role != roleAdmin
 
-	summaries := make([]sentinelaccess.SessionSummary, 0, len(sessions.Items))
+	summaries := make([]mcpaccess.SessionSummary, 0, len(sessions.Items))
 	for _, sess := range sessions.Items {
 		if filterByPrincipal && !principalCanReadSessionSubject(p, sess) {
 			continue
 		}
-		summaries = append(summaries, sentinelaccess.ToSessionSummary(sess))
+		summaries = append(summaries, mcpaccess.ToSessionSummary(sess))
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{"sessions": summaries})
@@ -117,7 +117,7 @@ func (s *AccessService) handleRuntimeSessionApply(w http.ResponseWriter, r *http
 
 	targetServer, err := s.accessMgr.GetMCPServerRef(ctx, req.ServerRef)
 	if err != nil {
-		if sentinelaccess.IsMCPServerNotFoundForRef(err) {
+		if mcpaccess.IsMCPServerNotFoundForRef(err) {
 			writeAPIError(w, http.StatusBadRequest, err.Error())
 		} else {
 			log.Printf("runtime session: assert MCPServer ref failed: %v", err)
@@ -162,13 +162,13 @@ func (s *AccessService) handleRuntimeSessionApply(w http.ResponseWriter, r *http
 		return
 	}
 
-	session := &sentinelaccess.MCPAgentSession{
+	session := &mcpaccess.MCPAgentSession{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        req.Name,
 			Namespace:   runtimeaccess.DefaultAccessNamespace(req.Namespace),
 			Annotations: grantAnnotations,
 		},
-		Spec: sentinelaccess.MCPAgentSessionSpec{
+		Spec: mcpaccess.MCPAgentSessionSpec{
 			ServerRef:      req.ServerRef,
 			Subject:        req.Subject,
 			ConsentedTrust: req.ConsentedTrust,
@@ -189,10 +189,10 @@ func (s *AccessService) handleRuntimeSessionApply(w http.ResponseWriter, r *http
 		writeAgentDirectoryError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"session": sentinelaccess.ToSessionSummary(*applied)})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"session": mcpaccess.ToSessionSummary(*applied)})
 }
 
-func (s *AccessService) sessionGrantLink(ctx context.Context, req accessSessionRequest) (map[string]string, *sentinelaccess.MCPAccessGrant, error) {
+func (s *AccessService) sessionGrantLink(ctx context.Context, req accessSessionRequest) (map[string]string, *mcpaccess.MCPAccessGrant, error) {
 	grantName := strings.TrimSpace(req.GrantName)
 	if grantName == "" {
 		return nil, nil, nil

@@ -32,31 +32,31 @@ type CAHealth struct {
 func ValidateCAKeyPair(certPEM, keyPEM []byte, now time.Time) (CAHealth, error) {
 	var health CAHealth
 	if len(certPEM) == 0 || len(keyPEM) == 0 {
-		return health, core.NewWithSentinel(core.ErrCASecretInvalid, "CA secret is missing tls.crt or tls.key")
+		return health, core.NewWithBase(core.ErrCASecretInvalid, "CA secret is missing tls.crt or tls.key")
 	}
 	// X509KeyPair verifies the private key matches the certificate public key.
 	if _, err := tls.X509KeyPair(certPEM, keyPEM); err != nil {
-		return health, core.NewWithSentinel(core.ErrCASecretInvalid, "CA certificate and private key are not a valid matching pair")
+		return health, core.NewWithBase(core.ErrCASecretInvalid, "CA certificate and private key are not a valid matching pair")
 	}
 	block, _ := pem.Decode(certPEM)
 	if block == nil {
-		return health, core.NewWithSentinel(core.ErrCASecretInvalid, "tls.crt is not PEM encoded")
+		return health, core.NewWithBase(core.ErrCASecretInvalid, "tls.crt is not PEM encoded")
 	}
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
-		return health, core.NewWithSentinel(core.ErrCASecretInvalid, "tls.crt is not a parseable certificate")
+		return health, core.NewWithBase(core.ErrCASecretInvalid, "tls.crt is not a parseable certificate")
 	}
 	if !cert.IsCA || !cert.BasicConstraintsValid {
-		return health, core.NewWithSentinel(core.ErrCASecretInvalid, "CA certificate lacks CA basic constraints (CA:TRUE)")
+		return health, core.NewWithBase(core.ErrCASecretInvalid, "CA certificate lacks CA basic constraints (CA:TRUE)")
 	}
 	if cert.KeyUsage&x509.KeyUsageCertSign == 0 {
-		return health, core.NewWithSentinel(core.ErrCASecretInvalid, "CA certificate lacks the keyCertSign key usage")
+		return health, core.NewWithBase(core.ErrCASecretInvalid, "CA certificate lacks the keyCertSign key usage")
 	}
 	if now.Before(cert.NotBefore) {
-		return health, core.NewWithSentinel(core.ErrCASecretInvalid, fmt.Sprintf("CA certificate is not valid until %s", cert.NotBefore.UTC().Format(time.RFC3339)))
+		return health, core.NewWithBase(core.ErrCASecretInvalid, fmt.Sprintf("CA certificate is not valid until %s", cert.NotBefore.UTC().Format(time.RFC3339)))
 	}
 	if !now.Before(cert.NotAfter) {
-		return health, core.NewWithSentinel(core.ErrCAExpired, fmt.Sprintf("CA certificate expired at %s", cert.NotAfter.UTC().Format(time.RFC3339)))
+		return health, core.NewWithBase(core.ErrCAExpired, fmt.Sprintf("CA certificate expired at %s", cert.NotAfter.UTC().Format(time.RFC3339)))
 	}
 	health = CAHealth{
 		Subject:   cert.Subject.String(),

@@ -1,4 +1,4 @@
-# Sentinel UI Coverage Checklist
+# Platform UI Coverage Checklist
 
 For React Teams (`#/admin/teams`), check new-account password validation,
 inline API error messages, duplicate-email conflict recovery, and **Add existing
@@ -347,7 +347,7 @@ back/forward work. Drive coverage from these URLs rather than clicking through:
 Things that changed and will break an older script:
 
 - There is no "More workspaces" tab and no iframe. `workspace-tab-legacy` and
-  `getByTitle('MCP Sentinel dashboard')` no longer exist. The legacy assets are
+  `getByTitle('MCP Runtime dashboard')` no longer exist. The legacy assets are
   still served at `/legacy/index.html` for the one unmigrated drill-down.
 - Sign-in has separate Account and API-key modes: click
   `signin-mode-api-key` before filling `login-api-key`.

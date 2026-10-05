@@ -170,9 +170,6 @@ func TestWorkloadSecretReferencesMatchConsumerAllowlists(t *testing.T) {
 			if ref, ok := node["secretKeyRef"].(map[string]any); ok {
 				name, _ := ref["name"].(string)
 				key, _ := ref["key"].(string)
-				if name == platforminventory.LegacyCredentialSecret {
-					t.Errorf("workload still mounts legacy secret for %s", key)
-				}
 				if keys, ok := allowed[name]; ok {
 					count++
 					if !keys[key] {

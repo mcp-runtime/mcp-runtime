@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	sentinelaccess "mcp-runtime/pkg/access"
+	mcpaccess "mcp-runtime/pkg/access"
 	"mcp-runtime/pkg/platforminventory"
 )
 
@@ -447,7 +447,7 @@ func ValidateTeamSlug(slug string) error {
 	if slug == "" {
 		return errors.New("team slug is required")
 	}
-	if err := sentinelaccess.ValidateResourceName("team", slug); err != nil {
+	if err := mcpaccess.ValidateResourceName("team", slug); err != nil {
 		return err
 	}
 	return nil
@@ -474,7 +474,7 @@ func ValidateTeamNamespace(namespace string) error {
 			return fmt.Errorf("namespace %q is reserved", namespace)
 		}
 	}
-	if err := sentinelaccess.ValidateResourceName("namespace", namespace); err != nil {
+	if err := mcpaccess.ValidateResourceName("namespace", namespace); err != nil {
 		return err
 	}
 	return nil

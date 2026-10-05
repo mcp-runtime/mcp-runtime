@@ -86,12 +86,12 @@ for ns in "${NS_LIST[@]}"; do
   done < <(kubectl -n "$ns" get deploy -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
 done
 
-# ClusterRoleBindings that look overly broad for mcp/sentinel names
+# ClusterRoleBindings that look overly broad for mcp names
 log "=== cluster RBAC name scan ==="
 broad="$(kubectl get clusterrolebinding -o json \
   | jq -r '
     .items[]
-    | select(.metadata.name | test("mcp|sentinel"; "i"))
+    | select(.metadata.name | test("mcp"; "i"))
     | select(
         (.subjects // [])[]?
         | .name == "system:authenticated" or .name == "system:unauthenticated"
@@ -99,7 +99,7 @@ broad="$(kubectl get clusterrolebinding -o json \
     | .metadata.name
   ' 2>/dev/null || true)"
 if [[ -z "$broad" ]]; then
-  ok "no mcp/sentinel ClusterRoleBinding to system:authenticated/unauthenticated"
+  ok "no mcp ClusterRoleBinding to system:authenticated/unauthenticated"
 else
   while IFS= read -r name; do
     [[ -z "$name" ]] && continue

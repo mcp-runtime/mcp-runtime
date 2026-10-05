@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Build and Trivy-scan MCP Runtime sentinel images (stdlib + OS CVEs in shipped binaries).
+# Build and Trivy-scan MCP Runtime platform images (stdlib + OS CVEs in shipped binaries).
 # Mirrors .github/workflows/security-trivy.yaml image job flags.
 #
 # Usage:
-#   bash hack/trivy-sentinel-images.sh              # all sentinel images
-#   bash hack/trivy-sentinel-images.sh platform-api analytics-api
-#   bash hack/trivy-sentinel-images.sh --scan-only platform-api
+#   bash hack/trivy-platform-images.sh              # all platform images
+#   bash hack/trivy-platform-images.sh platform-api analytics-api
+#   bash hack/trivy-platform-images.sh --scan-only platform-api
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

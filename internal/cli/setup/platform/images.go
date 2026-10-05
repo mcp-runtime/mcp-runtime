@@ -86,14 +86,14 @@ func resolveSetupImagePlatformFromArchitectures(archs []string, explicitPlatform
 		return "", err
 	}
 	if len(archs) == 0 {
-		return "", core.NewWithSentinel(core.ErrSetupImagePlatformNoNodeArchitectures, "could not resolve setup image platform: no Kubernetes node architectures were reported; set MCP_IMAGE_PLATFORM=linux/amd64 or linux/arm64")
+		return "", core.NewWithBase(core.ErrSetupImagePlatformNoNodeArchitectures, "could not resolve setup image platform: no Kubernetes node architectures were reported; set MCP_IMAGE_PLATFORM=linux/amd64 or linux/arm64")
 	}
 	if len(archs) > 1 {
-		return "", core.NewWithSentinel(core.ErrSetupImagePlatformMixedNodeArchitectures, fmt.Sprintf("mixed Kubernetes node architectures detected (%s); setup-built images are single-platform today, so set up homogeneous nodes or prebuild multi-arch images before running setup", strings.Join(archs, ", ")))
+		return "", core.NewWithBase(core.ErrSetupImagePlatformMixedNodeArchitectures, fmt.Sprintf("mixed Kubernetes node architectures detected (%s); setup-built images are single-platform today, so set up homogeneous nodes or prebuild multi-arch images before running setup", strings.Join(archs, ", ")))
 	}
 	if explicitPlatform != "" {
 		if arch := strings.TrimPrefix(explicitPlatform, "linux/"); arch != archs[0] {
-			return "", core.NewWithSentinel(core.ErrSetupImagePlatformMismatch, fmt.Sprintf("MCP_IMAGE_PLATFORM %q does not match Kubernetes node architecture %q", explicitPlatform, archs[0]))
+			return "", core.NewWithBase(core.ErrSetupImagePlatformMismatch, fmt.Sprintf("MCP_IMAGE_PLATFORM %q does not match Kubernetes node architecture %q", explicitPlatform, archs[0]))
 		}
 		return explicitPlatform, nil
 	}
@@ -104,30 +104,30 @@ func validateSetupImagePlatform(platform string) (string, error) {
 	platform = strings.TrimSpace(platform)
 	parts := strings.Split(platform, "/")
 	if len(parts) != 2 || parts[0] != "linux" {
-		return "", core.NewWithSentinel(core.ErrSetupImagePlatformInvalid, fmt.Sprintf("invalid MCP_IMAGE_PLATFORM %q; expected linux/amd64 or linux/arm64", platform))
+		return "", core.NewWithBase(core.ErrSetupImagePlatformInvalid, fmt.Sprintf("invalid MCP_IMAGE_PLATFORM %q; expected linux/amd64 or linux/arm64", platform))
 	}
 	switch parts[1] {
 	case "amd64", "arm64":
 		return platform, nil
 	default:
-		return "", core.NewWithSentinel(core.ErrSetupImagePlatformUnsupported, fmt.Sprintf("unsupported MCP_IMAGE_PLATFORM %q; expected linux/amd64 or linux/arm64", platform))
+		return "", core.NewWithBase(core.ErrSetupImagePlatformUnsupported, fmt.Sprintf("unsupported MCP_IMAGE_PLATFORM %q; expected linux/amd64 or linux/arm64", platform))
 	}
 }
 
 func clusterNodeArchitectures(kubectl core.KubectlRunner) ([]string, error) {
 	if kubectl == nil {
-		return nil, core.NewWithSentinel(core.ErrSetupImagePlatformKubectlNil, "could not resolve setup image platform: kubectl runner is nil")
+		return nil, core.NewWithBase(core.ErrSetupImagePlatformKubectlNil, "could not resolve setup image platform: kubectl runner is nil")
 	}
 	cmd, err := kubectl.CommandArgs([]string{"get", "nodes", "-o", "jsonpath={range .items[*]}{.status.nodeInfo.architecture}{\"\\n\"}{end}"})
 	if err != nil {
-		return nil, core.WrapWithSentinel(core.ErrSetupInspectNodeArchitecturesFailed, err, fmt.Sprintf("could not inspect Kubernetes node architectures: %v", err))
+		return nil, core.WrapWithBase(core.ErrSetupInspectNodeArchitecturesFailed, err, fmt.Sprintf("could not inspect Kubernetes node architectures: %v", err))
 	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		if detail := strings.TrimSpace(string(out)); detail != "" {
-			return nil, core.WrapWithSentinel(core.ErrSetupInspectNodeArchitecturesFailed, err, fmt.Sprintf("could not inspect Kubernetes node architectures: %v: %s", err, detail))
+			return nil, core.WrapWithBase(core.ErrSetupInspectNodeArchitecturesFailed, err, fmt.Sprintf("could not inspect Kubernetes node architectures: %v: %s", err, detail))
 		}
-		return nil, core.WrapWithSentinel(core.ErrSetupInspectNodeArchitecturesFailed, err, fmt.Sprintf("could not inspect Kubernetes node architectures: %v", err))
+		return nil, core.WrapWithBase(core.ErrSetupInspectNodeArchitecturesFailed, err, fmt.Sprintf("could not inspect Kubernetes node architectures: %v", err))
 	}
 	seen := map[string]struct{}{}
 	for _, line := range strings.Split(string(out), "\n") {
@@ -148,11 +148,11 @@ func clusterNodeArchitectures(kubectl core.KubectlRunner) ([]string, error) {
 func clusterNodeArchitecturesClientGo() ([]string, error) {
 	clients, err := platformKubernetesClients()
 	if err != nil {
-		return nil, core.WrapWithSentinel(core.ErrSetupInspectNodeArchitecturesFailed, err, fmt.Sprintf("could not create Kubernetes client to inspect node architectures: %v", err))
+		return nil, core.WrapWithBase(core.ErrSetupInspectNodeArchitecturesFailed, err, fmt.Sprintf("could not create Kubernetes client to inspect node architectures: %v", err))
 	}
 	archs, err := k8sclient.NodeArchitectures(context.Background(), clients)
 	if err != nil {
-		return nil, core.WrapWithSentinel(core.ErrSetupInspectNodeArchitecturesFailed, err, fmt.Sprintf("could not inspect Kubernetes node architectures: %v", err))
+		return nil, core.WrapWithBase(core.ErrSetupInspectNodeArchitecturesFailed, err, fmt.Sprintf("could not inspect Kubernetes node architectures: %v", err))
 	}
 	return archs, nil
 }
@@ -227,7 +227,7 @@ func prepareOperatorImage(logger *zap.Logger, extRegistry *config.ExternalRegist
 	if err := ensureImageViaCache("operator", operatorImage, func() error {
 		return deps.BuildOperatorImage(operatorImage)
 	}); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrOperatorImageBuildFailed,
 			err,
 			fmt.Sprintf("operator image build failed for image %q: %v", operatorImage, err),
@@ -268,7 +268,7 @@ func prepareOperatorImage(logger *zap.Logger, extRegistry *config.ExternalRegist
 	}
 
 	if err := deps.PushOperatorImageToInternal(logger, operatorImage, internalOperatorImage, "registry"); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrPushOperatorImageInternalFailed,
 			err,
 			fmt.Sprintf("failed to push operator image %q to internal registry %q: %v", operatorImage, internalOperatorImage, err),
@@ -295,7 +295,7 @@ func prepareGatewayProxyImage(logger *zap.Logger, extRegistry *config.ExternalRe
 	if err := ensureImageViaCache("gateway-proxy", gatewayProxyImage, func() error {
 		return deps.BuildGatewayProxyImage(gatewayProxyImage)
 	}); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrGatewayProxyImageBuildFailed,
 			err,
 			fmt.Sprintf("gateway proxy image build failed for image %q: %v", gatewayProxyImage, err),
@@ -336,7 +336,7 @@ func prepareGatewayProxyImage(logger *zap.Logger, extRegistry *config.ExternalRe
 	}
 
 	if err := deps.PushGatewayProxyImageToInternal(logger, gatewayProxyImage, internalGatewayProxyImage, "registry"); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrPushGatewayProxyImageInternalFailed,
 			err,
 			fmt.Sprintf("failed to push gateway proxy image %q to internal registry %q: %v", gatewayProxyImage, internalGatewayProxyImage, err),
@@ -441,7 +441,7 @@ func buildAndPublishAnalyticsComponent(logger *zap.Logger, extRegistry *config.E
 	if err := ensureImageViaCache(cacheComponent, image, func() error {
 		return deps.BuildAnalyticsImage(image, component.Dockerfile, component.BuildContext)
 	}); err != nil {
-		return "", core.WrapWithSentinelAndContext(
+		return "", core.WrapWithBaseAndContext(
 			core.ErrBuildImageFailed,
 			err,
 			fmt.Sprintf("failed to build analytics %s image %q: %v", component.Name, image, err),
@@ -475,7 +475,7 @@ func buildAndPublishAnalyticsComponent(logger *zap.Logger, extRegistry *config.E
 	}
 	internalImage := fmt.Sprintf("%s/%s:%s", internalRegistryURL, component.Repository, imageTag)
 	if err := deps.PushAnalyticsImageToInternal(logger, image, internalImage, "registry"); err != nil {
-		return "", core.WrapWithSentinelAndContext(
+		return "", core.WrapWithBaseAndContext(
 			core.ErrPushImageInClusterFailed,
 			err,
 			fmt.Sprintf("failed to push analytics %s image %q to internal registry %q: %v", component.Name, image, internalImage, err),
@@ -501,7 +501,7 @@ func prepareParallelImagePublishDeps(logger *zap.Logger, usingExternalRegistry b
 
 func ensureRegistryNamespaceForImagePush(deps SetupDeps, component string) error {
 	if err := deps.EnsureNamespace("registry"); err != nil {
-		return core.WrapWithSentinelAndContext(
+		return core.WrapWithBaseAndContext(
 			core.ErrEnsureRegistryNamespaceFailed,
 			err,
 			fmt.Sprintf("failed to ensure registry namespace: %v", err),
@@ -681,7 +681,7 @@ func pushAnalyticsImage(image string) error {
 func pushOperatorImageToInternalRegistry(logger *zap.Logger, sourceImage, targetImage, helperNamespace string) error {
 	mgr := registry.DefaultRegistryManager(logger)
 	if err := mgr.PushInCluster(sourceImage, targetImage, helperNamespace); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrPushImageInClusterFailed,
 			err,
 			fmt.Sprintf("failed to push image in-cluster: %v", err),
@@ -697,7 +697,7 @@ func pushOperatorImageToInternalRegistry(logger *zap.Logger, sourceImage, target
 func pushGatewayProxyImageToInternalRegistry(logger *zap.Logger, sourceImage, targetImage, helperNamespace string) error {
 	mgr := registry.DefaultRegistryManager(logger)
 	if err := mgr.PushInCluster(sourceImage, targetImage, helperNamespace); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrPushImageInClusterFailed,
 			err,
 			fmt.Sprintf("failed to push image in-cluster: %v", err),
@@ -713,7 +713,7 @@ func pushGatewayProxyImageToInternalRegistry(logger *zap.Logger, sourceImage, ta
 func pushAnalyticsImageToInternalRegistry(logger *zap.Logger, sourceImage, targetImage, helperNamespace string) error {
 	mgr := registry.DefaultRegistryManager(logger)
 	if err := mgr.PushInCluster(sourceImage, targetImage, helperNamespace); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrPushImageInClusterFailed,
 			err,
 			fmt.Sprintf("failed to push image in-cluster: %v", err),

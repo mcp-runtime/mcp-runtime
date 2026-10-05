@@ -29,7 +29,7 @@ explicit isolated Kind kubeconfig from the contributor guide.
 | CLI | `go test ./internal/cli/... -count=1` | command routing, command behavior, setup planning, registry helpers, doctor checks |
 | Operator | `go test ./internal/operator/... -race -count=1` | reconciliation defaults, owned resources, status, registry/image behavior |
 | Metadata | `go test ./pkg/metadata/... -count=1` | `.mcp` loading, host resolution, manifest generation |
-| Sentinel services | `go test -race -count=1 ./...` in each service module | API, UI, ingest, processor, proxy service logic |
+| Platform services | `go test -race -count=1 ./...` in each service module | API, UI, ingest, processor, proxy service logic |
 
 ## Golden CLI Tests
 
@@ -141,7 +141,7 @@ It requires `E2E_SCENARIOS=all` and adds broader CLI help, adapter proxy,
 platform API, UI auth, registry authz, team, deployment, and item-level runtime
 request flows.
 
-Image mirroring and local runtime/Sentinel image builds run with bounded
+Image mirroring and local runtime/platform image builds run with bounded
 parallelism. `E2E_IMAGE_PREP_PARALLELISM=<n>` tunes the shared prep default,
 `E2E_IMAGE_MIRROR_PARALLELISM=<n>` tunes pull/push mirroring, and
 `E2E_IMAGE_BUILD_PARALLELISM=<n>` tunes local Docker builds. CI sets mirroring

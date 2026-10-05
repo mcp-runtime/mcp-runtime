@@ -39,7 +39,7 @@ Key spec areas:
 | Routing | `ingressHost`, `publicPathPrefix`, `ingressPath`, `ingressClass`, `ingressAnnotations` | Host-based and hostless path-based routing both matter. E2E should cover public path changes. |
 | Runtime config | `envVars`, `secretEnvVars`, `resources` | Converted into pod container env and resource requirements. |
 | Inventory | `tools`, `prompts`, `mcpResources`, `tasks` | Used by gateway policy and UI/API surfaces. |
-| Governance | `auth`, `policy`, `session`, `gateway`, `analytics` | Changes usually require updates in `pkg/access`, Sentinel services, and e2e policy scenarios. |
+| Governance | `auth`, `policy`, `session`, `gateway`, `analytics` | Changes usually require updates in `pkg/access`, platform services, and e2e policy scenarios. |
 | Rollout | `rollout` | Reconciled into Deployment strategy/canary behavior where supported. |
 
 `MCPServerStatus` reports phase, message, Kubernetes conditions, and readiness

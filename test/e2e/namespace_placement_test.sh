@@ -38,12 +38,6 @@ require_line "shared config on observability" "${configmaps}" "mcp-observability
 require_line "ui analytics upstream" "${envs}" "deployment|mcp-platform|mcp-ui|ANALYTICS_UPSTREAM|http://mcp-analytics-api.mcp-observability.svc.cluster.local:8085"
 require_line "runtime clickhouse address" "${envs}" "deployment|mcp-platform|mcp-runtime-api|CLICKHOUSE_ADDR|clickhouse.mcp-observability.svc.cluster.local:9000"
 
-if printf '%s\n' "${workloads}${secrets}${configmaps}${envs}" | grep -q 'mcp-sentinel'; then
-  failed "contract still names mcp-sentinel"
-else
-  pass "contract omits mcp-sentinel"
-fi
-
 for script in qa-e2e.sh lib/staging.sh; do
   if grep -q 'namespace_placement_verify' "${SCRIPT_DIR}/${script}"; then
     pass "${script} runs the placement check"
@@ -55,13 +49,6 @@ done
 install_fake_kubectl() {
   FAKE_KUBECTL_MODE="$1"
   kubectl() {
-    if [[ "$1" == "get" && "$2" == "namespace" && "$3" == "mcp-sentinel" ]]; then
-      [[ "${FAKE_KUBECTL_MODE}" == "legacy-namespace" ]]
-      return
-    fi
-    if [[ "$1" == "get" && "$2" == "secret" && "$3" == "mcp-sentinel-secrets" ]]; then
-      return 1
-    fi
     if [[ "$1" == "get" && "$2" == "secret" && "$3" == "mcp-platform-tls" && "$5" == "mcp-observability" ]]; then
       [[ "${FAKE_KUBECTL_MODE}" == "tls-in-observability" ]]
       return
@@ -117,7 +104,6 @@ run_mode() {
 TMP="$(mktemp -d)"
 trap 'rm -rf "${TMP}"' EXIT
 run_mode "clean install placement" clean yes
-run_mode "refuses the old namespace" legacy-namespace no
 run_mode "refuses a second platform certificate" tls-in-observability no
 run_mode "refuses a missing observability workload" missing-ingest no
 run_mode "accepts k3s Traefik watching every namespace" k3s-traefik yes

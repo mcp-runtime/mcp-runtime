@@ -74,7 +74,7 @@ func TestEnsureManagedWorkloadCA(t *testing.T) {
 		name     string
 		secret   *corev1.Secret
 		testMode bool
-		sentinel error
+		base     error
 	}{
 		{"prod healthy", caSecret(goodC, goodK), false, nil},
 		{"prod missing refuses to generate", nil, false, core.ErrCASecretNotFound},
@@ -88,14 +88,14 @@ func TestEnsureManagedWorkloadCA(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			useFakeCAClient(t, tc.secret)
 			err := ensureManagedWorkloadCA(setupplan.Plan{TestMode: tc.testMode}, now)
-			if tc.sentinel == nil {
+			if tc.base == nil {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
 				return
 			}
-			if !errors.Is(err, tc.sentinel) {
-				t.Fatalf("want %v, got %v", tc.sentinel, err)
+			if !errors.Is(err, tc.base) {
+				t.Fatalf("want %v, got %v", tc.base, err)
 			}
 		})
 	}

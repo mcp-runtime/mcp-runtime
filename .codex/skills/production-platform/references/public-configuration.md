@@ -17,7 +17,7 @@ Operator may set `MCP_DEFAULT_INGRESS_HOST=mcp.<domain>` from platform domain en
 
 ## Expected URLs (after DNS + TLS)
 
-- **Dashboard:** `https://platform.<domain>/` (API at `/api/v1/*` via Traefik). Grafana at `/grafana` via `mcp-platform-observability` + `sentinel-admin-auth@file` (admin cookie or admin `x-api-key`). Prometheus stays internal — port-forward only for backend debug.
+- **Dashboard:** `https://platform.<domain>/` (API at `/api/v1/*` via Traefik). Grafana at `/grafana` via `mcp-platform-observability` + `platform-admin-auth@file` (admin cookie or admin `x-api-key`). Prometheus stays internal — port-forward only for backend debug.
 - **Registry:** `https://registry.<domain>/v2/` (admin auth via `registry-admin-auth@file` → `/api/v1/registry/authz`)
 - **MCP server:** `https://mcp.<domain>/<server-name>/mcp` (path-based; set `spec.publicPathPrefix` and `MCP_PATH`)
 

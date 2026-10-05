@@ -20,7 +20,7 @@ hack/
       setup.sh                # Full platform install
       clean.sh                # Wipe MCP Runtime namespaces (with backup)
       restore.sh              # Re-apply TLS/OIDC/bootstrap backups
-      rollout.sh              # Build/push Sentinel API+UI only
+      rollout.sh              # Build/push platform API+UI only
       multitenancy-test.sh    # Platform API multi-tenant smoke test
       lib/                    # Shared bash helpers (env, backup, clean, registry)
 ```

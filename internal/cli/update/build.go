@@ -197,7 +197,7 @@ func buildAndPushChanged(ctx context.Context, actions []ImageBuildAction, opts B
 	}
 	source, err := resolveSourceDir(opts.Source)
 	if err != nil {
-		return core.WrapWithSentinel(core.ErrUpdateBuildFailed, err, err.Error())
+		return core.WrapWithBase(core.ErrUpdateBuildFailed, err, err.Error())
 	}
 	platform := resolveImagePlatform(opts.ImagePlatform)
 	progress := opts.Progress
@@ -322,7 +322,7 @@ func buildAndPushChanged(ctx context.Context, actions []ImageBuildAction, opts B
 		if len(published) > 0 {
 			msg = fmt.Sprintf("%s; already published (re-run --build to reuse): %s", msg, strings.Join(published, ", "))
 		}
-		return core.WrapWithSentinel(core.ErrUpdateBuildFailed, firstErr, msg)
+		return core.WrapWithBase(core.ErrUpdateBuildFailed, firstErr, msg)
 	}
 	return nil
 }

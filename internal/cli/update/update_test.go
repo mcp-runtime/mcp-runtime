@@ -51,7 +51,7 @@ func readyPod(ns, app, container, imageID string) *corev1.Pod {
 
 // installed returns objects for a v0.4.0 test install of the default components.
 func installed(version string) []runtime.Object {
-	sentinel := func(name, container, repo string) *appsv1.Deployment {
+	platform := func(name, container, repo string) *appsv1.Deployment {
 		ns := "mcp-platform"
 		switch name {
 		case "mcp-analytics-api", "mcp-ingest", "mcp-processor":
@@ -64,12 +64,12 @@ func installed(version string) []runtime.Object {
 		deployment("mcp-runtime", platformrelease.OperatorDeployment, "manager", reg+"/mcp-runtime-operator:"+version, nil,
 			corev1.EnvVar{Name: "MCP_GATEWAY_PROXY_IMAGE", Value: reg + "/mcp-gateway:" + version},
 			corev1.EnvVar{Name: "OTHER", Value: "keep"}),
-		sentinel("mcp-platform-api", "platform-api", "mcp-platform-api"),
-		sentinel("mcp-runtime-api", "runtime-api", "mcp-runtime-api"),
-		sentinel("mcp-analytics-api", "analytics-api", "mcp-analytics-api"),
-		sentinel("mcp-ingest", "ingest", "mcp-ingest"),
-		sentinel("mcp-processor", "processor", "mcp-processor"),
-		sentinel("mcp-ui", "ui", "mcp-ui"),
+		platform("mcp-platform-api", "platform-api", "mcp-platform-api"),
+		platform("mcp-runtime-api", "runtime-api", "mcp-runtime-api"),
+		platform("mcp-analytics-api", "analytics-api", "mcp-analytics-api"),
+		platform("mcp-ingest", "ingest", "mcp-ingest"),
+		platform("mcp-processor", "processor", "mcp-processor"),
+		platform("mcp-ui", "ui", "mcp-ui"),
 		deployment("mcp-platform", "mcp-auth-server", "auth-server", "docker.io/princekrroshan01/mcp-auth-server:v1.0.0", nil),
 	}
 }
@@ -279,7 +279,7 @@ func TestPlanNotInstalledAndMissingWorkloads(t *testing.T) {
 	if _, err := BuildPlan(context.Background(), cs, manifest(t, "v0.5.0"), Selection{}); err == nil || !strings.Contains(err.Error(), "does not look like an MCP Runtime install") {
 		t.Fatalf("expected not-installed refusal, got %v", err)
 	}
-	// Operator only (no Sentinel): sentinel rows are skipped, never created.
+	// Operator only (no platform): platform rows are skipped, never created.
 	cs = fake.NewSimpleClientset(installed("v0.4.0")[:2]...)
 	plan, err := BuildPlan(context.Background(), cs, manifest(t, "v0.5.0"), Selection{})
 	if err != nil {

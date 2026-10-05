@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"mcp-runtime-api/internal/platformclient"
-	sentinelaccess "mcp-runtime/pkg/access"
+	mcpaccess "mcp-runtime/pkg/access"
 	"mcp-runtime/pkg/serviceutil"
 )
 
@@ -224,8 +224,8 @@ func (s *RuntimeServer) HandleRuntimeAgentPath(w http.ResponseWriter, r *http.Re
 // session. The UI never receives unrelated subjects or another user's session.
 type agentAccessSnapshot struct {
 	principal principal
-	grants    []sentinelaccess.MCPAccessGrant
-	sessions  []sentinelaccess.MCPAgentSession
+	grants    []mcpaccess.MCPAccessGrant
+	sessions  []mcpaccess.MCPAgentSession
 }
 
 func (s *RuntimeServer) agentAccessForPrincipal(ctx context.Context, p principal) (agentAccessSnapshot, error) {
@@ -266,7 +266,7 @@ func (a agentAccessSnapshot) canUse(agent platformclient.Agent) bool {
 	return false
 }
 
-func (a agentAccessSnapshot) grantMatches(grant sentinelaccess.MCPAccessGrant, agent platformclient.Agent, manager bool) bool {
+func (a agentAccessSnapshot) grantMatches(grant mcpaccess.MCPAccessGrant, agent platformclient.Agent, manager bool) bool {
 	subject := grant.Spec.Subject
 	if string(subject.TeamID) != agent.TeamID || (subject.AgentID != "" && string(subject.AgentID) != agent.ID) {
 		return false
@@ -274,7 +274,7 @@ func (a agentAccessSnapshot) grantMatches(grant sentinelaccess.MCPAccessGrant, a
 	return manager || subject.HumanID == "" || string(subject.HumanID) == a.principal.UserID()
 }
 
-func (a agentAccessSnapshot) sessionMatches(session sentinelaccess.MCPAgentSession, agent platformclient.Agent, manager bool) bool {
+func (a agentAccessSnapshot) sessionMatches(session mcpaccess.MCPAgentSession, agent platformclient.Agent, manager bool) bool {
 	subject := session.Spec.Subject
 	if string(subject.TeamID) != agent.TeamID || string(subject.AgentID) != agent.ID {
 		return false
@@ -282,17 +282,17 @@ func (a agentAccessSnapshot) sessionMatches(session sentinelaccess.MCPAgentSessi
 	return manager || (subject.HumanID != "" && string(subject.HumanID) == a.principal.UserID())
 }
 
-func (a agentAccessSnapshot) forAgent(agent platformclient.Agent, manager bool) ([]sentinelaccess.GrantSummary, []sentinelaccess.SessionSummary) {
-	grants := []sentinelaccess.GrantSummary{}
-	sessions := []sentinelaccess.SessionSummary{}
+func (a agentAccessSnapshot) forAgent(agent platformclient.Agent, manager bool) ([]mcpaccess.GrantSummary, []mcpaccess.SessionSummary) {
+	grants := []mcpaccess.GrantSummary{}
+	sessions := []mcpaccess.SessionSummary{}
 	for _, grant := range a.grants {
 		if a.grantMatches(grant, agent, manager) {
-			grants = append(grants, sentinelaccess.ToGrantSummary(grant))
+			grants = append(grants, mcpaccess.ToGrantSummary(grant))
 		}
 	}
 	for _, session := range a.sessions {
 		if a.sessionMatches(session, agent, manager) {
-			sessions = append(sessions, sentinelaccess.ToSessionSummary(session))
+			sessions = append(sessions, mcpaccess.ToSessionSummary(session))
 		}
 	}
 	return grants, sessions

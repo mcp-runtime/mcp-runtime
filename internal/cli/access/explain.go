@@ -115,10 +115,10 @@ func (m *AccessManager) ExplainAccess(opts explainOptions, out io.Writer) error 
 	toolName := strings.TrimSpace(opts.Tool)
 	if rpcMethod == "tools/call" {
 		if identity.HumanID == "" && identity.AgentID == "" && identity.TeamID == "" {
-			return core.NewWithSentinel(nil, "one of --human, --agent, or --team is required for tools/call")
+			return core.NewWithBase(nil, "one of --human, --agent, or --team is required for tools/call")
 		}
 		if toolName == "" {
-			return core.NewWithSentinel(nil, "--tool is required when --rpc-method is tools/call")
+			return core.NewWithBase(nil, "--tool is required when --rpc-method is tools/call")
 		}
 		if _, err := core.ValidateManifestField("tool", toolName); err != nil {
 			return err
@@ -130,7 +130,7 @@ func (m *AccessManager) ExplainAccess(opts explainOptions, out io.Writer) error 
 		return err
 	}
 	if string(doc.Server.Name) != server || string(doc.Server.Namespace) != namespace {
-		return core.NewWithSentinel(nil, fmt.Sprintf("policy server is %s/%s, want %s/%s", doc.Server.Namespace, doc.Server.Name, namespace, server))
+		return core.NewWithBase(nil, fmt.Sprintf("policy server is %s/%s, want %s/%s", doc.Server.Namespace, doc.Server.Name, namespace, server))
 	}
 	decision := policy.Authorize(doc, policy.Request{
 		Identity:  identity,
@@ -142,7 +142,7 @@ func (m *AccessManager) ExplainAccess(opts explainOptions, out io.Writer) error 
 		return err
 	}
 	if !decision.Allowed {
-		return core.NewWithSentinel(nil, fmt.Sprintf("policy denied: %s (status %d)", decision.Reason, decision.Status))
+		return core.NewWithBase(nil, fmt.Sprintf("policy denied: %s (status %d)", decision.Reason, decision.Status))
 	}
 	return nil
 }

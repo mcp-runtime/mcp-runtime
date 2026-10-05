@@ -12,22 +12,22 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtimeaccess "mcp-runtime-api/internal/runtimeapi/access"
-	sentinelaccess "mcp-runtime/pkg/access"
+	mcpaccess "mcp-runtime/pkg/access"
 	"mcp-runtime/pkg/k8sclient"
 	"mcp-runtime/pkg/serviceutil"
 )
 
 type accessGrantRequest struct {
-	Name               string                          `json:"name"`
-	Namespace          string                          `json:"namespace"`
-	ServerRef          sentinelaccess.ServerReference  `json:"serverRef"`
-	Subject            sentinelaccess.SubjectRef       `json:"subject"`
-	MaxTrust           sentinelaccess.TrustLevel       `json:"maxTrust"`
-	AllowedSideEffects []sentinelaccess.ToolSideEffect `json:"allowedSideEffects"`
-	PolicyVersion      string                          `json:"policyVersion"`
-	Disabled           *bool                           `json:"disabled,omitempty"`
-	ExpiresAt          *metav1.Time                    `json:"expiresAt,omitempty"`
-	ToolRules          []sentinelaccess.ToolRule       `json:"toolRules"`
+	Name               string                     `json:"name"`
+	Namespace          string                     `json:"namespace"`
+	ServerRef          mcpaccess.ServerReference  `json:"serverRef"`
+	Subject            mcpaccess.SubjectRef       `json:"subject"`
+	MaxTrust           mcpaccess.TrustLevel       `json:"maxTrust"`
+	AllowedSideEffects []mcpaccess.ToolSideEffect `json:"allowedSideEffects"`
+	PolicyVersion      string                     `json:"policyVersion"`
+	Disabled           *bool                      `json:"disabled,omitempty"`
+	ExpiresAt          *metav1.Time               `json:"expiresAt,omitempty"`
+	ToolRules          []mcpaccess.ToolRule       `json:"toolRules"`
 }
 
 type accessGrantPatchRequest struct {
@@ -174,7 +174,7 @@ func (s *AccessService) handleGrantGet(w http.ResponseWriter, r *http.Request, n
 		writeAPIError(w, http.StatusForbidden, "forbidden server")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"grant": sentinelaccess.ToGrantSummary(*grant)})
+	writeJSON(w, http.StatusOK, map[string]any{"grant": mcpaccess.ToGrantSummary(*grant)})
 }
 
 func (s *AccessService) handleGrantDelete(w http.ResponseWriter, r *http.Request, namespace, name string) {

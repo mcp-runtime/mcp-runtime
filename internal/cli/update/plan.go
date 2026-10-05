@@ -147,7 +147,7 @@ func (s Selection) validate() error {
 		}
 	}
 	if len(unknown) > 0 {
-		return core.NewWithSentinel(core.ErrUpdateInvalidFlag, fmt.Sprintf("--only has unknown component(s) %s; known components: %s", strings.Join(unknown, ", "), strings.Join(platformrelease.ComponentNames(), ", ")))
+		return core.NewWithBase(core.ErrUpdateInvalidFlag, fmt.Sprintf("--only has unknown component(s) %s; known components: %s", strings.Join(unknown, ", "), strings.Join(platformrelease.ComponentNames(), ", ")))
 	}
 	return nil
 }
@@ -156,15 +156,15 @@ func (s Selection) validate() error {
 func checkInstalled(ctx context.Context, cs kubernetes.Interface) error {
 	if _, err := cs.CoreV1().Namespaces().Get(ctx, platformrelease.OperatorNamespace, metav1.GetOptions{}); err != nil {
 		if apierrors.IsNotFound(err) {
-			return core.NewWithSentinel(core.ErrUpdateNotInstalled, fmt.Sprintf("namespace %q not found; this cluster does not look like an MCP Runtime install (run `mcp-runtime setup` first, or check --context)", platformrelease.OperatorNamespace))
+			return core.NewWithBase(core.ErrUpdateNotInstalled, fmt.Sprintf("namespace %q not found; this cluster does not look like an MCP Runtime install (run `mcp-runtime setup` first, or check --context)", platformrelease.OperatorNamespace))
 		}
-		return core.WrapWithSentinel(core.ErrUpdateInventoryFailed, err, fmt.Sprintf("read namespace %q: %v", platformrelease.OperatorNamespace, err))
+		return core.WrapWithBase(core.ErrUpdateInventoryFailed, err, fmt.Sprintf("read namespace %q: %v", platformrelease.OperatorNamespace, err))
 	}
 	if _, err := cs.AppsV1().Deployments(platformrelease.OperatorNamespace).Get(ctx, platformrelease.OperatorDeployment, metav1.GetOptions{}); err != nil {
 		if apierrors.IsNotFound(err) {
-			return core.NewWithSentinel(core.ErrUpdateNotInstalled, fmt.Sprintf("deployment %s/%s not found; this cluster does not look like an MCP Runtime install (run `mcp-runtime setup` first, or check --context)", platformrelease.OperatorNamespace, platformrelease.OperatorDeployment))
+			return core.NewWithBase(core.ErrUpdateNotInstalled, fmt.Sprintf("deployment %s/%s not found; this cluster does not look like an MCP Runtime install (run `mcp-runtime setup` first, or check --context)", platformrelease.OperatorNamespace, platformrelease.OperatorDeployment))
 		}
-		return core.WrapWithSentinel(core.ErrUpdateInventoryFailed, err, fmt.Sprintf("read operator deployment: %v", err))
+		return core.WrapWithBase(core.ErrUpdateInventoryFailed, err, fmt.Sprintf("read operator deployment: %v", err))
 	}
 	return nil
 }
@@ -188,14 +188,14 @@ func BuildPlan(ctx context.Context, cs kubernetes.Interface, m *platformrelease.
 		} else {
 			crds := strings.TrimSpace(m.CRDs)
 			if crds == "" {
-				return nil, core.NewWithSentinel(core.ErrUpdateCRDChange, fmt.Sprintf("release %s changes CustomResourceDefinitions but the manifest has no embedded crds; pass --crds <path|https-url> or use a release that publishes platform-manifest.json with crds / platform-crds.yaml", m.Version))
+				return nil, core.NewWithBase(core.ErrUpdateCRDChange, fmt.Sprintf("release %s changes CustomResourceDefinitions but the manifest has no embedded crds; pass --crds <path|https-url> or use a release that publishes platform-manifest.json with crds / platform-crds.yaml", m.Version))
 			}
 			filtered, names, err := platformrelease.FilterCRDBundle(crds)
 			if err != nil {
-				return nil, core.WrapWithSentinel(core.ErrUpdateManifestInvalid, err, fmt.Sprintf("release %s CRD bundle: %v", m.Version, err))
+				return nil, core.WrapWithBase(core.ErrUpdateManifestInvalid, err, fmt.Sprintf("release %s CRD bundle: %v", m.Version, err))
 			}
 			if len(names) == 0 {
-				return nil, core.NewWithSentinel(core.ErrUpdateManifestInvalid, fmt.Sprintf("release %s CRD bundle contains no CustomResourceDefinition objects", m.Version))
+				return nil, core.NewWithBase(core.ErrUpdateManifestInvalid, fmt.Sprintf("release %s CRD bundle contains no CustomResourceDefinition objects", m.Version))
 			}
 			plan.ApplyCRDs = true
 			plan.CRDNames = names
@@ -271,7 +271,7 @@ func planComponent(ctx context.Context, cs kubernetes.Interface, m *platformrele
 		return nil
 	}
 	if err != nil {
-		return core.WrapWithSentinel(core.ErrUpdateInventoryFailed, err, fmt.Sprintf("read deployment %s/%s: %v", c.Namespace, c.Deployment, err))
+		return core.WrapWithBase(core.ErrUpdateInventoryFailed, err, fmt.Sprintf("read deployment %s/%s: %v", c.Namespace, c.Deployment, err))
 	}
 	container := findContainer(deploy.Spec.Template.Spec.Containers, c.Container)
 	if container == nil {
@@ -308,7 +308,7 @@ func planComponent(ctx context.Context, cs kubernetes.Interface, m *platformrele
 
 	target, err := m.TargetRef(entry, currentRef.Registry)
 	if err != nil {
-		return core.WrapWithSentinel(core.ErrUpdateManifestInvalid, err, fmt.Sprintf("resolve %s target image: %v", c.Name, err))
+		return core.WrapWithBase(core.ErrUpdateManifestInvalid, err, fmt.Sprintf("resolve %s target image: %v", c.Name, err))
 	}
 	row.TargetImage = target.String()
 

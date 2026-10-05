@@ -8,7 +8,7 @@ Env file: `config/deployments/mcpruntime-org.env` (see `.example`).
 | `backup.sh` | Save a setup-focused object/Secret snapshot (`--setup`) or a full online K3s/local-path bundle (`--full --online-copy`) |
 | `clean.sh --yes` | Backup TLS/OIDC/bootstrap secrets, delete MCP Runtime namespaces |
 | `restore.sh` | Re-apply platform-runtime backup (TLS, certs, config) |
-| `rollout.sh` | Build/push Sentinel API+UI images; optionally update mcp-auth from published Docker Hub or selected local source; roll deployments |
+| `rollout.sh` | Build/push platform API+UI images; optionally update mcp-auth from published Docker Hub or selected local source; roll deployments |
 | `multitenancy-test.sh` | End-to-end multi-tenant demo via platform API only |
 
 Shared helpers live in `lib/`:

@@ -13,7 +13,7 @@ import (
 const doctorMCPAuthDeployment = "mcp-auth-server"
 
 // checkMCPAuthDeployment reports the optional authorization server separately
-// from Sentinel. An install without the opt-in deployment is healthy and is
+// from platform. An install without the opt-in deployment is healthy and is
 // explicitly skipped; an enabled deployment must have its rollout ready.
 func checkMCPAuthDeployment(kubectl core.KubectlRunner) DoctorCheck {
 	output, err := readKubectlOutput(kubectl, []string{"get", "deployment", doctorMCPAuthDeployment, "-n", componentNamespace("platform-api"), "--ignore-not-found", "-o", "json"})

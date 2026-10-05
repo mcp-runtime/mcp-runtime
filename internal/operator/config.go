@@ -86,7 +86,7 @@ func LoadOperatorConfig() *OperatorConfig {
 		RequeueDelaySeconds:           getEnvIntOrDefault("REQUEUE_DELAY_SECONDS", RequeueDelayNotReady),
 		GatewayProxyImage:             os.Getenv("MCP_GATEWAY_PROXY_IMAGE"),
 		GatewayOTLPEndpoint:           os.Getenv("MCP_GATEWAY_OTEL_EXPORTER_OTLP_ENDPOINT"),
-		AnalyticsIngestURL:            getEnvCompat("MCP_SENTINEL_INGEST_URL", "MCP_ANALYTICS_INGEST_URL"),
+		AnalyticsIngestURL:            os.Getenv("MCP_ANALYTICS_INGEST_URL"),
 		OAuthInternalIssuerURL:        strings.TrimSpace(os.Getenv("OAUTH_INTERNAL_ISSUER_URL")),
 		ClusterName:                   getEnvOrDefault("MCP_CLUSTER_NAME", "local"),
 	}

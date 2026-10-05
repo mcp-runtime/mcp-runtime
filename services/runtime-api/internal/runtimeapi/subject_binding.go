@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	runtimeaccess "mcp-runtime-api/internal/runtimeapi/access"
-	sentinelaccess "mcp-runtime/pkg/access"
+	mcpaccess "mcp-runtime/pkg/access"
 	"mcp-runtime/pkg/k8sclient"
 )
 
@@ -19,12 +19,12 @@ func writeK8sApplyError(w http.ResponseWriter, kind, namespace, name string, err
 	writeAPIError(w, code, fmt.Sprintf("failed to apply %s: %s", kind, msg))
 }
 
-func (s *AccessService) bindAccessSubjectTeamID(ctx context.Context, namespace, serverTeamID string, subject *sentinelaccess.SubjectRef) error {
-	subject.TeamID = sentinelaccess.TeamID(strings.TrimSpace(string(subject.TeamID)))
+func (s *AccessService) bindAccessSubjectTeamID(ctx context.Context, namespace, serverTeamID string, subject *mcpaccess.SubjectRef) error {
+	subject.TeamID = mcpaccess.TeamID(strings.TrimSpace(string(subject.TeamID)))
 	serverTeamID = strings.TrimSpace(serverTeamID)
 	namespaceTeamID := strings.TrimSpace(s.teamIDForPrincipalNamespace(ctx, namespace))
 	if subject.TeamID == "" {
-		subject.TeamID = sentinelaccess.TeamID(firstNonEmpty(serverTeamID, namespaceTeamID))
+		subject.TeamID = mcpaccess.TeamID(firstNonEmpty(serverTeamID, namespaceTeamID))
 	}
 	if err := runtimeaccess.ValidateTeamIDValue("subject.teamID", string(subject.TeamID)); err != nil {
 		return err

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Targeted rollout for mcpruntime.org k3s: build/push split Sentinel APIs + UI and apply RBAC/config.
+# Targeted rollout for mcpruntime.org k3s: build/push split platform APIs + UI and apply RBAC/config.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

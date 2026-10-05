@@ -23,28 +23,28 @@ import (
 	ktesting "k8s.io/client-go/testing"
 	"mcp-runtime-api/internal/platformclient"
 	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
-	sentinelaccess "mcp-runtime/pkg/access"
+	mcpaccess "mcp-runtime/pkg/access"
 	"mcp-runtime/pkg/controlplane"
 	"mcp-runtime/pkg/k8sclient"
-	"mcp-runtime/pkg/sentinel"
+	"mcp-runtime/pkg/platformstack"
 )
 
 func TestValidateGrantRequestDefaultsAndNormalizes(t *testing.T) {
 	req := &accessGrantRequest{
 		Name: " grant-a ",
-		ServerRef: sentinelaccess.ServerReference{
+		ServerRef: mcpaccess.ServerReference{
 			Name: " demo ",
 		},
-		Subject: sentinelaccess.SubjectRef{
+		Subject: mcpaccess.SubjectRef{
 			HumanID: " user-1 ",
 		},
-		MaxTrust: sentinelaccess.TrustLevel(" high "),
-		AllowedSideEffects: []sentinelaccess.ToolSideEffect{
-			sentinelaccess.ToolSideEffect(" read "),
-			sentinelaccess.ToolSideEffect("write"),
+		MaxTrust: mcpaccess.TrustLevel(" high "),
+		AllowedSideEffects: []mcpaccess.ToolSideEffect{
+			mcpaccess.ToolSideEffect(" read "),
+			mcpaccess.ToolSideEffect("write"),
 		},
-		ToolRules: []sentinelaccess.ToolRule{
-			{Name: " aaa-ping ", Decision: sentinelaccess.PolicyDecision(" allow ")},
+		ToolRules: []mcpaccess.ToolRule{
+			{Name: " aaa-ping ", Decision: mcpaccess.PolicyDecision(" allow ")},
 		},
 	}
 
@@ -54,7 +54,7 @@ func TestValidateGrantRequestDefaultsAndNormalizes(t *testing.T) {
 	if req.Name != "grant-a" {
 		t.Fatalf("Name = %q, want grant-a", req.Name)
 	}
-	if req.Namespace != sentinelaccess.DefaultMCPResourceNamespace {
+	if req.Namespace != mcpaccess.DefaultMCPResourceNamespace {
 		t.Fatalf("Namespace = %q, want mcp-servers", req.Namespace)
 	}
 	if req.PolicyVersion != "v1" {
@@ -71,11 +71,11 @@ func TestValidateGrantRequestDefaultsAndNormalizes(t *testing.T) {
 func TestValidateGrantRequestRejectsInvalidToolRule(t *testing.T) {
 	req := &accessGrantRequest{
 		Name:               "grant-a",
-		ServerRef:          sentinelaccess.ServerReference{Name: "demo"},
-		Subject:            sentinelaccess.SubjectRef{HumanID: "user-1"},
-		AllowedSideEffects: []sentinelaccess.ToolSideEffect{"read"},
-		ToolRules: []sentinelaccess.ToolRule{
-			{Name: "aaa-ping", Decision: sentinelaccess.PolicyDecision("audit")},
+		ServerRef:          mcpaccess.ServerReference{Name: "demo"},
+		Subject:            mcpaccess.SubjectRef{HumanID: "user-1"},
+		AllowedSideEffects: []mcpaccess.ToolSideEffect{"read"},
+		ToolRules: []mcpaccess.ToolRule{
+			{Name: "aaa-ping", Decision: mcpaccess.PolicyDecision("audit")},
 		},
 	}
 
@@ -88,8 +88,8 @@ func TestValidateGrantRequestRejectsInvalidToolRule(t *testing.T) {
 func TestValidateGrantRequestRequiresAllowedSideEffect(t *testing.T) {
 	req := &accessGrantRequest{
 		Name:      "grant-a",
-		ServerRef: sentinelaccess.ServerReference{Name: "demo"},
-		Subject:   sentinelaccess.SubjectRef{HumanID: "user-1"},
+		ServerRef: mcpaccess.ServerReference{Name: "demo"},
+		Subject:   mcpaccess.SubjectRef{HumanID: "user-1"},
 	}
 
 	err := validateGrantRequest(req)
@@ -101,9 +101,9 @@ func TestValidateGrantRequestRequiresAllowedSideEffect(t *testing.T) {
 func TestValidateGrantRequestRejectsExpiredAtCreation(t *testing.T) {
 	req := &accessGrantRequest{
 		Name:               "grant-a",
-		ServerRef:          sentinelaccess.ServerReference{Name: "demo"},
-		Subject:            sentinelaccess.SubjectRef{TeamID: "team-acme"},
-		AllowedSideEffects: []sentinelaccess.ToolSideEffect{"read"},
+		ServerRef:          mcpaccess.ServerReference{Name: "demo"},
+		Subject:            mcpaccess.SubjectRef{TeamID: "team-acme"},
+		AllowedSideEffects: []mcpaccess.ToolSideEffect{"read"},
 		ExpiresAt:          &metav1.Time{Time: time.Now().Add(-time.Second)},
 	}
 	if err := validateGrantRequest(req); err == nil || !strings.Contains(err.Error(), "expiresAt must be in the future") {
@@ -114,9 +114,9 @@ func TestValidateGrantRequestRejectsExpiredAtCreation(t *testing.T) {
 func TestValidateGrantRequestRejectsInvalidAllowedSideEffect(t *testing.T) {
 	req := &accessGrantRequest{
 		Name:               "grant-a",
-		ServerRef:          sentinelaccess.ServerReference{Name: "demo"},
-		Subject:            sentinelaccess.SubjectRef{HumanID: "user-1"},
-		AllowedSideEffects: []sentinelaccess.ToolSideEffect{"read", "delete"},
+		ServerRef:          mcpaccess.ServerReference{Name: "demo"},
+		Subject:            mcpaccess.SubjectRef{HumanID: "user-1"},
+		AllowedSideEffects: []mcpaccess.ToolSideEffect{"read", "delete"},
 	}
 
 	err := validateGrantRequest(req)
@@ -128,8 +128,8 @@ func TestValidateGrantRequestRejectsInvalidAllowedSideEffect(t *testing.T) {
 func TestValidateSessionRequestRequiresSubject(t *testing.T) {
 	req := &accessSessionRequest{
 		Name:           "session-a",
-		ServerRef:      sentinelaccess.ServerReference{Name: "demo"},
-		ConsentedTrust: sentinelaccess.TrustLevel("low"),
+		ServerRef:      mcpaccess.ServerReference{Name: "demo"},
+		ConsentedTrust: mcpaccess.TrustLevel("low"),
 	}
 
 	err := validateSessionRequest(req)
@@ -138,24 +138,24 @@ func TestValidateSessionRequestRequiresSubject(t *testing.T) {
 	}
 }
 
-func newTestAccessManager(t *testing.T) *sentinelaccess.Manager {
+func newTestAccessManager(t *testing.T) *mcpaccess.Manager {
 	t.Helper()
 	srv := &mcpv1alpha1.MCPServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "demo",
-			Namespace: sentinelaccess.DefaultMCPResourceNamespace,
+			Namespace: mcpaccess.DefaultMCPResourceNamespace,
 		},
 	}
 	return newTestAccessManagerWithObjects(t, srv)
 }
 
-func newTestAccessManagerWithObjects(t *testing.T, objects ...runtime.Object) *sentinelaccess.Manager {
+func newTestAccessManagerWithObjects(t *testing.T, objects ...runtime.Object) *mcpaccess.Manager {
 	t.Helper()
 	scheme := runtime.NewScheme()
 	if err := mcpv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("AddToScheme: %v", err)
 	}
-	return sentinelaccess.NewManager(dynamicfake.NewSimpleDynamicClient(scheme, objects...), nil)
+	return mcpaccess.NewManager(dynamicfake.NewSimpleDynamicClient(scheme, objects...), nil)
 }
 
 func TestRuntimeGrantApplyRejectsUnknownServer(t *testing.T) {
@@ -1092,7 +1092,7 @@ func TestRuntimeServerApplyPublicScopeResolvesCatalogNamespace(t *testing.T) {
 func TestRuntimeServerApplyDefaultsGatewayAndExplicitAnalyticsSecret(t *testing.T) {
 	t.Setenv("PLATFORM_MODE", "public")
 	t.Setenv("PLATFORM_TEAM_TRAEFIK_WATCH", "disabled")
-	t.Setenv("MCP_SENTINEL_INGEST_URL", "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events")
+	t.Setenv("MCP_ANALYTICS_INGEST_URL", "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events")
 	scheme := runtime.NewScheme()
 	if err := mcpv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("AddToScheme: %v", err)
@@ -1101,7 +1101,7 @@ func TestRuntimeServerApplyDefaultsGatewayAndExplicitAnalyticsSecret(t *testing.
 		k8sClients: &k8sclient.Clients{
 			Dynamic: dynamicfake.NewSimpleDynamicClient(scheme),
 			Clientset: kubernetesfake.NewSimpleClientset(&corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: defaultAnalyticsCredentialSourceSecretName, Namespace: sentinel.PlatformNamespace},
+				ObjectMeta: metav1.ObjectMeta{Name: defaultAnalyticsCredentialSourceSecretName, Namespace: platformstack.PlatformNamespace},
 				Data: map[string][]byte{
 					defaultAnalyticsCredentialSourceKey: []byte("ingest-key-1,ingest-key-2"),
 				},
@@ -1153,7 +1153,7 @@ func TestRuntimeServerApplyDefaultsGatewayAndExplicitAnalyticsSecret(t *testing.
 func TestRuntimeServerApplyEnablesAnalyticsByDefault(t *testing.T) {
 	t.Setenv("PLATFORM_MODE", "public")
 	t.Setenv("PLATFORM_TEAM_TRAEFIK_WATCH", "disabled")
-	t.Setenv("MCP_SENTINEL_INGEST_URL", "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events")
+	t.Setenv("MCP_ANALYTICS_INGEST_URL", "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events")
 	scheme := runtime.NewScheme()
 	if err := mcpv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("AddToScheme: %v", err)
@@ -1162,7 +1162,7 @@ func TestRuntimeServerApplyEnablesAnalyticsByDefault(t *testing.T) {
 		k8sClients: &k8sclient.Clients{
 			Dynamic: dynamicfake.NewSimpleDynamicClient(scheme),
 			Clientset: kubernetesfake.NewSimpleClientset(&corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: defaultAnalyticsCredentialSourceSecretName, Namespace: sentinel.PlatformNamespace},
+				ObjectMeta: metav1.ObjectMeta{Name: defaultAnalyticsCredentialSourceSecretName, Namespace: platformstack.PlatformNamespace},
 				Data: map[string][]byte{
 					defaultAnalyticsCredentialSourceKey: []byte("ingest-key-1"),
 				},
@@ -1204,7 +1204,7 @@ func TestRuntimeServerApplyEnablesAnalyticsByDefault(t *testing.T) {
 func TestRuntimeServerApplyDefaultsAnalyticsSecretNameFitsDNSLabelLimit(t *testing.T) {
 	t.Setenv("PLATFORM_MODE", "public")
 	t.Setenv("PLATFORM_TEAM_TRAEFIK_WATCH", "disabled")
-	t.Setenv("MCP_SENTINEL_INGEST_URL", "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events")
+	t.Setenv("MCP_ANALYTICS_INGEST_URL", "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events")
 	scheme := runtime.NewScheme()
 	if err := mcpv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("AddToScheme: %v", err)
@@ -1213,7 +1213,7 @@ func TestRuntimeServerApplyDefaultsAnalyticsSecretNameFitsDNSLabelLimit(t *testi
 		k8sClients: &k8sclient.Clients{
 			Dynamic: dynamicfake.NewSimpleDynamicClient(scheme),
 			Clientset: kubernetesfake.NewSimpleClientset(&corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: defaultAnalyticsCredentialSourceSecretName, Namespace: sentinel.PlatformNamespace},
+				ObjectMeta: metav1.ObjectMeta{Name: defaultAnalyticsCredentialSourceSecretName, Namespace: platformstack.PlatformNamespace},
 				Data: map[string][]byte{
 					defaultAnalyticsCredentialSourceKey: []byte("ingest-key-1"),
 				},
@@ -1257,7 +1257,7 @@ func TestRuntimeServerApplyDefaultsAnalyticsSecretNameFitsDNSLabelLimit(t *testi
 func TestRuntimeServerApplyAllowsMissingDefaultAnalyticsSecret(t *testing.T) {
 	t.Setenv("PLATFORM_MODE", "public")
 	t.Setenv("PLATFORM_TEAM_TRAEFIK_WATCH", "disabled")
-	t.Setenv("MCP_SENTINEL_INGEST_URL", "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events")
+	t.Setenv("MCP_ANALYTICS_INGEST_URL", "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events")
 	scheme := runtime.NewScheme()
 	if err := mcpv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("AddToScheme: %v", err)
@@ -1298,9 +1298,9 @@ func TestRuntimeServerApplyAllowsMissingDefaultAnalyticsSecret(t *testing.T) {
 }
 
 func TestApplyPublishedServerDefaultsSkipsAnalyticsSecretWhenRBACRestricted(t *testing.T) {
-	t.Setenv("MCP_SENTINEL_INGEST_URL", "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events")
+	t.Setenv("MCP_ANALYTICS_INGEST_URL", "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events")
 	client := kubernetesfake.NewSimpleClientset(&corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: defaultAnalyticsCredentialSourceSecretName, Namespace: sentinel.PlatformNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: defaultAnalyticsCredentialSourceSecretName, Namespace: platformstack.PlatformNamespace},
 		Data: map[string][]byte{
 			defaultAnalyticsCredentialSourceKey: []byte("ingest-key-1"),
 		},
@@ -1331,7 +1331,7 @@ func TestApplyPublishedServerDefaultsSkipsAnalyticsSecretWhenRBACRestricted(t *t
 func TestRuntimeServerApplyPreservesExplicitGatewaySettings(t *testing.T) {
 	t.Setenv("PLATFORM_MODE", "public")
 	t.Setenv("PLATFORM_TEAM_TRAEFIK_WATCH", "disabled")
-	t.Setenv("MCP_SENTINEL_INGEST_URL", "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events")
+	t.Setenv("MCP_ANALYTICS_INGEST_URL", "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events")
 	scheme := runtime.NewScheme()
 	if err := mcpv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("AddToScheme: %v", err)
@@ -1340,7 +1340,7 @@ func TestRuntimeServerApplyPreservesExplicitGatewaySettings(t *testing.T) {
 		k8sClients: &k8sclient.Clients{
 			Dynamic: dynamicfake.NewSimpleDynamicClient(scheme),
 			Clientset: kubernetesfake.NewSimpleClientset(&corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: defaultAnalyticsCredentialSourceSecretName, Namespace: sentinel.PlatformNamespace},
+				ObjectMeta: metav1.ObjectMeta{Name: defaultAnalyticsCredentialSourceSecretName, Namespace: platformstack.PlatformNamespace},
 				Data: map[string][]byte{
 					defaultAnalyticsCredentialSourceKey: []byte("ingest-key-1"),
 				},
@@ -1382,7 +1382,7 @@ func TestRuntimeServerApplyPreservesExplicitGatewaySettings(t *testing.T) {
 func TestRuntimeServerApplyPreservesExplicitAnalyticsDisable(t *testing.T) {
 	t.Setenv("PLATFORM_MODE", "public")
 	t.Setenv("PLATFORM_TEAM_TRAEFIK_WATCH", "disabled")
-	t.Setenv("MCP_SENTINEL_INGEST_URL", "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events")
+	t.Setenv("MCP_ANALYTICS_INGEST_URL", "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events")
 	scheme := runtime.NewScheme()
 	if err := mcpv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("AddToScheme: %v", err)
@@ -1391,7 +1391,7 @@ func TestRuntimeServerApplyPreservesExplicitAnalyticsDisable(t *testing.T) {
 		k8sClients: &k8sclient.Clients{
 			Dynamic: dynamicfake.NewSimpleDynamicClient(scheme),
 			Clientset: kubernetesfake.NewSimpleClientset(&corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: defaultAnalyticsCredentialSourceSecretName, Namespace: sentinel.PlatformNamespace},
+				ObjectMeta: metav1.ObjectMeta{Name: defaultAnalyticsCredentialSourceSecretName, Namespace: platformstack.PlatformNamespace},
 				Data: map[string][]byte{
 					defaultAnalyticsCredentialSourceKey: []byte("ingest-key-1"),
 				},
@@ -2077,7 +2077,7 @@ func TestRuntimeGrantApplyRejectsNormalUserInPersonalNamespace(t *testing.T) {
 	if err := mcpv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("AddToScheme: %v", err)
 	}
-	accessMgr := sentinelaccess.NewManager(dynamicfake.NewSimpleDynamicClient(scheme, &mcpv1alpha1.MCPServer{
+	accessMgr := mcpaccess.NewManager(dynamicfake.NewSimpleDynamicClient(scheme, &mcpv1alpha1.MCPServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "demo",
 			Namespace: "user-1",
@@ -2113,7 +2113,7 @@ func TestRuntimeGrantApplyDefaultsSubjectTeamID(t *testing.T) {
 	if err := mcpv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("AddToScheme: %v", err)
 	}
-	accessMgr := sentinelaccess.NewManager(dynamicfake.NewSimpleDynamicClient(scheme, &mcpv1alpha1.MCPServer{
+	accessMgr := mcpaccess.NewManager(dynamicfake.NewSimpleDynamicClient(scheme, &mcpv1alpha1.MCPServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "demo",
 			Namespace: "mcp-team-acme",
@@ -2179,7 +2179,7 @@ func TestRuntimeGrantApplyAllowsValidatedCrossTeamSubjectWithoutChangingServerOw
 	if err := mcpv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("AddToScheme: %v", err)
 	}
-	accessMgr := sentinelaccess.NewManager(dynamicfake.NewSimpleDynamicClient(scheme, &mcpv1alpha1.MCPServer{
+	accessMgr := mcpaccess.NewManager(dynamicfake.NewSimpleDynamicClient(scheme, &mcpv1alpha1.MCPServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "demo",
 			Namespace: "mcp-team-acme",
@@ -2227,7 +2227,7 @@ func TestRuntimeGrantApplyAllowsValidatedCrossTeamSubjectWithoutChangingServerOw
 	if grant.Spec.Subject.AgentID != "agt_01arz3ndektsv4rrffq69g5faw" {
 		t.Fatalf("subject.agentID = %q, want agt_...", grant.Spec.Subject.AgentID)
 	}
-	storedServer, err := accessMgr.GetMCPServerRef(ctx, sentinelaccess.ServerReference{Name: "demo", Namespace: "mcp-team-acme"})
+	storedServer, err := accessMgr.GetMCPServerRef(ctx, mcpaccess.ServerReference{Name: "demo", Namespace: "mcp-team-acme"})
 	if err != nil {
 		t.Fatalf("get server after cross-team grant: %v", err)
 	}
@@ -2241,7 +2241,7 @@ func TestRuntimeGrantApplyRejectsTeamMemberForTeamServer(t *testing.T) {
 	if err := mcpv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("AddToScheme: %v", err)
 	}
-	accessMgr := sentinelaccess.NewManager(dynamicfake.NewSimpleDynamicClient(scheme, &mcpv1alpha1.MCPServer{
+	accessMgr := mcpaccess.NewManager(dynamicfake.NewSimpleDynamicClient(scheme, &mcpv1alpha1.MCPServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "demo",
 			Namespace: "mcp-team-acme",
@@ -2285,7 +2285,7 @@ func TestRuntimeGrantApplyRejectsTeamMemberServerOwner(t *testing.T) {
 	if err := mcpv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("AddToScheme: %v", err)
 	}
-	accessMgr := sentinelaccess.NewManager(dynamicfake.NewSimpleDynamicClient(scheme, &mcpv1alpha1.MCPServer{
+	accessMgr := mcpaccess.NewManager(dynamicfake.NewSimpleDynamicClient(scheme, &mcpv1alpha1.MCPServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "demo",
 			Namespace: "mcp-team-acme",
@@ -2456,13 +2456,13 @@ func TestRuntimeGrantListScopesTeamMemberAccessResources(t *testing.T) {
 		},
 		Spec: mcpv1alpha1.MCPServerSpec{TeamID: "team-acme-id"},
 	})
-	if _, err := accessMgr.ApplyGrant(ctx, &sentinelaccess.MCPAccessGrant{
+	if _, err := accessMgr.ApplyGrant(ctx, &mcpaccess.MCPAccessGrant{
 		ObjectMeta: metav1.ObjectMeta{Name: "grant-team", Namespace: "mcp-team-acme"},
-		Spec: sentinelaccess.MCPAccessGrantSpec{
-			ServerRef:          sentinelaccess.ServerReference{Name: "demo"},
-			Subject:            sentinelaccess.SubjectRef{HumanID: "other-user", TeamID: "team-acme-id"},
-			MaxTrust:           sentinelaccess.TrustLevel("low"),
-			AllowedSideEffects: []sentinelaccess.ToolSideEffect{"read"},
+		Spec: mcpaccess.MCPAccessGrantSpec{
+			ServerRef:          mcpaccess.ServerReference{Name: "demo"},
+			Subject:            mcpaccess.SubjectRef{HumanID: "other-user", TeamID: "team-acme-id"},
+			MaxTrust:           mcpaccess.TrustLevel("low"),
+			AllowedSideEffects: []mcpaccess.ToolSideEffect{"read"},
 		},
 	}); err != nil {
 		t.Fatalf("seed grant: %v", err)
@@ -2487,7 +2487,7 @@ func TestRuntimeGrantListScopesTeamMemberAccessResources(t *testing.T) {
 		t.Fatalf("member status = %d body=%s", memberRec.Code, memberRec.Body.String())
 	}
 	var memberPayload struct {
-		Grants []sentinelaccess.GrantSummary `json:"grants"`
+		Grants []mcpaccess.GrantSummary `json:"grants"`
 	}
 	if err := json.NewDecoder(memberRec.Body).Decode(&memberPayload); err != nil {
 		t.Fatalf("decode member grants: %v", err)
@@ -2514,7 +2514,7 @@ func TestRuntimeGrantListScopesTeamMemberAccessResources(t *testing.T) {
 		t.Fatalf("owner status = %d body=%s", ownerRec.Code, ownerRec.Body.String())
 	}
 	var ownerPayload struct {
-		Grants []sentinelaccess.GrantSummary `json:"grants"`
+		Grants []mcpaccess.GrantSummary `json:"grants"`
 	}
 	if err := json.NewDecoder(ownerRec.Body).Decode(&ownerPayload); err != nil {
 		t.Fatalf("decode owner grants: %v", err)
@@ -2547,15 +2547,15 @@ func TestRuntimeGrantListScopesBySubjectWithoutServerLookup(t *testing.T) {
 		serverLists++
 		return false, nil, nil
 	})
-	accessMgr := sentinelaccess.NewManager(dynamicClient, nil)
+	accessMgr := mcpaccess.NewManager(dynamicClient, nil)
 	for _, name := range []string{"grant-one", "grant-two"} {
-		if _, err := accessMgr.ApplyGrant(ctx, &sentinelaccess.MCPAccessGrant{
+		if _, err := accessMgr.ApplyGrant(ctx, &mcpaccess.MCPAccessGrant{
 			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "mcp-team-acme"},
-			Spec: sentinelaccess.MCPAccessGrantSpec{
-				ServerRef:          sentinelaccess.ServerReference{Name: "demo"},
-				Subject:            sentinelaccess.SubjectRef{HumanID: "other-user", TeamID: "team-acme-id"},
-				MaxTrust:           sentinelaccess.TrustLevel("low"),
-				AllowedSideEffects: []sentinelaccess.ToolSideEffect{"read"},
+			Spec: mcpaccess.MCPAccessGrantSpec{
+				ServerRef:          mcpaccess.ServerReference{Name: "demo"},
+				Subject:            mcpaccess.SubjectRef{HumanID: "other-user", TeamID: "team-acme-id"},
+				MaxTrust:           mcpaccess.TrustLevel("low"),
+				AllowedSideEffects: []mcpaccess.ToolSideEffect{"read"},
 			},
 		}); err != nil {
 			t.Fatalf("seed %s: %v", name, err)
@@ -2580,7 +2580,7 @@ func TestRuntimeGrantListScopesBySubjectWithoutServerLookup(t *testing.T) {
 		t.Fatalf("status = %d body=%s", recorder.Code, recorder.Body.String())
 	}
 	var payload struct {
-		Grants []sentinelaccess.GrantSummary `json:"grants"`
+		Grants []mcpaccess.GrantSummary `json:"grants"`
 	}
 	if err := json.NewDecoder(recorder.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode grants: %v", err)
@@ -2608,13 +2608,13 @@ func TestRuntimeGrantGetRejectsTeamMemberForSensitiveGrant(t *testing.T) {
 		},
 		Spec: mcpv1alpha1.MCPServerSpec{TeamID: "team-acme-id"},
 	})
-	if _, err := accessMgr.ApplyGrant(ctx, &sentinelaccess.MCPAccessGrant{
+	if _, err := accessMgr.ApplyGrant(ctx, &mcpaccess.MCPAccessGrant{
 		ObjectMeta: metav1.ObjectMeta{Name: "grant-team", Namespace: "mcp-team-acme"},
-		Spec: sentinelaccess.MCPAccessGrantSpec{
-			ServerRef:          sentinelaccess.ServerReference{Name: "demo"},
-			Subject:            sentinelaccess.SubjectRef{HumanID: "other-user", TeamID: "team-acme-id"},
-			MaxTrust:           sentinelaccess.TrustLevel("low"),
-			AllowedSideEffects: []sentinelaccess.ToolSideEffect{"read"},
+		Spec: mcpaccess.MCPAccessGrantSpec{
+			ServerRef:          mcpaccess.ServerReference{Name: "demo"},
+			Subject:            mcpaccess.SubjectRef{HumanID: "other-user", TeamID: "team-acme-id"},
+			MaxTrust:           mcpaccess.TrustLevel("low"),
+			AllowedSideEffects: []mcpaccess.ToolSideEffect{"read"},
 		},
 	}); err != nil {
 		t.Fatalf("seed grant: %v", err)
@@ -2667,7 +2667,7 @@ func TestRuntimePolicyRequiresServerAdministrator(t *testing.T) {
 	clientset := kubernetesfake.NewSimpleClientset(cm)
 	server := &RuntimeServer{
 		k8sClients: &k8sclient.Clients{Dynamic: dynamicClient, Clientset: clientset},
-		accessMgr:  sentinelaccess.NewManager(dynamicClient, clientset),
+		accessMgr:  mcpaccess.NewManager(dynamicClient, clientset),
 	}
 
 	memberReq := httptest.NewRequest(http.MethodGet, "/api/runtime/policy?namespace=mcp-team-acme&server=demo", nil)
@@ -2840,13 +2840,13 @@ func TestRuntimeGrantDeleteAllowsNamespaceOwnerWithStaleServerRef(t *testing.T) 
 	ctx := context.Background()
 	accessMgr := newTestAccessManagerWithObjects(t)
 	for _, name := range []string{"stale-owner", "stale-member"} {
-		if _, err := accessMgr.ApplyGrant(ctx, &sentinelaccess.MCPAccessGrant{
+		if _, err := accessMgr.ApplyGrant(ctx, &mcpaccess.MCPAccessGrant{
 			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "mcp-team-acme"},
-			Spec: sentinelaccess.MCPAccessGrantSpec{
-				ServerRef:          sentinelaccess.ServerReference{Name: "deleted"},
-				Subject:            sentinelaccess.SubjectRef{HumanID: "other-user", TeamID: "team-acme-id"},
-				MaxTrust:           sentinelaccess.TrustLevel("low"),
-				AllowedSideEffects: []sentinelaccess.ToolSideEffect{"read"},
+			Spec: mcpaccess.MCPAccessGrantSpec{
+				ServerRef:          mcpaccess.ServerReference{Name: "deleted"},
+				Subject:            mcpaccess.SubjectRef{HumanID: "other-user", TeamID: "team-acme-id"},
+				MaxTrust:           mcpaccess.TrustLevel("low"),
+				AllowedSideEffects: []mcpaccess.ToolSideEffect{"read"},
 			},
 		}); err != nil {
 			t.Fatalf("seed %s: %v", name, err)
@@ -2910,12 +2910,12 @@ func TestRuntimeSessionDeleteMapsNotFound(t *testing.T) {
 func TestRuntimeSessionDeleteAllowsNamespaceOwnerWithStaleServerRef(t *testing.T) {
 	ctx := context.Background()
 	accessMgr := newTestAccessManagerWithObjects(t)
-	if _, err := accessMgr.ApplySession(ctx, &sentinelaccess.MCPAgentSession{
+	if _, err := accessMgr.ApplySession(ctx, &mcpaccess.MCPAgentSession{
 		ObjectMeta: metav1.ObjectMeta{Name: "stale-session", Namespace: "mcp-team-acme"},
-		Spec: sentinelaccess.MCPAgentSessionSpec{
-			ServerRef:      sentinelaccess.ServerReference{Name: "deleted"},
-			Subject:        sentinelaccess.SubjectRef{HumanID: "other-user", TeamID: "team-acme-id"},
-			ConsentedTrust: sentinelaccess.TrustLevel("low"),
+		Spec: mcpaccess.MCPAgentSessionSpec{
+			ServerRef:      mcpaccess.ServerReference{Name: "deleted"},
+			Subject:        mcpaccess.SubjectRef{HumanID: "other-user", TeamID: "team-acme-id"},
+			ConsentedTrust: mcpaccess.TrustLevel("low"),
 		},
 	}); err != nil {
 		t.Fatalf("seed session: %v", err)
@@ -2955,12 +2955,12 @@ func TestRuntimeSessionListScopesTeamMemberAccessResources(t *testing.T) {
 		},
 		Spec: mcpv1alpha1.MCPServerSpec{TeamID: "team-acme-id"},
 	})
-	if _, err := accessMgr.ApplySession(ctx, &sentinelaccess.MCPAgentSession{
+	if _, err := accessMgr.ApplySession(ctx, &mcpaccess.MCPAgentSession{
 		ObjectMeta: metav1.ObjectMeta{Name: "session-team", Namespace: "mcp-team-acme"},
-		Spec: sentinelaccess.MCPAgentSessionSpec{
-			ServerRef:      sentinelaccess.ServerReference{Name: "demo"},
-			Subject:        sentinelaccess.SubjectRef{HumanID: "other-user", TeamID: "team-acme-id"},
-			ConsentedTrust: sentinelaccess.TrustLevel("low"),
+		Spec: mcpaccess.MCPAgentSessionSpec{
+			ServerRef:      mcpaccess.ServerReference{Name: "demo"},
+			Subject:        mcpaccess.SubjectRef{HumanID: "other-user", TeamID: "team-acme-id"},
+			ConsentedTrust: mcpaccess.TrustLevel("low"),
 		},
 	}); err != nil {
 		t.Fatalf("seed session: %v", err)
@@ -2984,7 +2984,7 @@ func TestRuntimeSessionListScopesTeamMemberAccessResources(t *testing.T) {
 		t.Fatalf("status = %d body=%s", recorder.Code, recorder.Body.String())
 	}
 	var payload struct {
-		Sessions []sentinelaccess.SessionSummary `json:"sessions"`
+		Sessions []mcpaccess.SessionSummary `json:"sessions"`
 	}
 	if err := json.NewDecoder(recorder.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode sessions: %v", err)
@@ -3017,14 +3017,14 @@ func TestRuntimeSessionListScopesBySubjectWithoutServerLookup(t *testing.T) {
 		serverLists++
 		return false, nil, nil
 	})
-	accessMgr := sentinelaccess.NewManager(dynamicClient, nil)
+	accessMgr := mcpaccess.NewManager(dynamicClient, nil)
 	for _, name := range []string{"session-one", "session-two"} {
-		if _, err := accessMgr.ApplySession(ctx, &sentinelaccess.MCPAgentSession{
+		if _, err := accessMgr.ApplySession(ctx, &mcpaccess.MCPAgentSession{
 			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "mcp-team-acme"},
-			Spec: sentinelaccess.MCPAgentSessionSpec{
-				ServerRef:      sentinelaccess.ServerReference{Name: "demo"},
-				Subject:        sentinelaccess.SubjectRef{HumanID: "other-user", TeamID: "team-acme-id"},
-				ConsentedTrust: sentinelaccess.TrustLevel("low"),
+			Spec: mcpaccess.MCPAgentSessionSpec{
+				ServerRef:      mcpaccess.ServerReference{Name: "demo"},
+				Subject:        mcpaccess.SubjectRef{HumanID: "other-user", TeamID: "team-acme-id"},
+				ConsentedTrust: mcpaccess.TrustLevel("low"),
 			},
 		}); err != nil {
 			t.Fatalf("seed %s: %v", name, err)
@@ -3049,7 +3049,7 @@ func TestRuntimeSessionListScopesBySubjectWithoutServerLookup(t *testing.T) {
 		t.Fatalf("status = %d body=%s", recorder.Code, recorder.Body.String())
 	}
 	var payload struct {
-		Sessions []sentinelaccess.SessionSummary `json:"sessions"`
+		Sessions []mcpaccess.SessionSummary `json:"sessions"`
 	}
 	if err := json.NewDecoder(recorder.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode sessions: %v", err)
@@ -3077,12 +3077,12 @@ func TestRuntimeSessionToggleRejectsTeamMemberForTeamServer(t *testing.T) {
 		},
 		Spec: mcpv1alpha1.MCPServerSpec{TeamID: "team-acme-id"},
 	})
-	if _, err := accessMgr.ApplySession(ctx, &sentinelaccess.MCPAgentSession{
+	if _, err := accessMgr.ApplySession(ctx, &mcpaccess.MCPAgentSession{
 		ObjectMeta: metav1.ObjectMeta{Name: "session-team", Namespace: "mcp-team-acme"},
-		Spec: sentinelaccess.MCPAgentSessionSpec{
-			ServerRef:      sentinelaccess.ServerReference{Name: "demo"},
-			Subject:        sentinelaccess.SubjectRef{HumanID: "other-user", TeamID: "team-acme-id"},
-			ConsentedTrust: sentinelaccess.TrustLevel("low"),
+		Spec: mcpaccess.MCPAgentSessionSpec{
+			ServerRef:      mcpaccess.ServerReference{Name: "demo"},
+			Subject:        mcpaccess.SubjectRef{HumanID: "other-user", TeamID: "team-acme-id"},
+			ConsentedTrust: mcpaccess.TrustLevel("low"),
 		},
 	}); err != nil {
 		t.Fatalf("seed session: %v", err)
@@ -3126,12 +3126,12 @@ func TestRuntimeGrantApplyPreservesOmittedDisabled(t *testing.T) {
 		t.Fatalf("new grant status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
 
-	if _, err := accessMgr.ApplyGrant(ctx, &sentinelaccess.MCPAccessGrant{
+	if _, err := accessMgr.ApplyGrant(ctx, &mcpaccess.MCPAccessGrant{
 		ObjectMeta: metav1.ObjectMeta{Name: "grant-a", Namespace: "mcp-servers"},
-		Spec: sentinelaccess.MCPAccessGrantSpec{
-			ServerRef: sentinelaccess.ServerReference{Name: "demo"},
-			Subject:   sentinelaccess.SubjectRef{HumanID: "user-1"},
-			MaxTrust:  sentinelaccess.TrustLevel("low"),
+		Spec: mcpaccess.MCPAccessGrantSpec{
+			ServerRef: mcpaccess.ServerReference{Name: "demo"},
+			Subject:   mcpaccess.SubjectRef{HumanID: "user-1"},
+			MaxTrust:  mcpaccess.TrustLevel("low"),
 			Disabled:  true,
 		},
 	}); err != nil {
@@ -3200,12 +3200,12 @@ func TestRuntimeSessionApplyPreservesOmittedRevoked(t *testing.T) {
 		t.Fatalf("new session status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
 
-	if _, err := accessMgr.ApplySession(ctx, &sentinelaccess.MCPAgentSession{
+	if _, err := accessMgr.ApplySession(ctx, &mcpaccess.MCPAgentSession{
 		ObjectMeta: metav1.ObjectMeta{Name: "session-a", Namespace: "mcp-servers"},
-		Spec: sentinelaccess.MCPAgentSessionSpec{
-			ServerRef:      sentinelaccess.ServerReference{Name: "demo"},
-			Subject:        sentinelaccess.SubjectRef{HumanID: "user-1"},
-			ConsentedTrust: sentinelaccess.TrustLevel("low"),
+		Spec: mcpaccess.MCPAgentSessionSpec{
+			ServerRef:      mcpaccess.ServerReference{Name: "demo"},
+			Subject:        mcpaccess.SubjectRef{HumanID: "user-1"},
+			ConsentedTrust: mcpaccess.TrustLevel("low"),
 			Revoked:        true,
 		},
 	}); err != nil {
@@ -3276,18 +3276,18 @@ func TestValidateGrantRequestRejectsInvalidName(t *testing.T) {
 	cases := map[string]*accessGrantRequest{
 		"underscore in name": {
 			Name:      "grant_a",
-			ServerRef: sentinelaccess.ServerReference{Name: "demo"},
-			Subject:   sentinelaccess.SubjectRef{HumanID: "user-1"},
+			ServerRef: mcpaccess.ServerReference{Name: "demo"},
+			Subject:   mcpaccess.SubjectRef{HumanID: "user-1"},
 		},
 		"uppercase serverRef.name": {
 			Name:      "grant-a",
-			ServerRef: sentinelaccess.ServerReference{Name: "Demo"},
-			Subject:   sentinelaccess.SubjectRef{HumanID: "user-1"},
+			ServerRef: mcpaccess.ServerReference{Name: "Demo"},
+			Subject:   mcpaccess.SubjectRef{HumanID: "user-1"},
 		},
 		"invalid serverRef.namespace": {
 			Name:      "grant-a",
-			ServerRef: sentinelaccess.ServerReference{Name: "demo", Namespace: "Bad_NS"},
-			Subject:   sentinelaccess.SubjectRef{HumanID: "user-1"},
+			ServerRef: mcpaccess.ServerReference{Name: "demo", Namespace: "Bad_NS"},
+			Subject:   mcpaccess.SubjectRef{HumanID: "user-1"},
 		},
 	}
 	for label, req := range cases {
@@ -3302,9 +3302,9 @@ func TestValidateGrantRequestRejectsInvalidName(t *testing.T) {
 func TestValidateSessionRequestRejectsInvalidName(t *testing.T) {
 	req := &accessSessionRequest{
 		Name:           "Session-A",
-		ServerRef:      sentinelaccess.ServerReference{Name: "demo"},
-		Subject:        sentinelaccess.SubjectRef{HumanID: "user-1"},
-		ConsentedTrust: sentinelaccess.TrustLevel("low"),
+		ServerRef:      mcpaccess.ServerReference{Name: "demo"},
+		Subject:        mcpaccess.SubjectRef{HumanID: "user-1"},
+		ConsentedTrust: mcpaccess.TrustLevel("low"),
 	}
 	if err := validateSessionRequest(req); err == nil {
 		t.Fatal("expected validation error for uppercase session name")
@@ -3312,7 +3312,7 @@ func TestValidateSessionRequestRejectsInvalidName(t *testing.T) {
 }
 
 func TestRuntimeGrantApplyRejectsOversizedBody(t *testing.T) {
-	server := &RuntimeServer{accessMgr: sentinelaccess.NewManager(dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()), nil)}
+	server := &RuntimeServer{accessMgr: mcpaccess.NewManager(dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()), nil)}
 	body := oversizedJSON(accessApplyMaxBytes + 1)
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/api/runtime/grants", bytes.NewReader(body))
@@ -3326,7 +3326,7 @@ func TestRuntimeGrantApplyRejectsOversizedBody(t *testing.T) {
 }
 
 func TestRuntimeSessionApplyRejectsOversizedBody(t *testing.T) {
-	server := &RuntimeServer{accessMgr: sentinelaccess.NewManager(dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()), nil)}
+	server := &RuntimeServer{accessMgr: mcpaccess.NewManager(dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()), nil)}
 	body := oversizedJSON(accessApplyMaxBytes + 1)
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/api/runtime/sessions", bytes.NewReader(body))

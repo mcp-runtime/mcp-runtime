@@ -1,4 +1,4 @@
-// HTTP client for the Sentinel platform API using auth from authfile.
+// HTTP client for the MCP Runtime platform API using auth from authfile.
 // User-facing (non-kubeconfig) path for access, server list, and policy.
 
 package platformapi

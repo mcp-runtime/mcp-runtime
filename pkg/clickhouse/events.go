@@ -8,7 +8,7 @@ import (
 	"mcp-runtime/pkg/events"
 )
 
-// InsertEvents stores a batch of Sentinel event envelopes.
+// InsertEvents stores a batch of platform event envelopes.
 func (c *Client) InsertEvents(ctx context.Context, batch []events.Envelope) error {
 	if len(batch) == 0 {
 		return nil

@@ -209,7 +209,7 @@ failure. Do not copy a platform service key into a hand-written tenant Secret.
    the documented disaster-recovery process. Deleting broker PVCs discards
    queued audit events and is not a routine troubleshooting step.
 
-### Split Sentinel API returns 401
+### Split platform API returns 401
 
 The split API pods (`mcp-platform-api`, `mcp-runtime-api`, `mcp-analytics-api`) may have started with stale API keys from a previous
 setup run.
@@ -281,7 +281,7 @@ node recovers:
 Recovery check and repair:
 
 ```bash
-mcp-runtime cluster doctor          # reports "sentinel stale pods", Kafka, and ingest readiness
+mcp-runtime cluster doctor          # reports "platform stale pods", Kafka, and ingest readiness
 mcp-runtime setup --env-file <saved-install-profile>  # retain registry, TLS, and issuer settings
 ```
 

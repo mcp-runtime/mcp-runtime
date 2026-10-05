@@ -42,7 +42,7 @@ func TestValidateK8sNameAndNamespace(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects invalid name with sentinel", func(t *testing.T) {
+	t.Run("rejects invalid name with base", func(t *testing.T) {
 		_, _, err := ValidateK8sNameAndNamespace("server name", ErrInvalidServerName, "BadName", "test-ns")
 		if err == nil || !errors.Is(err, ErrInvalidServerName) {
 			t.Fatalf("expected ErrInvalidServerName, got %v", err)
@@ -56,10 +56,10 @@ func TestValidateK8sNameAndNamespace(t *testing.T) {
 		}
 	})
 
-	t.Run("accepts nil sentinel", func(t *testing.T) {
+	t.Run("accepts nil base", func(t *testing.T) {
 		_, _, err := ValidateK8sNameAndNamespace("resource name", nil, "BadName", "ns")
 		if err == nil {
-			t.Fatal("expected error for invalid name even with nil sentinel")
+			t.Fatal("expected error for invalid name even with nil base")
 		}
 	})
 }
