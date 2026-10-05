@@ -13,6 +13,11 @@ on stable and canary templates; the immutable Deployment selector stays the same
 An existing Service with an unchanged numeric port keeps its legacy selector.
 The Service itself records the old route, so an operator restart does not lose it.
 
+With adapter certificates enabled, the gateway NetworkPolicy permits Traefik
+to reach the named `gateway` port on each pod. Kubernetes resolves that name
+to each pod's listener, allowing both the retained and candidate ports during
+the rollout while keeping ingress restricted to the controller.
+
 Deployment readiness requires the observed generation and all desired replicas
 updated, Ready, and available with no overlapping old replicas. Service readiness
 requires its desired target port and a Ready, non-terminating EndpointSlice

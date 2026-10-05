@@ -2093,14 +2093,17 @@ func TestBuildServerEnvVarsDerivesOAuthResource(t *testing.T) {
 		assertEqual(t, "MCP_AUTH_RESOURCE", got["MCP_AUTH_RESOURCE"], "https://mcp.example.com/buddy/mcp")
 	})
 
-	t.Run("gateway-fronted servers get only the operator-owned path", func(t *testing.T) {
+	t.Run("gateway-fronted OAuth servers retain validation settings", func(t *testing.T) {
 		server := standalone()
 		server.Spec.Gateway.Enabled = mcpv1alpha1.BoolPtr(true)
 		got := envMap(r.buildServerEnvVars(server))
 		assertEqual(t, "MCP_PATH", got["MCP_PATH"], "/buddy/mcp")
-		if _, ok := got["MCP_AUTH_RESOURCE"]; ok {
-			t.Fatalf("gateway-fronted server should not get MCP_AUTH_RESOURCE, got %v", got)
-		}
+		assertEqual(t, "MCP_AUTH_RESOURCE", got["MCP_AUTH_RESOURCE"], "https://mcp.example.com/buddy/mcp")
+		assertEqual(t, "MCP_AUTH_ISSUER", got["MCP_AUTH_ISSUER"], "https://auth.example.com/mcp-auth")
+		server.Spec.Gateway.StripPrefix = "/buddy"
+		got = envMap(r.buildServerEnvVars(server))
+		assertEqual(t, "MCP_PATH", got["MCP_PATH"], "/mcp")
+		assertEqual(t, "MCP_AUTH_RESOURCE", got["MCP_AUTH_RESOURCE"], "https://mcp.example.com/buddy/mcp")
 	})
 
 }

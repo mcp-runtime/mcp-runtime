@@ -218,6 +218,13 @@ func runDoctorChecks(kubectl core.KubectlRunner, distro Distribution, progress D
 }
 
 func runDoctorChecksWithSpecs(kubectl core.KubectlRunner, distro Distribution, progress DoctorCheckProgress, specs []doctorCheckSpec) DoctorReport {
+	if len(specs) == 0 || specs[0].Name != "Kubernetes nodes ready" {
+		specs = append([]doctorCheckSpec{{
+			Name:   "Kubernetes API access",
+			Detail: "checking the active kubeconfig can reach the API and list nodes",
+			Run:    func() DoctorCheck { return checkClusterNodesReady(kubectl) },
+		}}, specs...)
+	}
 	checks := make([]DoctorCheck, 0, len(specs))
 	for i, spec := range specs {
 		finish := func(DoctorCheck) {}
@@ -238,6 +245,12 @@ func runDoctorChecksWithSpecs(kubectl core.KubectlRunner, distro Distribution, p
 		}
 		finish(check)
 		checks = append(checks, check)
+		if check.Name == "Kubernetes API access" && !check.OK {
+			if progress != nil && i+1 < len(specs) {
+				core.Info(fmt.Sprintf("Stopped after %d/%d checks; remaining checks were skipped because Kubernetes API access failed", i+1, len(specs)))
+			}
+			break
+		}
 	}
 	return DoctorReport{
 		Distribution: distro,
@@ -356,6 +369,7 @@ func doctorSetupCheckSpecs(kubectl core.KubectlRunner, distro Distribution) []do
 		{Name: "traefik service exposure", Detail: "checking LoadBalancer or NodePort exposure for the web entrypoint", Run: func() DoctorCheck { return checkTraefikServiceExposure(kubectl, distro) }},
 		{Name: "public ingress host config", Detail: "resolving platform, registry, and MCP public hosts from the environment", Run: checkPublicIngressHostConfig},
 		{Name: "public ingress DNS", Detail: "resolving configured public hosts through the local DNS resolver", Run: checkPublicIngressDNS},
+		{Name: "cert-manager compatibility", Detail: "checking installed cert-manager versions against Kubernetes support", Run: func() DoctorCheck { return checkCertManagerCompatibility(kubectl) }},
 		{Name: "cert-manager readiness", Detail: "checking cert-manager deployments when TLS preflight is requested", Run: func() DoctorCheck { return checkCertManagerReadiness(kubectl) }},
 		{Name: "TLS ClusterIssuer", Detail: "checking the configured cert-manager ClusterIssuer when MCP_TLS_CLUSTER_ISSUER is set", Run: func() DoctorCheck { return checkDoctorTLSClusterIssuer(kubectl) }},
 		{Name: "ACME HTTP-01 exposure", Detail: "verifying the active Traefik web entrypoint exposes public port 80 when MCP_ACME_EMAIL is set", Run: func() DoctorCheck { return checkDoctorACMEHTTP01Exposure(kubectl, distro) }},
@@ -381,34 +395,9 @@ func doctorPostSetupCheckSpecs(kubectl core.KubectlRunner) []doctorCheckSpec {
 // DetectDistribution inspects node info to guess which distribution is running.
 // This is best-effort: callers should treat DistroGeneric as "probably kubeadm/unknown".
 func DetectDistribution(kubectl core.KubectlRunner) Distribution {
-	cmd, err := kubectl.CommandArgs([]string{"get", "nodes", "-o", "jsonpath={.items[*].status.nodeInfo.kubeletVersion}"})
+	cmd, err := kubectl.CommandArgs([]string{"config", "current-context"})
 	if err == nil {
-		if out, err := cmd.Output(); err == nil {
-			v := strings.ToLower(string(out))
-			if strings.Contains(v, "+k3s") {
-				return DistroK3s
-			}
-		}
-	}
-
-	cmd, err = kubectl.CommandArgs([]string{"get", "nodes", "-o", "jsonpath={.items[*].metadata.name}"})
-	if err == nil {
-		if out, err := cmd.Output(); err == nil {
-			names := strings.ToLower(string(out))
-			switch {
-			case strings.Contains(names, "kind-"):
-				return DistroKind
-			case strings.Contains(names, "minikube"):
-				return DistroMinikube
-			case strings.Contains(names, "docker-desktop"):
-				return DistroDockerDesktop
-			}
-		}
-	}
-
-	cmd, err = kubectl.CommandArgs([]string{"config", "current-context"})
-	if err == nil {
-		if out, err := cmd.Output(); err == nil {
+		if out, err := runKubectlOutput(cmd); err == nil {
 			ctx := strings.ToLower(strings.TrimSpace(string(out)))
 			switch {
 			case strings.HasPrefix(ctx, "kind-"):
@@ -416,6 +405,32 @@ func DetectDistribution(kubectl core.KubectlRunner) Distribution {
 			case strings.HasPrefix(ctx, "minikube"):
 				return DistroMinikube
 			case ctx == "docker-desktop":
+				return DistroDockerDesktop
+			}
+		}
+	}
+
+	// Check the local context before bounded node lookups so doctor remains
+	// responsive when the API endpoint is offline.
+	cmd, err = kubectl.CommandArgs([]string{"--request-timeout=2s", "get", "nodes", "-o", "jsonpath={.items[*].status.nodeInfo.kubeletVersion}"})
+	if err == nil {
+		if out, err := runKubectlOutput(cmd); err == nil {
+			if strings.Contains(strings.ToLower(string(out)), "+k3s") {
+				return DistroK3s
+			}
+		}
+	}
+
+	cmd, err = kubectl.CommandArgs([]string{"--request-timeout=2s", "get", "nodes", "-o", "jsonpath={.items[*].metadata.name}"})
+	if err == nil {
+		if out, err := runKubectlOutput(cmd); err == nil {
+			names := strings.ToLower(string(out))
+			switch {
+			case strings.Contains(names, "kind-"):
+				return DistroKind
+			case strings.Contains(names, "minikube"):
+				return DistroMinikube
+			case strings.Contains(names, "docker-desktop"):
 				return DistroDockerDesktop
 			}
 		}

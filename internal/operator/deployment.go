@@ -743,14 +743,11 @@ func (r *MCPServerReconciler) buildImagePullSecrets(mcpServer *mcpv1alpha1.MCPSe
 	return []corev1.LocalObjectReference{{Name: secretName}}
 }
 
-// buildServerEnvVars returns the MCP server container env: the spec's env,
-// then the OAuth resource settings a standalone resource server needs. With the
-// gateway disabled the server itself answers OAuth challenges and publishes
-// protected-resource metadata, so it must advertise exactly the audience the
-// authorization server mints tokens for. Those values are derived from the
-// public URL here rather than hand-copied into envVars, where a stale host
-// makes MCP clients reject the metadata before OAuth even starts. Reconciled
-// path and OAuth values replace matching spec entries so they cannot drift.
+// buildServerEnvVars derives the upstream route and OAuth validation settings.
+// Gateway-fronted OAuth apps receive the same issuer and public audience as
+// standalone apps: the gateway forwards the validated bearer, and upstreams
+// can validate it independently. MCP_PATH can differ from that public audience
+// when the gateway strips a routing prefix.
 func (r *MCPServerReconciler) buildServerEnvVars(mcpServer *mcpv1alpha1.MCPServer) []corev1.EnvVar {
 	result := r.buildEnvVars(mcpServer.Spec.EnvVars, mcpServer.Spec.SecretEnvVars)
 	// MCP_PATH is the path the server receives requests on and belongs to
@@ -759,7 +756,7 @@ func (r *MCPServerReconciler) buildServerEnvVars(mcpServer *mcpv1alpha1.MCPServe
 	if upstreamPath := upstreamMCPPath(mcpServer); upstreamPath != "" {
 		result = setEnvVarValue(result, "MCP_PATH", upstreamPath)
 	}
-	if gatewayEnabled(mcpServer) || !serverUsesOAuth(mcpServer) {
+	if !serverUsesOAuth(mcpServer) {
 		return result
 	}
 	resource := strings.TrimSpace(mcpServer.Spec.Auth.Audience)

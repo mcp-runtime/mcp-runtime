@@ -10,13 +10,13 @@ import {
 } from "@mcp-auth/client";
 
 // Runtime derives these from auth.issuerURL and the public MCP URL when the
-// gateway is disabled. Local runs provide the same two settings themselves.
+// gateway is enabled or disabled. Local runs provide these settings themselves.
 const issuer = process.env.MCP_AUTH_ISSUER;
 const resource = process.env.MCP_AUTH_RESOURCE;
 if (!issuer || !resource) {
   throw new Error("OAuth requires MCP_AUTH_ISSUER and MCP_AUTH_RESOURCE");
 }
-const resourcePath = new URL(resource).pathname || "/mcp";
+const resourcePath = process.env.MCP_PATH || new URL(resource).pathname || "/mcp";
 const metadataUrl = protectedResourceMetadataUrl(resource);
 const metadataPath = new URL(metadataUrl).pathname;
 const authorizationServer = await discoverAuthorizationServer(issuer);

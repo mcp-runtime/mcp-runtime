@@ -59,7 +59,7 @@ nav:
   - Home: README.md
   - Getting Started:
       - Overview: start-here.md
-      - Hosted Quickstart: hosted-quickstart.md
+      - Public Platform Walkthrough: hosted-quickstart.md
       - Guided Tutorials:
           - Overview: learn/README.md
           - Core Concepts: learn/01-core-concepts.md
@@ -124,7 +124,6 @@ nav:
           - Dependency Rollouts: internals/dependency-rollouts.md
           - Log Collector Admission: internals/log-collector-admission.md
       - Developer References:
-          - Go Package Reference: internals/go-package-reference.md
           - Package Docs Hosting: internals/pkgsite.md
           - Design Background: internals/gateway-platform-inspirations.md
           - Tests and Coverage: internals/testing.md

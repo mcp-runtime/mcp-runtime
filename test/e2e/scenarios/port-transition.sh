@@ -58,7 +58,11 @@ run_e2e_port_transition_scenario() {
     ((SECONDS < deadline)) || { echo '[port-transition] ready candidate was not promoted' >&2; return 1; }
     sleep 2
   done
-  wait_for_mcp_tool_result "${MCP_SESSION_URL}" aaa-ping '{}' 200 pong "${MCP_POLICY_WAIT_TRIES}" '' port-transition-promoted
+  port_transition_capture_route "${directory}/promoted"
+  if ! wait_for_mcp_tool_result "${MCP_SESSION_URL}" aaa-ping '{}' 200 pong "${MCP_POLICY_WAIT_TRIES}" '' port-transition-promoted; then
+    port_transition_capture_route "${directory}/promotion-failed"
+    return 1
+  fi
   jq 'del(.status, .metadata.managedFields, .metadata.resourceVersion, .metadata.uid, .metadata.creationTimestamp)' \
     "${directory}/original.json" >"${directory}/restore.json"
   ./bin/mcp-runtime server --use-kube apply --file "${directory}/restore.json"
@@ -67,6 +71,21 @@ run_e2e_port_transition_scenario() {
     ((SECONDS < deadline)) || { echo '[port-transition] original route was not restored' >&2; return 1; }
     sleep 2
   done
+}
+
+port_transition_capture_route() {
+  local directory="$1"
+  mkdir -p "${directory}"
+  kubectl get service "${SERVER_NAME}" -n mcp-servers -o json >"${directory}/service.json" || true
+  kubectl get endpointslice -n mcp-servers -l "kubernetes.io/service-name=${SERVER_NAME}" -o json >"${directory}/endpointslices.json" || true
+  kubectl get pods -n mcp-servers -l "app=${SERVER_NAME}" -o json | jq \
+    '{items: [.items[] | {metadata: {name: .metadata.name, labels: .metadata.labels, deletionTimestamp: .metadata.deletionTimestamp}, ports: [.spec.containers[] | {name, ports}], status}]}' \
+    >"${directory}/pods.json" || true
+  kubectl get networkpolicy "${SERVER_NAME}-mtls-gateway" -n mcp-servers -o json >"${directory}/networkpolicy.json" || true
+  kubectl logs -n mcp-servers -l "app=${SERVER_NAME}" -c mcp-gateway --prefix --tail=100 \
+    >"${directory}/gateway.log" 2>&1 || true
+  kubectl logs -n mcp-runtime deployment/mcp-runtime-operator-controller-manager --tail=100 \
+    >"${directory}/operator.log" 2>&1 || true
 }
 
 port_transition_assert_old_route() {
