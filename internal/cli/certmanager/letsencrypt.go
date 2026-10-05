@@ -83,11 +83,11 @@ func ACMETLSDNSNames() []string {
 func validateACMEHostnameForPublicCA() error {
 	names := acmeTLSDNSNames()
 	if len(names) == 0 {
-		return core.NewWithSentinel(core.ErrCertACMEPublicDNSNameRequired, "ACME public CA requires a public DNS name; set MCP_PLATFORM_DOMAIN, MCP_REGISTRY_HOST, MCP_REGISTRY_INGRESS_HOST, or MCP_MCP_INGRESS_HOST")
+		return core.NewWithBase(core.ErrCertACMEPublicDNSNameRequired, "ACME public CA requires a public DNS name; set MCP_PLATFORM_DOMAIN, MCP_REGISTRY_HOST, MCP_REGISTRY_INGRESS_HOST, or MCP_MCP_INGRESS_HOST")
 	}
 	for _, host := range names {
 		if isDevRegistryURL(host) {
-			return core.NewWithSentinel(core.ErrCertACMEPublicDNSNameInvalid, fmt.Sprintf("ACME public CA requires a public DNS name; set MCP_PLATFORM_DOMAIN (e.g. mcpruntime.com for registry. and mcp. names) or MCP_REGISTRY_INGRESS_HOST, not %q", host))
+			return core.NewWithBase(core.ErrCertACMEPublicDNSNameInvalid, fmt.Sprintf("ACME public CA requires a public DNS name; set MCP_PLATFORM_DOMAIN (e.g. mcpruntime.com for registry. and mcp. names) or MCP_REGISTRY_INGRESS_HOST, not %q", host))
 		}
 	}
 	return nil
@@ -104,7 +104,7 @@ func ValidateACMEHostnamesForPublicCA(hosts ...string) error {
 	for _, host := range hosts {
 		host = strings.TrimSpace(host)
 		if isDevRegistryURL(host) {
-			return core.NewWithSentinel(core.ErrCertACMEPublicDNSNameInvalid, fmt.Sprintf("ACME public CA requires a public DNS name, not %q", host))
+			return core.NewWithBase(core.ErrCertACMEPublicDNSNameInvalid, fmt.Sprintf("ACME public CA requires a public DNS name, not %q", host))
 		}
 	}
 	return nil
@@ -156,7 +156,7 @@ func validateIngressManifestForACME(ingressManifest string) error {
 			"http-01 (Let's Encrypt) must reach your hostnames on port 80, but the %q overlay uses 8000/8443. Omit --ingress-manifest so setup uses the prod overlay, or set --ingress-manifest %q, then re-run (use --force-ingress-install if an old ingress is already present)",
 			acmeHTTP01DevIngressOverlay, "config/ingress/overlays/prod",
 		)
-		return core.NewWithSentinel(core.ErrCertACMEIngressManifestInvalid, msg)
+		return core.NewWithBase(core.ErrCertACMEIngressManifestInvalid, msg)
 	}
 	return nil
 }
@@ -180,7 +180,7 @@ func waitForTraefikDeploymentForACME(kubectl core.KubectlRunner) error {
 		"wait", "--for=condition=Available",
 		"deployment/" + traefikManagedDeployment, "-n", traefikManagedNamespace, "--timeout=3m",
 	}, os.Stdout, os.Stderr); err != nil {
-		return core.WrapWithSentinel(core.ErrCertTraefikNotReady, err, fmt.Sprintf("traefik not ready: %v", err))
+		return core.WrapWithBase(core.ErrCertTraefikNotReady, err, fmt.Sprintf("traefik not ready: %v", err))
 	}
 	core.Info(traefikManagedNamespace + "/" + traefikManagedDeployment + " is available")
 	return nil
@@ -223,7 +223,7 @@ func ensureCertManagerInstalled(kubectl core.KubectlRunner, logger *zap.Logger) 
 	url := certManagerInstallManifestURL()
 	// #nosec G204 -- fixed release URL.
 	if err := kubectl.RunWithOutput([]string{"apply", "-f", url}, os.Stdout, os.Stderr); err != nil {
-		wrapped := core.WrapWithSentinel(core.ErrCertManagerInstallFailed, err, fmt.Sprintf("cert-manager install failed: %v. %s", err, warnMsg))
+		wrapped := core.WrapWithBase(core.ErrCertManagerInstallFailed, err, fmt.Sprintf("cert-manager install failed: %v. %s", err, warnMsg))
 		core.Error("cert-manager install failed")
 		if logger != nil {
 			core.LogStructuredError(logger, wrapped, "cert-manager install failed")
@@ -237,7 +237,7 @@ func ensureCertManagerInstalled(kubectl core.KubectlRunner, logger *zap.Logger) 
 		remaining := time.Until(start.Add(overall))
 		if remaining <= 0 {
 			msg := fmt.Sprintf("timed out waiting for cert-manager before deployment/%s", dep)
-			err := core.NewWithSentinel(core.ErrCertManagerInstallFailed, msg)
+			err := core.NewWithBase(core.ErrCertManagerInstallFailed, msg)
 			core.Error("cert-manager did not become ready")
 			if logger != nil {
 				core.LogStructuredError(logger, err, "cert-manager did not become ready")
@@ -250,7 +250,7 @@ func ensureCertManagerInstalled(kubectl core.KubectlRunner, logger *zap.Logger) 
 			"deployment/" + dep, "-n", certManagerNamespace,
 			"--timeout=" + remaining.Round(time.Second).String(),
 		}, os.Stdout, os.Stderr); err != nil {
-			wrapped := core.WrapWithSentinel(core.ErrCertManagerInstallFailed, err, fmt.Sprintf("cert-manager component %s not ready: %v", dep, err))
+			wrapped := core.WrapWithBase(core.ErrCertManagerInstallFailed, err, fmt.Sprintf("cert-manager component %s not ready: %v", dep, err))
 			core.Error("cert-manager did not become ready")
 			if logger != nil {
 				core.LogStructuredError(logger, wrapped, "cert-manager did not become ready")
@@ -269,12 +269,12 @@ func EnsureCertManagerInstalled(kubectl core.KubectlRunner, logger *zap.Logger) 
 func applyLetsEncryptClusterIssuer(kubectl core.KubectlRunner, email string, staging bool, logger *zap.Logger) error {
 	email = strings.TrimSpace(email)
 	if email == "" {
-		return core.NewWithSentinel(core.ErrCertACMEEmailRequired, "ACME email is required")
+		return core.NewWithBase(core.ErrCertACMEEmailRequired, "ACME email is required")
 	}
 	name := ClusterIssuerNameForACME(staging)
 	manifest := renderLetsEncryptClusterIssuerManifest(name, email, acmeServerURL(staging))
 	if err := kube.ApplyManifestContent(kubectl.CommandArgs, manifest); err != nil {
-		wrapped := core.WrapWithSentinel(core.ErrClusterIssuerApplyFailed, err, fmt.Sprintf("failed to apply Let's Encrypt ClusterIssuer: %v", err))
+		wrapped := core.WrapWithBase(core.ErrClusterIssuerApplyFailed, err, fmt.Sprintf("failed to apply Let's Encrypt ClusterIssuer: %v", err))
 		core.Error("Failed to apply ClusterIssuer")
 		if logger != nil {
 			core.LogStructuredError(logger, wrapped, "Failed to apply ClusterIssuer")
@@ -335,7 +335,7 @@ func applyCertificate(kubectl core.KubectlRunner, certName, secretName string, d
 	uniq := dedupeHostnames(dnsNames)
 	uniqIPs := dedupeHostnames(ipAddresses)
 	if len(uniq) == 0 && len(uniqIPs) == 0 {
-		return core.NewWithSentinel(core.ErrCertCertificateSANsEmpty, fmt.Sprintf("%s TLS has no DNS names or IP addresses to request", certName))
+		return core.NewWithBase(core.ErrCertCertificateSANsEmpty, fmt.Sprintf("%s TLS has no DNS names or IP addresses to request", certName))
 	}
 	manifest := renderCertificate(certName, secretName, core.NamespaceRegistry, uniq, uniqIPs, issuerName)
 	return kube.ApplyManifestContent(kubectl.CommandArgs, manifest)

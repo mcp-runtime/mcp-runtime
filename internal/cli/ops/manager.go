@@ -23,7 +23,7 @@ type Manager struct {
 
 type platformComponent = platforminventory.Component
 
-var platformComponents = platforminventory.SentinelComponents(false)
+var platformComponents = platforminventory.PlatformComponents(false)
 
 // NewManager creates a Manager with explicit dependencies.
 func NewManager(kubectl *core.KubectlClient, logger *zap.Logger) *Manager {
@@ -59,7 +59,7 @@ func findPlatformComponent(name string) (*platformComponent, error) {
 		}
 	}
 
-	return nil, core.NewWithSentinel(nil, fmt.Sprintf("unknown platform component %q (use one of: %s)", name, strings.Join(ComponentKeys(), ", ")))
+	return nil, core.NewWithBase(nil, fmt.Sprintf("unknown platform component %q (use one of: %s)", name, strings.Join(ComponentKeys(), ", ")))
 }
 
 // ShowStatus prints a status table for platform workloads.
@@ -125,7 +125,7 @@ func (m *Manager) ViewLogs(component string, follow, previous bool, tail int, si
 	}
 
 	if err := m.kubectl.RunWithOutput(args, os.Stdout, os.Stderr); err != nil {
-		return core.WrapWithSentinelAndContext(nil, err, fmt.Sprintf("failed to stream logs for sentinel component %q: %v", component, err), map[string]any{
+		return core.WrapWithBaseAndContext(nil, err, fmt.Sprintf("failed to stream logs for platform component %q: %v", component, err), map[string]any{
 			"component": component,
 			"namespace": target.Namespace,
 		})
@@ -147,7 +147,7 @@ func (m *Manager) ShowEvents() error {
 		fmt.Fprintf(os.Stdout, "\n%s events:\n", namespace)
 		args := []string{"get", "events", "-n", namespace, "--sort-by=.lastTimestamp"}
 		if err := m.kubectl.RunWithOutput(args, os.Stdout, os.Stderr); err != nil {
-			return core.WrapWithSentinelAndContext(nil, err, fmt.Sprintf("failed to list platform events in %s: %v", namespace, err), map[string]any{
+			return core.WrapWithBaseAndContext(nil, err, fmt.Sprintf("failed to list platform events in %s: %v", namespace, err), map[string]any{
 				"namespace": namespace,
 				"component": "ops",
 			})
@@ -166,7 +166,7 @@ func (m *Manager) PortForwardTarget(target string, localPort int, address string
 		return err
 	}
 	if component.PortTarget == nil {
-		return core.NewWithSentinel(nil, fmt.Sprintf("component %q does not expose a predefined port-forward target", target))
+		return core.NewWithBase(nil, fmt.Sprintf("component %q does not expose a predefined port-forward target", target))
 	}
 	portTarget := component.PortTarget
 	if localPort <= 0 {
@@ -182,7 +182,7 @@ func (m *Manager) PortForwardTarget(target string, localPort int, address string
 	}
 
 	if err := m.kubectl.RunWithOutput(args, os.Stdout, os.Stderr); err != nil {
-		return core.WrapWithSentinelAndContext(nil, err, fmt.Sprintf("failed to port-forward sentinel target %q: %v", target, err), map[string]any{
+		return core.WrapWithBaseAndContext(nil, err, fmt.Sprintf("failed to port-forward platform target %q: %v", target, err), map[string]any{
 			"target":    target,
 			"namespace": component.Namespace,
 			"component": "ops",
@@ -200,7 +200,7 @@ func (m *Manager) Restart(component string, restartAll bool) error {
 		for _, target := range platformComponents {
 			args := []string{"rollout", "restart", fmt.Sprintf("%s/%s", target.Kind, target.Resource), "-n", target.Namespace}
 			if err := m.kubectl.RunWithOutput(args, os.Stdout, os.Stderr); err != nil {
-				return core.WrapWithSentinelAndContext(nil, err, fmt.Sprintf("failed to restart sentinel component %q: %v", target.Key, err), map[string]any{
+				return core.WrapWithBaseAndContext(nil, err, fmt.Sprintf("failed to restart platform component %q: %v", target.Key, err), map[string]any{
 					"component": target.Key,
 					"namespace": target.Namespace,
 				})
@@ -215,7 +215,7 @@ func (m *Manager) Restart(component string, restartAll bool) error {
 	}
 	args := []string{"rollout", "restart", fmt.Sprintf("%s/%s", target.Kind, target.Resource), "-n", target.Namespace}
 	if err := m.kubectl.RunWithOutput(args, os.Stdout, os.Stderr); err != nil {
-		return core.WrapWithSentinelAndContext(nil, err, fmt.Sprintf("failed to restart sentinel component %q: %v", component, err), map[string]any{
+		return core.WrapWithBaseAndContext(nil, err, fmt.Sprintf("failed to restart platform component %q: %v", component, err), map[string]any{
 			"component": component,
 			"namespace": target.Namespace,
 		})
@@ -225,16 +225,16 @@ func (m *Manager) Restart(component string, restartAll bool) error {
 
 func (m *Manager) requireAdminClusterAccess() error {
 	if m.kubectl == nil {
-		return core.NewWithSentinel(nil, kubeerr.DirectModeFailureMessage("ops commands require admin cluster access", "kubectl client is unavailable"))
+		return core.NewWithBase(nil, kubeerr.DirectModeFailureMessage("ops commands require admin cluster access", "kubectl client is unavailable"))
 	}
 	cmd, err := m.kubectl.CommandArgs([]string{"cluster-info"})
 	if err != nil {
-		return core.NewWithSentinel(nil, kubeerr.DirectModeFailureMessage("ops commands require admin cluster access", err.Error()))
+		return core.NewWithBase(nil, kubeerr.DirectModeFailureMessage("ops commands require admin cluster access", err.Error()))
 	}
 	output, execErr := cmd.CombinedOutput()
 	if execErr != nil {
 		detail := kubeerr.CommandDetail(string(output), execErr)
-		return core.NewWithSentinel(nil, kubeerr.DirectModeFailureMessage("ops commands require admin cluster access", detail))
+		return core.NewWithBase(nil, kubeerr.DirectModeFailureMessage("ops commands require admin cluster access", detail))
 	}
 	return nil
 }

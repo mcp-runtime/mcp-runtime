@@ -204,7 +204,7 @@ func RunPostSetupSmoke(kubectl core.KubectlRunner) DoctorReport {
 // RunPostSetupSmokeAndPrint streams the post-setup operational smoke checks.
 func RunPostSetupSmokeAndPrint(kubectl core.KubectlRunner) DoctorReport {
 	core.Section("Post-setup operational smoke")
-	core.Info("Checking nodes, Postgres, platform API, Sentinel rollouts, PVCs, and auth probe")
+	core.Info("Checking nodes, Postgres, platform API, platform rollouts, PVCs, and auth probe")
 	distro := DetectDistribution(kubectl)
 	core.Info(fmt.Sprintf("Distribution: %s", distro))
 
@@ -317,27 +317,27 @@ func doctorCheckSpecs(kubectl core.KubectlRunner, distro Distribution) []doctorC
 		},
 		{Name: "registry HTTP pull mismatch", Detail: "listing pods and inspecting image-pull failures for HTTP-vs-HTTPS registry errors", Run: func() DoctorCheck { return checkRegistryHTTPPullMismatch(kubectl) }},
 		{Name: "registry image pull diagnostics", Detail: "inspecting image-pull failures for registry TLS, auth, DNS, or corrupt-manifest errors", Run: func() DoctorCheck { return checkRegistryImagePullDiagnostics(kubectl) }},
-		{Name: "sentinel Kafka readiness", Detail: "checking the bundled Kafka StatefulSet is ready so analytics ingestion can function", Run: func() DoctorCheck { return checkSentinelKafkaReadiness(kubectl) }},
-		{Name: "sentinel ingest readiness", Detail: "checking the analytics ingest deployment is ready", Run: func() DoctorCheck { return checkSentinelIngestReadiness(kubectl) }},
-		{Name: "sentinel platform API readiness", Detail: "checking the platform-api deployment and /health + /ready endpoints", Run: func() DoctorCheck { return checkSentinelPlatformAPIReadiness(kubectl) }},
-		{Name: "sentinel workload rollout health", Detail: "detecting unavailable deployments, stuck rollouts, crash loops, and repeated container restarts", Run: func() DoctorCheck { return checkSentinelWorkloadHealth(kubectl) }},
-		{Name: "sentinel stale pods", Detail: "detecting Failed, Evicted, and orphaned Completed pods that obscure platform state after eviction churn", Run: func() DoctorCheck { return checkSentinelStalePods(kubectl) }},
-		{Name: "sentinel Postgres credential drift", Detail: "comparing the database password Secret with the live Postgres process before API pods fail authentication", Run: func() DoctorCheck { return checkSentinelPostgresCredentialDrift(kubectl) }},
-		{Name: "sentinel analytics API readiness", Detail: "checking the analytics-api deployment and /health + /ready endpoints", Run: func() DoctorCheck { return checkSentinelAnalyticsAPIReadiness(kubectl) }},
-		{Name: "sentinel telemetry pipeline", Detail: "checking the collector Service, endpoints, workload, and trace pipeline configuration", Run: func() DoctorCheck { return checkSentinelTelemetryPipeline(kubectl) }},
-		{Name: "sentinel Grafana provisioning", Detail: "checking the mcp-server dashboard uid and Prometheus datasource uid are provisioned and mounted in Grafana", Run: func() DoctorCheck { return checkSentinelGrafanaProvisioning(kubectl) }},
+		{Name: "platform Kafka readiness", Detail: "checking the bundled Kafka StatefulSet is ready so analytics ingestion can function", Run: func() DoctorCheck { return checkPlatformKafkaReadiness(kubectl) }},
+		{Name: "platform ingest readiness", Detail: "checking the analytics ingest deployment is ready", Run: func() DoctorCheck { return checkPlatformIngestReadiness(kubectl) }},
+		{Name: "platform API readiness", Detail: "checking the platform-api deployment and /health + /ready endpoints", Run: func() DoctorCheck { return checkPlatformPlatformAPIReadiness(kubectl) }},
+		{Name: "platform workload rollout health", Detail: "detecting unavailable deployments, stuck rollouts, crash loops, and repeated container restarts", Run: func() DoctorCheck { return checkPlatformWorkloadHealth(kubectl) }},
+		{Name: "platform stale pods", Detail: "detecting Failed, Evicted, and orphaned Completed pods that obscure platform state after eviction churn", Run: func() DoctorCheck { return checkPlatformStalePods(kubectl) }},
+		{Name: "platform Postgres credential drift", Detail: "comparing the database password Secret with the live Postgres process before API pods fail authentication", Run: func() DoctorCheck { return checkPlatformPostgresCredentialDrift(kubectl) }},
+		{Name: "platform analytics API readiness", Detail: "checking the analytics-api deployment and /health + /ready endpoints", Run: func() DoctorCheck { return checkPlatformAnalyticsAPIReadiness(kubectl) }},
+		{Name: "platform telemetry pipeline", Detail: "checking the collector Service, endpoints, workload, and trace pipeline configuration", Run: func() DoctorCheck { return checkPlatformTelemetryPipeline(kubectl) }},
+		{Name: "platform Grafana provisioning", Detail: "checking the mcp-server dashboard uid and Prometheus datasource uid are provisioned and mounted in Grafana", Run: func() DoctorCheck { return checkPlatformGrafanaProvisioning(kubectl) }},
 		{Name: "persistent volume claims", Detail: "checking that discovered PVCs are Bound", Run: func() DoctorCheck { return checkPersistentVolumeClaims(kubectl) }},
 		{Name: "runtime API Kubernetes API egress", Detail: "checking the runtime-api NetworkPolicy allows the cluster's actual Kubernetes API endpoint port", Run: func() DoctorCheck { return checkRuntimeAPIKubernetesAPIEgress(kubectl) }},
 		{Name: "cluster image architecture", Detail: "checking MCP_IMAGE_PLATFORM matches Kubernetes node architectures", Run: func() DoctorCheck { return checkClusterImageArchitecture(kubectl) }},
 		{Name: "DNS NetworkPolicy portability", Detail: "checking runtime-api egress matches the cluster's actual DNS pod labels", Run: func() DoctorCheck { return checkDNSNetworkPolicyPortability(kubectl) }},
 		{Name: "storage class readiness", Detail: "checking the configured StorageClass exists and is safe for the cluster topology", Run: func() DoctorCheck { return checkStorageClassReadiness(kubectl) }},
-		{Name: "sentinel session-local deployment scaling", Detail: "checking UI and gateway stay at one replica until shared session storage exists", Run: func() DoctorCheck { return checkSessionLocalDeploymentScaling(kubectl) }},
-		{Name: "sentinel secrets", Detail: "reading API, admin, UI, and ingest keys from their owner Secrets", Run: func() DoctorCheck { return checkSentinelSecrets(kubectl) }},
-		{Name: "sentinel secret consumer freshness", Detail: "checking runtime-api pods were started after the latest auth Secret update", Run: func() DoctorCheck { return checkSentinelSecretConsumerFreshness(kubectl) }},
-		{Name: "sentinel OIDC configuration", Detail: "checking tenant/public login configuration is complete", Run: func() DoctorCheck { return checkSentinelOIDCConfiguration(kubectl) }},
+		{Name: "platform session-local deployment scaling", Detail: "checking UI and gateway stay at one replica until shared session storage exists", Run: func() DoctorCheck { return checkSessionLocalDeploymentScaling(kubectl) }},
+		{Name: "platform secrets", Detail: "reading API, admin, UI, and ingest keys from their owner Secrets", Run: func() DoctorCheck { return checkPlatformSecrets(kubectl) }},
+		{Name: "platform secret consumer freshness", Detail: "checking runtime-api pods were started after the latest auth Secret update", Run: func() DoctorCheck { return checkPlatformSecretConsumerFreshness(kubectl) }},
+		{Name: "platform OIDC configuration", Detail: "checking tenant/public login configuration is complete", Run: func() DoctorCheck { return checkPlatformOIDCConfiguration(kubectl) }},
 		{Name: "gateway analytics credentials", Detail: "checking gateway sidecars have ingest credentials when analytics is enabled", Run: func() DoctorCheck { return checkGatewayAnalyticsCredentials(kubectl) }},
-		{Name: "sentinel API auth probe", Detail: "launching a temporary curl pod with UI_API_KEY against runtime-api", Run: func() DoctorCheck { return checkSentinelAPIAuthProbe(kubectl) }},
-		{Name: "sentinel runtime catalog probe", Detail: "calling authenticated runtime servers and tools endpoints through the in-cluster service", Run: func() DoctorCheck { return checkSentinelRuntimeCatalogProbe(kubectl) }},
+		{Name: "platform API auth probe", Detail: "launching a temporary curl pod with UI_API_KEY against runtime-api", Run: func() DoctorCheck { return checkPlatformAPIAuthProbe(kubectl) }},
+		{Name: "platform runtime catalog probe", Detail: "calling authenticated runtime servers and tools endpoints through the in-cluster service", Run: func() DoctorCheck { return checkPlatformRuntimeCatalogProbe(kubectl) }},
 		{Name: "mcp-auth deployment", Detail: "checking the optional mcp-auth authorization server rollout when installed", Run: func() DoctorCheck { return checkMCPAuthDeployment(kubectl) }},
 		{Name: "mcp-auth secrets", Detail: "checking optional mcp-auth signing-key and TLS Secret material", Run: func() DoctorCheck { return checkMCPAuthSecrets(kubectl) }},
 		{Name: "runtime API image display refs", Detail: "checking runtime API server listings do not leak internal registry pull hosts", Run: func() DoctorCheck { return checkRuntimeAPIImageDisplayRefs(kubectl) }},
@@ -384,11 +384,11 @@ func doctorPostSetupCheckSpecs(kubectl core.KubectlRunner) []doctorCheckSpec {
 		{Name: "Kubernetes nodes ready", Detail: "every node must be Ready or login and platform APIs can go dark", Run: func() DoctorCheck { return checkClusterNodesReady(kubectl) }},
 		{Name: "persistent volume claims", Detail: "Bound PVCs so Postgres and other stateful deps can schedule", Run: func() DoctorCheck { return checkPersistentVolumeClaims(kubectl) }},
 		{Name: "pending pods", Detail: "no Pending pods left after setup that block core services", Run: func() DoctorCheck { return checkPendingPodsByNamespace(kubectl) }},
-		{Name: "sentinel secrets", Detail: "platform admin and API keys exist for login", Run: func() DoctorCheck { return checkSentinelSecrets(kubectl) }},
-		{Name: "sentinel Postgres credential drift", Detail: "Postgres is running and matches the rendered Secret", Run: func() DoctorCheck { return checkSentinelPostgresCredentialDrift(kubectl) }},
-		{Name: "sentinel platform API readiness", Detail: "platform-api deployment plus /health and /ready", Run: func() DoctorCheck { return checkSentinelPlatformAPIReadiness(kubectl) }},
-		{Name: "sentinel workload rollout health", Detail: "no CrashLoopBackOff / ImagePullBackOff on Sentinel workloads", Run: func() DoctorCheck { return checkSentinelWorkloadHealth(kubectl) }},
-		{Name: "sentinel API auth probe", Detail: "authenticated runtime-api call with the UI API key", Run: func() DoctorCheck { return checkSentinelAPIAuthProbe(kubectl) }},
+		{Name: "platform secrets", Detail: "platform admin and API keys exist for login", Run: func() DoctorCheck { return checkPlatformSecrets(kubectl) }},
+		{Name: "platform Postgres credential drift", Detail: "Postgres is running and matches the rendered Secret", Run: func() DoctorCheck { return checkPlatformPostgresCredentialDrift(kubectl) }},
+		{Name: "platform API readiness", Detail: "platform-api deployment plus /health and /ready", Run: func() DoctorCheck { return checkPlatformPlatformAPIReadiness(kubectl) }},
+		{Name: "platform workload rollout health", Detail: "no CrashLoopBackOff / ImagePullBackOff on platform workloads", Run: func() DoctorCheck { return checkPlatformWorkloadHealth(kubectl) }},
+		{Name: "platform API auth probe", Detail: "authenticated runtime-api call with the UI API key", Run: func() DoctorCheck { return checkPlatformAPIAuthProbe(kubectl) }},
 	}
 }
 

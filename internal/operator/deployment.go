@@ -535,7 +535,7 @@ func (r *MCPServerReconciler) buildGatewayContainer(mcpServer *mcpv1alpha1.MCPSe
 		eventType := defaultAnalyticsEventType
 		var apiKeyRef *mcpv1alpha1.SecretKeyRef
 		if analytics != nil {
-			if v := strings.TrimSpace(analytics.IngestURL); v != "" && !mcpv1alpha1.EndpointUsesRetiredNamespace(v) {
+			if v := strings.TrimSpace(analytics.IngestURL); v != "" {
 				ingestURL = v
 			}
 			if v := strings.TrimSpace(analytics.Source); v != "" {
@@ -847,9 +847,6 @@ func (r *MCPServerReconciler) analyticsEnabled(mcpServer *mcpv1alpha1.MCPServer)
 	url := ""
 	if mcpServer.Spec.Analytics != nil {
 		url = strings.TrimSpace(mcpServer.Spec.Analytics.IngestURL)
-	}
-	if mcpv1alpha1.EndpointUsesRetiredNamespace(url) {
-		url = ""
 	}
 	if url == "" {
 		url = strings.TrimSpace(r.DefaultAnalyticsIngestURL)

@@ -1,4 +1,4 @@
-/* Design tokens for the MCP Sentinel console.
+/* Design tokens for the MCP Runtime console.
  *
  * Every repeated visual decision lives here as a semantic token. Components
  * reference the semantic name (--surface-raised), never a raw hex value, so a

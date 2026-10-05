@@ -140,7 +140,7 @@ incidents:
       expires: "2026-12-31"
       blocker: Findings must first be revalidated against current code.
   - id: "71"
-    title: Make sentinel messaging stack durable and self-healing across node restarts
+    title: Make platform messaging stack durable and self-healing across node restarts
     protected_behavior: Restart/eviction/dependency recovery without data loss or manual destructive repair.
     status: untested
     waiver:

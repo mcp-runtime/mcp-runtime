@@ -52,7 +52,7 @@ export function PlatformHealthPanel({ onSignIn }: PlatformHealthPanelProps) {
       <PageHeader
         title="Platform health"
         breadcrumb={[{ label: "Administration" }, { label: "Platform health" }]}
-        description="Operator, Sentinel services, and observability components reported by the runtime API."
+        description="Operator, platform services, and observability components reported by the runtime API."
         actions={
           <Button
             variant="secondary"
@@ -185,7 +185,7 @@ export function PlatformHealthPanel({ onSignIn }: PlatformHealthPanelProps) {
           <Icon name="alert" /> Disruptive actions
         </h2>
         <p>
-          Restarting everything rolls every Sentinel component at once. Expect the dashboard, gateway, and
+          Restarting everything rolls every platform component at once. Expect the dashboard, gateway, and
           analytics to be briefly unavailable. Refreshing this page is a safe read and does not restart
           anything.
         </p>

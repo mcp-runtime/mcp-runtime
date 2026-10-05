@@ -9,8 +9,6 @@ type CredentialSet struct {
 	Keys      []string
 }
 
-const LegacyCredentialSecret = "mcp-sentinel-secrets" // #nosec G101 -- Kubernetes object name
-
 var credentialSets = []CredentialSet{
 	{Name: "mcp-platform-api-credentials", Consumers: []string{"platform-api", "admin-bootstrap"}, Keys: []string{"API_KEYS", "ADMIN_API_KEYS", "POSTGRES_DSN", "JWT_SECRET", "INTERNAL_AUTH_TOKEN", "ADMIN_USERS", "PLATFORM_ADMIN_EMAIL", "PLATFORM_ADMIN_PASSWORD", "PLATFORM_DEV_LOGIN_ENABLED", "PLATFORM_DEV_USER_EMAIL", "PLATFORM_DEV_USER_PASSWORD", "PLATFORM_DEV_ADMIN_EMAIL", "PLATFORM_DEV_ADMIN_PASSWORD"}},
 	{Name: "mcp-runtime-api-credentials", Consumers: []string{"runtime-api"}, Keys: []string{"API_KEYS", "ADMIN_API_KEYS", "JWT_SECRET", "INTERNAL_AUTH_TOKEN"}},

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	sentinelaccess "mcp-runtime/pkg/access"
+	mcpaccess "mcp-runtime/pkg/access"
 )
 
 const defaultCrossTeamGrantMaxTTL = 7 * 24 * time.Hour
@@ -33,7 +33,7 @@ func crossTeamGrantExpiryValid(expiresAt time.Time, now time.Time, maxTTL time.D
 
 // validateCrossTeamSubject confirms each explicitly named principal belongs
 // to the subject team. Agent identity comes only from the platform directory.
-func (s *AccessService) validateCrossTeamSubject(ctx context.Context, subject sentinelaccess.SubjectRef) error {
+func (s *AccessService) validateCrossTeamSubject(ctx context.Context, subject mcpaccess.SubjectRef) error {
 	if s == nil || s.identity == nil || !s.identity.Configured() {
 		return errors.New("platform identity is unavailable for cross-team subject validation")
 	}

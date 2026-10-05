@@ -297,7 +297,7 @@ hack/deploy/mcpruntime-org/setup.sh
 ```
 
 For code-only changes (registry push, team create, API fixes) without a full
-platform rebuild, use the targeted Sentinel rollout:
+platform rebuild, use the targeted platform rollout:
 
 ```bash
 hack/deploy/mcpruntime-org/rollout.sh
@@ -525,8 +525,8 @@ the client secret outside the Compose and Caddy files. Start the service with
 `docker compose -f /opt/keycloak/compose.yaml up -d` on `devbox1`; append the
 Caddy site to `/opt/workspace/Caddyfile`, validate it with `caddy validate`,
 and reload Caddy. Keep the existing `workspace.mcpruntime.org` site in place.
-The mcp-auth connector should use the public HTTPS token and JWKS endpoints,
-without `mcp-sentinel.svc.cluster.local` references. A direct public discovery
+The mcp-auth connector should use the public HTTPS token and JWKS endpoints
+rather than in-cluster Service addresses. A direct public discovery
 check proves Keycloak is reachable; verify an authorization-code callback as
 well to prove mcp-auth can exchange a code.
 
@@ -920,7 +920,7 @@ never print them or put them in command arguments, tickets, or Buddy notes.
   status, and trace/span IDs in related logs. Record missing instrumentation
   and propagation explicitly; a missing trace does not prove success.
 
-**Trace and log correlation.** Sentinel services and the MCP gateway append
+**Trace and log correlation.** Platform services and the MCP gateway append
 `trace_id=<32 hex> span_id=<16 hex>` to request and failure log lines. Copy
 the `trace_id` from a Loki line into Tempo (or search Loki for a Tempo trace
 ID) to join them. Spans for 401, 403, and 5xx responses carry error status

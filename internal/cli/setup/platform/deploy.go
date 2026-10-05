@@ -15,7 +15,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
 	"mcp-runtime/internal/cli/certmanager"
 	clusterdoctor "mcp-runtime/internal/cli/cluster/doctor"
 	"mcp-runtime/internal/cli/core"
@@ -41,7 +40,7 @@ func deployOperatorStep(logger *zap.Logger, operatorImage, gatewayProxyImage str
 	core.Info("Deploying operator manifests")
 	imagePullSecretName, err := ensureOperatorImagePullSecret(extRegistry, registrySecretName, deps)
 	if err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrApplyImagePullSecretFailed,
 			err,
 			fmt.Sprintf("failed to prepare operator imagePullSecret: %v", err),
@@ -55,7 +54,7 @@ func deployOperatorStep(logger *zap.Logger, operatorImage, gatewayProxyImage str
 		return wrappedErr
 	}
 	if err := deps.DeployOperatorManifests(logger, operatorImage, gatewayProxyImage, operatorArgs, imagePullSecretName); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrOperatorDeploymentFailed,
 			err,
 			fmt.Sprintf("operator deployment failed for image %q: %v", operatorImage, err),
@@ -72,7 +71,7 @@ func deployOperatorStep(logger *zap.Logger, operatorImage, gatewayProxyImage str
 
 	if usingExternalRegistry {
 		if err := deps.ConfigureProvisionedRegistryEnv(extRegistry, registrySecretName); err != nil {
-			wrappedErr := core.WrapWithSentinelAndContext(
+			wrappedErr := core.WrapWithBaseAndContext(
 				core.ErrConfigureExternalRegistryEnvFailed,
 				err,
 				fmt.Sprintf("failed to configure external registry env on operator (registry: %q, secret: %q): %v", extRegistry.URL, registrySecretName, err),
@@ -91,7 +90,7 @@ func deployOperatorStep(logger *zap.Logger, operatorImage, gatewayProxyImage str
 
 	if err := deps.RestartDeployment("mcp-runtime-operator-controller-manager", "mcp-runtime"); err != nil {
 		if usingExternalRegistry {
-			wrappedErr := core.WrapWithSentinel(core.ErrRestartOperatorDeploymentFailed, err, fmt.Sprintf("failed to restart operator deployment after registry env update: %v", err))
+			wrappedErr := core.WrapWithBase(core.ErrRestartOperatorDeploymentFailed, err, fmt.Sprintf("failed to restart operator deployment after registry env update: %v", err))
 			core.Error("Failed to restart operator deployment")
 			core.LogStructuredError(logger, wrappedErr, "Failed to restart operator deployment")
 			return wrappedErr
@@ -192,7 +191,7 @@ func verifySetup(logger *zap.Logger, usingExternalRegistry bool, deps SetupDeps)
 				"component":  "registry",
 			}
 			mergeDeploymentDebugDiagnosticsIfNeeded(core.DefaultKubectlClient(), regCtx, "registry", "registry", "app=registry")
-			wrappedErr := core.WrapWithSentinelAndContext(
+			wrappedErr := core.WrapWithBaseAndContext(
 				core.ErrRegistryNotReady,
 				err,
 				fmt.Sprintf("registry not ready: %v", err),
@@ -214,7 +213,7 @@ func verifySetup(logger *zap.Logger, usingExternalRegistry bool, deps SetupDeps)
 			"component":  "operator",
 		}
 		mergeDeploymentDebugDiagnosticsIfNeeded(core.DefaultKubectlClient(), opCtx, "mcp-runtime-operator-controller-manager", "mcp-runtime", "control-plane=controller-manager")
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrOperatorNotReady,
 			err,
 			fmt.Sprintf("operator not ready: %v", err),
@@ -230,7 +229,7 @@ func verifySetup(logger *zap.Logger, usingExternalRegistry bool, deps SetupDeps)
 		crdName := "mcpservers.mcpruntime.org"
 		crdCtx := map[string]any{"crd": crdName, "component": "crd-check"}
 		mergeCRDCheckDebugDiagnosticsIfNeeded(core.DefaultKubectlClient(), crdCtx, crdName)
-		wrappedErr := core.WrapWithSentinelAndContext(core.ErrCRDCheckFailed, err, fmt.Sprintf("CRD check failed: %v", err), crdCtx)
+		wrappedErr := core.WrapWithBaseAndContext(core.ErrCRDCheckFailed, err, fmt.Sprintf("CRD check failed: %v", err), crdCtx)
 		core.Error("CRD check failed")
 		core.LogStructuredError(logger, wrappedErr, "CRD check failed")
 		return wrappedErr
@@ -239,7 +238,7 @@ func verifySetup(logger *zap.Logger, usingExternalRegistry bool, deps SetupDeps)
 	if deps.RunPostSetupSmoke != nil {
 		core.Info("Running post-setup operational smoke checks")
 		if err := deps.RunPostSetupSmoke(); err != nil {
-			wrappedErr := core.WrapWithSentinelAndContext(
+			wrappedErr := core.WrapWithBaseAndContext(
 				core.ErrSetupStepFailed,
 				err,
 				fmt.Sprintf("post-setup operational smoke failed: %v", err),
@@ -312,7 +311,7 @@ func waitForDeploymentReady(logger *zap.Logger, name, namespace, selector string
 	}
 	if err := waitForDeployment(context.Background(), clients, namespace, name, timeout); err != nil {
 		msg := fmt.Sprintf("timed out waiting for deployment %s in namespace %s", name, namespace)
-		cause := core.NewWithSentinel(core.ErrSetupDeploymentReadinessDeadlineExceeded, "deployment readiness deadline exceeded")
+		cause := core.NewWithBase(core.ErrSetupDeploymentReadinessDeadlineExceeded, "deployment readiness deadline exceeded")
 		ctx := map[string]any{
 			"deployment": name,
 			"namespace":  namespace,
@@ -321,7 +320,7 @@ func waitForDeploymentReady(logger *zap.Logger, name, namespace, selector string
 			"cause":      err.Error(),
 		}
 		mergeDeploymentDebugDiagnosticsIfNeeded(core.DefaultKubectlClient(), ctx, name, namespace, selector)
-		wrappedErr := core.WrapWithSentinelAndContext(core.ErrDeploymentTimeout, cause, msg, ctx)
+		wrappedErr := core.WrapWithBaseAndContext(core.ErrDeploymentTimeout, cause, msg, ctx)
 		core.Error("Deployment timeout")
 		if logger != nil {
 			core.LogStructuredError(logger, wrappedErr, "Deployment timeout")
@@ -356,7 +355,7 @@ func waitForDeploymentAvailableWithKubectl(kubectl core.KubectlRunner, logger *z
 		}
 		if time.Now().After(deadline) {
 			msg := fmt.Sprintf("timed out waiting for deployment %s in namespace %s", name, namespace)
-			cause := core.NewWithSentinel(core.ErrSetupDeploymentReadinessDeadlineExceeded, "deployment readiness deadline exceeded")
+			cause := core.NewWithBase(core.ErrSetupDeploymentReadinessDeadlineExceeded, "deployment readiness deadline exceeded")
 			ctx := map[string]any{
 				"deployment": name,
 				"namespace":  namespace,
@@ -364,7 +363,7 @@ func waitForDeploymentAvailableWithKubectl(kubectl core.KubectlRunner, logger *z
 				"component":  "deployment-wait",
 			}
 			mergeDeploymentDebugDiagnosticsIfNeeded(kubectl, ctx, name, namespace, selector)
-			wrappedErr := core.WrapWithSentinelAndContext(core.ErrDeploymentTimeout, cause, msg, ctx)
+			wrappedErr := core.WrapWithBaseAndContext(core.ErrDeploymentTimeout, cause, msg, ctx)
 			core.Error("Deployment timeout")
 			if logger != nil {
 				core.LogStructuredError(logger, wrappedErr, "Deployment timeout")
@@ -525,7 +524,7 @@ func deployOperatorManifestsWithClientGo(logger *zap.Logger, operatorImage, gate
 
 	core.Info("Applying CRD manifests")
 	if err := applyManifestDir("config/crd/bases", "", os.Stdout); err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrApplyCRDFailed, err, fmt.Sprintf("failed to apply CRD: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrApplyCRDFailed, err, fmt.Sprintf("failed to apply CRD: %v", err))
 		core.Error("Failed to apply CRD")
 		if logger != nil {
 			core.LogStructuredError(logger, wrappedErr, "Failed to apply CRD")
@@ -535,7 +534,7 @@ func deployOperatorManifestsWithClientGo(logger *zap.Logger, operatorImage, gate
 
 	core.Info("Applying RBAC manifests")
 	if err := ensureNamespaceWithLabels(core.NamespaceMCPRuntime, nil); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrEnsureOperatorNamespaceFailed,
 			err,
 			fmt.Sprintf("failed to ensure operator namespace: %v", err),
@@ -549,7 +548,7 @@ func deployOperatorManifestsWithClientGo(logger *zap.Logger, operatorImage, gate
 	}
 	for _, path := range operatorRBACManifests {
 		if err := applyManifestFile(path, "", os.Stdout); err != nil {
-			wrappedErr := core.WrapWithSentinel(core.ErrApplyRBACFailed, err, fmt.Sprintf("failed to apply RBAC: %v", err))
+			wrappedErr := core.WrapWithBase(core.ErrApplyRBACFailed, err, fmt.Sprintf("failed to apply RBAC: %v", err))
 			core.Error("Failed to apply RBAC")
 			if logger != nil {
 				core.LogStructuredError(logger, wrappedErr, "Failed to apply RBAC")
@@ -558,7 +557,7 @@ func deployOperatorManifestsWithClientGo(logger *zap.Logger, operatorImage, gate
 		}
 	}
 	if err := ensureOperatorSecretAccessBindingsClientGo(); err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrApplyRBACFailed, err, fmt.Sprintf("failed to scope operator Secret access to MCPServer namespaces: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrApplyRBACFailed, err, fmt.Sprintf("failed to scope operator Secret access to MCPServer namespaces: %v", err))
 		core.Error("Failed to scope operator Secret access")
 		if logger != nil {
 			core.LogStructuredError(logger, wrappedErr, "Failed to scope operator Secret access")
@@ -568,14 +567,14 @@ func deployOperatorManifestsWithClientGo(logger *zap.Logger, operatorImage, gate
 	// Grant replacement access before stripping the old cluster-wide rule.
 	// If migration fails, keep the old role intact and let setup be retried.
 	if err := applyManifestFile("config/rbac/role.yaml", "", os.Stdout); err != nil {
-		return core.WrapWithSentinel(core.ErrApplyRBACFailed, err, fmt.Sprintf("failed to narrow operator RBAC: %v", err))
+		return core.WrapWithBase(core.ErrApplyRBACFailed, err, fmt.Sprintf("failed to narrow operator RBAC: %v", err))
 	}
 	core.Info("Reapplied operator ClusterRole mcp-runtime-operator-role from config/rbac/role.yaml; run `mcp-runtime cluster doctor` if MCPServer creates ever appear unreconciled")
 
 	core.Info("Preparing operator admission webhook TLS")
 	webhookCA, err := ensureOperatorWebhookTLSSecretClientGo()
 	if err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrApplySecretManifestFailed, err, fmt.Sprintf("failed to prepare operator webhook TLS secret: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrApplySecretManifestFailed, err, fmt.Sprintf("failed to prepare operator webhook TLS secret: %v", err))
 		core.Error("Failed to prepare operator webhook TLS")
 		if logger != nil {
 			core.LogStructuredError(logger, wrappedErr, "Failed to prepare operator webhook TLS")
@@ -594,7 +593,7 @@ func deployOperatorManifestsWithClientGo(logger *zap.Logger, operatorImage, gate
 	if strings.TrimSpace(imagePullSecretName) != "" {
 		rendered, err := injectImagePullSecretsIntoManifest(string(managerYAML), imagePullSecretName)
 		if err != nil {
-			wrappedErr := core.WrapWithSentinel(core.ErrRenderManagerYAMLFailed, err, fmt.Sprintf("failed to inject operator imagePullSecret: %v", err))
+			wrappedErr := core.WrapWithBase(core.ErrRenderManagerYAMLFailed, err, fmt.Sprintf("failed to inject operator imagePullSecret: %v", err))
 			core.Error("Failed to inject operator imagePullSecret")
 			if logger != nil {
 				core.LogStructuredError(logger, wrappedErr, "Failed to inject operator imagePullSecret")
@@ -604,7 +603,7 @@ func deployOperatorManifestsWithClientGo(logger *zap.Logger, operatorImage, gate
 		managerYAML = []byte(rendered)
 	}
 	if err := applyManifestYAML(string(managerYAML), core.NamespaceMCPRuntime, os.Stdout); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrApplyManagerDeploymentFailed,
 			err,
 			fmt.Sprintf("failed to apply manager deployment: %v", err),
@@ -618,7 +617,7 @@ func deployOperatorManifestsWithClientGo(logger *zap.Logger, operatorImage, gate
 	}
 
 	if err := applyOperatorWebhookManifestsClientGo(webhookCA); err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrApplyManifestFailed, err, fmt.Sprintf("failed to apply operator webhook manifests: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrApplyManifestFailed, err, fmt.Sprintf("failed to apply operator webhook manifests: %v", err))
 		core.Error("Failed to apply operator webhook manifests")
 		if logger != nil {
 			core.LogStructuredError(logger, wrappedErr, "Failed to apply operator webhook manifests")
@@ -633,20 +632,20 @@ func deployOperatorManifestsWithClientGo(logger *zap.Logger, operatorImage, gate
 func renderOperatorManagerManifest(operatorImage, gatewayProxyImage string, operatorArgs []string, existingEnvValue func(string) string, webhookCA []byte) ([]byte, error) {
 	managerYAML, err := os.ReadFile("config/manager/manager.yaml")
 	if err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrReadManagerYAMLFailed, err, fmt.Sprintf("failed to read manager.yaml: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrReadManagerYAMLFailed, err, fmt.Sprintf("failed to read manager.yaml: %v", err))
 		core.Error("Failed to read manager.yaml")
 		return nil, wrappedErr
 	}
 
 	mutator, err := manifest.NewMutator(managerYAML)
 	if err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrParseManagerYAMLFailed, err, fmt.Sprintf("failed to parse manager.yaml: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrParseManagerYAMLFailed, err, fmt.Sprintf("failed to parse manager.yaml: %v", err))
 		core.Error("Failed to parse manager.yaml")
 		return nil, wrappedErr
 	}
 
 	if err := mutator.SetDeploymentImage(core.OperatorDeploymentName, core.OperatorManagerContainerName, operatorImage); err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrSetOperatorImageFailed, err, fmt.Sprintf("failed to set operator image: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrSetOperatorImageFailed, err, fmt.Sprintf("failed to set operator image: %v", err))
 		core.Error("Failed to set operator image")
 		return nil, wrappedErr
 	}
@@ -654,7 +653,7 @@ func renderOperatorManagerManifest(operatorImage, gatewayProxyImage string, oper
 	pullPolicy := operatorImagePullPolicy(operatorImage)
 	if pullPolicy != "" {
 		if err := mutator.SetDeploymentImagePullPolicy(core.OperatorDeploymentName, core.OperatorManagerContainerName, pullPolicy); err != nil {
-			wrappedErr := core.WrapWithSentinel(core.ErrMutateManagerYAMLFailed, err, fmt.Sprintf("failed to set operator image pull policy: %v", err))
+			wrappedErr := core.WrapWithBase(core.ErrMutateManagerYAMLFailed, err, fmt.Sprintf("failed to set operator image pull policy: %v", err))
 			core.Error("Failed to set operator image pull policy")
 			return nil, wrappedErr
 		}
@@ -662,7 +661,7 @@ func renderOperatorManagerManifest(operatorImage, gatewayProxyImage string, oper
 
 	if len(operatorArgs) > 0 {
 		if err := mutator.MergeDeploymentArgs(core.OperatorDeploymentName, core.OperatorManagerContainerName, operatorArgs); err != nil {
-			wrappedErr := core.WrapWithSentinel(core.ErrMutateManagerYAMLFailed, err, fmt.Sprintf("failed to merge operator args: %v", err))
+			wrappedErr := core.WrapWithBase(core.ErrMutateManagerYAMLFailed, err, fmt.Sprintf("failed to merge operator args: %v", err))
 			core.Error("Failed to merge operator args")
 			return nil, wrappedErr
 		}
@@ -678,21 +677,21 @@ func renderOperatorManagerManifest(operatorImage, gatewayProxyImage string, oper
 			envMap[ev.Name] = ev.Value
 		}
 		if err := mutator.MergeDeploymentEnv(core.OperatorDeploymentName, core.OperatorManagerContainerName, envMap); err != nil {
-			wrappedErr := core.WrapWithSentinel(core.ErrMutateManagerYAMLFailed, err, fmt.Sprintf("failed to merge operator env vars: %v", err))
+			wrappedErr := core.WrapWithBase(core.ErrMutateManagerYAMLFailed, err, fmt.Sprintf("failed to merge operator env vars: %v", err))
 			core.Error("Failed to merge operator env vars")
 			return nil, wrappedErr
 		}
 	}
 
 	if err := configureOperatorWebhookDeployment(mutator, webhookCA); err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrMutateManagerYAMLFailed, err, fmt.Sprintf("failed to configure operator webhooks: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrMutateManagerYAMLFailed, err, fmt.Sprintf("failed to configure operator webhooks: %v", err))
 		core.Error("Failed to configure operator webhooks")
 		return nil, wrappedErr
 	}
 
 	mutatedYAML, err := mutator.ToYAML()
 	if err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrRenderManagerYAMLFailed, err, fmt.Sprintf("failed to render mutated manifest: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrRenderManagerYAMLFailed, err, fmt.Sprintf("failed to render mutated manifest: %v", err))
 		core.Error("Failed to render mutated manifest")
 		return nil, wrappedErr
 	}
@@ -716,7 +715,7 @@ func deployOperatorManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap.
 	core.Info("Applying CRD manifests")
 	// #nosec G204 -- fixed directory path from repository.
 	if err := kubectl.RunWithOutput([]string{"apply", "--validate=false", "-f", "config/crd/bases"}, os.Stdout, os.Stderr); err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrApplyCRDFailed, err, fmt.Sprintf("failed to apply CRD: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrApplyCRDFailed, err, fmt.Sprintf("failed to apply CRD: %v", err))
 		core.Error("Failed to apply CRD")
 		if logger != nil {
 			core.LogStructuredError(logger, wrappedErr, "Failed to apply CRD")
@@ -727,7 +726,7 @@ func deployOperatorManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap.
 	// Step 2: Apply RBAC (ServiceAccount, Role, RoleBinding)
 	core.Info("Applying RBAC manifests")
 	if err := kube.EnsureNamespace(core.DefaultKubectlClient().CommandArgs, core.NamespaceMCPRuntime); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrEnsureOperatorNamespaceFailed,
 			err,
 			fmt.Sprintf("failed to ensure operator namespace: %v", err),
@@ -742,7 +741,7 @@ func deployOperatorManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap.
 
 	// #nosec G204 -- fixed kustomize path from repository.
 	if err := kubectl.RunWithOutput([]string{"apply", "-k", "config/rbac/"}, os.Stdout, os.Stderr); err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrApplyRBACFailed, err, fmt.Sprintf("failed to apply RBAC: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrApplyRBACFailed, err, fmt.Sprintf("failed to apply RBAC: %v", err))
 		core.Error("Failed to apply RBAC")
 		if logger != nil {
 			core.LogStructuredError(logger, wrappedErr, "Failed to apply RBAC")
@@ -754,7 +753,7 @@ func deployOperatorManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap.
 	core.Info("Preparing operator admission webhook TLS")
 	webhookCA, err := ensureOperatorWebhookTLSSecret(kubectl)
 	if err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrApplySecretManifestFailed, err, fmt.Sprintf("failed to prepare operator webhook TLS secret: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrApplySecretManifestFailed, err, fmt.Sprintf("failed to prepare operator webhook TLS secret: %v", err))
 		core.Error("Failed to prepare operator webhook TLS")
 		if logger != nil {
 			core.LogStructuredError(logger, wrappedErr, "Failed to prepare operator webhook TLS")
@@ -768,7 +767,7 @@ func deployOperatorManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap.
 	// Read manager.yaml and apply structured mutations
 	managerYAML, err := os.ReadFile("config/manager/manager.yaml")
 	if err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrReadManagerYAMLFailed, err, fmt.Sprintf("failed to read manager.yaml: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrReadManagerYAMLFailed, err, fmt.Sprintf("failed to read manager.yaml: %v", err))
 		core.Error("Failed to read manager.yaml")
 		if logger != nil {
 			core.LogStructuredError(logger, wrappedErr, "Failed to read manager.yaml")
@@ -779,7 +778,7 @@ func deployOperatorManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap.
 	// Use structured manifest mutation instead of regex
 	mutator, err := manifest.NewMutator(managerYAML)
 	if err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrParseManagerYAMLFailed, err, fmt.Sprintf("failed to parse manager.yaml: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrParseManagerYAMLFailed, err, fmt.Sprintf("failed to parse manager.yaml: %v", err))
 		core.Error("Failed to parse manager.yaml")
 		if logger != nil {
 			core.LogStructuredError(logger, wrappedErr, "Failed to parse manager.yaml")
@@ -789,7 +788,7 @@ func deployOperatorManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap.
 
 	// Set the operator image
 	if err := mutator.SetDeploymentImage(core.OperatorDeploymentName, core.OperatorManagerContainerName, operatorImage); err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrSetOperatorImageFailed, err, fmt.Sprintf("failed to set operator image: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrSetOperatorImageFailed, err, fmt.Sprintf("failed to set operator image: %v", err))
 		core.Error("Failed to set operator image")
 		if logger != nil {
 			core.LogStructuredError(logger, wrappedErr, "Failed to set operator image")
@@ -801,7 +800,7 @@ func deployOperatorManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap.
 	pullPolicy := operatorImagePullPolicy(operatorImage)
 	if pullPolicy != "" {
 		if err := mutator.SetDeploymentImagePullPolicy(core.OperatorDeploymentName, core.OperatorManagerContainerName, pullPolicy); err != nil {
-			wrappedErr := core.WrapWithSentinel(core.ErrMutateManagerYAMLFailed, err, fmt.Sprintf("failed to set operator image pull policy: %v", err))
+			wrappedErr := core.WrapWithBase(core.ErrMutateManagerYAMLFailed, err, fmt.Sprintf("failed to set operator image pull policy: %v", err))
 			core.Error("Failed to set operator image pull policy")
 			if logger != nil {
 				core.LogStructuredError(logger, wrappedErr, "Failed to set operator image pull policy")
@@ -813,7 +812,7 @@ func deployOperatorManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap.
 	// Inject operator args if provided
 	if len(operatorArgs) > 0 {
 		if err := mutator.MergeDeploymentArgs(core.OperatorDeploymentName, core.OperatorManagerContainerName, operatorArgs); err != nil {
-			wrappedErr := core.WrapWithSentinel(core.ErrMutateManagerYAMLFailed, err, fmt.Sprintf("failed to merge operator args: %v", err))
+			wrappedErr := core.WrapWithBase(core.ErrMutateManagerYAMLFailed, err, fmt.Sprintf("failed to merge operator args: %v", err))
 			core.Error("Failed to merge operator args")
 			if logger != nil {
 				core.LogStructuredError(logger, wrappedErr, "Failed to merge operator args")
@@ -830,7 +829,7 @@ func deployOperatorManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap.
 			envMap[ev.Name] = ev.Value
 		}
 		if err := mutator.MergeDeploymentEnv(core.OperatorDeploymentName, core.OperatorManagerContainerName, envMap); err != nil {
-			wrappedErr := core.WrapWithSentinel(core.ErrMutateManagerYAMLFailed, err, fmt.Sprintf("failed to merge operator env vars: %v", err))
+			wrappedErr := core.WrapWithBase(core.ErrMutateManagerYAMLFailed, err, fmt.Sprintf("failed to merge operator env vars: %v", err))
 			core.Error("Failed to merge operator env vars")
 			if logger != nil {
 				core.LogStructuredError(logger, wrappedErr, "Failed to merge operator env vars")
@@ -840,7 +839,7 @@ func deployOperatorManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap.
 	}
 
 	if err := configureOperatorWebhookDeployment(mutator, webhookCA); err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrMutateManagerYAMLFailed, err, fmt.Sprintf("failed to configure operator webhooks: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrMutateManagerYAMLFailed, err, fmt.Sprintf("failed to configure operator webhooks: %v", err))
 		core.Error("Failed to configure operator webhooks")
 		if logger != nil {
 			core.LogStructuredError(logger, wrappedErr, "Failed to configure operator webhooks")
@@ -851,7 +850,7 @@ func deployOperatorManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap.
 	// Render the mutated manifest
 	mutatedYAML, err := mutator.ToYAML()
 	if err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrRenderManagerYAMLFailed, err, fmt.Sprintf("failed to render mutated manifest: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrRenderManagerYAMLFailed, err, fmt.Sprintf("failed to render mutated manifest: %v", err))
 		core.Error("Failed to render mutated manifest")
 		if logger != nil {
 			core.LogStructuredError(logger, wrappedErr, "Failed to render mutated manifest")
@@ -861,7 +860,7 @@ func deployOperatorManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap.
 	if strings.TrimSpace(imagePullSecretName) != "" {
 		rendered, err := injectImagePullSecretsIntoManifest(string(mutatedYAML), imagePullSecretName)
 		if err != nil {
-			wrappedErr := core.WrapWithSentinel(core.ErrRenderManagerYAMLFailed, err, fmt.Sprintf("failed to inject operator imagePullSecret: %v", err))
+			wrappedErr := core.WrapWithBase(core.ErrRenderManagerYAMLFailed, err, fmt.Sprintf("failed to inject operator imagePullSecret: %v", err))
 			core.Error("Failed to inject operator imagePullSecret")
 			if logger != nil {
 				core.LogStructuredError(logger, wrappedErr, "Failed to inject operator imagePullSecret")
@@ -872,7 +871,7 @@ func deployOperatorManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap.
 	}
 
 	if err := applyOperatorManagerManifest(kubectl, mutatedYAML); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrApplyManagerDeploymentFailed,
 			err,
 			fmt.Sprintf("failed to apply manager deployment: %v", err),
@@ -886,7 +885,7 @@ func deployOperatorManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap.
 	}
 
 	if err := applyOperatorWebhookManifests(kubectl, webhookCA); err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrApplyManifestFailed, err, fmt.Sprintf("failed to apply operator webhook manifests: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrApplyManifestFailed, err, fmt.Sprintf("failed to apply operator webhook manifests: %v", err))
 		core.Error("Failed to apply operator webhook manifests")
 		if logger != nil {
 			core.LogStructuredError(logger, wrappedErr, "Failed to apply operator webhook manifests")
@@ -916,8 +915,8 @@ func applyOperatorManagerManifest(kubectl core.KubectlRunner, managerYAML []byte
 	return cmd.Run()
 }
 
-// mcpSentinelDependencyRolloutFailed wraps early platform storage/messaging rollouts; diagnostics are attached only in --debug.
-func mcpSentinelDependencyRolloutFailed(kubectl core.KubectlRunner, err error, kind, name, namespace, phase string) error {
+// mcpPlatformDependencyRolloutFailed wraps early platform storage/messaging rollouts; diagnostics are attached only in --debug.
+func mcpPlatformDependencyRolloutFailed(kubectl core.KubectlRunner, err error, kind, name, namespace, phase string) error {
 	ctx := map[string]any{
 		"component": "platform",
 		"phase":     phase,
@@ -929,12 +928,12 @@ func mcpSentinelDependencyRolloutFailed(kubectl core.KubectlRunner, err error, k
 			ctx["diagnostics"] = trimDiagnosticsString(diag)
 		}
 	}
-	return core.WrapWithSentinelAndContext(core.ErrOperatorDeploymentFailed, err,
+	return core.WrapWithBaseAndContext(core.ErrOperatorDeploymentFailed, err,
 		fmt.Sprintf("platform %s: %s/%s: %v", phase, kind, name, err), ctx)
 }
 
-// mcpSentinelDependencyJobFailed wraps the clickhouse init job; diagnostics are attached only in --debug.
-func mcpSentinelDependencyJobFailed(kubectl core.KubectlRunner, err error, name, namespace, phase string) error {
+// mcpPlatformDependencyJobFailed wraps the clickhouse init job; diagnostics are attached only in --debug.
+func mcpPlatformDependencyJobFailed(kubectl core.KubectlRunner, err error, name, namespace, phase string) error {
 	ctx := map[string]any{
 		"component": "platform",
 		"phase":     phase,
@@ -946,7 +945,7 @@ func mcpSentinelDependencyJobFailed(kubectl core.KubectlRunner, err error, name,
 			ctx["diagnostics"] = trimDiagnosticsString(diag)
 		}
 	}
-	return core.WrapWithSentinelAndContext(core.ErrOperatorDeploymentFailed, err,
+	return core.WrapWithBaseAndContext(core.ErrOperatorDeploymentFailed, err,
 		fmt.Sprintf("platform %s: job/%s: %v", phase, name, err), ctx)
 }
 
@@ -1100,10 +1099,7 @@ func operatorEnvOverrides(gatewayProxyImage, existingGatewayOTLPEndpoint string)
 	if gatewayOTLPEndpoint == "" {
 		gatewayOTLPEndpoint = strings.TrimSpace(existingGatewayOTLPEndpoint)
 	}
-	// A collector address left in the removed combined namespace cannot receive
-	// traces. Replace it with the current otel-collector Service. An operator
-	// who set a different collector keeps that value.
-	if gatewayOTLPEndpoint == "" || mcpv1alpha1.EndpointUsesRetiredNamespace(gatewayOTLPEndpoint) {
+	if gatewayOTLPEndpoint == "" {
 		gatewayOTLPEndpoint = defaultGatewayOTELExporterOTLPEndpointForCluster()
 	}
 	envVars = append(envVars, operatorEnvVar{Name: gatewayOTELExporterOTLPEndpointEnv, Value: gatewayOTLPEndpoint})
@@ -1112,7 +1108,7 @@ func operatorEnvOverrides(gatewayProxyImage, existingGatewayOTLPEndpoint string)
 		ingestURL = defaultAnalyticsIngestURLForCluster()
 	}
 	if ingestURL != "" {
-		envVars = append(envVars, operatorEnvVar{Name: "MCP_SENTINEL_INGEST_URL", Value: ingestURL})
+		envVars = append(envVars, operatorEnvVar{Name: "MCP_ANALYTICS_INGEST_URL", Value: ingestURL})
 	}
 	if mode := strings.TrimSpace(core.DefaultCLIConfig.IngressReadinessMode); mode != "" {
 		envVars = append(envVars, operatorEnvVar{Name: "MCP_INGRESS_READINESS_MODE", Value: mode})

@@ -11,21 +11,21 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtimeaccess "mcp-runtime-api/internal/runtimeapi/access"
-	sentinelaccess "mcp-runtime/pkg/access"
+	mcpaccess "mcp-runtime/pkg/access"
 	"mcp-runtime/pkg/k8sclient"
 	"mcp-runtime/pkg/serviceutil"
 )
 
 type accessSessionRequest struct {
-	Name           string                         `json:"name"`
-	Namespace      string                         `json:"namespace"`
-	ServerRef      sentinelaccess.ServerReference `json:"serverRef"`
-	Subject        sentinelaccess.SubjectRef      `json:"subject"`
-	ConsentedTrust sentinelaccess.TrustLevel      `json:"consentedTrust"`
-	ExpiresAt      *metav1.Time                   `json:"expiresAt"`
-	Revoked        *bool                          `json:"revoked,omitempty"`
-	PolicyVersion  string                         `json:"policyVersion"`
-	GrantName      string                         `json:"grantName,omitempty"`
+	Name           string                    `json:"name"`
+	Namespace      string                    `json:"namespace"`
+	ServerRef      mcpaccess.ServerReference `json:"serverRef"`
+	Subject        mcpaccess.SubjectRef      `json:"subject"`
+	ConsentedTrust mcpaccess.TrustLevel      `json:"consentedTrust"`
+	ExpiresAt      *metav1.Time              `json:"expiresAt"`
+	Revoked        *bool                     `json:"revoked,omitempty"`
+	PolicyVersion  string                    `json:"policyVersion"`
+	GrantName      string                    `json:"grantName,omitempty"`
 }
 
 type accessSessionPatchRequest struct {
@@ -103,7 +103,7 @@ func (s *AccessService) handleSessionGet(w http.ResponseWriter, r *http.Request,
 		writeAPIError(w, http.StatusForbidden, "forbidden server")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"session": sentinelaccess.ToSessionSummary(*session)})
+	writeJSON(w, http.StatusOK, map[string]any{"session": mcpaccess.ToSessionSummary(*session)})
 }
 
 func (s *AccessService) handleSessionDelete(w http.ResponseWriter, r *http.Request, namespace, name string) {

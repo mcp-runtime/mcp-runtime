@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # End-to-end check on a fresh kind cluster:
-# - build the CLI and publish runtime/sentinel images to a local docker mirror registry
+# - build the CLI and publish runtime and platform images to a local docker mirror registry
 # - run `mcp-runtime setup --test-mode`
 # - deploy a policy-enabled MCP server through the CLI pipeline flow
 # - exercise the deployed server through curl-based smoke checks and targeted MCP requests
@@ -95,12 +95,12 @@ log_line() {
 log_line info "Running from: ${PROJECT_ROOT}"
 export E2E_HELPERS="${PROJECT_ROOT}/test/e2e/e2e_helpers.py"
 
-SENTINEL_ROOT="${PROJECT_ROOT}"
-if [[ ! -d "${SENTINEL_ROOT}/services" || ! -d "${SENTINEL_ROOT}/k8s" ]]; then
-  echo "expected flattened services/ and k8s/ layout under ${SENTINEL_ROOT}" >&2
+PLATFORM_ROOT="${PROJECT_ROOT}"
+if [[ ! -d "${PLATFORM_ROOT}/services" || ! -d "${PLATFORM_ROOT}/k8s" ]]; then
+  echo "expected flattened services/ and k8s/ layout under ${PLATFORM_ROOT}" >&2
   exit 1
 fi
-log_line info "Sentinel root: ${SENTINEL_ROOT}"
+log_line info "Platform root: ${PLATFORM_ROOT}"
 
 CLUSTER_NAME="${CLUSTER_NAME:-mcp-e2e}"
 PLATFORM_HOST="${PLATFORM_HOST:-localhost}"
@@ -146,7 +146,7 @@ OAUTH_AUDIENCE_CONFIGURED="${OAUTH_AUDIENCE:+1}"
 OAUTH_AUDIENCE="${OAUTH_AUDIENCE:-http://${OAUTH_SERVER_HOST}:${TRAEFIK_PORT}/${OAUTH_SERVER_NAME}/mcp}"
 GO_OAUTH_STANDALONE_AUDIENCE_CONFIGURED="${GO_OAUTH_STANDALONE_AUDIENCE:+1}"
 GO_OAUTH_STANDALONE_AUDIENCE="${GO_OAUTH_STANDALONE_AUDIENCE:-http://${GO_EXAMPLE_SERVER_HOST}:${TRAEFIK_PORT}${GO_EXAMPLE_STANDALONE_ROUTE}}"
-SENTINEL_PORT="${SENTINEL_PORT:-18083}"
+PLATFORM_PORT="${PLATFORM_PORT:-18083}"
 TEMPO_PORT="${TEMPO_PORT:-13200}"
 LOKI_PORT="${LOKI_PORT:-13100}"
 API_SERVICE_PORT="${API_SERVICE_PORT:-18091}"
@@ -159,7 +159,7 @@ OAUTH_UPSTREAM_PORT="${OAUTH_UPSTREAM_PORT:-18097}"
 PYTHON_EXAMPLE_PROXY_PORT="${PYTHON_EXAMPLE_PROXY_PORT:-18098}"
 RUST_EXAMPLE_PROXY_PORT="${RUST_EXAMPLE_PROXY_PORT:-18099}"
 GO_EXAMPLE_PROXY_PORT="${GO_EXAMPLE_PROXY_PORT:-18102}"
-CLI_SENTINEL_API_PORT="${CLI_SENTINEL_API_PORT:-18103}"
+CLI_PLATFORM_API_PORT="${CLI_PLATFORM_API_PORT:-18103}"
 ADAPTER_PROXY_PORT="${ADAPTER_PROXY_PORT:-18104}"
 MCP_SERVICE_SESSION_PORT="${MCP_SERVICE_SESSION_PORT:-18105}"
 MT_TENANT_A_PORT="${MT_TENANT_A_PORT:-18106}"
@@ -1138,12 +1138,12 @@ ensure_api_port_forward() {
 }
 
 ensure_gateway_port_forward() {
-  if [[ -z "${SENTINEL_PORT_FORWARD_PID:-}" ]]; then
-    echo "[port-forward] exposing mcp-platform-gateway on localhost:${SENTINEL_PORT}"
-    port_forward_bg mcp-platform mcp-platform-gateway "${SENTINEL_PORT}" 8083 "${WORKDIR}/sentinel-port-forward.log"
-    SENTINEL_PORT_FORWARD_PID="${LAST_MANAGED_PID}"
+  if [[ -z "${PLATFORM_PORT_FORWARD_PID:-}" ]]; then
+    echo "[port-forward] exposing mcp-platform-gateway on localhost:${PLATFORM_PORT}"
+    port_forward_bg mcp-platform mcp-platform-gateway "${PLATFORM_PORT}" 8083 "${WORKDIR}/platform-port-forward.log"
+    PLATFORM_PORT_FORWARD_PID="${LAST_MANAGED_PID}"
   fi
-  wait_port "${SENTINEL_PORT}"
+  wait_port "${PLATFORM_PORT}"
 }
 
 # shellcheck source=lib/namespace-placement.sh
@@ -1288,7 +1288,7 @@ start_e2e_adapter_proxy() {
     # Match curl -k / mcp_header_proxy --insecure-upstream for the port-forward hop.
     tls_insecure_args=(--tls-insecure-skip-verify)
   fi
-  MCP_PLATFORM_API_URL="http://127.0.0.1:${SENTINEL_PORT}" \
+  MCP_PLATFORM_API_URL="http://127.0.0.1:${PLATFORM_PORT}" \
     MCP_PLATFORM_API_TOKEN="${platform_token}" \
     ./bin/mcp-runtime adapter proxy \
       --listen "127.0.0.1:${listen_port}" \
@@ -1407,7 +1407,7 @@ ensure_trust_adapter_session() {
     -H "Authorization: Bearer ${ADAPTER_CALLER_TOKEN}" \
     -H "content-type: application/json" \
     --data "${session_body}" \
-    "http://127.0.0.1:${SENTINEL_PORT}/api/v1/runtime/adapter/sessions")"
+    "http://127.0.0.1:${PLATFORM_PORT}/api/v1/runtime/adapter/sessions")"
   ADAPTER_SESSION_NAME="$(printf '%s' "${session_resp}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["name"])')"
   ADAPTER_HUMAN_ID="$(printf '%s' "${session_resp}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["humanID"])')"
   if [[ -z "${ADAPTER_TEAM_ID:-}" ]]; then
@@ -1452,7 +1452,7 @@ print(json.dumps({"email": os.environ["PLATFORM_ADMIN_EMAIL"], "password": os.en
   member_email="${team_slug}@mcpruntime.org"
   member_password="test-password-123"
   platform_env=(
-    "MCP_PLATFORM_API_URL=http://127.0.0.1:${SENTINEL_PORT}"
+    "MCP_PLATFORM_API_URL=http://127.0.0.1:${PLATFORM_PORT}"
     "MCP_PLATFORM_API_TOKEN=${admin_token}"
   )
   env "${platform_env[@]}" ./bin/mcp-runtime team create "${team_slug}" \
@@ -1466,7 +1466,7 @@ print(json.dumps({"email": os.environ["PLATFORM_ADMIN_EMAIL"], "password": os.en
     -H "Authorization: Bearer ${admin_token}" \
     -H "content-type: application/json" \
     --data '{"name":"E2E adapter agent"}' \
-    "http://127.0.0.1:${SENTINEL_PORT}/api/v1/runtime/teams/${team_slug}/agents")"
+    "http://127.0.0.1:${PLATFORM_PORT}/api/v1/runtime/teams/${team_slug}/agents")"
   ADAPTER_AGENT_ID="$(printf '%s' "${agent_response}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["agent"]["id"])')"
   ADAPTER_TEAM_ID="$(printf '%s' "${agent_response}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["agent"]["team_id"])')"
   ADAPTER_AGENT_EXPIRES_AT="$(python3 -c 'from datetime import datetime,timedelta,timezone; print((datetime.now(timezone.utc)+timedelta(hours=1)).replace(microsecond=0).isoformat().replace("+00:00","Z"))')"
@@ -2204,7 +2204,7 @@ wait_for_gateway_rpc_methods() {
   local server_name="$1"
   local label="$2"
 
-  API_BASE="http://127.0.0.1:${SENTINEL_PORT}/api/v1" \
+  API_BASE="http://127.0.0.1:${PLATFORM_PORT}/api/v1" \
   API_KEY="${API_KEY}" \
   SERVER_NAME="${server_name}" \
   AUDIT_LABEL="${label}" \
@@ -2723,8 +2723,8 @@ run_api_platform_http_flows() {
   log_line policy "validating targeted platform API request paths"
   ensure_api_port_forward
   ensure_gateway_port_forward
-  API_BASE="http://127.0.0.1:${SENTINEL_PORT}/api/v1" \
-  GATEWAY_API_BASE="http://127.0.0.1:${SENTINEL_PORT}/api/v1" \
+  API_BASE="http://127.0.0.1:${PLATFORM_PORT}/api/v1" \
+  GATEWAY_API_BASE="http://127.0.0.1:${PLATFORM_PORT}/api/v1" \
   API_KEY="${API_KEY}" \
   SERVER_NAME="${SERVER_NAME}" \
   SESSION_ID="${SESSION_ID}" \
@@ -2741,7 +2741,7 @@ run_ui_auth_http_flows() {
   ensure_ui_port_forward
   ensure_gateway_port_forward
   UI_BASE="http://127.0.0.1:${UI_SERVICE_PORT}" \
-  GATEWAY_BASE="http://127.0.0.1:${SENTINEL_PORT}" \
+  GATEWAY_BASE="http://127.0.0.1:${PLATFORM_PORT}" \
   API_KEY="${API_KEY}" \
   E2E_PLATFORM_MODE="${E2E_PLATFORM_MODE}" \
   python3 test/e2e/ui_auth_flows.py
@@ -3584,9 +3584,9 @@ build_and_publish_image() {
 
   # Reuse only a GHCR image keyed by this checkout's content. Mutable tags in
   # the local mirror can contain code from a different checkout.
-  "${SENTINEL_ROOT}/bin/e2e-image-cache" ensure \
+  "${PLATFORM_ROOT}/bin/e2e-image-cache" ensure \
     --image "${image}" --dockerfile "${dockerfile}" \
-    --context "${context_dir}" --root "${SENTINEL_ROOT}"
+    --context "${context_dir}" --root "${PLATFORM_ROOT}"
   publish_image_to_local_registry "${image}"
 }
 
@@ -3600,10 +3600,10 @@ image_build_label() {
       echo "build test registry image (${image})"
       ;;
     docker.io/library/mcp-gateway:*)
-      echo "build Sentinel MCP gateway image (${image})"
+      echo "build platform MCP gateway image (${image})"
       ;;
     docker.io/library/mcp-ingest:*)
-      echo "build Sentinel ingest image (${image})"
+      echo "build platform ingest image (${image})"
       ;;
     docker.io/library/mcp-platform-api:*)
       echo "build platform-api image (${image})"
@@ -3615,10 +3615,10 @@ image_build_label() {
       echo "build analytics-api image (${image})"
       ;;
     docker.io/library/mcp-processor:*)
-      echo "build Sentinel processor image (${image})"
+      echo "build platform processor image (${image})"
       ;;
     docker.io/library/mcp-ui:*)
-      echo "build Sentinel UI image (${image})"
+      echo "build platform UI image (${image})"
       ;;
     *)
       echo "build image ${image}"
@@ -3629,7 +3629,7 @@ image_build_label() {
 build_and_publish_images_parallel() {
   local start_failed=0
 
-  log_status "PLAN" "Building runtime and Sentinel images with ${E2E_IMAGE_BUILD_PARALLELISM} parallel workers"
+  log_status "PLAN" "Building runtime and platform images with ${E2E_IMAGE_BUILD_PARALLELISM} parallel workers"
   parallel_reset
   while [[ $# -gt 0 ]]; do
     local image="$1"
@@ -3952,7 +3952,7 @@ fi
 # Compare each component to the single local :latest image (or the GHCR hash
 # tag, when that cache is on). A warm cluster must not skip this: the previous
 # tag can belong to another checkout.
-go build -o "${SENTINEL_ROOT}/bin/e2e-image-cache" ./hack/e2e-image-cache
+go build -o "${PLATFORM_ROOT}/bin/e2e-image-cache" ./hack/e2e-image-cache
 mirror_upstream_images_parallel \
   "registry:2.8.3" \
   "traefik:v2.10" \
@@ -3969,13 +3969,13 @@ mirror_upstream_images_parallel \
 build_and_publish_images_parallel \
   "docker.io/library/mcp-runtime-operator:latest" "Dockerfile.operator" "." \
   "${TEST_MODE_REGISTRY_IMAGE}" "test/e2e/registry.Dockerfile" "." \
-  "docker.io/library/mcp-gateway:latest" "${SENTINEL_ROOT}/services/mcp-gateway/Dockerfile" "${SENTINEL_ROOT}" \
-  "docker.io/library/mcp-ingest:latest" "${SENTINEL_ROOT}/services/ingest/Dockerfile" "${SENTINEL_ROOT}" \
-  "docker.io/library/mcp-platform-api:latest" "${SENTINEL_ROOT}/services/platform-api/Dockerfile" "${SENTINEL_ROOT}" \
-  "docker.io/library/mcp-runtime-api:latest" "${SENTINEL_ROOT}/services/runtime-api/Dockerfile" "${SENTINEL_ROOT}" \
-  "docker.io/library/mcp-analytics-api:latest" "${SENTINEL_ROOT}/services/analytics-api/Dockerfile" "${SENTINEL_ROOT}" \
-  "docker.io/library/mcp-processor:latest" "${SENTINEL_ROOT}/services/processor/Dockerfile" "${SENTINEL_ROOT}" \
-  "docker.io/library/mcp-ui:latest" "${SENTINEL_ROOT}/services/ui/Dockerfile" "${SENTINEL_ROOT}"
+  "docker.io/library/mcp-gateway:latest" "${PLATFORM_ROOT}/services/mcp-gateway/Dockerfile" "${PLATFORM_ROOT}" \
+  "docker.io/library/mcp-ingest:latest" "${PLATFORM_ROOT}/services/ingest/Dockerfile" "${PLATFORM_ROOT}" \
+  "docker.io/library/mcp-platform-api:latest" "${PLATFORM_ROOT}/services/platform-api/Dockerfile" "${PLATFORM_ROOT}" \
+  "docker.io/library/mcp-runtime-api:latest" "${PLATFORM_ROOT}/services/runtime-api/Dockerfile" "${PLATFORM_ROOT}" \
+  "docker.io/library/mcp-analytics-api:latest" "${PLATFORM_ROOT}/services/analytics-api/Dockerfile" "${PLATFORM_ROOT}" \
+  "docker.io/library/mcp-processor:latest" "${PLATFORM_ROOT}/services/processor/Dockerfile" "${PLATFORM_ROOT}" \
+  "docker.io/library/mcp-ui:latest" "${PLATFORM_ROOT}/services/ui/Dockerfile" "${PLATFORM_ROOT}"
 docker image prune -f >/dev/null 2>&1 || true
 
 image_rebuilt=0
@@ -4033,10 +4033,10 @@ fi
 ./bin/mcp-runtime registry status
 ./bin/mcp-runtime registry info
 
-echo "[cli] checking auth, bootstrap, cluster, registry, and sentinel commands"
+echo "[cli] checking auth, bootstrap, cluster, registry, and platform commands"
 MCP_RUNTIME_CONFIG_DIR="${WORKDIR}/auth-config" ./bin/mcp-runtime auth status
 MCP_RUNTIME_CONFIG_DIR="${WORKDIR}/auth-config" ./bin/mcp-runtime auth login \
-  --api-url "http://127.0.0.1:${SENTINEL_PORT}" \
+  --api-url "http://127.0.0.1:${PLATFORM_PORT}" \
   --token e2e-token \
   --skip-verify \
   --registry-host "${LOCAL_REGISTRY_PUSH_HOST}"
@@ -4125,16 +4125,16 @@ fi
 ./bin/mcp-runtime ops status
 ./bin/mcp-runtime ops events >"${WORKDIR}/ops-events.txt"
 ./bin/mcp-runtime ops logs api --tail 20 >"${WORKDIR}/ops-api-logs.txt"
-require_port_available "${CLI_SENTINEL_API_PORT}" "sentinel CLI port-forward"
+require_port_available "${CLI_PLATFORM_API_PORT}" "platform CLI port-forward"
 _cli_pf_pid=""
 ./bin/mcp-runtime ops port-forward api \
-  --port "${CLI_SENTINEL_API_PORT}" \
-  --address 127.0.0.1 >"${WORKDIR}/sentinel-cli-port-forward.log" 2>&1 &
+  --port "${CLI_PLATFORM_API_PORT}" \
+  --address 127.0.0.1 >"${WORKDIR}/platform-cli-port-forward.log" 2>&1 &
 _cli_pf_pid="$!"
 if [[ -n "${_cli_pf_pid}" ]]; then
   PIDS+=("${_cli_pf_pid}")
 fi
-wait_managed_port "${CLI_SENTINEL_API_PORT}" "${_cli_pf_pid}" "${WORKDIR}/sentinel-cli-port-forward.log" "sentinel CLI port-forward" 30
+wait_managed_port "${CLI_PLATFORM_API_PORT}" "${_cli_pf_pid}" "${WORKDIR}/platform-cli-port-forward.log" "platform CLI port-forward" 30
 if [[ -n "${_cli_pf_pid}" ]]; then
   stop_process_tree "${_cli_pf_pid}"
 fi
@@ -4519,7 +4519,7 @@ EOF
       -H "Authorization: Bearer ${ADAPTER_CALLER_TOKEN}" \
       -H "content-type: application/json" \
       --data "${ADAPTER_SESSION_BODY}" \
-      "http://127.0.0.1:${SENTINEL_PORT}/api/v1/runtime/adapter/sessions")"
+      "http://127.0.0.1:${PLATFORM_PORT}/api/v1/runtime/adapter/sessions")"
     echo "${ADAPTER_SESSION_RESP}" | ADAPTER_AGENT_ID="${ADAPTER_AGENT_ID}" python3 -c "
 import json, os, sys
 resp = json.load(sys.stdin)
@@ -4547,7 +4547,7 @@ print('adapter-session issued:', resp['name'], 'reused=', resp['reused'])
       -H "Authorization: Bearer ${ADAPTER_CALLER_TOKEN}" \
       -H "content-type: application/json" \
       --data "${ADAPTER_SESSION_BODY}" \
-      "http://127.0.0.1:${SENTINEL_PORT}/api/v1/runtime/adapter/sessions")"
+      "http://127.0.0.1:${PLATFORM_PORT}/api/v1/runtime/adapter/sessions")"
     echo "${ADAPTER_SESSION_RESP2}" | python3 -c "
 import json, sys
 resp = json.load(sys.stdin)
@@ -4561,7 +4561,7 @@ print('adapter-session reused:', resp['name'])
       -H "Authorization: Bearer ${ADAPTER_CALLER_TOKEN}" \
       -H "content-type: application/json" \
       --data "{\"serverName\":\"definitely-missing\",\"namespace\":\"mcp-servers\",\"agentID\":\"${ADAPTER_AGENT_ID}\"}" \
-      "http://127.0.0.1:${SENTINEL_PORT}/api/v1/runtime/adapter/sessions")"
+      "http://127.0.0.1:${PLATFORM_PORT}/api/v1/runtime/adapter/sessions")"
     if [[ "${ADAPTER_SESSION_REJECT_STATUS}" != "403" ]]; then
       echo "expected 403 when no grant matches, got ${ADAPTER_SESSION_REJECT_STATUS}" >&2
       exit 1
@@ -4585,7 +4585,7 @@ print(json.dumps({"email": os.environ["PLATFORM_ADMIN_EMAIL"], "password": os.en
     DEEP_CLI_TEAM_SLUG="e2e-cli-$(date +%s)"
     DEEP_CLI_USER_EMAIL="${DEEP_CLI_TEAM_SLUG}@mcpruntime.org"
     DEEP_PLATFORM_ENV=(
-      MCP_PLATFORM_API_URL="http://127.0.0.1:${SENTINEL_PORT}"
+      MCP_PLATFORM_API_URL="http://127.0.0.1:${PLATFORM_PORT}"
       MCP_PLATFORM_API_TOKEN="${ADAPTER_PLATFORM_TOKEN}"
     )
 
@@ -4744,7 +4744,7 @@ if checkpoint_enabled "oauth"; then
   if ui_service_paths_selected; then
     wait_port "${UI_SERVICE_PORT}"
   fi
-  wait_http "http://127.0.0.1:${SENTINEL_PORT}/api/v1/stats" "x-api-key: ${API_KEY}"
+  wait_http "http://127.0.0.1:${PLATFORM_PORT}/api/v1/stats" "x-api-key: ${API_KEY}"
   wait_http "http://127.0.0.1:${TEMPO_PORT}/ready"
   wait_http "http://127.0.0.1:${LOKI_PORT}/ready"
   if scenario_selected "observability"; then
@@ -5377,7 +5377,7 @@ PY
 
   echo "[oauth] validating valid bearer token MCP flow"
   wait_for_mcp_tool_result "${MCP_OAUTH_VALID_URL}" "add" '{"a":7,"b":5}' 200 "12"
-  API_BASE="http://127.0.0.1:${SENTINEL_PORT}/api/v1" \
+  API_BASE="http://127.0.0.1:${PLATFORM_PORT}/api/v1" \
   API_KEY="${API_KEY}" \
   OAUTH_SERVER_NAME="${OAUTH_SERVER_NAME}" \
   OAUTH_HUMAN_ID="${OAUTH_HUMAN_ID}" \
@@ -5490,10 +5490,10 @@ EOF
       --file "${WRONG_SERVER_MANIFEST_DIR}/${WRONG_SERVER_NAME}.yaml"
     wait_for_named_server_ready "${WRONG_SERVER_NAME}"
 
-    ADAPTER_CERT_ENROLL_OUTPUT="$(MCP_RUNTIME_CONFIG_DIR="${ADAPTER_CERT_DIR}" MCP_PLATFORM_API_URL="http://127.0.0.1:${SENTINEL_PORT}" \
+    ADAPTER_CERT_ENROLL_OUTPUT="$(MCP_RUNTIME_CONFIG_DIR="${ADAPTER_CERT_DIR}" MCP_PLATFORM_API_URL="http://127.0.0.1:${PLATFORM_PORT}" \
       MCP_PLATFORM_API_TOKEN="${ADAPTER_CALLER_TOKEN}" \
       ./bin/mcp-runtime adapter enroll \
-        --platform-url "http://127.0.0.1:${SENTINEL_PORT}" \
+        --platform-url "http://127.0.0.1:${PLATFORM_PORT}" \
         --server "${OAUTH_SERVER_NAME}" \
         --namespace mcp-servers \
         --agent "${ADAPTER_CERT_AGENT_ID}")"
@@ -5696,7 +5696,7 @@ EOF
     -H "Authorization: Bearer ${ADAPTER_CALLER_TOKEN}" \
     -H "content-type: application/json" \
     --data "${ADAPTER_SESSION_BODY}" \
-    "http://127.0.0.1:${SENTINEL_PORT}/api/v1/runtime/adapter/sessions")"
+    "http://127.0.0.1:${PLATFORM_PORT}/api/v1/runtime/adapter/sessions")"
   echo "${ADAPTER_SESSION_RESP}" | ADAPTER_AGENT_ID="${ADAPTER_AGENT_ID}" python3 -c "
 import json, os, sys
 resp = json.load(sys.stdin)
@@ -5724,7 +5724,7 @@ print('adapter-session issued:', resp['name'], 'reused=', resp['reused'])
     -H "Authorization: Bearer ${ADAPTER_CALLER_TOKEN}" \
     -H "content-type: application/json" \
     --data "${ADAPTER_SESSION_BODY}" \
-    "http://127.0.0.1:${SENTINEL_PORT}/api/v1/runtime/adapter/sessions")"
+    "http://127.0.0.1:${PLATFORM_PORT}/api/v1/runtime/adapter/sessions")"
   echo "${ADAPTER_SESSION_RESP2}" | python3 -c "
 import json, sys
 resp = json.load(sys.stdin)
@@ -5738,7 +5738,7 @@ print('adapter-session reused:', resp['name'])
     -H "Authorization: Bearer ${ADAPTER_CALLER_TOKEN}" \
     -H "content-type: application/json" \
     --data "{\"serverName\":\"definitely-missing\",\"namespace\":\"mcp-servers\",\"agentID\":\"${ADAPTER_AGENT_ID}\"}" \
-    "http://127.0.0.1:${SENTINEL_PORT}/api/v1/runtime/adapter/sessions")"
+    "http://127.0.0.1:${PLATFORM_PORT}/api/v1/runtime/adapter/sessions")"
   if [[ "${ADAPTER_SESSION_REJECT_STATUS}" != "403" ]]; then
     echo "expected 403 when no grant matches, got ${ADAPTER_SESSION_REJECT_STATUS}" >&2
     exit 1
@@ -5762,7 +5762,7 @@ print(json.dumps({"email": os.environ["PLATFORM_ADMIN_EMAIL"], "password": os.en
   DEEP_CLI_TEAM_SLUG="e2e-cli-$(date +%s)"
   DEEP_CLI_USER_EMAIL="${DEEP_CLI_TEAM_SLUG}@mcpruntime.org"
   DEEP_PLATFORM_ENV=(
-    MCP_PLATFORM_API_URL="http://127.0.0.1:${SENTINEL_PORT}"
+    MCP_PLATFORM_API_URL="http://127.0.0.1:${PLATFORM_PORT}"
     MCP_PLATFORM_API_TOKEN="${ADAPTER_PLATFORM_TOKEN}"
   )
 
@@ -5838,16 +5838,16 @@ if scenario_selected "observability" && checkpoint_enabled "observability"; then
     ensure_trust_session_proxy
   fi
   wait_for_mcp_tool_result "${MCP_SESSION_URL}" "aaa-ping" '{}' 200 "pong" 20 "" "metrics-warmup"
-  API_BASE="http://127.0.0.1:${SENTINEL_PORT}/api/v1" \
+  API_BASE="http://127.0.0.1:${PLATFORM_PORT}/api/v1" \
   API_KEY="${API_KEY}" \
   INGEST_API_KEY="${INGEST_API_KEY}" \
   SERVER_NAME="${SERVER_NAME}" \
   OAUTH_SERVER_NAME="${OAUTH_SERVER_NAME}" \
   OAUTH_HUMAN_ID="${OAUTH_HUMAN_ID}" \
   OAUTH_AGENT_ID="${OAUTH_AGENT_ID}" \
-  SENTINEL_BASE="http://127.0.0.1:${SENTINEL_PORT}" \
+  PLATFORM_BASE="http://127.0.0.1:${PLATFORM_PORT}" \
   TEMPO_BASE="http://127.0.0.1:${TEMPO_PORT}" \
-  GRAFANA_BASE="http://127.0.0.1:${SENTINEL_PORT}/grafana" \
+  GRAFANA_BASE="http://127.0.0.1:${PLATFORM_PORT}/grafana" \
   PROMETHEUS_BASE="http://127.0.0.1:${PROMETHEUS_PORT}/prometheus" \
   GRAFANA_ADMIN_USER="${GRAFANA_ADMIN_USER}" \
   GRAFANA_ADMIN_PASSWORD="${GRAFANA_ADMIN_PASSWORD}" \
@@ -5875,7 +5875,7 @@ prometheus_base = os.environ["PROMETHEUS_BASE"]
 grafana_user = os.environ["GRAFANA_ADMIN_USER"]
 grafana_password = os.environ["GRAFANA_ADMIN_PASSWORD"]
 loki_base = os.environ["LOKI_BASE"]
-sentinel_base = os.environ["SENTINEL_BASE"]
+platform_base = os.environ["PLATFORM_BASE"]
 gateway_trace_services = (f"{server_name}-gateway", f"{oauth_server_name}-gateway")
 server_gateway_source, oauth_gateway_source = gateway_trace_services
 expected_gateway_sources = {server_gateway_source, oauth_gateway_source}
@@ -6177,7 +6177,7 @@ def rpc_methods_from_events_doc(doc):
 headers = {"x-api-key": api_key}
 ingest_headers = {"x-api-key": ingest_api_key}
 
-# PII redaction check via the Sentinel gateway Traefik route.
+# PII redaction check via the platform gateway Traefik route.
 pii_source = "pii-redaction-e2e"
 pii_event_body = {
     "timestamp": "2026-03-29T00:00:00Z",
@@ -6191,7 +6191,7 @@ pii_event_body = {
     },
 }
 status, resp_body = post_json(
-    f"{sentinel_base}/ingest/events",
+    f"{platform_base}/ingest/events",
     pii_event_body,
     {"content-type": "application/json", **ingest_headers},
 )
@@ -6205,7 +6205,7 @@ check(
 # so /api/event-types includes it before the analytics assertions below.
 route_check_source = "e2e-service-route-check"
 status, resp_body = post_json(
-    f"{sentinel_base}/ingest/events",
+    f"{platform_base}/ingest/events",
     {
         "timestamp": "2026-03-29T00:00:00Z",
         "source": route_check_source,
@@ -6588,9 +6588,9 @@ grafana_prometheus_jobs = wait_for_prometheus_up(
     description="grafana prometheus up query",
 )
 
-sentinel_request_counts = {}
+platform_request_counts = {}
 for service_name in ("mcp-platform-api", "mcp-runtime-api", "mcp-analytics-api", "mcp-ingest"):
-    sentinel_request_counts[service_name] = wait_for_prometheus_metric(
+    platform_request_counts[service_name] = wait_for_prometheus_metric(
         prometheus_base,
         f'sum(mcp_request_total{{service="{service_name}"}})',
         headers=headers,
@@ -6701,7 +6701,7 @@ rows = [
     ("grafana.datasources", str(len(grafana_datasources))),
     ("prometheus.jobs", ",".join(f"{k}:{v}" for k, v in sorted(prometheus_jobs.items()))),
     ("grafana.prometheus.jobs", ",".join(f"{k}:{v}" for k, v in sorted(grafana_prometheus_jobs.items()))),
-    ("metrics.sentinel.requests", ",".join(f"{k}:{int(v)}" for k, v in sorted(sentinel_request_counts.items()))),
+    ("metrics.platform.requests", ",".join(f"{k}:{int(v)}" for k, v in sorted(platform_request_counts.items()))),
     ("metrics.gateway.rpc", ",".join(f"{k}:{int(v)}" for k, v in sorted(gateway_request_counts.items()))),
     ("metrics.gateway.quantiles", ",".join(f"{k}:{v:.6f}s" for k, v in sorted(gateway_quantiles.items()))),
     ("metrics.grafana.gateway.p95", f"{grafana_gateway_p95:.6f}s"),
@@ -6729,7 +6729,7 @@ if scenario_selected "platform-update"; then
   run_e2e_platform_update_scenario
 fi
 
-echo "[cli] checking sentinel restart command"
+echo "[cli] checking platform restart command"
 # The full E2E stack packs single-node Kind tightly, so avoid requiring surge CPU for this restart smoke.
 refresh_kind_kubeconfig
 kubectl patch deployment mcp-platform-api -n mcp-platform --type merge -p '{"spec":{"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxSurge":0,"maxUnavailable":1}}}}' >/dev/null

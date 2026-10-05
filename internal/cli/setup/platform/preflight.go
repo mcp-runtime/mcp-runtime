@@ -122,7 +122,7 @@ func (s preflightStep) Run(logger *zap.Logger, _ SetupDeps, ctx *SetupContext) e
 	}
 
 	if hasFatal {
-		return core.NewWithSentinel(
+		return core.NewWithBase(
 			core.ErrSetupStepFailed,
 			fmt.Sprintf("pre-flight checks found %d blocker(s) — resolve the issues above and re-run setup", countFatal(issues)),
 		)

@@ -4,7 +4,7 @@
 ## When to use
 
 - Live cluster misbehaves after `setup`, upgrade, or config change
-- Operator, gateway, registry, or Sentinel symptoms (not unit-test failures)
+- Operator, gateway, registry, or platform symptoms (not unit-test failures)
 - Before re-running full `setup`, scan the checklist for a targeted fix
 
 ## First steps

@@ -216,7 +216,7 @@ func networkPolicyAllowsPlatformAPI(raw string) bool {
 				return true
 			}
 			labels := peer.PodSelector.MatchLabels
-			if len(labels) == 0 || sentinelAPIPodAppAllowed(labels["app"]) {
+			if len(labels) == 0 || platformAPIPodAppAllowed(labels["app"]) {
 				return true
 			}
 		}
@@ -224,7 +224,7 @@ func networkPolicyAllowsPlatformAPI(raw string) bool {
 	return false
 }
 
-func sentinelAPIPodAppAllowed(app string) bool {
+func platformAPIPodAppAllowed(app string) bool {
 	switch app {
 	case doctorPlatformAPIService, doctorRuntimeAPIService, doctorAnalyticsAPIService:
 		return true

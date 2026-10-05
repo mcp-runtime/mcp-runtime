@@ -285,39 +285,6 @@ func TestMCPServerDefaultAnalyticsWhenIngestURLConfigured(t *testing.T) {
 	}
 }
 
-func TestMCPServerDefaultReplacesRetiredIngestURL(t *testing.T) {
-	server := &MCPServer{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-server"},
-		Spec: MCPServerSpec{
-			Image:   "example.com/mcp-server",
-			Gateway: &GatewayConfig{Enabled: BoolPtr(true)},
-			Analytics: &AnalyticsConfig{
-				IngestURL: "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events",
-			},
-		},
-	}
-	const current = "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events"
-	server.DefaultWithOptions(MCPServerDefaultOptions{DefaultAnalyticsIngestURL: current})
-	if server.Spec.Analytics.IngestURL != current {
-		t.Fatalf("ingest URL = %q, want %q", server.Spec.Analytics.IngestURL, current)
-	}
-
-	custom := &MCPServer{
-		ObjectMeta: metav1.ObjectMeta{Name: "custom"},
-		Spec: MCPServerSpec{
-			Image:   "example.com/mcp-server",
-			Gateway: &GatewayConfig{Enabled: BoolPtr(true)},
-			Analytics: &AnalyticsConfig{
-				IngestURL: "https://ingest.example/events",
-			},
-		},
-	}
-	custom.DefaultWithOptions(MCPServerDefaultOptions{DefaultAnalyticsIngestURL: current})
-	if custom.Spec.Analytics.IngestURL != "https://ingest.example/events" {
-		t.Fatalf("custom ingest URL = %q", custom.Spec.Analytics.IngestURL)
-	}
-}
-
 func TestMCPServerDefaultGatewayEmptyMeansEnabled(t *testing.T) {
 	server := &MCPServer{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-server"},

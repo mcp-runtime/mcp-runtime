@@ -24,7 +24,7 @@ const (
 // Grafana and analytics-api routes are created in observabilityNamespace,
 // beside those Services. Server-side UI auth still uses API_UPSTREAM against
 // platform-api. The observability Ingress uses the repo-managed
-// sentinel-admin-auth@file Traefik middleware so Grafana is reachable from
+// platform-admin-auth@file Traefik middleware so Grafana is reachable from
 // admin UI links without exposing it raw on the public platform host.
 // Prometheus stays internal as Grafana's metrics datasource and is not
 // exposed as a direct public route.
@@ -108,7 +108,7 @@ func RenderPlatformUIIngress(host, issuerName string, tlsEnabled bool, platformN
 	} else {
 		b.WriteString("    traefik.ingress.kubernetes.io/router.entrypoints: web\n")
 	}
-	b.WriteString("    traefik.ingress.kubernetes.io/router.middlewares: sentinel-admin-auth@file\n")
+	b.WriteString("    traefik.ingress.kubernetes.io/router.middlewares: platform-admin-auth@file\n")
 	b.WriteString("spec:\n")
 	b.WriteString("  ingressClassName: traefik\n")
 	b.WriteString("  rules:\n")

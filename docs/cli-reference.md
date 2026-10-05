@@ -695,7 +695,7 @@ mcp-runtime setup \
   --ingress none
 
 mcp-runtime setup --with-tls --acme-email ops@example.com   # Let's Encrypt
-mcp-runtime setup --without-sentinel                         # skip analytics
+mcp-runtime setup --without-platform-stack                         # skip analytics
 mcp-runtime setup --test-mode                                # local Kind dev
 ```
 

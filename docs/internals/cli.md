@@ -32,14 +32,14 @@ tests, and the command help snapshots.
 | File group | Responsibility |
 |---|---|
 | `core/constants.go` | namespace, deployment, service, and resource names shared by commands |
-| `core/errors.go` | sentinel error values and wrapping helpers |
+| `core/errors.go` | base error values and wrapping helpers |
 | `core/exec.go`, `core/kubectl_runner.go` | external command execution and test seams |
 | `core/runtime.go` | composition root for shared CLI dependencies (`Config`, logger, kubectl, executor, printer) |
 | `core/printer.go` | terminal output formatting |
 | `kubeerr/` | shared kubectl error-detail extraction and cluster setup hints |
 | `core/config.go` | environment/config defaults for registry, ingress, and setup |
 | `kube/` | manifest apply, namespace, and kubectl-oriented helpers shared by command paths |
-| `platformapi/` | Sentinel platform API client for auth-backed access and runtime reads |
+| `platformapi/` | Platform API client for auth-backed access and runtime reads |
 | `platformapi/baseurl.go` | platform API base URL normalization used by auth and platform API clients |
 | `platformstatus/` | shared workload catalog, readiness rows, and quiet kubectl status probes for `status` and `ops status` |
 | `certmanager/` | cert-manager, private CA, and ACME helpers shared by setup and `cluster cert` |
@@ -67,7 +67,7 @@ Setup is split across `internal/cli/setup/`:
 - `ingressmanifest/`: platform UI ingress manifest rendering.
 
 `setup --test-mode` relaxes production guardrails but still builds and pushes
-the operator, gateway proxy, and Sentinel images with `latest` tags. Pull hosts
+the operator, gateway proxy, and platform images with `latest` tags. Pull hosts
 must still be reachable and trusted by node container runtimes. On k3s with the
 bundled HTTP registry, that means a `registries.yaml` mirror for the exact
 registry host/port used in pod image refs.
@@ -82,7 +82,7 @@ Important setup contracts:
 - Operator setup prepares admission webhook TLS, enables webhook serving on the
   manager deployment, and applies the generated webhook service/configuration
   with the matching CA bundle.
-- Sentinel rollouts use `MCP_DEPLOYMENT_TIMEOUT`.
+- Platform rollouts use `MCP_DEPLOYMENT_TIMEOUT`.
 - Setup verification should fail with diagnostic context instead of reporting
   success after partial deployment.
 

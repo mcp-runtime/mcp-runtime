@@ -122,7 +122,7 @@ with your platform tooling before continuing.
 fix gaps with your platform tooling, or `bootstrap --apply --provider k3s` to
 install bundled CoreDNS / local-path on k3s. After setup, run `cluster diagnostics`
 to validate the installed MCP Runtime resources, registry pulls, ingress,
-Sentinel, and operator readiness.
+Platform, and operator readiness.
 
 ## 3. Choose production-style setup { #4-production-style-install }
 
@@ -137,7 +137,7 @@ Before `setup`, make these decisions explicitly:
 - DNS: stable hostnames for `registry`, `mcp`, and `platform`
 - TLS: Let's Encrypt, enterprise `ClusterIssuer`, or preinstalled cert flow
 - Ingress: repo-managed Traefik or an existing platform ingress controller
-- Storage and retention: registry and Sentinel persistence choices
+- Storage and retention: registry and platform persistence choices
 - Image pull auth: pull secrets, workload identity, or node-native registry auth
 
 Read these first:
@@ -279,7 +279,7 @@ configured install.
 
 `setup` installs the platform pieces companies need for MCP operations: CRDs,
 `mcp-runtime` and catalog namespaces, the internal Docker registry, ingress
-wiring, the operator, and the bundled Sentinel stack for gateway policy,
+wiring, the operator, and the bundled platform stack for gateway policy,
 analytics, audit, and observability.
 
 `--platform-mode` chooses who can browse and publish servers on your
@@ -323,7 +323,7 @@ Common variants:
 ```bash
 mcp-runtime setup --with-tls            # cert-manager TLS for the registry
 mcp-runtime setup --platform-mode public # public preview catalog namespace
-mcp-runtime setup --without-sentinel    # skip the request-path stack
+mcp-runtime setup --without-platform-stack    # skip the request-path stack
 mcp-runtime setup --test-mode           # local Kind/dev build+push path
 mcp-runtime setup --storage-mode hostpath # single-node cluster with no dynamic provisioner
 mcp-runtime setup --parallel-builds     # build and publish setup images in parallel
@@ -421,7 +421,7 @@ mcp-runtime status
 # Dashboard: http://localhost:18080/ (Kind) or https://platform.<domain>/
 ```
 
-Admin/operator kubectl diagnostics (`sentinel *` requires admin cluster access):
+Admin/operator kubectl diagnostics (`ops *` requires admin cluster access):
 
 ```bash
 mcp-runtime ops port-forward ui          # Governance + dashboard

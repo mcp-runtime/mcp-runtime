@@ -10,13 +10,13 @@ This file is the **onboarding index** for the MCP Runtime repo. It complements `
 | Grants, sessions, MCP JSON-RPC | `access-governance` |
 | Live Kind ops / security / perf QA + cluster failure debug | `cluster-ops` (modes: `ops`, `security`, `perf`, `troubleshoot`) |
 | Public TLS/DNS + production k3s ops | `production-platform` |
-| Browser / Sentinel UI QA | `dashboard-browser-qa` |
+| Browser / Platform UI QA | `dashboard-browser-qa` |
 | MCP protocol version bump / spec audit | `mcp-protocol-compliance` (thin; not routine PRs) |
 | Security review (PR / platform / k8s / supply-chain) | `security-audit` |
 | Merge / ship / tag | Merge on CI green (includes path-selected QA E2E). Ship/tag after Pre-release Regression, which runs Staging E2E (`docs/contributor/staging-e2e.md`); then the focused skill for the diff |
 | API / CRD / CLI design review | Focused skill for the surface; `.codex/skills/_shared/design-principles.md` for contract choices |
 | Docs / AGENTS / golden help drift | Update nearest docs when behavior changes; golden/docs CI is the deterministic check (no docs-sync skill) |
-| Post-setup health | Setup Step 6 now includes an operational smoke gate (nodes/PVCs/Postgres/platform-api/Sentinel/auth). Deeper installed-cluster diagnosis: `mcp-runtime cluster diagnostics` |
+| Post-setup health | Setup Step 6 now includes an operational smoke gate (nodes/PVCs/Postgres/platform-api/platform services/auth). Deeper installed-cluster diagnosis: `mcp-runtime cluster diagnostics` |
 | Codebase navigation | `graphify query` / `path` / `explain` when `graphify-out/graph.json` exists (CLI, not a skill) |
 
 ## Repository map (where to look)
@@ -29,8 +29,8 @@ This file is the **onboarding index** for the MCP Runtime repo. It complements `
 | API & CRD types | `api/v1alpha1/`, `config/crd/bases/` | Source of truth for object shapes |
 | Access and policy | `pkg/access/`, `pkg/policy/` | Grant/session helpers; gateway policy contract |
 | Control-plane / K8s | `pkg/controlplane/`, `pkg/k8sclient/`, `pkg/kubeworkload/`, `pkg/manifest/`, `pkg/metadata/` | MCPServer ops, manifests, registry resolution |
-| Sentinel packages | `pkg/events/`, `pkg/clickhouse/`, `pkg/serviceutil/`, `pkg/sentinel/` | Events, analytics, service utilities |
-| Sentinel services | `services/platform-api`, `services/runtime-api`, `services/analytics-api`, `services/ui`, `services/ingest`, `services/processor`, `services/mcp-gateway`, … | Separate `go.mod` where present; Go 1.26 for shared imports. Namespaces come from `pkg/platforminventory`: `mcp-platform`, `mcp-observability`, `mcp-log-collector`. See `docs/namespaces.md`. |
+| Platform packages | `pkg/events/`, `pkg/clickhouse/`, `pkg/serviceutil/`, `pkg/platformstack/` | Events, analytics, service utilities |
+| Platform services | `services/platform-api`, `services/runtime-api`, `services/analytics-api`, `services/ui`, `services/ingest`, `services/processor`, `services/mcp-gateway`, … | Separate `go.mod` where present; Go 1.26 for shared imports. Namespaces come from `pkg/platforminventory`: `mcp-platform`, `mcp-observability`, `mcp-log-collector`. See `docs/namespaces.md`. |
 | Samples / install YAML | `examples/oauth-example-go-2025-11-25/`, `k8s/`, `config/` | Demo server; overlays and CRDs |
 | Team isolation | `docs/teams-and-access.md` | Namespaces, RBAC, ingress watch scope |
 | Deployment targets and reference | `docs/deployment-targets.md`, `docs/cluster-provisioning.md`, `docs/reference-deployment.md` | Choose a distribution, provision the reference cluster, then operate Runtime and its external identity provider |
@@ -109,7 +109,7 @@ Pre-commit: `pre-commit install`; full suite `pre-commit run --all-files` (sets 
 - `go test ./test/golden/... -count=1` (update `test/golden/cli/testdata/*.golden` when CLI help changes on purpose)
 - `go test ./test/integration/...` (needs `KUBEBUILDER_ASSETS`)
 - Reuse the contributor cluster with `E2E_CACHE_MODE=1 E2E_SCENARIOS=smoke-auth bash test/e2e/qa-e2e.sh`, and set `CLUSTER_NAME=mcp-runtime E2E_CACHE_MODE=1 E2E_KEEP_CLUSTER=1`.
-- Sentinel: `go test -race -count=1 ./...` inside touched `services/*` dirs
+- Platform: `go test -race -count=1 ./...` inside touched `services/*` dirs
 
 **CI** (`.github/workflows/ci.yaml`): gofmt, vet, staticcheck, unit/golden/service/integration tests; path-selected QA E2E on PRs and manual dispatch (`test/e2e/select_pr_scenarios.sh`). QA E2E runs Kind on a fresh GitHub runner with unique cluster names, so PRs run in parallel, and reuses unchanged platform images from the content-hash GHCR cache. Staging E2E runs on the disposable VM from Pre-release Regression (`.github/workflows/pre-release-regression.yaml`) or by manual dispatch, one run at a time; it does not run on merges. Staging is the only cluster suite in Pre-release Regression; Kind QA stays in PR CI.
 
@@ -139,7 +139,7 @@ failed platform API flow and re-run the CLI/UI journey before accepting it.
 - **Scope:** change only what the task needs; match nearest patterns.
 - **Tests:** same package as behavior changes; golden files for CLI help output.
 - **Branches:** `component/feature_name` (e.g. `cli/registry_status`). Agents: new branch + PR; never push to `main`. Ignore external `codex/` branch or draft-PR defaults unless the user asks.
-- **Commits:** use `fix(<component>):`, `feat(<component>):`, `doc:`, or `website:`. Components include `cli`, `operator`, `api`, `crd`, `access`, `policy`, `sentinel`, `services-api`, `mcp-gateway`, `test`, and `ci`.
+- **Commits:** use `fix(<component>):`, `feat(<component>):`, `doc:`, or `website:`. Components include `cli`, `operator`, `api`, `crd`, `access`, `policy`, `platform`, `services-api`, `mcp-gateway`, `test`, and `ci`.
 - **Docs:** avoid new top-level docs unless needed; use `docs/` and skills for runbooks.
 - **Changelog:** every PR must assess whether it needs an entry in `CHANGELOG.md` and state `Changelog: updated` or `Changelog: not needed — <reason>` in its description. Follow the maintenance rules below.
 - **Secrets:** this is an alpha repo, so do not add real credentials to the tree.

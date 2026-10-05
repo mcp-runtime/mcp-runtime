@@ -12,7 +12,7 @@ creation. Other resources are read once per manifest. Missing required resources
 or keys and authorization errors fail planning; only optional NotFound is allowed.
 Applying the unchanged manifest preserves its revision. A changed dependency
 updates only affected templates and uses their normal rollout policies. The old
-blanket restart of Sentinel deployments is removed. The first upgrade adopts the
+blanket restart of platform deployments is removed. The first upgrade adopts the
 annotation and may roll existing consumers once.
 
 This covers supported setup apply paths. Standalone rotation commands must use

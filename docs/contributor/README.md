@@ -43,7 +43,7 @@ when to use each guide.
    ```
 
 3. Use a disposable Kind cluster for platform, UI, operator, registry, gateway,
-   and Sentinel changes.
+   and platform changes.
 
    Start with [Local Kind and Test Mode](local-kind.md).
 

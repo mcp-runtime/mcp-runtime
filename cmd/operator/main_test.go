@@ -92,21 +92,11 @@ func TestAnalyticsIngestURLFromEnv(t *testing.T) {
 
 	t.Run("returns configured ingest url", func(t *testing.T) {
 		env := map[string]string{
-			"MCP_SENTINEL_INGEST_URL": "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events",
-		}
-		getenv := func(key string) string { return env[key] }
-		if got := analyticsIngestURLFromEnv(getenv); got != "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events" {
-			t.Fatalf("unexpected analytics ingest url: %q", got)
-		}
-	})
-
-	t.Run("falls back to legacy analytics env", func(t *testing.T) {
-		env := map[string]string{
 			"MCP_ANALYTICS_INGEST_URL": "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events",
 		}
 		getenv := func(key string) string { return env[key] }
 		if got := analyticsIngestURLFromEnv(getenv); got != "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events" {
-			t.Fatalf("unexpected analytics ingest url from legacy env: %q", got)
+			t.Fatalf("unexpected analytics ingest url: %q", got)
 		}
 	})
 }

@@ -49,7 +49,7 @@ func resolveRegistrySetup(logger *zap.Logger, plan setupplan.Plan, deps SetupDep
 	mode, _ := setupplan.NormalizeRegistryMode(plan.RegistryMode)
 	flagCfg := externalRegistryFlagConfig(plan)
 	if (mode == setupplan.RegistryModeBundledHTTP || mode == setupplan.RegistryModeBundledHTTPS) && flagCfg != nil {
-		return nil, false, defaultRegistrySecretName, core.NewWithSentinel(
+		return nil, false, defaultRegistrySecretName, core.NewWithBase(
 			core.ErrRegistryURLRequired,
 			"--external-registry-* flags require --registry-mode external or --registry-mode auto",
 		)
@@ -66,7 +66,7 @@ func resolveRegistrySetup(logger *zap.Logger, plan setupplan.Plan, deps SetupDep
 		core.Warn(fmt.Sprintf("Could not load external registry config: %v", err))
 	}
 	if (mode == setupplan.RegistryModeExternal || flagCfg != nil) && (extRegistry == nil || strings.TrimSpace(extRegistry.URL) == "") {
-		return nil, false, defaultRegistrySecretName, core.NewWithSentinel(
+		return nil, false, defaultRegistrySecretName, core.NewWithBase(
 			core.ErrRegistryURLRequired,
 			"external registry url is required (use --external-registry-url, PROVISIONED_REGISTRY_URL, or mcp-runtime registry provision)",
 		)
@@ -101,13 +101,13 @@ func validateNonTestSetupWithAuthConfig(plan setupplan.Plan, extRegistry *config
 		return nil
 	}
 	if !plan.TLSEnabled {
-		return core.NewWithSentinel(
+		return core.NewWithBase(
 			core.ErrSetupStepFailed,
 			"strict production setup requires --with-tls; use normal setup for local HTTP/internal registry flows",
 		)
 	}
 	if plan.RegistryMode == setupplan.RegistryModeBundledHTTP {
-		return core.NewWithSentinel(
+		return core.NewWithBase(
 			core.ErrSetupStepFailed,
 			"strict production setup requires --registry-mode bundled-https or --registry-mode external; bundled-http is for local/dev clusters",
 		)
@@ -117,7 +117,7 @@ func validateNonTestSetupWithAuthConfig(plan setupplan.Plan, extRegistry *config
 	}
 	if usingExternalRegistry && extRegistry != nil && strings.TrimSpace(extRegistry.URL) != "" {
 		if isDevRegistryURL(extRegistry.URL) {
-			return core.NewWithSentinel(
+			return core.NewWithBase(
 				core.ErrSetupStepFailed,
 				fmt.Sprintf("strict production setup requires a stable production registry, got dev-only registry URL %q", extRegistry.URL),
 			)
@@ -125,13 +125,13 @@ func validateNonTestSetupWithAuthConfig(plan setupplan.Plan, extRegistry *config
 		return nil
 	}
 	if plan.RegistryMode == setupplan.RegistryModeAuto {
-		return core.NewWithSentinel(
+		return core.NewWithBase(
 			core.ErrSetupStepFailed,
 			"strict production setup with the bundled registry requires --registry-mode bundled-https; use --registry-mode external for a provisioned registry",
 		)
 	}
 	if isDevRegistryURL(core.GetRegistryEndpoint()) {
-		return core.NewWithSentinel(
+		return core.NewWithBase(
 			core.ErrSetupStepFailed,
 			fmt.Sprintf("strict production setup requires a stable internal registry endpoint; set MCP_REGISTRY_ENDPOINT (current %q)", core.GetRegistryEndpoint()),
 		)
@@ -144,7 +144,7 @@ func validateRequiredPlatformEnv(plan setupplan.Plan, usingExternalRegistry bool
 		return nil
 	}
 	if missing := missingPublicHostEnv(); len(missing) > 0 {
-		return core.NewWithSentinel(
+		return core.NewWithBase(
 			core.ErrSetupStepFailed,
 			fmt.Sprintf(
 				"platform host configuration is incomplete; set MCP_PLATFORM_DOMAIN or set %s before running setup",
@@ -153,7 +153,7 @@ func validateRequiredPlatformEnv(plan setupplan.Plan, usingExternalRegistry bool
 		)
 	}
 	if !platformAdminEnvConfigured() {
-		return core.NewWithSentinel(
+		return core.NewWithBase(
 			core.ErrSetupStepFailed,
 			"platform admin configuration is incomplete; set MCP_PLATFORM_ADMIN_EMAIL (or ADMIN_USERS) before running production setup",
 		)
@@ -162,7 +162,7 @@ func validateRequiredPlatformEnv(plan setupplan.Plan, usingExternalRegistry bool
 		return err
 	}
 	if !usingExternalRegistry && plan.RegistryMode == setupplan.RegistryModeAuto && !registryEndpointEnvExplicitlyConfigured() {
-		return core.NewWithSentinel(
+		return core.NewWithBase(
 			core.ErrSetupStepFailed,
 			"bundled registry setup with --registry-mode auto requires MCP_REGISTRY_ENDPOINT set to the exact registry host:port Kubernetes nodes can pull from; use --registry-mode bundled-http, bundled-https, or external when the platform should discover the internal registry Service automatically",
 		)

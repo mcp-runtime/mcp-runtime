@@ -160,7 +160,7 @@ func run(ctx context.Context, out io.Writer, opts Options, d deps) error {
 	}
 	kh, err := d.kube(opts.Kubeconfig, opts.Context)
 	if err != nil {
-		return core.WrapWithSentinel(core.ErrUpdateKubeClientFailed, err, fmt.Sprintf("connect to Kubernetes: %v (pass --kubeconfig/--context)", err))
+		return core.WrapWithBase(core.ErrUpdateKubeClientFailed, err, fmt.Sprintf("connect to Kubernetes: %v (pass --kubeconfig/--context)", err))
 	}
 	plan, err := BuildPlan(ctx, kh.Clientset, manifest, Selection{
 		Only:               opts.Only,
@@ -177,7 +177,7 @@ func run(ctx context.Context, out io.Writer, opts Options, d deps) error {
 	if plan.ApplyCRDs && kh.Clients != nil {
 		preview, err := refineCRDPlan(ctx, kh.Clients, plan)
 		if err != nil {
-			return core.WrapWithSentinel(core.ErrUpdateCRDChange, err, fmt.Sprintf("compare CustomResourceDefinitions: %v", err))
+			return core.WrapWithBase(core.ErrUpdateCRDChange, err, fmt.Sprintf("compare CustomResourceDefinitions: %v", err))
 		}
 		plan.CRDPreview = preview
 	}
@@ -202,7 +202,7 @@ func run(ctx context.Context, out io.Writer, opts Options, d deps) error {
 		for _, r := range blocked {
 			names = append(names, r.Component)
 		}
-		return core.NewWithSentinel(core.ErrUpdateBlocked, fmt.Sprintf("update blocked for %s; see plan reasons", strings.Join(names, ", ")))
+		return core.NewWithBase(core.ErrUpdateBlocked, fmt.Sprintf("update blocked for %s; see plan reasons", strings.Join(names, ", ")))
 	}
 
 	buildOpts := d.build
@@ -225,11 +225,11 @@ func run(ctx context.Context, out io.Writer, opts Options, d deps) error {
 			buildOpts.SkipRegistryProbe = true
 		}
 		if err := rewriteBuiltTargetsToTags(plan); err != nil {
-			return core.WrapWithSentinel(core.ErrUpdateBuildFailed, err, err.Error())
+			return core.WrapWithBase(core.ErrUpdateBuildFailed, err, err.Error())
 		}
 		actions, err := planImageBuilds(ctx, plan, buildOpts)
 		if err != nil {
-			return core.WrapWithSentinel(core.ErrUpdateBuildFailed, err, err.Error())
+			return core.WrapWithBase(core.ErrUpdateBuildFailed, err, err.Error())
 		}
 		plan.ImageBuilds = actions
 	}
@@ -276,7 +276,7 @@ func run(ctx context.Context, out io.Writer, opts Options, d deps) error {
 			return err
 		}
 		if !ok {
-			return core.NewWithSentinel(core.ErrUpdateAborted, "update aborted; no changes were made")
+			return core.NewWithBase(core.ErrUpdateAborted, "update aborted; no changes were made")
 		}
 	}
 
@@ -303,32 +303,32 @@ func run(ctx context.Context, out io.Writer, opts Options, d deps) error {
 		return err
 	}
 	if res.Failed {
-		return core.NewWithSentinel(core.ErrUpdateRolloutFailed, "platform update failed; see per-workload status and recovery commands above")
+		return core.NewWithBase(core.ErrUpdateRolloutFailed, "platform update failed; see per-workload status and recovery commands above")
 	}
 	return nil
 }
 
 func validateOptions(opts Options) error {
 	if strings.TrimSpace(opts.To) == "" && strings.TrimSpace(opts.ReleaseManifest) == "" {
-		return core.NewWithSentinel(core.ErrUpdateTargetRequired, "no update target: pass --to <version> or --release-manifest <path|https-url>; update never picks a release implicitly")
+		return core.NewWithBase(core.ErrUpdateTargetRequired, "no update target: pass --to <version> or --release-manifest <path|https-url>; update never picks a release implicitly")
 	}
 	if opts.To != "" {
 		if _, err := platformrelease.ParseVersion(opts.To); err != nil {
-			return core.NewWithSentinel(core.ErrUpdateInvalidFlag, fmt.Sprintf("--to: %v", err))
+			return core.NewWithBase(core.ErrUpdateInvalidFlag, fmt.Sprintf("--to: %v", err))
 		}
 	}
 	if opts.Output != "text" && opts.Output != "json" {
-		return core.NewWithSentinel(core.ErrUpdateInvalidFlag, fmt.Sprintf("--output must be text or json, got %q", opts.Output))
+		return core.NewWithBase(core.ErrUpdateInvalidFlag, fmt.Sprintf("--output must be text or json, got %q", opts.Output))
 	}
 	if opts.Timeout <= 0 {
-		return core.NewWithSentinel(core.ErrUpdateInvalidFlag, "--timeout must be positive")
+		return core.NewWithBase(core.ErrUpdateInvalidFlag, "--timeout must be positive")
 	}
 	if opts.Build {
 		if _, err := resolveSourceDir(opts.Source); err != nil {
-			return core.WrapWithSentinel(core.ErrUpdateInvalidFlag, err, fmt.Sprintf("--source: %v", err))
+			return core.WrapWithBase(core.ErrUpdateInvalidFlag, err, fmt.Sprintf("--source: %v", err))
 		}
 		if opts.BuildParallelism <= 0 {
-			return core.NewWithSentinel(core.ErrUpdateInvalidFlag, "--build-parallelism must be positive")
+			return core.NewWithBase(core.ErrUpdateInvalidFlag, "--build-parallelism must be positive")
 		}
 	}
 	return nil
@@ -341,14 +341,14 @@ func resolveManifest(ctx context.Context, opts Options, d deps) (*platformreleas
 	}
 	data, err := d.loadManifest(ctx, source)
 	if err != nil {
-		return nil, source, core.WrapWithSentinel(core.ErrUpdateManifestInvalid, err, fmt.Sprintf("load release manifest: %v", err))
+		return nil, source, core.WrapWithBase(core.ErrUpdateManifestInvalid, err, fmt.Sprintf("load release manifest: %v", err))
 	}
 	m, err := platformrelease.ParseManifest(data)
 	if err != nil {
-		return nil, source, core.WrapWithSentinel(core.ErrUpdateManifestInvalid, err, fmt.Sprintf("release manifest %s: %v", source, err))
+		return nil, source, core.WrapWithBase(core.ErrUpdateManifestInvalid, err, fmt.Sprintf("release manifest %s: %v", source, err))
 	}
 	if opts.To != "" && m.Version != opts.To {
-		return nil, source, core.NewWithSentinel(core.ErrUpdateTargetMismatch, fmt.Sprintf("release manifest %s is for %s but --to is %s; refusing to change the target silently", source, m.Version, opts.To))
+		return nil, source, core.NewWithBase(core.ErrUpdateTargetMismatch, fmt.Sprintf("release manifest %s is for %s but --to is %s; refusing to change the target silently", source, m.Version, opts.To))
 	}
 	if err := ensureManifestCRDs(ctx, m, opts, d); err != nil {
 		return nil, source, err
@@ -385,9 +385,9 @@ func ensureManifestCRDs(ctx context.Context, m *platformrelease.Manifest, opts O
 		return nil
 	}
 	if last != nil {
-		return core.WrapWithSentinel(core.ErrUpdateCRDChange, last, fmt.Sprintf("release %s changes CustomResourceDefinitions but no CRD bundle was found (embed crds in platform-manifest.json, pass --crds, or publish %s on the release): %v", m.Version, platformrelease.CRDsAssetName, last))
+		return core.WrapWithBase(core.ErrUpdateCRDChange, last, fmt.Sprintf("release %s changes CustomResourceDefinitions but no CRD bundle was found (embed crds in platform-manifest.json, pass --crds, or publish %s on the release): %v", m.Version, platformrelease.CRDsAssetName, last))
 	}
-	return core.NewWithSentinel(core.ErrUpdateCRDChange, fmt.Sprintf("release %s changes CustomResourceDefinitions but the manifest has no embedded crds; pass --crds <path|https-url> or publish %s on the release", m.Version, platformrelease.CRDsAssetName))
+	return core.NewWithBase(core.ErrUpdateCRDChange, fmt.Sprintf("release %s changes CustomResourceDefinitions but the manifest has no embedded crds; pass --crds <path|https-url> or publish %s on the release", m.Version, platformrelease.CRDsAssetName))
 }
 
 // kubeClient builds clients from kubeconfig and reports the context,
@@ -435,7 +435,7 @@ func kubeClient(kubeconfig, kubeContext string) (kubeHandle, error) {
 func promptConfirm(in io.Reader, out io.Writer, cluster ClusterInfo) (bool, error) {
 	f, ok := in.(*os.File)
 	if !ok || !term.IsTerminal(int(f.Fd())) { // #nosec G115 -- file descriptors fit in int.
-		return false, core.NewWithSentinel(core.ErrUpdateConfirmationMissing, "refusing to update without confirmation: stdin is not a terminal; review the plan (or --dry-run) and pass --yes")
+		return false, core.NewWithBase(core.ErrUpdateConfirmationMissing, "refusing to update without confirmation: stdin is not a terminal; review the plan (or --dry-run) and pass --yes")
 	}
 	fmt.Fprintf(out, "\nApply this update to context %q (cluster %s)? Type 'yes' to continue: ", cluster.Context, cluster.ClusterID)
 	line, err := bufio.NewReader(in).ReadString('\n')

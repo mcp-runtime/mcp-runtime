@@ -13,7 +13,7 @@
     },
     {
       "id": "full-dashboard-regression",
-      "prompt": "Run a full Sentinel dashboard regression across roles, tabs, forms, filters, responsive layout, and public-host defenses.",
+      "prompt": "Run a full platform dashboard regression across roles, tabs, forms, filters, responsive layout, and public-host defenses.",
       "expected_output": "A full UI QA report using the matrix in references/ui-coverage.md, with role-scoped browser evidence, network/API evidence, screenshots or snapshots, cleanup, and skipped checks with reasons.",
       "assertions": [
         "Loads references/ui-coverage.md for full-ui mode",

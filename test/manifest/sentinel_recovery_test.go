@@ -84,7 +84,7 @@ func recoveryWorkload(t *testing.T, manifest, kind, name string) recoveryDoc {
 	return recoveryDoc{}
 }
 
-func TestSentinelPriorityClassesOrderDataAboveServices(t *testing.T) {
+func TestPlatformPriorityClassesOrderDataAboveServices(t *testing.T) {
 	values := map[string]int{}
 	for _, doc := range loadRecoveryDocs(t, "00-priority-classes.yaml") {
 		if doc.Kind != "PriorityClass" {
@@ -104,7 +104,7 @@ func TestSentinelPriorityClassesOrderDataAboveServices(t *testing.T) {
 	}
 }
 
-func TestSentinelStatefulStoresAreEvictionResilient(t *testing.T) {
+func TestPlatformStatefulStoresAreEvictionResilient(t *testing.T) {
 	stores := []struct{ manifest, name string }{
 		{"03-clickhouse.yaml", "clickhouse"},
 		{"03-clickhouse-hostpath.yaml", "clickhouse"},
@@ -140,7 +140,7 @@ func TestSentinelStatefulStoresAreEvictionResilient(t *testing.T) {
 	}
 }
 
-func TestSentinelSlowStartStoresHaveStartupProbes(t *testing.T) {
+func TestPlatformSlowStartStoresHaveStartupProbes(t *testing.T) {
 	// Startup probes keep liveness from killing a store that is replaying logs
 	// or recovering after an eviction.
 	for _, store := range []struct{ manifest, name string }{
@@ -160,7 +160,7 @@ func TestSentinelSlowStartStoresHaveStartupProbes(t *testing.T) {
 	}
 }
 
-func TestSentinelPipelineWorkloadsRecoverFromTransientPullAndBrokerLoss(t *testing.T) {
+func TestPlatformPipelineWorkloadsRecoverFromTransientPullAndBrokerLoss(t *testing.T) {
 	for _, manifest := range []string{"06-ingest.yaml", "07-processor.yaml"} {
 		name := strings.TrimSuffix(strings.SplitN(manifest, "-", 2)[1], ".yaml")
 		deploy := recoveryWorkload(t, manifest, "Deployment", "mcp-"+name)
@@ -188,7 +188,7 @@ func TestSentinelPipelineWorkloadsRecoverFromTransientPullAndBrokerLoss(t *testi
 	}
 }
 
-func TestSentinelUIStartupProbeCoversPostgresWait(t *testing.T) {
+func TestPlatformUIStartupProbeCoversPostgresWait(t *testing.T) {
 	// The UI listens only after its session store opens, and setup applies
 	// Postgres after the UI. Liveness must not count that two-minute wait.
 	c := recoveryWorkload(t, "09-ui.yaml", "Deployment", "mcp-ui").Spec.Template.Spec.Containers[0]
@@ -200,7 +200,7 @@ func TestSentinelUIStartupProbeCoversPostgresWait(t *testing.T) {
 	}
 }
 
-func TestSentinelServiceDeploymentsUseServicesPriorityClass(t *testing.T) {
+func TestPlatformServiceDeploymentsUseServicesPriorityClass(t *testing.T) {
 	for manifest, deployment := range map[string]string{
 		"08-analytics-api.yaml": "mcp-analytics-api",
 		"08-platform-api.yaml":  "mcp-platform-api",
@@ -215,7 +215,7 @@ func TestSentinelServiceDeploymentsUseServicesPriorityClass(t *testing.T) {
 	}
 }
 
-func TestSentinelRecoveryHardeningKeepsPlacementUnchanged(t *testing.T) {
+func TestPlatformRecoveryHardeningKeepsPlacementUnchanged(t *testing.T) {
 	// Kafka keeps its soft anti-affinity and no manifest gains a nodeSelector
 	// as part of recovery hardening.
 	for _, manifest := range []string{"05-kafka.yaml", "05-kafka-hostpath.yaml"} {

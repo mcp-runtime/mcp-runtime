@@ -71,7 +71,7 @@ func activeNamedTraefikDeploymentNamespacesClientGo() ([]string, error) {
 	}
 	namespaces, err := k8sclient.ListDeploymentNamespacesByName(context.Background(), clients, "traefik")
 	if err != nil {
-		return nil, core.WrapWithSentinel(core.ErrSetupListTraefikDeploymentsFailed, err, fmt.Sprintf("list traefik deployments: %v", err))
+		return nil, core.WrapWithBase(core.ErrSetupListTraefikDeploymentsFailed, err, fmt.Sprintf("list traefik deployments: %v", err))
 	}
 	return namespaces, nil
 }
@@ -86,7 +86,7 @@ func activeNamedTraefikDeploymentNamespacesWithKubectl(kubectl core.KubectlRunne
 	}
 	out, err := cmd.Output()
 	if err != nil {
-		return nil, core.WrapWithSentinel(core.ErrSetupListTraefikDeploymentsFailed, err, fmt.Sprintf("list traefik deployments: %v", err))
+		return nil, core.WrapWithBase(core.ErrSetupListTraefikDeploymentsFailed, err, fmt.Sprintf("list traefik deployments: %v", err))
 	}
 	seen := map[string]struct{}{}
 	var namespaces []string
@@ -112,15 +112,15 @@ func activeNamedTraefikDeploymentNamespacesWithKubectl(kubectl core.KubectlRunne
 func applyTraefikSupportManifest(kubectl core.KubectlRunner, relPath, namespace string) error {
 	resolvedPath, err := assetpath.ResolveRepoAssetPath(relPath)
 	if err != nil {
-		return core.WrapWithSentinel(core.ErrReadIngressManifestFailed, err, fmt.Sprintf("failed to resolve Traefik manifest %s: %v", relPath, err))
+		return core.WrapWithBase(core.ErrReadIngressManifestFailed, err, fmt.Sprintf("failed to resolve Traefik manifest %s: %v", relPath, err))
 	}
 	manifestBytes, err := kube.ReadFileAtPath(resolvedPath)
 	if err != nil {
-		return core.WrapWithSentinel(core.ErrReadIngressManifestFailed, err, fmt.Sprintf("failed to read Traefik manifest %s: %v", relPath, err))
+		return core.WrapWithBase(core.ErrReadIngressManifestFailed, err, fmt.Sprintf("failed to read Traefik manifest %s: %v", relPath, err))
 	}
 	manifestContent := strings.ReplaceAll(string(manifestBytes), "namespace: traefik", "namespace: "+namespace)
 	if err := kube.ApplyManifestContent(kubectl.CommandArgs, manifestContent); err != nil {
-		return core.WrapWithSentinel(
+		return core.WrapWithBase(
 			core.ErrInstallIngressControllerFailed,
 			err,
 			fmt.Sprintf("failed to reconcile Traefik manifest %s in namespace %s: %v", relPath, namespace, err),
@@ -132,15 +132,15 @@ func applyTraefikSupportManifest(kubectl core.KubectlRunner, relPath, namespace 
 func applyTraefikSupportManifestClientGo(relPath, namespace string) error {
 	resolvedPath, err := assetpath.ResolveRepoAssetPath(relPath)
 	if err != nil {
-		return core.WrapWithSentinel(core.ErrReadIngressManifestFailed, err, fmt.Sprintf("failed to resolve Traefik manifest %s: %v", relPath, err))
+		return core.WrapWithBase(core.ErrReadIngressManifestFailed, err, fmt.Sprintf("failed to resolve Traefik manifest %s: %v", relPath, err))
 	}
 	manifestBytes, err := kube.ReadFileAtPath(resolvedPath)
 	if err != nil {
-		return core.WrapWithSentinel(core.ErrReadIngressManifestFailed, err, fmt.Sprintf("failed to read Traefik manifest %s: %v", relPath, err))
+		return core.WrapWithBase(core.ErrReadIngressManifestFailed, err, fmt.Sprintf("failed to read Traefik manifest %s: %v", relPath, err))
 	}
 	manifestContent := strings.ReplaceAll(string(manifestBytes), "namespace: traefik", "namespace: "+namespace)
 	if err := applyManifestYAML(manifestContent, "", os.Stdout); err != nil {
-		return core.WrapWithSentinel(
+		return core.WrapWithBase(
 			core.ErrInstallIngressControllerFailed,
 			err,
 			fmt.Sprintf("failed to reconcile Traefik manifest %s in namespace %s: %v", relPath, namespace, err),
@@ -161,7 +161,7 @@ func patchTraefikDeploymentForFileMiddlewareSupport(kubectl core.KubectlRunner, 
 	if err := kubectl.RunWithOutput([]string{
 		"patch", "deployment", "traefik", "-n", namespace, "--type=json", "-p", string(patchBytes),
 	}, os.Stdout, os.Stderr); err != nil {
-		return core.WrapWithSentinel(
+		return core.WrapWithBase(
 			core.ErrInstallIngressControllerFailed,
 			err,
 			fmt.Sprintf("failed to patch traefik deployment in namespace %s for file-provider middleware support: %v", namespace, err),
@@ -184,7 +184,7 @@ func patchTraefikDeploymentForFileMiddlewareSupportClientGo(namespace string) er
 		return err
 	}
 	if err := k8sclient.PatchDeploymentJSON(context.Background(), clients, namespace, "traefik", patchBytes); err != nil {
-		return core.WrapWithSentinel(
+		return core.WrapWithBase(
 			core.ErrInstallIngressControllerFailed,
 			err,
 			fmt.Sprintf("failed to patch traefik deployment in namespace %s for file-provider middleware support: %v", namespace, err),
@@ -195,7 +195,7 @@ func patchTraefikDeploymentForFileMiddlewareSupportClientGo(namespace string) er
 
 func traefikMiddlewarePatch(spec traefikDeploymentSpec, namespace string) ([]byte, error) {
 	if len(spec.Spec.Template.Spec.Containers) == 0 {
-		return nil, core.NewWithSentinel(core.ErrInstallIngressControllerFailed, fmt.Sprintf("traefik deployment in namespace %s has no containers", namespace))
+		return nil, core.NewWithBase(core.ErrInstallIngressControllerFailed, fmt.Sprintf("traefik deployment in namespace %s has no containers", namespace))
 	}
 	containerIndex := -1
 	for i, candidate := range spec.Spec.Template.Spec.Containers {
@@ -205,7 +205,7 @@ func traefikMiddlewarePatch(spec traefikDeploymentSpec, namespace string) ([]byt
 		}
 	}
 	if containerIndex == -1 {
-		return nil, core.NewWithSentinel(core.ErrInstallIngressControllerFailed, fmt.Sprintf("traefik deployment in namespace %s has no container named traefik", namespace))
+		return nil, core.NewWithBase(core.ErrInstallIngressControllerFailed, fmt.Sprintf("traefik deployment in namespace %s has no container named traefik", namespace))
 	}
 	container := spec.Spec.Template.Spec.Containers[containerIndex]
 
@@ -252,7 +252,7 @@ func traefikMiddlewarePatch(spec traefikDeploymentSpec, namespace string) ([]byt
 	}
 	patchBytes, err := json.Marshal(ops)
 	if err != nil {
-		return nil, core.WrapWithSentinel(core.ErrSetupMarshalTraefikDeploymentPatchFailed, err, fmt.Sprintf("marshal traefik deployment patch: %v", err))
+		return nil, core.WrapWithBase(core.ErrSetupMarshalTraefikDeploymentPatchFailed, err, fmt.Sprintf("marshal traefik deployment patch: %v", err))
 	}
 	return patchBytes, nil
 }
@@ -265,10 +265,10 @@ func readTraefikDeploymentSpec(kubectl core.KubectlRunner, namespace string) (tr
 	}
 	out, err := cmd.Output()
 	if err != nil {
-		return spec, core.WrapWithSentinel(core.ErrSetupReadTraefikDeploymentFailed, err, fmt.Sprintf("read traefik deployment %s/traefik: %v", namespace, err))
+		return spec, core.WrapWithBase(core.ErrSetupReadTraefikDeploymentFailed, err, fmt.Sprintf("read traefik deployment %s/traefik: %v", namespace, err))
 	}
 	if err := json.Unmarshal(out, &spec); err != nil {
-		return spec, core.WrapWithSentinel(core.ErrSetupDecodeTraefikDeploymentFailed, err, fmt.Sprintf("decode traefik deployment %s/traefik: %v", namespace, err))
+		return spec, core.WrapWithBase(core.ErrSetupDecodeTraefikDeploymentFailed, err, fmt.Sprintf("decode traefik deployment %s/traefik: %v", namespace, err))
 	}
 	return spec, nil
 }
@@ -281,14 +281,14 @@ func readTraefikDeploymentSpecClientGo(namespace string) (traefikDeploymentSpec,
 	}
 	deploy, err := k8sclient.GetDeployment(context.Background(), clients, namespace, "traefik")
 	if err != nil {
-		return spec, core.WrapWithSentinel(core.ErrSetupReadTraefikDeploymentFailed, err, fmt.Sprintf("read traefik deployment %s/traefik: %v", namespace, err))
+		return spec, core.WrapWithBase(core.ErrSetupReadTraefikDeploymentFailed, err, fmt.Sprintf("read traefik deployment %s/traefik: %v", namespace, err))
 	}
 	out, err := json.Marshal(deploy)
 	if err != nil {
-		return spec, core.WrapWithSentinel(core.ErrSetupDecodeTraefikDeploymentFailed, err, fmt.Sprintf("decode traefik deployment %s/traefik: %v", namespace, err))
+		return spec, core.WrapWithBase(core.ErrSetupDecodeTraefikDeploymentFailed, err, fmt.Sprintf("decode traefik deployment %s/traefik: %v", namespace, err))
 	}
 	if err := json.Unmarshal(out, &spec); err != nil {
-		return spec, core.WrapWithSentinel(core.ErrSetupDecodeTraefikDeploymentFailed, err, fmt.Sprintf("decode traefik deployment %s/traefik: %v", namespace, err))
+		return spec, core.WrapWithBase(core.ErrSetupDecodeTraefikDeploymentFailed, err, fmt.Sprintf("decode traefik deployment %s/traefik: %v", namespace, err))
 	}
 	return spec, nil
 }

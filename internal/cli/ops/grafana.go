@@ -9,7 +9,7 @@ import (
 )
 
 // Grafana has two independent authentication layers. The platform ingress gate
-// (sentinel-admin-auth) decides who may reach /grafana; Grafana then verifies
+// (platform-admin-auth) decides who may reach /grafana; Grafana then verifies
 // its own persisted admin account. The check below runs inside the Grafana pod
 // against 127.0.0.1, so it bypasses the ingress gate and exercises only the
 // Grafana login layer. The configured password is read from the pod's own
@@ -121,7 +121,7 @@ func (m *Manager) CheckGrafanaCredentials() (GrafanaCheckResult, error) {
 	}
 	out, err := m.kubectl.CombinedOutput(grafanaExecArgs(grafanaProbeScript))
 	if err != nil {
-		return GrafanaCheckResult{}, core.WrapWithSentinelAndContext(nil, err, fmt.Sprintf("failed to probe Grafana in %s/%s: %v", core.ComponentNamespace("grafana"), grafanaExecTarget, err), map[string]any{
+		return GrafanaCheckResult{}, core.WrapWithBaseAndContext(nil, err, fmt.Sprintf("failed to probe Grafana in %s/%s: %v", core.ComponentNamespace("grafana"), grafanaExecTarget, err), map[string]any{
 			"namespace": core.ComponentNamespace("grafana"),
 			"component": "grafana",
 		})
@@ -138,7 +138,7 @@ func (m *Manager) ShowGrafanaCheck() error {
 	}
 	printGrafanaResult(res)
 	if res.State != GrafanaAuthOK {
-		return core.NewWithSentinel(nil, grafanaStateMessage(res))
+		return core.NewWithBase(nil, grafanaStateMessage(res))
 	}
 	return nil
 }
@@ -148,7 +148,7 @@ func printGrafanaResult(res GrafanaCheckResult) {
 	core.DefaultPrinter.Println()
 	core.TableBoxed([][]string{
 		{"Layer", "Check", "Result"},
-		{"Platform ingress gate", "sentinel-admin-auth (not exercised here)", "see docs/platform-services.md"},
+		{"Platform ingress gate", "platform-admin-auth (not exercised here)", "see docs/platform-services.md"},
 		{"Grafana health", "GET /grafana/api/health in pod", codeOrNone(res.HealthCode)},
 		{"Grafana login", "GET /grafana/api/user with configured admin credentials in pod", codeOrNone(res.AuthCode)},
 	})
@@ -189,15 +189,15 @@ func (m *Manager) ResetGrafanaAdminPassword(confirmed bool) error {
 		core.DefaultPrinter.Println("Grafana already accepts the configured admin credentials; nothing to reset.")
 		return nil
 	default:
-		return core.NewWithSentinel(nil, "refusing to reset: "+grafanaStateMessage(res))
+		return core.NewWithBase(nil, "refusing to reset: "+grafanaStateMessage(res))
 	}
 	if !confirmed {
-		return core.NewWithSentinel(nil, "Grafana admin credential drift detected. Re-run with --yes to back up the Grafana database and reset the persisted admin password to the value in mcp-grafana-credentials. Dashboards and datasources are preserved; any password an operator set in Grafana will be overwritten.")
+		return core.NewWithBase(nil, "Grafana admin credential drift detected. Re-run with --yes to back up the Grafana database and reset the persisted admin password to the value in mcp-grafana-credentials. Dashboards and datasources are preserved; any password an operator set in Grafana will be overwritten.")
 	}
 
 	backup, err := m.kubectl.Output(grafanaExecArgs(grafanaBackupScript))
 	if err != nil {
-		return core.WrapWithSentinelAndContext(nil, err, fmt.Sprintf("failed to back up the Grafana database; password not changed: %v", err), map[string]any{
+		return core.WrapWithBaseAndContext(nil, err, fmt.Sprintf("failed to back up the Grafana database; password not changed: %v", err), map[string]any{
 			"namespace": core.ComponentNamespace("grafana"),
 			"component": "grafana",
 		})
@@ -205,7 +205,7 @@ func (m *Manager) ResetGrafanaAdminPassword(confirmed bool) error {
 	core.DefaultPrinter.Println("Grafana database backed up to " + strings.TrimSpace(string(backup)) + " (inside the grafana pod volume)")
 
 	if err := m.kubectl.RunWithOutput(grafanaExecArgs(grafanaResetScript), os.Stdout, os.Stderr); err != nil {
-		return core.WrapWithSentinelAndContext(nil, err, fmt.Sprintf("failed to reset Grafana admin password: %v", err), map[string]any{
+		return core.WrapWithBaseAndContext(nil, err, fmt.Sprintf("failed to reset Grafana admin password: %v", err), map[string]any{
 			"namespace": core.ComponentNamespace("grafana"),
 			"component": "grafana",
 		})
@@ -216,7 +216,7 @@ func (m *Manager) ResetGrafanaAdminPassword(confirmed bool) error {
 		return err
 	}
 	if verify.State != GrafanaAuthOK {
-		return core.NewWithSentinel(nil, "password reset ran but verification failed: "+grafanaStateMessage(verify))
+		return core.NewWithBase(nil, "password reset ran but verification failed: "+grafanaStateMessage(verify))
 	}
 	core.DefaultPrinter.Println("Verified: Grafana accepts the configured admin credentials.")
 	core.DefaultPrinter.Println("Store the working credentials and Grafana URL only in your private operator infra.env.")

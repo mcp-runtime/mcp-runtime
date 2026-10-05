@@ -110,7 +110,7 @@ func (m *Manager) GetTool(name string, filters catalogFilters) error {
 		}
 	}
 	if len(matched) == 0 {
-		return core.NewWithSentinel(nil, fmt.Sprintf("tool %q not found", name))
+		return core.NewWithBase(nil, fmt.Sprintf("tool %q not found", name))
 	}
 	return printToolRows(matched, filters.Output)
 }
@@ -160,7 +160,7 @@ func printToolRows(rows []platformapi.RuntimeToolRow, output string) error {
 		_, err = os.Stdout.Write(data)
 		return err
 	default:
-		return core.NewWithSentinel(nil, "output must be table, json, or yaml")
+		return core.NewWithBase(nil, "output must be table, json, or yaml")
 	}
 }
 

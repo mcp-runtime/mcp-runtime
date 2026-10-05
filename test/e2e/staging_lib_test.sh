@@ -236,9 +236,9 @@ expect_ok "adapter authorization accepts an allowed can-i result" staging_auth_d
 expect_fail "adapter authorization reports API errors" staging_auth_decision_case forbidden 1 no
 
 # --- diagnostics failed-check parsing -------------------------------------------
-printf '\033[30;42m SUCCESS \033[0m ok check — fine\n\033[30;101m  ERROR  \033[0m \033[91msentinel OIDC configuration — tenant mode\033[0m\n\033[30;101m         \033[0m continuation line\n  ERROR   MCPServer reconcile smoke — timed out\n' >"${TMP}/diag.log"
+printf '\033[30;42m SUCCESS \033[0m ok check — fine\n\033[30;101m  ERROR  \033[0m \033[91mplatform OIDC configuration — tenant mode\033[0m\n\033[30;101m         \033[0m continuation line\n  ERROR   MCPServer reconcile smoke — timed out\n' >"${TMP}/diag.log"
 expect_eq "failed checks parsed" "$(staging_failed_checks "${TMP}/diag.log" | paste -sd'|' -)" \
-  "MCPServer reconcile smoke|sentinel OIDC configuration"
+  "MCPServer reconcile smoke|platform OIDC configuration"
 
 if [[ "${FAILURES}" -ne 0 ]]; then
   echo "${FAILURES} staging lib test(s) failed" >&2

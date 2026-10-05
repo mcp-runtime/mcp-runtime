@@ -19,18 +19,18 @@ func readOwnedSecret(kubectl core.KubectlRunner, key string) (name, value string
 	return name, value, err
 }
 
-func checkSentinelSecrets(kubectl core.KubectlRunner) DoctorCheck {
+func checkPlatformSecrets(kubectl core.KubectlRunner) DoctorCheck {
 	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", componentNamespace("platform-api"), "-o", "jsonpath={.metadata.name}"}); err != nil {
 		return DoctorCheck{
-			Name:   "sentinel secrets",
+			Name:   "platform secrets",
 			OK:     true,
-			Detail: "namespace mcp-platform not found; skipping sentinel secret checks",
+			Detail: "namespace mcp-platform not found; skipping platform secret checks",
 		}
 	}
 	apiSecret, apiKeysB64, err := readOwnedSecret(kubectl, "API_KEYS")
 	if err != nil {
 		return DoctorCheck{
-			Name:   "sentinel secrets",
+			Name:   "platform secrets",
 			OK:     false,
 			Detail: "secret " + apiSecret + " missing or API_KEYS key absent",
 			Remedy: "rerun setup so each credential set is rendered for its owner",
@@ -39,7 +39,7 @@ func checkSentinelSecrets(kubectl core.KubectlRunner) DoctorCheck {
 	_, adminAPIKeysB64, err := readOwnedSecret(kubectl, "ADMIN_API_KEYS")
 	if err != nil {
 		return DoctorCheck{
-			Name:   "sentinel secrets",
+			Name:   "platform secrets",
 			OK:     false,
 			Detail: "owner secret missing ADMIN_API_KEYS key",
 			Remedy: "rerun setup so platform-api credentials include ADMIN_API_KEYS and UI_API_KEY",
@@ -48,7 +48,7 @@ func checkSentinelSecrets(kubectl core.KubectlRunner) DoctorCheck {
 	_, ingestAPIKeysB64, err := readOwnedSecret(kubectl, "INGEST_API_KEYS")
 	if err != nil {
 		return DoctorCheck{
-			Name:   "sentinel secrets",
+			Name:   "platform secrets",
 			OK:     false,
 			Detail: "owner secret missing INGEST_API_KEYS key",
 			Remedy: "rerun setup so the ingest credential set includes INGEST_API_KEYS",
@@ -57,31 +57,31 @@ func checkSentinelSecrets(kubectl core.KubectlRunner) DoctorCheck {
 	_, uiKeyB64, err := readOwnedSecret(kubectl, "UI_API_KEY")
 	if err != nil {
 		return DoctorCheck{
-			Name:   "sentinel secrets",
+			Name:   "platform secrets",
 			OK:     false,
 			Detail: "owner secret missing UI_API_KEY key",
 			Remedy: "rerun setup so the UI credential set includes UI_API_KEY",
 		}
 	}
-	apiKeys, decodeCheck := decodeSentinelSecretValue("API_KEYS", apiKeysB64)
+	apiKeys, decodeCheck := decodePlatformSecretValue("API_KEYS", apiKeysB64)
 	if decodeCheck != nil {
 		return *decodeCheck
 	}
-	adminAPIKeys, decodeCheck := decodeSentinelSecretValue("ADMIN_API_KEYS", adminAPIKeysB64)
+	adminAPIKeys, decodeCheck := decodePlatformSecretValue("ADMIN_API_KEYS", adminAPIKeysB64)
 	if decodeCheck != nil {
 		return *decodeCheck
 	}
-	ingestAPIKeys, decodeCheck := decodeSentinelSecretValue("INGEST_API_KEYS", ingestAPIKeysB64)
+	ingestAPIKeys, decodeCheck := decodePlatformSecretValue("INGEST_API_KEYS", ingestAPIKeysB64)
 	if decodeCheck != nil {
 		return *decodeCheck
 	}
-	uiKey, decodeCheck := decodeSentinelSecretValue("UI_API_KEY", uiKeyB64)
+	uiKey, decodeCheck := decodePlatformSecretValue("UI_API_KEY", uiKeyB64)
 	if decodeCheck != nil {
 		return *decodeCheck
 	}
 	if apiKeys == "" || adminAPIKeys == "" || ingestAPIKeys == "" || uiKey == "" {
 		return DoctorCheck{
-			Name:   "sentinel secrets",
+			Name:   "platform secrets",
 			OK:     false,
 			Detail: "API_KEYS, ADMIN_API_KEYS, INGEST_API_KEYS, or UI_API_KEY is empty",
 			Remedy: "populate non-empty API_KEYS, ADMIN_API_KEYS, INGEST_API_KEYS, and UI_API_KEY on their owner Secrets",
@@ -98,7 +98,7 @@ func checkSentinelSecrets(kubectl core.KubectlRunner) DoctorCheck {
 	}
 	if !uiInAPIKeys {
 		return DoctorCheck{
-			Name:   "sentinel secrets",
+			Name:   "platform secrets",
 			OK:     false,
 			Detail: "UI_API_KEY not present in API_KEYS",
 			Remedy: "align API_KEYS and UI_API_KEY on the platform-api and UI credential sets",
@@ -107,24 +107,24 @@ func checkSentinelSecrets(kubectl core.KubectlRunner) DoctorCheck {
 	for _, k := range adminKeys {
 		if k == uiKey {
 			return DoctorCheck{
-				Name:   "sentinel secrets",
+				Name:   "platform secrets",
 				OK:     true,
 				Detail: "UI_API_KEY is present in API_KEYS and ADMIN_API_KEYS; INGEST_API_KEYS is populated separately",
 			}
 		}
 	}
 	return DoctorCheck{
-		Name:   "sentinel secrets",
+		Name:   "platform secrets",
 		OK:     false,
 		Detail: "UI_API_KEY not present in ADMIN_API_KEYS",
 		Remedy: "include UI_API_KEY in ADMIN_API_KEYS for browser admin access",
 	}
 }
 
-func checkSentinelAPIAuthProbe(kubectl core.KubectlRunner) DoctorCheck {
+func checkPlatformAPIAuthProbe(kubectl core.KubectlRunner) DoctorCheck {
 	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", componentNamespace("platform-api"), "-o", "jsonpath={.metadata.name}"}); err != nil {
 		return DoctorCheck{
-			Name:   "sentinel API auth probe",
+			Name:   "platform API auth probe",
 			OK:     true,
 			Detail: "namespace mcp-platform not found; skipping auth probe",
 		}
@@ -132,7 +132,7 @@ func checkSentinelAPIAuthProbe(kubectl core.KubectlRunner) DoctorCheck {
 	uiSecret, apiKeyB64, err := readOwnedSecret(kubectl, "UI_API_KEY")
 	if err != nil {
 		return DoctorCheck{
-			Name:   "sentinel API auth probe",
+			Name:   "platform API auth probe",
 			OK:     false,
 			Detail: "UI_API_KEY not available in " + uiSecret,
 			Remedy: "configure UI_API_KEY before probing API auth",
@@ -141,7 +141,7 @@ func checkSentinelAPIAuthProbe(kubectl core.KubectlRunner) DoctorCheck {
 	apiKey, err := decodeBase64(apiKeyB64)
 	if err != nil {
 		return DoctorCheck{
-			Name:   "sentinel API auth probe",
+			Name:   "platform API auth probe",
 			OK:     false,
 			Detail: fmt.Sprintf("UI_API_KEY in %s is not valid base64: %v", uiSecret, err),
 			Remedy: "patch " + uiSecret + " with valid Kubernetes secret data for UI_API_KEY",
@@ -150,13 +150,13 @@ func checkSentinelAPIAuthProbe(kubectl core.KubectlRunner) DoctorCheck {
 	apiKey = strings.TrimSpace(apiKey)
 	if apiKey == "" {
 		return DoctorCheck{
-			Name:   "sentinel API auth probe",
+			Name:   "platform API auth probe",
 			OK:     false,
 			Detail: "UI_API_KEY decoded to empty value",
 			Remedy: "set non-empty UI_API_KEY in " + uiSecret,
 		}
 	}
-	podName := fmt.Sprintf("doctor-sentinel-probe-%d", time.Now().UnixNano())
+	podName := fmt.Sprintf("doctor-platform-probe-%d", time.Now().UnixNano())
 	image := "curlimages/curl:8.7.1"
 	curlArgs := []string{
 		"-sS", "-o", "doctor-response",
@@ -178,7 +178,7 @@ func checkSentinelAPIAuthProbe(kubectl core.KubectlRunner) DoctorCheck {
 	})
 	if cmdErr != nil {
 		return DoctorCheck{
-			Name:   "sentinel API auth probe",
+			Name:   "platform API auth probe",
 			OK:     false,
 			Detail: fmt.Sprintf("kubectl error: %v", cmdErr),
 			Remedy: "check kubectl connectivity and helper image access",
@@ -187,10 +187,10 @@ func checkSentinelAPIAuthProbe(kubectl core.KubectlRunner) DoctorCheck {
 	createOut, runErr := cmd.CombinedOutput()
 	if runErr != nil {
 		return DoctorCheck{
-			Name:   "sentinel API auth probe",
+			Name:   "platform API auth probe",
 			OK:     false,
 			Detail: fmt.Sprintf("failed creating auth probe pod: %v: %s", runErr, strings.TrimSpace(string(createOut))),
-			Remedy: "verify sentinel API deployment/service and API key config",
+			Remedy: "verify platform API deployment/service and API key config",
 		}
 	}
 	if err := waitForDoctorPodSucceeded(kubectl, podName, componentNamespace("platform-api"), 90*time.Second); err != nil {
@@ -200,16 +200,16 @@ func checkSentinelAPIAuthProbe(kubectl core.KubectlRunner) DoctorCheck {
 			detail += ": " + strings.TrimSpace(logs)
 		}
 		return DoctorCheck{
-			Name:   "sentinel API auth probe",
+			Name:   "platform API auth probe",
 			OK:     false,
 			Detail: detail,
-			Remedy: "verify sentinel API deployment/service and API key config",
+			Remedy: "verify platform API deployment/service and API key config",
 		}
 	}
 	out, logsErr := readKubectlOutput(kubectl, []string{"logs", podName, "-n", componentNamespace("platform-api")})
 	if logsErr != nil {
 		return DoctorCheck{
-			Name:   "sentinel API auth probe",
+			Name:   "platform API auth probe",
 			OK:     false,
 			Detail: fmt.Sprintf("failed reading auth probe logs: %v", logsErr),
 			Remedy: "inspect auth probe pod logs",
@@ -218,59 +218,59 @@ func checkSentinelAPIAuthProbe(kubectl core.KubectlRunner) DoctorCheck {
 	status := strings.TrimSpace(out)
 	if status == "200" {
 		return DoctorCheck{
-			Name:   "sentinel API auth probe",
+			Name:   "platform API auth probe",
 			OK:     true,
 			Detail: "authenticated probe returned HTTP 200",
 		}
 	}
 	return DoctorCheck{
-		Name:   "sentinel API auth probe",
+		Name:   "platform API auth probe",
 		OK:     false,
 		Detail: fmt.Sprintf("authenticated probe returned HTTP %s", status),
-		Remedy: "verify API key and sentinel API route availability",
+		Remedy: "verify API key and platform API route availability",
 	}
 }
 
-// checkSentinelRuntimeCatalogProbe exercises the endpoints the dashboard uses
+// checkPlatformRuntimeCatalogProbe exercises the endpoints the dashboard uses
 // for its server catalog. Readiness alone cannot detect a broken Kubernetes
 // API route, an incomplete NetworkPolicy, or an API key accepted by the UI but
 // rejected by runtime-api.
-func checkSentinelRuntimeCatalogProbe(kubectl core.KubectlRunner) DoctorCheck {
+func checkPlatformRuntimeCatalogProbe(kubectl core.KubectlRunner) DoctorCheck {
 	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", componentNamespace("platform-api"), "-o", "jsonpath={.metadata.name}"}); err != nil {
-		return DoctorCheck{Name: "sentinel runtime catalog probe", OK: true, Detail: "namespace mcp-platform not found; skipping runtime catalog probe"}
+		return DoctorCheck{Name: "platform runtime catalog probe", OK: true, Detail: "namespace mcp-platform not found; skipping runtime catalog probe"}
 	}
 	adminSecret, encoded, err := readOwnedSecret(kubectl, "ADMIN_API_KEYS")
 	if err != nil {
-		return DoctorCheck{Name: "sentinel runtime catalog probe", OK: false, Detail: "ADMIN_API_KEYS not available in " + adminSecret, Remedy: "configure an admin API key before probing runtime catalog routes"}
+		return DoctorCheck{Name: "platform runtime catalog probe", OK: false, Detail: "ADMIN_API_KEYS not available in " + adminSecret, Remedy: "configure an admin API key before probing runtime catalog routes"}
 	}
 	decoded, err := decodeBase64(encoded)
 	if err != nil {
-		return DoctorCheck{Name: "sentinel runtime catalog probe", OK: false, Detail: fmt.Sprintf("ADMIN_API_KEYS is not valid base64: %v", err), Remedy: "patch " + adminSecret + " with valid Kubernetes secret data"}
+		return DoctorCheck{Name: "platform runtime catalog probe", OK: false, Detail: fmt.Sprintf("ADMIN_API_KEYS is not valid base64: %v", err), Remedy: "patch " + adminSecret + " with valid Kubernetes secret data"}
 	}
 	adminKeys := splitCommaTrim(decoded)
 	_, apiKeysEncoded, err := readOwnedSecret(kubectl, "API_KEYS")
 	if err != nil {
-		return DoctorCheck{Name: "sentinel runtime catalog probe", OK: false, Detail: "API_KEYS not available in its owner Secret", Remedy: "configure the admin probe key in both API_KEYS and ADMIN_API_KEYS"}
+		return DoctorCheck{Name: "platform runtime catalog probe", OK: false, Detail: "API_KEYS not available in its owner Secret", Remedy: "configure the admin probe key in both API_KEYS and ADMIN_API_KEYS"}
 	}
 	apiKeysDecoded, err := decodeBase64(apiKeysEncoded)
 	if err != nil {
-		return DoctorCheck{Name: "sentinel runtime catalog probe", OK: false, Detail: fmt.Sprintf("API_KEYS is not valid base64: %v", err), Remedy: "patch the owner Secret with valid Kubernetes secret data"}
+		return DoctorCheck{Name: "platform runtime catalog probe", OK: false, Detail: fmt.Sprintf("API_KEYS is not valid base64: %v", err), Remedy: "patch the owner Secret with valid Kubernetes secret data"}
 	}
 	apiKeys := splitCommaTrim(apiKeysDecoded)
 	keys := intersectSecretKeys(apiKeys, adminKeys)
 	if len(keys) == 0 {
-		return DoctorCheck{Name: "sentinel runtime catalog probe", OK: false, Detail: "API_KEYS and ADMIN_API_KEYS have no common key", Remedy: "include at least one identical admin credential in both API_KEYS and ADMIN_API_KEYS"}
+		return DoctorCheck{Name: "platform runtime catalog probe", OK: false, Detail: "API_KEYS and ADMIN_API_KEYS have no common key", Remedy: "include at least one identical admin credential in both API_KEYS and ADMIN_API_KEYS"}
 	}
 	for _, path := range []string{"/api/v1/runtime/servers", "/api/v1/runtime/tools"} {
-		status, probeErr := runSentinelAuthenticatedProbe(kubectl, keys[0], path)
+		status, probeErr := runPlatformAuthenticatedProbe(kubectl, keys[0], path)
 		if probeErr != nil {
-			return DoctorCheck{Name: "sentinel runtime catalog probe", OK: false, Detail: fmt.Sprintf("%s probe failed: %v", path, probeErr), Remedy: "inspect runtime-api NetworkPolicy, Kubernetes API reachability, service endpoints, and API_KEYS/ADMIN_API_KEYS alignment"}
+			return DoctorCheck{Name: "platform runtime catalog probe", OK: false, Detail: fmt.Sprintf("%s probe failed: %v", path, probeErr), Remedy: "inspect runtime-api NetworkPolicy, Kubernetes API reachability, service endpoints, and API_KEYS/ADMIN_API_KEYS alignment"}
 		}
 		if status != "200" {
-			return DoctorCheck{Name: "sentinel runtime catalog probe", OK: false, Detail: fmt.Sprintf("%s returned HTTP %s", path, status), Remedy: "verify runtime-api authentication and catalog dependencies; /health can remain green while these routes fail"}
+			return DoctorCheck{Name: "platform runtime catalog probe", OK: false, Detail: fmt.Sprintf("%s returned HTTP %s", path, status), Remedy: "verify runtime-api authentication and catalog dependencies; /health can remain green while these routes fail"}
 		}
 	}
-	return DoctorCheck{Name: "sentinel runtime catalog probe", OK: true, Detail: "authenticated runtime servers and tools catalog endpoints returned HTTP 200"}
+	return DoctorCheck{Name: "platform runtime catalog probe", OK: true, Detail: "authenticated runtime servers and tools catalog endpoints returned HTTP 200"}
 }
 
 func intersectSecretKeys(apiKeys, adminKeys []string) []string {
@@ -287,8 +287,8 @@ func intersectSecretKeys(apiKeys, adminKeys []string) []string {
 	return keys
 }
 
-func runSentinelAuthenticatedProbe(kubectl core.KubectlRunner, apiKey, path string) (string, error) {
-	podName := fmt.Sprintf("doctor-sentinel-catalog-%d", time.Now().UnixNano())
+func runPlatformAuthenticatedProbe(kubectl core.KubectlRunner, apiKey, path string) (string, error) {
+	podName := fmt.Sprintf("doctor-platform-catalog-%d", time.Now().UnixNano())
 	image := "curlimages/curl:8.7.1"
 	curlArgs := []string{
 		"-sS", "-o", "/tmp/doctor-response", "-w", "%{http_code}",
@@ -321,27 +321,27 @@ func runSentinelAuthenticatedProbe(kubectl core.KubectlRunner, apiKey, path stri
 	return strings.TrimSpace(logs), nil
 }
 
-func checkSentinelPlatformAPIReadiness(kubectl core.KubectlRunner) DoctorCheck {
-	return checkSentinelServiceHealthReadiness(
+func checkPlatformPlatformAPIReadiness(kubectl core.KubectlRunner) DoctorCheck {
+	return checkPlatformServiceHealthReadiness(
 		kubectl,
-		"sentinel platform API readiness",
+		"platform API readiness",
 		doctorPlatformAPIService,
 		doctorPlatformAPIPort,
 		componentNamespace("platform-api"),
 	)
 }
 
-func checkSentinelAnalyticsAPIReadiness(kubectl core.KubectlRunner) DoctorCheck {
-	return checkSentinelServiceHealthReadiness(
+func checkPlatformAnalyticsAPIReadiness(kubectl core.KubectlRunner) DoctorCheck {
+	return checkPlatformServiceHealthReadiness(
 		kubectl,
-		"sentinel analytics API readiness",
+		"platform analytics API readiness",
 		doctorAnalyticsAPIService,
 		doctorAnalyticsAPIPort,
 		componentNamespace("analytics-api"),
 	)
 }
 
-func checkSentinelServiceHealthReadiness(kubectl core.KubectlRunner, checkName, service string, port int, namespace string) DoctorCheck {
+func checkPlatformServiceHealthReadiness(kubectl core.KubectlRunner, checkName, service string, port int, namespace string) DoctorCheck {
 	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", namespace, "-o", "jsonpath={.metadata.name}"}); err != nil {
 		return DoctorCheck{
 			Name:   checkName,
@@ -395,7 +395,7 @@ func checkSentinelServiceHealthReadiness(kubectl core.KubectlRunner, checkName, 
 }
 
 func doctorCurlServiceEndpoint(kubectl core.KubectlRunner, url string) (string, error) {
-	podName := fmt.Sprintf("doctor-sentinel-probe-%d", time.Now().UnixNano())
+	podName := fmt.Sprintf("doctor-platform-probe-%d", time.Now().UnixNano())
 	image := "curlimages/curl:8.7.1"
 	curlArgs := []string{
 		"-sS", "-o", "/dev/null",
@@ -436,11 +436,11 @@ func doctorCurlServiceEndpoint(kubectl core.KubectlRunner, url string) (string, 
 	return strings.TrimSpace(out), nil
 }
 
-func decodeSentinelSecretValue(key, encoded string) (string, *DoctorCheck) {
+func decodePlatformSecretValue(key, encoded string) (string, *DoctorCheck) {
 	decoded, err := decodeBase64(encoded)
 	if err != nil {
 		return "", &DoctorCheck{
-			Name:   "sentinel secrets",
+			Name:   "platform secrets",
 			OK:     false,
 			Detail: fmt.Sprintf("%s in its owner Secret is not valid base64: %v", key, err),
 			Remedy: "patch the owner Secret with valid Kubernetes secret data for API, admin, ingest, and UI keys",

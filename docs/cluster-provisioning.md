@@ -29,7 +29,7 @@ are covered in [Public Reference Deployment](reference-deployment.md#identity-pr
 |---|---|---|---|
 | `mcp-cp-1` | server | 4-8 vCPU, 8-16 GiB RAM | Kubernetes API, scheduler, controller manager, embedded datastore, light platform workloads |
 | `mcp-ingress-1` | agent | 2-4 vCPU, 4-8 GiB RAM | Public Traefik ServiceLB node for ports 80 and 443 |
-| `mcp-worker-1` | agent | 2-4 vCPU, 4-8 GiB RAM | Sentinel, operator, registry, and MCP server workloads |
+| `mcp-worker-1` | agent | 2-4 vCPU, 4-8 GiB RAM | Platform, operator, registry, and MCP server workloads |
 | `mcp-worker-2` | agent | 2-4 vCPU, 4-8 GiB RAM | Extra capacity and scheduling headroom |
 
 For a five-node demo, add `mcp-worker-3` as another general worker. If you need

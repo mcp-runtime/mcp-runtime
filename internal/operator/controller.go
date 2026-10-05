@@ -264,7 +264,7 @@ func (r *MCPServerReconciler) validateGatewayConfig(ctx context.Context, mcpServ
 		opURL := strings.TrimSpace(r.DefaultAnalyticsIngestURL)
 		if specURL == "" && opURL == "" {
 			if err := r.requireSpecField(ctx, mcpServer, logger, "analytics ingest URL", "",
-				"analytics.ingestURL is required when spec.analytics is set; set spec.analytics.ingestURL, configure MCP_SENTINEL_INGEST_URL on the operator, or set spec.analytics.disabled to true"); err != nil {
+				"analytics.ingestURL is required when spec.analytics is set; set spec.analytics.ingestURL, configure MCP_ANALYTICS_INGEST_URL on the operator, or set spec.analytics.disabled to true"); err != nil {
 				return err
 			}
 		}

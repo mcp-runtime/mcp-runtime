@@ -211,7 +211,7 @@ type SetupDeps struct {
 	StampPlatformVersion func(version string) error
 	// RunPostSetupSmoke runs a short operational gate after registry/operator/CRD
 	// checks. Nil skips the smoke (tests); production defaults fail setup when
-	// nodes, Postgres, platform-api, Sentinel rollouts, or auth probes are bad.
+	// nodes, Postgres, platform-api, platform rollouts, or auth probes are bad.
 	RunPostSetupSmoke func() error
 }
 
@@ -354,8 +354,8 @@ func ValidateStorageMode(mode string) error {
 	case setupplan.StorageModeDynamic, setupplan.StorageModeHostpath:
 		return nil
 	default:
-		cause := core.NewWithSentinel(core.ErrSetupInvalidStorageMode, fmt.Sprintf("invalid storage mode %q", mode))
-		return core.WrapWithSentinel(core.ErrFieldRequired, cause, "invalid --storage-mode; expected dynamic or hostpath")
+		cause := core.NewWithBase(core.ErrSetupInvalidStorageMode, fmt.Sprintf("invalid storage mode %q", mode))
+		return core.WrapWithBase(core.ErrFieldRequired, cause, "invalid --storage-mode; expected dynamic or hostpath")
 	}
 }
 
@@ -363,8 +363,8 @@ func ValidatePlatformMode(mode string) error {
 	if _, ok := setupplan.NormalizePlatformMode(mode); ok {
 		return nil
 	}
-	cause := core.NewWithSentinel(core.ErrSetupInvalidPlatformMode, fmt.Sprintf("invalid platform mode %q", mode))
-	return core.WrapWithSentinel(core.ErrFieldRequired, cause, "invalid --platform-mode; expected tenant, org, or public")
+	cause := core.NewWithBase(core.ErrSetupInvalidPlatformMode, fmt.Sprintf("invalid platform mode %q", mode))
+	return core.WrapWithBase(core.ErrFieldRequired, cause, "invalid --platform-mode; expected tenant, org, or public")
 }
 
 func ValidatePublicPlatformAuthEnv(platformMode string, tlsEnabled, testMode bool) error {
@@ -378,7 +378,7 @@ func ValidatePublicPlatformAuthConfig(platformMode string, tlsEnabled, testMode 
 	if publicBrowserLoginConfigConfigured(existingData) {
 		return nil
 	}
-	return core.NewWithSentinel(
+	return core.NewWithBase(
 		core.ErrFieldRequired,
 		"--platform-mode public with --with-tls requires browser login configuration: set GOOGLE_CLIENT_ID or MCP_GOOGLE_CLIENT_ID for Google sign-in, or set OIDC_ISSUER and OIDC_AUDIENCE for another provider (OIDC_JWKS_URL is optional when issuer discovery is available), or rerun against a cluster whose mcp-shared-config already contains those values",
 	)
@@ -425,7 +425,7 @@ func setupPlatformWithDeps(logger *zap.Logger, plan setupplan.Plan, deps SetupDe
 	// Propagate test mode to build helpers so they can choose faster/safer build paths.
 	if plan.TestMode {
 		if err := os.Setenv("MCP_RUNTIME_TEST_MODE", "1"); err != nil {
-			return core.WrapWithSentinel(core.ErrSetupSetRuntimeTestModeFailed, err, fmt.Sprintf("set MCP_RUNTIME_TEST_MODE: %v", err))
+			return core.WrapWithBase(core.ErrSetupSetRuntimeTestModeFailed, err, fmt.Sprintf("set MCP_RUNTIME_TEST_MODE: %v", err))
 		}
 		if strings.TrimSpace(os.Getenv("MCP_TRUST_DOMAIN")) == "" {
 			if err := os.Setenv("MCP_TRUST_DOMAIN", "cluster.local"); err != nil {
@@ -434,11 +434,11 @@ func setupPlatformWithDeps(logger *zap.Logger, plan setupplan.Plan, deps SetupDe
 		}
 	} else {
 		if err := os.Unsetenv("MCP_RUNTIME_TEST_MODE"); err != nil {
-			return core.WrapWithSentinel(core.ErrSetupUnsetRuntimeTestModeFailed, err, fmt.Sprintf("unset MCP_RUNTIME_TEST_MODE: %v", err))
+			return core.WrapWithBase(core.ErrSetupUnsetRuntimeTestModeFailed, err, fmt.Sprintf("unset MCP_RUNTIME_TEST_MODE: %v", err))
 		}
 	}
 	if err := os.Setenv("MCP_PLATFORM_MODE", plan.PlatformMode); err != nil {
-		return core.WrapWithSentinel(core.ErrSetupSetPlatformModeFailed, err, fmt.Sprintf("set MCP_PLATFORM_MODE: %v", err))
+		return core.WrapWithBase(core.ErrSetupSetPlatformModeFailed, err, fmt.Sprintf("set MCP_PLATFORM_MODE: %v", err))
 	}
 
 	extRegistry, usingExternalRegistry, registrySecretName, err := resolveRegistrySetup(logger, plan, deps)
@@ -497,7 +497,7 @@ func setupClusterSteps(logger *zap.Logger, kubeconfig, context string, ingressOp
 	core.Step("Step 1: Initialize cluster")
 	core.Info("Installing CRD")
 	if err := deps.ClusterManager.InitCluster(kubeconfig, context); err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrClusterInitFailed, err, fmt.Sprintf("failed to initialize cluster: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrClusterInitFailed, err, fmt.Sprintf("failed to initialize cluster: %v", err))
 		core.Error("Cluster initialization failed")
 		core.LogStructuredError(logger, wrappedErr, "Cluster initialization failed")
 		return wrappedErr
@@ -517,7 +517,7 @@ func setupClusterSteps(logger *zap.Logger, kubeconfig, context string, ingressOp
 	}
 	core.Info("Checking ingress controller")
 	if err := deps.ClusterManager.ConfigureCluster(ingressOpts); err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrClusterConfigFailed, err, fmt.Sprintf("cluster configuration failed: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrClusterConfigFailed, err, fmt.Sprintf("cluster configuration failed: %v", err))
 		core.Error("Cluster configuration failed")
 		core.LogStructuredError(logger, wrappedErr, "Cluster configuration failed")
 		return wrappedErr
@@ -551,7 +551,7 @@ func setupCatalogNamespaceStep(logger *zap.Logger, plan setupplan.Plan, deps Set
 	}
 	core.Step(fmt.Sprintf("Provisioning %s catalog namespace %q", plan.PlatformMode, namespace))
 	if err := deps.EnsureCatalogNamespace(namespace, catalogNamespaceLabels(plan.PlatformMode)); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrSetupStepFailed,
 			err,
 			fmt.Sprintf("ensure catalog namespace %q failed: %v", namespace, err),

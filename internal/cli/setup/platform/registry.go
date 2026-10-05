@@ -23,8 +23,8 @@ func ValidateRegistryMode(mode string) error {
 	if _, ok := setupplan.NormalizeRegistryMode(mode); ok {
 		return nil
 	}
-	cause := core.NewWithSentinel(core.ErrSetupInvalidRegistryMode, fmt.Sprintf("invalid registry mode %q", mode))
-	return core.WrapWithSentinel(
+	cause := core.NewWithBase(core.ErrSetupInvalidRegistryMode, fmt.Sprintf("invalid registry mode %q", mode))
+	return core.WrapWithBase(
 		core.ErrFieldRequired,
 		cause,
 		"invalid --registry-mode; expected auto, bundled-http, bundled-https, or external",
@@ -37,7 +37,7 @@ func ValidateRegistryTLSMode(mode string, tlsEnabled bool, acmeEmail string) err
 		return nil
 	}
 	if normalized == setupplan.RegistryModeBundledHTTPS && !tlsEnabled {
-		return core.NewWithSentinel(
+		return core.NewWithBase(
 			core.ErrFieldRequired,
 			"--registry-mode bundled-https requires --with-tls so setup can provision registry-tls for the registry pod",
 		)
@@ -53,7 +53,7 @@ func setupRegistryStep(logger *zap.Logger, extRegistry *config.ExternalRegistryC
 		if extRegistry.Username != "" || extRegistry.Password != "" {
 			core.Info("Logging into external registry")
 			if err := deps.LoginRegistry(logger, extRegistry.URL, extRegistry.Username, extRegistry.Password); err != nil {
-				wrappedErr := core.WrapWithSentinel(core.ErrRegistryLoginFailed, err, fmt.Sprintf("failed to login to registry %q: %v", extRegistry.URL, err))
+				wrappedErr := core.WrapWithBase(core.ErrRegistryLoginFailed, err, fmt.Sprintf("failed to login to registry %q: %v", extRegistry.URL, err))
 				core.Error("Registry login failed")
 				core.LogStructuredError(logger, wrappedErr, "Registry login failed")
 				return wrappedErr
@@ -71,7 +71,7 @@ func setupRegistryStep(logger *zap.Logger, extRegistry *config.ExternalRegistryC
 		core.Info("TLS: disabled (dev HTTP mode)")
 	}
 	if err := deps.DeployRegistry(logger, "registry", deps.GetRegistryPort(), registryType, registryStorageSize, registryManifest); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrDeployRegistryFailed,
 			err,
 			fmt.Sprintf("failed to deploy registry (type: %s, manifest: %s): %v", registryType, registryManifest, err),
@@ -98,7 +98,7 @@ func setupRegistryStep(logger *zap.Logger, extRegistry *config.ExternalRegistryC
 			"component":  "registry",
 		}
 		mergeDeploymentDebugDiagnosticsIfNeeded(core.DefaultKubectlClient(), regCtx, "registry", "registry", "app=registry")
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrRegistryNotReady,
 			err,
 			fmt.Sprintf("registry deployment not ready in namespace %q: %v", "registry", err),
@@ -297,7 +297,7 @@ func ensureProvisionedRegistrySecretWithKubectl(kubectl core.KubectlRunner, name
 	createCmd.SetStdout(&rendered)
 	createCmd.SetStderr(os.Stderr)
 	if err := createCmd.Run(); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrRenderSecretManifestFailed,
 			err,
 			fmt.Sprintf("render secret manifest: %v", err),
@@ -317,7 +317,7 @@ func ensureProvisionedRegistrySecretWithKubectl(kubectl core.KubectlRunner, name
 	applyCmd.SetStdout(os.Stdout)
 	applyCmd.SetStderr(os.Stderr)
 	if err := applyCmd.Run(); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrApplySecretManifestFailed,
 			err,
 			fmt.Sprintf("apply secret manifest: %v", err),
@@ -347,7 +347,7 @@ func ensureProvisionedRegistrySecretWithClientGo(name, username, password string
 		return err
 	}
 	if err := k8sclient.UpsertOpaqueSecretStringData(context.Background(), clients, core.NamespaceMCPRuntime, name, data); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrApplySecretManifestFailed,
 			err,
 			fmt.Sprintf("apply secret manifest: %v", err),
@@ -375,7 +375,7 @@ func ensureImagePullSecretWithKubectl(kubectl core.KubectlRunner, namespace, nam
 	}
 	dockerCfgJSON, err := json.Marshal(dockerCfg)
 	if err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrMarshalDockerConfigFailed,
 			err,
 			fmt.Sprintf("marshal docker config: %v", err),
@@ -406,7 +406,7 @@ data:
 	applyCmd.SetStdout(os.Stdout)
 	applyCmd.SetStderr(os.Stderr)
 	if err := applyCmd.Run(); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrApplyImagePullSecretFailed,
 			err,
 			fmt.Sprintf("apply imagePullSecret: %v", err),
@@ -429,7 +429,7 @@ func ensureImagePullSecretWithClientGo(namespace, name, registry, username, pass
 		return err
 	}
 	if err := k8sclient.UpsertDockerConfigSecret(context.Background(), clients, namespace, name, registry, username, password); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrApplyImagePullSecretFailed,
 			err,
 			fmt.Sprintf("apply imagePullSecret: %v", err),

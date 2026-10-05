@@ -35,9 +35,9 @@ Produce a STRIDE table per component. Components to cover:
 - **platform-api** (`services/platform-api/`): identity, admin, registry forward-auth.
 - **runtime-api** (`services/runtime-api/`): runtime governance, deployments, registry push.
 - **analytics-api** (`services/analytics-api/`): ClickHouse events and usage analytics.
-- **sentinel-ui** (`services/ui/`): browser UI, login, dashboards.
-- **sentinel-ingest** (`services/ingest/`): high-volume event intake.
-- **sentinel-processor** (`services/processor/`): event processing, ClickHouse
+- **mcp-ui** (`services/ui/`): browser UI, login, dashboards.
+- **mcp-ingest** (`services/ingest/`): high-volume event intake.
+- **mcp-processor** (`services/processor/`): event processing, ClickHouse
   writes.
 - **registry** (`k8s/`, `config/`): Distribution v2 registry (HTTP dev or
   HTTPS prod).

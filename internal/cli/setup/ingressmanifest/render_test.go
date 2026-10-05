@@ -33,7 +33,7 @@ func TestRenderPlatformUIIngressNoTLS(t *testing.T) {
 		"namespace: " + testPlatformNS,
 		"namespace: " + testObservabilityNS,
 		"traefik.ingress.kubernetes.io/router.entrypoints: web",
-		"traefik.ingress.kubernetes.io/router.middlewares: sentinel-admin-auth@file",
+		"traefik.ingress.kubernetes.io/router.middlewares: platform-admin-auth@file",
 		`- host: "platform.example.com"`,
 		"- path: /api/v1/auth\n",
 		"- path: /api/v1/stats\n",
@@ -116,7 +116,7 @@ func TestRenderPlatformObservabilityIngressShape(t *testing.T) {
 	mustContain := []string{
 		"namespace: " + testObservabilityNS,
 		"traefik.ingress.kubernetes.io/router.entrypoints: web",
-		"traefik.ingress.kubernetes.io/router.middlewares: sentinel-admin-auth@file",
+		"traefik.ingress.kubernetes.io/router.middlewares: platform-admin-auth@file",
 		`- host: "platform.example.com"`,
 		"- path: /grafana\n",
 		"name: grafana",
