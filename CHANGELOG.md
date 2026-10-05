@@ -7,9 +7,6 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
-### Security
-
-- HTTPS registry overlays no longer expose the unauthenticated backend through NodePort 32000. Before upgrading, migrate any node mirrors using that port to the supported HTTPS pull endpoint and verify CA trust and fresh pulls. HTTP lab overlays retain their NodePort. Internal repository-scoped authentication remains pending ([#531](https://github.com/mcp-runtime/mcp-runtime/issues/531)).
 ### Changed
 
 - Release development follows a pre-customer policy: breaking changes may use a backed-up fresh setup and tested recovery of the hosted reference platform, without legacy compatibility layers or general upgrade infrastructure. Release instructions must cover required data, identity-provider backups, recovery, and verification; customer migration commitments will be defined when the first external customer is onboarded.
@@ -17,6 +14,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 - Documentation sections use descriptive names and start with audience and reading-path overviews. Getting Started separates hosted, self-hosted, and contributor paths; Server and Client Guides connects publishing, access, and client setup. Deployment and Operations groups installation, the public reference, and maintenance. Development and Testing and Implementation Details use shorter grouped menus. The home page consolidates repeated guide lists; existing page URLs and heading anchors remain available. Platform Installation owns reusable setup and enterprise certificate instructions, with Cluster Provisioning handing off once infrastructure is ready.
 
 - Deployment documentation uses distribution-neutral names: `reference-deployment.md` covers Runtime and its external identity provider, while `cluster-provisioning.md` describes the reference cluster with K3s as the worked distribution choice. Navigation, indexes, and operational links follow the new names; published URLs redirect and existing section anchors remain available. The reference guide separates configuration, installation and updates, identity-provider setup, backups and recovery, and verification, and clarifies that Keycloak DNS and backups belong to its separate VM.
+
+### Security
+
+- HTTPS registry overlays no longer expose the unauthenticated backend through NodePort 32000. Before upgrading, migrate any node mirrors using that port to the supported HTTPS pull endpoint and verify CA trust and fresh pulls. HTTP lab overlays retain their NodePort. Internal repository-scoped authentication remains pending ([#531](https://github.com/mcp-runtime/mcp-runtime/issues/531)).
 
 ## [0.5.2] - 2026-10-05
 

@@ -100,7 +100,7 @@ func TestCheckRegistryService(t *testing.T) {
 	t.Run("ok with nodeport", func(t *testing.T) {
 		mock := &core.MockExecutor{
 			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
-				return &core.MockCommand{OutputData: []byte("32000")}
+				return &core.MockCommand{OutputData: []byte("NodePort 5000 32000")}
 			},
 		}
 		kubectl := core.NewTestKubectlClient(mock)
@@ -110,6 +110,29 @@ func TestCheckRegistryService(t *testing.T) {
 		}
 		if !strings.Contains(check.Detail, "32000") {
 			t.Fatalf("detail should mention the NodePort, got %q", check.Detail)
+		}
+	})
+
+	t.Run("ok with clusterip on https installs", func(t *testing.T) {
+		mock := &core.MockExecutor{
+			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
+				return &core.MockCommand{OutputData: []byte("ClusterIP 5000 ")}
+			},
+		}
+		check := checkRegistryService(core.NewTestKubectlClient(mock))
+		if !check.OK || !strings.Contains(check.Detail, "ClusterIP port 5000") {
+			t.Fatalf("expected ClusterIP registry to pass, got ok=%v detail=%q", check.OK, check.Detail)
+		}
+	})
+
+	t.Run("fails on nodeport service without a node port", func(t *testing.T) {
+		mock := &core.MockExecutor{
+			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
+				return &core.MockCommand{OutputData: []byte("NodePort 5000 ")}
+			},
+		}
+		if check := checkRegistryService(core.NewTestKubectlClient(mock)); check.OK {
+			t.Fatal("expected failure for a NodePort Service with no allocated port")
 		}
 	})
 

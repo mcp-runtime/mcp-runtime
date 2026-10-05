@@ -341,6 +341,7 @@ func printDoctorReportFooter(r DoctorReport) {
 		core.Info("Full remediation steps per distribution are in docs/cluster-readiness.md.")
 		if reportHasRegistryOrPullFailure(r) {
 			core.Info(remediationHint(r.Distribution))
+			core.Info("These mirror steps apply to HTTP registry installs. HTTPS installs pull from the registry ingress host and expose no NodePort.")
 		}
 	}
 }
