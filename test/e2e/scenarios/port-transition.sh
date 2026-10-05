@@ -15,7 +15,7 @@ run_e2e_port_transition_scenario() {
   gateway_image="$(jq -er '.spec.template.spec.containers[] | select(.name == "mcp-gateway") | .image' "${directory}/deployment-before.json")"
   jq --arg image 'registry.registry.svc.cluster.local:5000/mcp-gateway:missing-port-transition-fixture' \
     --argjson port "${candidate_port}" \
-    'del(.status, .metadata.managedFields, .metadata.resourceVersion, .metadata.uid, .metadata.creationTimestamp) | .spec.gateway.port=$port | .spec.gateway.image=$image' \
+    'del(.status, .metadata.managedFields, .metadata.resourceVersion, .metadata.uid, .metadata.creationTimestamp, .metadata.annotations["kubectl.kubernetes.io/last-applied-configuration"]) | .spec.gateway.port=$port | .spec.gateway.image=$image' \
     "${directory}/original.json" >"${directory}/broken.json"
   ./bin/mcp-runtime server --use-kube apply --file "${directory}/broken.json"
   deadline=$((SECONDS + 120))
@@ -36,10 +36,24 @@ run_e2e_port_transition_scenario() {
     sleep 2
   done
   jq --argjson port "${candidate_port}" --arg image "${gateway_image}" \
-    'del(.status, .metadata.managedFields, .metadata.resourceVersion, .metadata.uid, .metadata.creationTimestamp) | .spec.gateway.port=$port | .spec.gateway.image=$image' \
+    'del(.status, .metadata.managedFields, .metadata.resourceVersion, .metadata.uid, .metadata.creationTimestamp, .metadata.annotations["kubectl.kubernetes.io/last-applied-configuration"]) | .spec.gateway.port=$port | .spec.gateway.image=$image' \
     "${directory}/original.json" >"${directory}/fixed.json"
   ./bin/mcp-runtime server --use-kube apply --file "${directory}/fixed.json"
   deadline=$((SECONDS + 180))
+  while true; do
+    kubectl get mcpserver "${SERVER_NAME}" -n mcp-servers -o json >"${directory}/repaired-status.json"
+    if jq -e --arg image "${gateway_image}" \
+      '.metadata.generation as $generation | .spec.gateway.image == $image and (.status.conditions // [] | any(.type=="DeploymentReady" and .status=="True" and .observedGeneration==$generation))' \
+      "${directory}/repaired-status.json" >/dev/null; then
+      break
+    fi
+    ((SECONDS < deadline)) || {
+      echo '[port-transition] repaired candidate did not become deployment-ready' >&2
+      jq '{spec: .spec.gateway, deploymentReady: [.status.conditions[]? | select(.type=="DeploymentReady")], message: .status.message}' "${directory}/repaired-status.json" >&2
+      return 1
+    }
+    sleep 2
+  done
   while [[ "$(kubectl get service "${SERVER_NAME}" -n mcp-servers -o jsonpath='{.spec.ports[0].targetPort}')" != "${candidate_port}" ]]; do
     ((SECONDS < deadline)) || { echo '[port-transition] ready candidate was not promoted' >&2; return 1; }
     sleep 2
