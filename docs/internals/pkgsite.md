@@ -15,6 +15,8 @@ reuses the existing `DOCS_DEPLOY_*` secrets. The remote script stops early if
 another container already publishes the port, and restores the previous image
 if the new container does not serve the package page. The container runs as a non-root user with a
 read-only filesystem, a temporary build cache, and no added capabilities.
+After rollout, the workflow checks public package pages over HTTPS. A missing
+Ingress, failed certificate, or broken public route fails the deployment run.
 
 The public route lives on the production k3s cluster, whose Traefik also
 serves `docs.mcpruntime.org`. The docs host is that cluster's node, and the

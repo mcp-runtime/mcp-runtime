@@ -430,16 +430,46 @@ without that flag, set the admin email env var above.
 If setup reports "cert-manager already installed" but TLS issuance times out,
 check two things: (1) Traefik serves port 80; (2) cert-manager pods are
 Running. The "already installed" check tests only for the CRDs. After a k3s
-restart the CRDs survive, but the pods may be gone. Reinstall manually if
-needed:
+restart the CRDs survive, but the pods may be gone. For an existing installation, diagnose the Deployments before reinstalling.
+Fresh installs use v1.21.2 (Kubernetes 1.33–1.36). Do not apply this version
+directly over a 1.16 installation: follow the staged upgrade below.
+For a fresh installation:
 ```bash
 kubectl get pods -n cert-manager
 # If not running:
-curl -sL https://github.com/cert-manager/cert-manager/releases/download/v1.16.2/cert-manager.yaml \
+curl -sL https://github.com/cert-manager/cert-manager/releases/download/v1.21.2/cert-manager.yaml \
   | kubectl apply -f -
 kubectl wait pod -n cert-manager --all --for=condition=Ready --timeout=120s
 ```
 
+### Upgrading an existing cert-manager installation
+
+`setup` retains an existing cert-manager installation; the new install pin does
+not perform a multi-minor upgrade. `cluster doctor` checks the controller,
+webhook, and cainjector versions against the reviewed upstream support matrix.
+It reports retired, mismatched, unknown, or unsupported versions rather than
+counting Ready pods as compatibility evidence.
+
+For the old 1.16 installation, rehearse upgrades one minor at a time through
+1.17, 1.18, 1.19, 1.20, and 1.21 using the latest patch in each series. Read
+each minor's upgrade notes and use the same installation method throughout.
+Before starting, make an encrypted off-host backup of cert-manager resources,
+CA/private-key Secrets, ACME account Secrets, and public/internal TLS Secrets.
+Record certificate fingerprints, issuer readiness, and renewal times. Never
+uninstall the CRDs, delete signing material, or force leaf reissuance to update
+the controller. Preserve any custom approval controller configuration.
+
+After each step on disposable Staging E2E, wait for controller, webhook, and
+cainjector readiness; verify existing issuers and Certificates remain Ready;
+issue a fresh bounded test CertificateRequest; and check renewal scheduling and
+unchanged CA/TLS identities. Stop on failure and recover using the documented
+upstream rollback procedure and the backed-up configuration. Only then schedule
+the production upgrade and repeat the read-only inventory checks.
+
+Reviewed 2026-10-03: [supported releases](https://cert-manager.io/docs/releases/)
+and [upgrade guidance](https://cert-manager.io/docs/installation/upgrade/).
+The compatibility check currently recognizes supported 1.20 and 1.21 series;
+update that reviewed table when adopting a new upstream minor.
 ## Identity provider
 
 The reference deployment uses Keycloak as its external identity provider and
@@ -1009,3 +1039,11 @@ kubectl apply -f /tmp/platform-tls-backup.yaml
 ```
 
 Check current usage at <https://crt.sh/?q=mcpruntime.org>.
+
+The disposable Kind QA harness now adds fresh certificate issuance to its
+adapter-certificate scenario. It reapplies the supported certificate setup,
+issues a one-hour test certificate, verifies its SAN, validity and workload CA
+chain, and compares public workload-CA/platform-TLS fingerprints before and
+afterward. The fixture never reads private keys. This covers fresh issuance and
+preservation during reapplication; the minor-by-minor upgrade and renewal
+procedure still needs a disposable staging run.
