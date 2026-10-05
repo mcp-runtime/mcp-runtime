@@ -54,13 +54,15 @@ Status fields are operator-owned; user-facing commands should not mutate them.
 `humanID`, `agentID`, and `teamID`; the gateway matches every non-empty subject
 field exactly, so a team-only subject can grant access to any authenticated
 principal from that team. Namespace/RBAC boundaries still decide who can write
-the resources; see [Multi-team isolation](../multi-team.md).
+the resources; see [Multi-team isolation](../teams-and-access.md).
 
 `MCPAccessGrantSpec` binds a subject to an `MCPServer` and optionally sets:
 
 - `maxTrust`: administrative trust ceiling
 - `allowedSideEffects`: side-effect classes (`read`, `write`, `destructive`) the grant may use; omitted or empty fails closed
-- `policyVersion`: cache invalidation/version marker
+- `policyVersion`: authorization policy label (rendered `revision` tracks
+  snapshot content changes separately)
+- optional `expiresAt`: delegation expiry, also caps adapter session lifetime
 - `disabled`: soft off switch
 - `toolRules`: per-tool allow/deny decisions and required trust levels
 

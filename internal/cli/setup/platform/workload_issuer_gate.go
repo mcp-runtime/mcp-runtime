@@ -31,7 +31,7 @@ func validateWorkloadIssuerApprovalGate() error {
 	if ack, ok := parseBoolEnv(workloadIssuerApprovalAckEnv); ok && ack {
 		return nil
 	}
-	return fmt.Errorf("MCP_ADAPTER_CERTIFICATES=true requires an effective CertificateRequest approval policy for the workload issuer. Verify that cert-manager's default auto-approver is disabled, a policy limits the requester to the runtime API service account and the certificate to bounded client-auth session SPIFFE URIs, and forged requests are denied. Then set %s=true. See docs/agent-adapters.md", workloadIssuerApprovalAckEnv)
+	return fmt.Errorf("MCP_ADAPTER_CERTIFICATES=true requires an effective CertificateRequest approval policy for the workload issuer. Verify that cert-manager's default auto-approver is disabled, a policy limits the requester to the runtime API service account and the certificate to bounded client-auth session SPIFFE URIs, and forged requests are denied. Then set %s=true. See docs/connect-clients.md", workloadIssuerApprovalAckEnv)
 }
 
 func parseBoolEnv(name string) (value bool, ok bool) {

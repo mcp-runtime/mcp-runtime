@@ -565,7 +565,7 @@ func ensureManagedWorkloadCA(plan setupplan.Plan, now time.Time) error {
 		}
 		if !plan.TestMode {
 			return core.NewWithSentinel(core.ErrCASecretNotFound, fmt.Sprintf(
-				"managed workload CA Secret %s/%s is missing. Production setup will not generate a new root. Restore it from your encrypted backup, create it from your CA (kubectl create secret tls %s --cert=ca.crt --key=ca.key -n %s), or use an enterprise issuer via --mtls-cluster-issuer; see docs/cli.md (Bundled workload CA lifecycle)",
+				"managed workload CA Secret %s/%s is missing. Production setup will not generate a new root. Restore it from your encrypted backup, create it from your CA (kubectl create secret tls %s --cert=ca.crt --key=ca.key -n %s), or use an enterprise issuer via --mtls-cluster-issuer; see docs/cli-reference.md (Bundled workload CA lifecycle)",
 				certmanager.CertManagerNamespace, certmanager.CertCASecretName, certmanager.CertCASecretName, certmanager.CertManagerNamespace))
 		}
 		if _, err := ensureCASecretClientGo(); err != nil {
@@ -575,11 +575,11 @@ func ensureManagedWorkloadCA(plan setupplan.Plan, now time.Time) error {
 	}
 	health, err := certmanager.ValidateCAKeyPair(secret.Data["tls.crt"], secret.Data["tls.key"], now)
 	if err != nil {
-		return core.WrapWithSentinel(core.ErrCASecretInvalid, err, fmt.Sprintf("managed workload CA %s/%s is not usable: %v. Restore a valid CA from backup or rotate it per docs/cli.md (Bundled workload CA lifecycle)", certmanager.CertManagerNamespace, certmanager.CertCASecretName, err))
+		return core.WrapWithSentinel(core.ErrCASecretInvalid, err, fmt.Sprintf("managed workload CA %s/%s is not usable: %v. Restore a valid CA from backup or rotate it per docs/cli-reference.md (Bundled workload CA lifecycle)", certmanager.CertManagerNamespace, certmanager.CertCASecretName, err))
 	}
 	days := int(health.Remaining.Hours() / 24)
 	if health.NearExpiry {
-		msg := fmt.Sprintf("managed workload CA expires %s (%d days remaining, minimum %d); rotate with dual trust per docs/cli.md (Bundled workload CA lifecycle)", health.NotAfter.UTC().Format(time.RFC3339), days, int(certmanager.MinCARemainingLifetime.Hours()/24))
+		msg := fmt.Sprintf("managed workload CA expires %s (%d days remaining, minimum %d); rotate with dual trust per docs/cli-reference.md (Bundled workload CA lifecycle)", health.NotAfter.UTC().Format(time.RFC3339), days, int(certmanager.MinCARemainingLifetime.Hours()/24))
 		if !plan.TestMode {
 			return core.NewWithSentinel(core.ErrCANearExpiry, msg)
 		}

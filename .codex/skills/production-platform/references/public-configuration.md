@@ -58,7 +58,7 @@ Non-test public TLS (`--platform-mode public --with-tls`) requires `GOOGLE_CLIEN
 
 ## k3s-specific
 
-Use `.codex/skills/production-platform/SKILL.md`, `docs/k3s-deployment-runbook.md`, and `docs/cluster-readiness.md` for scripted deploy, node `registries.yaml`, and multitenancy smoke.
+Use `.codex/skills/production-platform/SKILL.md`, `docs/reference-deployment.md`, and `docs/cluster-readiness.md` for scripted deploy, node `registries.yaml`, and multitenancy smoke.
 
 ## Troubleshooting cross-links
 

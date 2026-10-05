@@ -15,7 +15,7 @@ rules:
   # creates a request and polls that one by name, so list/watch (which would
   # expose every team's CSRs) are intentionally not granted. Pair this with a
   # workload-issuer approval policy before enabling adapter certificates; see
-  # docs/agent-adapters.md.
+  # docs/connect-clients.md.
   - apiGroups: ["cert-manager.io"]
     resources: ["certificaterequests"]
     verbs: ["create", "get"]

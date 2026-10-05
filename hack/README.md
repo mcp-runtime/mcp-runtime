@@ -38,9 +38,9 @@ PLATFORM_URL=... MCP_URL=... REGISTRY_HOST=... hack/deploy/mcpruntime-org/multit
 ```
 
 Use `backup.sh --full --online-copy` before destructive cleanup or for full
-node recovery; see `docs/k3s-deployment-runbook.md` for coverage and limits.
+node recovery; see `docs/reference-deployment.md` for coverage and limits.
 
-See `docs/k3s-deployment-runbook.md` for the full runbook.
+See `docs/reference-deployment.md` for the full runbook.
 
 ## CI / dev
 

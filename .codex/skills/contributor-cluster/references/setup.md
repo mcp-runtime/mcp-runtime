@@ -4,7 +4,7 @@
 ## Overview
 
 This skill provisions or recovers the **real** contributor cluster described in
-`docs/getting-started.md#3-contributor-test-mode-cluster`. It is the entry
+`docs/self-hosting.md#3-contributor-test-mode-cluster`. It is the entry
 point for every other `qa-e2e-*` skill. It is **not** a unit-test skill — it
 boots a Kind cluster, builds and pushes runtime images, installs the operator
 and Sentinel stack, deploys the bundled Go MCP server, applies a working
@@ -113,7 +113,7 @@ MCP_SETUP_WAIT_TIMEOUT=900 \
 CI QA E2E can skip rebuilding unchanged platform images via content-hash
 tags on GHCR (`E2E_IMAGE_CACHE=1`, `MCP_SETUP_IMAGE_CACHE=1`,
 `E2E_GHCR_PUSH=1`). Local bring-up leaves those unset and builds as usual.
-See `docs/internals/tests.md` (Content-hash GHCR image cache).
+See `docs/internals/testing.md` (Content-hash GHCR image cache).
 
 In **reuse** mode, skip `kind create`; still run `make build` (CLI may be
 stale) and `bootstrap`. Skip `setup` only if `cluster doctor` already
@@ -179,7 +179,7 @@ curl -fsS -o /dev/null http://localhost:18080/ && echo "dashboard reachable"
 
 ## Step 7 — Deploy the bundled Go MCP example
 
-Use the metadata from `docs/getting-started.md#3-contributor-test-mode-cluster`
+Use the metadata from `docs/self-hosting.md#3-contributor-test-mode-cluster`
 exactly — gateway policy, analytics, and required headers all depend on the
 documented shape.
 

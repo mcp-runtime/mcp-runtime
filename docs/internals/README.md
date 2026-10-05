@@ -1,10 +1,25 @@
-# Internals
+# Implementation Details
+
+<span id="internals"></span>
 
 These pages describe how the MCP Runtime codebase is organized: the CLI, operator, Kubernetes API types, platform services, manifests, and tests. Read them before changing one of those areas.
 
 For platform usage, start with the [user docs](../README.md). This section is
 for contributors who need to understand package boundaries, runtime flows, and
 the checks that protect each subsystem.
+
+## Reading path
+
+Start with [API Types](api-types.md) and [Request Flows](request-flows.md), then
+follow the component involved in your change. Use
+[Development and Testing](../contributor/README.md) for the local contribution loop.
+
+| Guide group | What it covers | Entry points |
+|---|---|---|
+| Contracts and Flows | Resource shapes, request paths, server metadata, and manifests | [API Types](api-types.md), [Request Flows](request-flows.md) |
+| Components | CLI startup and commands, operator reconciliation, and workload inventory | [CLI Implementation](cli.md), [Operator](operator.md), [Component Inventory](component-inventory.md) |
+| Security and Lifecycle | Credential consumers, Secret access, rollouts, and log collector admission | [Credential Ownership](credential-consumers.md), [Operator Secret Access](operator-secret-access.md), [Dependency Rollouts](dependency-rollouts.md) |
+| Developer References | Package documentation, design background, and test coverage | [Go Package Reference](go-package-reference.md), [Tests and Coverage](testing.md) |
 
 ## Mental model
 
@@ -18,7 +33,9 @@ MCP Runtime is a Kubernetes-native control plane for MCP servers. Most changes t
 ```mermaid
 flowchart LR
     User[User or automation] --> CLI[mcp-runtime CLI]
-    CLI --> K8s[Kubernetes API]
+    CLI --> RunAPI[runtime-api]
+    CLI --> PlatAPI[platform-api]
+    CLI -. setup or explicit admin Kubernetes mode .-> K8s[Kubernetes API]
     CLI --> Registry[Container registry]
     K8s --> CRDs[MCP Runtime CRDs]
     CRDs --> Operator[Operator controller]
@@ -29,14 +46,16 @@ flowchart LR
     Gateway --> Policy
     Gateway --> Workloads
     Gateway --> Ingest[Analytics ingest]
-    Ingest --> Processor[Processor]
-    Processor --> Store[(ClickHouse/Postgres)]
+    Ingest --> Kafka[(Kafka)]
+    Kafka --> Processor[Processor]
+    Processor --> Store[(ClickHouse)]
+    DB[(Postgres)]
     UI[Platform UI] --> Ingress[Traefik /api/v1]
     Ingress --> PlatAPI[platform-api]
     Ingress --> RunAPI[runtime-api]
     Ingress --> AnaAPI[analytics-api]
     RunAPI --> K8s
-    PlatAPI --> Store
+    PlatAPI --> DB
     AnaAPI --> Store
 ```
 
@@ -44,8 +63,8 @@ flowchart LR
 
 | Area | Start here | Why it matters |
 |---|---|---|
-| CLI entrypoint | [`cmd-mcp-runtime.md`](cmd-mcp-runtime.md) | Shows how the binary starts, wires foldered Cobra commands, and reports errors. |
-| CLI implementation | [`internal-cli.md`](internal-cli.md) | Covers the `internal/cli/root` routing layer plus setup, bootstrap, registry, server, access, adapter, auth, team, status, and sentinel behavior. |
+| CLI entrypoint | [`cli-entrypoint.md`](cli-entrypoint.md) | Shows how the binary starts, wires foldered Cobra commands, and reports errors. |
+| CLI implementation | [`cli.md`](cli.md) | Covers the `internal/cli/root` routing layer plus setup, bootstrap, registry, server, access, adapter, auth, team, status, and sentinel behavior. |
 | Kubernetes API types | [`api-types.md`](api-types.md) | Defines the public CRD shapes consumed by users, tests, and the operator. |
 | Request flows | [`request-flows.md`](request-flows.md) | Maps CLI, UI/API, registry, adapter, MCP runtime, policy, analytics, tenancy, and pre-release paths to components and E2E scenarios. |
 | Platform API services | [`../platform-services.md`](../platform-services.md) | Three-service split (platform-api, runtime-api, analytics-api): Traefik `/api/v1` routing, RBAC, `/internal/*` contracts, OpenAPI per service. |
@@ -53,31 +72,39 @@ flowchart LR
 | Generated Go reference | [`go-package-reference.md`](go-package-reference.md) | Captures `go doc` output for the main contributor-facing packages. |
 | Agent adapter | `internal/agentadapter/`, `internal/cli/adapter/` | Streamable HTTP proxy behavior with session-bound client certificates; exposed via `mcp-runtime adapter proxy`. |
 | Operator Secret access | [`operator-secret-access.md`](operator-secret-access.md) | Scoped tenant Secret permissions and the named public trust bundle exception. |
-| Operator | [`cmd-operator.md`](cmd-operator.md) | Explains manager startup and reconciliation from desired state to Kubernetes resources. |
+| Operator | [`operator.md`](operator.md) | Explains manager startup and reconciliation from desired state to Kubernetes resources. |
 | Component inventory | [`component-inventory.md`](component-inventory.md) | Stable workload identity, ownership and validated namespace layout resolution. |
 | Control-plane helpers | `pkg/controlplane/` | Shared MCPServer Kubernetes operations and status projection used outside HTTP/CLI glue. |
 | Shared policy and events | `pkg/policy/`, `pkg/events/`, `pkg/clickhouse/` | Gateway policy contracts/evaluation plus event envelopes and ClickHouse query/insert helpers. |
 | Service and workload helpers | `pkg/serviceutil/`, `pkg/kubeworkload/` | Shared service HTTP/env/OTel helpers and restricted Kubernetes workload defaults. |
 | API service internals | `services/runtime-api/internal/runtimeapi/`, `services/platform-api/internal/platformstore/`, `pkg/apihttp/`, `pkg/platformauth/`, `pkg/internalapi/` | Split API modules: runtime HTTP/Kubernetes orchestration, platform Postgres persistence, shared HTTP contract helpers. |
-| Metadata helpers | [`pkg-metadata.md`](pkg-metadata.md) | Covers `.mcp` metadata loading, host resolution, and CRD generation helpers. |
+| Metadata helpers | [`metadata.md`](metadata.md) | Covers `.mcp` metadata loading, host resolution, and CRD generation helpers. |
 | Manifests and examples | [`config-and-examples.md`](config-and-examples.md) | Explains Kustomize overlays, registry/ingress config, and example MCP servers. |
-| Tests | [`tests.md`](tests.md) | Maps unit, golden, integration, and QA E2E coverage. |
+| Tests | [`testing.md`](testing.md) | Maps unit, golden, integration, and QA E2E coverage. |
 
 ## Control-plane flow
 
-A normal deployment starts in the CLI, passes through the Kubernetes API, and is completed by reconciliation.
+A normal server deployment starts in the CLI, passes through runtime-api and
+the Kubernetes API, and is completed by reconciliation. Setup and explicit
+admin Kubernetes mode write to Kubernetes directly.
 
 ```mermaid
 sequenceDiagram
     participant U as User
     participant CLI as mcp-runtime CLI
+    participant API as runtime-api
     participant K as Kubernetes API
     participant O as Operator
     participant R as Registry
     participant W as Workloads
 
     U->>CLI: setup / server deploy (platform API) or server apply --use-kube
-    CLI->>K: apply CRDs, manifests, MCPServer (platform API or --use-kube)
+    alt normal server deploy
+        CLI->>API: Authenticated MCPServer request
+        API->>K: Apply MCPServer after authorization
+    else setup or explicit admin Kubernetes mode
+        CLI->>K: Apply CRDs or selected manifests
+    end
     CLI->>R: build or push images when requested
     K-->>O: watch MCPServer changes
     O->>K: create or update Deployment, Service, Ingress
@@ -90,7 +117,11 @@ When changing this path, check the relevant CLI command, the `api/v1alpha1` cont
 
 ## Runtime request flow
 
-At request time, clients do not call server pods directly. Traffic flows through the gateway, which validates OAuth and checks grants and sessions before forwarding MCP JSON-RPC calls. The optional agent adapter runs beside a client that needs a local HTTP proxy; it forwards OAuth and adds identity from a verified client certificate.
+With the gateway enabled, ingress sends requests through the gateway before
+they reach the application. OAuth validation applies when `spec.auth` is set;
+grant/session enforcement applies to allow-list policy. Observe mode forwards
+calls without those policy checks. With the gateway explicitly disabled, the
+application handles authentication and authorization itself. The optional agent adapter runs beside a client that needs a local HTTP proxy; it forwards OAuth and adds identity from a verified client certificate.
 
 ```mermaid
 flowchart TD
@@ -103,7 +134,8 @@ flowchart TD
     Authz -->|deny| Deny[JSON-RPC error]
     Gateway --> Events[Audit and analytics event]
     Events --> Ingest[services/ingest]
-    Ingest --> Processor[services/processor]
+    Ingest --> Kafka[(Kafka)]
+    Kafka --> Processor[services/processor]
     Processor --> Analytics[(analytics store)]
     RuntimeAPI[runtime-api] --> Grants[MCPAccessGrant]
     RuntimeAPI --> Sessions[MCPAgentSession]
@@ -120,7 +152,7 @@ flowchart TB
     Cmd[cmd/mcp-runtime] --> CLIRoot[internal/cli/root]
     CLIRoot --> CLIAdapter
     CLIAdapter[internal/cli/adapter] --> AgentAdapter[internal/agentadapter]
-    CLIRoot --> CLICommands[internal/cli/<command>]
+    CLIRoot --> CLICommands[CLI command packages]
     CLICommands --> CLICore[internal/cli/core]
     CLICommands --> Metadata[pkg/metadata]
     CLICommands --> Manifest[pkg/manifest]
@@ -140,7 +172,7 @@ flowchart TB
     Services --> ClickHouse[pkg/clickhouse]
     Services --> Events[pkg/events]
     Gateway[services/mcp-gateway] --> Policy
-    PlatformAPI[services/platform-api] --> Workload
+    RuntimeAPI[services/runtime-api] --> Workload
     RuntimeAPI[services/runtime-api] --> RuntimeAPIPkg[services/runtime-api/internal/runtimeapi]
     PlatformAPI --> PlatformStore[services/platform-api/internal/platformstore]
     PlatformAPI --> APIAuth[services/platform-api/internal/apiauth]
@@ -155,11 +187,11 @@ Keep shared behavior in `pkg/` only when multiple binaries or services need it. 
 ## Learning path
 
 1. Read [API types](api-types.md) first. The CRDs are the contract that every other subsystem follows.
-2. Read [CLI internals](internal-cli.md) and [cmd/mcp-runtime](cmd-mcp-runtime.md) to see how users create, inspect, and deploy resources.
-3. Read [operator internals](cmd-operator.md) to understand how `MCPServer` state becomes Kubernetes workloads and ingress.
+2. Read [CLI internals](cli.md) and [cmd/mcp-runtime](cli-entrypoint.md) to see how users create, inspect, and deploy resources.
+3. Read [operator internals](operator.md) to understand how `MCPServer` state becomes Kubernetes workloads and ingress.
 4. Read [config and examples](config-and-examples.md), then run or inspect the example server manifests.
 5. Read [request flows](request-flows.md) when a change crosses CLI, UI, API, registry, gateway, policy, analytics, or tenant boundaries.
-6. Read [tests](tests.md) before making changes; it shows the fastest feedback loop and the broader CI safety net.
+6. Read [tests](testing.md) before making changes; it shows the fastest feedback loop and the broader CI safety net.
 7. Use the change playbooks below to choose the narrowest useful tests before
    broadening to full CI coverage.
 
@@ -186,8 +218,8 @@ workflows.
 | Change generated manifests | `pkg/metadata`, `pkg/manifest`, `config/`, examples | targeted package tests plus manifest diff review |
 | Change reconciliation behavior | `internal/operator`, API types, k8s helpers | `go test ./internal/operator/... -race -count=1` |
 | Change governance policy | `pkg/access`, `pkg/policy`, `services/runtime-api`, `services/mcp-gateway`, access CRDs | targeted package/service tests plus e2e policy scenario |
-| Change agent adapters | `internal/agentadapter`, `internal/cli/adapter`, `docs/agent-adapters.md` | `go test ./internal/agentadapter ./internal/cli/adapter -count=1` |
-| Change team provisioning or membership | `internal/cli/team`, `services/runtime-api/internal/runtimeapi`, `services/platform-api/internal/platformstore`, `docs/multi-team.md` | `go test ./internal/cli/team -count=1` plus service API tests inside `services/platform-api` and `services/runtime-api` |
+| Change agent adapters | `internal/agentadapter`, `internal/cli/adapter`, `docs/connect-clients.md` | `go test ./internal/agentadapter ./internal/cli/adapter -count=1` |
+| Change team provisioning or membership | `internal/cli/team`, `services/runtime-api/internal/runtimeapi`, `services/platform-api/internal/platformstore`, `docs/teams-and-access.md` | `go test ./internal/cli/team -count=1` plus service API tests inside `services/platform-api` and `services/runtime-api` |
 | Change event storage | `pkg/events`, `pkg/clickhouse`, `services/ingest`, `services/processor`, `services/analytics-api`, `services/mcp-gateway` | package tests plus touched service tests |
 | Change docs site behavior | `docs/mkdocs.yml`, `docs/nginx.conf`, Markdown pages | MkDocs build or docs container build |
 

@@ -1474,7 +1474,7 @@ print(json.dumps({"email": os.environ["ADAPTER_MEMBER_EMAIL"], "password": os.en
     "http://127.0.0.1:${API_SERVICE_PORT}/api/v1/auth/login" | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')"
 }
 
-# tenant_owner_cli runs the CLI the way a docs/quickstart.md user does: only
+# tenant_owner_cli runs the CLI the way a docs/hosted-quickstart.md user does: only
 # the saved `auth login` profile, no API token or other MCP_* configuration,
 # and no kubeconfig, so every command goes through the platform API as that
 # user. Select the profile explicitly so every subprocess uses the same owner
