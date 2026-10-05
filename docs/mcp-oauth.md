@@ -255,7 +255,7 @@ deploy this authorization server.
 The mcp-auth server image is released independently from the MCP Runtime CLI
 and platform images. For a public production rollout, use a unique image ref
 such as `registry.mcpruntime.org/mcp-auth-server:<tag>` and update it through
-the [k3s deployment runbook](k3s-deployment-runbook.md#separate-release-tracks-and-user-verification).
+the [reference deployment guide](reference-deployment.md#separate-release-tracks-and-user-verification).
 An image-only update preserves the existing connector configuration, SQLite
 PVC, signing key, and TLS Secret; it does not require rerunning `setup` or
 issuing a certificate.
@@ -494,3 +494,11 @@ exchange boundaries.
   and confirm the bundled auth server resource list reflects current OAuth MCPServers.
 - tokens fail after restart: use a persistent RSA signing-key Secret; do not
   rely on the test-mode ephemeral key.
+
+## Next steps
+
+Once the OAuth resource and authorization server are configured, use
+[Client Connections](connect-clients.md) to supply the bearer token together
+with adapter identity, and follow this guide's verification steps.
+[Identity and Authorization](identity-and-authorization.md) explains how the
+OAuth subject is bound to the session human during enforcement.

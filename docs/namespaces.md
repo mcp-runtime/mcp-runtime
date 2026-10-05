@@ -1,9 +1,13 @@
 # Namespaces
 
-`pkg/platforminventory` is the only owner-to-namespace map. `mcp-runtime setup`
-installs into these namespaces.
-Setup creates `mcp-platform` and `mcp-observability` before applying the
-Traefik bundle because its Roles and RoleBindings live in both namespaces.
+This page shows where MCP Runtime's components run in your Kubernetes cluster.
+A namespace groups related services and their configuration. `mcp-runtime
+setup` creates the platform namespaces; team workflows create separate
+namespaces for each team's servers.
+
+For contributors, `pkg/platforminventory` defines the component placement.
+Setup creates `mcp-platform` and `mcp-observability` before installing Traefik
+because its permissions refer to both namespaces.
 
 | Namespace | What runs there |
 |---|---|
@@ -46,7 +50,7 @@ Each key lives on the Secret that owns it, in that owner's namespace.
 | `mcp-runtime-ingest-credentials` | `mcp-platform` | Ingest key copy read by runtime-api |
 
 The bundled Traefik allowlist is `registry`, `mcp-platform`,
-`mcp-observability`, `mcp-servers`, `mcp-servers-org`, and
+`mcp-observability`, `mcp-log-collector`, `mcp-servers`, `mcp-servers-org`, and
 `mcp-servers-public`. Team create appends `mcp-team-{slug}` only when the
 Traefik Deployment already has `--providers.kubernetesingress.namespaces`.
 k3s Traefik in `kube-system` watches every namespace and is left unchanged.

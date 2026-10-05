@@ -20,7 +20,7 @@ Shared helpers live in `lib/`:
 | `lib/clean.sh` | Namespace selection and cluster-scoped CR cleanup |
 | `lib/registry.sh` | Registry pull secret and internal skopeo push via port-forward |
 
-Runbook: `docs/k3s-deployment-runbook.md`
+Runbook: `docs/reference-deployment.md`
 
 Run production builds with the workstation's selected Docker daemon and set
 `MCP_IMAGE_PLATFORM=linux/amd64` for the current k3s nodes. Set

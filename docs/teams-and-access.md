@@ -1,9 +1,12 @@
 # Multi-Team Isolation
 
-MCP Runtime's beta multi-team model combines team identity with Kubernetes
-namespace boundaries. `MCPServer.spec.teamID` records the owning
-platform team. `SubjectRef.teamID` constrains grants and sessions to callers
-from that team. Namespaces and RBAC still isolate who can create resources.
+Each team has its own place to deploy servers and manage access. Kubernetes
+namespaces keep those resources separate, and the platform checks team
+membership before allowing changes. A team can share a server with another
+team through an explicit grant.
+
+In the resource definitions, `MCPServer.spec.teamID` records the owning team.
+`SubjectRef.teamID` identifies the team allowed to use a grant or session.
 
 The source-of-truth data plane is:
 
@@ -179,9 +182,11 @@ when present, or the sole team ID when there is only one.
 
 ## Platform API Enforcement
 
-The platform API fails closed for team-scoped writes. The setup-time
-`--platform-mode` decides which catalog namespace non-admin users see by
-default:
+The platform API blocks changes outside a user's allowed team namespaces.
+When you install MCP Runtime, `--platform-mode` chooses which catalog users see
+by default. In `public` mode, visitors can browse that catalog without signing
+in. This is a setting for your own platform; the public reference deployment
+at `platform.mcpruntime.org` is a separate installation.
 
 | Mode | Default namespace behavior | Non-admin behavior |
 |---|---|---|
@@ -292,7 +297,9 @@ server owner's team without joining through namespace names.
 
 ## Known Limits
 
-- Team-wide grants require a trusted `teamID` header or OAuth team claim.
+- Team-wide grants require team identity from a verified adapter session or
+  validated OAuth team claims. Arbitrary client-supplied identity headers are
+  not trusted.
 - The evaluator does exact string matching. It does not resolve live group
   membership from the platform database.
 - Direct `kubectl apply` can bypass platform API defaulting; Kubernetes RBAC is
@@ -306,7 +313,8 @@ server owner's team without joining through namespace names.
 
 ## Operational Checklist
 
-1. Create one namespace per team or tenant boundary.
+1. Use `mcp-runtime team create` to provision a namespace per team or tenant
+   boundary.
 2. Bind team admins only to their namespace.
 3. Put each team's `MCPServer`, `MCPAccessGrant`, `MCPAgentSession`, analytics
    secrets, and image pull secrets in that namespace.
@@ -314,12 +322,18 @@ server owner's team without joining through namespace names.
 5. Set `subject.teamID` on grants and sessions, or use the platform API so it
    defaults missing values from the owning server team. Use an explicit foreign
    `subject.teamID` for delegated cross-team access.
-6. Configure trusted header or OAuth team identity extraction.
+6. Configure verified adapter-certificate identity and OAuth when the server
+   enables it.
 7. Add team namespaces to the ingress controller watch list and RBAC.
 
 ## Related Docs
 
-- [Getting Started](getting-started.md) for the single-namespace local flow.
-- [CLI](cli.md) for `team`, `access`, and namespace-scoped commands.
-- [Runtime](runtime.md) for CRD and reconciliation behavior.
-- [API Reference](api.md) for access resource fields.
+- [Getting Started](self-hosting.md) for self-hosting;
+  [Local Kind](contributor/local-kind.md) for contributor setup.
+- [CLI](cli-reference.md) for `team`, `access`, and namespace-scoped commands.
+- [Runtime](runtime-operations.md) for CRD and reconciliation behavior.
+- [API Reference](api-reference.md) for access resource fields.
+
+**Next:** [Client Connections](connect-clients.md) connects an authorized agent
+using its session certificate. Use [Server Publishing](publish-mcp-server.md)
+first if the team's server is not deployed yet.
