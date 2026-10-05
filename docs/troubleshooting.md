@@ -175,7 +175,7 @@ failure. Do not copy a platform service key into a hand-written tenant Secret.
 
 1. Check the ingest service is receiving events:
    ```bash
-   mcp-runtime sentinel logs ingest --since 5m
+   mcp-runtime ops logs ingest --since 5m
    ```
    `401` errors mean the analytics API key in the gateway sidecar is stale.
    Check the server’s analytics Secret reference and ingest logs. Repair using
@@ -183,7 +183,7 @@ failure. Do not copy a platform service key into a hand-written tenant Secret.
 
 2. Check the processor is consuming from Kafka:
    ```bash
-   mcp-runtime sentinel logs processor --since 5m
+   mcp-runtime ops logs processor --since 5m
    ```
 
 3. Check Kafka has the `mcp.events` topic:
@@ -217,8 +217,8 @@ setup run.
 ```bash
 # After correcting configuration through the supported setup path,
 # restart only a component that still needs to reload its credentials.
-mcp-runtime sentinel restart runtime-api
-mcp-runtime sentinel status
+mcp-runtime ops restart runtime-api
+mcp-runtime ops status
 ```
 
 A `401` alone does not establish key drift. Check the saved login with

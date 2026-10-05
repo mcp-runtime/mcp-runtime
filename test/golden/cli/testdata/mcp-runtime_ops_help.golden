@@ -1,7 +1,7 @@
 Inspect and operate the bundled platform analytics, gateway, and observability stack. These commands require admin/operator Kubernetes access with kubectl; normal users should use the platform API and dashboard instead.
 
 Usage:
-  mcp-runtime sentinel [command]
+  mcp-runtime ops [command]
 
 Available Commands:
   events       Show recent Kubernetes events for the platform namespaces
@@ -12,9 +12,9 @@ Available Commands:
   status       Show platform stack status
 
 Flags:
-  -h, --help   help for sentinel
+  -h, --help   help for ops
 
 Global Flags:
       --debug   Enable debug mode with structured error logging
 
-Use "mcp-runtime sentinel [command] --help" for more information about a command.
+Use "mcp-runtime ops [command] --help" for more information about a command.

@@ -526,7 +526,7 @@ PARALLEL_FAILED=0
 PARALLEL_SEQ=0
 STAGE_SEQ=0
 
-# `mcp-runtime sentinel port-forward` runs `kubectl port-forward` as a child
+# `mcp-runtime ops port-forward` runs `kubectl port-forward` as a child
 # and does not pass SIGTERM on, so killing only the CLI left kubectl holding
 # its port. A cache-mode replay in the same job then failed with
 # "localhost:18103 is already in use". Stop the children first.
@@ -808,12 +808,12 @@ run_cli_help_sweep() {
     "access session delete"
     "access session revoke"
     "access session unrevoke"
-    "sentinel"
-    "sentinel status"
-    "sentinel logs"
-    "sentinel events"
-    "sentinel port-forward"
-    "sentinel restart"
+    "ops"
+    "ops status"
+    "ops logs"
+    "ops events"
+    "ops port-forward"
+    "ops restart"
     "server generate"
     "setup"
     "status"
@@ -4122,12 +4122,12 @@ fi
   --username e2e \
   --password e2e \
   --dry-run >"${WORKDIR}/registry-provision-dry-run.txt"
-./bin/mcp-runtime sentinel status
-./bin/mcp-runtime sentinel events >"${WORKDIR}/sentinel-events.txt"
-./bin/mcp-runtime sentinel logs api --tail 20 >"${WORKDIR}/sentinel-api-logs.txt"
+./bin/mcp-runtime ops status
+./bin/mcp-runtime ops events >"${WORKDIR}/ops-events.txt"
+./bin/mcp-runtime ops logs api --tail 20 >"${WORKDIR}/ops-api-logs.txt"
 require_port_available "${CLI_SENTINEL_API_PORT}" "sentinel CLI port-forward"
 _cli_pf_pid=""
-./bin/mcp-runtime sentinel port-forward api \
+./bin/mcp-runtime ops port-forward api \
   --port "${CLI_SENTINEL_API_PORT}" \
   --address 127.0.0.1 >"${WORKDIR}/sentinel-cli-port-forward.log" 2>&1 &
 _cli_pf_pid="$!"
@@ -6738,7 +6738,7 @@ echo "[cli] checking sentinel restart command"
 # The full E2E stack packs single-node Kind tightly, so avoid requiring surge CPU for this restart smoke.
 refresh_kind_kubeconfig
 kubectl patch deployment mcp-platform-api -n mcp-platform --type merge -p '{"spec":{"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxSurge":0,"maxUnavailable":1}}}}' >/dev/null
-KUBECONFIG="${KUBECONFIG_FILE}" ./bin/mcp-runtime sentinel restart api
+KUBECONFIG="${KUBECONFIG_FILE}" ./bin/mcp-runtime ops restart api
 rollout_status_with_logs mcp-platform deploy mcp-platform-api 180s
 
 echo "[cli] deleting deployed MCP servers"
