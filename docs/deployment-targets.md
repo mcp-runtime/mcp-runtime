@@ -148,6 +148,23 @@ platform security policy before using those clusters.
 On self-managed clusters you control node runtime configuration, and you own
 every node pull path.
 
+### HTTPS registry NodePort migration
+
+HTTPS registry overlays expose a ClusterIP Service, with no unauthenticated
+NodePort. Public publication continues through the authenticated registry
+ingress; bundled HTTPS node pulls use the configured internal Service endpoint.
+The plain HTTP lab overlays retain NodePort 32000.
+
+Before upgrading an HTTPS installation that configured a containerd mirror at
+`127.0.0.1:32000` or a node address on port 32000, switch every node to the
+supported bundled HTTPS pull endpoint and configure its CA trust. Verify a new
+image pull before applying the registry overlay. An upgrade removes that
+NodePort; existing running containers remain running, but stale mirrors would
+prevent subsequent pulls. Back up the containerd configuration and preserve
+registry storage and certificates. Do not expose another backend port as a
+workaround. This closes the node exposure; repository-scoped authentication on
+the internal endpoint is still tracked in #531.
+
 ### k3s lab example
 
 Use this for a single-node k3s lab or internal evaluation with the bundled
