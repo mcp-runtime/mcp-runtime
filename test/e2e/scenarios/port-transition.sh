@@ -5,12 +5,14 @@ run_e2e_port_transition_scenario() {
   [[ "$(kubectl config current-context)" == "kind-${CLUSTER_NAME}" ]] || {
     echo '[port-transition] requires the QA Kind context' >&2; return 1;
   }
-  local directory="${WORKDIR}/port-transition" old_port candidate_port deadline
+  local directory="${WORKDIR}/port-transition" old_port candidate_port deadline gateway_image
   mkdir -p "${directory}"
   kubectl get mcpserver "${SERVER_NAME}" -n mcp-servers -o json >"${directory}/original.json"
   kubectl get service "${SERVER_NAME}" -n mcp-servers -o json >"${directory}/service-before.json"
+  kubectl get deployment "${SERVER_NAME}" -n mcp-servers -o json >"${directory}/deployment-before.json"
   old_port="$(jq -r '.spec.ports[0].targetPort' "${directory}/service-before.json")"
   candidate_port=$((old_port + 10))
+  gateway_image="$(jq -er '.spec.template.spec.containers[] | select(.name == "mcp-gateway") | .image' "${directory}/deployment-before.json")"
   jq --arg image 'registry.registry.svc.cluster.local:5000/mcp-gateway:missing-port-transition-fixture' \
     --argjson port "${candidate_port}" \
     'del(.status, .metadata.managedFields, .metadata.resourceVersion, .metadata.uid, .metadata.creationTimestamp) | .spec.gateway.port=$port | .spec.gateway.image=$image' \
@@ -33,8 +35,8 @@ run_e2e_port_transition_scenario() {
     wait_for_mcp_tool_result "${MCP_SESSION_URL}" aaa-ping '{}' 200 pong 1 '' port-transition-retained
     sleep 2
   done
-  jq --argjson port "${candidate_port}" \
-    'del(.status, .metadata.managedFields, .metadata.resourceVersion, .metadata.uid, .metadata.creationTimestamp) | .spec.gateway.port=$port' \
+  jq --argjson port "${candidate_port}" --arg image "${gateway_image}" \
+    'del(.status, .metadata.managedFields, .metadata.resourceVersion, .metadata.uid, .metadata.creationTimestamp) | .spec.gateway.port=$port | .spec.gateway.image=$image' \
     "${directory}/original.json" >"${directory}/fixed.json"
   ./bin/mcp-runtime server --use-kube apply --file "${directory}/fixed.json"
   deadline=$((SECONDS + 180))
