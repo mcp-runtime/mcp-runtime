@@ -385,6 +385,10 @@ IngressRoute on `websecure` only — probe them at
 
 ## 5. Confirm health { #6-confirm-health }
 
+After `mcp-runtime auth login --api-url <platform-url>`, use `status` for a quick
+authenticated platform API check. Use the other status commands for cluster,
+registry, and workload health.
+
 ```bash
 mcp-runtime status
 mcp-runtime cluster status

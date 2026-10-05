@@ -247,6 +247,10 @@ Grants, sessions, adapter flows, MCP curl examples: **`access-governance`** skil
 
 ## Logs and observability
 
+`mcp-runtime status` is a quick authenticated platform API check with a
+five-second timeout; it does not query Kubernetes or list servers. Use
+`server list`, `cluster status`, and `ops status` for those details.
+
 For production incidents, start with [Grafana](https://platform.mcpruntime.org/grafana): inspect metrics, aggregated logs, and distributed traces for the same incident window. Read private credentials from `~/.mcpruntime/infra.env` without displaying them. Verify collection coverage and correlate request/trace IDs with the affected client's own logs. See the [production observability workflow](docs/reference-deployment.md#production-observability-and-debugging).
 
 When work reveals a concrete maintainability or debuggability improvement, search for an existing issue first. Create an actionable ticket in `mcp-runtime/mcp-runtime` when none exists, then attach the new or existing ticket to [Maintainability and Debuggability Improvement](https://github.com/orgs/mcp-runtime/projects/1) (organization project 1). Include redacted evidence, affected components, proposed scope, and acceptance checks; never include credentials, tokens, private user content, or tool payloads. Record missing instrumentation and collection/correlation gaps explicitly.
