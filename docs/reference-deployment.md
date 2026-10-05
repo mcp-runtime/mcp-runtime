@@ -13,7 +13,7 @@ and provide a worked example for operators building their own deployment.
 The Runtime cluster uses
 **K3s**; the external identity provider runs on a separate VM with Docker and
 Caddy. K3s is the distribution selected for this example, not a requirement
-for MCP Runtime. See [Deployment Targets](deployment-targets.md) for other
+for MCP Runtime. See [Deployment Options](deployment-targets.md) for other
 Kubernetes distributions and [Self-Hosting](self-hosting.md) for the general
 installation path.
 
@@ -47,7 +47,7 @@ have their own backup and recovery boundary outside Kubernetes.
 
 For a provider-managed cluster, use the provider's supported login/configure
 command to write a kubeconfig context; see the per-distribution overview in
-[Deployment Targets](deployment-targets.md#get-a-kubeconfig-for-the-target-distribution).
+[Deployment Options](deployment-targets.md#get-a-kubeconfig-for-the-target-distribution).
 For this self-managed k3s cluster, use the isolated production file
 `$HOME/.kube/prod-mcp-runtime-config` when it is provisioned. Keep the default
 `~/.kube/config` on the contributor test context and do not merge production

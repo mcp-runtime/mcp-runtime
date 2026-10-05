@@ -59,7 +59,6 @@ nav:
   - Home: README.md
   - Start Here:
       - Hosted Quickstart: hosted-quickstart.md
-      - Self-Host MCP Runtime: self-hosting.md
       - Guided Tutorials: learn/README.md
       - "Module 1: Core Concepts": learn/01-core-concepts.md
       - "Module 2: Your First Server": learn/02-first-governed-server.md
@@ -71,14 +70,18 @@ nav:
       - Manage Teams and Isolation: teams-and-access.md
   - Self-Host and Operate:
       - Overview: hosting-overview.md
-      - Choose a Deployment Target: deployment-targets.md
-      - Prepare Your Cluster: cluster-readiness.md
-      - Cluster Provisioning: cluster-provisioning.md
-      - Public Reference Deployment: reference-deployment.md
-      - Runtime Operations: runtime-operations.md
-      - Namespaces: namespaces.md
-      - Platform Services and Observability: platform-services.md
-      - Troubleshooting: troubleshooting.md
+      - Installation:
+          - Deployment Options: deployment-targets.md
+          - Cluster Requirements: cluster-readiness.md
+          - Platform Installation: self-hosting.md
+      - Public Reference:
+          - Cluster Provisioning: cluster-provisioning.md
+          - Deployment Guide: reference-deployment.md
+      - Operations:
+          - Runtime Operations: runtime-operations.md
+          - Namespaces: namespaces.md
+          - Services and Observability: platform-services.md
+          - Troubleshooting: troubleshooting.md
   - Concepts and Architecture:
       - Core Concepts: core-concepts.md
       - Identity and Authorization: identity-and-authorization.md

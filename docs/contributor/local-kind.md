@@ -122,7 +122,7 @@ Platform and plain Ingress URLs are HTTP over a port-forward because
 `--test-mode` with the HTTP ingress overlay is a local-only shape.
 Adapter-certificate IngressRoutes still terminate TLS on `:18443`. Any shared
 or public install uses `--with-tls` and the `platform`, `registry`, and `mcp`
-hostnames instead; see [Deployment Targets](../deployment-targets.md).
+hostnames instead; see [Deployment Options](../deployment-targets.md).
 
 ## Seeded Logins
 

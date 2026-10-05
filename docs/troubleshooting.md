@@ -135,7 +135,7 @@ MCP_PLATFORM_API_PROFILE=admin \
 The cluster node does not trust the registry's TLS certificate.
 
 For `bundled-https` mode, the registry uses the internal `mcp-runtime-ca`. Nodes
-must trust this CA. See [Cluster Readiness](cluster-readiness.md) for distribution-
+must trust this CA. See [Cluster Requirements](cluster-readiness.md) for distribution-
 specific node trust configuration.
 
 ### `no basic auth credentials` on image pull

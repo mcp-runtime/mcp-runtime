@@ -17,21 +17,45 @@ To use the existing public platform, follow the
 operators hosting their own platform or learning how the public reference is
 operated.
 
-## Follow the deployment lifecycle
+<span id="follow-the-deployment-lifecycle"></span>
 
-| Task | Guide |
-|---|---|
-| Choose the Kubernetes distribution and install shape | [Choose a Deployment Target](deployment-targets.md) |
-| Check DNS, registry access, ingress, TLS, and storage prerequisites | [Prepare Your Cluster](cluster-readiness.md) |
-| Provision infrastructure using the worked cluster example | [Cluster Provisioning](cluster-provisioning.md) |
-| Install the CLI and platform on your prepared cluster | [Self-Hosting MCP Runtime](self-hosting.md) |
-| Understand the public deployment's topology, configuration, identity provider, updates, backups, and verification | [Public Reference Deployment](reference-deployment.md) |
-| Manage server reconciliation, routing, and rollouts | [Runtime Operations](runtime-operations.md) |
-| Understand component placement and team workload boundaries | [Namespaces](namespaces.md) |
-| Operate platform services, audit, analytics, and telemetry | [Platform Services and Observability](platform-services.md) |
-| Diagnose an installation or runtime failure | [Troubleshooting](troubleshooting.md) |
+## Installation
 
-Use the general installation guides to prepare your own deployment, and the
-public reference as a concrete example of how the pieces fit together. Adapt
-its domains, node layout, credentials, and backup ownership to your
-environment before running the reference scripts.
+Start here when hosting your own platform. These guides apply to managed
+and self-managed Kubernetes clusters.
+
+1. [Deployment Options](deployment-targets.md): choose a Kubernetes distribution,
+   registry, ingress, TLS, and storage model.
+2. [Cluster Requirements](cluster-readiness.md): check node image pulls, DNS,
+   ingress, certificates, and storage before installing.
+3. [Platform Installation](self-hosting.md): install the CLI, configure the
+   platform, check its health, and publish your first server.
+
+## Public reference
+
+Follow the public platform's worked example to see how those choices fit
+together in a complete deployment.
+
+1. [Cluster Provisioning](cluster-provisioning.md): build the example node
+   topology, configure cluster access, and prepare ingress.
+2. [Deployment Guide](reference-deployment.md): configure Runtime and its
+   external identity provider, install and update the platform, back up and
+   recover data, and verify the deployment.
+
+The provisioning guide hands off to the installation guides once the cluster
+is ready. Adapt the example's domains, node layout, credentials, and backup
+ownership to your environment before running the reference scripts.
+
+## Operations
+
+Return to these guides after installation for component placement, runtime
+behavior, service maintenance, and incident diagnosis.
+
+- [Runtime Operations](runtime-operations.md): server resources, reconciliation,
+  routing, and rollouts.
+- [Namespaces](namespaces.md): component placement, team boundaries, service DNS,
+  and credential ownership.
+- [Services and Observability](platform-services.md): platform services,
+  gateway enforcement, audit events, metrics, logs, and traces.
+- [Troubleshooting](troubleshooting.md): diagnosis of installation, access,
+  registry, analytics, and cluster failures.

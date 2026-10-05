@@ -146,8 +146,8 @@ resources for your environment.
 
 For provider-specific prerequisites such as container runtime registry trust,
 DNS, ingress, TLS, and Kubernetes distribution configuration, start with
-[Deployment Targets](deployment-targets.md) to choose the right install shape,
-then [Cluster readiness](cluster-readiness.md) for distribution-specific
+[Deployment Options](deployment-targets.md) to choose the right install shape,
+then [Cluster Requirements](cluster-readiness.md) for distribution-specific
 preparation.
 
 ## Where to go next

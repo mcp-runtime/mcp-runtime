@@ -1,4 +1,6 @@
-# Platform services
+# Services and Observability
+
+<span id="platform-services"></span>
 
 These are the bundled services for gateway enforcement, audit, query, the governance UI, and observability. They govern **live MCP requests** only. They ship in `services/` and install by default with `mcp-runtime setup` (skip with `--without-sentinel`).
 

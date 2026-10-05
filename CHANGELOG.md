@@ -9,7 +9,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Changed
 
-- The Self-Host and Operate section starts with an overview explaining the hosting lifecycle through the public platform at `platform.mcpruntime.org`. It connects cluster preparation, installation, identity, updates, backups, and operations, and distinguishes the reference's infrastructure choices from the general installation path. Hosted users are directed to the quickstart.
+- Self-Host and Operate groups guides into Installation, Public Reference, and Operations with concise sidebar labels. Its overview explains hosting through `platform.mcpruntime.org`, with K3s as the example distribution. Platform Installation owns the reusable setup and enterprise certificate instructions; Cluster Provisioning hands off once infrastructure is ready. Existing page URLs and heading anchors remain available.
 
 - Deployment documentation uses distribution-neutral names: `reference-deployment.md` covers Runtime and its external identity provider, while `cluster-provisioning.md` describes the reference cluster with K3s as the worked distribution choice. Navigation, indexes, and operational links follow the new names; published URLs redirect and existing section anchors remain available. The reference guide separates configuration, installation and updates, identity-provider setup, backups and recovery, and verification, and clarifies that Keycloak DNS and backups belong to its separate VM.
 

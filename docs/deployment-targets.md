@@ -1,10 +1,12 @@
-# Deployment Targets
+# Deployment Options
+
+<span id="deployment-targets"></span>
 
 Pick a Kubernetes target and install shape for MCP Runtime on common
 self-managed and managed distributions.
 
 - [Getting Started](self-hosting.md) has the step-by-step install flow.
-- [Cluster Readiness](cluster-readiness.md) has the detailed registry,
+- [Cluster Requirements](cluster-readiness.md) has the detailed registry,
   container runtime, DNS, ingress, TLS, and failure-mode checks.
 
 `mcp-runtime setup` installs into an existing Kubernetes cluster. Create the

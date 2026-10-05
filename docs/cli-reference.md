@@ -97,7 +97,7 @@ mcp-runtime auth logout
 | `adapter` | User | Certificate-authenticated HTTP proxy and enrollment for agents | [Agent adapter](connect-clients.md) |
 | `team` | Admin | Create teams and add password users | [Multi-team](teams-and-access.md) |
 | `sentinel` | Operator | Inspect and operate the analytics stack | [Platform services](platform-services.md) |
-| `bootstrap` | Operator | Pre-install cluster checks | [Cluster readiness](cluster-readiness.md) |
+| `bootstrap` | Operator | Pre-install cluster checks | [Cluster Requirements](cluster-readiness.md) |
 | `setup` | Operator | Install the full platform stack | [setup](#setup) |
 | `update` | Operator | Update installed platform services to a release | [update](#update) |
 | `cluster` | Operator | Initialize clusters, run readiness and post-install checks, manage cert-manager | [Deployment targets](deployment-targets.md) |
@@ -670,7 +670,7 @@ Component names for `logs` and `restart`:
 
 **[Operator]** Run before `setup` on a fresh cluster.
 
-> Full guide: [Cluster readiness](cluster-readiness.md)
+> Full guide: [Cluster Requirements](cluster-readiness.md)
 
 ```bash
 mcp-runtime bootstrap
@@ -804,7 +804,7 @@ Key env vars for `--env-file` (see `config/deployments/mcpruntime-org.env.exampl
 | `MCP_SETUP_INGRESS=none` | `--ingress` |
 | `MCP_SETUP_SKIP_CERT_MANAGER_INSTALL=1` | `--skip-cert-manager-install` |
 
-Deeper guides: [Cluster readiness](cluster-readiness.md),
+Deeper guides: [Cluster Requirements](cluster-readiness.md),
 [Deployment targets](deployment-targets.md), and
 [Getting started](self-hosting.md#4-production-style-install).
 
@@ -935,5 +935,5 @@ KUBECONFIG=~/.kube/config mcp-runtime cluster diagnostics    # post-setup diagno
 | Certificate-authenticated HTTP adapter | [Agent adapter](connect-clients.md) |
 | Multi-team namespaces and RBAC | [Multi-team isolation](teams-and-access.md) |
 | Platform service logs, events, restart | [Platform services](platform-services.md) |
-| Distro-specific cluster prerequisites | [Cluster readiness](cluster-readiness.md) |
+| Distro-specific cluster prerequisites | [Cluster Requirements](cluster-readiness.md) |
 | Kind, EKS, k3s deployment | [Deployment targets](deployment-targets.md) |

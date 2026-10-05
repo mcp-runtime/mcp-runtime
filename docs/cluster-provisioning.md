@@ -7,12 +7,12 @@
 Provision a Kubernetes cluster for the [reference deployment](reference-deployment.md),
 with DNS, TLS, ingress, storage, and registry access. The worked example uses
 **K3s** as its Kubernetes distribution; MCP Runtime can also run on the other
-distributions described in [Deployment Targets](deployment-targets.md).
+distributions described in [Deployment Options](deployment-targets.md).
 
 The node layout, packaged Traefik, ServiceLB labels, install commands, and
 container-runtime configuration below are specific to the K3s example. If you
 choose another distribution, use its provisioning instructions and the shared
-[Cluster Readiness](cluster-readiness.md) checks before installing Runtime.
+[Cluster Requirements](cluster-readiness.md) checks before installing Runtime.
 
 The four-node layout is a demo or pilot reference design, not an inventory of
 the current public deployment. A five-node variant is covered below. The
@@ -281,130 +281,29 @@ Let's Encrypt HTTP-01. Port 80 must reach Traefik for certificate issuance.
 
 ## Install MCP Runtime
 
-Build the CLI from the repo root:
+The cluster is now ready for platform installation. Follow
+[Platform Installation](self-hosting.md) for CLI installation, registry and TLS
+choices, platform setup, and the first server. For the public reference's
+saved configuration, installation scripts, and subsequent updates, use the
+[Deployment Guide](reference-deployment.md#install-and-update).
 
-```bash
-make deps
-make build
-```
+When using the K3s-provided Traefik from this example:
 
-For a public demo using the bundled HTTPS registry, set the public platform
-domain and make platform image pulls use the public registry host. The registry
-host must resolve from every node.
+- Pass `--ingress none` to setup to reuse the existing ingress controller.
+- Set `PLATFORM_TRAEFIK_NAMESPACE=kube-system` and
+  `PLATFORM_TEAM_TRAEFIK_WATCH=disabled` in the deployment environment.
+- Pass `--kubeconfig "$PROD_KUBECONFIG"` explicitly to setup and other commands
+  targeting this cluster.
 
-```bash
-export MCP_PLATFORM_DOMAIN=example.com
-export MCP_REGISTRY_ENDPOINT=registry.example.com
-export MCP_PLATFORM_ADMIN_EMAIL=admin@example.com
-export GOOGLE_CLIENT_ID=<google-client-id>.apps.googleusercontent.com
-export MCP_IMAGE_PLATFORM=linux/amd64
-```
+If you disabled K3s Traefik during provisioning, let setup install the
+repo-managed ingress controller instead, as described above.
 
-`MCP_IMAGE_PLATFORM` is optional when all Kubernetes nodes report the same
-architecture. Set it when you build from an ARM laptop for amd64 servers. Use `linux/arm64` only for a homogeneous ARM cluster.
+<span id="enterprise-provided-tls-certificate-files"></span>
+<span id="renewal"></span>
 
-Run setup:
-
-```bash
-./bin/mcp-runtime bootstrap --provider k3s
-
-# k3s ships Traefik in kube-system, so use --ingress none to avoid a second stack.
-# Pass --kubeconfig explicitly when multiple kubeconfigs exist on the workstation.
-MCP_SETUP_WAIT_TIMEOUT=1200 ./bin/mcp-runtime setup \
-  --kubeconfig "$PROD_KUBECONFIG" \
-  --platform-mode public \
-  --registry-mode bundled-https \
-  --storage-mode dynamic \
-  --with-tls \
-  --acme-email ops@example.com \
-  --ingress none \
-  --strict-prod \
-  --parallel-builds
-```
-
-Set `PLATFORM_TRAEFIK_NAMESPACE=kube-system` and
-`PLATFORM_TEAM_TRAEFIK_WATCH=disabled` in the deployment env (see
-`config/deployments/mcpruntime-org.env.example`) so team create does not patch
-repo-managed Traefik when k3s Traefik is already active.
-
-For reruns, clean+restore, rollout-only updates, and the full environment
-variable reference, use [Public Reference Deployment](reference-deployment.md).
-
-Use `--platform-mode tenant` for private team-isolated installs, or
-`--platform-mode org` for a shared internal catalog. `public` exposes the
-catalog anonymously and requires browser login configuration for publishing.
-
-If your organization already owns cert-manager and a `ClusterIssuer`, replace
-`--acme-email` with:
-
-```bash
-MCP_SETUP_WAIT_TIMEOUT=1200 ./bin/mcp-runtime setup \
-  --platform-mode public \
-  --registry-mode bundled-https \
-  --storage-mode dynamic \
-  --with-tls \
-  --tls-cluster-issuer <issuer-name> \
-  --skip-cert-manager-install \
-  --strict-prod \
-  --parallel-builds
-```
-
-If your organization already owns a registry, use the external registry path:
-
-```bash
-MCP_SETUP_WAIT_TIMEOUT=1200 ./bin/mcp-runtime setup \
-  --platform-mode public \
-  --registry-mode external \
-  --external-registry-url registry.example.com/mcp-runtime \
-  --with-tls \
-  --acme-email ops@example.com \
-  --strict-prod \
-  --parallel-builds
-```
-
-Pass `--external-registry-username` and `PROVISIONED_REGISTRY_PASSWORD` when the
-registry needs credentials.
-
-## Enterprise-provided TLS certificate files
-
-Use this mode when enterprise IT supplies a certificate chain (`fullchain.pem`)
-and its matching private key (`privkey.pem`) but does **not** operate a
-cert-manager `ClusterIssuer`. Unlike `--tls-cluster-issuer`, this mode only
-references the Secrets below. Runtime never creates or renews a cert-manager
-`Certificate`.
-
-Verify that the certificate SANs cover every public Runtime hostname, and keep
-the PEM files outside the repository and shell history. Kubernetes Secrets are
-namespace-scoped, so import the pair once for each Runtime ingress namespace:
-
-```bash
-kubectl --kubeconfig "$PROD_KUBECONFIG" -n registry create secret tls registry-tls \
-  --cert=/secure/fullchain.pem --key=/secure/privkey.pem \
-  --dry-run=client -o yaml | kubectl apply -f -
-
-kubectl --kubeconfig "$PROD_KUBECONFIG" -n mcp-platform create secret tls mcp-platform-tls \
-  --cert=/secure/fullchain.pem --key=/secure/privkey.pem \
-  --dry-run=client -o yaml | kubectl apply -f -
-```
-
-Then run setup with static Secret mode:
-
-```bash
-./bin/mcp-runtime setup --with-tls --provided-tls-secrets --strict-prod
-```
-
-Do not combine `--provided-tls-secrets` with `--acme-email` or
-`--tls-cluster-issuer`. If you also deploy bundled mcp-auth, add its
-operator-managed TLS Secret to the `mcp-platform` namespace and pass its name
-through the optional `--mcp-auth-tls-secret` override.
-
-### Renewal
-
-You renew certificates in this mode. Before the enterprise certificate
-expires, IT supplies a replacement matching pair; rerun the two `kubectl create
-secret tls ... --dry-run=client -o yaml | kubectl apply -f -` commands above.
-Traefik observes Secret updates and serves the replacement certificate. Verify
-the public endpoint's hostname and expiry after each rotation.
+Enterprise-supplied certificate installation and renewal are documented in
+[Platform Installation](self-hosting.md#enterprise-provided-tls-certificate-files).
+These instructions also apply to other Kubernetes distributions.
 
 ## Validate
 

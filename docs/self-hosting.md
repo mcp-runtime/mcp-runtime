@@ -1,4 +1,6 @@
-# Self-Hosting MCP Runtime
+# Platform Installation
+
+<span id="self-hosting-mcp-runtime"></span>
 
 Install MCP Runtime on your own Kubernetes cluster. To try the platform without
 a cluster, use the [Quickstart](hosted-quickstart.md).
@@ -27,8 +29,8 @@ To install the platform, you also need:
 - Docker or a Docker-compatible client, with the daemon running and reachable
 - `kubectl` on `PATH`, configured for the intended target cluster
 - A running Kubernetes cluster with DNS, storage, and ingress prepared.
-  Start with [Deployment Targets](deployment-targets.md), then
-  [Cluster Readiness](cluster-readiness.md).
+  Start with [Deployment Options](deployment-targets.md), then
+  [Cluster Requirements](cluster-readiness.md).
 
 Contributor and example workflows also use Go `1.26+`, Make, `curl`, `jq`,
 Python 3, and Kind for local test-mode clusters. Run the repository's dependency
@@ -104,7 +106,7 @@ mcp-runtime bootstrap
 
 Before setup, confirm the target Kubernetes cluster is ready for registry
 pushes, image pulls, ingress, storage, and TLS. See
-[Deployment Targets](deployment-targets.md) to choose the right install shape
+[Deployment Options](deployment-targets.md) to choose the right install shape
 for self-managed or managed Kubernetes, then
 [cluster-readiness.md](cluster-readiness.md) for distribution-specific
 preparation.
@@ -139,8 +141,8 @@ Before `setup`, make these decisions explicitly:
 
 Read these first:
 
-- [Deployment Targets](deployment-targets.md)
-- [Cluster readiness](cluster-readiness.md)
+- [Deployment Options](deployment-targets.md)
+- [Cluster Requirements](cluster-readiness.md)
 - [Platform service Kubernetes awareness and hardening](platform-services.md#kubernetes-awareness-and-hardening)
 - [Multi-team isolation](teams-and-access.md) if multiple teams will publish or govern servers on one cluster
 
@@ -223,6 +225,50 @@ Do not use the contributor `--test-mode` flow as a production install guide.
 `--test-mode` is for local development and CI-like validation; it provisions a
 local cert-manager workload CA for mTLS tests and still builds
 and pushes local images and assumes the contributor registry and ingress shape.
+
+### Enterprise-provided TLS certificate files
+
+Use this mode when enterprise IT supplies a certificate chain (`fullchain.pem`)
+and its matching private key (`privkey.pem`) but does **not** operate a
+cert-manager `ClusterIssuer`. Unlike `--tls-cluster-issuer`, this mode only
+references the Secrets below. Runtime never creates or renews a cert-manager
+`Certificate`.
+
+Set `INSTALL_KUBECONFIG` to the kubeconfig for your installation cluster.
+The target namespaces must already exist when importing their Secrets.
+
+Verify that the certificate SANs cover every public Runtime hostname, and keep
+the PEM files outside the repository and shell history. Kubernetes Secrets are
+namespace-scoped, so import the pair once for each Runtime ingress namespace:
+
+```bash
+kubectl --kubeconfig "$INSTALL_KUBECONFIG" -n registry create secret tls registry-tls \
+  --cert=/secure/fullchain.pem --key=/secure/privkey.pem \
+  --dry-run=client -o yaml | kubectl --kubeconfig "$INSTALL_KUBECONFIG" apply -f -
+
+kubectl --kubeconfig "$INSTALL_KUBECONFIG" -n mcp-platform create secret tls mcp-platform-tls \
+  --cert=/secure/fullchain.pem --key=/secure/privkey.pem \
+  --dry-run=client -o yaml | kubectl --kubeconfig "$INSTALL_KUBECONFIG" apply -f -
+```
+
+Then run setup with static Secret mode:
+
+```bash
+mcp-runtime setup --kubeconfig "$INSTALL_KUBECONFIG" --with-tls --provided-tls-secrets --strict-prod
+```
+
+Do not combine `--provided-tls-secrets` with `--acme-email` or
+`--tls-cluster-issuer`. If you also deploy bundled mcp-auth, add its
+operator-managed TLS Secret to the `mcp-platform` namespace and pass its name
+through the optional `--mcp-auth-tls-secret` override.
+
+#### Renewal
+
+You renew certificates in this mode. Before the enterprise certificate
+expires, IT supplies a replacement matching pair; rerun the two `kubectl create
+secret tls ... --dry-run=client -o yaml | kubectl --kubeconfig "$INSTALL_KUBECONFIG" apply -f -` commands above.
+Traefik observes Secret updates and serves the replacement certificate. Verify
+the public endpoint's hostname and expiry after each rotation.
 
 ## 4. Configure and install the platform stack { #5-install-the-platform-stack }
 

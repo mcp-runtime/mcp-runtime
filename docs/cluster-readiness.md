@@ -1,4 +1,6 @@
-# Cluster Readiness
+# Cluster Requirements
+
+<span id="cluster-readiness"></span>
 
 `./bin/mcp-runtime setup` installs the platform (registry, operator, ingress, sentinel) into an *already-running* Kubernetes cluster. You must configure the node's container runtime and host DNS stack yourself; the steps differ per distribution.
 
@@ -9,7 +11,7 @@ Without that configuration, you typically see:
 - MCPServer pods get stuck in `ImagePullBackOff` pulling `registry.local/<server-name>`.
 
 The sections below list what each distribution needs before you run `setup`.
-To choose where to deploy, see [Deployment Targets](deployment-targets.md).
+To choose where to deploy, see [Deployment Options](deployment-targets.md).
 
 ## Dev vs production readiness
 

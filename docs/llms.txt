@@ -4,8 +4,6 @@
 ## Start here
 
 - Quickstart: https://docs.mcpruntime.org/hosted-quickstart/ — Deploy a sample server on the hosted platform, grant an active managed agent access, and connect through the adapter.
-- Getting Started: https://docs.mcpruntime.org/self-hosting/ — Install MCP Runtime on your own Kubernetes cluster.
-
 - Learn overview: https://docs.mcpruntime.org/learn/ — Guided path from core concepts through a first server and multi-team setup.
 - Module 1: https://docs.mcpruntime.org/learn/01-core-concepts/
 - Module 2: https://docs.mcpruntime.org/learn/02-first-governed-server/
@@ -20,12 +18,22 @@
 ## Self-host and operate
 
 - Overview: https://docs.mcpruntime.org/hosting-overview/ — Learn how to host and operate MCP Runtime using the public platform as the reference deployment, then adapt its infrastructure choices to your environment.
-- Deployment targets: https://docs.mcpruntime.org/deployment-targets/ — Choose an install shape for k3s, EKS, GKE, AKS, or another distribution.
-- Cluster readiness: https://docs.mcpruntime.org/cluster-readiness/ — Check registry trust, DNS, TLS, storage, and ingress prerequisites.
+### Installation
+
+- Deployment options: https://docs.mcpruntime.org/deployment-targets/ — Choose an install shape for k3s, EKS, GKE, AKS, or another distribution.
+- Cluster requirements: https://docs.mcpruntime.org/cluster-readiness/ — Check registry trust, DNS, TLS, storage, and ingress prerequisites.
+- Platform installation: https://docs.mcpruntime.org/self-hosting/ — Install the CLI and platform, select registry and TLS modes, and publish a first server.
+
+### Public reference
+
 - Cluster provisioning: https://docs.mcpruntime.org/cluster-provisioning/ — Provision the reference Kubernetes topology, with K3s as the worked distribution example.
-- Public reference deployment: https://docs.mcpruntime.org/reference-deployment/ — Operate the complete Runtime and external identity-provider deployment: configuration, updates, backups, recovery, and verification.
-- Runtime: https://docs.mcpruntime.org/runtime-operations/ — CRDs, reconciliation, image resolution, ingress, and rollouts.
-- Platform services: https://docs.mcpruntime.org/platform-services/ — Gateway policy, audit events, analytics, and observability.
+- Deployment guide: https://docs.mcpruntime.org/reference-deployment/ — Operate the complete Runtime and external identity-provider deployment: configuration, updates, backups, recovery, and verification.
+
+### Operations
+
+- Runtime operations: https://docs.mcpruntime.org/runtime-operations/ — CRDs, reconciliation, image resolution, ingress, and rollouts.
+- Namespaces: https://docs.mcpruntime.org/namespaces/ — Component placement, team boundaries, service DNS, and credential ownership.
+- Services and observability: https://docs.mcpruntime.org/platform-services/ — Gateway policy, audit events, analytics, and observability.
 - Troubleshooting: https://docs.mcpruntime.org/troubleshooting/ — Diagnose deployment, access, registry, analytics, and cluster issues.
 
 ## Concepts and architecture
