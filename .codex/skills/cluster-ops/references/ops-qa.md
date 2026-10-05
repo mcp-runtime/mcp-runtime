@@ -91,7 +91,7 @@ git diff --exit-code
 ./bin/mcp-runtime status
 ./bin/mcp-runtime cluster status
 ./bin/mcp-runtime registry status
-./bin/mcp-runtime sentinel status
+./bin/mcp-runtime ops status
 ./bin/mcp-runtime cluster doctor
 kubectl get pods -A --field-selector=status.phase!=Running,status.phase!=Succeeded
 kubectl get events -A --sort-by=.lastTimestamp | tail -40
@@ -155,8 +155,8 @@ about behavior).
   --since 5m | head -40
 ./bin/mcp-runtime server policy inspect oauth-example-go-2025-11-25-gateway --namespace mcp-servers \
   | head -40
-./bin/mcp-runtime sentinel events | head -20
-./bin/mcp-runtime sentinel logs api --since 5m | tail -40
+./bin/mcp-runtime ops events | head -20
+./bin/mcp-runtime ops logs api --since 5m | tail -40
 
 # Negative path: error UX should route through internal/cli/core/errors.go.
 ./bin/mcp-runtime server status --namespace bogus 2>&1 | head -5
@@ -164,7 +164,7 @@ about behavior).
 ```
 
 After setup, confirm `daemonset/promtail` remains ready in
-`mcp-log-collector` and that `sentinel events` includes
+`mcp-log-collector` and that `ops events` includes
 `mcp-observability` and `mcp-log-collector`. The shared ConfigMap's OTel and
 Prometheus endpoints must resolve from both `mcp-platform` and
 `mcp-observability`.

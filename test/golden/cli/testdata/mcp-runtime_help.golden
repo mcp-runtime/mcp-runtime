@@ -17,8 +17,8 @@ Available Commands:
   cluster     Manage Kubernetes cluster
   completion  Generate the autocompletion script for the specified shell
   help        Help about any command
+  ops         Operate the bundled platform stack (admin only)
   registry    Manage container registry
-  sentinel    Operate the bundled platform stack (admin only)
   server      Manage MCP servers
   setup       Setup the complete MCP platform
   status      Show platform status

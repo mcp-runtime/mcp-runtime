@@ -46,7 +46,7 @@ A public preview runs at [platform.mcpruntime.org](https://platform.mcpruntime.o
 
 ## What ships
 
-- `mcp-runtime` CLI for `auth`, `bootstrap`, `setup`, `status`, `registry`, `server`, `catalog`, `cluster`, `access`, `team`, and `sentinel`
+- `mcp-runtime` CLI for `auth`, `bootstrap`, `setup`, `status`, `registry`, `server`, `catalog`, `cluster`, `access`, `team`, and `ops`
 - `mcp-runtime adapter proxy` for governed Streamable HTTP agent integrations.
   It enrolls a session-bound client certificate with
   `--server <name> --agent <id>` once an enabled grant exists; `--auto-refresh`
@@ -118,7 +118,7 @@ To build from source or run a disposable local Kind cluster, start with the
 ./bin/mcp-runtime catalog tools          # search tools across visible servers
 ./bin/mcp-runtime access grant list      # inspect access grants
 ./bin/mcp-runtime adapter proxy --server <name> --agent <id> --auto-refresh   # connect an MCP client
-./bin/mcp-runtime sentinel status        # inspect Sentinel stack
+./bin/mcp-runtime ops status        # inspect platform stack
 ```
 
 ## Comparison

@@ -1,4 +1,4 @@
-package sentinel_test
+package ops_test
 
 import (
 	"testing"
@@ -6,7 +6,7 @@ import (
 	"go.uber.org/zap"
 
 	"mcp-runtime/internal/cli/core"
-	"mcp-runtime/internal/cli/sentinel"
+	"mcp-runtime/internal/cli/ops"
 )
 
 func contains(slice []string, val string) bool {
@@ -18,12 +18,12 @@ func contains(slice []string, val string) bool {
 	return false
 }
 
-func TestSentinelManager_ViewSentinelLogs(t *testing.T) {
+func TestManager_ViewLogs(t *testing.T) {
 	mock := &core.MockExecutor{}
 	kubectl := core.NewTestKubectlClient(mock)
-	mgr := sentinel.NewSentinelManager(kubectl, zap.NewNop())
+	mgr := ops.NewManager(kubectl, zap.NewNop())
 
-	if err := mgr.ViewSentinelLogs("api", true, false, 50, "5m"); err != nil {
+	if err := mgr.ViewLogs("api", true, false, 50, "5m"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -38,12 +38,12 @@ func TestSentinelManager_ViewSentinelLogs(t *testing.T) {
 	}
 }
 
-func TestSentinelManager_PortForwardSentinelTarget(t *testing.T) {
+func TestManager_PortForwardTarget(t *testing.T) {
 	mock := &core.MockExecutor{}
 	kubectl := core.NewTestKubectlClient(mock)
-	mgr := sentinel.NewSentinelManager(kubectl, zap.NewNop())
+	mgr := ops.NewManager(kubectl, zap.NewNop())
 
-	if err := mgr.PortForwardSentinelTarget("grafana", 0, "0.0.0.0"); err != nil {
+	if err := mgr.PortForwardTarget("grafana", 0, "0.0.0.0"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -55,12 +55,12 @@ func TestSentinelManager_PortForwardSentinelTarget(t *testing.T) {
 	}
 }
 
-func TestSentinelManager_RestartSentinel(t *testing.T) {
+func TestManager_Restart(t *testing.T) {
 	mock := &core.MockExecutor{}
 	kubectl := core.NewTestKubectlClient(mock)
-	mgr := sentinel.NewSentinelManager(kubectl, zap.NewNop())
+	mgr := ops.NewManager(kubectl, zap.NewNop())
 
-	if err := mgr.RestartSentinel("processor", false); err != nil {
+	if err := mgr.Restart("processor", false); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -72,10 +72,10 @@ func TestSentinelManager_RestartSentinel(t *testing.T) {
 	}
 }
 
-func TestSentinelManager_ShowSentinelEventsCoversEveryOwnerNamespace(t *testing.T) {
+func TestManager_ShowEventsCoversEveryOwnerNamespace(t *testing.T) {
 	mock := &core.MockExecutor{}
-	mgr := sentinel.NewSentinelManager(core.NewTestKubectlClient(mock), zap.NewNop())
-	if err := mgr.ShowSentinelEvents(); err != nil {
+	mgr := ops.NewManager(core.NewTestKubectlClient(mock), zap.NewNop())
+	if err := mgr.ShowEvents(); err != nil {
 		t.Fatal(err)
 	}
 	wantNamespaces := []string{core.NamespaceMCPRuntime, core.ComponentNamespace("platform-api"), core.ComponentNamespace("analytics-api"), core.ComponentNamespace("promtail")}

@@ -1,4 +1,4 @@
-package sentinel
+package ops
 
 import (
 	"fmt"
@@ -115,7 +115,7 @@ func grafanaExecArgs(script string) []string {
 // CheckGrafanaCredentials probes Grafana read-only and reports whether the
 // persisted admin account accepts the configured credentials. It never resets
 // or modifies an account.
-func (m *SentinelManager) CheckGrafanaCredentials() (GrafanaCheckResult, error) {
+func (m *Manager) CheckGrafanaCredentials() (GrafanaCheckResult, error) {
 	if err := m.requireAdminClusterAccess(); err != nil {
 		return GrafanaCheckResult{}, err
 	}
@@ -131,7 +131,7 @@ func (m *SentinelManager) CheckGrafanaCredentials() (GrafanaCheckResult, error) 
 
 // ShowGrafanaCheck prints the credential check and returns an error when the
 // persisted credentials are not usable, so scripts can gate on the exit code.
-func (m *SentinelManager) ShowGrafanaCheck() error {
+func (m *Manager) ShowGrafanaCheck() error {
 	res, err := m.CheckGrafanaCredentials()
 	if err != nil {
 		return err
@@ -148,7 +148,7 @@ func printGrafanaResult(res GrafanaCheckResult) {
 	core.DefaultPrinter.Println()
 	core.TableBoxed([][]string{
 		{"Layer", "Check", "Result"},
-		{"Platform ingress gate", "sentinel-admin-auth (not exercised here)", "see docs/sentinel.md"},
+		{"Platform ingress gate", "sentinel-admin-auth (not exercised here)", "see docs/platform-services.md"},
 		{"Grafana health", "GET /grafana/api/health in pod", codeOrNone(res.HealthCode)},
 		{"Grafana login", "GET /grafana/api/user with configured admin credentials in pod", codeOrNone(res.AuthCode)},
 	})
@@ -167,9 +167,9 @@ func grafanaStateMessage(res GrafanaCheckResult) string {
 	case GrafanaAuthOK:
 		return "Grafana accepts the configured admin credentials."
 	case GrafanaCredentialDrift:
-		return "Grafana rejected the configured admin credentials (HTTP 401): the persisted admin account has drifted from mcp-grafana-credentials. The platform ingress gate may still admit you. After reviewing, recover deliberately with: mcp-runtime sentinel grafana reset-admin-password --yes"
+		return "Grafana rejected the configured admin credentials (HTTP 401): the persisted admin account has drifted from mcp-grafana-credentials. The platform ingress gate may still admit you. After reviewing, recover deliberately with: mcp-runtime ops grafana reset-admin-password --yes"
 	case GrafanaUnhealthy:
-		return fmt.Sprintf("Grafana is not healthy (health=%s); credentials were not evaluated. Check: mcp-runtime sentinel logs grafana", codeOrNone(res.HealthCode))
+		return fmt.Sprintf("Grafana is not healthy (health=%s); credentials were not evaluated. Check: mcp-runtime ops logs grafana", codeOrNone(res.HealthCode))
 	default:
 		return fmt.Sprintf("Unexpected Grafana login response (auth=%s); credentials were not classified.", codeOrNone(res.AuthCode))
 	}
@@ -178,7 +178,7 @@ func grafanaStateMessage(res GrafanaCheckResult) string {
 // ResetGrafanaAdminPassword restores the persisted Grafana admin password to
 // the configured value after a database backup. It is deliberate: it requires
 // confirmation, refuses unless drift is detected, and verifies the result.
-func (m *SentinelManager) ResetGrafanaAdminPassword(confirmed bool) error {
+func (m *Manager) ResetGrafanaAdminPassword(confirmed bool) error {
 	res, err := m.CheckGrafanaCredentials()
 	if err != nil {
 		return err

@@ -41,7 +41,7 @@ tests, and the command help snapshots.
 | `kube/` | manifest apply, namespace, and kubectl-oriented helpers shared by command paths |
 | `platformapi/` | Sentinel platform API client for auth-backed access and runtime reads |
 | `platformapi/baseurl.go` | platform API base URL normalization used by auth and platform API clients |
-| `platformstatus/` | shared workload catalog, readiness rows, and quiet kubectl status probes for `status` and `sentinel status` |
+| `platformstatus/` | shared workload catalog, readiness rows, and quiet kubectl status probes for `status` and `ops status` |
 | `certmanager/` | cert-manager, private CA, and ACME helpers shared by setup and `cluster cert` |
 | `cluster/ingress.go` | ingress configuration option structs shared by setup and cluster managers |
 | `registry/` | registry manager, registry deployment, registry push, and platform registry defaults |
@@ -205,20 +205,20 @@ lives in `docs/teams-and-access.md`.
 Tests: `team/manager_test.go`; for platform team API changes, run focused tests
 inside `services/platform-api` and `services/runtime-api`.
 
-## Auth, Sentinel, and Platform API
+## Auth, Ops, and Platform API
 
 `internal/cli/auth/` handles platform API login, logout, and credential profiles.
-`internal/cli/sentinel/` and `internal/cli/platformapi/` provide CLI access to
-the split Sentinel APIs and platform API URL normalization. These commands should stay
+`internal/cli/ops/` operates the bundled platform stack with admin kubectl
+access, and `internal/cli/platformapi/` handles platform API URL normalization. These commands should stay
 aligned with split API service routes (`/api/v1/*`) and the public docs.
 
-Tests: `sentinel/*_test.go`, `auth/*_test.go`, and `platformapi/*_test.go`.
+Tests: `ops/*_test.go`, `auth/*_test.go`, and `platformapi/*_test.go`.
 
 ## Status
 
 `internal/cli/status/` prints high-level platform health by querying Kubernetes.
 It uses the shared `internal/cli/platformstatus/` workload catalog so top-level
-status and `sentinel status` do not drift. Shared kubectl diagnostics live in
+status and `ops status` do not drift. Shared kubectl diagnostics live in
 `internal/cli/kubeerr/`. Status should be quick, readable, and conservative.
 Deeper diagnosis belongs in `cluster doctor`.
 

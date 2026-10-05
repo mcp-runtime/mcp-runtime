@@ -131,10 +131,10 @@ gate does not prove the Grafana login works, and changing the bootstrap
 password in `mcp-grafana-credentials` does not update an existing persisted
 account. A browser that clears the gate but then sees `password-auth.failed`
 indicates credential drift. Diagnose it read-only with
-`mcp-runtime sentinel grafana check`, which probes from inside the Grafana pod
+`mcp-runtime ops grafana check`, which probes from inside the Grafana pod
 (so it bypasses the gate and reports only the Grafana login layer) and never
 resets anything. Recover deliberately with
-`mcp-runtime sentinel grafana reset-admin-password --yes`: it runs only when
+`mcp-runtime ops grafana reset-admin-password --yes`: it runs only when
 drift is detected, copies the Grafana database inside the pod volume to
 `/var/lib/grafana/backups/` first, passes the configured password to the Grafana
 CLI over stdin inside the pod, verifies authenticated API access, and preserves
@@ -453,31 +453,31 @@ platform dashboard and `/api/v1/*`.
 
 ```bash
 # Health + Kubernetes events
-mcp-runtime sentinel status
-mcp-runtime sentinel events
+mcp-runtime ops status
+mcp-runtime ops events
 
 # Logs
-mcp-runtime sentinel logs ingest --since 15m --follow
-mcp-runtime sentinel logs grafana --tail 500
+mcp-runtime ops logs ingest --since 15m --follow
+mcp-runtime ops logs grafana --tail 500
 
 # Local UI / API access
-mcp-runtime sentinel port-forward ui
-mcp-runtime sentinel port-forward grafana
+mcp-runtime ops port-forward ui
+mcp-runtime ops port-forward grafana
 
 # Restart
-mcp-runtime sentinel restart gateway
-mcp-runtime sentinel restart --all
+mcp-runtime ops restart gateway
+mcp-runtime ops restart --all
 
 # Grafana admin credential drift (see Admin Grafana access)
-mcp-runtime sentinel grafana check
-mcp-runtime sentinel grafana reset-admin-password --yes
+mcp-runtime ops grafana check
+mcp-runtime ops grafana reset-admin-password --yes
 ```
 
-`sentinel events` is a Kubernetes event view for `mcp-platform`. Component logs, port-forward, and restart use the namespace from `pkg/platforminventory` for that component.
+`ops events` lists Kubernetes events from `mcp-runtime`, `mcp-platform`, `mcp-observability`, and `mcp-log-collector`. Component logs, port-forward, and restart use the namespace from `pkg/platforminventory` for that component.
 Use `/api/v1/events` with query filters when you need the request/audit
 events emitted by `mcp-gateway`.
 
-See [CLI → sentinel](cli-reference.md#sentinel) for component keys and flag details.
+See [CLI → ops](cli-reference.md#ops) for component keys and flag details.
 
 ## Repository structure note
 
