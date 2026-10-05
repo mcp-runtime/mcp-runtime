@@ -4946,6 +4946,9 @@ spec:
         - podSelector:
             matchLabels:
               app: ${GO_EXAMPLE_STANDALONE_NAME}
+        - podSelector:
+            matchLabels:
+              app: ${ADAPTER_CERT_WRONG_SERVER_NAME}
       ports:
         - protocol: TCP
           port: 8080
