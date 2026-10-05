@@ -10,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
@@ -62,8 +63,20 @@ func TestReconcileMTLSNetworkPolicy(t *testing.T) {
 			gw.From[0].NamespaceSelector == nil || gw.From[0].NamespaceSelector.MatchLabels["kubernetes.io/metadata.name"] != "traefik" {
 			t.Fatalf("gateway rule from = %#v, want traefik ns+pod", gw.From)
 		}
-		if len(gw.Ports) != 1 || gw.Ports[0].Port == nil || gw.Ports[0].Port.IntValue() != 8091 {
-			t.Fatalf("gateway port = %#v, want 8091", gw.Ports)
+		if len(gw.Ports) != 1 || gw.Ports[0].Port == nil || *gw.Ports[0].Port != intstr.FromString("gateway") {
+			t.Fatalf("gateway port = %#v, want named gateway listener", gw.Ports)
+		}
+		// A failed candidate must not change policy to its numeric port and
+		// block the retained serving pod's listener.
+		server.Spec.Gateway.Port = 8101
+		if err := r.reconcileMTLSNetworkPolicy(context.Background(), server); err != nil {
+			t.Fatalf("reconcile port transition: %v", err)
+		}
+		if err := client.Get(context.Background(), key, &np); err != nil {
+			t.Fatalf("get policy after port transition: %v", err)
+		}
+		if got := np.Spec.Ingress[0].Ports; len(got) != 1 || got[0].Port == nil || *got[0].Port != intstr.FromString("gateway") {
+			t.Fatalf("port transition replaced per-pod listener with candidate port: %#v", got)
 		}
 		metrics := np.Spec.Ingress[1]
 		if len(metrics.From) != 0 {

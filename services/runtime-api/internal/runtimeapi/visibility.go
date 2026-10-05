@@ -8,7 +8,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	runtimeaccess "mcp-runtime-api/internal/runtimeapi/access"
 	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
-	sentinelaccess "mcp-runtime/pkg/access"
+	mcpaccess "mcp-runtime/pkg/access"
 )
 
 func principalCanAdministerServerLabels(p principal, namespace string, serverLabels map[string]string) bool {
@@ -54,14 +54,14 @@ func (s *AccessService) principalCanAdministerAccessServer(ctx context.Context, 
 	return principalCanAdministerMCPServer(p, server)
 }
 
-func (s *AccessService) canAdministerAccessServerRef(ctx context.Context, namespace string, ref sentinelaccess.ServerReference) (bool, error) {
-	ref.Namespace = sentinelaccess.Namespace(strings.TrimSpace(string(ref.Namespace)))
+func (s *AccessService) canAdministerAccessServerRef(ctx context.Context, namespace string, ref mcpaccess.ServerReference) (bool, error) {
+	ref.Namespace = mcpaccess.Namespace(strings.TrimSpace(string(ref.Namespace)))
 	if ref.Namespace == "" {
-		ref.Namespace = sentinelaccess.Namespace(runtimeaccess.DefaultAccessNamespace(namespace))
+		ref.Namespace = mcpaccess.Namespace(runtimeaccess.DefaultAccessNamespace(namespace))
 	}
 	targetServer, err := s.accessMgr.GetMCPServerRef(ctx, ref)
 	if err != nil {
-		if sentinelaccess.IsMCPServerNotFoundForRef(err) || apierrors.IsNotFound(err) {
+		if mcpaccess.IsMCPServerNotFoundForRef(err) || apierrors.IsNotFound(err) {
 			if p, ok := principalFromContext(ctx); ok {
 				return principalCanAdministerServerLabels(p, namespace, nil), nil
 			}

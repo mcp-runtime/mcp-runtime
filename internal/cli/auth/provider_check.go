@@ -71,7 +71,7 @@ func newProviderCheckCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			issuer = strings.TrimSpace(issuer)
 			if issuer == "" {
-				return core.NewWithSentinel(core.ErrAuthAPIURLRequired, "OIDC issuer URL is required (pass --issuer-url)")
+				return core.NewWithBase(core.ErrAuthAPIURLRequired, "OIDC issuer URL is required (pass --issuer-url)")
 			}
 			ctx, cancel := context.WithTimeout(cmd.Context(), 15*time.Second)
 			defer cancel()

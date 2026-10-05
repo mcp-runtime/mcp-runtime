@@ -22,7 +22,7 @@ type gatewayDoc struct {
 	} `yaml:"metadata"`
 }
 
-func TestSentinelGatewayRedactionScope(t *testing.T) {
+func TestPlatformGatewayRedactionScope(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", "k8s", "10-gateway.yaml"))
 	if err != nil {
 		t.Fatalf("read gateway manifest: %v", err)

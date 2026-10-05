@@ -53,7 +53,7 @@ For each existing namespace:
 ```sh
 NS=mcp-platform
 kubectl -n "$NS" get all,sa,role,rolebinding,networkpolicy -o name
-kubectl get clusterrole,clusterrolebinding -o name | grep -iE 'mcp|sentinel'
+kubectl get clusterrole,clusterrolebinding -o name | grep -iE 'mcp'
 ```
 
 Record SA → Role/ClusterRole bindings as a graph; this becomes the input to

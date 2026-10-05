@@ -644,7 +644,7 @@ staging_failed_checks() {
 # Findings that fail on every fresh staging install for reasons outside the
 # suite, accepted by name so every other check stays a hard gate. Override with
 # E2E_DIAGNOSTICS_ACCEPTED (a |-separated list; empty = strict).
-#   - "sentinel OIDC configuration": tenant mode wants Google/OIDC login, and the
+#   - "platform OIDC configuration": tenant mode wants Google/OIDC login, and the
 #     staging VM has no identity provider unless E2E_WITH_MCP_AUTH/OIDC is set.
 #   - "mcp-servers image pull smoke" / "MCPServer reconcile smoke": the doctor
 #     smoke pod in mcp-servers pulls from the auth-protected public registry
@@ -656,7 +656,7 @@ staging_default_accepted_checks() {
   local accepted="mcp-servers image pull smoke|MCPServer reconcile smoke"
   if [[ -z "${OIDC_ISSUER:-}${GOOGLE_CLIENT_ID:-}${MCP_GOOGLE_CLIENT_ID:-}" ]] &&
     ! staging_flag_enabled "${E2E_WITH_MCP_AUTH:-0}"; then
-    accepted+="|sentinel OIDC configuration"
+    accepted+="|platform OIDC configuration"
   fi
   printf '%s' "${accepted}"
 }
@@ -992,7 +992,7 @@ staging_check_platform_login() {
   export E2E_PLATFORM_API_TOKEN="${token}"
 
   local command
-  for command in auth bootstrap cluster catalog registry server access adapter admin setup status sentinel team; do
+  for command in auth bootstrap cluster catalog registry server access adapter admin setup status ops team; do
     "${BIN}" "${command}" --help >"${STAGING_ARTIFACT_DIR}/help-${command}.txt"
   done
   printf '%s' "${token}" | "${BIN}" auth login --api-url "${PLATFORM_URL}" --profile e2e --token-stdin

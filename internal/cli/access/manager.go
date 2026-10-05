@@ -169,7 +169,7 @@ func buildAccessManifest(opts accessManifestInitOptions) ([]byte, error) {
 		subject["teamID"] = teamID
 	}
 	if len(subject) == 0 {
-		return nil, core.NewWithSentinel(nil, "one of --human-id, --agent-id, or --team-id is required")
+		return nil, core.NewWithBase(nil, "one of --human-id, --agent-id, or --team-id is required")
 	}
 	trust, err := normalizeAccessTrust(opts.Trust)
 	if err != nil {
@@ -231,7 +231,7 @@ func buildAccessManifest(opts accessManifestInitOptions) ([]byte, error) {
 			spec["upstreamTokenSecretRef"] = map[string]string{"name": secretName, "key": secretKey}
 		}
 	default:
-		return nil, core.NewWithSentinel(nil, fmt.Sprintf("unsupported access manifest kind %q", opts.Kind))
+		return nil, core.NewWithBase(nil, fmt.Sprintf("unsupported access manifest kind %q", opts.Kind))
 	}
 
 	doc := map[string]any{
@@ -250,15 +250,15 @@ func normalizeSessionExpiry(expiresAt, expiresIn string) (string, error) {
 	expiresAt = strings.TrimSpace(expiresAt)
 	expiresIn = strings.TrimSpace(expiresIn)
 	if expiresAt != "" && expiresIn != "" {
-		return "", core.NewWithSentinel(nil, "use either --expires-at or --expires-in, not both")
+		return "", core.NewWithBase(nil, "use either --expires-at or --expires-in, not both")
 	}
 	if expiresAt != "" {
 		parsed, err := time.Parse(time.RFC3339, expiresAt)
 		if err != nil {
-			return "", core.WrapWithSentinel(nil, err, fmt.Sprintf("--expires-at must be RFC3339: %v", err))
+			return "", core.WrapWithBase(nil, err, fmt.Sprintf("--expires-at must be RFC3339: %v", err))
 		}
 		if !parsed.After(time.Now()) {
-			return "", core.NewWithSentinel(nil, "--expires-at must be in the future")
+			return "", core.NewWithBase(nil, "--expires-at must be in the future")
 		}
 		return parsed.UTC().Format(time.RFC3339), nil
 	}
@@ -267,10 +267,10 @@ func normalizeSessionExpiry(expiresAt, expiresIn string) (string, error) {
 	}
 	duration, err := time.ParseDuration(expiresIn)
 	if err != nil {
-		return "", core.WrapWithSentinel(nil, err, fmt.Sprintf("--expires-in must be a duration like 1h or 30m: %v", err))
+		return "", core.WrapWithBase(nil, err, fmt.Sprintf("--expires-in must be a duration like 1h or 30m: %v", err))
 	}
 	if duration <= 0 {
-		return "", core.NewWithSentinel(nil, "--expires-in must be greater than zero")
+		return "", core.NewWithBase(nil, "--expires-in must be greater than zero")
 	}
 	return time.Now().UTC().Add(duration).Format(time.RFC3339), nil
 }
@@ -278,15 +278,15 @@ func normalizeSessionExpiry(expiresAt, expiresIn string) (string, error) {
 func writeAccessManifest(path string, body []byte, force bool) error {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return core.NewWithSentinel(nil, "--output is required")
+		return core.NewWithBase(nil, "--output is required")
 	}
 	if _, err := os.Stat(path); err == nil && !force {
-		return core.NewWithSentinel(nil, fmt.Sprintf("%s already exists; pass --force to replace it", path))
+		return core.NewWithBase(nil, fmt.Sprintf("%s already exists; pass --force to replace it", path))
 	} else if err != nil && !os.IsNotExist(err) {
-		return core.WrapWithSentinel(nil, err, fmt.Sprintf("failed to inspect %q: %v", path, err))
+		return core.WrapWithBase(nil, err, fmt.Sprintf("failed to inspect %q: %v", path, err))
 	}
 	if err := os.WriteFile(path, body, 0o600); err != nil {
-		return core.WrapWithSentinel(nil, err, fmt.Sprintf("failed to write %q: %v", path, err))
+		return core.WrapWithBase(nil, err, fmt.Sprintf("failed to write %q: %v", path, err))
 	}
 	return nil
 }
@@ -297,7 +297,7 @@ func normalizeAccessTrust(value string) (string, error) {
 	case "low", "medium", "high":
 		return value, nil
 	default:
-		return "", core.NewWithSentinel(nil, fmt.Sprintf("unsupported trust level %q (use low|medium|high)", value))
+		return "", core.NewWithBase(nil, fmt.Sprintf("unsupported trust level %q (use low|medium|high)", value))
 	}
 }
 
@@ -312,7 +312,7 @@ func normalizeSideEffects(values []string) ([]string, error) {
 		switch value {
 		case "read", "write", "destructive":
 		default:
-			return nil, core.NewWithSentinel(nil, fmt.Sprintf("unsupported side effect %q (use read|write|destructive)", value))
+			return nil, core.NewWithBase(nil, fmt.Sprintf("unsupported side effect %q (use read|write|destructive)", value))
 		}
 		if _, ok := seen[value]; ok {
 			continue
@@ -348,7 +348,7 @@ func initToolRules(tools, explicitRules []string, trust string) ([]map[string]st
 		}
 		parts := strings.Split(rule, ":")
 		if len(parts) != 3 {
-			return nil, core.NewWithSentinel(nil, fmt.Sprintf("unsupported tool rule %q (use name:allow|deny:low|medium|high)", rule))
+			return nil, core.NewWithBase(nil, fmt.Sprintf("unsupported tool rule %q (use name:allow|deny:low|medium|high)", rule))
 		}
 		name := strings.TrimSpace(parts[0])
 		decision := strings.ToLower(strings.TrimSpace(parts[1]))
@@ -357,15 +357,15 @@ func initToolRules(tools, explicitRules []string, trust string) ([]map[string]st
 			return nil, err
 		}
 		if name == "" {
-			return nil, core.NewWithSentinel(nil, fmt.Sprintf("unsupported tool rule %q: tool name is required", rule))
+			return nil, core.NewWithBase(nil, fmt.Sprintf("unsupported tool rule %q: tool name is required", rule))
 		}
 		switch decision {
 		case "allow", "deny":
 		default:
-			return nil, core.NewWithSentinel(nil, fmt.Sprintf("unsupported tool rule %q: decision must be allow or deny", rule))
+			return nil, core.NewWithBase(nil, fmt.Sprintf("unsupported tool rule %q: decision must be allow or deny", rule))
 		}
 		if _, ok := seen[name]; ok {
-			return nil, core.NewWithSentinel(nil, fmt.Sprintf("duplicate tool rule for %q", name))
+			return nil, core.NewWithBase(nil, fmt.Sprintf("duplicate tool rule for %q", name))
 		}
 		seen[name] = struct{}{}
 		out = append(out, map[string]string{
@@ -398,7 +398,7 @@ func (m *AccessManager) ListAccessResources(resource, namespace string, allNames
 	}
 
 	if err := m.kubectl.RunWithOutput(args, os.Stdout, os.Stderr); err != nil {
-		return core.WrapWithSentinelAndContext(nil, err, kubeerr.DirectModeFailureMessage(fmt.Sprintf("failed to list %s resources", resource), err.Error()), map[string]any{
+		return core.WrapWithBaseAndContext(nil, err, kubeerr.DirectModeFailureMessage(fmt.Sprintf("failed to list %s resources", resource), err.Error()), map[string]any{
 			"resource":  resource,
 			"namespace": namespace,
 			"component": "access",
@@ -412,7 +412,7 @@ func (m *AccessManager) listAccessPlatform(ctx context.Context, plat *platformap
 	case GrantResource:
 		grants, err := plat.ListGrants(ctx, nsFilter)
 		if err != nil {
-			return core.WrapWithSentinelAndContext(nil, err, fmt.Sprintf("list grants: %v", err), map[string]any{"component": "access"})
+			return core.WrapWithBaseAndContext(nil, err, fmt.Sprintf("list grants: %v", err), map[string]any{"component": "access"})
 		}
 		tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 		_, _ = fmt.Fprintln(tw, "NAME\tNAMESPACE\tSERVER\tDISABLED")
@@ -424,7 +424,7 @@ func (m *AccessManager) listAccessPlatform(ctx context.Context, plat *platformap
 	case SessionResource:
 		sessions, err := plat.ListSessions(ctx, nsFilter)
 		if err != nil {
-			return core.WrapWithSentinelAndContext(nil, err, fmt.Sprintf("list sessions: %v", err), map[string]any{"component": "access"})
+			return core.WrapWithBaseAndContext(nil, err, fmt.Sprintf("list sessions: %v", err), map[string]any{"component": "access"})
 		}
 		tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 		_, _ = fmt.Fprintln(tw, "NAME\tNAMESPACE\tSERVER\tREVOKED")
@@ -434,7 +434,7 @@ func (m *AccessManager) listAccessPlatform(ctx context.Context, plat *platformap
 		_ = tw.Flush()
 		return nil
 	default:
-		return core.NewWithSentinel(nil, fmt.Sprintf("unsupported access resource %q", resource))
+		return core.NewWithBase(nil, fmt.Sprintf("unsupported access resource %q", resource))
 	}
 }
 
@@ -455,7 +455,7 @@ func (m *AccessManager) GetAccessResource(resource, name, namespace string) erro
 
 	args := []string{"get", resource, name, "-n", namespace, "-o", "yaml"}
 	if err := m.kubectl.RunWithOutput(args, os.Stdout, os.Stderr); err != nil {
-		return core.WrapWithSentinelAndContext(nil, err, kubeerr.DirectModeFailureMessage(fmt.Sprintf("failed to get %s %q in namespace %q", resource, name, namespace), err.Error()), map[string]any{
+		return core.WrapWithBaseAndContext(nil, err, kubeerr.DirectModeFailureMessage(fmt.Sprintf("failed to get %s %q in namespace %q", resource, name, namespace), err.Error()), map[string]any{
 			"resource":  resource,
 			"name":      name,
 			"namespace": namespace,
@@ -484,7 +484,7 @@ func (m *AccessManager) getAccessPlatform(ctx context.Context, plat *platformapi
 		_, _ = os.Stdout.Write(append(b, '\n'))
 		return nil
 	default:
-		return core.NewWithSentinel(nil, fmt.Sprintf("unsupported access resource %q", resource))
+		return core.NewWithBase(nil, fmt.Sprintf("unsupported access resource %q", resource))
 	}
 }
 
@@ -497,7 +497,7 @@ func (m *AccessManager) ApplyAccessResource(file string) error {
 	}
 	if !kube {
 		if err := plat.ApplyAccessFromYAMLFile(context.Background(), file); err != nil {
-			return core.WrapWithSentinelAndContext(nil, err, fmt.Sprintf("apply access resource from file %q: %v", file, err), map[string]any{
+			return core.WrapWithBaseAndContext(nil, err, fmt.Sprintf("apply access resource from file %q: %v", file, err), map[string]any{
 				"file":      file,
 				"component": "access",
 			})
@@ -505,7 +505,7 @@ func (m *AccessManager) ApplyAccessResource(file string) error {
 		return nil
 	}
 	if err := kubeapply.ApplyManifestFromFile(m.kubectl.CommandArgs, file, os.Stdout, os.Stderr); err != nil {
-		return core.WrapWithSentinelAndContext(nil, err, kubeerr.DirectModeFailureMessage(fmt.Sprintf("failed to apply access resource from file %q", file), err.Error()), map[string]any{
+		return core.WrapWithBaseAndContext(nil, err, kubeerr.DirectModeFailureMessage(fmt.Sprintf("failed to apply access resource from file %q", file), err.Error()), map[string]any{
 			"file":      file,
 			"component": "access",
 		})
@@ -543,10 +543,10 @@ func (m *AccessManager) DeleteAccessResource(resource, name, namespace string) e
 		case SessionResource:
 			err = plat.DeleteSession(ctx, namespace, name)
 		default:
-			return core.NewWithSentinel(nil, fmt.Sprintf("unsupported access resource %q", resource))
+			return core.NewWithBase(nil, fmt.Sprintf("unsupported access resource %q", resource))
 		}
 		if err != nil {
-			return core.WrapWithSentinelAndContext(nil, err, fmt.Sprintf("delete %s %q: %v", resource, name, err), map[string]any{
+			return core.WrapWithBaseAndContext(nil, err, fmt.Sprintf("delete %s %q: %v", resource, name, err), map[string]any{
 				"resource":  resource,
 				"name":      name,
 				"namespace": namespace,
@@ -559,7 +559,7 @@ func (m *AccessManager) DeleteAccessResource(resource, name, namespace string) e
 
 	args := []string{"delete", resource, name, "-n", namespace}
 	if err := m.kubectl.RunWithOutput(args, os.Stdout, os.Stderr); err != nil {
-		return core.WrapWithSentinelAndContext(nil, err, kubeerr.DirectModeFailureMessage(fmt.Sprintf("failed to delete %s %q in namespace %q", resource, name, namespace), err.Error()), map[string]any{
+		return core.WrapWithBaseAndContext(nil, err, kubeerr.DirectModeFailureMessage(fmt.Sprintf("failed to delete %s %q in namespace %q", resource, name, namespace), err.Error()), map[string]any{
 			"resource":  resource,
 			"name":      name,
 			"namespace": namespace,
@@ -596,10 +596,10 @@ func (m *AccessManager) ToggleAccessResource(resource, name, namespace string, v
 				err = plat.PatchSession(ctx, namespace, name, false)
 			}
 		default:
-			return core.NewWithSentinel(nil, fmt.Sprintf("unsupported access resource %q", resource))
+			return core.NewWithBase(nil, fmt.Sprintf("unsupported access resource %q", resource))
 		}
 		if err != nil {
-			return core.WrapWithSentinelAndContext(nil, err, fmt.Sprintf("toggle %s %q: %v", resource, name, err), map[string]any{
+			return core.WrapWithBaseAndContext(nil, err, fmt.Sprintf("toggle %s %q: %v", resource, name, err), map[string]any{
 				"resource":  resource,
 				"name":      name,
 				"namespace": namespace,
@@ -617,12 +617,12 @@ func (m *AccessManager) ToggleAccessResource(resource, name, namespace string, v
 	case SessionResource:
 		patchValue["spec"].(map[string]any)["revoked"] = value
 	default:
-		return core.NewWithSentinel(nil, fmt.Sprintf("unsupported access resource %q", resource))
+		return core.NewWithBase(nil, fmt.Sprintf("unsupported access resource %q", resource))
 	}
 
 	data, err := json.Marshal(patchValue)
 	if err != nil {
-		return core.WrapWithSentinelAndContext(nil, err, fmt.Sprintf("failed to marshal access patch for %s %q: %v", resource, name, err), map[string]any{
+		return core.WrapWithBaseAndContext(nil, err, fmt.Sprintf("failed to marshal access patch for %s %q: %v", resource, name, err), map[string]any{
 			"resource":  resource,
 			"name":      name,
 			"namespace": namespace,
@@ -632,7 +632,7 @@ func (m *AccessManager) ToggleAccessResource(resource, name, namespace string, v
 
 	args := []string{"patch", resource, name, "-n", namespace, "--type", "merge", "--patch", string(data)}
 	if err := m.kubectl.RunWithOutput(args, os.Stdout, os.Stderr); err != nil {
-		return core.WrapWithSentinelAndContext(nil, err, kubeerr.DirectModeFailureMessage(fmt.Sprintf("failed to patch %s %q in namespace %q", resource, name, namespace), err.Error()), map[string]any{
+		return core.WrapWithBaseAndContext(nil, err, kubeerr.DirectModeFailureMessage(fmt.Sprintf("failed to patch %s %q in namespace %q", resource, name, namespace), err.Error()), map[string]any{
 			"resource":  resource,
 			"name":      name,
 			"namespace": namespace,

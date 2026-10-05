@@ -34,7 +34,7 @@ func waitForDoctorResource(kubectl core.KubectlRunner, resource, name, namespace
 			if lastErr != nil {
 				return lastErr
 			}
-			return core.NewWithSentinel(core.ErrDoctorResourceNotFoundBeforeTimeout, fmt.Sprintf("%s/%s not found before timeout", resource, name))
+			return core.NewWithBase(core.ErrDoctorResourceNotFoundBeforeTimeout, fmt.Sprintf("%s/%s not found before timeout", resource, name))
 		case <-ticker.C:
 		}
 	}
@@ -53,7 +53,7 @@ func waitForDoctorDeploymentReady(kubectl core.KubectlRunner, name, namespace st
 	if detail == "" {
 		return runErr
 	}
-	return core.WrapWithSentinel(core.ErrDoctorDeploymentRolloutFailed, runErr, fmt.Sprintf("%v: %s", runErr, detail))
+	return core.WrapWithBase(core.ErrDoctorDeploymentRolloutFailed, runErr, fmt.Sprintf("%v: %s", runErr, detail))
 }
 
 func waitForDoctorPodsScheduled(kubectl core.KubectlRunner, name, namespace string, timeout time.Duration) error {
@@ -69,7 +69,7 @@ func waitForDoctorPodsScheduled(kubectl core.KubectlRunner, name, namespace stri
 		}
 		select {
 		case <-timeoutTimer.C:
-			return core.NewWithSentinel(core.ErrDoctorPodsNotScheduledBeforeTimeout, fmt.Sprintf("no scheduled pod found for deployment %s before timeout", name))
+			return core.NewWithBase(core.ErrDoctorPodsNotScheduledBeforeTimeout, fmt.Sprintf("no scheduled pod found for deployment %s before timeout", name))
 		case <-ticker.C:
 		}
 	}
@@ -141,7 +141,7 @@ func decodeBase64(value string) (string, error) {
 	}
 	decoded, err := base64.StdEncoding.DecodeString(trimmed)
 	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrDoctorDecodeBase64Failed, err, fmt.Sprintf("decode base64 value: %v", err))
+		return "", core.WrapWithBase(core.ErrDoctorDecodeBase64Failed, err, fmt.Sprintf("decode base64 value: %v", err))
 	}
 	return string(decoded), nil
 }

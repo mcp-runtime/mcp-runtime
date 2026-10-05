@@ -120,11 +120,11 @@ jobs:
           go test -v -race -coverprofile=unit.out \
             $(go list ./... | grep -v -x "${module_path}/test/integration")
 
-      - name: Test Sentinel service modules
+      - name: Test platform service modules
         run: |
           set -euo pipefail
 
-          log_dir="${SENTINEL_SERVICE_TEST_LOG_DIR}"
+          log_dir="${PLATFORM_SERVICE_TEST_LOG_DIR}"
           mkdir -p "${log_dir}"
           services=(platform-api analytics-api runtime-api ingest processor mcp-gateway ui)
           pids=()
@@ -154,7 +154,7 @@ jobs:
           exit "${failed}"
         env:
           MCP_PLATFORM_TEST_POSTGRES_DSN: postgres://postgres:disposable-test-password@127.0.0.1:5432/postgres?sslmode=disable
-          SENTINEL_SERVICE_TEST_LOG_DIR: ${{ runner.temp }}/sentinel-service-test-logs
+          PLATFORM_SERVICE_TEST_LOG_DIR: ${{ runner.temp }}/platform-service-test-logs
 
       - name: Test Traefik plugin modules
         run: |
@@ -164,12 +164,12 @@ jobs:
             (cd "${plugin}" && go test -v -race -count=1 ./...)
           done
 
-      - name: Upload Sentinel service test logs
+      - name: Upload platform service test logs
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: sentinel-service-test-logs
-          path: ${{ runner.temp }}/sentinel-service-test-logs
+          name: platform-service-test-logs
+          path: ${{ runner.temp }}/platform-service-test-logs
           if-no-files-found: ignore
 
       - name: Run integration tests with coverage

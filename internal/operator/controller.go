@@ -138,6 +138,7 @@ type resourceReadiness = operatorutil.ResourceReadiness
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch
 //+kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;delete
 //+kubebuilder:rbac:groups="",resources=pods,verbs=list;patch
+//+kubebuilder:rbac:groups=discovery.k8s.io,resources=endpointslices,verbs=get;list;watch
 //+kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch
 //+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
@@ -264,7 +265,7 @@ func (r *MCPServerReconciler) validateGatewayConfig(ctx context.Context, mcpServ
 		opURL := strings.TrimSpace(r.DefaultAnalyticsIngestURL)
 		if specURL == "" && opURL == "" {
 			if err := r.requireSpecField(ctx, mcpServer, logger, "analytics ingest URL", "",
-				"analytics.ingestURL is required when spec.analytics is set; set spec.analytics.ingestURL, configure MCP_SENTINEL_INGEST_URL on the operator, or set spec.analytics.disabled to true"); err != nil {
+				"analytics.ingestURL is required when spec.analytics is set; set spec.analytics.ingestURL, configure MCP_ANALYTICS_INGEST_URL on the operator, or set spec.analytics.disabled to true"); err != nil {
 				return err
 			}
 		}

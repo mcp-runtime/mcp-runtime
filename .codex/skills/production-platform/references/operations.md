@@ -183,8 +183,8 @@ Healthy setup signs:
 
 - setup ends with `Platform setup complete`
 - no `ErrImagePull` / `ImagePullBackOff`
-- operator and Sentinel images use `registry.<domain>:<tag>`, not a Service IP
-- operator and Sentinel workloads reference `mcp-runtime-registry-pull` when
+- operator and platform images use `registry.<domain>:<tag>`, not a Service IP
+- operator and platform workloads reference `mcp-runtime-registry-pull` when
   they pull from the public registry hostname
 - `cluster doctor` passes all checks
 

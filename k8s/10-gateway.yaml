@@ -28,7 +28,7 @@ data:
           stripPrefix:
             prefixes:
               - /ingest
-        sentinel-admin-auth:
+        platform-admin-auth:
           forwardAuth:
             address: http://mcp-ui.mcp-platform.svc.cluster.local:8082/auth/admin-check
             trustForwardHeader: true
@@ -593,7 +593,7 @@ metadata:
   name: mcp-platform-gateway-observability
   namespace: mcp-observability
   annotations:
-    traefik.ingress.kubernetes.io/router.middlewares: sentinel-admin-auth@file
+    traefik.ingress.kubernetes.io/router.middlewares: platform-admin-auth@file
 spec:
   ingressClassName: traefik
   rules:

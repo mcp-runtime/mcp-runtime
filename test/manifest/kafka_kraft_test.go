@@ -99,7 +99,7 @@ func TestKafkaManifestDefinesThreeNodeKRaftCluster(t *testing.T) {
 	}
 }
 
-func TestKafkaTopicInitCreatesReplicatedSentinelTopic(t *testing.T) {
+func TestKafkaTopicInitCreatesReplicatedPlatformTopic(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", "k8s", "05-kafka-topic-init.yaml"))
 	if err != nil {
 		t.Fatalf("read topic init manifest: %v", err)

@@ -1,4 +1,4 @@
-package sentinel
+package platformstack
 
 import (
 	"fmt"
@@ -8,7 +8,7 @@ import (
 	"mcp-runtime/pkg/platforminventory"
 )
 
-// Component and PortTarget retain the Sentinel API's existing field names.
+// Component and PortTarget retain the platform API's existing field names.
 type Component = platforminventory.Component
 type PortTarget = platforminventory.PortTarget
 
@@ -20,7 +20,7 @@ const (
 )
 
 // Components preserves the historical public status and management surface.
-var Components = platforminventory.SentinelComponents(true)
+var Components = platforminventory.PlatformComponents(true)
 
 // GetComponentKeys returns sorted list of all component keys.
 func GetComponentKeys() []string {
@@ -61,7 +61,7 @@ func FindPortTarget(name string) (*PortTarget, error) {
 	return component.PortTarget, nil
 }
 
-// IsCoreComponent returns true if the component is part of the core Sentinel runtime.
+// IsCoreComponent returns true if the component is part of the core platform runtime.
 func IsCoreComponent(key string) bool {
 	core := map[string]bool{
 		"platform-api":  true,

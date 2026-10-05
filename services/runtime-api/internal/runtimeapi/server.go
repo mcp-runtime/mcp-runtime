@@ -5,11 +5,11 @@ import (
 	"sync"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
-	sentinelaccess "mcp-runtime/pkg/access"
+	mcpaccess "mcp-runtime/pkg/access"
 	chpkg "mcp-runtime/pkg/clickhouse"
 	"mcp-runtime/pkg/controlplane"
 	"mcp-runtime/pkg/k8sclient"
-	"mcp-runtime/pkg/sentinel"
+	"mcp-runtime/pkg/platformstack"
 )
 
 // RuntimeServer composes runtime API dependencies for analytics, Kubernetes control-plane access, and platform identity.
@@ -17,16 +17,16 @@ type RuntimeServer struct {
 	inventory     *InventoryService
 	inventoryOnce sync.Once
 
-	db          *chpkg.Client
-	clickhouse  clickhouse.Conn
-	dbName      string
-	apiKeys     map[string]struct{}
-	identity    identityStore
-	k8sClients  *k8sclient.Clients
-	control     *controlplane.Manager
-	accessMgr   *sentinelaccess.Manager
-	sentinelMgr *sentinel.Manager
-	audit       auditWriter
+	db         *chpkg.Client
+	clickhouse clickhouse.Conn
+	dbName     string
+	apiKeys    map[string]struct{}
+	identity   identityStore
+	k8sClients *k8sclient.Clients
+	control    *controlplane.Manager
+	accessMgr  *mcpaccess.Manager
+	stackMgr   *platformstack.Manager
+	audit      auditWriter
 
 	liveInventoryOnce  sync.Once
 	liveInventoryCache *liveInventoryCache
@@ -42,7 +42,7 @@ type DeploymentService struct {
 type AccessService struct {
 	k8sClients *k8sclient.Clients
 	identity   identityStore
-	accessMgr  *sentinelaccess.Manager
+	accessMgr  *mcpaccess.Manager
 	audit      auditWriter
 }
 
@@ -75,26 +75,26 @@ func NewRuntimeServer(db clickhouse.Conn, dbName string, apiKeys map[string]stru
 		k8sClients = nil
 	}
 
-	var accessMgr *sentinelaccess.Manager
-	var sentinelMgr *sentinel.Manager
+	var accessMgr *mcpaccess.Manager
+	var stackMgr *platformstack.Manager
 	var control *controlplane.Manager
 
 	if k8sClients != nil {
 		control = controlplane.New(k8sClients)
-		accessMgr = sentinelaccess.NewManager(k8sClients.Dynamic, k8sClients.Clientset)
-		sentinelMgr = sentinel.NewManager(k8sClients.Clientset)
+		accessMgr = mcpaccess.NewManager(k8sClients.Dynamic, k8sClients.Clientset)
+		stackMgr = platformstack.NewManager(k8sClients.Clientset)
 	}
 
 	return &RuntimeServer{
-		db:          chClient,
-		clickhouse:  db,
-		dbName:      dbName,
-		apiKeys:     apiKeys,
-		identity:    identity,
-		k8sClients:  k8sClients,
-		control:     control,
-		accessMgr:   accessMgr,
-		sentinelMgr: sentinelMgr,
+		db:         chClient,
+		clickhouse: db,
+		dbName:     dbName,
+		apiKeys:    apiKeys,
+		identity:   identity,
+		k8sClients: k8sClients,
+		control:    control,
+		accessMgr:  accessMgr,
+		stackMgr:   stackMgr,
 	}, nil
 }
 

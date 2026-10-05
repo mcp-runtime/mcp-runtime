@@ -67,7 +67,7 @@ func PlatformURL(logger *zap.Logger, kubectl KubectlCommand, cfg Config) string 
 
 // InternalPlatformURL resolves the bundled registry host:port for platform pods
 // rendered by setup. It intentionally ignores public ingress hosts derived from
-// MCP_PLATFORM_DOMAIN/MCP_REGISTRY_INGRESS_HOST so operator and Sentinel pods do
+// MCP_PLATFORM_DOMAIN/MCP_REGISTRY_INGRESS_HOST so operator and platform pods do
 // not need anonymous or pull-secret access to the public registry route.
 func InternalPlatformURL(logger *zap.Logger, kubectl KubectlCommand, cfg Config) string {
 	if endpoint := strings.TrimSpace(cfg.RegistryEndpoint); endpoint != "" &&

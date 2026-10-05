@@ -40,7 +40,7 @@ type ingestServer struct {
 	oidcAudience string
 }
 
-// main initializes and starts the MCP Sentinel Ingest service.
+// main initializes and starts the MCP Runtime Ingest service.
 // It sets up Kafka producer connection, configures authentication, initializes tracing,
 // sets up HTTP routes, and starts the server on the configured port.
 func main() {

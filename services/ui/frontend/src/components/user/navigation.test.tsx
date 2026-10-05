@@ -152,7 +152,7 @@ describe("workspace navigation", () => {
     await screen.findByTestId("workspace-tab-servers");
 
     expect(screen.queryByTestId("workspace-tab-legacy")).not.toBeInTheDocument();
-    expect(screen.queryByTitle("MCP Sentinel dashboard")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("MCP Runtime dashboard")).not.toBeInTheDocument();
   });
 
   it("puts the active workspace in the URL so it can be shared", async () => {

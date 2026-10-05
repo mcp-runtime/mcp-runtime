@@ -5,7 +5,7 @@
 //   - A category description (e.g., "Registry error")
 //   - A user-facing message
 //   - Optional structured context (key-value pairs)
-//   - Optional cause and base sentinel errors
+//   - Optional cause and base error errors
 //
 // Error codes follow a scheme where the first two digits represent the domain:
 //   - 70xxx: CLI/argument validation errors
@@ -25,9 +25,9 @@
 //
 //	err := errx.Registry("failed to connect to registry").
 //		WithContext("url", "registry.mcpruntime.com").
-//		WithBase(sentinelErr)
+//		WithBase(baseErr)
 //
-//	if errors.Is(err, sentinelErr) {
+//	if errors.Is(err, baseErr) {
 //		// Handle specific error
 //	}
 //

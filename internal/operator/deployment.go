@@ -40,6 +40,10 @@ func (r *MCPServerReconciler) reconcileDeployment(ctx context.Context, mcpServer
 		}
 	}
 
+	strategy, err := r.servingDeploymentStrategy(ctx, mcpServer)
+	if err != nil {
+		return err
+	}
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      mcpServer.Name,
@@ -53,6 +57,7 @@ func (r *MCPServerReconciler) reconcileDeployment(ctx context.Context, mcpServer
 			"mcpruntime.org/rollout-track": "stable",
 		}
 		templateLabels := map[string]string{
+			servingPortLabel:               strconv.Itoa(int(servingPort(mcpServer))),
 			"app":                          mcpServer.Name,
 			"app.kubernetes.io/managed-by": "mcp-runtime",
 			"mcpruntime.org/rollout-track": "stable",
@@ -70,7 +75,7 @@ func (r *MCPServerReconciler) reconcileDeployment(ctx context.Context, mcpServer
 			Selector: &metav1.LabelSelector{
 				MatchLabels: selectorLabels,
 			},
-			Strategy: deploymentStrategy(mcpServer),
+			Strategy: strategy,
 		}
 		deployment.Spec.Template.ObjectMeta.Labels = templateLabels
 
@@ -125,6 +130,10 @@ func (r *MCPServerReconciler) reconcileCanaryDeployment(ctx context.Context, mcp
 		return err
 	}
 
+	strategy, err := r.servingDeploymentStrategy(ctx, mcpServer)
+	if err != nil {
+		return err
+	}
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      canaryDeploymentName(mcpServer.Name),
@@ -151,9 +160,10 @@ func (r *MCPServerReconciler) reconcileCanaryDeployment(ctx context.Context, mcp
 			Selector: &metav1.LabelSelector{
 				MatchLabels: selectorLabels,
 			},
-			Strategy: deploymentStrategy(mcpServer),
+			Strategy: strategy,
 		}
 		deployment.Spec.Template.ObjectMeta.Labels = map[string]string{
+			servingPortLabel:               strconv.Itoa(int(servingPort(mcpServer))),
 			"app":                          mcpServer.Name,
 			"app.kubernetes.io/managed-by": "mcp-runtime",
 			"mcpruntime.org/rollout-track": "canary",
@@ -535,7 +545,7 @@ func (r *MCPServerReconciler) buildGatewayContainer(mcpServer *mcpv1alpha1.MCPSe
 		eventType := defaultAnalyticsEventType
 		var apiKeyRef *mcpv1alpha1.SecretKeyRef
 		if analytics != nil {
-			if v := strings.TrimSpace(analytics.IngestURL); v != "" && !mcpv1alpha1.EndpointUsesRetiredNamespace(v) {
+			if v := strings.TrimSpace(analytics.IngestURL); v != "" {
 				ingestURL = v
 			}
 			if v := strings.TrimSpace(analytics.Source); v != "" {
@@ -847,9 +857,6 @@ func (r *MCPServerReconciler) analyticsEnabled(mcpServer *mcpv1alpha1.MCPServer)
 	url := ""
 	if mcpServer.Spec.Analytics != nil {
 		url = strings.TrimSpace(mcpServer.Spec.Analytics.IngestURL)
-	}
-	if mcpv1alpha1.EndpointUsesRetiredNamespace(url) {
-		url = ""
 	}
 	if url == "" {
 		url = strings.TrimSpace(r.DefaultAnalyticsIngestURL)

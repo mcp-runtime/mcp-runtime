@@ -85,21 +85,6 @@ type MCPServerDefaultOptions struct {
 	DefaultOAuthIssuerURL     string
 }
 
-// EndpointUsesRetiredNamespace reports whether raw is a URL aimed at the
-// removed combined platform namespace. Callers replace those values with the
-// current service DNS. A collector outside that namespace is left unchanged.
-func EndpointUsesRetiredNamespace(raw string) bool {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return false
-	}
-	host := raw
-	if parsed, err := url.Parse(raw); err == nil && parsed.Host != "" {
-		host = parsed.Hostname()
-	}
-	return strings.Contains(host, ".mcp-sentinel.svc.")
-}
-
 func (r *MCPServer) Default() {
 	r.DefaultWithOptions(MCPServerDefaultOptions{})
 }
@@ -258,7 +243,7 @@ func (r *MCPServer) DefaultWithOptions(options MCPServerDefaultOptions) {
 			r.Spec.Analytics.EventType = defaultAnalyticsEventType
 		}
 		ingestURL := strings.TrimSpace(r.Spec.Analytics.IngestURL)
-		if ingestURL == "" || EndpointUsesRetiredNamespace(ingestURL) {
+		if ingestURL == "" {
 			if def := strings.TrimSpace(options.DefaultAnalyticsIngestURL); def != "" {
 				r.Spec.Analytics.IngestURL = def
 			}

@@ -95,7 +95,7 @@ jobs:
           KUBEBUILDER_ASSETS: ${{ env.KUBEBUILDER_ASSETS }}
 
   service-tests:
-    name: Sentinel Service Tests
+    name: Platform Service Tests
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false

@@ -14,7 +14,7 @@ import (
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 
 	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
-	sentinelaccess "mcp-runtime/pkg/access"
+	mcpaccess "mcp-runtime/pkg/access"
 	"mcp-runtime/pkg/certauth"
 	"mcp-runtime/pkg/k8sclient"
 )
@@ -38,7 +38,7 @@ func TestHandleAdapterCertificateRefusesRevokedSession(t *testing.T) {
 		},
 	}
 	dyn := dynamicfake.NewSimpleDynamicClient(scheme, session)
-	svc := &AccessService{k8sClients: &k8sclient.Clients{Dynamic: dyn}, accessMgr: sentinelaccess.NewManager(dyn, nil)}
+	svc := &AccessService{k8sClients: &k8sclient.Clients{Dynamic: dyn}, accessMgr: mcpaccess.NewManager(dyn, nil)}
 
 	_, csrPEM, _, err := certauth.BuildSessionCSR("cluster.local", "mcp-team-acme", "adapter-1")
 	if err != nil {

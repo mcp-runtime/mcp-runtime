@@ -237,14 +237,14 @@ func checkOperatorRegistryEndpoint(kubectl core.KubectlRunner) DoctorCheck {
 	}
 }
 
-func checkSentinelKafkaReadiness(kubectl core.KubectlRunner) DoctorCheck {
+func checkPlatformKafkaReadiness(kubectl core.KubectlRunner) DoctorCheck {
 	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", componentNamespace("kafka"), "-o", "jsonpath={.metadata.name}"}); err != nil {
-		return DoctorCheck{Name: "sentinel Kafka readiness", OK: true, Detail: "namespace mcp-observability not found; skipping Kafka readiness"}
+		return DoctorCheck{Name: "platform Kafka readiness", OK: true, Detail: "namespace mcp-observability not found; skipping Kafka readiness"}
 	}
 	pair, ready, err := doctorStatefulSetReplicaStatus(kubectl, componentNamespace("kafka"), "kafka")
 	if err != nil {
 		return DoctorCheck{
-			Name:   "sentinel Kafka readiness",
+			Name:   "platform Kafka readiness",
 			OK:     false,
 			Detail: err.Error(),
 			Remedy: "inspect Kafka rollout, logs, and PVC state in mcp-observability",
@@ -252,27 +252,27 @@ func checkSentinelKafkaReadiness(kubectl core.KubectlRunner) DoctorCheck {
 	}
 	if !ready {
 		return DoctorCheck{
-			Name:   "sentinel Kafka readiness",
+			Name:   "platform Kafka readiness",
 			OK:     false,
 			Detail: fmt.Sprintf("%s replicas ready", pair),
 			Remedy: "inspect `kubectl -n mcp-observability get pods`, `kubectl -n mcp-observability logs kafka-0 --previous`, and the Kafka PVC state",
 		}
 	}
 	return DoctorCheck{
-		Name:   "sentinel Kafka readiness",
+		Name:   "platform Kafka readiness",
 		OK:     true,
 		Detail: fmt.Sprintf("%s replicas ready", pair),
 	}
 }
 
-func checkSentinelIngestReadiness(kubectl core.KubectlRunner) DoctorCheck {
+func checkPlatformIngestReadiness(kubectl core.KubectlRunner) DoctorCheck {
 	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", componentNamespace("ingest"), "-o", "jsonpath={.metadata.name}"}); err != nil {
-		return DoctorCheck{Name: "sentinel ingest readiness", OK: true, Detail: "namespace mcp-observability not found; skipping ingest readiness"}
+		return DoctorCheck{Name: "platform ingest readiness", OK: true, Detail: "namespace mcp-observability not found; skipping ingest readiness"}
 	}
 	pair, ready, err := doctorDeploymentReplicaStatus(kubectl, componentNamespace("ingest"), "mcp-ingest")
 	if err != nil {
 		return DoctorCheck{
-			Name:   "sentinel ingest readiness",
+			Name:   "platform ingest readiness",
 			OK:     false,
 			Detail: err.Error(),
 			Remedy: "inspect the ingest deployment and pod logs in mcp-observability",
@@ -280,14 +280,14 @@ func checkSentinelIngestReadiness(kubectl core.KubectlRunner) DoctorCheck {
 	}
 	if !ready {
 		return DoctorCheck{
-			Name:   "sentinel ingest readiness",
+			Name:   "platform ingest readiness",
 			OK:     false,
 			Detail: fmt.Sprintf("%s replicas ready", pair),
 			Remedy: "inspect `kubectl -n mcp-observability get pods`, `kubectl -n mcp-observability logs deploy/mcp-ingest`, and Kafka readiness",
 		}
 	}
 	return DoctorCheck{
-		Name:   "sentinel ingest readiness",
+		Name:   "platform ingest readiness",
 		OK:     true,
 		Detail: fmt.Sprintf("%s replicas ready", pair),
 	}
@@ -359,7 +359,7 @@ func checkRuntimeAPIImageDisplayRefs(kubectl core.KubectlRunner) DoctorCheck {
 			Name:   "runtime API image display refs",
 			OK:     false,
 			Detail: fmt.Sprintf("failed creating runtime API probe pod: %v: %s", runErr, strings.TrimSpace(string(createOut))),
-			Remedy: "verify sentinel API deployment/service and UI_API_KEY config",
+			Remedy: "verify platform API deployment/service and UI_API_KEY config",
 		}
 	}
 	if err := waitForDoctorPodSucceeded(kubectl, podName, componentNamespace("platform-api"), 90*time.Second); err != nil {
@@ -372,7 +372,7 @@ func checkRuntimeAPIImageDisplayRefs(kubectl core.KubectlRunner) DoctorCheck {
 			Name:   "runtime API image display refs",
 			OK:     false,
 			Detail: detail,
-			Remedy: "verify sentinel API deployment/service and runtime API route availability",
+			Remedy: "verify platform API deployment/service and runtime API route availability",
 		}
 	}
 	out, logsErr := readKubectlOutput(kubectl, []string{"logs", podName, "-n", componentNamespace("platform-api")})

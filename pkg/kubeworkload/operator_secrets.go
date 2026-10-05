@@ -30,7 +30,7 @@ func OperatorSecretNamespaceProtected(namespace string) bool {
 		return true
 	}
 	switch namespace {
-	case "default", "mcp-sentinel", "mcp-platform", "mcp-observability", "mcp-log-collector", "registry", OperatorNamespace, "cert-manager", "traefik":
+	case "default", "mcp-platform", "mcp-observability", "mcp-log-collector", "registry", OperatorNamespace, "cert-manager", "traefik":
 		return true
 	}
 	return false

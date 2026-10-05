@@ -8,7 +8,7 @@ import (
 	"github.com/go-logr/logr"
 )
 
-// Sentinel errors for operator operations.
+// Platform errors for operator operations.
 var (
 	// Reconciliation errors.
 	ErrReconcileDeployment = fmt.Errorf("failed to reconcile deployment")

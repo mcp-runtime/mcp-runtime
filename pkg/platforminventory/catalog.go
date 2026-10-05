@@ -44,7 +44,7 @@ type Component struct {
 	Owner        Owner        `json:"-"`
 	Capabilities []Capability `json:"-"`
 	Dependencies []Dependency `json:"-"`
-	Sentinel     bool         `json:"-"`
+	Managed      bool         `json:"-"`
 	Key          string
 	Display      string
 	Namespace    string
@@ -77,11 +77,11 @@ const (
 	SharedServicesPriorityClass = "mcp-shared-services"
 )
 
-// catalog keeps the historical Sentinel management order.
+// catalog keeps the platform management order.
 var catalog = []Component{
 	{
 		Key:   "operator",
-		Owner: Operator, Sentinel: true,
+		Owner: Operator, Managed: true,
 		Capabilities: []Capability{Control},
 		Display:      "Operator",
 		Namespace:    OperatorNamespace,
@@ -91,7 +91,7 @@ var catalog = []Component{
 	},
 	{
 		Key:   "clickhouse",
-		Owner: Observability, Sentinel: true,
+		Owner: Observability, Managed: true,
 		Capabilities: []Capability{Telemetry, Persistent},
 		Display:      "ClickHouse",
 		Namespace:    "",
@@ -101,7 +101,7 @@ var catalog = []Component{
 	},
 	{
 		Key:   "kafka",
-		Owner: Observability, Sentinel: true,
+		Owner: Observability, Managed: true,
 		Capabilities: []Capability{Telemetry, Persistent},
 		Display:      "Kafka",
 		Namespace:    "",
@@ -111,7 +111,7 @@ var catalog = []Component{
 	},
 	{
 		Key:   "ingest",
-		Owner: Observability, Sentinel: true,
+		Owner: Observability, Managed: true,
 		Capabilities: []Capability{Telemetry},
 		Dependencies: []Dependency{{Component: "kafka", Optional: false}},
 		Display:      "Ingest",
@@ -122,7 +122,7 @@ var catalog = []Component{
 	},
 	{
 		Key:   "platform-api",
-		Owner: Platform, Sentinel: true,
+		Owner: Platform, Managed: true,
 		Capabilities: []Capability{Control},
 		Dependencies: []Dependency{{Component: "postgres", Optional: false}, {Component: "runtime-api", Optional: false}},
 		Display:      "Platform API",
@@ -140,7 +140,7 @@ var catalog = []Component{
 	},
 	{
 		Key:   "runtime-api",
-		Owner: Platform, Sentinel: true,
+		Owner: Platform, Managed: true,
 		Capabilities: []Capability{Control},
 		Dependencies: []Dependency{{Component: "platform-api", Optional: false}, {Component: "clickhouse", Optional: true}},
 		Display:      "Runtime Control",
@@ -158,7 +158,7 @@ var catalog = []Component{
 	},
 	{
 		Key:   "analytics-api",
-		Owner: Observability, Sentinel: true,
+		Owner: Observability, Managed: true,
 		Capabilities: []Capability{Telemetry},
 		Dependencies: []Dependency{{Component: "clickhouse", Optional: false}, {Component: "platform-api", Optional: false}},
 		Display:      "Analytics API",
@@ -176,7 +176,7 @@ var catalog = []Component{
 	},
 	{
 		Key:   "processor",
-		Owner: Observability, Sentinel: true,
+		Owner: Observability, Managed: true,
 		Capabilities: []Capability{Telemetry},
 		Dependencies: []Dependency{{Component: "kafka", Optional: false}, {Component: "clickhouse", Optional: false}},
 		Display:      "Processor",
@@ -187,7 +187,7 @@ var catalog = []Component{
 	},
 	{
 		Key:   "ui",
-		Owner: Platform, Sentinel: true,
+		Owner: Platform, Managed: true,
 		Capabilities: []Capability{Control},
 		Dependencies: []Dependency{{Component: "platform-api", Optional: false}, {Component: "runtime-api", Optional: false}, {Component: "analytics-api", Optional: true}},
 		Display:      "UI",
@@ -204,7 +204,7 @@ var catalog = []Component{
 	},
 	{
 		Key:   "gateway",
-		Owner: Platform, Sentinel: true,
+		Owner: Platform, Managed: true,
 		Capabilities: []Capability{Routing},
 		Dependencies: []Dependency{{Component: "ui", Optional: false}, {Component: "platform-api", Optional: false}, {Component: "runtime-api", Optional: false}, {Component: "analytics-api", Optional: true}, {Component: "grafana", Optional: true}},
 		Display:      "Gateway",
@@ -215,7 +215,7 @@ var catalog = []Component{
 	},
 	{
 		Key:   "prometheus",
-		Owner: Observability, Sentinel: true,
+		Owner: Observability, Managed: true,
 		Capabilities: []Capability{Telemetry},
 		Display:      "Prometheus",
 		Namespace:    "",
@@ -232,7 +232,7 @@ var catalog = []Component{
 	},
 	{
 		Key:   "grafana",
-		Owner: Observability, Sentinel: true,
+		Owner: Observability, Managed: true,
 		Capabilities: []Capability{Telemetry},
 		Dependencies: []Dependency{{Component: "prometheus", Optional: true}, {Component: "loki", Optional: true}, {Component: "tempo", Optional: true}},
 		Display:      "Grafana",
@@ -249,7 +249,7 @@ var catalog = []Component{
 	},
 	{
 		Key:   "otel-collector",
-		Owner: Observability, Sentinel: true,
+		Owner: Observability, Managed: true,
 		Capabilities: []Capability{Telemetry},
 		Dependencies: []Dependency{{Component: "tempo", Optional: false}},
 		Display:      "OTel Collector",
@@ -261,7 +261,7 @@ var catalog = []Component{
 	},
 	{
 		Key:   "tempo",
-		Owner: Observability, Sentinel: true,
+		Owner: Observability, Managed: true,
 		Capabilities: []Capability{Telemetry, Persistent},
 		Display:      "Tempo",
 		Namespace:    "",
@@ -271,7 +271,7 @@ var catalog = []Component{
 	},
 	{
 		Key:   "loki",
-		Owner: Observability, Sentinel: true,
+		Owner: Observability, Managed: true,
 		Capabilities: []Capability{Telemetry, Persistent},
 		Display:      "Loki",
 		Namespace:    "",
@@ -281,7 +281,7 @@ var catalog = []Component{
 	},
 	{
 		Key:   "promtail",
-		Owner: LogCollector, Sentinel: true,
+		Owner: LogCollector, Managed: true,
 		Capabilities: []Capability{Telemetry, NodeLogs},
 		Dependencies: []Dependency{{Component: "loki", Optional: false}},
 		Display:      "Promtail",
@@ -354,13 +354,13 @@ func Find(name string) (Component, bool) {
 	return Component{}, false
 }
 
-// SentinelComponents preserves the existing management surface. Image-only,
+// PlatformComponents preserves the existing management surface. Image-only,
 // optional authentication and database components are deliberately not added
 // to restart-all or to the public status response by inventory consolidation.
-func SentinelComponents(includeOperator bool) []Component {
+func PlatformComponents(includeOperator bool) []Component {
 	var out []Component
 	for _, c := range Catalog() {
-		if c.Sentinel && (includeOperator || c.Key != "operator") {
+		if c.Managed && (includeOperator || c.Key != "operator") {
 			out = append(out, c)
 		}
 	}

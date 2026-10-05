@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -122,40 +123,6 @@ func TestApplyContainerResources(t *testing.T) {
 			t.Fatal("expected error for invalid memory value")
 		}
 	})
-}
-
-func TestBuildGatewayContainerReplacesRetiredIngestURL(t *testing.T) {
-	mcpServer := &mcpv1alpha1.MCPServer{
-		ObjectMeta: metav1.ObjectMeta{Name: "buddy", Namespace: "mcp-servers"},
-		Spec: mcpv1alpha1.MCPServerSpec{
-			Gateway: &mcpv1alpha1.GatewayConfig{
-				Enabled:     mcpv1alpha1.BoolPtr(true),
-				Port:        defaultGatewayPort,
-				UpstreamURL: "http://127.0.0.1:8080",
-			},
-			Analytics: &mcpv1alpha1.AnalyticsConfig{
-				IngestURL: "http://mcp-sentinel-ingest.mcp-sentinel.svc.cluster.local:8081/events",
-			},
-		},
-	}
-	const current = "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events"
-	r := MCPServerReconciler{
-		GatewayProxyImage:         "example.com/mcp-gateway:latest",
-		DefaultAnalyticsIngestURL: current,
-	}
-	container, err := r.buildGatewayContainer(mcpServer)
-	if err != nil {
-		t.Fatalf("buildGatewayContainer() error = %v", err)
-	}
-	for _, env := range container.Env {
-		if env.Name == "ANALYTICS_INGEST_URL" {
-			if env.Value != current {
-				t.Fatalf("ANALYTICS_INGEST_URL = %q, want %q", env.Value, current)
-			}
-			return
-		}
-	}
-	t.Fatal("ANALYTICS_INGEST_URL was not set")
 }
 
 func TestBuildGatewayContainerAppliesDefaultResources(t *testing.T) {
@@ -684,7 +651,7 @@ func TestReconcileServicePreservesExistingAnnotations(t *testing.T) {
 			},
 		},
 		Spec: corev1.ServiceSpec{
-			Ports: []corev1.ServicePort{{Port: 80}},
+			Ports: []corev1.ServicePort{{Port: 80, TargetPort: intstr.FromInt(8091)}},
 		},
 	}
 

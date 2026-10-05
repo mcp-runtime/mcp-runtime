@@ -95,7 +95,7 @@ func NextLink(r *http.Request, nextCursor string, limit int) string {
 
 // ListMeta builds pagination metadata for handlers that fetch exactly `limit`
 // rows. HasMore is therefore optimistic on exact-fit pages unless the caller
-// uses a limit+1 sentinel query upstream.
+// uses a limit+1 platform query upstream.
 func ListMeta(limit, offset, returned int) Meta {
 	hasMore := returned >= limit && limit > 0
 	meta := Meta{Limit: limit, HasMore: hasMore}

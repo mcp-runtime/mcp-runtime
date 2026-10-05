@@ -86,11 +86,11 @@ def check_ui_auth(base, label, *, include_observability=False):
 
 
 expect_status(f"{ui_base}/health", 200, contains='"ok":true')
-ui_index = expect_status(f"{ui_base}/", 200, contains="MCP Sentinel Control Plane")
+ui_index = expect_status(f"{ui_base}/", 200, contains="MCP Runtime Control Plane")
 ui_config = expect_status(f"{ui_base}/config.js", 200, contains="window.MCP_API_BASE")
 check(f'window.MCP_PLATFORM_MODE = "{platform_mode}"' in ui_config, "ui config.js exposes platform mode", f"ui config missing platform mode {platform_mode}: {ui_config}")
 ui_script_path, ui_style_path = check_vite_assets(ui_base, "ui", ui_index)
-gateway_index = expect_status(f"{gateway_base}/", 200, contains="MCP Sentinel Control Plane")
+gateway_index = expect_status(f"{gateway_base}/", 200, contains="MCP Runtime Control Plane")
 expect_status(f"{gateway_base}/config.js", 200, contains="window.MCP_API_BASE")
 gateway_script_path, gateway_style_path = check_vite_assets(gateway_base, "gateway", gateway_index)
 expect_status(f"{gateway_base}/grafana/api/health", 401)

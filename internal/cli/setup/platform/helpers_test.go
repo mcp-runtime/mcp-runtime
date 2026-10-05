@@ -565,7 +565,7 @@ func TestPlatformImageDefaultsUseInternalRegistryWithPlatformDomain(t *testing.T
 	}
 }
 
-func TestApplyPlatformIngressPrunesPathBasedSentinelIngresses(t *testing.T) {
+func TestApplyPlatformIngressPrunesPathBasedPlatformIngresses(t *testing.T) {
 	origConfig := core.DefaultCLIConfig
 	t.Cleanup(func() { core.DefaultCLIConfig = origConfig })
 	core.DefaultCLIConfig = &core.CLIConfig{PlatformIngressHost: "platform.example.com"}
@@ -721,7 +721,7 @@ func TestOperatorEnvOverrides(t *testing.T) {
 			t.Fatalf("expected gateway otel, default analytics ingest, and registry endpoint env only, got %v", got)
 		}
 		requireOperatorEnvVar(t, got, "MCP_GATEWAY_OTEL_EXPORTER_OTLP_ENDPOINT", defaultGatewayOTELExporterOTLPEndpoint)
-		requireOperatorEnvVar(t, got, "MCP_SENTINEL_INGEST_URL", defaultAnalyticsIngestURL)
+		requireOperatorEnvVar(t, got, "MCP_ANALYTICS_INGEST_URL", defaultAnalyticsIngestURL)
 		requireOperatorEnvVarNonEmpty(t, got, "MCP_REGISTRY_ENDPOINT")
 	})
 
@@ -733,7 +733,7 @@ func TestOperatorEnvOverrides(t *testing.T) {
 		}
 		requireOperatorEnvVar(t, got, "MCP_GATEWAY_PROXY_IMAGE", "example.com/mcp-gateway:latest")
 		requireOperatorEnvVar(t, got, "MCP_GATEWAY_OTEL_EXPORTER_OTLP_ENDPOINT", defaultGatewayOTELExporterOTLPEndpoint)
-		requireOperatorEnvVar(t, got, "MCP_SENTINEL_INGEST_URL", defaultAnalyticsIngestURL)
+		requireOperatorEnvVar(t, got, "MCP_ANALYTICS_INGEST_URL", defaultAnalyticsIngestURL)
 		requireOperatorEnvVarNonEmpty(t, got, "MCP_REGISTRY_ENDPOINT")
 	})
 
@@ -748,14 +748,8 @@ func TestOperatorEnvOverrides(t *testing.T) {
 		}
 		requireOperatorEnvVar(t, got, "MCP_GATEWAY_PROXY_IMAGE", "example.com/mcp-gateway:setup")
 		requireOperatorEnvVar(t, got, "MCP_GATEWAY_OTEL_EXPORTER_OTLP_ENDPOINT", defaultGatewayOTELExporterOTLPEndpoint)
-		requireOperatorEnvVar(t, got, "MCP_SENTINEL_INGEST_URL", "http://custom-analytics-ingest")
+		requireOperatorEnvVar(t, got, "MCP_ANALYTICS_INGEST_URL", "http://custom-analytics-ingest")
 		requireOperatorEnvVarNonEmpty(t, got, "MCP_REGISTRY_ENDPOINT")
-	})
-
-	t.Run("replaces a retired gateway otel endpoint with the current collector", func(t *testing.T) {
-		core.DefaultCLIConfig = &core.CLIConfig{}
-		got := operatorEnvOverrides("", "http://otel-collector.mcp-sentinel.svc.cluster.local:4318")
-		requireOperatorEnvVar(t, got, "MCP_GATEWAY_OTEL_EXPORTER_OTLP_ENDPOINT", defaultGatewayOTELExporterOTLPEndpoint)
 	})
 
 	t.Run("preserves existing gateway otel endpoint when configured", func(t *testing.T) {
@@ -765,7 +759,7 @@ func TestOperatorEnvOverrides(t *testing.T) {
 			t.Fatalf("expected gateway otel, default analytics ingest, and registry endpoint env only, got %v", got)
 		}
 		requireOperatorEnvVar(t, got, "MCP_GATEWAY_OTEL_EXPORTER_OTLP_ENDPOINT", "http://custom-collector.mcp-observability.svc.cluster.local:4318")
-		requireOperatorEnvVar(t, got, "MCP_SENTINEL_INGEST_URL", defaultAnalyticsIngestURL)
+		requireOperatorEnvVar(t, got, "MCP_ANALYTICS_INGEST_URL", defaultAnalyticsIngestURL)
 		requireOperatorEnvVarNonEmpty(t, got, "MCP_REGISTRY_ENDPOINT")
 	})
 
@@ -776,7 +770,7 @@ func TestOperatorEnvOverrides(t *testing.T) {
 			t.Fatalf("expected gateway otel, default analytics ingest, and registry endpoint env only, got %v", got)
 		}
 		requireOperatorEnvVar(t, got, "MCP_GATEWAY_OTEL_EXPORTER_OTLP_ENDPOINT", "https://otel.example.com/v1/traces")
-		requireOperatorEnvVar(t, got, "MCP_SENTINEL_INGEST_URL", defaultAnalyticsIngestURL)
+		requireOperatorEnvVar(t, got, "MCP_ANALYTICS_INGEST_URL", defaultAnalyticsIngestURL)
 		requireOperatorEnvVarNonEmpty(t, got, "MCP_REGISTRY_ENDPOINT")
 	})
 
@@ -787,7 +781,7 @@ func TestOperatorEnvOverrides(t *testing.T) {
 			t.Fatalf("expected gateway otel, analytics ingest, and registry endpoint env only, got %d (%v)", len(got), got)
 		}
 		requireOperatorEnvVar(t, got, "MCP_GATEWAY_OTEL_EXPORTER_OTLP_ENDPOINT", defaultGatewayOTELExporterOTLPEndpoint)
-		requireOperatorEnvVar(t, got, "MCP_SENTINEL_INGEST_URL", "http://custom-analytics-ingest")
+		requireOperatorEnvVar(t, got, "MCP_ANALYTICS_INGEST_URL", "http://custom-analytics-ingest")
 		requireOperatorEnvVarNonEmpty(t, got, "MCP_REGISTRY_ENDPOINT")
 	})
 
@@ -798,7 +792,7 @@ func TestOperatorEnvOverrides(t *testing.T) {
 			t.Fatalf("expected analytics, ingress readiness, and registry endpoint env overrides, got %v", got)
 		}
 		requireOperatorEnvVar(t, got, "MCP_GATEWAY_OTEL_EXPORTER_OTLP_ENDPOINT", defaultGatewayOTELExporterOTLPEndpoint)
-		requireOperatorEnvVar(t, got, "MCP_SENTINEL_INGEST_URL", defaultAnalyticsIngestURL)
+		requireOperatorEnvVar(t, got, "MCP_ANALYTICS_INGEST_URL", defaultAnalyticsIngestURL)
 		requireOperatorEnvVar(t, got, "MCP_INGRESS_READINESS_MODE", "permissive")
 		requireOperatorEnvVarNonEmpty(t, got, "MCP_REGISTRY_ENDPOINT")
 	})
@@ -813,7 +807,7 @@ func TestOperatorEnvOverrides(t *testing.T) {
 			t.Fatalf("expected analytics plus registry env overrides, got %v", got)
 		}
 		requireOperatorEnvVar(t, got, "MCP_GATEWAY_OTEL_EXPORTER_OTLP_ENDPOINT", defaultGatewayOTELExporterOTLPEndpoint)
-		requireOperatorEnvVar(t, got, "MCP_SENTINEL_INGEST_URL", defaultAnalyticsIngestURL)
+		requireOperatorEnvVar(t, got, "MCP_ANALYTICS_INGEST_URL", defaultAnalyticsIngestURL)
 		requireOperatorEnvVar(t, got, "MCP_REGISTRY_ENDPOINT", "10.43.39.164:5000")
 		requireOperatorEnvVar(t, got, "MCP_REGISTRY_INGRESS_HOST", "registry.local")
 	})
@@ -1588,7 +1582,7 @@ data:
 		t.Fatalf("unmarshal rendered config: %v", err)
 	}
 	if got := payload.Data["MCP_MTLS_CLUSTER_ISSUER"]; got != "mcp-runtime-ca" {
-		t.Fatalf("expected MCP_MTLS_CLUSTER_ISSUER to be injected into the sentinel ConfigMap, got %q", got)
+		t.Fatalf("expected MCP_MTLS_CLUSTER_ISSUER to be injected into the platform ConfigMap, got %q", got)
 	}
 }
 
@@ -1972,7 +1966,7 @@ func TestPrepareAnalyticsImagesUsesTestModeImageSet(t *testing.T) {
 	if atomic.LoadInt32(&buildCalls) != int32(len(analyticsComponentsForSetup(true))) {
 		t.Fatalf("expected %d builds in test mode, got %d", len(analyticsComponentsForSetup(true)), buildCalls)
 	}
-	// Sentinel service Dockerfiles need the repo root context for shared packages and service modules.
+	// Platform service Dockerfiles need the repo root context for shared packages and service modules.
 	wantBuildContexts := []string{".", ".", ".", ".", ".", ".", "."}
 	if !slices.Equal(buildContexts, wantBuildContexts) {
 		t.Fatalf("build contexts = %v, want %v", buildContexts, wantBuildContexts)
@@ -3150,7 +3144,7 @@ func TestDeployOperatorManifestsWithKubectl(t *testing.T) {
 	if !strings.Contains(managerManifest, "name: MCP_GATEWAY_PROXY_IMAGE") || !strings.Contains(managerManifest, "value: "+gatewayProxyImage) {
 		t.Fatalf("expected manager manifest to include gateway proxy image env, got:\n%s", managerManifest)
 	}
-	if !strings.Contains(managerManifest, "name: MCP_SENTINEL_INGEST_URL") || !strings.Contains(managerManifest, "value: "+defaultAnalyticsIngestURL) {
+	if !strings.Contains(managerManifest, "name: MCP_ANALYTICS_INGEST_URL") || !strings.Contains(managerManifest, "value: "+defaultAnalyticsIngestURL) {
 		t.Fatalf("expected manager manifest to include analytics ingest env, got:\n%s", managerManifest)
 	}
 	if !strings.Contains(managerManifest, "name: MCP_ENABLE_WEBHOOKS") || !strings.Contains(managerManifest, "value: \"true\"") {

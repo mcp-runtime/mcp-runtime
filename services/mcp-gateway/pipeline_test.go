@@ -453,7 +453,7 @@ func TestAuthFilterMTLSRejectsRevokedOrExpiredSession(t *testing.T) {
 func TestAuthFilterAlwaysRunsBeforeAuthz(t *testing.T) {
 	t.Parallel()
 	// Prove ordering by verifying that when authFilter Rejects, authzFilter
-	// is never called. Use a sentinel filter after auth in a custom pipeline.
+	// is never called. Use a base filter after auth in a custom pipeline.
 	authzCalled := false
 	s := minimalServer()
 
@@ -739,9 +739,9 @@ func TestUpstreamFilterStripsUnvalidatedBearerWhenOAuthDisabled(t *testing.T) {
 	}
 }
 
-// ---- errPolicyUnavailable sentinel ------------------------------------------
+// ---- errPolicyUnavailable base ------------------------------------------
 
-func TestErrPolicyUnavailableIsSentinel(t *testing.T) {
+func TestErrPolicyUnavailableIsBaseError(t *testing.T) {
 	// Verify that errPolicyUnavailable is a distinct error value that can be
 	// identified by callers checking the policy unavailable condition.
 	if errPolicyUnavailable == nil {

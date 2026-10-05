@@ -1,4 +1,4 @@
-package sentinel
+package platformstack
 
 import (
 	"context"
@@ -14,13 +14,13 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// Manager provides operations for Sentinel stack components.
+// Manager provides operations for platform stack components.
 // Each component carries its own namespace from the inventory.
 type Manager struct {
 	clientset kubernetes.Interface
 }
 
-// NewManager creates a new Sentinel component manager.
+// NewManager creates a new platform component manager.
 func NewManager(clientset kubernetes.Interface) *Manager {
 	return &Manager{clientset: clientset}
 }

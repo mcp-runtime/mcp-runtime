@@ -99,7 +99,7 @@ func LoadCLIConfig() *CLIConfig {
 		GatewayProxyImage:           os.Getenv("MCP_GATEWAY_PROXY_IMAGE"),
 		ImagePlatform:               os.Getenv("MCP_IMAGE_PLATFORM"),
 		GatewayOTLPEndpoint:         os.Getenv("MCP_GATEWAY_OTEL_EXPORTER_OTLP_ENDPOINT"),
-		AnalyticsIngestURL:          getEnvCompat("MCP_SENTINEL_INGEST_URL", "MCP_ANALYTICS_INGEST_URL"),
+		AnalyticsIngestURL:          os.Getenv("MCP_ANALYTICS_INGEST_URL"),
 		IngressReadinessMode:        os.Getenv("MCP_INGRESS_READINESS_MODE"),
 		ClusterName:                 getEnvOrDefault("MCP_CLUSTER_NAME", "local"),
 		DefaultServerPort:           parseIntEnv("MCP_DEFAULT_SERVER_PORT", defaultServerPort),
@@ -135,15 +135,6 @@ func getEnvOrDefault(key, defaultVal string) string {
 		return val
 	}
 	return defaultVal
-}
-
-func getEnvCompat(keys ...string) string {
-	for _, key := range keys {
-		if val := os.Getenv(key); val != "" {
-			return val
-		}
-	}
-	return ""
 }
 
 // --- Convenience accessors using DefaultCLIConfig ---

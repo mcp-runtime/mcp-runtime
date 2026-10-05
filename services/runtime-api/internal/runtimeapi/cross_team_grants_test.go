@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	sentinelaccess "mcp-runtime/pkg/access"
+	mcpaccess "mcp-runtime/pkg/access"
 )
 
 func TestCrossTeamGrantExpiryValid(t *testing.T) {
@@ -31,7 +31,7 @@ func TestCrossTeamGrantExpiryValid(t *testing.T) {
 }
 
 func TestBindAccessSubjectPreservesExplicitForeignTeam(t *testing.T) {
-	subject := sentinelaccess.SubjectRef{HumanID: "user-b", TeamID: "team-b"}
+	subject := mcpaccess.SubjectRef{HumanID: "user-b", TeamID: "team-b"}
 	if err := (&AccessService{}).bindAccessSubjectTeamID(context.Background(), "mcp-team-a", "team-a", &subject); err != nil {
 		t.Fatalf("bindAccessSubjectTeamID() error = %v", err)
 	}

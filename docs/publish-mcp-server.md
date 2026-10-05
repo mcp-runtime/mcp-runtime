@@ -462,7 +462,7 @@ but hand-written YAML must state them explicitly.
   enforcement with the adapter.
 - `spec.analytics`
   Analytics emission is on by default whenever the gateway is on and the
-  operator has an ingest URL (`MCP_SENTINEL_INGEST_URL` or
+  operator has an ingest URL (`MCP_ANALYTICS_INGEST_URL` or
   `spec.analytics.ingestURL`). Set `spec.analytics.disabled: true` to opt out.
   Platform API deploys create a namespace-local ingest-key Secret and set
   `spec.analytics.apiKeySecretRef` automatically when analytics is not disabled.

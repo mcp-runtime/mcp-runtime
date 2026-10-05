@@ -27,7 +27,7 @@ func newClusterDiagnosticsCmd(mgr *ClusterManager) *cobra.Command {
 	return &cobra.Command{
 		Use:   "diagnostics",
 		Short: "Diagnose an installed MCP Runtime cluster",
-		Long:  "Run post-setup diagnostics for the Kubernetes distribution, MCP Runtime services, registry, image pulls, Sentinel dependencies, authentication, and MCPServer reconciliation. Each failure includes a targeted remediation. Setup already runs a shorter operational smoke gate (nodes, PVCs, Postgres, platform-api, Sentinel rollouts, auth probe); use this command for deeper follow-up.",
+		Long:  "Run post-setup diagnostics for the Kubernetes distribution, MCP Runtime services, registry, image pulls, platform dependencies, authentication, and MCPServer reconciliation. Each failure includes a targeted remediation. Setup already runs a shorter operational smoke gate (nodes, PVCs, Postgres, platform-api, platform rollouts, auth probe); use this command for deeper follow-up.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			report := clusterdoctor.RunDoctorAndPrint(mgr.KubectlRunner())
 			if !report.AllOK() {

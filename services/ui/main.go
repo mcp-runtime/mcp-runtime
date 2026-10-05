@@ -101,7 +101,7 @@ var (
 	authHTTPClient = &http.Client{Timeout: 10 * time.Second}
 )
 
-// main initializes and starts the MCP Sentinel UI server.
+// main initializes and starts the MCP Runtime UI server.
 // It serves static web assets and provides a dynamic /config.js endpoint
 // with API configuration for the frontend. Includes tracing support.
 func main() {

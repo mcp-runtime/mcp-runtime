@@ -200,7 +200,7 @@ func TestLoadOperatorConfig(t *testing.T) {
 	t.Setenv("REQUEUE_DELAY_SECONDS", "45")
 	t.Setenv("MCP_GATEWAY_PROXY_IMAGE", "example.com/mcp-gateway:latest")
 	t.Setenv("MCP_GATEWAY_OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel-collector.mcp-observability.svc.cluster.local:4318")
-	t.Setenv("MCP_SENTINEL_INGEST_URL", "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events")
+	t.Setenv("MCP_ANALYTICS_INGEST_URL", "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events")
 
 	cfg := LoadOperatorConfig()
 	if cfg.DefaultIngressHost != "mcp.example.com" {
@@ -257,16 +257,6 @@ func TestLoadOperatorConfigPrefersMCPDefaultIngressHost(t *testing.T) {
 	cfg := LoadOperatorConfig()
 	if cfg.DefaultIngressHost != "mcp-default.example.com" {
 		t.Fatalf("expected MCP_DEFAULT_INGRESS_HOST override, got %q", cfg.DefaultIngressHost)
-	}
-}
-
-func TestLoadOperatorConfigUsesLegacyAnalyticsEnv(t *testing.T) {
-	t.Setenv("MCP_SENTINEL_INGEST_URL", "")
-	t.Setenv("MCP_ANALYTICS_INGEST_URL", "http://legacy-ingest")
-
-	cfg := LoadOperatorConfig()
-	if cfg.AnalyticsIngestURL != "http://legacy-ingest" {
-		t.Fatalf("expected legacy analytics ingest url override, got %q", cfg.AnalyticsIngestURL)
 	}
 }
 

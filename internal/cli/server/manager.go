@@ -60,7 +60,7 @@ func (m *ServerManager) BindUseKubeFlag(cmd *cobra.Command) {
 
 func (m *ServerManager) requireKubectlForMutation() error {
 	if !m.useKube {
-		return core.NewWithSentinel(nil, "this command requires `--use-kube` for direct Kubernetes mode. "+kubeerr.DirectModeGuidance)
+		return core.NewWithBase(nil, "this command requires `--use-kube` for direct Kubernetes mode. "+kubeerr.DirectModeGuidance)
 	}
 	return nil
 }
@@ -120,7 +120,7 @@ func (m *ServerManager) InitServer(name, metadataDir, image, imageTag, scope, po
 	switch metadata.PolicyMode(policyMode) {
 	case metadata.PolicyModeAllowList, metadata.PolicyModeObserve:
 	default:
-		return core.NewWithSentinel(nil, fmt.Sprintf("invalid policy mode %q; must be allow-list or observe", policyMode))
+		return core.NewWithBase(nil, fmt.Sprintf("invalid policy mode %q; must be allow-list or observe", policyMode))
 	}
 	defaultDecision = strings.TrimSpace(defaultDecision)
 	if defaultDecision == "" {
@@ -129,7 +129,7 @@ func (m *ServerManager) InitServer(name, metadataDir, image, imageTag, scope, po
 	switch metadata.PolicyDecision(defaultDecision) {
 	case metadata.PolicyDecisionAllow, metadata.PolicyDecisionDeny:
 	default:
-		return core.NewWithSentinel(nil, fmt.Sprintf("invalid default decision %q; must be allow or deny", defaultDecision))
+		return core.NewWithBase(nil, fmt.Sprintf("invalid default decision %q; must be allow or deny", defaultDecision))
 	}
 	if port <= 0 {
 		port = defaultDeployPort()
@@ -140,11 +140,11 @@ func (m *ServerManager) InitServer(name, metadataDir, image, imageTag, scope, po
 	if _, err := os.Stat(metadataPath); err == nil {
 		existing, loadErr := loadMetadataForRewrite(metadataPath)
 		if loadErr != nil {
-			return core.WrapWithSentinel(core.ErrLoadMetadataFailed, loadErr, fmt.Sprintf("failed to load existing metadata file %q: %v", metadataPath, loadErr))
+			return core.WrapWithBase(core.ErrLoadMetadataFailed, loadErr, fmt.Sprintf("failed to load existing metadata file %q: %v", metadataPath, loadErr))
 		}
 		registry = *existing
 	} else if err != nil && !os.IsNotExist(err) {
-		return core.WrapWithSentinel(core.ErrLoadMetadataFailed, err, fmt.Sprintf("failed to inspect metadata file %q: %v", metadataPath, err))
+		return core.WrapWithBase(core.ErrLoadMetadataFailed, err, fmt.Sprintf("failed to inspect metadata file %q: %v", metadataPath, err))
 	}
 	if strings.TrimSpace(registry.Version) == "" {
 		registry.Version = "v1"
@@ -187,7 +187,7 @@ func (m *ServerManager) InitServer(name, metadataDir, image, imageTag, scope, po
 			continue
 		}
 		if !force {
-			return core.NewWithSentinel(nil, fmt.Sprintf("metadata for server %q already exists in %s; pass --force to replace it", name, metadataPath))
+			return core.NewWithBase(nil, fmt.Sprintf("metadata for server %q already exists in %s; pass --force to replace it", name, metadataPath))
 		}
 		registry.Servers[i] = server
 		replaced = true
@@ -198,14 +198,14 @@ func (m *ServerManager) InitServer(name, metadataDir, image, imageTag, scope, po
 	}
 
 	if err := os.MkdirAll(metadataDir, 0o750); err != nil {
-		return core.WrapWithSentinel(nil, err, fmt.Sprintf("failed to create metadata directory %q: %v", metadataDir, err))
+		return core.WrapWithBase(nil, err, fmt.Sprintf("failed to create metadata directory %q: %v", metadataDir, err))
 	}
 	data, err := yaml.Marshal(&registry)
 	if err != nil {
-		return core.WrapWithSentinel(nil, err, fmt.Sprintf("failed to encode metadata: %v", err))
+		return core.WrapWithBase(nil, err, fmt.Sprintf("failed to encode metadata: %v", err))
 	}
 	if err := os.WriteFile(metadataPath, data, 0o600); err != nil {
-		return core.WrapWithSentinel(nil, err, fmt.Sprintf("failed to write metadata file %q: %v", metadataPath, err))
+		return core.WrapWithBase(nil, err, fmt.Sprintf("failed to write metadata file %q: %v", metadataPath, err))
 	}
 	action := "Created"
 	if replaced {
@@ -249,26 +249,26 @@ func initToolMetadata(tools, toolSpecs []string, toolRisk string) ([]metadata.To
 		}
 		parts := strings.Split(spec, ":")
 		if len(parts) != 3 {
-			return nil, core.NewWithSentinel(nil, fmt.Sprintf("unsupported tool spec %q (use name:low|medium|high:read|write|destructive)", spec))
+			return nil, core.NewWithBase(nil, fmt.Sprintf("unsupported tool spec %q (use name:low|medium|high:read|write|destructive)", spec))
 		}
 		name := strings.TrimSpace(parts[0])
 		trust := metadata.TrustLevel(strings.ToLower(strings.TrimSpace(parts[1])))
 		sideEffect := metadata.ToolSideEffect(strings.ToLower(strings.TrimSpace(parts[2])))
 		if name == "" {
-			return nil, core.NewWithSentinel(nil, fmt.Sprintf("unsupported tool spec %q: tool name is required", spec))
+			return nil, core.NewWithBase(nil, fmt.Sprintf("unsupported tool spec %q: tool name is required", spec))
 		}
 		switch trust {
 		case metadata.TrustLevelLow, metadata.TrustLevelMedium, metadata.TrustLevelHigh:
 		default:
-			return nil, core.NewWithSentinel(nil, fmt.Sprintf("unsupported tool spec %q: trust must be low, medium, or high", spec))
+			return nil, core.NewWithBase(nil, fmt.Sprintf("unsupported tool spec %q: trust must be low, medium, or high", spec))
 		}
 		switch sideEffect {
 		case metadata.ToolSideEffectRead, metadata.ToolSideEffectWrite, metadata.ToolSideEffectDestructive:
 		default:
-			return nil, core.NewWithSentinel(nil, fmt.Sprintf("unsupported tool spec %q: side effect must be read, write, or destructive", spec))
+			return nil, core.NewWithBase(nil, fmt.Sprintf("unsupported tool spec %q: side effect must be read, write, or destructive", spec))
 		}
 		if _, ok := seen[name]; ok {
-			return nil, core.NewWithSentinel(nil, fmt.Sprintf("duplicate tool metadata for %q", name))
+			return nil, core.NewWithBase(nil, fmt.Sprintf("duplicate tool metadata for %q", name))
 		}
 		seen[name] = struct{}{}
 		out = append(out, metadata.ToolConfig{
@@ -291,7 +291,7 @@ func normalizeMetadataRisk(raw string) (metadata.ToolRiskLevel, error) {
 	case metadata.ToolRiskLevelLow, metadata.ToolRiskLevelMedium, metadata.ToolRiskLevelHigh:
 		return metadata.ToolRiskLevel(raw), nil
 	default:
-		return "", core.NewWithSentinel(nil, fmt.Sprintf("invalid tool risk %q; must be low, medium, or high", raw))
+		return "", core.NewWithBase(nil, fmt.Sprintf("invalid tool risk %q; must be low, medium, or high", raw))
 	}
 }
 
@@ -305,14 +305,14 @@ func (m *ServerManager) ListServers(namespace, team string) error {
 	namespace = strings.TrimSpace(namespace)
 	team = strings.TrimSpace(team)
 	if namespace != "" && team != "" {
-		return core.NewWithSentinel(nil, "use either --namespace or --team, not both")
+		return core.NewWithBase(nil, "use either --namespace or --team, not both")
 	}
 	plat, useK, err := platformapi.ResolvePlatformOrKube(m.useKube)
 	if err != nil {
 		return err
 	}
 	if useK && team != "" {
-		return core.NewWithSentinel(nil, "cannot use --team with --use-kube")
+		return core.NewWithBase(nil, "cannot use --team with --use-kube")
 	}
 	if !useK {
 		if team != "" {
@@ -350,7 +350,7 @@ func (m *ServerManager) ListServers(namespace, team string) error {
 
 	// #nosec G204 -- namespace validated above; kubectl validates resource names.
 	if err := m.kubectl.RunWithOutput([]string{"get", "mcpserver", "-n", namespace}, os.Stdout, os.Stderr); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrListServersFailed,
 			err,
 			kubeerr.DirectModeFailureMessage(fmt.Sprintf("failed to list servers in namespace %q", namespace), err.Error()),
@@ -387,12 +387,12 @@ func (m *ServerManager) GetServer(name, namespace string) error {
 				return nil
 			}
 		}
-		return core.NewWithSentinel(core.ErrGetMCPServerFailed, fmt.Sprintf("server %q not found in namespace %q (platform API)", name, namespace))
+		return core.NewWithBase(core.ErrGetMCPServerFailed, fmt.Sprintf("server %q not found in namespace %q (platform API)", name, namespace))
 	}
 
 	// #nosec G204 -- name/namespace validated via validateServerInput.
 	if err := m.kubectl.RunWithOutput([]string{"get", "mcpserver", name, "-n", namespace, "-o", "yaml"}, os.Stdout, os.Stderr); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrGetMCPServerFailed,
 			err,
 			kubeerr.DirectModeFailureMessage(fmt.Sprintf("failed to get server %q in namespace %q", name, namespace), err.Error()),
@@ -410,10 +410,10 @@ func (m *ServerManager) ConnectConfig(name, namespace, clientName, output string
 	name = strings.TrimSpace(name)
 	namespace = strings.TrimSpace(namespace)
 	if name == "" {
-		return core.NewWithSentinel(nil, "server name is required")
+		return core.NewWithBase(nil, "server name is required")
 	}
 	if m.useKube {
-		return core.NewWithSentinel(nil, "connect-config uses the platform API; omit --use-kube and run mcp-runtime auth login first")
+		return core.NewWithBase(nil, "connect-config uses the platform API; omit --use-kube and run mcp-runtime auth login first")
 	}
 	plat, err := platformapi.NewPlatformClient()
 	if err != nil {
@@ -437,9 +437,9 @@ func (m *ServerManager) ConnectConfig(name, namespace, clientName, output string
 		return printConnectConfig(config, output)
 	}
 	if namespace != "" {
-		return core.NewWithSentinel(nil, fmt.Sprintf("server %q not found in namespace %q", name, namespace))
+		return core.NewWithBase(nil, fmt.Sprintf("server %q not found in namespace %q", name, namespace))
 	}
-	return core.NewWithSentinel(nil, fmt.Sprintf("server %q not found", name))
+	return core.NewWithBase(nil, fmt.Sprintf("server %q not found", name))
 }
 
 func BuildConnectConfig(server platformapi.ServerListItem, clientName string) (map[string]any, error) {
@@ -475,7 +475,7 @@ func BuildConnectConfig(server platformapi.ServerListItem, clientName string) (m
 		}
 	}
 	if url == "" {
-		return nil, core.NewWithSentinel(nil, fmt.Sprintf("server %q has no connect URL", serverName))
+		return nil, core.NewWithBase(nil, fmt.Sprintf("server %q has no connect URL", serverName))
 	}
 	switch clientName {
 	case "claude", "cursor", "json", "raw":
@@ -497,7 +497,7 @@ func BuildConnectConfig(server platformapi.ServerListItem, clientName string) (m
 			},
 		}, nil
 	default:
-		return nil, core.NewWithSentinel(nil, "client must be claude, cursor, vscode, or json")
+		return nil, core.NewWithBase(nil, "client must be claude, cursor, vscode, or json")
 	}
 }
 
@@ -518,7 +518,7 @@ func printConnectConfig(config map[string]any, output string) error {
 		_, err = os.Stdout.Write(data)
 		return err
 	default:
-		return core.NewWithSentinel(nil, "output must be text, json, or yaml")
+		return core.NewWithBase(nil, "output must be text, json, or yaml")
 	}
 }
 
@@ -563,7 +563,7 @@ func (m *ServerManager) CreateServer(name, namespace, image, imageTag string) er
 
 	manifestBytes, err := yaml.Marshal(manifest)
 	if err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrMarshalManifestFailed,
 			err,
 			fmt.Sprintf("failed to marshal manifest: %v", err),
@@ -575,7 +575,7 @@ func (m *ServerManager) CreateServer(name, namespace, image, imageTag string) er
 	}
 
 	if err := kube.ApplyManifestContent(m.kubectl.CommandArgs, string(manifestBytes)); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrCreateServerFailed,
 			err,
 			kubeerr.DirectModeFailureMessage(fmt.Sprintf("failed to create server %q", name), err.Error()),
@@ -590,7 +590,7 @@ func (m *ServerManager) CreateServer(name, namespace, image, imageTag string) er
 
 func (m *ServerManager) DeployServer(name, namespace, team, scope, image, imageTag string, replicas, port, servicePort int32, metadataFile, metadataDir string, update bool) error {
 	if m.useKube {
-		return core.NewWithSentinel(nil, "server deploy uses the platform API; remove --use-kube")
+		return core.NewWithBase(nil, "server deploy uses the platform API; remove --use-kube")
 	}
 	name, err := validateManifestValue("name", name)
 	if err != nil {
@@ -633,13 +633,13 @@ func (m *ServerManager) DeployServer(name, namespace, team, scope, image, imageT
 		return err
 	}
 	if namespace != "" && team != "" {
-		return core.NewWithSentinel(nil, "use either --namespace or --team, not both")
+		return core.NewWithBase(nil, "use either --namespace or --team, not both")
 	}
 	if scope != "" && namespace != "" && scope != string(publishscope.Tenant) {
-		return core.NewWithSentinel(nil, "--scope public/org resolves the platform catalog namespace; use --scope tenant when passing --namespace")
+		return core.NewWithBase(nil, "--scope public/org resolves the platform catalog namespace; use --scope tenant when passing --namespace")
 	}
 	if scope != "" && team != "" && scope != string(publishscope.Tenant) {
-		return core.NewWithSentinel(nil, "--scope public/org cannot be combined with --team")
+		return core.NewWithBase(nil, "--scope public/org cannot be combined with --team")
 	}
 	plat, err := platformapi.NewPlatformClient()
 	if err != nil {
@@ -659,11 +659,11 @@ func (m *ServerManager) DeployServer(name, namespace, team, scope, image, imageT
 		}
 		switch len(principal.Teams) {
 		case 0:
-			return core.NewWithSentinel(nil, "tenant deploy requires a team membership; ask an admin to add you to a team")
+			return core.NewWithBase(nil, "tenant deploy requires a team membership; ask an admin to add you to a team")
 		case 1:
 			namespace = principal.Teams[0].Namespace
 		default:
-			return core.NewWithSentinel(nil, "tenant deploy has multiple team memberships; pass --team <slug> or --namespace <team-namespace>")
+			return core.NewWithBase(nil, "tenant deploy has multiple team memberships; pass --team <slug> or --namespace <team-namespace>")
 		}
 	}
 	if namespace != "" {
@@ -677,7 +677,7 @@ func (m *ServerManager) DeployServer(name, namespace, team, scope, image, imageT
 		return err
 	}
 	if strings.TrimSpace(spec.Image) == "" {
-		return core.NewWithSentinel(core.ErrImageRequired, "image is required unless .mcp metadata provides image; pass --image or run from a directory with .mcp/servers.yaml")
+		return core.NewWithBase(core.ErrImageRequired, "image is required unless .mcp metadata provides image; pass --image or run from a directory with .mcp/servers.yaml")
 	}
 	// Metadata written by an older CLI (or with no registry configured) can
 	// name the in-cluster registry DNS name or the registry.local placeholder.
@@ -718,7 +718,7 @@ func (m *ServerManager) GenerateManifests(metadataFile, metadataDir, outputDir s
 		outputDir = "manifests"
 	}
 	if err := metadata.GenerateCRDsFromRegistry(registry, outputDir); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrGenerateCRDsFailed,
 			err,
 			fmt.Sprintf("failed to generate MCPServer manifests: %v", err),
@@ -747,7 +747,7 @@ func waitForDeployedServer(ctx context.Context, plat *platformapi.PlatformClient
 	for {
 		servers, err := plat.ListRuntimeServers(ctx, namespace)
 		if err != nil {
-			return platformapi.ServerListItem{}, core.WrapWithSentinel(
+			return platformapi.ServerListItem{}, core.WrapWithBase(
 				core.ErrListServersFailed,
 				err,
 				fmt.Sprintf("wait for deployed server readiness: %v", err),
@@ -768,7 +768,7 @@ func waitForDeployedServer(ctx context.Context, plat *platformapi.PlatformClient
 		}
 		if time.Now().After(deadline) {
 			if last != nil {
-				return platformapi.ServerListItem{}, core.NewWithSentinel(
+				return platformapi.ServerListItem{}, core.NewWithBase(
 					nil,
 					fmt.Sprintf(
 						"server %s was applied in namespace %s but did not become ready within %s (status=%s ready=%s)",
@@ -780,14 +780,14 @@ func waitForDeployedServer(ctx context.Context, plat *platformapi.PlatformClient
 					),
 				)
 			}
-			return platformapi.ServerListItem{}, core.NewWithSentinel(
+			return platformapi.ServerListItem{}, core.NewWithBase(
 				nil,
 				fmt.Sprintf("server %s was applied in namespace %s but did not appear in runtime inventory within %s", name, namespace, timeout.Round(time.Second)),
 			)
 		}
 		select {
 		case <-ctx.Done():
-			return platformapi.ServerListItem{}, core.WrapWithSentinel(
+			return platformapi.ServerListItem{}, core.WrapWithBase(
 				core.ErrListServersFailed,
 				ctx.Err(),
 				fmt.Sprintf("wait for deployed server readiness: %v", ctx.Err()),
@@ -807,7 +807,7 @@ func validateDeployedServerImage(server platformapi.ServerListItem, expectedImag
 		return nil
 	}
 	if !deployImageRefsEquivalent(expectedImage, gotImage) {
-		return core.NewWithSentinel(
+		return core.NewWithBase(
 			nil,
 			fmt.Sprintf(
 				"server %s deployed with image %q but runtime inventory reports %q; verify server push and deploy image references match",
@@ -820,7 +820,7 @@ func validateDeployedServerImage(server platformapi.ServerListItem, expectedImag
 	expectedTag = strings.TrimSpace(expectedTag)
 	gotTag := strings.TrimSpace(server.ImageTag)
 	if expectedTag != "" && gotTag != "" && gotTag != expectedTag {
-		return core.NewWithSentinel(
+		return core.NewWithBase(
 			nil,
 			fmt.Sprintf(
 				"server %s deployed with tag %q but runtime inventory reports %q",
@@ -914,7 +914,7 @@ func loadDeployMetadata(metadataFile, metadataDir string) (*metadata.RegistryFil
 	if metadataFile != "" {
 		registry, err := metadata.LoadFromFile(metadataFile)
 		if err != nil {
-			return nil, core.WrapWithSentinel(core.ErrLoadMetadataFailed, err, fmt.Sprintf("failed to load metadata file %q: %v", metadataFile, err))
+			return nil, core.WrapWithBase(core.ErrLoadMetadataFailed, err, fmt.Sprintf("failed to load metadata file %q: %v", metadataFile, err))
 		}
 		return registry, nil
 	}
@@ -925,11 +925,11 @@ func loadDeployMetadata(metadataFile, metadataDir string) (*metadata.RegistryFil
 		if os.IsNotExist(err) && metadataDir == ".mcp" {
 			return nil, nil
 		}
-		return nil, core.WrapWithSentinel(core.ErrLoadMetadataFailed, err, fmt.Sprintf("failed to inspect metadata directory %q: %v", metadataDir, err))
+		return nil, core.WrapWithBase(core.ErrLoadMetadataFailed, err, fmt.Sprintf("failed to inspect metadata directory %q: %v", metadataDir, err))
 	}
 	registry, err := metadata.LoadFromDirectory(metadataDir)
 	if err != nil {
-		return nil, core.WrapWithSentinel(core.ErrLoadMetadataFailed, err, fmt.Sprintf("failed to load metadata directory %q: %v", metadataDir, err))
+		return nil, core.WrapWithBase(core.ErrLoadMetadataFailed, err, fmt.Sprintf("failed to load metadata directory %q: %v", metadataDir, err))
 	}
 	return registry, nil
 }
@@ -950,7 +950,7 @@ func selectDeployMetadata(name, metadataFile, metadataDir string) (*metadata.Ser
 	if len(registry.Servers) == 1 {
 		return &registry.Servers[0], nil
 	}
-	return nil, core.NewWithSentinel(nil, fmt.Sprintf("no metadata entry for server %q", name))
+	return nil, core.NewWithBase(nil, fmt.Sprintf("no metadata entry for server %q", name))
 }
 
 func mergeDeployMetadata(spec *mcpv1alpha1.MCPServerSpec, src *metadata.ServerMetadata) {
@@ -1154,7 +1154,7 @@ func (m *ServerManager) ApplyServerFromFile(file string) error {
 		return err
 	}
 	if err := kube.ApplyManifestFromFile(m.kubectl.CommandArgs, file, os.Stdout, os.Stderr); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			nil,
 			err,
 			kubeerr.DirectModeFailureMessage(fmt.Sprintf("failed to apply server manifest from file %q", file), err.Error()),
@@ -1181,14 +1181,14 @@ func (m *ServerManager) CreateServerFromFile(file string) error {
 
 	manifestBytes, err := kube.ReadFileAtPath(absPath)
 	if err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrFileNotAccessible, err, fmt.Sprintf("cannot read file %q: %v", file, err))
+		wrappedErr := core.WrapWithBase(core.ErrFileNotAccessible, err, fmt.Sprintf("cannot read file %q: %v", file, err))
 		core.Error("Cannot access file")
 		core.LogStructuredError(m.logger, wrappedErr, "Cannot access file")
 		return wrappedErr
 	}
 
 	if err := kube.ApplyManifestContent(m.kubectl.CommandArgs, string(manifestBytes)); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrCreateServerFailed,
 			err,
 			kubeerr.DirectModeFailureMessage(fmt.Sprintf("failed to create server from file %q", file), err.Error()),
@@ -1218,7 +1218,7 @@ func (m *ServerManager) ExportServer(name, namespace, file string) error {
 	output, execErr := cmd.CombinedOutput()
 	if execErr != nil {
 		detail := kubeerr.CommandDetail(string(output), execErr)
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			nil,
 			execErr,
 			kubeerr.DirectModeFailureMessage(fmt.Sprintf("failed to export server %q in namespace %q", name, namespace), detail),
@@ -1231,7 +1231,7 @@ func (m *ServerManager) ExportServer(name, namespace, file string) error {
 
 	if file != "" {
 		if err := kube.WriteOutputFile(file, output); err != nil {
-			wrappedErr := core.WrapWithSentinelAndContext(
+			wrappedErr := core.WrapWithBaseAndContext(
 				nil,
 				err,
 				fmt.Sprintf("failed to write server manifest to %q: %v", file, err),
@@ -1245,7 +1245,7 @@ func (m *ServerManager) ExportServer(name, namespace, file string) error {
 	}
 
 	if _, err := os.Stdout.Write(output); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			nil,
 			err,
 			fmt.Sprintf("failed to write server manifest to stdout: %v", err),
@@ -1272,16 +1272,16 @@ func (m *ServerManager) PatchServer(name, namespace, patchType, patch, patchFile
 	switch patchType {
 	case "merge", "json", "strategic":
 	default:
-		return core.NewWithSentinel(nil, fmt.Sprintf("unsupported patch type %q (use merge|json|strategic)", patchType))
+		return core.NewWithBase(nil, fmt.Sprintf("unsupported patch type %q (use merge|json|strategic)", patchType))
 	}
 
 	inlinePatch := strings.TrimSpace(patch)
 	patchFile = strings.TrimSpace(patchFile)
 	switch {
 	case inlinePatch == "" && patchFile == "":
-		return core.NewWithSentinel(nil, "either --patch or --patch-file is required")
+		return core.NewWithBase(nil, "either --patch or --patch-file is required")
 	case inlinePatch != "" && patchFile != "":
-		return core.NewWithSentinel(nil, "use either --patch or --patch-file, not both")
+		return core.NewWithBase(nil, "use either --patch or --patch-file, not both")
 	}
 
 	normalizedPatch := inlinePatch
@@ -1291,7 +1291,7 @@ func (m *ServerManager) PatchServer(name, namespace, patchType, patch, patchFile
 		normalizedPatch, err = kube.NormalizePatchDocument(inlinePatch)
 	}
 	if err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			nil,
 			err,
 			fmt.Sprintf("failed to prepare patch for server %q: %v", name, err),
@@ -1304,7 +1304,7 @@ func (m *ServerManager) PatchServer(name, namespace, patchType, patch, patchFile
 
 	args := []string{"patch", "mcpserver", name, "-n", namespace, "--type", patchType, "--patch", normalizedPatch}
 	if err := m.kubectl.RunWithOutput(args, os.Stdout, os.Stderr); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			nil,
 			err,
 			kubeerr.DirectModeFailureMessage(fmt.Sprintf("failed to patch server %q in namespace %q", name, namespace), err.Error()),
@@ -1332,7 +1332,7 @@ func (m *ServerManager) InspectServerPolicy(name, namespace string) error {
 	if !useK {
 		b, err := plat.GetRuntimePolicy(context.Background(), namespace, name)
 		if err != nil {
-			wrappedErr := core.WrapWithSentinelAndContext(
+			wrappedErr := core.WrapWithBaseAndContext(
 				nil,
 				err,
 				fmt.Sprintf("platform API policy for server %q: %v", name, err),
@@ -1362,7 +1362,7 @@ func (m *ServerManager) InspectServerPolicy(name, namespace string) error {
 	output, execErr := cmd.CombinedOutput()
 	if execErr != nil {
 		detail := kubeerr.CommandDetail(string(output), execErr)
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			nil,
 			execErr,
 			kubeerr.DirectModeFailureMessage(fmt.Sprintf("failed to inspect rendered policy for server %q in namespace %q", name, namespace), detail),
@@ -1375,7 +1375,7 @@ func (m *ServerManager) InspectServerPolicy(name, namespace string) error {
 
 	if len(output) > 0 {
 		if _, err := os.Stdout.Write(output); err != nil {
-			wrappedErr := core.WrapWithSentinelAndContext(
+			wrappedErr := core.WrapWithBaseAndContext(
 				nil,
 				err,
 				fmt.Sprintf("failed to write rendered policy to stdout: %v", err),
@@ -1416,7 +1416,7 @@ func (m *ServerManager) DeleteServer(name, namespace string) error {
 
 	// #nosec G204 -- name/namespace validated via validateServerInput.
 	if err := m.kubectl.RunWithOutput([]string{"delete", "mcpserver", name, "-n", namespace}, os.Stdout, os.Stderr); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrDeleteServerFailed,
 			err,
 			kubeerr.DirectModeFailureMessage(fmt.Sprintf("failed to delete server %q in namespace %q", name, namespace), err.Error()),
@@ -1458,7 +1458,7 @@ func (m *ServerManager) ViewServerLogs(name, namespace string, follow, previous 
 
 	// #nosec G204 -- name/namespace validated via validateServerInput.
 	if err := m.kubectl.RunWithOutput(args, os.Stdout, os.Stderr); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrViewServerLogsFailed,
 			err,
 			kubeerr.DirectModeFailureMessage(fmt.Sprintf("failed to view logs for server %q in namespace %q", name, namespace), err.Error()),
@@ -1512,7 +1512,7 @@ func (m *ServerManager) ServerStatus(namespace string) error {
 			errDetails = err.Error()
 		}
 		core.DefaultPrinter.Println("ERROR: Failed to list MCP servers: " + kubeerr.WithDirectModeHint(errDetails))
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrGetMCPServerFailed,
 			err,
 			kubeerr.DirectModeFailureMessage("kubectl get mcpserver failed", errDetails),

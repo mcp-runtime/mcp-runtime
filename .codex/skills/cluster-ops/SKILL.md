@@ -32,6 +32,10 @@ export KUBECONFIG="$TEST_KUBECONFIG"
 Do **not** re-run the full local CI suite as a substitute for GitHub CI. CI is
 the deterministic unit/integration gate; this skill owns live cluster evidence.
 
+`mcp-runtime status` is a quick authenticated platform API check with a
+five-second timeout. Use `cluster status`, `ops status`, and `server list`
+for Kubernetes workload health and server inventories.
+
 ## Deterministic preference
 
 | Surface | Prefer over long agent playbooks |
