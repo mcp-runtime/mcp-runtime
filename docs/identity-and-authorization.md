@@ -120,7 +120,7 @@ an authorized session and enrolls a certificate in memory. For a saved
 certificate, use `mcp-runtime adapter enroll` with the same server, namespace,
 and agent. The private key stays local; an OAuth-enabled target also needs its
 OAuth bearer token. A grant alone does not establish a connection. See
-[Agent adapters](agent-adapters.md) for the supported CLI steps. Direct MCP
+[Agent adapters](connect-clients.md) for the supported CLI steps. Direct MCP
 clients remain governed by their existing gateway policy.
 
 Agent IDs are platform-generated immutable `agt_<26-character lowercase
@@ -156,7 +156,7 @@ Enrollment uses the platform-wide `MCP_MTLS_CLUSTER_ISSUER` and
 certificate.
 For the adapter request flow, including how one certificate can accompany
 different per-request OAuth tokens, see
-[Certificate identity and OAuth tokens](agent-adapters.md#certificate-identity-and-oauth-tokens).
+[Certificate identity and OAuth tokens](connect-clients.md#certificate-identity-and-oauth-tokens).
 
 Further reading: [MCP authorization](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization),
 [WIMSE Agent Identity Management Services draft](https://datatracker.ietf.org/doc/draft-ietf-wimse-aims/00/)
@@ -377,5 +377,6 @@ from platform roles and gateway policy.
 | Who enforces the tool call? | MCP gateway |
 | Who can change cluster resources? | Kubernetes ServiceAccount and RBAC |
 
-**Next:** [Concepts](concepts.md) for the individual resource model, or
-[Multi-Team Isolation](multi-team.md) for namespace and team boundaries.
+**Next:** [Architecture](architecture.md) shows where identity and policy are
+enforced across components. Use [Teams and Access](teams-and-access.md) to
+apply the model to namespace boundaries and cross-team delegation.

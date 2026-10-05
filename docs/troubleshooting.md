@@ -3,15 +3,22 @@
 Common errors in deployment, gateway policy, registry, analytics, and
 connectivity, with fixes.
 
+Use the saved platform login for server and access management. Kubernetes
+commands below are administrator diagnostics against an explicitly selected
+kubeconfig. For production, pass `KUBECONFIG=<production-file>` per command;
+keep production out of the default context. Reuse the installation’s saved
+configuration for any setup repair.
+
 ## Server deployment
 
 ### `tool_side_effect_unknown`
 
 The gateway returned this error on a tool call.
 
-**Cause:** The tool name in the grant or the session does not match a tool listed in
-the server's `.mcp/servers.yaml` metadata. The gateway cannot look up the tool's
-side-effect class, so it denies the call.
+**Cause:** The requested tool is absent from the rendered tool inventory, or
+has no declared side effect. The gateway cannot determine the tool’s
+side-effect class, so it denies the call. Sessions identify the caller and
+consent; they do not contain tool inventories.
 
 **Fix:**
 
@@ -20,12 +27,13 @@ side-effect class, so it denies the call.
 cat .mcp/servers.yaml
 
 # 2. Check what tools the running server actually exposes
-mcp-runtime server init --from-server http://localhost:8088 --force
+mcp-runtime server init <server-name> --from-server http://localhost:8088 --force
 
 # 3. Validate the grant against the metadata
 mcp-runtime server validate --metadata-dir .mcp --grant-file grant.yaml
 
-# 4. Re-apply the corrected grant
+# 4. Redeploy corrected server metadata and apply the reviewed grant
+mcp-runtime server deploy <server-name> --scope tenant --metadata-dir .mcp --update
 mcp-runtime access grant apply --file grant.yaml
 ```
 
@@ -33,15 +41,20 @@ mcp-runtime access grant apply --file grant.yaml
 
 The agent tried to call a tool that is not in any `allow` rule in the active grant.
 
-**Fix:** Add the tool to the grant with `--tool <name>` and re-apply.
+**Fix:** Review the grant’s `toolRules` and `allowedSideEffects`. Add an allow
+rule for the intended tool and its side-effect class, validate the manifest
+with `server validate --grant-file grant.yaml`, then re-apply it. `--tool` is
+a flag on `access grant init`, not on `access grant apply`.
 
 ### `grant_expired`
 
 Every grant that matches the caller has passed its `spec.expiresAt`.
 
 **Fix:** Re-apply the grant with a later `expiresAt`, or remove the field to make it
-open-ended. Sessions issued from the grant cannot outlive it, so the adapter
-obtains a new session on its next refresh.
+open-ended for a same-team delegation. Cross-team grants must retain an expiry
+within `MCP_CROSS_TEAM_GRANT_MAX_TTL` (default seven days). Existing session
+expiries do not extend when the grant changes; an adapter using `--auto-refresh`
+requests renewed access, subject to the current grant.
 
 ### Server stuck in `Pending` or `NotReady`
 
@@ -62,9 +75,7 @@ Common causes:
 ### `server push` returns 401
 
 ```bash
-# Check the registry pull secret is valid
-kubectl get secret mcp-runtime-registry-pull -n mcp-team-<slug>
-
+# A push uses saved platform/registry credentials, not a pod pull secret.
 # Re-login and retry
 mcp-runtime auth login --api-url https://platform.example.com
 mcp-runtime server push --image ...
@@ -124,29 +135,29 @@ MCP_PLATFORM_API_PROFILE=admin \
 The cluster node does not trust the registry's TLS certificate.
 
 For `bundled-https` mode, the registry uses the internal `mcp-runtime-ca`. Nodes
-must trust this CA. See [Cluster Readiness](cluster-readiness.md) for distribution-
+must trust this CA. See [Cluster Requirements](cluster-readiness.md) for distribution-
 specific node trust configuration.
 
 ### `no basic auth credentials` on image pull
 
-The `mcp-runtime-registry-pull` pull secret in the server's namespace has stale
-credentials. This happens after a `mcp-runtime setup` rerun that rotates API keys.
+The image's registry host must match a pull secret attached to the workload
+ServiceAccount. A missing or stale secret, the wrong host, or a credential
+without repository access can cause this error. Setup preserves existing
+credential values on ordinary reruns; it does not rotate all API keys.
 
 ```bash
-# Check secret exists
+# Admin diagnostics: inspect secret metadata and ServiceAccount references.
 kubectl get secret mcp-runtime-registry-pull -n mcp-team-<slug>
+kubectl get serviceaccount mcp-workload -n mcp-team-<slug> -o yaml
+kubectl describe pod -n mcp-team-<slug> <pod-name>
 
-# Re-run setup or re-create the secret manually:
-ADMIN_KEY=$(kubectl get secret mcp-ui-credentials -n mcp-platform \
-  -o jsonpath='{.data.UI_API_KEY}' | base64 -d)
-
-kubectl create secret docker-registry mcp-runtime-registry-pull \
-  -n mcp-team-<slug> \
-  --docker-server=registry.example.com \
-  --docker-username=platform-service \
-  --docker-password="$ADMIN_KEY" \
-  --dry-run=client -o yaml | kubectl apply -f -
+# Repair managed server pull wiring through the platform deployment path.
+mcp-runtime auth login --api-url https://platform.example.com
+mcp-runtime server deploy <server-name> --scope tenant --metadata-dir .mcp --update
 ```
+
+If that workflow fails, retain its error and diagnose the registry/platform API
+failure. Do not copy a platform service key into a hand-written tenant Secret.
 
 ## Analytics and observability
 
@@ -154,14 +165,15 @@ kubectl create secret docker-registry mcp-runtime-registry-pull \
 
 1. Check the ingest service is receiving events:
    ```bash
-   KUBECONFIG=~/.kube/config mcp-runtime sentinel logs ingest --since 5m
+   mcp-runtime sentinel logs ingest --since 5m
    ```
    `401` errors mean the analytics API key in the gateway sidecar is stale.
-   Re-run `setup` or restart the analytics deployments.
+   Check the server’s analytics Secret reference and ingest logs. Repair using
+   the saved setup configuration; restarting alone does not fix a wrong key.
 
 2. Check the processor is consuming from Kafka:
    ```bash
-   KUBECONFIG=~/.kube/config mcp-runtime sentinel logs processor --since 5m
+   mcp-runtime sentinel logs processor --since 5m
    ```
 
 3. Check Kafka has the `mcp.events` topic:
@@ -173,7 +185,7 @@ kubectl create secret docker-registry mcp-runtime-registry-pull \
 
 4. Check the three-broker KRaft quorum and replicas:
    ```bash
-   kubectl get pods -n mcp-platform -l app=kafka -o wide
+   kubectl get pods -n mcp-observability -l app=kafka -o wide
    kubectl exec -n mcp-observability kafka-0 -- \
      kafka-metadata-quorum --bootstrap-server localhost:9092 describe --status
    kubectl exec -n mcp-observability kafka-0 -- \
@@ -182,10 +194,10 @@ kubectl create secret docker-registry mcp-runtime-registry-pull \
    Healthy output shows three Kafka pods, three `mcp.events` partitions, replica
    factor `3`, and all assigned replicas in ISR.
 
-5. If Kafka reports `InconsistentClusterIdException`, do not delete the Kafka
-   PVC automatically. The stored broker metadata no longer matches the
-   configured KRaft cluster ID. Back up any data you need, scale Kafka to zero,
-   delete all three `kafka-data-kafka-{0,1,2}` PVCs, then rerun setup.
+5. If Kafka reports `InconsistentClusterIdException`, inspect its configured
+   cluster ID and persisted broker metadata. Restore matching metadata or use
+   the documented disaster-recovery process. Deleting broker PVCs discards
+   queued audit events and is not a routine troubleshooting step.
 
 ### Split Sentinel API returns 401
 
@@ -193,18 +205,22 @@ The split API pods (`mcp-platform-api`, `mcp-runtime-api`, `mcp-analytics-api`) 
 setup run.
 
 ```bash
-# Restart to pick up current keys
-kubectl rollout restart deployment/mcp-platform-api deployment/mcp-runtime-api -n mcp-platform
-kubectl rollout restart deployment/mcp-analytics-api -n mcp-observability
-kubectl rollout status deployment/mcp-platform-api -n mcp-platform --timeout=120s
+# After correcting configuration through the supported setup path,
+# restart only a component that still needs to reload its credentials.
+mcp-runtime sentinel restart runtime-api
+mcp-runtime sentinel status
 ```
+
+A `401` alone does not establish key drift. Check the saved login with
+`mcp-runtime auth status`, identify the rejecting service, and distinguish an
+expired user credential from service-to-service authentication failure.
 
 ## Platform and cluster health
 
 ### `cluster diagnostics` reports failures
 
 ```bash
-KUBECONFIG=~/.kube/config mcp-runtime cluster diagnostics
+mcp-runtime cluster diagnostics
 ```
 
 Diagnostics runs the post-setup check suite and prints a remedy for each
@@ -212,7 +228,7 @@ failure. Follow the printed instructions. Most failures are missing ingress,
 stale certificates, or image pull errors, and the remedy includes the `kubectl`
 commands to fix them.
 
-Before setup, run `KUBECONFIG=~/.kube/config mcp-runtime cluster doctor`.
+Before setup, run `mcp-runtime cluster doctor`.
 
 ### Setup pre-flight check blocked by stale Certificate
 
@@ -221,11 +237,18 @@ ERROR  Stale Certificate "registry-cert" has DNS names [registry.local]
        but the expected registry host is "registry.example.com"
 ```
 
+Inspect the installed Certificate and Ingress without deleting them:
+
 ```bash
-kubectl delete certificate -n registry registry-cert
-kubectl delete certificaterequest -n registry --all
-# Re-run setup
+kubectl get certificate registry-cert -n registry -o yaml
+kubectl get ingress -n registry -o yaml
+mcp-runtime cluster cert --help
 ```
+
+Compare their hostnames with the saved install profile. Use the supported
+certificate/configuration workflow to repair that mismatch, preserve existing
+TLS Secrets, then rerun the configured setup command. Deleting every
+CertificateRequest can affect unrelated issuance and is not a targeted fix.
 
 ### Platform stack stuck after node pressure or eviction
 
@@ -249,11 +272,11 @@ Recovery check and repair:
 
 ```bash
 mcp-runtime cluster doctor          # reports "sentinel stale pods", Kafka, and ingest readiness
-mcp-runtime setup                   # single repair action: re-applies manifests and prunes terminated pods
+mcp-runtime setup --env-file <saved-install-profile>  # retain registry, TLS, and issuer settings
 ```
 
 `cluster doctor` flags `Failed` (Evicted, Error, ContainerStatusUnknown) pods
-and orphaned `Completed` pods in `mcp-platform`; `mcp-runtime setup` removes
+and orphaned `Completed` pods in `mcp-platform` and `mcp-observability`; `mcp-runtime setup` removes
 them before re-applying the stack. Pods owned by a Job are left alone.
 
 If Kafka logs `InconsistentClusterIdException`, setup refuses to delete the
@@ -264,10 +287,14 @@ reset the Kafka PVCs explicitly and rerun `mcp-runtime setup`.
 ### Namespace stuck in Terminating
 
 ```bash
-kubectl patch ns <namespace> \
-  -p '{"metadata":{"finalizers":null}}' \
-  --type=merge
+kubectl describe namespace <namespace>
+kubectl get namespace <namespace> -o yaml
 ```
+
+Check the namespace conditions for unavailable API services, remaining
+resources, or finalizers. Repair the responsible controller or delete resources
+through their owning management workflow. Removing finalizers blindly can
+orphan workloads and does not repair a discovery failure.
 
 ## Getting more help
 

@@ -9,63 +9,63 @@ observability. The linked guides at the end cover each part in detail.
 flowchart TB
     subgraph clients [Clients]
         CLI[mcp-runtime CLI]
-        UI[Platform dashboard]
-        Agent[Agent adapters]
-        MCP[MCP clients]
+        Browser[Platform dashboard in browser]
+        Adapter[Agent adapter]
+        MCP[MCP client]
     end
-
     subgraph platform [mcp-platform]
+        UI[UI and session BFF]
         PlatAPI[platform-api]
         RunAPI[runtime-api]
+        DB[(Postgres identity and agent directory)]
     end
-
     subgraph operatorns [mcp-runtime]
         Op[MCPServer operator]
     end
-
     subgraph observability [mcp-observability]
         AnaAPI[analytics-api]
         Ingest[ingest]
-        CH[ClickHouse / Grafana]
+        Kafka[(Kafka)]
+        Processor[processor]
+        CH[(ClickHouse)]
     end
-
-    subgraph runtime [MCP server namespaces]
-        Ing[Ingress / Traefik]
-        GW[mcp-gateway sidecar]
-        Srv[MCP server pods]
-    end
-
-    subgraph data [Data and policy]
+    subgraph servers [MCP server namespace]
         Grant[MCPAccessGrant]
         Session[MCPAgentSession]
-        AgentDir[Managed agent directory]
-        Policy[Per-server policy ConfigMap]
-        Reg[Container registry]
+        Server[MCPServer]
+        Policy[Policy ConfigMap]
+        GW[mcp-gateway sidecar]
+        Srv[MCP application]
     end
-
+    Ing[Traefik ingress]
     K8s[Kubernetes API]
-
+    Reg[Container registry]
     CLI --> PlatAPI
     CLI --> RunAPI
-    CLI -. "admin --use-kube only" .-> K8s
+    CLI -. setup or explicit admin Kubernetes mode .-> K8s
+    Browser --> Ing
+    Ing --> UI
     UI --> PlatAPI
     UI --> RunAPI
     UI --> AnaAPI
-    PlatAPI --> AgentDir
-    Agent --> Ing
-    MCP --> Ing
+    PlatAPI --> DB
+    RunAPI -->|resolve principal and directory| PlatAPI
     RunAPI --> K8s
-    K8s --> Op
-    Op --> Srv
-    Op --> Grant
-    Op --> Session
-    Op --> Policy
+    K8s -->|watch events| Op
+    Server --> Op
+    Grant --> Op
+    Session --> Op
+    Op -->|render| Policy
+    Op -->|reconcile workload| Srv
+    Policy -->|mounted snapshot| GW
+    MCP --> Adapter
+    Adapter -->|session and certificate enrollment| RunAPI
+    Adapter -->|MCP over HTTPS| Ing
     Ing --> GW --> Srv
-    GW --> Policy
-    CLI --> Reg
-    PlatAPI --> Reg
-    GW --> Ingest --> CH
-    AnaAPI --> CH
+    RunAPI -->|in-cluster image push| Reg
+    Reg -. pull image .-> Srv
+    GW --> Ingest --> Kafka --> Processor --> CH
+    AnaAPI -->|query| CH
 ```
 
 Service placement is in [Namespaces](namespaces.md). The `/api/v1` surface is served by three services behind Traefik path routing:
@@ -78,22 +78,23 @@ RBAC split.
 
 | Layer | Owns | Read next |
 |-------|------|-----------|
-| **Runtime** | Bootstrap, setup, registry workflow, `MCPServer` reconciliation, grants/sessions, rollout | [Runtime](runtime.md) |
+| **Runtime** | Bootstrap, setup, registry workflow, `MCPServer` reconciliation, grants/sessions, rollout | [Runtime](runtime-operations.md) |
 | **Platform services** | Gateway sidecar policy enforcement, analytics ingest, dashboards | [Platform services](platform-services.md) |
-| **Split APIs** | platform-api (teams, identity, registry authz), runtime-api (deploy/push, grants, adapter sessions), analytics-api (events, usage) | [API](api.md), [Platform services](platform-services.md) |
-| **Multi-team** | Namespace isolation, team RBAC, Traefik watch scope | [Multi-Team Isolation](multi-team.md) |
+| **Split APIs** | platform-api (teams, identity, registry authz), runtime-api (deploy/push, grants, adapter sessions), analytics-api (events, usage) | [API](api-reference.md), [Platform services](platform-services.md) |
+| **Multi-team** | Namespace isolation, team RBAC, Traefik watch scope | [Multi-Team Isolation](teams-and-access.md) |
 
 ## Typical request path
 
 1. An MCP client (or agent adapter) calls `https://mcp.<domain>/<server>/mcp`.
 2. Ingress routes to the server pod; the **mcp-gateway** sidecar evaluates
    `MCPAccessGrant` + `MCPAgentSession` policy before forwarding to the app.
-3. Allowed tool calls emit analytics events through ingest → Kafka → processor
+3. Allowed and denied tool calls can emit analytics events through ingest → Kafka → processor
    → ClickHouse; Grafana surfaces usage and traces.
 
 Local scaffolding commands (`server init`, `access grant init`, `access session init`)
-write manifests on the workstation only; they do not call the platform API or
-Kubernetes.
+write manifests on the workstation. `server init --from-server` also calls
+the supplied MCP endpoint to discover tools; these commands do not write to
+the platform API or Kubernetes.
 
 Control-plane changes (setup, `auth login`, `server deploy`, `access grant apply`,
 and admin-only `access session apply`) flow through the CLI or the split APIs
@@ -114,13 +115,13 @@ component-level paths, and E2E scenario mapping.
 |-------|-------------|-------|
 | Kind + `--test-mode` | Local contributor development | [Contributor Local Kind](contributor/local-kind.md) |
 | k3s lab (HTTP registry) | Single-node evaluation | [Deployment Targets - k3s lab](deployment-targets.md#k3s-lab-example) |
-| k3s / on-prem + bundled HTTPS | Public domain with Let's Encrypt | [Deployment Targets](deployment-targets.md), [k3s Deployment Runbook](k3s-deployment-runbook.md) |
+| k3s / on-prem + bundled HTTPS | Public domain with Let's Encrypt | [Deployment Options](deployment-targets.md), [Public Reference Deployment](reference-deployment.md) |
 | Managed Kubernetes + external registry | EKS, GKE, AKS | [Deployment Targets - Managed Kubernetes](deployment-targets.md#managed-kubernetes) |
 
 ## Related reading
 
-- [Getting Started](getting-started.md): install and first server
+- [Getting Started](self-hosting.md): install and first server
 - [Publish an MCP Server](publish-mcp-server.md): metadata, build, push, deploy
-- [Agent Adapters](agent-adapters.md): HTTP proxy
-- [CLI](cli.md): command reference
-- [Cluster Readiness](cluster-readiness.md): registry, DNS, TLS, node trust checks
+- [Agent Adapters](connect-clients.md): HTTP proxy
+- [CLI](cli-reference.md): command reference
+- [Cluster Requirements](cluster-readiness.md): registry, DNS, TLS, node trust checks

@@ -5,6 +5,9 @@ repo_name: mcp-runtime/mcp-runtime
 edit_uri: edit/main/docs/
 docs_dir: .
 site_dir: ../site
+validation:
+  links:
+    anchors: warn
 exclude_docs: |
   .dockerignore
   Dockerfile
@@ -54,55 +57,74 @@ extra_css:
   - stylesheets/infra.css
 nav:
   - Home: README.md
-  - Quickstart: quickstart.md
-  - Concepts:
-      - Core Concepts: concepts.md
+  - Getting Started:
+      - Overview: start-here.md
+      - Hosted Quickstart: hosted-quickstart.md
+      - Guided Tutorials:
+          - Overview: learn/README.md
+          - Core Concepts: learn/01-core-concepts.md
+          - First Governed Server: learn/02-first-governed-server.md
+          - Multi-Team Access: learn/03-multi-team-access.md
+  - Server and Client Guides:
+      - Overview: usage-overview.md
+      - Server Publishing: publish-mcp-server.md
+      - Teams and Access: teams-and-access.md
+      - Client Connections: connect-clients.md
+      - MCP OAuth: mcp-oauth.md
+  - Deployment and Operations:
+      - Overview: hosting-overview.md
+      - Installation:
+          - Deployment Options: deployment-targets.md
+          - Cluster Requirements: cluster-readiness.md
+          - Platform Installation: self-hosting.md
+      - Public Reference:
+          - Cluster Provisioning: cluster-provisioning.md
+          - Deployment Guide: reference-deployment.md
+      - Operations:
+          - Runtime Operations: runtime-operations.md
+          - Namespaces: namespaces.md
+          - Services and Observability: platform-services.md
+          - Troubleshooting: troubleshooting.md
+  - Concepts and Architecture:
+      - Overview: concepts-overview.md
+      - Core Concepts: core-concepts.md
       - Identity and Authorization: identity-and-authorization.md
-  - Architecture: architecture.md
-  - Getting Started: getting-started.md
-  - Developer Guide:
-      - Publish an MCP Server: publish-mcp-server.md
-      - Agent Adapters: agent-adapters.md
-      - MCP Authorization: mcp-authorization.md
-      - Multi-Team Isolation: multi-team.md
-  - Operator Guide:
-      - Deployment Targets: deployment-targets.md
-      - Cluster Readiness: cluster-readiness.md
-      - k3s On-Prem Cluster: k3s-on-prem-cluster.md
-      - k3s Deployment Runbook: k3s-deployment-runbook.md
-      - Runtime: runtime.md
-      - Namespaces: namespaces.md
-      - Platform services: platform-services.md
-      - Troubleshooting: troubleshooting.md
-  - Reference:
-      - CLI: cli.md
-      - API: api.md
-      - API Authn/Authz Matrix: security/authz-matrix.md
+      - Architecture: architecture.md
+  - CLI and API Reference:
+      - Overview: reference-overview.md
+      - CLI Commands: cli-reference.md
+      - API and Resources: api-reference.md
+      - Authentication and Authorization: security/authz-matrix.md
       - Go Packages: https://docs.pkg.mcpruntime.org/github.com/mcp-runtime/mcp-runtime
-  - Learn:
-      - Overview: learn/README.md
-      - "Module 1: Core Concepts": learn/module-1-concepts.md
-      - "Module 2: Your First Server": learn/module-2-first-server.md
-      - "Module 3: Multi-Team Setup": learn/module-3-multi-team.md
-  - Contributor Guide:
+  - Development and Testing:
       - Overview: contributor/README.md
-      - Local Kind and Test Mode: contributor/local-kind.md
-      - Service Iteration: contributor/service-iteration.md
-      - Runtime MCP Testing: contributor/runtime-mcp-testing.md
-      - Staging E2E: contributor/staging-e2e.md
-      - Regression Index: contributor/regression-index.md
-      - Troubleshooting: contributor/troubleshooting.md
-  - Internals:
+      - Local Development:
+          - Cluster Setup: contributor/local-kind.md
+          - Service Iteration: contributor/service-iteration.md
+          - Troubleshooting: contributor/troubleshooting.md
+      - Verification:
+          - MCP Runtime Tests: contributor/runtime-mcp-testing.md
+          - Staging End-to-End Tests: contributor/staging-e2e.md
+          - Regression Coverage: contributor/regression-index.md
+  - Implementation Details:
       - Overview: internals/README.md
-      - API Types: internals/api-types.md
-      - Request Flows: internals/request-flows.md
-      - Go Package Reference: internals/go-package-reference.md
-      - Hosting Go Package Docs: internals/pkgsite.md
-      - CLI Internals: internals/internal-cli.md
-      - Operator Internals: internals/cmd-operator.md
-      - Component Inventory: internals/component-inventory.md
-      - Runtime CLI Cmd: internals/cmd-mcp-runtime.md
-      - Metadata Package: internals/pkg-metadata.md
-      - Config and Examples: internals/config-and-examples.md
-      - Gateway and Platform Inspirations: internals/gateway-platform-inspirations.md
-      - Tests: internals/tests.md
+      - Contracts and Flows:
+          - API Types: internals/api-types.md
+          - Request Flows: internals/request-flows.md
+          - Server Metadata: internals/metadata.md
+          - Configuration and Examples: internals/config-and-examples.md
+      - Components:
+          - CLI Entrypoint: internals/cli-entrypoint.md
+          - CLI Implementation: internals/cli.md
+          - Operator: internals/operator.md
+          - Component Inventory: internals/component-inventory.md
+      - Security and Lifecycle:
+          - Credential Ownership: internals/credential-consumers.md
+          - Operator Secret Access: internals/operator-secret-access.md
+          - Dependency Rollouts: internals/dependency-rollouts.md
+          - Log Collector Admission: internals/log-collector-admission.md
+      - Developer References:
+          - Go Package Reference: internals/go-package-reference.md
+          - Package Docs Hosting: internals/pkgsite.md
+          - Design Background: internals/gateway-platform-inspirations.md
+          - Tests and Coverage: internals/testing.md

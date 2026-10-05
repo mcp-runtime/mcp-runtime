@@ -47,5 +47,5 @@ grant and session from the repository root:
 The samples grant `example-agent` / `example-human` access to `aaa-ping` and
 `whoami` at low trust with read-only side effects. Use the matching issued
 identity and session when connecting through an adapter; see the
-[adapter guide](../../docs/agent-adapters.md). Change the grant and session to
+[adapter guide](../../docs/connect-clients.md). Change the grant and session to
 exercise allow/deny policy on the same server, without another server fixture.

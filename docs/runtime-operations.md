@@ -22,7 +22,7 @@ the gateway evaluates the matching grant and, when `session.required: true`,
 the session on each tool call. Observe mode records calls without enforcing
 those checks.
 
-See the [API reference](api.md) for full field definitions and examples.
+See the [API reference](api-reference.md) for full field definitions and examples.
 
 ## Reconciliation outputs
 
@@ -54,6 +54,8 @@ For every `MCPServer`, the operator reconciles:
   memberships. Place runtime CRDs in per-team namespaces and rely on Kubernetes
   RBAC and ingress watch configuration for isolation.
 - Default ingress class is `traefik`; override via `spec.ingressClass`.
+- Gateway defaults to enabled; set `spec.gateway.enabled: false` to route
+  directly to the MCP application.
 
 ## Topology
 
@@ -74,17 +76,17 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-    A[01. Initialize cluster<br/>cluster init / setup] --> B[02. Configure ingress + registry]
-    B --> C[03. Describe servers<br/>MCPServer YAML]
-    C --> D[04. Scaffold + publish<br/>server init, build, push, deploy]
+    A[01. Prepare an existing cluster<br/>bootstrap, cluster doctor] --> B[02. Configure and install<br/>registry, DNS, TLS, setup]
+    B --> C[03. Log in and describe a server<br/>auth login, server init, server validate]
+    C --> D[04. Publish and deploy<br/>server build image, push, deploy]
     D --> E[05. Grant access<br/>grant init/apply; adapter sessions]
     E --> F[06. Observe<br/>status, UI, API]
 ```
 
 | Step | Commands |
 |---|---|
-| Initialize cluster | `cluster init`, `setup`, `bootstrap` |
-| Configure ingress + registry | `cluster config --ingress traefik`, `registry provision` |
+| Prepare cluster | Choose or provision the target, then `bootstrap` and `cluster doctor` |
+| Configure and install | Select registry, ingress, DNS, and TLS; run configured `setup` |
 | Describe servers | `server init`, hand-written `MCPServer` YAML, or metadata in `.mcp/` |
 | Publish + deploy | `auth login`, `server build image`, `server push`, `server deploy`, `server generate` for GitOps YAML |
 | Grant access | `auth login`, `access grant init`, `access grant apply`; sessions via `adapter proxy --server … --agent …` or admin `access session init/apply` |
@@ -94,7 +96,7 @@ flowchart LR
 
 | Mode | Behavior |
 |---|---|
-| **Direct** | No `gateway.enabled`. Service points at the MCP server directly. Server is exposed at `/{server-name}/mcp`. |
+| **Direct** | `spec.gateway.enabled: false`. Service points at the MCP server directly. Server is exposed at `/{server-name}/mcp`. |
 | **Gateway** | `spec.gateway.enabled: true`. Traffic flows through the proxy sidecar, which handles identity, policy, audit, and telemetry. |
 | **Trust evaluation** | At tool-call time, effective trust is `min(grant.maxTrust, session.consentedTrust)` and must meet the required trust, which is the higher of the tool's `requiredTrust` and the matching tool rule's `requiredTrust`. |
 | **Side-effect evaluation** | Each listed tool must declare `sideEffect: read`, `write`, or `destructive`. A grant authorizes only tools whose side effect is in `allowedSideEffects`. Omitted or empty `allowedSideEffects` allows no side-effect classes. A tool the server never declared is denied, because it has no side effect to authorize. |
@@ -161,7 +163,7 @@ Operational notes:
 - Set `MCP_RUNTIME_LOG_LEVEL=info` on the adapter to print runtime 4xx
   denials to stderr.
 
-See [Agent Adapters](agent-adapters.md) for build commands and full
+See [Agent Adapters](connect-clients.md) for build commands and full
 integration examples.
 
 ## Operator internals (high-level)
@@ -175,7 +177,7 @@ The operator is a single-controller `controller-runtime` manager:
 5. Reconciles Deployment → Service → Ingress in order.
 6. Computes per-resource readiness, sets phase and conditions, writes status.
 
-Source walkthroughs live under [internals/cmd-operator.md](internals/cmd-operator.md).
+Source walkthroughs live under [internals/operator.md](internals/operator.md).
 
 ## Current scope
 
@@ -195,7 +197,7 @@ Implemented and stable enough to evaluate:
   server you operate. Accounts stay in your identity provider. The bundled
   server federates to one configured OIDC connector per process. Policy
   decisions stay in the gateway. See
-  [MCP authorization](mcp-authorization.md).
+  [MCP authorization](mcp-oauth.md).
 - Adapter certificates: the runtime API enrolls a session certificate when
   `MCP_MTLS_CLUSTER_ISSUER` and `MCP_TRUST_DOMAIN` are set. Ingress verifies
   that certificate, and the gateway derives the session identity from it, only
@@ -210,6 +212,6 @@ Not yet:
 
 ## Next
 
-- [CLI](cli.md): every command and flag.
-- [API](api.md): full CRD reference with examples.
+- [CLI](cli-reference.md): every command and flag.
+- [API](api-reference.md): full CRD reference with examples.
 - [Platform services](platform-services.md): what happens after traffic enters the gateway.

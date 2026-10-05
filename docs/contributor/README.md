@@ -1,11 +1,26 @@
-# Contributor Guide
+# Development and Testing
+
+<span id="contributor-guide"></span>
 
 Use this runbook when you need to set up a disposable cluster, change code, rebuild one service,
 exercise tenant isolation, or debug the platform UI and MCP request path.
 
 For product concepts, start with [Architecture](../architecture.md). For code
-package boundaries, use [Internals](../internals/README.md). This guide focuses
+package boundaries, use [Implementation Details](../internals/README.md). This guide focuses
 on the day-to-day loop for contributors.
+
+## Guide order
+
+Start with [Local Cluster Setup](local-kind.md), then use
+[Service Iteration](service-iteration.md) to rebuild the part you are changing.
+[Contributor Troubleshooting](troubleshooting.md) covers failures in that loop.
+
+For verification, [MCP Runtime Tests](runtime-mcp-testing.md) covers real request
+and governance flows, [Staging End-to-End Tests](staging-e2e.md) exercises a
+production-style installation on a disposable VM, and
+[Regression Coverage](regression-index.md) maps known incidents to checks.
+Choose checks for the changed behavior; the contribution loop below explains
+when to use each guide.
 
 ## Contribution Loop
 
@@ -20,16 +35,20 @@ on the day-to-day loop for contributors.
    ```bash
    make deps
    make build
-   go test ./internal/cli/... ./internal/operator/... -count=1
+   (
+     export KUBECONFIG=$(mktemp)  # isolate tests from real clusters
+     trap 'rm -f "$KUBECONFIG"' EXIT
+     go test ./internal/cli/... ./internal/operator/... -count=1
+   )
    ```
 
 3. Use a disposable Kind cluster for platform, UI, operator, registry, gateway,
    and Sentinel changes.
 
-Start with [Local Kind and Test Mode](local-kind.md).
+   Start with [Local Kind and Test Mode](local-kind.md).
 
-For a real production-style install on the disposable VM, use
-[Staging E2E](staging-e2e.md).
+   For a production-style install on the disposable VM, use
+   [Staging E2E](staging-e2e.md).
 
 4. Rebuild only the changed service while iterating.
 

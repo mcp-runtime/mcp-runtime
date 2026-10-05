@@ -1,86 +1,53 @@
-# MCP Runtime k3s Deployment Runbook
+# Public Reference Deployment
 
-Deploy, redeploy, and test MCP Runtime on a public k3s cluster with DNS and
-TLS. For the reference topology, see [k3s-on-prem-cluster.md](k3s-on-prem-cluster.md).
+<span id="reference-deployment"></span>
 
-## Reference cluster
+<span id="mcp-runtime-k3s-deployment-runbook"></span>
 
-The public example at `platform.mcpruntime.org` runs on the project's k3s
-cluster. Cluster size, node names, and addresses can change; inspect the
-selected kubeconfig context with `kubectl get nodes`. The multi-node topology
-in [k3s-on-prem-cluster.md](k3s-on-prem-cluster.md) is a reference design; the
-live example may have a different node count.
+This guide documents the project's public reference deployment at
+[platform.mcpruntime.org](https://platform.mcpruntime.org). To use that hosted
+platform, start with the [Hosted Quickstart](hosted-quickstart.md). The
+operations below explain how its infrastructure is configured and maintained,
+and provide a worked example for operators building their own deployment.
 
-## Production observability and debugging
+The Runtime cluster uses
+**K3s**; the external identity provider runs on a separate VM with Docker and
+Caddy. K3s is the distribution selected for this example, not a requirement
+for MCP Runtime. See [Deployment Options](deployment-targets.md) for other
+Kubernetes distributions and [Self-Hosting](self-hosting.md) for the general
+installation path.
 
-Start incident investigation at
-[production Grafana](https://platform.mcpruntime.org/grafana). Its provisioned
-data sources are Prometheus (metrics), Loki (logs), and Tempo (traces).
-Use the same UTC time range across all three; record the affected workload,
-deployment image, and request/trace IDs. Inspect the affected client's own
-logs too, particularly for OAuth and MCP transport failures.
+This guide covers configuration, installation and updates, identity-provider
+integration, backups and recovery, and verification. Commands use the
+reference deployment's source checkout, env profile, and helper scripts.
+Adapt the domain, node architecture, SSH hosts, kubeconfig, storage, ingress,
+and identity provider to your own deployment. The reference scripts include
+K3s-specific backup and ingress behavior; do not apply them unchanged to a
+managed cluster.
 
-Read private operator credentials from `~/.mcpruntime/infra.env`:
-`GRAFANA_URL` identifies the endpoint, and the saved Secret entries ending in
-`GRAFANA_ADMIN_USER__BASE64` and `GRAFANA_ADMIN_PASSWORD__BASE64` contain
-Grafana credentials. Browser access also requires a signed-in platform admin
-session. API access needs an accepted platform admin `x-api-key` for the
-ingress gate as well as Grafana authentication. Keep credentials in memory;
-never print them or put them in command arguments, tickets, or Buddy notes.
+<span id="reference-cluster"></span>
 
-- **Metrics:** verify target health and freshness, request/error rates,
-  latency, restarts, resource pressure, and collector/exporter failures.
-  Confirm that the affected service actually has a scrape target.
-- **Logs:** discover the actual Loki labels and query auth, ingress/gateway,
-  and MCP server workloads over the incident window. Verify collection from
-  all relevant namespaces and containers. Preserve event timestamps, HTTP
-  status, safe failure reason, request ID, and workload identity.
-- **Traces:** verify spans reach Tempo and follow the failure across
-  instrumented services. Check service identity, operation, duration, error
-  status, and trace/span IDs in related logs. Record missing instrumentation
-  and propagation explicitly; a missing trace does not prove success.
+## Topology
 
-**Trace and log correlation.** Sentinel services and the MCP gateway append
-`trace_id=<32 hex> span_id=<16 hex>` to request and failure log lines. Copy
-the `trace_id` from a Loki line into Tempo (or search Loki for a Tempo trace
-ID) to join them. Spans for 401, 403, and 5xx responses carry error status
-plus `mcp.failure.operation`, `mcp.failure.reason`, and
-`http.response.status_code`; in Tempo, search `status=error`. The gateway
-records the policy decision reason, RPC method, and status only, never
-tokens or tool arguments. Health, readiness, and metrics probes are not
-traced. Known boundaries: external OAuth authorization servers and MCP
-clients that do not send W3C `traceparent` start a new trace at the gateway,
-so a client-side refresh failure cannot be joined to the gateway trace by ID;
-correlate by time window, workload, and status instead. Collector export
-failures are logged as `otel internal error: ...` and counted by the
-`mcp_otel_internal_errors_total` metric on each service's metrics port; a
-non-zero rate means spans are being dropped before Tempo.
+| Component | Reference placement | Public endpoint / responsibility |
+|---|---|---|
+| Runtime operator, APIs, UI, MCP servers, and telemetry | Kubernetes cluster using K3s | `platform.mcpruntime.org` and `mcp.mcpruntime.org` |
+| Registry, Traefik, and cert-manager | Runtime cluster | `registry.mcpruntime.org`; Runtime ingress and TLS |
+| Optional MCP authorization server (`mcp-auth`) | Runtime cluster, separate release track | `auth.mcpruntime.org/mcp-auth`; MCP OAuth issuance |
+| External identity provider (Keycloak) | Docker service on the Buddy VM | `keycloak.mcpruntime.org`; users, realm data, and upstream login |
+| Identity-provider HTTPS endpoint (Caddy) | Buddy VM, beside Keycloak | Keycloak TLS termination and certificate renewal |
 
-Distinguish missing instrumentation from broken collection or an incorrect
-query/time range. Verify improvements through a real request and its
-resulting telemetry. Use read-only pod logs or authorized datasource reads
-as a documented fallback if Grafana is unavailable. Never capture tokens,
-passwords, or MCP tool payloads merely to improve debugging.
-
-For each concrete maintainability or debuggability gap, search existing
-repository issues before creating a ticket. Include redacted evidence,
-affected components, scope, and acceptance checks; attach the new or existing
-issue to [Maintainability and Debuggability Improvement](https://github.com/orgs/mcp-runtime/projects/1).
-
-For a Grafana 401, distinguish the platform admin gate from Grafana's login.
-A configured `GF_SECURITY_ADMIN_PASSWORD` matching the saved Secret does
-not prove the persisted account accepts it. Before an authorized password
-recovery, back up the persistent database and inspect
-`grafana cli admin reset-admin-password --help`. Use
-`--password-from-stdin`, preserve dashboards/data sources, verify authenticated
-API access afterward, and save the working credential and URL in private
-`infra.env`. Do not reset a persisted account automatically during diagnosis.
+Cluster size, node names, and addresses can change. Inspect the selected
+kubeconfig with `kubectl get nodes`; the multi-node layout in
+[Cluster Provisioning](cluster-provisioning.md) is a reference
+design, not a statement of the live cluster's node count. Keycloak and Caddy
+have their own backup and recovery boundary outside Kubernetes.
 
 ## Obtain and select cluster access
 
 For a provider-managed cluster, use the provider's supported login/configure
 command to write a kubeconfig context; see the per-distribution overview in
-[Deployment Targets](deployment-targets.md#get-a-kubeconfig-for-the-target-distribution).
+[Deployment Options](deployment-targets.md#get-a-kubeconfig-for-the-target-distribution).
 For this self-managed k3s cluster, use the isolated production file
 `$HOME/.kube/prod-mcp-runtime-config` when it is provisioned. Keep the default
 `~/.kube/config` on the contributor test context and do not merge production
@@ -131,7 +98,9 @@ make build
 Production setup commands use the selected `PROD_KUBECONFIG` explicitly; do
 not export it as the workstation's default kubeconfig.
 
-## Required environment variables
+<span id="required-environment-variables"></span>
+
+## Configuration
 
 Saved deployment profile (committed template + local override):
 
@@ -244,174 +213,6 @@ A ready-to-adapt protected server definition is in `examples/oauth-example-go-20
 server's canonical resource URI (`https://mcp.<domain>/<prefix>/mcp`). The
 gateway fails closed with 401 when a token's `aud` does not match.
 
-#### Optional bundled MCP authorization server
-
-OAuth-enabled MCP Runtime servers require bearer tokens, Protected Resource Metadata,
-and resource audience validation. The bundled `mcp-auth-server` is optional;
-when enabled it authenticates
-users through one external OIDC identity provider such as Keycloak and issues
-MCP access tokens. Runtime governance decisions stay in the gateway.
-
-The Runtime gateway is the protected-resource boundary. It verifies the
-issuer, signature, audience/resource, expiry, and scope, then applies grants,
-agent sessions, trust, and tool policy. The authorization server sees only
-login and token requests; Runtime policy needs the MCP JSON-RPC tool call and
-current grant/session state, so the two stay separate.
-
-For a public test deployment, create DNS records for two hosts pointing to the
-ingress node:
-
-```text
-keycloak.<domain>  -> <public ingress IP>
-auth.<domain>      -> <public ingress IP>
-```
-
-Deploy Keycloak with a realm such as `mcp-runtime` and a confidential client
-named `mcp-auth`. Configure this exact upstream callback URI:
-
-```text
-https://auth.<domain>/mcp-auth/identity/callback
-```
-
-The connector file references the Keycloak issuer and client but never stores
-the client secret:
-
-```json
-{
-  "keycloak": {
-    "issuer": "https://keycloak.<domain>/realms/mcp-runtime",
-    "authorization_endpoint": "https://keycloak.<domain>/realms/mcp-runtime/protocol/openid-connect/auth",
-    "token_endpoint": "https://keycloak.<domain>/realms/mcp-runtime/protocol/openid-connect/token",
-    "jwks_uri": "https://keycloak.<domain>/realms/mcp-runtime/protocol/openid-connect/certs",
-    "client_id": "mcp-auth",
-    "client_secret_env": "KEYCLOAK_CLIENT_SECRET",
-    "exchange_client_id": "mcp-auth",
-    "scopes": ["openid", "profile", "email"],
-    "mcp_scopes": ["tools:read"],
-    "identity_claims": ["preferred_username"],
-    "token_endpoint_auth_method": "client_secret_post",
-    "allowed_upstream_callback_uris": [
-      "https://auth.<domain>/mcp-auth/identity/callback"
-    ],
-    "downstream_token_strategy": "upstream_session"
-  }
-}
-```
-
-Deploy the optional bundled server through normal setup:
-
-```bash
-./bin/mcp-runtime setup \
-  --with-tls --tls-cluster-issuer letsencrypt-prod \
-  --with-mcp-auth-server \
-  --mcp-auth-signing-key-secret mcp-auth-signing-key \
-  --mcp-auth-connectors-file /secure/mcp-auth-connectors.json \
-  --mcp-auth-connector keycloak
-```
-
-The issuer defaults to `https://auth.<MCP_PLATFORM_DOMAIN>/mcp-auth`, and the
-operator derives `auth.issuerURL` and reconciles accepted resource audiences
-from OAuth MCPServers. Any optional `--mcp-auth-resource-url` must exactly
-match an MCPServer's `spec.auth.audience`. Production requires a certificate
-covering the auth host (provisioned by the configured TLS
-ClusterIssuer), a selected connector, and a persistent RSA signing key
-stored in the Secret key `private-key.pem`. Use `--mcp-auth-tls-secret` only
-for an externally managed certificate. The connector's
-`KEYCLOAK_CLIENT_SECRET` value is read from the environment and converted into
-a Kubernetes Secret; it must not be committed to Git.
-
-Setup waits for the current auth and operator Deployment revisions to finish
-rolling out. A healthy old auth pod does not prove the new image or resource
-allowlist is active. If authorization returns `resource is not recognized`,
-compare `MCP_AUTH_RESOURCES` on the serving pods with the Deployment and inspect
-replacement pod startup logs. A published image that rejects connector fields
-must be replaced with a compatible image; preserve the connector config,
-signing key, and data PVC during recovery.
-`cluster diagnostics` checks the current auth revision, observed generation, and
-replacement replicas; API access failures are reported rather than treated as
-an absent optional auth installation.
-
-The bundled server uses SQLite on a PVC in production and memory storage only
-in `--test-mode`. Test mode also permits the loopback development issuer and an
-ephemeral signing key. A public deployment must use HTTPS for Keycloak's
-issuer, authorization endpoint, token endpoint, and JWKS endpoint. Use internal
-HTTP only for local testing.
-
-#### Production backups
-
-Before a production `setup` redeployment, capture resources and credentials
-that setup may reapply. The snapshot includes PVC/PV definitions, but does not
-copy live volume contents because setup does not delete claims or their data:
-
-```bash
-hack/deploy/mcpruntime-org/backup.sh --setup
-```
-
-The command requires the isolated `prod-mcp-runtime` context. It creates a
-timestamped snapshot under
-`~/.mcpruntime/backups/mcpruntime-org/` and updates `latest` only after all
-parts validate. The snapshot directory is mode `0700`; files containing
-Secrets are mode `0600`. Setup merges existing resources and reuses matching
-PVCs, but may update config/Secrets and roll workloads. An immutable
-StatefulSet change can recreate that StatefulSet while leaving its claims in
-place. The resource inventory is for recovery reference, not bulk
-`kubectl apply`; its selected platform files are consumed by the existing
-setup restore path.
-
-For destructive cleanup or full node recovery, create a full backup:
-
-```bash
-hack/deploy/mcpruntime-org/backup.sh --full --online-copy
-```
-
-The full snapshot also requires the configured SSH host and captures K3s
-control-plane state and local-path volume files without stopping workloads.
-
-A full snapshot includes namespaced and cluster-scoped Kubernetes objects,
-CRDs, Secrets, grants, sessions, PV/PVC specs, a consistent SQLite online
-backup of the K3s control-plane database, `/etc/rancher/k3s`, K3s server
-credentials, and every file under `/var/lib/rancher/k3s/storage`. That volume
-archive includes Postgres, ClickHouse, Kafka, Keycloak, mcp-auth,
-observability, and registry data. It also contains the TLS and platform
-config/Secret files used by the existing setup restore path, plus a SHA-256
-manifest.
-
-The bundle is **not encrypted by the backup command**; file permissions reduce
-local access but do not protect it from device loss or disk compromise. Encrypt
-it with the team's approved storage before copying it off-host.
-
-The full backup runs without stopping workloads. Kubernetes objects and SQLite
-state are captured online; PVC files are copied live and are not guaranteed to
-be an application-consistent point-in-time image. Databases may need WAL
-recovery after restore. Store this bundle on encrypted storage and copy it off
-the production node and workstation. Full node recovery restores the K3s state
-and volume archive on the original node. Validate the SHA-256 manifest before
-restoring.
-
-For a full node restore, provision the same host and K3s version, stop K3s,
-extract `k3s-host-and-pv-data.tar.gz` at `/`, copy `k3s-state.db` to
-`/var/lib/rancher/k3s/server/db/state.db` with owner `root:root` and mode `0600`,
-then start K3s and validate node and workload readiness. Keep the existing
-server token and `/etc/rancher/k3s` configuration from the archive. Verify the
-bundle first with `cd ~/.mcpruntime/backups/mcpruntime-org/latest && shasum -a
-256 -c SHA256SUMS`. Check each database's recovery logs before accepting
-traffic. This does not restore an external identity provider or data stored
-outside the cluster.
-
-`hack/deploy/mcpruntime-org/clean.sh` still takes a smaller **platform-runtime
-restore snapshot** before its intentional namespace wipe. It covers platform
-TLS/config/bootstrap material, not the full node or PVC data.
-
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `MCP_TLS_BACKUP_DIR` | `~/.mcpruntime/backups/mcpruntime-org` | Root directory for timestamped setup or full snapshots. |
-| `MCP_RESTORE_TLS_AFTER_SETUP` | `1` | When `1`, `hack/deploy/mcpruntime-org/setup.sh` runs `hack/deploy/mcpruntime-org/restore.sh` after setup. |
-| `MCP_DEPLOY_ENV` | `config/deployments/mcpruntime-org.env` | Env file path for all hack scripts. |
-
-The `clean.sh` snapshot covers TLS, cert-manager, OIDC, and bootstrap secrets.
-Use `backup.sh --setup` before setup, or `backup.sh --full --online-copy` for
-the Kubernetes object and persistent volume recovery bundle described above.
-
 #### Rollout-only (`hack/deploy/mcpruntime-org/rollout.sh`)
 
 | Variable | Default | Purpose |
@@ -458,82 +259,12 @@ export GOOGLE_CLIENT_ID=<google-oauth-client-id>
 
 See `config/deployments/mcpruntime-org.env.example` for the full saved profile used by the hack scripts.
 
-## Step 0: Back up platform-runtime state before any wipe
+<span id="setup"></span>
 
-Let's Encrypt enforces a **5 duplicate-certificate / 7 days per domain** rate
-limit. Use the helper script to back up platform-runtime material (TLS,
-cert-manager ownership, OIDC, bootstrap secrets) before wiping app namespaces:
+## Install and update
 
-```bash
-hack/deploy/mcpruntime-org/clean.sh --yes --wait
-```
-
-The backup covers platform-runtime state only. Tenant/user data (teams,
-Postgres identity store, MCP CRs, registry images) is **not** preserved. See
-[Deployment Targets - k3s Production](deployment-targets.md#option-a-bundled-https-registry-on-prem-reference).
-
-Manual TLS-only backup (legacy):
-
-```bash
-kubectl get secret registry-tls -n registry -o yaml \
-  > /tmp/registry-tls-backup.yaml 2>/dev/null || true
-kubectl get secret mcp-platform-tls -n mcp-platform -o yaml \
-  > /tmp/platform-tls-backup.yaml 2>/dev/null || true
-```
-
-Restore after setup (prefer automatic restore via `hack/deploy/mcpruntime-org/setup.sh`):
-
-```bash
-hack/deploy/mcpruntime-org/restore.sh
-# or from clean.sh:
-hack/deploy/mcpruntime-org/clean.sh --restore-platform
-```
-
-## Safe cluster wipe (app workloads only)
-
-Delete only app namespaces. Deleting kube-system resources breaks k3s's
-reconciliation loop: CoreDNS, Traefik, svclb-traefik, and
-local-path-provisioner cannot recover without an SSH restart.
-
-```bash
-# 1. Back up TLS secrets (see Step 0)
-
-# 2. Delete only app namespaces, and leave kube-system untouched
-kubectl get ns --no-headers \
-  | awk '{print $1}' \
-  | grep -Ev '^(kube-system|kube-public|kube-node-lease|default)$' \
-  | xargs -r kubectl delete ns --grace-period=0
-
-# 3. Delete cluster-scoped MCP resources
-kubectl delete mcpserver,mcpaccessgrant,mcpagentsession \
-  --all -A --ignore-not-found 2>/dev/null || true
-kubectl delete clusterrole,clusterrolebinding \
-  -l app.kubernetes.io/managed-by=mcp-runtime \
-  --ignore-not-found 2>/dev/null || true
-```
-
-### If you accidentally wiped kube-system
-
-If kube-system pods are gone (no CoreDNS, no Traefik), restart k3s on the
-control plane to trigger full reconciliation from
-`/var/lib/rancher/k3s/server/manifests/`:
-
-```bash
-ssh root@103.181.176.28 "systemctl restart k3s"
-# Wait for CoreDNS, Traefik, and svclb pods to come up
-kubectl wait pod -n kube-system \
-  -l app.kubernetes.io/name=traefik \
-  --for=condition=Ready --timeout=120s
-```
-
-Verify port 80 is reachable before running setup with TLS:
-
-```bash
-curl -sm5 http://registry.mcpruntime.org/ && echo "port 80 OK"
-# Expected: "404 page not found" from Traefik
-```
-
-## Setup
+For an existing install, read [Backups and recovery](#backups-and-recovery)
+before a setup rerun or cleanup. First-time installs can proceed below.
 
 ### First install (creates Let's Encrypt ClusterIssuer and certificates)
 
@@ -543,9 +274,11 @@ cp config/deployments/mcpruntime-org.env.example config/deployments/mcpruntime-o
 
 export MCP_PLATFORM_ADMIN_EMAIL=admin@example.com
 
+PROD_KUBECONFIG="$HOME/.kube/prod-mcp-runtime-config"
 MCP_SETUP_WAIT_TIMEOUT=900 MCP_CERT_TIMEOUT=15m \
 ./bin/mcp-runtime setup \
-  --kubeconfig "$KUBECONFIG" \
+  --env-file config/deployments/mcpruntime-org.env \
+  --kubeconfig "$PROD_KUBECONFIG" \
   --with-tls \
   --acme-email ops@example.com \
   --ingress none \
@@ -643,36 +376,7 @@ that immutable candidate ref while
 preserving the existing mcp-auth configuration, SQLite PVC, signing key, and
 TLS Secret. Do not rerun `setup --with-tls` for an image-only release.
 
-### Separate release tracks and user verification
-
-The Runtime CLI release and the hosted platform images are separate artifacts.
-Tagging a Runtime release publishes platform-specific CLI binaries through
-`.github/workflows/release.yaml` (triggered when a GitHub Release is published
-from the UI for a pushed `v*` tag); it does not update the hosted platform.
-The production rollout updates platform APIs/UI (and mcp-auth only when explicitly
-selected); it does not publish a new CLI release. Publish either project's
-release only after its candidate passes the checks below.
-
-Verify the user path after rollout:
-
-1. Install the candidate CLI built from the selected Runtime ref and confirm
-   `mcp-runtime --version` reports that commit. After release publication,
-   verify the `releases/latest` binary download reports the release tag.
-2. Follow [Quickstart](quickstart.md) against
-   `https://platform.mcpruntime.org`: log in, build/push/deploy a temporary
-   `qa-audit-*` server, create a grant, call a tool through the adapter, and
-   confirm the request appears under **Analytics → Tools** in the platform UI.
-3. Check the signed-out platform page and signed-in role-gated UI with browser
-   evidence. Use only temporary `qa-audit-*` resources and clean them up.
-4. Verify `mcp-runtime status`, server listing, deployment readiness, and
-   `cluster doctor`; confirm the existing certificate resources remain Ready.
-
-Users access the same `https://platform.mcpruntime.org` URL after a platform
-rollout. They update the CLI separately from the GitHub Releases page. Until a
-new tag is published, `releases/latest` still downloads the previously
-published CLI.
-
-That sources `config/deployments/mcpruntime-org.env` (or the `.example` template)
+The setup helper sources `config/deployments/mcpruntime-org.env` (or the `.example` template)
 and runs setup with `--tls-cluster-issuer letsencrypt-prod` and
 `--skip-cert-manager-install`. Existing certificates stay on the same revision
 when SANs are unchanged.
@@ -682,7 +386,7 @@ Equivalent manual command:
 ```bash
 set -a && source config/deployments/mcpruntime-org.env && set +a
 MCP_SETUP_WAIT_TIMEOUT=900 ./bin/mcp-runtime setup \
-  --kubeconfig "$KUBECONFIG" \
+  --kubeconfig "$PROD_KUBECONFIG" \
   --with-tls \
   --tls-cluster-issuer letsencrypt-prod \
   --skip-cert-manager-install \
@@ -691,8 +395,10 @@ MCP_SETUP_WAIT_TIMEOUT=900 ./bin/mcp-runtime setup \
   --platform-mode tenant
 ```
 
-**Why no `--test-mode`:** CI does not publish pre-built container images, so
-every deployment builds operator/gateway/Sentinel images from the source tree.
+**Why no `--test-mode`:** production installs must retain their configured
+registry, DNS, TLS, credentials, and workload issuer policy. Test mode is the
+local Kind/CI installation shape. CI’s content-hash image cache is separate
+from release publication; setup can reuse cached images when configured.
 Without `--test-mode`, setup requires `MCP_PLATFORM_ADMIN_EMAIL` and is
 otherwise identical. At run time, `--test-mode` only sets
 `MCP_RUNTIME_TEST_MODE=1` inside deployed pods. For a production deployment
@@ -734,6 +440,303 @@ curl -sL https://github.com/cert-manager/cert-manager/releases/download/v1.16.2/
 kubectl wait pod -n cert-manager --all --for=condition=Ready --timeout=120s
 ```
 
+## Identity provider
+
+The reference deployment uses Keycloak as its external identity provider and
+runs the optional MCP authorization server inside the Runtime cluster.
+Other deployments can use a compatible OIDC provider; a separate Keycloak VM
+and Caddy are choices made by this reference, not Runtime prerequisites.
+
+### Optional bundled MCP authorization server
+
+OAuth-enabled MCP Runtime servers require bearer tokens, Protected Resource Metadata,
+and resource audience validation. The bundled `mcp-auth-server` is optional;
+when enabled it authenticates
+users through one external OIDC identity provider such as Keycloak and issues
+MCP access tokens. Runtime governance decisions stay in the gateway.
+
+The Runtime gateway is the protected-resource boundary. It verifies the
+issuer, signature, audience/resource, expiry, and scope, then applies grants,
+agent sessions, trust, and tool policy. The authorization server sees only
+login and token requests; Runtime policy needs the MCP JSON-RPC tool call and
+current grant/session state, so the two stay separate.
+
+For the reference deployment, the two authentication hosts have different
+locations. Point `auth.<domain>` at Runtime ingress and `keycloak.<domain>` at
+the identity-provider VM; keep the provider's advertised HTTPS endpoints
+consistent with that DNS choice:
+
+```text
+auth.<domain>      -> <Runtime ingress IP>
+keycloak.<domain>  -> <identity-provider VM IP>
+```
+
+Deploy Keycloak with a realm such as `mcp-runtime` and a confidential client
+named `mcp-auth`. Configure this exact upstream callback URI:
+
+```text
+https://auth.<domain>/mcp-auth/identity/callback
+```
+
+For the `mcpruntime.org` demo, Keycloak is a separate Docker service on the
+Buddy VM (`devbox1`, `103.181.176.61`). Its
+[`Compose file`](https://github.com/mcp-runtime/mcp-runtime/blob/main/config/deployments/mcpruntime-org-keycloak-compose.yaml)
+mounts the retained realm database at `/opt/keycloak/data` and caps Keycloak
+at 900 MiB on this 2 GiB VM. This H2 configuration is for a single-instance
+demo. The existing Caddy instance on that VM serves
+`keycloak.mcpruntime.org` using the
+[`Caddy site`](https://github.com/mcp-runtime/mcp-runtime/blob/main/config/deployments/mcpruntime-org-keycloak.Caddyfile) and
+obtains and renews its Let's Encrypt certificate. The DNS A record for
+`keycloak.mcpruntime.org` must point to `103.181.176.61`.
+
+Runtime setup does not deploy, back up, or restore this identity provider.
+Back up `/opt/keycloak/data` while the Keycloak container is stopped, and keep
+the client secret outside the Compose and Caddy files. Start the service with
+`docker compose -f /opt/keycloak/compose.yaml up -d` on `devbox1`; append the
+Caddy site to `/opt/workspace/Caddyfile`, validate it with `caddy validate`,
+and reload Caddy. Keep the existing `workspace.mcpruntime.org` site in place.
+The mcp-auth connector should use the public HTTPS token and JWKS endpoints,
+without `mcp-sentinel.svc.cluster.local` references. A direct public discovery
+check proves Keycloak is reachable; verify an authorization-code callback as
+well to prove mcp-auth can exchange a code.
+
+```bash
+curl -fsS https://keycloak.mcpruntime.org/realms/mcp-runtime/.well-known/openid-configuration
+curl -fsS https://auth.mcpruntime.org/.well-known/oauth-authorization-server/mcp-auth
+ssh devbox1 'docker ps --filter name=demo-keycloak; docker logs demo-keycloak --tail 30'
+```
+
+For the `mcpruntime.org` demo, use the tracked
+[`connector file`](https://github.com/mcp-runtime/mcp-runtime/blob/main/config/deployments/mcpruntime-org-keycloak-connectors.json)
+and set `MCP_SETUP_MCP_AUTH_CONNECTORS_FILE=config/deployments/mcpruntime-org-keycloak-connectors.json`
+in the private deployment env file. It references the Keycloak issuer and client
+but never stores the client secret. The relevant fields are:
+
+```json
+{
+  "keycloak": {
+    "issuer": "https://keycloak.<domain>/realms/mcp-runtime",
+    "authorization_endpoint": "https://keycloak.<domain>/realms/mcp-runtime/protocol/openid-connect/auth",
+    "token_endpoint": "https://keycloak.<domain>/realms/mcp-runtime/protocol/openid-connect/token",
+    "jwks_uri": "https://keycloak.<domain>/realms/mcp-runtime/protocol/openid-connect/certs",
+    "client_id": "mcp-auth",
+    "client_secret_env": "KEYCLOAK_CLIENT_SECRET",
+    "exchange_client_id": "mcp-auth",
+    "scopes": ["openid", "profile", "email"],
+    "mcp_scopes": ["tools:read"],
+    "identity_claims": ["preferred_username"],
+    "token_endpoint_auth_method": "client_secret_post",
+    "allowed_upstream_callback_uris": [
+      "https://auth.<domain>/mcp-auth/identity/callback"
+    ],
+    "downstream_token_strategy": "upstream_session"
+  }
+}
+```
+
+Deploy the optional bundled server through normal setup:
+
+```bash
+./bin/mcp-runtime setup \
+  --with-tls --tls-cluster-issuer letsencrypt-prod \
+  --with-mcp-auth-server \
+  --mcp-auth-signing-key-secret mcp-auth-signing-key \
+  --mcp-auth-connectors-file /secure/mcp-auth-connectors.json \
+  --mcp-auth-connector keycloak
+```
+
+The issuer defaults to `https://auth.<MCP_PLATFORM_DOMAIN>/mcp-auth`, and the
+operator derives `auth.issuerURL` and reconciles accepted resource audiences
+from OAuth MCPServers. Any optional `--mcp-auth-resource-url` must exactly
+match an MCPServer's `spec.auth.audience`. Production requires a certificate
+covering the auth host (provisioned by the configured TLS
+ClusterIssuer), a selected connector, and a persistent RSA signing key
+stored in the Secret key `private-key.pem`. Use `--mcp-auth-tls-secret` only
+for an externally managed certificate. The connector's
+`KEYCLOAK_CLIENT_SECRET` value is read from the environment and converted into
+a Kubernetes Secret; it must not be committed to Git.
+
+Setup waits for the current auth and operator Deployment revisions to finish
+rolling out. A healthy old auth pod does not prove the new image or resource
+allowlist is active. If authorization returns `resource is not recognized`,
+compare `MCP_AUTH_RESOURCES` on the serving pods with the Deployment and inspect
+replacement pod startup logs. A published image that rejects connector fields
+must be replaced with a compatible image; preserve the connector config,
+signing key, and data PVC during recovery.
+`cluster diagnostics` checks the current auth revision, observed generation, and
+replacement replicas; API access failures are reported rather than treated as
+an absent optional auth installation.
+
+The bundled server uses SQLite on a PVC in production and memory storage only
+in `--test-mode`. Test mode also permits the loopback development issuer and an
+ephemeral signing key. A public deployment must use HTTPS for Keycloak's
+issuer, authorization endpoint, token endpoint, and JWKS endpoint. Use internal
+HTTP only for local testing.
+
+## Backups and recovery
+
+Back up the Runtime cluster and the identity-provider VM separately. Runtime
+backup scripts do not include Keycloak realm data or Caddy state; see
+[Identity provider](#identity-provider) for that boundary. Before reinstalling
+an existing platform, review the backup coverage and recovery steps below.
+
+### Production backups
+
+Before a production `setup` redeployment, capture resources and credentials
+that setup may reapply. The snapshot includes PVC/PV definitions, but does not
+copy live volume contents because setup does not delete claims or their data:
+
+```bash
+hack/deploy/mcpruntime-org/backup.sh --setup
+```
+
+The command requires the isolated `prod-mcp-runtime` context. It creates a
+timestamped snapshot under
+`~/.mcpruntime/backups/mcpruntime-org/` and updates `latest` only after all
+parts validate. The snapshot directory is mode `0700`; files containing
+Secrets are mode `0600`. Setup merges existing resources and reuses matching
+PVCs, but may update config/Secrets and roll workloads. An immutable
+StatefulSet change can recreate that StatefulSet while leaving its claims in
+place. The resource inventory is for recovery reference, not bulk
+`kubectl apply`; its selected platform files are consumed by the existing
+setup restore path.
+
+For destructive cleanup or full node recovery, create a full backup:
+
+```bash
+hack/deploy/mcpruntime-org/backup.sh --full --online-copy
+```
+
+The full snapshot also requires the configured SSH host and captures K3s
+control-plane state and local-path volume files without stopping workloads.
+
+A full snapshot includes namespaced and cluster-scoped Kubernetes objects,
+CRDs, Secrets, grants, sessions, PV/PVC specs, a consistent SQLite online
+backup of the K3s control-plane database, `/etc/rancher/k3s`, K3s server
+credentials, and every file under `/var/lib/rancher/k3s/storage`. That volume
+archive includes Postgres, ClickHouse, Kafka, mcp-auth,
+observability, and registry data. It also contains the TLS and platform
+config/Secret files used by the existing setup restore path, plus a SHA-256
+manifest.
+
+The demo Keycloak database and Caddy certificate now live on `devbox1`, so
+this K3s backup does not cover them. Stop `demo-keycloak` for a consistent
+backup of `/opt/keycloak/data`; back up the Caddy config and `/opt/workspace/caddy_data`
+on that VM separately.
+
+The bundle is **not encrypted by the backup command**; file permissions reduce
+local access but do not protect it from device loss or disk compromise. Encrypt
+it with the team's approved storage before copying it off-host.
+
+The full backup runs without stopping workloads. Kubernetes objects and SQLite
+state are captured online; PVC files are copied live and are not guaranteed to
+be an application-consistent point-in-time image. Databases may need WAL
+recovery after restore. Store this bundle on encrypted storage and copy it off
+the production node and workstation. Full node recovery restores the K3s state
+and volume archive on the original node. Validate the SHA-256 manifest before
+restoring.
+
+For a full node restore, provision the same host and K3s version, stop K3s,
+extract `k3s-host-and-pv-data.tar.gz` at `/`, copy `k3s-state.db` to
+`/var/lib/rancher/k3s/server/db/state.db` with owner `root:root` and mode `0600`,
+then start K3s and validate node and workload readiness. Keep the existing
+server token and `/etc/rancher/k3s` configuration from the archive. Verify the
+bundle first with `cd ~/.mcpruntime/backups/mcpruntime-org/latest && shasum -a
+256 -c SHA256SUMS`. Check each database's recovery logs before accepting
+traffic. This does not restore an external identity provider or data stored
+outside the cluster.
+
+`hack/deploy/mcpruntime-org/clean.sh` still takes a smaller **platform-runtime
+restore snapshot** before its intentional namespace wipe. It covers platform
+TLS/config/bootstrap material, not the full node or PVC data.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `MCP_TLS_BACKUP_DIR` | `~/.mcpruntime/backups/mcpruntime-org` | Root directory for timestamped setup or full snapshots. |
+| `MCP_RESTORE_TLS_AFTER_SETUP` | `1` | When `1`, `hack/deploy/mcpruntime-org/setup.sh` runs `hack/deploy/mcpruntime-org/restore.sh` after setup. |
+| `MCP_DEPLOY_ENV` | `config/deployments/mcpruntime-org.env` | Env file path for all hack scripts. |
+
+The `clean.sh` snapshot covers TLS, cert-manager, OIDC, and bootstrap secrets.
+Use `backup.sh --setup` before setup, or `backup.sh --full --online-copy` for
+the Kubernetes object and persistent volume recovery bundle described above.
+
+### Step 0: Back up platform-runtime state before any wipe
+
+Let's Encrypt enforces a **5 duplicate-certificate / 7 days per domain** rate
+limit. Use the helper script to back up platform-runtime material (TLS,
+cert-manager ownership, OIDC, bootstrap secrets) before wiping app namespaces:
+
+```bash
+hack/deploy/mcpruntime-org/clean.sh --yes --wait
+```
+
+The backup covers platform-runtime state only. Tenant/user data (teams,
+Postgres identity store, MCP CRs, registry images) is **not** preserved. See
+[Deployment Targets - bundled HTTPS reference](deployment-targets.md#option-a-bundled-https-registry-on-prem-reference).
+
+Manual TLS-only backup (legacy):
+
+```bash
+kubectl get secret registry-tls -n registry -o yaml \
+  > /tmp/registry-tls-backup.yaml 2>/dev/null || true
+kubectl get secret mcp-platform-tls -n mcp-platform -o yaml \
+  > /tmp/platform-tls-backup.yaml 2>/dev/null || true
+```
+
+Restore after setup (prefer automatic restore via `hack/deploy/mcpruntime-org/setup.sh`):
+
+```bash
+hack/deploy/mcpruntime-org/restore.sh
+# or from clean.sh:
+hack/deploy/mcpruntime-org/clean.sh --restore-platform
+```
+
+### Safe cluster wipe (app workloads only)
+
+Delete only app namespaces. Deleting kube-system resources breaks k3s's
+reconciliation loop: CoreDNS, Traefik, svclb-traefik, and
+local-path-provisioner cannot recover without an SSH restart.
+
+```bash
+# 1. Back up TLS secrets (see Step 0)
+
+# 2. Delete only app namespaces, and leave kube-system untouched
+kubectl get ns --no-headers \
+  | awk '{print $1}' \
+  | grep -Ev '^(kube-system|kube-public|kube-node-lease|default)$' \
+  | xargs -r kubectl delete ns --grace-period=0
+
+# 3. Delete cluster-scoped MCP resources
+kubectl delete mcpserver,mcpaccessgrant,mcpagentsession \
+  --all -A --ignore-not-found 2>/dev/null || true
+kubectl delete clusterrole,clusterrolebinding \
+  -l app.kubernetes.io/managed-by=mcp-runtime \
+  --ignore-not-found 2>/dev/null || true
+```
+
+#### If you accidentally wiped kube-system
+
+If kube-system pods are gone (no CoreDNS, no Traefik), restart k3s on the
+control plane to trigger full reconciliation from
+`/var/lib/rancher/k3s/server/manifests/`:
+
+```bash
+ssh root@103.181.176.28 "systemctl restart k3s"
+# Wait for CoreDNS, Traefik, and svclb pods to come up
+kubectl wait pod -n kube-system \
+  -l app.kubernetes.io/name=traefik \
+  --for=condition=Ready --timeout=120s
+```
+
+Verify port 80 is reachable before running setup with TLS:
+
+```bash
+curl -sm5 http://registry.mcpruntime.org/ && echo "port 80 OK"
+# Expected: "404 page not found" from Traefik
+```
+
+## Verification
+
 ### Post-setup check
 
 ```bash
@@ -750,7 +753,39 @@ kubectl get pods -n mcp-observability
 
 Expected: platform and telemetry pods `1/1 Running`, certificate `READY=True`.
 
-## Tenant push and deploy smoke test
+### Separate release tracks and user verification
+
+The Runtime CLI release and the hosted platform images are separate artifacts.
+Tagging a Runtime release publishes platform-specific CLI binaries through
+`.github/workflows/release.yaml` (triggered when a GitHub Release is published
+from the UI for a pushed `v*` tag); it does not update the hosted platform.
+The production rollout updates platform APIs/UI (and mcp-auth only when explicitly
+selected); it does not publish a new CLI release. Publish either project's
+release only after its candidate passes the checks below.
+
+Verify the user path after rollout:
+
+1. Install the candidate CLI built from the selected Runtime ref and confirm
+   `mcp-runtime --version` reports that commit. After release publication,
+   verify the `releases/latest` binary download reports the release tag.
+2. Follow [Quickstart](hosted-quickstart.md) against
+   `https://platform.mcpruntime.org`: log in, build/push/deploy a temporary
+   `qa-audit-*` server, create a grant, and verify the adapter result matches
+   the configured identity mode. The hosted preview currently leaves adapter
+   identity verification off, so its allow-list call returns `missing_identity`.
+   Verify a successful governed call separately on the guarded staging target
+   with adapter certificates enabled.
+3. Check the signed-out platform page and signed-in role-gated UI with browser
+   evidence. Use only temporary `qa-audit-*` resources and clean them up.
+4. Verify `mcp-runtime status`, server listing, deployment readiness, and
+   `cluster doctor`; confirm the existing certificate resources remain Ready.
+
+Users access the same `https://platform.mcpruntime.org` URL after a platform
+rollout. They update the CLI separately from the GitHub Releases page. Until a
+new tag is published, `releases/latest` still downloads the previously
+published CLI.
+
+### Tenant push and deploy smoke test
 
 After setup, verify a non-admin team member can publish and deploy:
 
@@ -805,7 +840,7 @@ If `team create` returns `500 failed to provision team namespace`, confirm
 `PLATFORM_TEAM_TRAEFIK_WATCH=disabled` is present in `mcp-shared-config`
 (or set it in `config/deployments/mcpruntime-org.env` before rerunning setup).
 
-## Multi-tenancy end-to-end test
+### Multi-tenancy end-to-end test
 
 ```bash
 hack/deploy/mcpruntime-org/multitenancy-test.sh
@@ -825,6 +860,71 @@ To skip the build/deploy and only verify an existing setup:
 ```bash
 SKIP_SETUP=1 hack/deploy/mcpruntime-org/multitenancy-test.sh
 ```
+
+## Production observability and debugging
+
+Start incident investigation at
+[production Grafana](https://platform.mcpruntime.org/grafana). Its provisioned
+data sources are Prometheus (metrics), Loki (logs), and Tempo (traces).
+Use the same UTC time range across all three; record the affected workload,
+deployment image, and request/trace IDs. Inspect the affected client's own
+logs too, particularly for OAuth and MCP transport failures.
+
+Read private operator credentials from `~/.mcpruntime/infra.env`:
+`GRAFANA_URL` identifies the endpoint, and the saved Secret entries ending in
+`GRAFANA_ADMIN_USER__BASE64` and `GRAFANA_ADMIN_PASSWORD__BASE64` contain
+Grafana credentials. Browser access also requires a signed-in platform admin
+session. API access needs an accepted platform admin `x-api-key` for the
+ingress gate as well as Grafana authentication. Keep credentials in memory;
+never print them or put them in command arguments, tickets, or Buddy notes.
+
+- **Metrics:** verify target health and freshness, request/error rates,
+  latency, restarts, resource pressure, and collector/exporter failures.
+  Confirm that the affected service actually has a scrape target.
+- **Logs:** discover the actual Loki labels and query auth, ingress/gateway,
+  and MCP server workloads over the incident window. Verify collection from
+  all relevant namespaces and containers. Preserve event timestamps, HTTP
+  status, safe failure reason, request ID, and workload identity.
+- **Traces:** verify spans reach Tempo and follow the failure across
+  instrumented services. Check service identity, operation, duration, error
+  status, and trace/span IDs in related logs. Record missing instrumentation
+  and propagation explicitly; a missing trace does not prove success.
+
+**Trace and log correlation.** Sentinel services and the MCP gateway append
+`trace_id=<32 hex> span_id=<16 hex>` to request and failure log lines. Copy
+the `trace_id` from a Loki line into Tempo (or search Loki for a Tempo trace
+ID) to join them. Spans for 401, 403, and 5xx responses carry error status
+plus `mcp.failure.operation`, `mcp.failure.reason`, and
+`http.response.status_code`; in Tempo, search `status=error`. The gateway
+records the policy decision reason, RPC method, and status only, never
+tokens or tool arguments. Health, readiness, and metrics probes are not
+traced. Known boundaries: external OAuth authorization servers and MCP
+clients that do not send W3C `traceparent` start a new trace at the gateway,
+so a client-side refresh failure cannot be joined to the gateway trace by ID;
+correlate by time window, workload, and status instead. Collector export
+failures are logged as `otel internal error: ...` and counted by the
+`mcp_otel_internal_errors_total` metric on each service's metrics port; a
+non-zero rate means spans are being dropped before Tempo.
+
+Distinguish missing instrumentation from broken collection or an incorrect
+query/time range. Verify improvements through a real request and its
+resulting telemetry. Use read-only pod logs or authorized datasource reads
+as a documented fallback if Grafana is unavailable. Never capture tokens,
+passwords, or MCP tool payloads merely to improve debugging.
+
+For each concrete maintainability or debuggability gap, search existing
+repository issues before creating a ticket. Include redacted evidence,
+affected components, scope, and acceptance checks; attach the new or existing
+issue to [Maintainability and Debuggability Improvement](https://github.com/orgs/mcp-runtime/projects/1).
+
+For a Grafana 401, distinguish the platform admin gate from Grafana's login.
+A configured `GF_SECURITY_ADMIN_PASSWORD` matching the saved Secret does
+not prove the persisted account accepts it. Before an authorized password
+recovery, back up the persistent database and inspect
+`grafana cli admin reset-admin-password --help`. Use
+`--password-from-stdin`, preserve dashboards/data sources, verify authenticated
+API access afterward, and save the working credential and URL in private
+`infra.env`. Do not reset a persisted account automatically during diagnosis.
 
 ## Troubleshooting
 
