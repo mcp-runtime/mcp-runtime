@@ -50,6 +50,13 @@ func NewHTTPServer(addr string, handler http.Handler) *http.Server {
 	}
 }
 
+// WrapHandler applies the shared OTEL, request logging, and request metrics
+// middleware. The wrapped writers unwrap to the connection's writer, so
+// handlers can still use http.ResponseController to extend deadlines.
+func WrapHandler(serviceName string, requestMetrics *serviceutil.RequestMetrics, next http.Handler) http.Handler {
+	return otelhttp.NewHandler(serviceutil.LogRequests(requestMetrics.Middleware(serviceName, next)), "http.server", otelhttp.WithFilter(serviceutil.TraceableRequest))
+}
+
 // Run starts metrics, OTEL-instrumented HTTP, and blocks until shutdown.
 func Run(cfg Config) error {
 	if cfg.Handler == nil {
@@ -82,8 +89,7 @@ func Run(cfg Config) error {
 	metricsShutdown, metricsErrs := serviceutil.StartMetricsServer(metricsPort)
 	log.Printf("%s listening on :%s", serviceName, port)
 
-	requestMetrics := serviceutil.DefaultRequestMetrics()
-	handler := otelhttp.NewHandler(serviceutil.LogRequests(requestMetrics.Middleware(serviceName, cfg.Handler)), "http.server", otelhttp.WithFilter(serviceutil.TraceableRequest))
+	handler := WrapHandler(serviceName, serviceutil.DefaultRequestMetrics(), cfg.Handler)
 	httpServer := NewHTTPServer(":"+port, handler)
 
 	shutdownSignals, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
