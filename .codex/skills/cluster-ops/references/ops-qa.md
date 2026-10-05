@@ -81,7 +81,6 @@ export KUBEBUILDER_ASSETS="${KUBEBUILDER_ASSETS:-$(go run sigs.k8s.io/controller
 go test -race -timeout 30m -count=1 ./test/integration/...
 
 make -f Makefile.operator generate manifests
-python3 docs/scripts/generate_go_package_reference.py
 git diff --exit-code
 )
 ```
@@ -267,8 +266,7 @@ Drift is a behavioral regression even if unit tests pass.
 
 ```bash
 make -f Makefile.operator generate manifests
-python3 docs/scripts/generate_go_package_reference.py
-git diff --exit-code api/ config/crd/bases/ docs/internals/ || echo "FAIL: regen drift"
+git diff --exit-code api/ config/crd/bases/ || echo "FAIL: regen drift"
 ```
 
 ## Step 10 — Chaos canary (ship / pre-tag only)

@@ -33,6 +33,12 @@ explicitly for production commands, never as the default kubeconfig.
 
 For public k3s / `mcpruntime.org` deploys, also read `.codex/skills/production-platform/SKILL.md` and `docs/cluster-readiness.md`.
 
+Doctor stops dependent checks when it cannot list nodes and includes the
+underlying kubectl diagnostic. Repair that access failure before interpreting
+resource readiness. Status reports platform API failures and skips its server
+list after a failed authentication check; distinguish rejected credentials from
+DNS, network, and TLS errors before recommending a new login.
+
 For production incidents, inspect metrics, aggregated logs, and traces at
 `https://platform.mcpruntime.org/grafana` for a shared incident window.
 Read private credentials from `~/.mcpruntime/infra.env` without displaying

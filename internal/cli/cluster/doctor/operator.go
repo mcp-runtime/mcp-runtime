@@ -24,13 +24,13 @@ func checkNamespaceExists(kubectl core.KubectlRunner, namespace string) DoctorCh
 			Remedy: "check cluster connectivity and kubeconfig",
 		}
 	}
-	out, err := cmd.Output()
+	out, err := runKubectlBytes(cmd)
 	got := strings.TrimSpace(string(out))
 	if err != nil || got != namespace {
 		return DoctorCheck{
 			Name:   fmt.Sprintf("namespace %s", namespace),
 			OK:     false,
-			Detail: fmt.Sprintf("namespace %s not found", namespace),
+			Detail: kubectlResultDetail(err, fmt.Sprintf("namespace %s not found", namespace)),
 			Remedy: "run `./bin/mcp-runtime setup` to create the runtime namespaces",
 		}
 	}
@@ -51,13 +51,13 @@ func checkNamespaceDefaultServiceAccount(kubectl core.KubectlRunner, namespace s
 			Remedy: "check namespace permissions and kubeconfig",
 		}
 	}
-	out, err := cmd.Output()
+	out, err := runKubectlBytes(cmd)
 	name := strings.TrimSpace(string(out))
 	if err != nil || name != "default" {
 		return DoctorCheck{
 			Name:   fmt.Sprintf("namespace %s default serviceaccount", namespace),
 			OK:     false,
-			Detail: "serviceaccount default missing",
+			Detail: kubectlResultDetail(err, "serviceaccount default missing"),
 			Remedy: fmt.Sprintf("recreate the namespace or run `kubectl create serviceaccount default -n %s`", namespace),
 		}
 	}
@@ -164,13 +164,13 @@ func checkMCPServerCRD(kubectl core.KubectlRunner) DoctorCheck {
 			Remedy: "run `./bin/mcp-runtime setup` to install CRDs",
 		}
 	}
-	out, err := cmd.Output()
+	out, err := runKubectlBytes(cmd)
 	got := strings.TrimSpace(string(out))
 	if err != nil || got != crd {
 		return DoctorCheck{
 			Name:   "MCPServer CRD",
 			OK:     false,
-			Detail: fmt.Sprintf("CRD %s not found", crd),
+			Detail: kubectlResultDetail(err, fmt.Sprintf("CRD %s not found", crd)),
 			Remedy: "apply CRDs (for example `make manifests` then `kubectl apply -f config/crd/bases`)",
 		}
 	}
@@ -229,9 +229,15 @@ func checkOperatorWebhookCertExpiry(kubectl core.KubectlRunner) DoctorCheck {
 			Remedy: "check cluster connectivity and kubeconfig",
 		}
 	}
-	out, err := cmd.Output()
+	out, err := runKubectlBytes(cmd)
 	certB64 := strings.TrimSpace(string(out))
-	if err != nil || certB64 == "" {
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "notfound") || strings.Contains(strings.ToLower(err.Error()), "not found") {
+			return DoctorCheck{Name: checkName, OK: true, Detail: "webhook TLS secret not present (webhooks may be disabled)"}
+		}
+		return DoctorCheck{Name: checkName, OK: false, Detail: fmt.Sprintf("cannot read operator webhook certificate: %v", err), Remedy: "check RBAC for reading the operator webhook Secret"}
+	}
+	if certB64 == "" {
 		return DoctorCheck{
 			Name:   checkName,
 			OK:     true,
@@ -352,7 +358,7 @@ func checkOperatorClusterRoleRules(kubectl core.KubectlRunner) DoctorCheck {
 	if err != nil {
 		return DoctorCheck{Name: name, OK: false, Detail: fmt.Sprintf("kubectl error: %v", err), Remedy: remedy}
 	}
-	out, err := cmd.Output()
+	out, err := runKubectlBytes(cmd)
 	if err != nil {
 		return DoctorCheck{Name: name, OK: false, Detail: fmt.Sprintf("ClusterRole mcp-runtime-operator-role not readable: %v", err), Remedy: remedy}
 	}

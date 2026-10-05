@@ -19,6 +19,24 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 - Deployment documentation uses distribution-neutral names: `reference-deployment.md` covers Runtime and its external identity provider, while `cluster-provisioning.md` describes the reference cluster with K3s as the worked distribution choice. Navigation, indexes, and operational links follow the new names; published URLs redirect and existing section anchors remain available. The reference guide separates configuration, installation and updates, identity-provider setup, backups and recovery, and verification, and clarifies that Keycloak DNS and backups belong to its separate VM.
 
+### Removed
+
+- The checked-in Go Package Reference page and its generator are removed; contributors use the hosted [pkgsite](https://docs.pkg.mcpruntime.org/github.com/mcp-runtime/mcp-runtime) or `go doc`, and the generated-file drift checks now cover only CRDs and manifests. The `Staging E2E (Remote Cluster)` workflow and `test/e2e/staging-remote.sh` are removed: Staging E2E runs only on the disposable VM through `Staging E2E (Disposable VM)`.
+
+### Fixed
+
+- `mcp-runtime cluster doctor` reports the underlying kubectl/API error and stops dependent checks when the cluster cannot be queried. `mcp-runtime status` explains platform authentication and Kubernetes access failures, skips duplicate server-list requests after auth errors, and bounds its status probes ([#591](https://github.com/mcp-runtime/mcp-runtime/issues/591)).
+- Gateway-enabled OAuth apps receive the derived issuer and public resource audience, and the TypeScript example listens on the reconciled upstream path while retaining bearer validation. Apps that validate tokens themselves now need network access to the issuer's JWKS endpoint even when the gateway is enabled; the Go example exits at startup if it cannot reach it ([#532](https://github.com/mcp-runtime/mcp-runtime/issues/532)).
+
+### Security
+
+- Fresh cert-manager installs use v1.21.2 instead of the retired v1.16.2; TLS doctor checks flag unsupported Kubernetes/version pairs and inconsistent controller/webhook/cainjector versions. Existing installations remain unchanged and require staged minor upgrades with certificate/Secret backups ([#534](https://github.com/mcp-runtime/mcp-runtime/issues/534)).
+
+### Security
+
+- Fresh cert-manager installs use v1.21.2 instead of the retired v1.16.2; TLS doctor checks flag unsupported Kubernetes/version pairs and inconsistent controller/webhook/cainjector versions. Existing installations remain unchanged and require staged minor upgrades with certificate/Secret backups ([#534](https://github.com/mcp-runtime/mcp-runtime/issues/534)).
+- HTTPS registry overlays no longer expose the unauthenticated backend through NodePort 32000. Before upgrading, migrate any node mirrors using that port to the supported HTTPS pull endpoint and verify CA trust and fresh pulls. HTTP lab overlays retain their NodePort. Internal repository-scoped authentication remains pending ([#531](https://github.com/mcp-runtime/mcp-runtime/issues/531)).
+
 ## [0.5.2] - 2026-10-05
 
 ### Changed

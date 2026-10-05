@@ -257,7 +257,7 @@ jobs:
           cache: true
 
       - name: Log in to GHCR
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -391,13 +391,10 @@ jobs:
       - name: Regenerate CRDs/manifests
         run: make -f Makefile.operator generate manifests
 
-      - name: Regenerate Go package reference
-        run: python3 docs/scripts/generate_go_package_reference.py
-
       - name: Check for drift
         run: |
           if ! git diff --quiet; then
-            echo "Generated files are out of date. Run 'make -f Makefile.operator generate manifests' and 'python3 docs/scripts/generate_go_package_reference.py'."
+            echo "Generated files are out of date. Run 'make -f Makefile.operator generate manifests'."
             git diff
             exit 1
           fi
@@ -410,7 +407,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Generate repository SBOM
-        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           path: .
           format: spdx-json

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -100,7 +101,7 @@ func TestCheckRegistryService(t *testing.T) {
 	t.Run("ok with nodeport", func(t *testing.T) {
 		mock := &core.MockExecutor{
 			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
-				return &core.MockCommand{OutputData: []byte("32000")}
+				return &core.MockCommand{OutputData: []byte("NodePort 5000 32000")}
 			},
 		}
 		kubectl := core.NewTestKubectlClient(mock)
@@ -110,6 +111,29 @@ func TestCheckRegistryService(t *testing.T) {
 		}
 		if !strings.Contains(check.Detail, "32000") {
 			t.Fatalf("detail should mention the NodePort, got %q", check.Detail)
+		}
+	})
+
+	t.Run("ok with clusterip on https installs", func(t *testing.T) {
+		mock := &core.MockExecutor{
+			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
+				return &core.MockCommand{OutputData: []byte("ClusterIP 5000 ")}
+			},
+		}
+		check := checkRegistryService(core.NewTestKubectlClient(mock))
+		if !check.OK || !strings.Contains(check.Detail, "ClusterIP port 5000") {
+			t.Fatalf("expected ClusterIP registry to pass, got ok=%v detail=%q", check.OK, check.Detail)
+		}
+	})
+
+	t.Run("fails on nodeport service without a node port", func(t *testing.T) {
+		mock := &core.MockExecutor{
+			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
+				return &core.MockCommand{OutputData: []byte("NodePort 5000 ")}
+			},
+		}
+		if check := checkRegistryService(core.NewTestKubectlClient(mock)); check.OK {
+			t.Fatal("expected failure for a NodePort Service with no allocated port")
 		}
 	})
 
@@ -2722,6 +2746,36 @@ func TestCheckClusterNodesReadyReportsNotReadyNodes(t *testing.T) {
 	check := checkClusterNodesReady(core.NewTestKubectlClient(mock))
 	if check.OK || !strings.Contains(check.Detail, "worker-1") {
 		t.Fatalf("expected not-ready node to fail, got %+v", check)
+	}
+}
+
+func TestCheckClusterNodesReadyReportsKubectlFailureCause(t *testing.T) {
+	mock := &core.MockExecutor{
+		CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
+			return &core.MockCommand{
+				OutputData: []byte("Unable to connect to the server: connection refused\n"),
+				OutputErr:  errors.New("exit status 1"),
+			}
+		},
+	}
+	check := checkClusterNodesReady(core.NewTestKubectlClient(mock))
+	if check.OK || check.Name != "Kubernetes API access" || !strings.Contains(check.Detail, "connection refused") {
+		t.Fatalf("expected actionable Kubernetes API failure, got %+v", check)
+	}
+}
+
+func TestDoctorStopsDependentChecksAfterAPIAccessFailure(t *testing.T) {
+	mock := &core.MockExecutor{DefaultErr: &exec.ExitError{Stderr: []byte("Error from server (Forbidden): nodes cannot be listed\n")}}
+	ranDependentCheck := false
+	report := runDoctorChecksWithSpecs(core.NewTestKubectlClient(mock), DistroGeneric, nil, []doctorCheckSpec{{
+		Name: "storage class readiness",
+		Run: func() DoctorCheck {
+			ranDependentCheck = true
+			return DoctorCheck{OK: true}
+		},
+	}})
+	if ranDependentCheck || len(report.Checks) != 1 || report.AllOK() || !strings.Contains(report.Checks[0].Detail, "Forbidden") {
+		t.Fatalf("expected only the underlying API access failure, got %+v", report)
 	}
 }
 
