@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	sentinelaccess "mcp-runtime/pkg/access"
+	mcpaccess "mcp-runtime/pkg/access"
 )
 
 func ValidateTeamIDValue(name, value string) error {
@@ -21,11 +21,11 @@ func ValidateTeamIDValue(name, value string) error {
 	return nil
 }
 
-func BindAccessServerRefNamespace(resourceNamespace string, serverRef *sentinelaccess.ServerReference) error {
+func BindAccessServerRefNamespace(resourceNamespace string, serverRef *mcpaccess.ServerReference) error {
 	resourceNamespace = DefaultAccessNamespace(resourceNamespace)
-	serverRef.Namespace = sentinelaccess.Namespace(strings.TrimSpace(string(serverRef.Namespace)))
+	serverRef.Namespace = mcpaccess.Namespace(strings.TrimSpace(string(serverRef.Namespace)))
 	if serverRef.Namespace == "" {
-		serverRef.Namespace = sentinelaccess.Namespace(resourceNamespace)
+		serverRef.Namespace = mcpaccess.Namespace(resourceNamespace)
 		return nil
 	}
 	if string(serverRef.Namespace) != resourceNamespace {

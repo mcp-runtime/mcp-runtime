@@ -13,6 +13,9 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Changed
 
+- **Breaking:** the "Sentinel" name is removed from the product. `setup --without-sentinel` and `MCP_WITHOUT_SENTINEL` become `--without-platform-stack` and `MCP_WITHOUT_PLATFORM_STACK`, and the hidden `--without-analytics` alias is gone. The operator and CLI read only `MCP_ANALYTICS_INGEST_URL` (`MCP_SENTINEL_INGEST_URL` is no longer read). The Traefik middleware guarding `/grafana` is renamed `platform-admin-auth`. `pkg/sentinel` becomes `pkg/platformstack`, `cluster doctor` checks are named "platform …", and the UI is titled "MCP Runtime Control Plane". The operator no longer rewrites analytics or OTLP URLs that point at the removed combined namespace, and setup no longer guards against it. Apply with a fresh setup on the reference platform; setup writes the new env var and middleware name.
+- `mcp-runtime status` makes one authenticated platform API readiness check with a five-second timeout and returns a failure exit code for missing or rejected credentials and unavailable APIs. Workload and server inventories remain available through `cluster status`, `ops status`, and `server list`. QA checks status using its isolated saved login after authentication.
+
 - Release development follows a pre-customer policy: breaking changes may use a backed-up fresh setup and tested recovery of the hosted reference platform, without legacy compatibility layers or general upgrade infrastructure. Release instructions must cover required data, identity-provider backups, recovery, and verification; customer migration commitments will be defined when the first external customer is onboarded.
 
 - Documentation sections use descriptive names and start with audience and reading-path overviews. Getting Started separates hosted, self-hosted, and contributor paths; Server and Client Guides connects publishing, access, and client setup. Deployment and Operations groups installation, the public reference, and maintenance. Development and Testing and Implementation Details use shorter grouped menus. The home page consolidates repeated guide lists; existing page URLs and heading anchors remain available. Platform Installation owns reusable setup and enterprise certificate instructions, with Cluster Provisioning handing off once infrastructure is ready.
@@ -26,12 +29,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Fixed
 
-- `mcp-runtime cluster doctor` reports the underlying kubectl/API error and stops dependent checks when the cluster cannot be queried. `mcp-runtime status` explains platform authentication and Kubernetes access failures, skips duplicate server-list requests after auth errors, and bounds its status probes ([#591](https://github.com/mcp-runtime/mcp-runtime/issues/591)).
+- `mcp-runtime cluster doctor` reports the underlying kubectl/API error and stops dependent checks when the cluster cannot be queried ([#591](https://github.com/mcp-runtime/mcp-runtime/issues/591)).
 - Gateway-enabled OAuth apps receive the derived issuer and public resource audience, and the TypeScript example listens on the reconciled upstream path while retaining bearer validation. Apps that validate tokens themselves now need network access to the issuer's JWKS endpoint even when the gateway is enabled; the Go example exits at startup if it cannot reach it ([#532](https://github.com/mcp-runtime/mcp-runtime/issues/532)).
-
-### Security
-
-- Fresh cert-manager installs use v1.21.2 instead of the retired v1.16.2; TLS doctor checks flag unsupported Kubernetes/version pairs and inconsistent controller/webhook/cainjector versions. Existing installations remain unchanged and require staged minor upgrades with certificate/Secret backups ([#534](https://github.com/mcp-runtime/mcp-runtime/issues/534)).
 
 ### Security
 

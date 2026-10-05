@@ -10,7 +10,7 @@ import (
 
 var ErrMissingFields = errors.New("missing_fields")
 
-// Envelope is the shared Sentinel event transport contract.
+// Envelope is the shared platform event transport contract.
 type Envelope struct {
 	Timestamp string          `json:"timestamp"`
 	TraceID   string          `json:"trace_id,omitempty"`

@@ -40,7 +40,7 @@ func init() {
 	prometheus.MustRegister(processorIntakePaused, processorIntakePauseTransitions)
 }
 
-// main initializes and starts the MCP Sentinel Processor service.
+// main initializes and starts the MCP Runtime Processor service.
 // It sets up Kafka consumer connection, ClickHouse database connection,
 // configures batch processing parameters, initializes tracing,
 // and starts consuming events from Kafka to insert into ClickHouse.

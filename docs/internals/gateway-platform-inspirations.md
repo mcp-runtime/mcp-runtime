@@ -13,7 +13,7 @@ implementation spec, roadmap commitment, or proposal to copy third-party
 source. Nothing here describes shipped behavior beyond the "What MCP Runtime
 already has" table, and the numbered items, milestones, and example YAML are
 sketches. Any implementation must be designed against MCP Runtime's existing
-CRDs, policy contract, sidecar model, and Sentinel services, and reviewed with
+CRDs, policy contract, sidecar model, and platform services, and reviewed with
 the shared `.codex/skills/_shared/design-principles.md` guide before it becomes a contract.
 
 ## Sources reviewed

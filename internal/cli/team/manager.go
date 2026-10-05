@@ -140,7 +140,7 @@ func (m *Manager) AddTeamUser(slug, userID, role string) error {
 }
 
 func (m *Manager) InitTeam(opts InitOptions) error {
-	return core.NewWithSentinel(
+	return core.NewWithBase(
 		nil,
 		`team init is direct Kubernetes administration and requires admin cluster access with kubectl; use "mcp-runtime team create <slug>" for the normal platform-backed flow`,
 	)

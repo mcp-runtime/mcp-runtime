@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// HandleDashboardSummary returns analytics and live control-plane counters for the Sentinel dashboard.
+// HandleDashboardSummary returns analytics and live control-plane counters for the platform dashboard.
 func (s *RuntimeServer) HandleDashboardSummary(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("allow", http.MethodGet)
@@ -56,7 +56,7 @@ func (s *RuntimeServer) HandleDashboardSummary(w http.ResponseWriter, r *http.Re
 	writeJSON(w, http.StatusOK, summary)
 }
 
-// HandleRuntimeComponents returns admin-only health details for Sentinel platform components.
+// HandleRuntimeComponents returns admin-only health details for platform components.
 func (s *RuntimeServer) HandleRuntimeComponents(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("allow", http.MethodGet)
@@ -67,7 +67,7 @@ func (s *RuntimeServer) HandleRuntimeComponents(w http.ResponseWriter, r *http.R
 		writeAPIError(w, http.StatusForbidden, "forbidden")
 		return
 	}
-	if s.sentinelMgr == nil {
+	if s.stackMgr == nil {
 		writeAPIError(w, http.StatusServiceUnavailable, "kubernetes not available")
 		return
 	}
@@ -75,7 +75,7 @@ func (s *RuntimeServer) HandleRuntimeComponents(w http.ResponseWriter, r *http.R
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	statuses, err := s.sentinelMgr.GetAllComponentStatuses(ctx)
+	statuses, err := s.stackMgr.GetAllComponentStatuses(ctx)
 	if err != nil {
 		writeAPIError(w, http.StatusInternalServerError, "failed to get component statuses")
 		return

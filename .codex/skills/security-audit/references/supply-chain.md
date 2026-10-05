@@ -64,11 +64,11 @@ docker build --pull -f services/processor/Dockerfile -t mcp-processor:audit .
 docker build --pull -f services/mcp-gateway/Dockerfile -t mcp-gateway:audit .
 docker build --pull -f services/oauth-server/Dockerfile -t mcp-oauth-server:audit .
 
-# Or use the repo helper — NOTE: as of this audit hack/trivy-sentinel-images.sh
+# Or use the repo helper — NOTE: as of this audit hack/trivy-platform-images.sh
 # does not include oauth-server (its SERVICE_DOCKERFILES map stops at
 # mcp-gateway), so it under-covers relative to the CI matrix below; run the
 # manual oauth-server build/scan separately until the script is fixed.
-bash hack/trivy-sentinel-images.sh
+bash hack/trivy-platform-images.sh
 
 for img in mcp-runtime-operator:audit mcp-platform-api:audit mcp-runtime-api:audit \
            mcp-analytics-api:audit mcp-ui:audit \

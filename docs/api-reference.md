@@ -215,7 +215,7 @@ spec:
 
 ### Implemented today
 
-- **Optional bearer-token validation** against JWKS / issuer / audience on the split Sentinel API services (`platform-api`, `runtime-api`, `analytics-api`) and on ingest.
+- **Optional bearer-token validation** against JWKS / issuer / audience on the split platform API services (`platform-api`, `runtime-api`, `analytics-api`) and on ingest.
 - When an MCP server includes `spec.auth`, it is an OAuth protected resource. The gateway publishes Protected Resource Metadata and validates issuer and audience/resource binding against `auth.audience`. It forwards the validated bearer to the same logical upstream MCP application, which validates the same issuer and audience. Adapter requests always require a verified session certificate and add the bearer only for OAuth-enabled targets.
 - OAuth authentication failures return `401` with an authorization challenge. Authenticated OAuth policy denials return `403` without an `insufficient_scope` challenge because Runtime policy decisions are not OAuth scope negotiation. See the [MCP Authorization specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization).
 
@@ -435,7 +435,7 @@ POST /api/v1/runtime/agents/{id}/reactivate # Reactivate agent (admin/team owner
 POST /api/v1/runtime/registry/push        # Multipart docker-save upload; in-cluster skopeo push to platform registry
 GET  /api/v1/runtime/namespaces           # Allowed namespaces + org catalog metadata
 GET  /api/v1/runtime/namespaces/{namespace}
-GET  /api/v1/runtime/components           # Admin-only Sentinel component health status
+GET  /api/v1/runtime/components           # Admin-only platform component health status
 GET  /api/v1/runtime/policy?namespace=&server=   # Get rendered policy for an administered server
 ```
 
@@ -544,7 +544,7 @@ POST /api/v1/runtime/actions/restart     # Body: {component: "platform-api"} or 
 |---|---|
 | **Grant Toggle** | Enable / disable an `MCPAccessGrant` without deleting it. Disabled grants deny access at the gateway. |
 | **Session Revoke** | Revoke / unrevoke an `MCPAgentSession`. Revoked sessions cannot be used for tool calls. |
-| **Component Restart** | Rolling restart of Sentinel components (`platform-api`, `runtime-api`, `analytics-api`, `ingest`, `processor`, `gateway`, `ui`) or all. |
+| **Component Restart** | Rolling restart of platform components (`platform-api`, `runtime-api`, `analytics-api`, `ingest`, `processor`, `gateway`, `ui`) or all. |
 
 ## Platform admin and user API
 
@@ -636,7 +636,7 @@ GET /api/v1/events?trace_id=<trace>&server=payments&decision=deny&agent_id=agt_0
 
 ## Setup integration
 
-`mcp-runtime setup` builds the runtime operator image, the gateway proxy image, the analytics service images, and deploys the bundled analytics stack by default. Use `--without-sentinel` to skip the request-path stack and keep only the runtime / operator footprint.
+`mcp-runtime setup` builds the runtime operator image, the gateway proxy image, the analytics service images, and deploys the bundled analytics stack by default. Use `--without-platform-stack` to skip the request-path stack and keep only the runtime / operator footprint.
 
 ## Next
 

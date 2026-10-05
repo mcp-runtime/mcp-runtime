@@ -238,7 +238,7 @@ describe("App", () => {
     await screen.findByTestId("workspace-tab-servers");
 
     expect(screen.queryByTestId("workspace-tab-legacy")).not.toBeInTheDocument();
-    expect(screen.queryByTitle("MCP Sentinel dashboard")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("MCP Runtime dashboard")).not.toBeInTheDocument();
     expect(document.querySelector("iframe")).toBeNull();
   });
 

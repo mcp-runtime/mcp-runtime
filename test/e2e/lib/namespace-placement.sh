@@ -1,6 +1,5 @@
 # shellcheck shell=bash
 # Shared clean-install placement contract for QA E2E and Staging E2E.
-# A passing run has no mcp-sentinel namespace and no combined credential Secret.
 
 namespace_placement_workloads() {
   cat <<'EOF'
@@ -57,11 +56,6 @@ namespace_placement_fail() {
 
 namespace_placement_verify() {
   local failed=0 kind ns name key want got args traefik_ns
-  if kubectl get namespace mcp-sentinel >/dev/null 2>&1; then
-    namespace_placement_fail "namespace mcp-sentinel must not exist after a clean install"
-    failed=1
-  fi
-
   while IFS='|' read -r kind ns name; do
     [[ -z "${kind}" ]] && continue
     if ! kubectl get "${kind}" "${name}" -n "${ns}" >/dev/null 2>&1; then
@@ -86,12 +80,6 @@ namespace_placement_verify() {
     fi
   done < <(namespace_placement_configmaps)
 
-  for ns in mcp-runtime mcp-platform mcp-observability mcp-log-collector; do
-    if kubectl get secret mcp-sentinel-secrets -n "${ns}" >/dev/null 2>&1; then
-      namespace_placement_fail "combined secret mcp-sentinel-secrets is still present in ${ns}"
-      failed=1
-    fi
-  done
 
   if kubectl get secret mcp-platform-tls -n mcp-observability >/dev/null 2>&1; then
     namespace_placement_fail "mcp-platform-tls must stay in mcp-platform, not mcp-observability"
@@ -115,10 +103,6 @@ namespace_placement_verify() {
     args=""
   done
   if [[ -n "${args}" ]]; then
-    if [[ "${args}" == *mcp-sentinel* ]]; then
-      namespace_placement_fail "Traefik still watches mcp-sentinel: ${args}"
-      failed=1
-    fi
     # Only a namespace-scoped Traefik needs these names. k3s's bundled Traefik
     # in kube-system has no --providers.*.namespaces flag and watches all
     # namespaces, so there is no list to check.

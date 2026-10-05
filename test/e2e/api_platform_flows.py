@@ -96,7 +96,7 @@ def merged_headers(*items):
 
 
 def registry_forwarded_headers(path):
-    # Traefik on the sentinel gateway overwrites X-Forwarded-Uri with the API
+    # Traefik on the platform gateway overwrites X-Forwarded-Uri with the API
     # route (/api/v1/registry/authz). Keep the registry repository path on
     # X-Forwarded-URL so scope checks still see /v2/... through the gateway.
     return {"X-Forwarded-Uri": path, "X-Forwarded-URL": path}

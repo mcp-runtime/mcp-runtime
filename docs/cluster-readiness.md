@@ -2,7 +2,7 @@
 
 <span id="cluster-readiness"></span>
 
-`./bin/mcp-runtime setup` installs the platform (registry, operator, ingress, sentinel) into an *already-running* Kubernetes cluster. You must configure the node's container runtime and host DNS stack yourself; the steps differ per distribution.
+`./bin/mcp-runtime setup` installs the platform (registry, operator, ingress, platform) into an *already-running* Kubernetes cluster. You must configure the node's container runtime and host DNS stack yourself; the steps differ per distribution.
 
 Without that configuration, you typically see:
 
@@ -31,7 +31,7 @@ choices:
 | Image credentials | Local helper flows and default service account image pull secrets | Dedicated pull secrets, workload identity, or cloud-native node registry auth |
 | Ingress | Bundled Traefik overlay is acceptable | Existing platform ingress or gateway may be preferred; validate ingress class, TLS, DNS, and policy ownership |
 | Persistence | Default registry storage is acceptable for throwaway clusters | Storage class, backup/restore, quota, retention, and registry HA need explicit owner decisions |
-| Sentinel stack | Bundled stack is useful for development and demos | Size, retention, security, and observability integration should be reviewed before production use |
+| Platform stack | Bundled stack is useful for development and demos | Size, retention, security, and observability integration should be reviewed before production use |
 
 Do **not** use `insecure_skip_verify`, HTTP registries, wildcard insecure CIDR
 ranges, or manual `/etc/hosts` edits in production. They are local
@@ -42,7 +42,7 @@ enabled.
 `./bin/mcp-runtime cluster diagnostics` validates the installed registry and
 the rest of a live install. Setup itself also runs a short post-setup
 operational smoke gate (nodes Ready, Bound PVCs, Postgres, platform-api
-health/ready, Sentinel rollout health, auth probe) and fails if those basics
+health/ready, platform rollout health, auth probe) and fails if those basics
 are not green. For the bundled
 registry it probes the in-cluster `registry/registry` Service and selects HTTP
 or HTTPS from the installed registry state: if `registry/registry-internal-tls`
@@ -56,16 +56,16 @@ Production readiness checklist:
 - Choose the registry architecture: bundled registry with TLS, or a managed /
   hardened external registry.
 - Ensure every node pool that can schedule MCP Runtime workloads can pull the
-  operator, gateway proxy, Sentinel, and MCP server images.
+  operator, gateway proxy, platform, and MCP server images.
 - Configure image credentials with pull secrets, workload identity, or
   cloud-native node registry auth.
 - Confirm the ingress class, public DNS, and TLS issuer are owned by the
   platform team and match the cluster's ingress controller.
 - Confirm a default `StorageClass` exists, or set explicit storage choices for
-  the registry and Sentinel data paths.
+  the registry and platform data paths.
 - Decide certificate management up front: Let's Encrypt with public DNS,
   `--tls-cluster-issuer` for an enterprise CA, or a preinstalled issuer.
-- Review Sentinel sizing, retention, auth, Kubernetes API access, and
+- Review platform sizing, retention, auth, Kubernetes API access, and
   observability integration before enabling it on production traffic; see
   [Platform service Kubernetes awareness and hardening](platform-services.md#kubernetes-awareness-and-hardening).
 - Run `./bin/mcp-runtime setup --with-tls --strict-prod` for production-style
@@ -86,13 +86,13 @@ Three actors fetch images, and each resolves hostnames differently:
 The CLI handles the in-cluster push path (`PushInCluster` rewrites the destination to the service DNS). You manage the developer path locally. **The distribution-specific config below configures the node/kubelet path.**
 
 `setup --test-mode` uses the same model. It relaxes production guardrails, and
-it still builds and pushes the operator, gateway proxy, and Sentinel images with
+it still builds and pushes the operator, gateway proxy, and platform images with
 `latest` tags to the configured or bundled registry. Those pods still pull
 through kubelet/containerd, so an HTTP bundled registry requires node trust for
 the exact image host and port used in the rendered image references.
 
 When setup uses the bundled registry, platform-owned image refs for the
-operator, gateway proxy, and Sentinel services are rendered with the internal
+operator, gateway proxy, and platform services are rendered with the internal
 registry endpoint, ClusterIP, or service-DNS host. They do not use the public
 registry ingress hostname derived from `MCP_PLATFORM_DOMAIN`; that host serves
 ingress routing and user-facing registry flows; set
@@ -136,7 +136,7 @@ for the exact rendered image host.
 
 ### Setup image platform
 
-`setup` builds the operator, gateway proxy, and Sentinel images as Linux
+`setup` builds the operator, gateway proxy, and platform images as Linux
 container images. By default it inspects `kubernetes.io/arch` on cluster nodes
 and builds a single-platform image for a homogeneous cluster, for example
 `linux/amd64` on standard VPS nodes or `linux/arm64` on ARM nodes. Mixed-arch
@@ -178,7 +178,7 @@ export PROVISIONED_REGISTRY_PASSWORD=<password>  # optional
 ```
 
 When external registry credentials are configured, setup creates pull secrets
-for Sentinel workloads and a separate `mcp-runtime/mcp-runtime-registry-pull-creds`
+for platform workloads and a separate `mcp-runtime/mcp-runtime-registry-pull-creds`
 Secret for the operator Deployment. If you intentionally roll platform
 workloads from an already-authenticated public registry, set
 `MCP_PLATFORM_IMAGE_PULL_SECRET=<secret-name>` before setup; the Secret must
@@ -322,7 +322,7 @@ Quick public endpoint checks after DNS and TLS are live:
   API traffic.
 - `curl -k -i -H "x-api-key: $ADMIN_API_KEY" https://platform.<domain>/grafana/api/v1/health`
   should reach the admin-gated observability route. Without admin credentials,
-  the `sentinel-admin-auth@file` guard should return `401`. Prometheus is not
+  the `platform-admin-auth@file` guard should return `401`. Prometheus is not
   exposed directly on the platform host; validate it through Grafana's
   datasource or a temporary `kubectl port-forward`.
 - `curl -k -i https://mcp.<domain>/<server-name>/mcp` may return an
@@ -369,7 +369,7 @@ bootstrap-only credentials after the first successful bring-up.
 
 ## Clean platform reset
 
-Sentinel state lives mainly in PVC-backed StatefulSets, so deleting pods does
+Platform state lives mainly in PVC-backed StatefulSets, so deleting pods does
 not reset the platform. For a fresh platform state, scale the StatefulSets down
 and delete the PVCs you intend to wipe.
 
@@ -431,7 +431,7 @@ Traefik already runs in `kube-system`.
 
 For `setup --test-mode` with the bundled plain HTTP registry, the same
 containerd mirror requirement applies because setup still builds and pushes
-operator, gateway proxy, and Sentinel images, then deploys pods that pull those
+operator, gateway proxy, and platform images, then deploys pods that pull those
 images. On k3s hosts where `~/.kube/config` is empty or minimal, pass
 `--kubeconfig /etc/rancher/k3s/k3s.yaml` to setup.
 
@@ -472,10 +472,10 @@ Multi-node k3s: apply the same `/etc/rancher/k3s/registries.yaml` and `/etc/host
 ## Node disk-pressure recovery
 
 Image-heavy setup runs on small clusters can trip kubelet `DiskPressure` during
-the operator/Sentinel build-and-push phase. Typical symptoms:
+the operator/platform build-and-push phase. Typical symptoms:
 
 - helper pods such as `registry-pusher-*` stay `Pending`
-- new Sentinel pods fail scheduling with `untolerated taint(s)`
+- new platform pods fail scheduling with `untolerated taint(s)`
 - `kubectl describe node` shows `node.kubernetes.io/disk-pressure:NoSchedule`
 
 Check the node first:
@@ -667,13 +667,13 @@ before `setup`. It checks:
 `./bin/mcp-runtime cluster diagnostics` runs post-install diagnostics:
 
 - Detects your distribution (k3s / kind / minikube / docker-desktop / generic).
-- Checks the installed MCP Runtime namespaces, CRDs, operator, Traefik ingress, registry, Sentinel, and MCPServer reconciliation path. The MCPServer smoke uses an existing ready app image when available; otherwise it falls back to `registry.k8s.io/pause:3.9` and validates deployment/service/ingress reconciliation plus pod scheduling without a TCP readiness wait.
+- Checks the installed MCP Runtime namespaces, CRDs, operator, Traefik ingress, registry, platform, and MCPServer reconciliation path. The MCPServer smoke uses an existing ready app image when available; otherwise it falls back to `registry.k8s.io/pause:3.9` and validates deployment/service/ingress reconciliation plus pod scheduling without a TCP readiness wait.
 - Prefers k3s' bundled Traefik in `kube-system/traefik` when the active cluster is k3s, then falls back to the repo-managed `traefik/traefik` install.
 - `setup` follows the same ownership model: it reuses active external Traefik and refuses to force-install the repo-managed Traefik when that would create a second active stack.
 - Verifies registry reachability, registry image-pull smoke behavior, and common pod image-pull failures. The bundled registry reachability probe uses HTTPS when `registry/registry-internal-tls` is installed, and HTTP otherwise.
 - Reports `http: server gave HTTP response to HTTPS client` when kubelet/containerd tried HTTPS against the HTTP dev registry, including the affected pod and image where possible.
 - Streams the current check before running it, including helper pod probes and waits, so a slow run shows what it is doing.
-- Prints the distribution-specific registry remediation hint only when registry or image-pull checks fail; Traefik and Sentinel failures use their own check-specific remedies.
+- Prints the distribution-specific registry remediation hint only when registry or image-pull checks fail; Traefik and platform failures use their own check-specific remedies.
 
 Diagnostics discover cluster-specific values where Kubernetes exposes them.
 Failed kubectl reads include the underlying diagnostic, such as RBAC denial,

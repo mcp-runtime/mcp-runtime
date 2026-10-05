@@ -13,29 +13,29 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtimeaccess "mcp-runtime-api/internal/runtimeapi/access"
-	sentinelaccess "mcp-runtime/pkg/access"
+	mcpaccess "mcp-runtime/pkg/access"
 )
 
 func validateGrantRequest(req *accessGrantRequest) error {
 	req.Name = strings.TrimSpace(req.Name)
 	req.Namespace = runtimeaccess.DefaultAccessNamespace(req.Namespace)
-	req.ServerRef.Name = sentinelaccess.ServerName(strings.TrimSpace(string(req.ServerRef.Name)))
-	req.ServerRef.Namespace = sentinelaccess.Namespace(strings.TrimSpace(string(req.ServerRef.Namespace)))
-	req.Subject.HumanID = sentinelaccess.HumanID(strings.TrimSpace(string(req.Subject.HumanID)))
-	req.Subject.AgentID = sentinelaccess.AgentID(strings.TrimSpace(string(req.Subject.AgentID)))
-	req.Subject.TeamID = sentinelaccess.TeamID(strings.TrimSpace(string(req.Subject.TeamID)))
+	req.ServerRef.Name = mcpaccess.ServerName(strings.TrimSpace(string(req.ServerRef.Name)))
+	req.ServerRef.Namespace = mcpaccess.Namespace(strings.TrimSpace(string(req.ServerRef.Namespace)))
+	req.Subject.HumanID = mcpaccess.HumanID(strings.TrimSpace(string(req.Subject.HumanID)))
+	req.Subject.AgentID = mcpaccess.AgentID(strings.TrimSpace(string(req.Subject.AgentID)))
+	req.Subject.TeamID = mcpaccess.TeamID(strings.TrimSpace(string(req.Subject.TeamID)))
 	req.PolicyVersion = runtimeaccess.DefaultPolicyVersion(req.PolicyVersion)
 	req.MaxTrust = runtimeaccess.NormalizeTrust(req.MaxTrust)
-	if err := sentinelaccess.ValidateResourceName("name", req.Name); err != nil {
+	if err := mcpaccess.ValidateResourceName("name", req.Name); err != nil {
 		return err
 	}
-	if err := sentinelaccess.ValidateResourceName("namespace", req.Namespace); err != nil {
+	if err := mcpaccess.ValidateResourceName("namespace", req.Namespace); err != nil {
 		return err
 	}
-	if err := sentinelaccess.ValidateResourceName("serverRef.name", string(req.ServerRef.Name)); err != nil {
+	if err := mcpaccess.ValidateResourceName("serverRef.name", string(req.ServerRef.Name)); err != nil {
 		return err
 	}
-	if err := sentinelaccess.ValidateOptionalResourceName("serverRef.namespace", string(req.ServerRef.Namespace)); err != nil {
+	if err := mcpaccess.ValidateOptionalResourceName("serverRef.namespace", string(req.ServerRef.Namespace)); err != nil {
 		return err
 	}
 	if req.Subject.HumanID == "" && req.Subject.AgentID == "" && req.Subject.TeamID == "" {
@@ -53,7 +53,7 @@ func validateGrantRequest(req *accessGrantRequest) error {
 	if len(req.AllowedSideEffects) == 0 {
 		return errors.New("at least one allowed side effect is required")
 	}
-	seenSideEffects := map[sentinelaccess.ToolSideEffect]struct{}{}
+	seenSideEffects := map[mcpaccess.ToolSideEffect]struct{}{}
 	for i := range req.AllowedSideEffects {
 		req.AllowedSideEffects[i] = runtimeaccess.NormalizeSideEffect(req.AllowedSideEffects[i])
 		if req.AllowedSideEffects[i] == "" {
@@ -69,7 +69,7 @@ func validateGrantRequest(req *accessGrantRequest) error {
 	}
 	for i := range req.ToolRules {
 		req.ToolRules[i].Name = strings.TrimSpace(req.ToolRules[i].Name)
-		req.ToolRules[i].Decision = sentinelaccess.PolicyDecision(strings.TrimSpace(string(req.ToolRules[i].Decision)))
+		req.ToolRules[i].Decision = mcpaccess.PolicyDecision(strings.TrimSpace(string(req.ToolRules[i].Decision)))
 		req.ToolRules[i].RequiredTrust = runtimeaccess.NormalizeTrust(req.ToolRules[i].RequiredTrust)
 		if req.ToolRules[i].Name == "" {
 			return fmt.Errorf("toolRules[%d].name is required", i)
@@ -107,12 +107,12 @@ func (s *AccessService) handleRuntimeGrantList(w http.ResponseWriter, r *http.Re
 	p, filterByPrincipal := principalFromContext(ctx)
 	filterByPrincipal = filterByPrincipal && p.Role != roleAdmin
 
-	summaries := make([]sentinelaccess.GrantSummary, 0, len(grants.Items))
+	summaries := make([]mcpaccess.GrantSummary, 0, len(grants.Items))
 	for _, g := range grants.Items {
 		if filterByPrincipal && !principalCanReadGrantSubject(p, g) {
 			continue
 		}
-		summaries = append(summaries, sentinelaccess.ToGrantSummary(g))
+		summaries = append(summaries, mcpaccess.ToGrantSummary(g))
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{"grants": summaries})
@@ -153,7 +153,7 @@ func (s *AccessService) handleRuntimeGrantApply(w http.ResponseWriter, r *http.R
 
 	targetServer, err := s.accessMgr.GetMCPServerRef(ctx, req.ServerRef)
 	if err != nil {
-		if sentinelaccess.IsMCPServerNotFoundForRef(err) {
+		if mcpaccess.IsMCPServerNotFoundForRef(err) {
 			writeAPIError(w, http.StatusBadRequest, err.Error())
 		} else {
 			log.Printf("runtime grant: assert MCPServer ref failed: %v", err)
@@ -200,12 +200,12 @@ func (s *AccessService) handleRuntimeGrantApply(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	grant := &sentinelaccess.MCPAccessGrant{
+	grant := &mcpaccess.MCPAccessGrant{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      req.Name,
 			Namespace: runtimeaccess.DefaultAccessNamespace(req.Namespace),
 		},
-		Spec: sentinelaccess.MCPAccessGrantSpec{
+		Spec: mcpaccess.MCPAccessGrantSpec{
 			ServerRef:          req.ServerRef,
 			Subject:            req.Subject,
 			MaxTrust:           req.MaxTrust,
@@ -228,10 +228,10 @@ func (s *AccessService) handleRuntimeGrantApply(w http.ResponseWriter, r *http.R
 		}
 		s.writeCrossTeamGrantAudit(ctx, action, *applied, string(targetServer.Spec.TeamID))
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"grant": sentinelaccess.ToGrantSummary(*applied)})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"grant": mcpaccess.ToGrantSummary(*applied)})
 }
 
-func (s *AccessService) writeCrossTeamGrantAudit(ctx context.Context, action string, grant sentinelaccess.MCPAccessGrant, resourceTeamID string) {
+func (s *AccessService) writeCrossTeamGrantAudit(ctx context.Context, action string, grant mcpaccess.MCPAccessGrant, resourceTeamID string) {
 	if s == nil || s.audit == nil || strings.TrimSpace(string(grant.Spec.Subject.TeamID)) == strings.TrimSpace(resourceTeamID) {
 		return
 	}

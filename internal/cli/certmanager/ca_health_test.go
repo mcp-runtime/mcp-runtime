@@ -46,11 +46,11 @@ func TestValidateCAKeyPair(t *testing.T) {
 	_, otherKey := testCA(t, true, good, now.Add(-time.Hour), now.AddDate(5, 0, 0))
 
 	cases := []struct {
-		name     string
-		cert     []byte
-		key      []byte
-		sentinel error
-		near     bool
+		name string
+		cert []byte
+		key  []byte
+		base error
+		near bool
 	}{
 		{"healthy", okCert, okKey, nil, false},
 		{"near expiry reported", nearCert, nearKey, nil, true},
@@ -64,9 +64,9 @@ func TestValidateCAKeyPair(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			h, err := ValidateCAKeyPair(tc.cert, tc.key, now)
-			if tc.sentinel != nil {
-				if !errors.Is(err, tc.sentinel) {
-					t.Fatalf("want %v, got %v", tc.sentinel, err)
+			if tc.base != nil {
+				if !errors.Is(err, tc.base) {
+					t.Fatalf("want %v, got %v", tc.base, err)
 				}
 				return
 			}

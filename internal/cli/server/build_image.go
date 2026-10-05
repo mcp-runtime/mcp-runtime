@@ -79,7 +79,7 @@ func buildImage(ctx context.Context, logger *zap.Logger, serverName, dockerfile,
 	buildCmd.SetStderr(os.Stderr)
 
 	if err := buildCmd.Run(); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrBuildImageFailed,
 			err,
 			fmt.Sprintf("failed to build image for %s: %v", serverName, err),
@@ -123,7 +123,7 @@ func metadataScopeForBuild(serverName, metadataFile, metadataDir string) (string
 func scopedRepositoryNameForBuild(ctx context.Context, serverName, metadataFile, metadataDir string) (string, error) {
 	server, ok, err := findMetadataServer(serverName, metadataFile, metadataDir)
 	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrLoadMetadataFailed, err, fmt.Sprintf("failed to load metadata: %v", err))
+		return "", core.WrapWithBase(core.ErrLoadMetadataFailed, err, fmt.Sprintf("failed to load metadata: %v", err))
 	}
 	if !ok {
 		return serverName, nil
@@ -217,7 +217,7 @@ func updateMetadataImage(serverName, imageName, tag, metadataFile, metadataDir s
 	}
 
 	if targetFile == "" {
-		err := core.NewWithSentinel(core.ErrMetadataFileNotFound, fmt.Sprintf("metadata file not found for server %s", serverName))
+		err := core.NewWithBase(core.ErrMetadataFileNotFound, fmt.Sprintf("metadata file not found for server %s", serverName))
 		core.Error("Metadata file not found")
 		// Note: No logger available in this helper function
 		return err
@@ -226,7 +226,7 @@ func updateMetadataImage(serverName, imageName, tag, metadataFile, metadataDir s
 	// Load and update the entries as written, without persisting loader defaults.
 	registry, err := loadMetadataForRewrite(targetFile)
 	if err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrLoadMetadataFailed, err, fmt.Sprintf("failed to load metadata: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrLoadMetadataFailed, err, fmt.Sprintf("failed to load metadata: %v", err))
 		core.Error("Failed to load metadata")
 		// Note: No logger available in this helper function
 		return wrappedErr
@@ -244,7 +244,7 @@ func updateMetadataImage(serverName, imageName, tag, metadataFile, metadataDir s
 	}
 
 	if !updated {
-		err := core.NewWithSentinel(core.ErrServerNotFoundInMetadata, fmt.Sprintf("server %s not found in metadata", serverName))
+		err := core.NewWithBase(core.ErrServerNotFoundInMetadata, fmt.Sprintf("server %s not found in metadata", serverName))
 		core.Error("Server not found in metadata")
 		// Note: No logger available in this helper function
 		return err
@@ -253,7 +253,7 @@ func updateMetadataImage(serverName, imageName, tag, metadataFile, metadataDir s
 	// Write back
 	data, err := yamlMarshal(registry)
 	if err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrMarshalMetadataFailed, err, fmt.Sprintf("failed to marshal metadata: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrMarshalMetadataFailed, err, fmt.Sprintf("failed to marshal metadata: %v", err))
 		core.Error("Failed to marshal metadata")
 		// Note: No logger available in this helper function
 		return wrappedErr
@@ -264,7 +264,7 @@ func updateMetadataImage(serverName, imageName, tag, metadataFile, metadataDir s
 		fileMode = info.Mode().Perm()
 		if fileMode&0o200 == 0 {
 			writeErr := fmt.Errorf("file is not writable: %s", targetFile)
-			wrappedErr := core.WrapWithSentinel(core.ErrWriteMetadataFailed, writeErr, fmt.Sprintf("failed to write metadata: %v", writeErr))
+			wrappedErr := core.WrapWithBase(core.ErrWriteMetadataFailed, writeErr, fmt.Sprintf("failed to write metadata: %v", writeErr))
 			core.Error("Failed to write metadata")
 			// Note: No logger available in this helper function
 			return wrappedErr
@@ -272,7 +272,7 @@ func updateMetadataImage(serverName, imageName, tag, metadataFile, metadataDir s
 	}
 
 	if err := os.WriteFile(targetFile, data, fileMode); err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrWriteMetadataFailed, err, fmt.Sprintf("failed to write metadata: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrWriteMetadataFailed, err, fmt.Sprintf("failed to write metadata: %v", err))
 		core.Error("Failed to write metadata")
 		// Note: No logger available in this helper function
 		return wrappedErr

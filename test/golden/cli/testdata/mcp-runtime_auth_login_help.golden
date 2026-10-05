@@ -4,7 +4,7 @@ Usage:
   mcp-runtime auth login [flags]
 
 Flags:
-      --api-url string         Sentinel API base URL (scheme and host, no /api path)
+      --api-url string         Platform API base URL (scheme and host, no /api path)
       --email string           Platform account email for password login
   -h, --help                   help for login
       --password string        Platform account password (if omitted with --email, prompt securely in a terminal)

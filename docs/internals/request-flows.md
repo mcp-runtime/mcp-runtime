@@ -58,7 +58,7 @@ sequenceDiagram
 
 Primary request paths:
 
-- `mcp-runtime setup`, `bootstrap`, `cluster doctor`, `sentinel *`
+- `mcp-runtime setup`, `bootstrap`, `cluster doctor`, `ops *`
 - `mcp-runtime auth login/status/logout`
 - `mcp-runtime registry status/info/provision/push`
 - `mcp-runtime server list/get/create/apply/deploy/delete/logs/status/policy inspect`

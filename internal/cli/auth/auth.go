@@ -35,13 +35,13 @@ var httpDoHook func(req *http.Request) (*http.Response, error)
 var passwordPrompt = func(stderr io.Writer) (string, error) {
 	stdinFD, err := terminalFD(os.Stdin.Fd())
 	if err != nil || !term.IsTerminal(stdinFD) {
-		return "", core.NewWithSentinel(core.ErrAuthTTYRequired, "password login needs a TTY to prompt securely; pass --password for non-interactive login")
+		return "", core.NewWithBase(core.ErrAuthTTYRequired, "password login needs a TTY to prompt securely; pass --password for non-interactive login")
 	}
 	fmt.Fprint(stderr, "Enter platform account password: ")
 	password, err := term.ReadPassword(stdinFD)
 	fmt.Fprintln(stderr)
 	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrAuthReadTokenFailed, err, fmt.Sprintf("read password: %v", err))
+		return "", core.WrapWithBase(core.ErrAuthReadTokenFailed, err, fmt.Sprintf("read password: %v", err))
 	}
 	return string(password), nil
 }
@@ -72,7 +72,7 @@ func New(runtime *core.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "auth",
 		Short: "Log in to the platform API and manage saved credentials",
-		Long: `Authenticate to the Sentinel platform using email/password or an API token (not Kubernetes).
+		Long: `Authenticate to the MCP Runtime platform using email/password or an API token (not Kubernetes).
 
 Use this for day-to-day deploy and registry-related flows. Cluster install and admin work
 use Kubernetes and the cluster commands, not this command.
@@ -104,7 +104,7 @@ func (m *manager) NewLoginCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&f.apiURL, "api-url", os.Getenv(authfile.EnvAPIURL), "Sentinel API base URL (scheme and host, no /api path)")
+	cmd.Flags().StringVar(&f.apiURL, "api-url", os.Getenv(authfile.EnvAPIURL), "Platform API base URL (scheme and host, no /api path)")
 	cmd.Flags().StringVar(&f.email, "email", "", "Platform account email for password login")
 	cmd.Flags().StringVar(&f.username, "username", "", "Alias for --email")
 	cmd.Flags().StringVar(&f.password, "password", "", "Platform account password (if omitted with --email, prompt securely in a terminal)")
@@ -128,11 +128,11 @@ func (m *manager) runLogin(cmd *cobra.Command, f loginFlags) error {
 	apiURL := strings.TrimSpace(f.apiURL)
 	if apiURL == "" {
 		msg := fmt.Sprintf("api URL is required (set --api-url or %s)", authfile.EnvAPIURL)
-		return core.NewWithSentinel(core.ErrAuthAPIURLRequired, msg)
+		return core.NewWithBase(core.ErrAuthAPIURLRequired, msg)
 	}
 	apiURL = platformapi.NormalizeBaseURL(apiURL)
 	if apiURL == "" {
-		return core.NewWithSentinel(core.ErrAuthAPIURLInvalid, "api URL must include scheme and host")
+		return core.NewWithBase(core.ErrAuthAPIURLInvalid, "api URL must include scheme and host")
 	}
 
 	loginEmail, err := core.ResolveEmailAlias(f.email, f.username)
@@ -143,7 +143,7 @@ func (m *manager) runLogin(cmd *cobra.Command, f loginFlags) error {
 	var token, loginRole string
 	if loginEmail != "" || strings.TrimSpace(f.password) != "" {
 		if loginEmail == "" {
-			return core.NewWithSentinel(core.ErrAuthEmailPasswordRequired, "email and password are both required for password login")
+			return core.NewWithBase(core.ErrAuthEmailPasswordRequired, "email and password are both required for password login")
 		}
 		password := f.password
 		if strings.TrimSpace(password) == "" {
@@ -152,12 +152,12 @@ func (m *manager) runLogin(cmd *cobra.Command, f loginFlags) error {
 				return err
 			}
 			if strings.TrimSpace(password) == "" {
-				return core.NewWithSentinel(core.ErrAuthTokenRequired, "password is required")
+				return core.NewWithBase(core.ErrAuthTokenRequired, "password is required")
 			}
 		}
 		tok, role, err := loginPlatformPassword(context.Background(), apiURL, loginEmail, password)
 		if err != nil {
-			return core.WrapWithSentinel(core.ErrAuthPlatformLoginFailed, err, fmt.Sprintf("platform login failed: %v", err))
+			return core.WrapWithBase(core.ErrAuthPlatformLoginFailed, err, fmt.Sprintf("platform login failed: %v", err))
 		}
 		token = tok
 		loginRole = role
@@ -165,7 +165,7 @@ func (m *manager) runLogin(cmd *cobra.Command, f loginFlags) error {
 	} else if f.tokenFromStdin {
 		b, err := io.ReadAll(os.Stdin)
 		if err != nil {
-			return core.WrapWithSentinel(core.ErrAuthReadStdinFailed, err, fmt.Sprintf("read stdin: %v", err))
+			return core.WrapWithBase(core.ErrAuthReadStdinFailed, err, fmt.Sprintf("read stdin: %v", err))
 		}
 		token = strings.TrimSpace(string(b))
 	} else if strings.TrimSpace(f.token) != "" {
@@ -173,18 +173,18 @@ func (m *manager) runLogin(cmd *cobra.Command, f loginFlags) error {
 	} else {
 		stdinFD, err := terminalFD(os.Stdin.Fd())
 		if err != nil || !term.IsTerminal(stdinFD) {
-			return core.NewWithSentinel(core.ErrAuthTTYRequired, "not a TTY: pass --token, --token-stdin, or run in an interactive terminal")
+			return core.NewWithBase(core.ErrAuthTTYRequired, "not a TTY: pass --token, --token-stdin, or run in an interactive terminal")
 		}
 		fmt.Fprint(stderr, "Enter platform API token: ")
 		tok, err := term.ReadPassword(stdinFD)
 		fmt.Fprintln(stderr)
 		if err != nil {
-			return core.WrapWithSentinel(core.ErrAuthReadTokenFailed, err, fmt.Sprintf("read token: %v", err))
+			return core.WrapWithBase(core.ErrAuthReadTokenFailed, err, fmt.Sprintf("read token: %v", err))
 		}
 		token = strings.TrimSpace(string(tok))
 	}
 	if token == "" {
-		return core.NewWithSentinel(core.ErrAuthTokenRequired, "token is required")
+		return core.NewWithBase(core.ErrAuthTokenRequired, "token is required")
 	}
 
 	if !f.skipVerify {
@@ -197,7 +197,7 @@ func (m *manager) runLogin(cmd *cobra.Command, f loginFlags) error {
 			err = verifyPlatformAPIToken(ctx, apiURL, token)
 		}
 		if err != nil {
-			return core.WrapWithSentinel(core.ErrAuthTokenVerificationFailed, err, fmt.Sprintf("API token could not be verified: %v", err))
+			return core.WrapWithBase(core.ErrAuthTokenVerificationFailed, err, fmt.Sprintf("API token could not be verified: %v", err))
 		}
 	}
 
@@ -395,13 +395,13 @@ func loginPlatformPassword(ctx context.Context, apiBaseURL, email, password stri
 		} `json:"user"`
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", "", core.NewWithSentinel(core.ErrAuthLoginHTTPStatus, fmt.Sprintf("HTTP %d", resp.StatusCode))
+		return "", "", core.NewWithBase(core.ErrAuthLoginHTTPStatus, fmt.Sprintf("HTTP %d", resp.StatusCode))
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return "", "", err
 	}
 	if strings.TrimSpace(out.AccessToken) == "" {
-		return "", "", core.NewWithSentinel(core.ErrAuthLoginResponseMissingAccessToken, "login response did not include access_token")
+		return "", "", core.NewWithBase(core.ErrAuthLoginResponseMissingAccessToken, "login response did not include access_token")
 	}
 	return strings.TrimSpace(out.AccessToken), strings.TrimSpace(out.User.Role), nil
 }
@@ -438,19 +438,19 @@ func verifyPlatformAPIToken(ctx context.Context, apiBaseURL, token string) error
 	defer drainAndCloseBody(resp.Body)
 	switch resp.StatusCode {
 	case http.StatusUnauthorized, http.StatusForbidden:
-		return core.NewWithSentinel(core.ErrAuthServerRejectedToken, fmt.Sprintf("server rejected the token (HTTP %d)", resp.StatusCode))
+		return core.NewWithBase(core.ErrAuthServerRejectedToken, fmt.Sprintf("server rejected the token (HTTP %d)", resp.StatusCode))
 	case http.StatusNotFound:
-		return core.NewWithSentinel(core.ErrAuthAPIURLMayBeWrong, fmt.Sprintf("API URL may be wrong (path returned HTTP 404, expected %q)", u))
+		return core.NewWithBase(core.ErrAuthAPIURLMayBeWrong, fmt.Sprintf("API URL may be wrong (path returned HTTP 404, expected %q)", u))
 	}
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		return nil
 	}
-	return core.NewWithSentinel(core.ErrAuthVerifyRequestFailed, fmt.Sprintf("verify request failed: HTTP %d", resp.StatusCode))
+	return core.NewWithBase(core.ErrAuthVerifyRequestFailed, fmt.Sprintf("verify request failed: HTTP %d", resp.StatusCode))
 }
 
 func terminalFD(fd uintptr) (int, error) {
 	if fd > uintptr(math.MaxInt) {
-		return 0, core.NewWithSentinel(core.ErrAuthFileDescriptorOutOfRange, "file descriptor out of range")
+		return 0, core.NewWithBase(core.ErrAuthFileDescriptorOutOfRange, "file descriptor out of range")
 	}
 	return int(fd), nil
 }

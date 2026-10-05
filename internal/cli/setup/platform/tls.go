@@ -32,13 +32,13 @@ func ValidateTLSSetupCLIFlags(
 	acmeStagingResolved, skipCertManagerInstall bool,
 ) error {
 	if providedTLSSecrets && (acmeEmailResolved != "" || tlsCIResolved != "") {
-		return core.NewWithSentinel(core.ErrFieldRequired, "--provided-tls-secrets cannot be combined with --acme-email or --tls-cluster-issuer; import enterprise TLS Secrets before setup instead")
+		return core.NewWithBase(core.ErrFieldRequired, "--provided-tls-secrets cannot be combined with --acme-email or --tls-cluster-issuer; import enterprise TLS Secrets before setup instead")
 	}
 	if acmeEmailResolved != "" && tlsCIResolved != "" {
-		return core.NewWithSentinel(core.ErrFieldRequired, "use either --acme-email (or MCP_ACME_EMAIL) for public Let's Encrypt, or --tls-cluster-issuer (or MCP_TLS_CLUSTER_ISSUER) for an existing internal ClusterIssuer, not both")
+		return core.NewWithBase(core.ErrFieldRequired, "use either --acme-email (or MCP_ACME_EMAIL) for public Let's Encrypt, or --tls-cluster-issuer (or MCP_TLS_CLUSTER_ISSUER) for an existing internal ClusterIssuer, not both")
 	}
 	if !tlsEnabled && (providedTLSSecrets || tlsCIResolved != "" || acmeEmailResolved != "" || acmeStagingResolved || skipCertManagerInstall) {
-		return core.NewWithSentinel(core.ErrFieldRequired, "--with-tls is required when using --provided-tls-secrets, --acme-email, --tls-cluster-issuer, --acme-staging, --skip-cert-manager-install, or related environment variables")
+		return core.NewWithBase(core.ErrFieldRequired, "--with-tls is required when using --provided-tls-secrets, --acme-email, --tls-cluster-issuer, --acme-staging, --skip-cert-manager-install, or related environment variables")
 	}
 	return nil
 }
@@ -50,7 +50,7 @@ func ValidateTLSSetupCLIFlags(
 // mode is exempt (it serves the bundled self-signed default certificate there).
 func ValidateMTLSSetupCLIFlags(testMode, tlsEnabled bool, mtlsClusterIssuer string) error {
 	if strings.TrimSpace(mtlsClusterIssuer) != "" && !tlsEnabled && !testMode {
-		return core.NewWithSentinel(core.ErrFieldRequired, "--mtls-cluster-issuer requires --with-tls: mTLS terminates at the ingress on the websecure (TLS) entrypoint")
+		return core.NewWithBase(core.ErrFieldRequired, "--mtls-cluster-issuer requires --with-tls: mTLS terminates at the ingress on the websecure (TLS) entrypoint")
 	}
 	return nil
 }
@@ -63,7 +63,7 @@ func setupTLSStep(logger *zap.Logger, plan setupplan.Plan, deps SetupDeps) error
 		return nil
 	}
 	if err := deps.SetupTLS(logger, plan); err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrTLSSetupFailed, err, fmt.Sprintf("TLS setup failed: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrTLSSetupFailed, err, fmt.Sprintf("TLS setup failed: %v", err))
 		core.Error("TLS setup failed")
 		core.LogStructuredError(logger, wrappedErr, "TLS setup failed")
 		return wrappedErr
@@ -84,7 +84,7 @@ func setupWorkloadPKI(logger *zap.Logger, plan setupplan.Plan) error {
 			return err
 		}
 	} else if err := checkCertManagerInstalledClientGo(); err != nil {
-		return core.WrapWithSentinel(core.ErrCertManagerNotInstalled, err, "workload mTLS requires cert-manager; install it or omit --skip-cert-manager-install")
+		return core.WrapWithBase(core.ErrCertManagerNotInstalled, err, "workload mTLS requires cert-manager; install it or omit --skip-cert-manager-install")
 	}
 
 	// Managed mode: provision the bundled mcp-runtime-ca workload issuer whenever
@@ -99,7 +99,7 @@ func setupWorkloadPKI(logger *zap.Logger, plan setupplan.Plan) error {
 		// otherwise harmless re-apply of cert-manager's ClusterIssuer.
 		if err := checkNamedClusterIssuerClientGo(issuer); err != nil {
 			if applyErr := applyManifestFile("config/cert-manager/cluster-issuer.yaml", "", os.Stdout); applyErr != nil {
-				return core.WrapWithSentinel(core.ErrClusterIssuerApplyFailed, applyErr, "apply managed workload ClusterIssuer")
+				return core.WrapWithBase(core.ErrClusterIssuerApplyFailed, applyErr, "apply managed workload ClusterIssuer")
 			}
 		}
 	} else if err := checkNamedClusterIssuerClientGo(issuer); err != nil {
@@ -184,7 +184,7 @@ func checkTLSSecretWithKubectl(kubectl core.KubectlRunner, namespace, name, purp
 func setupTLSLetsEncryptClientGo(logger *zap.Logger, plan setupplan.Plan) error {
 	core.Info("Configuring TLS with Let's Encrypt (cert-manager HTTP-01)")
 	if err := certmanager.ValidateACMEHostnameForPublicCA(); err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrTLSSetupFailed, err, err.Error())
+		wrappedErr := core.WrapWithBase(core.ErrTLSSetupFailed, err, err.Error())
 		core.Error("Invalid configuration for Let's Encrypt")
 		if logger != nil {
 			core.LogStructuredError(logger, wrappedErr, "Invalid configuration for Let's Encrypt")
@@ -201,7 +201,7 @@ func setupTLSLetsEncryptClientGo(logger *zap.Logger, plan setupplan.Plan) error 
 		}
 	}
 	if err := certmanager.ValidateIngressManifestForACME(plan.Ingress.Manifest); err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrTLSSetupFailed, err, err.Error())
+		wrappedErr := core.WrapWithBase(core.ErrTLSSetupFailed, err, err.Error())
 		core.Error("Ingress configuration blocks Let's Encrypt")
 		if logger != nil {
 			core.LogStructuredError(logger, wrappedErr, "Ingress configuration blocks Let's Encrypt")
@@ -213,7 +213,7 @@ func setupTLSLetsEncryptClientGo(logger *zap.Logger, plan setupplan.Plan) error 
 			return err
 		}
 	} else if err := checkCertManagerInstalledClientGo(); err != nil {
-		err := core.WrapWithSentinel(core.ErrCertManagerNotInstalled, err, "cert-manager not installed. Install it, or omit --skip-cert-manager-install to let setup apply it from upstream")
+		err := core.WrapWithBase(core.ErrCertManagerNotInstalled, err, "cert-manager not installed. Install it, or omit --skip-cert-manager-install to let setup apply it from upstream")
 		core.Error("Cert-manager not installed")
 		if logger != nil {
 			core.LogStructuredError(logger, err, "Cert-manager not installed")
@@ -221,7 +221,7 @@ func setupTLSLetsEncryptClientGo(logger *zap.Logger, plan setupplan.Plan) error 
 		return err
 	}
 	if err := waitForTraefikDeploymentForACMEClientGo(); err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrTLSSetupFailed, err, err.Error())
+		wrappedErr := core.WrapWithBase(core.ErrTLSSetupFailed, err, err.Error())
 		core.Error("Traefik is not ready for HTTP-01")
 		if logger != nil {
 			core.LogStructuredError(logger, wrappedErr, "Traefik is not ready for HTTP-01")
@@ -281,7 +281,7 @@ func setupTLSWithExistingClusterIssuerClientGo(logger *zap.Logger, plan setuppla
 			return err
 		}
 	} else if err := checkCertManagerInstalledClientGo(); err != nil {
-		err := core.WrapWithSentinel(core.ErrCertManagerNotInstalled, err, "cert-manager not installed. Install it, or omit --skip-cert-manager-install to let setup apply it from upstream")
+		err := core.WrapWithBase(core.ErrCertManagerNotInstalled, err, "cert-manager not installed. Install it, or omit --skip-cert-manager-install to let setup apply it from upstream")
 		core.Error("Cert-manager not installed")
 		if logger != nil {
 			core.LogStructuredError(logger, err, "Cert-manager not installed")
@@ -306,8 +306,8 @@ func setupTLSWithExistingClusterIssuerClientGo(logger *zap.Logger, plan setuppla
 	}
 	dnsNames, ipAddresses := registryCertificateSANs(plan)
 	if len(dnsNames) == 0 && len(ipAddresses) == 0 {
-		err := core.NewWithSentinel(core.ErrSetupTLSCertificateSANsEmpty, "no DNS names or IP addresses resolved for the Certificate; set MCP_PLATFORM_DOMAIN, MCP_REGISTRY_HOST, or MCP_REGISTRY_INGRESS_HOST (and optional MCP_MCP_INGRESS_HOST)")
-		wrappedErr := core.WrapWithSentinel(core.ErrTLSSetupFailed, err, err.Error())
+		err := core.NewWithBase(core.ErrSetupTLSCertificateSANsEmpty, "no DNS names or IP addresses resolved for the Certificate; set MCP_PLATFORM_DOMAIN, MCP_REGISTRY_HOST, or MCP_REGISTRY_INGRESS_HOST (and optional MCP_MCP_INGRESS_HOST)")
+		wrappedErr := core.WrapWithBase(core.ErrTLSSetupFailed, err, err.Error())
 		core.Error("Invalid TLS host configuration")
 		if logger != nil {
 			core.LogStructuredError(logger, wrappedErr, "Invalid TLS host configuration")
@@ -335,7 +335,7 @@ func setupTLSWithExistingClusterIssuerClientGo(logger *zap.Logger, plan setuppla
 func setupTLSPrivateCAClientGo(logger *zap.Logger, plan setupplan.Plan) error {
 	core.Info("Checking cert-manager installation")
 	if err := checkCertManagerInstalledClientGo(); err != nil {
-		err := core.WrapWithSentinel(core.ErrCertManagerNotInstalled, err, "cert-manager not installed. Install it first:\n  helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --set crds.enabled=true\n  or run setup with --with-tls --acme-email <addr> to install cert-manager automatically")
+		err := core.WrapWithBase(core.ErrCertManagerNotInstalled, err, "cert-manager not installed. Install it first:\n  helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --set crds.enabled=true\n  or run setup with --with-tls --acme-email <addr> to install cert-manager automatically")
 		core.Error("Cert-manager not installed")
 		if logger != nil {
 			core.LogStructuredError(logger, err, "Cert-manager not installed")
@@ -348,7 +348,7 @@ func setupTLSPrivateCAClientGo(logger *zap.Logger, plan setupplan.Plan) error {
 	if plan.RegistryMode == setupplan.RegistryModeBundledHTTPS {
 		created, err := ensureCASecretClientGo()
 		if err != nil {
-			err := core.WrapWithSentinel(core.ErrCASecretNotFound, err, "CA secret 'mcp-runtime-ca' could not be generated in cert-manager namespace. Create a private CA manually:\n  kubectl create secret tls mcp-runtime-ca --cert=ca.crt --key=ca.key -n cert-manager")
+			err := core.WrapWithBase(core.ErrCASecretNotFound, err, "CA secret 'mcp-runtime-ca' could not be generated in cert-manager namespace. Create a private CA manually:\n  kubectl create secret tls mcp-runtime-ca --cert=ca.crt --key=ca.key -n cert-manager")
 			core.Error("CA secret unavailable")
 			if logger != nil {
 				core.LogStructuredError(logger, err, "CA secret unavailable")
@@ -359,7 +359,7 @@ func setupTLSPrivateCAClientGo(logger *zap.Logger, plan setupplan.Plan) error {
 			core.Info("Generated cert-manager/mcp-runtime-ca for bundled HTTPS registry TLS; configure every Kubernetes node to trust its tls.crt before pulling from the bundled HTTPS registry")
 		}
 	} else if err := checkCASecretClientGo(); err != nil {
-		err := core.WrapWithSentinel(core.ErrCASecretNotFound, err, "CA secret 'mcp-runtime-ca' not found in cert-manager namespace. For Let's Encrypt use --acme-email, or create a private CA:\n  kubectl create secret tls mcp-runtime-ca --cert=ca.crt --key=ca.key -n cert-manager")
+		err := core.WrapWithBase(core.ErrCASecretNotFound, err, "CA secret 'mcp-runtime-ca' not found in cert-manager namespace. For Let's Encrypt use --acme-email, or create a private CA:\n  kubectl create secret tls mcp-runtime-ca --cert=ca.crt --key=ca.key -n cert-manager")
 		core.Error("CA secret not found")
 		if logger != nil {
 			core.LogStructuredError(logger, err, "CA secret not found")
@@ -370,7 +370,7 @@ func setupTLSPrivateCAClientGo(logger *zap.Logger, plan setupplan.Plan) error {
 
 	core.Info("Applying ClusterIssuer")
 	if err := applyManifestFile("config/cert-manager/cluster-issuer.yaml", "", os.Stdout); err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrClusterIssuerApplyFailed, err, fmt.Sprintf("failed to apply ClusterIssuer: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrClusterIssuerApplyFailed, err, fmt.Sprintf("failed to apply ClusterIssuer: %v", err))
 		core.Error("Failed to apply ClusterIssuer")
 		if logger != nil {
 			core.LogStructuredError(logger, wrappedErr, "Failed to apply ClusterIssuer")
@@ -428,7 +428,7 @@ func ensureCertManagerInstalledClientGo(logger *zap.Logger) error {
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 	resp, err := httpClient.Get(certmanager.CertManagerInstallManifestURL()) // #nosec G107 -- fixed cert-manager release URL.
 	if err != nil {
-		wrapped := core.WrapWithSentinel(core.ErrCertManagerInstallFailed, err, fmt.Sprintf("cert-manager install failed: %v. %s", err, warnMsg))
+		wrapped := core.WrapWithBase(core.ErrCertManagerInstallFailed, err, fmt.Sprintf("cert-manager install failed: %v. %s", err, warnMsg))
 		core.Error("cert-manager install failed")
 		if logger != nil {
 			core.LogStructuredError(logger, wrapped, "cert-manager install failed")
@@ -437,7 +437,7 @@ func ensureCertManagerInstalledClientGo(logger *zap.Logger) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		err := core.NewWithSentinel(core.ErrCertManagerInstallFailed, fmt.Sprintf("cert-manager install manifest download failed: HTTP %d. %s", resp.StatusCode, warnMsg))
+		err := core.NewWithBase(core.ErrCertManagerInstallFailed, fmt.Sprintf("cert-manager install manifest download failed: HTTP %d. %s", resp.StatusCode, warnMsg))
 		core.Error("cert-manager install failed")
 		if logger != nil {
 			core.LogStructuredError(logger, err, "cert-manager install failed")
@@ -446,10 +446,10 @@ func ensureCertManagerInstalledClientGo(logger *zap.Logger) error {
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return core.WrapWithSentinel(core.ErrCertManagerInstallFailed, err, fmt.Sprintf("read cert-manager install manifest: %v", err))
+		return core.WrapWithBase(core.ErrCertManagerInstallFailed, err, fmt.Sprintf("read cert-manager install manifest: %v", err))
 	}
 	if err := applyManifestYAML(string(body), "", os.Stdout); err != nil {
-		wrapped := core.WrapWithSentinel(core.ErrCertManagerInstallFailed, err, fmt.Sprintf("cert-manager install failed: %v. %s", err, warnMsg))
+		wrapped := core.WrapWithBase(core.ErrCertManagerInstallFailed, err, fmt.Sprintf("cert-manager install failed: %v. %s", err, warnMsg))
 		core.Error("cert-manager install failed")
 		if logger != nil {
 			core.LogStructuredError(logger, wrapped, "cert-manager install failed")
@@ -474,7 +474,7 @@ func waitForCertManagerDeploymentsClientGo(logger *zap.Logger, timeout time.Dura
 	for _, dep := range []string{"cert-manager", "cert-manager-cainjector", "cert-manager-webhook"} {
 		remaining := time.Until(start.Add(timeout))
 		if remaining <= 0 {
-			err := core.NewWithSentinel(core.ErrCertManagerInstallFailed, fmt.Sprintf("timed out waiting for cert-manager before deployment/%s", dep))
+			err := core.NewWithBase(core.ErrCertManagerInstallFailed, fmt.Sprintf("timed out waiting for cert-manager before deployment/%s", dep))
 			if logErrors {
 				core.Error("cert-manager did not become ready")
 				if logger != nil {
@@ -484,7 +484,7 @@ func waitForCertManagerDeploymentsClientGo(logger *zap.Logger, timeout time.Dura
 			return err
 		}
 		if err := k8sclient.WaitForDeploymentAvailable(context.Background(), clients, "cert-manager", dep, remaining.Round(time.Second)); err != nil {
-			wrapped := core.WrapWithSentinel(core.ErrCertManagerInstallFailed, err, fmt.Sprintf("cert-manager component %s not ready: %v", dep, err))
+			wrapped := core.WrapWithBase(core.ErrCertManagerInstallFailed, err, fmt.Sprintf("cert-manager component %s not ready: %v", dep, err))
 			if logErrors {
 				core.Error("cert-manager did not become ready")
 				if logger != nil {
@@ -525,7 +525,7 @@ func waitForTraefikDeploymentForACMEClientGo() error {
 	}
 	core.Info("Waiting for traefik/traefik (ingress must be up before the ACME request)")
 	if err := k8sclient.WaitForDeploymentAvailable(context.Background(), clients, "traefik", "traefik", 3*time.Minute); err != nil {
-		return core.WrapWithSentinel(core.ErrCertTraefikNotReady, err, fmt.Sprintf("traefik not ready: %v", err))
+		return core.WrapWithBase(core.ErrCertTraefikNotReady, err, fmt.Sprintf("traefik not ready: %v", err))
 	}
 	core.Info("traefik/traefik is available")
 	return nil
@@ -534,14 +534,14 @@ func waitForTraefikDeploymentForACMEClientGo() error {
 func checkNamedClusterIssuerClientGo(name string) error {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return core.NewWithSentinel(core.ErrClusterIssuerNotFound, "ClusterIssuer name is empty (set --tls-cluster-issuer or MCP_TLS_CLUSTER_ISSUER)")
+		return core.NewWithBase(core.ErrClusterIssuerNotFound, "ClusterIssuer name is empty (set --tls-cluster-issuer or MCP_TLS_CLUSTER_ISSUER)")
 	}
 	clients, err := platformKubernetesClients()
 	if err != nil {
 		return err
 	}
 	if err := k8sclient.CheckClusterIssuer(context.Background(), clients, name); err != nil {
-		return core.WrapWithSentinel(core.ErrClusterIssuerNotFound, err, fmt.Sprintf("ClusterIssuer %q not found. Install your org issuer first (cert-manager) or fix --tls-cluster-issuer / MCP_TLS_CLUSTER_ISSUER: %v", name, err))
+		return core.WrapWithBase(core.ErrClusterIssuerNotFound, err, fmt.Sprintf("ClusterIssuer %q not found. Install your org issuer first (cert-manager) or fix --tls-cluster-issuer / MCP_TLS_CLUSTER_ISSUER: %v", name, err))
 	}
 	return nil
 }
@@ -561,27 +561,27 @@ func ensureManagedWorkloadCA(plan setupplan.Plan, now time.Time) error {
 	secret, err := clients.Clientset.CoreV1().Secrets(certmanager.CertManagerNamespace).Get(context.Background(), certmanager.CertCASecretName, metav1.GetOptions{})
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
-			return core.WrapWithSentinel(core.ErrCASecretNotFound, err, "read managed workload CA Secret")
+			return core.WrapWithBase(core.ErrCASecretNotFound, err, "read managed workload CA Secret")
 		}
 		if !plan.TestMode {
-			return core.NewWithSentinel(core.ErrCASecretNotFound, fmt.Sprintf(
+			return core.NewWithBase(core.ErrCASecretNotFound, fmt.Sprintf(
 				"managed workload CA Secret %s/%s is missing. Production setup will not generate a new root. Restore it from your encrypted backup, create it from your CA (kubectl create secret tls %s --cert=ca.crt --key=ca.key -n %s), or use an enterprise issuer via --mtls-cluster-issuer; see docs/cli-reference.md (Bundled workload CA lifecycle)",
 				certmanager.CertManagerNamespace, certmanager.CertCASecretName, certmanager.CertCASecretName, certmanager.CertManagerNamespace))
 		}
 		if _, err := ensureCASecretClientGo(); err != nil {
-			return core.WrapWithSentinel(core.ErrCASecretNotFound, err, "create managed workload CA")
+			return core.WrapWithBase(core.ErrCASecretNotFound, err, "create managed workload CA")
 		}
 		return nil
 	}
 	health, err := certmanager.ValidateCAKeyPair(secret.Data["tls.crt"], secret.Data["tls.key"], now)
 	if err != nil {
-		return core.WrapWithSentinel(core.ErrCASecretInvalid, err, fmt.Sprintf("managed workload CA %s/%s is not usable: %v. Restore a valid CA from backup or rotate it per docs/cli-reference.md (Bundled workload CA lifecycle)", certmanager.CertManagerNamespace, certmanager.CertCASecretName, err))
+		return core.WrapWithBase(core.ErrCASecretInvalid, err, fmt.Sprintf("managed workload CA %s/%s is not usable: %v. Restore a valid CA from backup or rotate it per docs/cli-reference.md (Bundled workload CA lifecycle)", certmanager.CertManagerNamespace, certmanager.CertCASecretName, err))
 	}
 	days := int(health.Remaining.Hours() / 24)
 	if health.NearExpiry {
 		msg := fmt.Sprintf("managed workload CA expires %s (%d days remaining, minimum %d); rotate with dual trust per docs/cli-reference.md (Bundled workload CA lifecycle)", health.NotAfter.UTC().Format(time.RFC3339), days, int(certmanager.MinCARemainingLifetime.Hours()/24))
 		if !plan.TestMode {
-			return core.NewWithSentinel(core.ErrCANearExpiry, msg)
+			return core.NewWithBase(core.ErrCANearExpiry, msg)
 		}
 		core.Warn(msg)
 		return nil
@@ -617,7 +617,7 @@ func ensureCASecretClientGo() (bool, error) {
 
 func applyRegistryCertificateClientGo(certName, secretName string, dnsNames, ipAddresses []string, issuerName string) error {
 	if len(dnsNames) == 0 && len(ipAddresses) == 0 {
-		return core.NewWithSentinel(core.ErrCertCertificateSANsEmpty, fmt.Sprintf("%s TLS has no DNS names or IP addresses to request", certName))
+		return core.NewWithBase(core.ErrCertCertificateSANsEmpty, fmt.Sprintf("%s TLS has no DNS names or IP addresses to request", certName))
 	}
 	manifest := certmanager.RenderRegistryCertificate(certName, secretName, dnsNames, ipAddresses, issuerName)
 	return applyManifestYAML(manifest, "", os.Stdout)
@@ -625,7 +625,7 @@ func applyRegistryCertificateClientGo(certName, secretName string, dnsNames, ipA
 
 func applyCertificateClientGo(certName, secretName, namespace string, dnsNames, ipAddresses []string, issuerName string) error {
 	if len(dnsNames) == 0 && len(ipAddresses) == 0 {
-		return core.NewWithSentinel(core.ErrCertCertificateSANsEmpty, fmt.Sprintf("%s TLS has no DNS names or IP addresses to request", certName))
+		return core.NewWithBase(core.ErrCertCertificateSANsEmpty, fmt.Sprintf("%s TLS has no DNS names or IP addresses to request", certName))
 	}
 	manifest := certmanager.RenderCertificate(certName, secretName, namespace, dnsNames, ipAddresses, issuerName)
 	return applyManifestYAML(manifest, "", os.Stdout)
@@ -692,7 +692,7 @@ func waitForCertificateReadyClientGo(name, namespace string, timeout time.Durati
 		return err
 	}
 	if err := k8sclient.WaitForCertificateReady(context.Background(), clients, namespace, name, timeout); err != nil {
-		err := core.NewWithSentinel(core.ErrCertificateNotReady, fmt.Sprintf("%s not ready after %s. Check cert-manager logs: kubectl logs -n cert-manager deployment/cert-manager", label, timeout))
+		err := core.NewWithBase(core.ErrCertificateNotReady, fmt.Sprintf("%s not ready after %s. Check cert-manager logs: kubectl logs -n cert-manager deployment/cert-manager", label, timeout))
 		core.Error("Certificate not ready")
 		if logger != nil {
 			core.LogStructuredError(logger, err, "Certificate not ready")
@@ -703,7 +703,7 @@ func waitForCertificateReadyClientGo(name, namespace string, timeout time.Durati
 }
 
 func wrapRegistryNamespaceError(err error, logger *zap.Logger) error {
-	wrappedErr := core.WrapWithSentinelAndContext(
+	wrappedErr := core.WrapWithBaseAndContext(
 		core.ErrCreateRegistryNamespaceFailed,
 		err,
 		fmt.Sprintf("failed to create registry namespace: %v", err),
@@ -717,7 +717,7 @@ func wrapRegistryNamespaceError(err error, logger *zap.Logger) error {
 }
 
 func wrapApplyCertificateError(err error, logger *zap.Logger, name string) error {
-	wrappedErr := core.WrapWithSentinelAndContext(
+	wrappedErr := core.WrapWithBaseAndContext(
 		core.ErrApplyCertificateFailed,
 		err,
 		fmt.Sprintf("failed to apply Certificate: %v", err),
@@ -737,7 +737,7 @@ func ensureRegistryCertificateOwnershipClientGo(logger *zap.Logger) error {
 		return err
 	}
 	if err := k8sclient.RemoveIngressAnnotation(context.Background(), clients, core.NamespaceRegistry, core.RegistryServiceName, "cert-manager.io/cluster-issuer"); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(core.ErrTLSSetupFailed, err, err.Error(), map[string]any{"ingress": core.RegistryServiceName, "namespace": core.NamespaceRegistry, "component": "setup"})
+		wrappedErr := core.WrapWithBaseAndContext(core.ErrTLSSetupFailed, err, err.Error(), map[string]any{"ingress": core.RegistryServiceName, "namespace": core.NamespaceRegistry, "component": "setup"})
 		core.Error("Failed to remove registry ingress-shim annotation")
 		if logger != nil {
 			core.LogStructuredError(logger, wrappedErr, "Failed to remove registry ingress-shim annotation")
@@ -746,7 +746,7 @@ func ensureRegistryCertificateOwnershipClientGo(logger *zap.Logger) error {
 	}
 	owners, err := k8sclient.CertificateOwnersForSecret(context.Background(), clients, core.NamespaceRegistry, certmanager.RegistryTLSSecretName)
 	if err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(core.ErrTLSSetupFailed, err, err.Error(), map[string]any{"resource_name": certmanager.RegistryTLSSecretName, "namespace": core.NamespaceRegistry, "component": "setup"})
+		wrappedErr := core.WrapWithBaseAndContext(core.ErrTLSSetupFailed, err, err.Error(), map[string]any{"resource_name": certmanager.RegistryTLSSecretName, "namespace": core.NamespaceRegistry, "component": "setup"})
 		core.Error("Registry TLS Certificate conflict")
 		if logger != nil {
 			core.LogStructuredError(logger, wrappedErr, "Registry TLS Certificate conflict")
@@ -757,8 +757,8 @@ func ensureRegistryCertificateOwnershipClientGo(logger *zap.Logger) error {
 		return nil
 	}
 	msg := fmt.Sprintf("registry TLS secret %q in namespace %q is already referenced by Certificate(s) %s; setup owns this secret with Certificate %q. Delete or rename the extra Certificate resource before re-running setup (old ingress-shim drift is usually fixed with: kubectl delete certificate registry-tls -n registry)", certmanager.RegistryTLSSecretName, core.NamespaceRegistry, strings.Join(owners, ", "), certmanager.RegistryCertificateName)
-	err = core.NewWithSentinel(core.ErrCertRegistryTLSSecretConflict, msg)
-	wrappedErr := core.WrapWithSentinelAndContext(core.ErrTLSSetupFailed, err, err.Error(), map[string]any{"resource_name": certmanager.RegistryTLSSecretName, "namespace": core.NamespaceRegistry, "component": "setup"})
+	err = core.NewWithBase(core.ErrCertRegistryTLSSecretConflict, msg)
+	wrappedErr := core.WrapWithBaseAndContext(core.ErrTLSSetupFailed, err, err.Error(), map[string]any{"resource_name": certmanager.RegistryTLSSecretName, "namespace": core.NamespaceRegistry, "component": "setup"})
 	core.Error("Registry TLS Certificate conflict")
 	if logger != nil {
 		core.LogStructuredError(logger, wrappedErr, "Registry TLS Certificate conflict")
@@ -772,7 +772,7 @@ func setupBundledRegistryInternalTLSClientGo(logger *zap.Logger, plan setupplan.
 	}
 	issuerName, err := bundledRegistryInternalIssuerNameClientGo(plan)
 	if err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrClusterIssuerNotFound, err, fmt.Sprintf("failed to inspect internal registry ClusterIssuer: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrClusterIssuerNotFound, err, fmt.Sprintf("failed to inspect internal registry ClusterIssuer: %v", err))
 		core.Error("Internal registry issuer unavailable")
 		if logger != nil {
 			core.LogStructuredError(logger, wrappedErr, "Internal registry issuer unavailable")
@@ -783,7 +783,7 @@ func setupBundledRegistryInternalTLSClientGo(logger *zap.Logger, plan setupplan.
 		core.Info("Ensuring internal registry CA secret")
 		created, err := ensureCASecretClientGo()
 		if err != nil {
-			err := core.WrapWithSentinel(core.ErrCASecretNotFound, err, "bundled HTTPS registry pulls need an internal CA for registry-internal-tls. Setup could not create cert-manager/mcp-runtime-ca; pass --tls-cluster-issuer for an existing internal issuer or create the CA secret manually")
+			err := core.WrapWithBase(core.ErrCASecretNotFound, err, "bundled HTTPS registry pulls need an internal CA for registry-internal-tls. Setup could not create cert-manager/mcp-runtime-ca; pass --tls-cluster-issuer for an existing internal issuer or create the CA secret manually")
 			core.Error("Internal registry CA secret unavailable")
 			if logger != nil {
 				core.LogStructuredError(logger, err, "Internal registry CA secret unavailable")
@@ -795,7 +795,7 @@ func setupBundledRegistryInternalTLSClientGo(logger *zap.Logger, plan setupplan.
 		}
 		core.Info("Applying internal registry ClusterIssuer")
 		if err := applyManifestFile("config/cert-manager/cluster-issuer.yaml", "", os.Stdout); err != nil {
-			wrappedErr := core.WrapWithSentinel(core.ErrClusterIssuerApplyFailed, err, fmt.Sprintf("failed to apply internal registry ClusterIssuer: %v", err))
+			wrappedErr := core.WrapWithBase(core.ErrClusterIssuerApplyFailed, err, fmt.Sprintf("failed to apply internal registry ClusterIssuer: %v", err))
 			core.Error("Failed to apply internal registry ClusterIssuer")
 			if logger != nil {
 				core.LogStructuredError(logger, wrappedErr, "Failed to apply internal registry ClusterIssuer")
@@ -807,7 +807,7 @@ func setupBundledRegistryInternalTLSClientGo(logger *zap.Logger, plan setupplan.
 	dnsNames, ipAddresses := registryInternalCertificateSANs(plan)
 	core.Info("Applying Certificate for internal registry pod TLS")
 	if err := applyRegistryCertificateClientGo(certmanager.RegistryInternalCertificateName, certmanager.RegistryInternalTLSSecretName, dnsNames, ipAddresses, issuerName); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrApplyCertificateFailed,
 			err,
 			fmt.Sprintf("failed to apply internal registry Certificate: %v", err),
@@ -888,7 +888,7 @@ func bundledRegistryInternalIssuerName(kubectl core.KubectlRunner, plan setuppla
 
 func clusterIssuerUsesACME(kubectl core.KubectlRunner, name string) (bool, error) {
 	if kubectl == nil {
-		return false, core.NewWithSentinel(core.ErrSetupTLSKubectlRunnerNil, "kubectl runner is nil")
+		return false, core.NewWithBase(core.ErrSetupTLSKubectlRunnerNil, "kubectl runner is nil")
 	}
 	cmd, err := kubectl.CommandArgs([]string{"get", "clusterissuer", name, "-o", "jsonpath={.spec.acme.server}"})
 	if err != nil {
@@ -897,7 +897,7 @@ func clusterIssuerUsesACME(kubectl core.KubectlRunner, name string) (bool, error
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		if detail := strings.TrimSpace(string(out)); detail != "" {
-			return false, core.WrapWithSentinel(core.ErrSetupInspectClusterIssuerFailed, err, fmt.Sprintf("inspect ClusterIssuer %q: %v: %s", name, err, detail))
+			return false, core.WrapWithBase(core.ErrSetupInspectClusterIssuerFailed, err, fmt.Sprintf("inspect ClusterIssuer %q: %v: %s", name, err, detail))
 		}
 		return false, err
 	}
@@ -959,7 +959,7 @@ func dedupeStrings(values []string) []string {
 func setupTLSLetsEncrypt(kubectl core.KubectlRunner, logger *zap.Logger, plan setupplan.Plan) error {
 	core.Info("Configuring TLS with Let's Encrypt (cert-manager HTTP-01)")
 	if err := certmanager.ValidateACMEHostnameForPublicCA(); err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrTLSSetupFailed, err, err.Error())
+		wrappedErr := core.WrapWithBase(core.ErrTLSSetupFailed, err, err.Error())
 		core.Error("Invalid configuration for Let's Encrypt")
 		if logger != nil {
 			core.LogStructuredError(logger, wrappedErr, "Invalid configuration for Let's Encrypt")
@@ -967,7 +967,7 @@ func setupTLSLetsEncrypt(kubectl core.KubectlRunner, logger *zap.Logger, plan se
 		return wrappedErr
 	}
 	if err := certmanager.ValidateIngressManifestForACME(plan.Ingress.Manifest); err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrTLSSetupFailed, err, err.Error())
+		wrappedErr := core.WrapWithBase(core.ErrTLSSetupFailed, err, err.Error())
 		core.Error("Ingress configuration blocks Let's Encrypt")
 		if logger != nil {
 			core.LogStructuredError(logger, wrappedErr, "Ingress configuration blocks Let's Encrypt")
@@ -981,7 +981,7 @@ func setupTLSLetsEncrypt(kubectl core.KubectlRunner, logger *zap.Logger, plan se
 	} else {
 		core.Info("Checking cert-manager installation (--skip-cert-manager-install)")
 		if err := certmanager.CheckCertManagerInstalledWithKubectl(kubectl); err != nil {
-			err := core.WrapWithSentinel(core.ErrCertManagerNotInstalled, err, "cert-manager not installed. Install it, or omit --skip-cert-manager-install to let setup apply it from upstream")
+			err := core.WrapWithBase(core.ErrCertManagerNotInstalled, err, "cert-manager not installed. Install it, or omit --skip-cert-manager-install to let setup apply it from upstream")
 			core.Error("Cert-manager not installed")
 			if logger != nil {
 				core.LogStructuredError(logger, err, "Cert-manager not installed")
@@ -991,7 +991,7 @@ func setupTLSLetsEncrypt(kubectl core.KubectlRunner, logger *zap.Logger, plan se
 		core.Info("cert-manager CRDs found")
 	}
 	if err := certmanager.WaitForTraefikDeploymentForACME(kubectl); err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrTLSSetupFailed, err, err.Error())
+		wrappedErr := core.WrapWithBase(core.ErrTLSSetupFailed, err, err.Error())
 		core.Error("Traefik is not ready for HTTP-01")
 		if logger != nil {
 			core.LogStructuredError(logger, wrappedErr, "Traefik is not ready for HTTP-01")
@@ -1007,7 +1007,7 @@ func setupTLSLetsEncrypt(kubectl core.KubectlRunner, logger *zap.Logger, plan se
 	}
 
 	if err := kube.EnsureNamespace(kubectl.CommandArgs, core.NamespaceRegistry); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrCreateRegistryNamespaceFailed,
 			err,
 			fmt.Sprintf("failed to create registry namespace: %v", err),
@@ -1030,7 +1030,7 @@ func setupTLSLetsEncrypt(kubectl core.KubectlRunner, logger *zap.Logger, plan se
 	dnsNames := certmanager.ACMETLSDNSNames()
 	core.Info("Applying Certificate for registry (Let's Encrypt SANs)")
 	if err := certmanager.ApplyRegistryCertificateForACME(kubectl, dnsNames, issuerName); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrApplyCertificateFailed,
 			err,
 			fmt.Sprintf("failed to apply Certificate: %v", err),
@@ -1049,7 +1049,7 @@ func setupTLSLetsEncrypt(kubectl core.KubectlRunner, logger *zap.Logger, plan se
 	}
 	core.Info(fmt.Sprintf("Waiting for certificate to be issued (timeout: %s)", certTimeout))
 	if err := certmanager.WaitForCertificateReadyWithKubectl(kubectl, certmanager.RegistryCertificateName, core.NamespaceRegistry, certTimeout); err != nil {
-		err := core.NewWithSentinel(core.ErrCertificateNotReady, fmt.Sprintf("certificate not ready after %s. Check cert-manager logs: kubectl logs -n cert-manager deployment/cert-manager", certTimeout))
+		err := core.NewWithBase(core.ErrCertificateNotReady, fmt.Sprintf("certificate not ready after %s. Check cert-manager logs: kubectl logs -n cert-manager deployment/cert-manager", certTimeout))
 		core.Error("Certificate not ready")
 		if logger != nil {
 			core.LogStructuredError(logger, err, "Certificate not ready")
@@ -1077,7 +1077,7 @@ func setupTLSWithExistingClusterIssuer(kubectl core.KubectlRunner, logger *zap.L
 	} else {
 		core.Info("Checking cert-manager installation (--skip-cert-manager-install)")
 		if err := certmanager.CheckCertManagerInstalledWithKubectl(kubectl); err != nil {
-			err := core.WrapWithSentinel(core.ErrCertManagerNotInstalled, err, "cert-manager not installed. Install it, or omit --skip-cert-manager-install to let setup apply it from upstream")
+			err := core.WrapWithBase(core.ErrCertManagerNotInstalled, err, "cert-manager not installed. Install it, or omit --skip-cert-manager-install to let setup apply it from upstream")
 			core.Error("Cert-manager not installed")
 			if logger != nil {
 				core.LogStructuredError(logger, err, "Cert-manager not installed")
@@ -1096,7 +1096,7 @@ func setupTLSWithExistingClusterIssuer(kubectl core.KubectlRunner, logger *zap.L
 	}
 
 	if err := kube.EnsureNamespace(kubectl.CommandArgs, core.NamespaceRegistry); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrCreateRegistryNamespaceFailed,
 			err,
 			fmt.Sprintf("failed to create registry namespace: %v", err),
@@ -1117,8 +1117,8 @@ func setupTLSWithExistingClusterIssuer(kubectl core.KubectlRunner, logger *zap.L
 
 	dnsNames, ipAddresses := registryCertificateSANs(plan)
 	if len(dnsNames) == 0 && len(ipAddresses) == 0 {
-		err := core.NewWithSentinel(core.ErrSetupTLSCertificateSANsEmpty, "no DNS names or IP addresses resolved for the Certificate; set MCP_PLATFORM_DOMAIN, MCP_REGISTRY_HOST, or MCP_REGISTRY_INGRESS_HOST (and optional MCP_MCP_INGRESS_HOST)")
-		wrappedErr := core.WrapWithSentinel(core.ErrTLSSetupFailed, err, err.Error())
+		err := core.NewWithBase(core.ErrSetupTLSCertificateSANsEmpty, "no DNS names or IP addresses resolved for the Certificate; set MCP_PLATFORM_DOMAIN, MCP_REGISTRY_HOST, or MCP_REGISTRY_INGRESS_HOST (and optional MCP_MCP_INGRESS_HOST)")
+		wrappedErr := core.WrapWithBase(core.ErrTLSSetupFailed, err, err.Error())
 		core.Error("Invalid TLS host configuration")
 		if logger != nil {
 			core.LogStructuredError(logger, wrappedErr, "Invalid TLS host configuration")
@@ -1128,7 +1128,7 @@ func setupTLSWithExistingClusterIssuer(kubectl core.KubectlRunner, logger *zap.L
 
 	core.Info("Applying Certificate for registry (custom ClusterIssuer)")
 	if err := certmanager.ApplyRegistryCertificate(kubectl, dnsNames, ipAddresses, issuerName); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrApplyCertificateFailed,
 			err,
 			fmt.Sprintf("failed to apply Certificate: %v", err),
@@ -1147,7 +1147,7 @@ func setupTLSWithExistingClusterIssuer(kubectl core.KubectlRunner, logger *zap.L
 	}
 	core.Info(fmt.Sprintf("Waiting for certificate to be issued (timeout: %s)", certTimeout))
 	if err := certmanager.WaitForCertificateReadyWithKubectl(kubectl, certmanager.RegistryCertificateName, core.NamespaceRegistry, certTimeout); err != nil {
-		err := core.NewWithSentinel(core.ErrCertificateNotReady, fmt.Sprintf("certificate not ready after %s. Check cert-manager and your ClusterIssuer configuration: kubectl logs -n cert-manager deployment/cert-manager", certTimeout))
+		err := core.NewWithBase(core.ErrCertificateNotReady, fmt.Sprintf("certificate not ready after %s. Check cert-manager and your ClusterIssuer configuration: kubectl logs -n cert-manager deployment/cert-manager", certTimeout))
 		core.Error("Certificate not ready")
 		if logger != nil {
 			core.LogStructuredError(logger, err, "Certificate not ready")
@@ -1166,7 +1166,7 @@ func setupTLSWithExistingClusterIssuer(kubectl core.KubectlRunner, logger *zap.L
 func setupTLSPrivateCA(kubectl core.KubectlRunner, logger *zap.Logger, plan setupplan.Plan) error {
 	core.Info("Checking cert-manager installation")
 	if err := certmanager.CheckCertManagerInstalledWithKubectl(kubectl); err != nil {
-		err := core.WrapWithSentinel(core.ErrCertManagerNotInstalled, err, "cert-manager not installed. Install it first:\n  helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --set crds.enabled=true\n  or run setup with --with-tls --acme-email <addr> to install cert-manager automatically")
+		err := core.WrapWithBase(core.ErrCertManagerNotInstalled, err, "cert-manager not installed. Install it first:\n  helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --set crds.enabled=true\n  or run setup with --with-tls --acme-email <addr> to install cert-manager automatically")
 		core.Error("Cert-manager not installed")
 		if logger != nil {
 			core.LogStructuredError(logger, err, "Cert-manager not installed")
@@ -1179,7 +1179,7 @@ func setupTLSPrivateCA(kubectl core.KubectlRunner, logger *zap.Logger, plan setu
 	if plan.RegistryMode == setupplan.RegistryModeBundledHTTPS {
 		created, err := certmanager.EnsureCASecretWithKubectl(kubectl)
 		if err != nil {
-			err := core.WrapWithSentinel(core.ErrCASecretNotFound, err, "CA secret 'mcp-runtime-ca' could not be generated in cert-manager namespace. Create a private CA manually:\n  kubectl create secret tls mcp-runtime-ca --cert=ca.crt --key=ca.key -n cert-manager")
+			err := core.WrapWithBase(core.ErrCASecretNotFound, err, "CA secret 'mcp-runtime-ca' could not be generated in cert-manager namespace. Create a private CA manually:\n  kubectl create secret tls mcp-runtime-ca --cert=ca.crt --key=ca.key -n cert-manager")
 			core.Error("CA secret unavailable")
 			if logger != nil {
 				core.LogStructuredError(logger, err, "CA secret unavailable")
@@ -1190,7 +1190,7 @@ func setupTLSPrivateCA(kubectl core.KubectlRunner, logger *zap.Logger, plan setu
 			core.Info("Generated cert-manager/mcp-runtime-ca for bundled HTTPS registry TLS; configure every Kubernetes node to trust its tls.crt before pulling from the bundled HTTPS registry")
 		}
 	} else if err := certmanager.CheckCASecretWithKubectl(kubectl); err != nil {
-		err := core.WrapWithSentinel(core.ErrCASecretNotFound, err, "CA secret 'mcp-runtime-ca' not found in cert-manager namespace. For Let's Encrypt use --acme-email, or create a private CA:\n  kubectl create secret tls mcp-runtime-ca --cert=ca.crt --key=ca.key -n cert-manager")
+		err := core.WrapWithBase(core.ErrCASecretNotFound, err, "CA secret 'mcp-runtime-ca' not found in cert-manager namespace. For Let's Encrypt use --acme-email, or create a private CA:\n  kubectl create secret tls mcp-runtime-ca --cert=ca.crt --key=ca.key -n cert-manager")
 		core.Error("CA secret not found")
 		if logger != nil {
 			core.LogStructuredError(logger, err, "CA secret not found")
@@ -1201,7 +1201,7 @@ func setupTLSPrivateCA(kubectl core.KubectlRunner, logger *zap.Logger, plan setu
 
 	core.Info("Applying ClusterIssuer")
 	if err := certmanager.ApplyClusterIssuerWithKubectl(kubectl); err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrClusterIssuerApplyFailed, err, fmt.Sprintf("failed to apply ClusterIssuer: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrClusterIssuerApplyFailed, err, fmt.Sprintf("failed to apply ClusterIssuer: %v", err))
 		core.Error("Failed to apply ClusterIssuer")
 		if logger != nil {
 			core.LogStructuredError(logger, wrappedErr, "Failed to apply ClusterIssuer")
@@ -1210,7 +1210,7 @@ func setupTLSPrivateCA(kubectl core.KubectlRunner, logger *zap.Logger, plan setu
 	}
 
 	if err := kube.EnsureNamespace(kubectl.CommandArgs, core.NamespaceRegistry); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrCreateRegistryNamespaceFailed,
 			err,
 			fmt.Sprintf("failed to create registry namespace: %v", err),
@@ -1235,7 +1235,7 @@ func setupTLSPrivateCA(kubectl core.KubectlRunner, logger *zap.Logger, plan setu
 		certErr = certmanager.ApplyRegistryCertificateWithKubectl(kubectl)
 	}
 	if certErr != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrApplyCertificateFailed,
 			certErr,
 			fmt.Sprintf("failed to apply Certificate: %v", certErr),
@@ -1251,7 +1251,7 @@ func setupTLSPrivateCA(kubectl core.KubectlRunner, logger *zap.Logger, plan setu
 	certTimeout := core.GetCertTimeout()
 	core.Info(fmt.Sprintf("Waiting for certificate to be issued (timeout: %s)", certTimeout))
 	if err := certmanager.WaitForCertificateReadyWithKubectl(kubectl, certmanager.RegistryCertificateName, core.NamespaceRegistry, certTimeout); err != nil {
-		err := core.NewWithSentinel(core.ErrCertificateNotReady, fmt.Sprintf("certificate not ready after %s. Check cert-manager logs: kubectl logs -n cert-manager deployment/cert-manager", certTimeout))
+		err := core.NewWithBase(core.ErrCertificateNotReady, fmt.Sprintf("certificate not ready after %s. Check cert-manager logs: kubectl logs -n cert-manager deployment/cert-manager", certTimeout))
 		core.Error("Certificate not ready")
 		if logger != nil {
 			core.LogStructuredError(logger, err, "Certificate not ready")
@@ -1271,7 +1271,7 @@ func setupBundledRegistryInternalTLSStep(kubectl core.KubectlRunner, logger *zap
 	}
 	issuerName, err := bundledRegistryInternalIssuerName(kubectl, plan)
 	if err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrClusterIssuerNotFound, err, fmt.Sprintf("failed to inspect internal registry ClusterIssuer: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrClusterIssuerNotFound, err, fmt.Sprintf("failed to inspect internal registry ClusterIssuer: %v", err))
 		core.Error("Internal registry issuer unavailable")
 		if logger != nil {
 			core.LogStructuredError(logger, wrappedErr, "Internal registry issuer unavailable")
@@ -1282,7 +1282,7 @@ func setupBundledRegistryInternalTLSStep(kubectl core.KubectlRunner, logger *zap
 		core.Info("Ensuring internal registry CA secret")
 		created, err := certmanager.EnsureCASecretWithKubectl(kubectl)
 		if err != nil {
-			err := core.WrapWithSentinel(
+			err := core.WrapWithBase(
 				core.ErrCASecretNotFound,
 				err,
 				"bundled HTTPS registry pulls need an internal CA for registry-internal-tls. Setup could not create cert-manager/mcp-runtime-ca; pass --tls-cluster-issuer for an existing internal issuer or create the CA secret manually",
@@ -1298,7 +1298,7 @@ func setupBundledRegistryInternalTLSStep(kubectl core.KubectlRunner, logger *zap
 		}
 		core.Info("Applying internal registry ClusterIssuer")
 		if err := certmanager.ApplyClusterIssuerWithKubectl(kubectl); err != nil {
-			wrappedErr := core.WrapWithSentinel(core.ErrClusterIssuerApplyFailed, err, fmt.Sprintf("failed to apply internal registry ClusterIssuer: %v", err))
+			wrappedErr := core.WrapWithBase(core.ErrClusterIssuerApplyFailed, err, fmt.Sprintf("failed to apply internal registry ClusterIssuer: %v", err))
 			core.Error("Failed to apply internal registry ClusterIssuer")
 			if logger != nil {
 				core.LogStructuredError(logger, wrappedErr, "Failed to apply internal registry ClusterIssuer")
@@ -1310,7 +1310,7 @@ func setupBundledRegistryInternalTLSStep(kubectl core.KubectlRunner, logger *zap
 	dnsNames, ipAddresses := registryInternalCertificateSANs(plan)
 	core.Info("Applying Certificate for internal registry pod TLS")
 	if err := certmanager.ApplyRegistryInternalCertificate(kubectl, dnsNames, ipAddresses, issuerName); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrApplyCertificateFailed,
 			err,
 			fmt.Sprintf("failed to apply internal registry Certificate: %v", err),
@@ -1329,7 +1329,7 @@ func setupBundledRegistryInternalTLSStep(kubectl core.KubectlRunner, logger *zap
 	}
 	core.Info(fmt.Sprintf("Waiting for internal registry certificate to be issued (timeout: %s)", certTimeout))
 	if err := certmanager.WaitForCertificateReadyWithKubectl(kubectl, certmanager.RegistryInternalCertificateName, core.NamespaceRegistry, certTimeout); err != nil {
-		err := core.NewWithSentinel(core.ErrCertificateNotReady, fmt.Sprintf("internal registry certificate not ready after %s. Check cert-manager and your internal issuer configuration", certTimeout))
+		err := core.NewWithBase(core.ErrCertificateNotReady, fmt.Sprintf("internal registry certificate not ready after %s. Check cert-manager and your internal issuer configuration", certTimeout))
 		core.Error("Internal registry certificate not ready")
 		if logger != nil {
 			core.LogStructuredError(logger, err, "Internal registry certificate not ready")
@@ -1343,7 +1343,7 @@ func setupBundledRegistryInternalTLSStep(kubectl core.KubectlRunner, logger *zap
 func ensureRegistryCertificateOwnership(kubectl core.KubectlRunner, logger *zap.Logger) error {
 	core.Info("Checking registry TLS Certificate ownership")
 	if err := certmanager.RemoveRegistryIngressShimAnnotationWithKubectl(kubectl); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrTLSSetupFailed,
 			err,
 			err.Error(),
@@ -1356,7 +1356,7 @@ func ensureRegistryCertificateOwnership(kubectl core.KubectlRunner, logger *zap.
 		return wrappedErr
 	}
 	if err := certmanager.CheckRegistryCertificateOwnershipWithKubectl(kubectl); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrTLSSetupFailed,
 			err,
 			err.Error(),

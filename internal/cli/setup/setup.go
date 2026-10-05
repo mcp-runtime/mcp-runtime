@@ -67,7 +67,7 @@ func New(runtime *core.Runtime, clusterMgr setupplatform.ClusterManagerAPI) *cob
 	var testMode bool
 	var parallelBuilds bool
 	var strictProd bool
-	var withoutAnalytics bool
+	var withoutPlatformStack bool
 	var withMCPAuthServer bool
 	var mcpAuthServerImage string
 	var mcpAuthIssuerURL string
@@ -192,7 +192,7 @@ will use to push and pull container images.`,
 			envBool("test-mode", &testMode, "MCP_SETUP_TEST_MODE")
 			envBool("parallel-builds", &parallelBuilds, "MCP_PARALLEL_BUILDS")
 			envBool("strict-prod", &strictProd, "MCP_STRICT_PROD")
-			envBool("without-sentinel", &withoutAnalytics, "MCP_WITHOUT_SENTINEL")
+			envBool("without-platform-stack", &withoutPlatformStack, "MCP_WITHOUT_PLATFORM_STACK")
 			envBool("with-mcp-auth-server", &withMCPAuthServer, "MCP_SETUP_WITH_MCP_AUTH_SERVER")
 			envStr("mcp-auth-server-image", &mcpAuthServerImage, "MCP_SETUP_MCP_AUTH_SERVER_IMAGE")
 			envStr("mcp-auth-issuer-url", &mcpAuthIssuerURL, "MCP_SETUP_MCP_AUTH_ISSUER_URL")
@@ -204,8 +204,8 @@ will use to push and pull container images.`,
 			envStr("mcp-auth-signing-key-secret", &mcpAuthSigningKeySecret, "MCP_SETUP_MCP_AUTH_SIGNING_KEY_SECRET")
 			envStr("mcp-auth-connectors-file", &mcpAuthConnectorsFile, "MCP_SETUP_MCP_AUTH_CONNECTORS_FILE")
 			envStr("mcp-auth-connector", &mcpAuthConnector, "MCP_SETUP_MCP_AUTH_CONNECTOR")
-			if withMCPAuthServer && withoutAnalytics {
-				return fmt.Errorf("--with-mcp-auth-server requires the bundled sentinel stack")
+			if withMCPAuthServer && withoutPlatformStack {
+				return fmt.Errorf("--with-mcp-auth-server requires the bundled platform stack")
 			}
 			if withMCPAuthServer && !testMode {
 				if !tlsEnabled {
@@ -285,7 +285,7 @@ will use to push and pull container images.`,
 				TestMode:                testMode,
 				ParallelBuilds:          parallelBuilds,
 				StrictProd:              strictProd,
-				DeployAnalytics:         !withoutAnalytics,
+				DeployAnalytics:         !withoutPlatformStack,
 				DeployMCPAuthServer:     withMCPAuthServer,
 				MCPAuthServerImage:      mcpAuthServerImage,
 				MCPAuthIssuerURL:        mcpAuthIssuerURL,
@@ -330,7 +330,7 @@ will use to push and pull container images.`,
 	cmd.Flags().BoolVar(&testMode, "test-mode", false, "Test mode for local Kind/dev installs; builds and pushes latest-tag runtime images, provisions a local workload mTLS issuer, and relaxes production guardrails")
 	cmd.Flags().BoolVar(&parallelBuilds, "parallel-builds", false, "Build and publish setup images in parallel; keeps cluster, registry, TLS, and rollout sequencing unchanged")
 	cmd.Flags().BoolVar(&strictProd, "strict-prod", false, "Require production-style registry and TLS validation for non-test setup")
-	cmd.Flags().BoolVar(&withoutAnalytics, "without-sentinel", false, "Skip deploying the bundled platform stack")
+	cmd.Flags().BoolVar(&withoutPlatformStack, "without-platform-stack", false, "Skip deploying the bundled platform stack")
 	cmd.Flags().BoolVar(&withMCPAuthServer, "with-mcp-auth-server", false, "Deploy the optional bundled mcp-auth authorization server; production requires a platform domain, connector, and TLS-enabled ingress")
 	cmd.Flags().StringVar(&mcpAuthServerImage, "mcp-auth-server-image", "docker.io/princekrroshan01/mcp-auth-server:latest", "Container image for the optional bundled mcp-auth authorization server")
 	cmd.Flags().StringVar(&mcpAuthIssuerURL, "mcp-auth-issuer-url", "", "Public HTTPS issuer URL for the bundled mcp-auth authorization server (defaults to https://auth.<MCP_PLATFORM_DOMAIN>/mcp-auth)")
@@ -339,9 +339,6 @@ will use to push and pull container images.`,
 	cmd.Flags().StringVar(&mcpAuthTLSSecret, "mcp-auth-tls-secret", "", "Override the managed TLS Secret for the bundled mcp-auth ingress (default: mcp-auth-server-tls)")
 	cmd.Flags().StringVar(&mcpAuthConnectorsFile, "mcp-auth-connectors-file", "", "Provider connector JSON file for the bundled mcp-auth authorization server")
 	cmd.Flags().StringVar(&mcpAuthConnector, "mcp-auth-connector", "", "Provider connector name to activate (requires --mcp-auth-connectors-file)")
-	cmd.Flags().BoolVar(&withoutAnalytics, "without-analytics", false, "Deprecated alias for --without-sentinel")
-	_ = cmd.Flags().MarkDeprecated("without-analytics", "use --without-sentinel")
-	_ = cmd.Flags().MarkHidden("without-analytics")
 	cmd.Flags().StringVar(&operatorMetricsAddr, "operator-metrics-addr", "", "Operator metrics bind address (default: :8080 from manager.yaml)")
 	cmd.Flags().StringVar(&operatorProbeAddr, "operator-probe-addr", "", "Operator health probe bind address (default: :8081 from manager.yaml)")
 	cmd.Flags().BoolVar(&operatorLeaderElect, "operator-leader-elect", false, "Override operator leader election when set")

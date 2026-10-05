@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	sentinelaccess "mcp-runtime/pkg/access"
+	mcpaccess "mcp-runtime/pkg/access"
 	serviceutil "mcp-runtime/pkg/serviceutil"
 )
 
@@ -21,16 +21,16 @@ func ExtractNamespacedPath(path, prefix string, expectedParts int) (string, stri
 	if namespace == "" || name == "" {
 		return "", "", fmt.Errorf("invalid path")
 	}
-	if err := sentinelaccess.ValidateResourceName("namespace", namespace); err != nil {
+	if err := mcpaccess.ValidateResourceName("namespace", namespace); err != nil {
 		return "", "", err
 	}
-	if err := sentinelaccess.ValidateResourceName("name", name); err != nil {
+	if err := mcpaccess.ValidateResourceName("name", name); err != nil {
 		return "", "", err
 	}
 	return namespace, name, nil
 }
 
-func AccessServerRefNamespace(resourceNamespace string, ref sentinelaccess.ServerReference) string {
+func AccessServerRefNamespace(resourceNamespace string, ref mcpaccess.ServerReference) string {
 	if ns := strings.TrimSpace(string(ref.Namespace)); ns != "" {
 		return ns
 	}

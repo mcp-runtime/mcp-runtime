@@ -3,7 +3,7 @@ package access
 import (
 	"strings"
 
-	sentinelaccess "mcp-runtime/pkg/access"
+	mcpaccess "mcp-runtime/pkg/access"
 	"mcp-runtime/pkg/mcpdefaults"
 )
 
@@ -13,7 +13,7 @@ func DefaultAccessNamespace(namespace string) string {
 	if namespace = strings.TrimSpace(namespace); namespace != "" {
 		return namespace
 	}
-	return sentinelaccess.DefaultMCPResourceNamespace
+	return mcpaccess.DefaultMCPResourceNamespace
 }
 
 func DefaultPolicyVersion(policyVersion string) string {
@@ -23,15 +23,15 @@ func DefaultPolicyVersion(policyVersion string) string {
 	return DefaultPolicyVersionValue
 }
 
-func NormalizeTrust(trust sentinelaccess.TrustLevel) sentinelaccess.TrustLevel {
-	return sentinelaccess.TrustLevel(strings.TrimSpace(string(trust)))
+func NormalizeTrust(trust mcpaccess.TrustLevel) mcpaccess.TrustLevel {
+	return mcpaccess.TrustLevel(strings.TrimSpace(string(trust)))
 }
 
-func NormalizeSideEffect(sideEffect sentinelaccess.ToolSideEffect) sentinelaccess.ToolSideEffect {
-	return sentinelaccess.ToolSideEffect(strings.TrimSpace(string(sideEffect)))
+func NormalizeSideEffect(sideEffect mcpaccess.ToolSideEffect) mcpaccess.ToolSideEffect {
+	return mcpaccess.ToolSideEffect(strings.TrimSpace(string(sideEffect)))
 }
 
-func ValidTrust(trust sentinelaccess.TrustLevel) bool {
+func ValidTrust(trust mcpaccess.TrustLevel) bool {
 	switch trust {
 	case "low", "medium", "high":
 		return true
@@ -40,7 +40,7 @@ func ValidTrust(trust sentinelaccess.TrustLevel) bool {
 	}
 }
 
-func ValidSideEffect(sideEffect sentinelaccess.ToolSideEffect) bool {
+func ValidSideEffect(sideEffect mcpaccess.ToolSideEffect) bool {
 	switch sideEffect {
 	case "read", "write", "destructive":
 		return true
@@ -49,7 +49,7 @@ func ValidSideEffect(sideEffect sentinelaccess.ToolSideEffect) bool {
 	}
 }
 
-func ValidDecision(decision sentinelaccess.PolicyDecision) bool {
+func ValidDecision(decision mcpaccess.PolicyDecision) bool {
 	switch decision {
 	case "allow", "deny":
 		return true

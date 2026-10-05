@@ -6,7 +6,7 @@
       "should_trigger": true
     },
     {
-      "query": "Run full browser QA for Sentinel dashboard roles, tabs, forms, filters, responsive layout, and console errors.",
+      "query": "Run full browser QA for platform dashboard roles, tabs, forms, filters, responsive layout, and console errors.",
       "should_trigger": true
     },
     {

@@ -38,7 +38,7 @@ A public preview runs at [platform.mcpruntime.org](https://platform.mcpruntime.o
 
 - `MCPServer`, `MCPAccessGrant`, and `MCPAgentSession` are namespaced CRDs, so servers, access, and sessions are visible and reviewable with `kubectl`.
 - The `mcp-gateway` sidecar applies deny-by-default tool rules, trust ceilings, side-effect limits, session expiry, and revocation on every `tools/call`.
-- Every allow and deny decision is recorded with the identity, tool, reason, and policy version, and is queryable through the Sentinel API and dashboards.
+- Every allow and deny decision is recorded with the identity, tool, reason, and policy version, and is queryable through the platform API and dashboards.
 - `adapter proxy` gives IDEs, agent frameworks, and scripts a local Streamable HTTP endpoint that adds a session-bound client certificate with automatic refresh and forwards OAuth when the target requires it.
 - Team namespaces, RBAC, and `teamID` subject matching let several teams publish and govern servers on one cluster, with private, org-wide, or public catalogs.
 - Setup, registry and image-pull wiring, ingress, rollout readiness, `cluster doctor`, `cluster diagnostics`, and status commands are included.
@@ -56,7 +56,7 @@ A public preview runs at [platform.mcpruntime.org](https://platform.mcpruntime.o
 - Kubernetes operator for `Deployment`, `Service`, `Ingress`, and policy materialization
 - Internal or provisioned registry workflows
 - Optional gateway enforcement for identity, tool policy, trust, and audit emission
-- Bundled Sentinel stack for ingest, processing, API, UI, and observability.
+- Bundled platform stack for ingest, processing, API, UI, and observability.
   Control-plane services run in `mcp-platform`. The event pipeline and
   telemetry stack run in `mcp-observability`. Promtail runs in
   `mcp-log-collector`. MCP servers stay in `mcp-servers`, `mcp-servers-org`,
@@ -81,7 +81,7 @@ Cluster prerequisites:
 - Working DNS, default storage class, ingress, and load-balancing path for your distribution
 - See [`docs/deployment-targets.md`](docs/deployment-targets.md) to choose the install shape, then [`docs/cluster-readiness.md`](docs/cluster-readiness.md) before running production-like installs
 
-`mcp-runtime setup` installs the platform stack, including Sentinel services such as ClickHouse and Kafka. You do not install those separately for the default flow.
+`mcp-runtime setup` installs the platform stack, including platform services such as ClickHouse and Kafka. You do not install those separately for the default flow.
 
 ## Quick start
 

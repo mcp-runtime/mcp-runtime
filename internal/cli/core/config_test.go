@@ -60,7 +60,7 @@ func TestLoadCLIConfigWithProvisionedRegistry(t *testing.T) {
 	t.Setenv("MCP_GATEWAY_PROXY_IMAGE", "example/mcp-gateway:latest")
 	t.Setenv("MCP_IMAGE_PLATFORM", "linux/amd64")
 	t.Setenv("MCP_GATEWAY_OTEL_EXPORTER_OTLP_ENDPOINT", "http://custom-otel:4318")
-	t.Setenv("MCP_SENTINEL_INGEST_URL", "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events")
+	t.Setenv("MCP_ANALYTICS_INGEST_URL", "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events")
 	t.Setenv("MCP_INGRESS_READINESS_MODE", "permissive")
 	t.Setenv("MCP_DEFAULT_SERVER_PORT", "9000")
 	t.Setenv("PROVISIONED_REGISTRY_URL", "registry.mcpruntime.com")
@@ -134,17 +134,6 @@ func TestLoadCLIConfigPlatformDomain(t *testing.T) {
 	}
 	if cfg.McpIngressHost != "mcp.mcpruntime.com" {
 		t.Fatalf("expected mcp host from platform, got %q", cfg.McpIngressHost)
-	}
-}
-
-func TestLoadCLIConfigUsesLegacyAnalyticsEnv(t *testing.T) {
-	t.Setenv("MCP_PLATFORM_DOMAIN", "")
-	t.Setenv("MCP_SENTINEL_INGEST_URL", "")
-	t.Setenv("MCP_ANALYTICS_INGEST_URL", "http://legacy-ingest")
-
-	cfg := LoadCLIConfig()
-	if cfg.AnalyticsIngestURL != "http://legacy-ingest" {
-		t.Fatalf("expected legacy analytics ingest url override, got %q", cfg.AnalyticsIngestURL)
 	}
 }
 

@@ -92,7 +92,7 @@ func TestPromtailManifestUsesCollectorNamespace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Count(string(content), "namespace: mcp-log-collector") < 4 || strings.Contains(string(content), "namespace: mcp-sentinel") {
+	if strings.Count(string(content), "namespace: mcp-log-collector") < 4 {
 		t.Fatal("promtail resources must use the collector namespace")
 	}
 }

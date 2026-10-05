@@ -9,26 +9,26 @@ func CreateByCode(code, description, message string, cause error) *Error {
 	return New(code, description, message)
 }
 
-// FromSentinel creates an Error from a sentinel error and optional message/cause.
-// This is useful when you have a sentinel error and want to create an errx.Error
-// with the same category. The sentinel is used to determine the category via a lookup function.
-// Panics if sentinel is nil (sentinel is required for error identification).
-func FromSentinel(sentinel error, lookup func(error) (code, description string), message string, cause error) *Error {
-	if sentinel == nil {
-		panic("errx.FromSentinel: sentinel cannot be nil")
+// FromBase creates an Error from a base error and optional message/cause.
+// This is useful when you have a base error and want to create an errx.Error
+// with the same category. The base is used to determine the category via a lookup function.
+// Panics if base is nil (base is required for error identification).
+func FromBase(base error, lookup func(error) (code, description string), message string, cause error) *Error {
+	if base == nil {
+		panic("errx.FromBase: base cannot be nil")
 	}
-	code, desc := lookup(sentinel)
+	code, desc := lookup(base)
 	if code == "" {
 		code = CodeCLI
 		desc = DescCLI
 	}
-	return CreateByCode(code, desc, message, cause).WithBase(sentinel)
+	return CreateByCode(code, desc, message, cause).WithBase(base)
 }
 
 // CLI creates a CLI/argument validation error with code 70000.
 // Use this for errors related to command-line argument validation,
 // invalid user input, or CLI-specific issues.
-// This is heavily used in internal/cli/errors.go for CLI sentinel errors.
+// This is heavily used in internal/cli/errors.go for CLI base errors.
 func CLI(message string) *Error {
 	return New(CodeCLI, DescCLI, message)
 }

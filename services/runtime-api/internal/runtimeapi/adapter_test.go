@@ -11,7 +11,7 @@ import (
 
 	"mcp-runtime-api/internal/platformclient"
 	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
-	sentinelaccess "mcp-runtime/pkg/access"
+	mcpaccess "mcp-runtime/pkg/access"
 	"mcp-runtime/pkg/platformauth"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -44,7 +44,7 @@ func newAdapterTestFixture(t *testing.T, grants ...mcpv1alpha1.MCPAccessGrant) a
 	for i := range grants {
 		objects = append(objects, &grants[i])
 	}
-	mgr := sentinelaccess.NewManager(dynamicfake.NewSimpleDynamicClient(scheme, objects...), nil)
+	mgr := mcpaccess.NewManager(dynamicfake.NewSimpleDynamicClient(scheme, objects...), nil)
 	agentTeamID := "team-acme"
 	agentStatus := "active"
 	identityHTTP := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -180,12 +180,12 @@ func TestAdapterSessionRefreshCapsExistingSessionWhenGrantExpiryIsShortened(t *t
 	}
 	fx := newAdapterTestFixture(t, grant)
 	sessionName := adapterSessionName("user-123", "agt_01arz3ndektsv4rrffq69g5fav", "team-acme", "demo")
-	_, err := fx.server.accessMgr.ApplySession(t.Context(), &sentinelaccess.MCPAgentSession{
+	_, err := fx.server.accessMgr.ApplySession(t.Context(), &mcpaccess.MCPAgentSession{
 		ObjectMeta: metav1.ObjectMeta{Name: sessionName, Namespace: "mcp-team-acme"},
-		Spec: sentinelaccess.MCPAgentSessionSpec{
-			ServerRef:      sentinelaccess.ServerReference{Name: "demo", Namespace: "mcp-team-acme"},
-			Subject:        sentinelaccess.SubjectRef{HumanID: "user-123", AgentID: "agt_01arz3ndektsv4rrffq69g5fav", TeamID: "team-acme"},
-			ConsentedTrust: sentinelaccess.TrustLow,
+		Spec: mcpaccess.MCPAgentSessionSpec{
+			ServerRef:      mcpaccess.ServerReference{Name: "demo", Namespace: "mcp-team-acme"},
+			Subject:        mcpaccess.SubjectRef{HumanID: "user-123", AgentID: "agt_01arz3ndektsv4rrffq69g5fav", TeamID: "team-acme"},
+			ConsentedTrust: mcpaccess.TrustLow,
 			PolicyVersion:  "v1",
 			ExpiresAt:      &metav1.Time{Time: time.Now().UTC().Add(time.Hour)},
 		},
@@ -383,7 +383,7 @@ func TestAdapterSessionPicksHighestTrustWithDeterministicTiebreak(t *testing.T) 
 }
 
 func TestMatchingAdapterGrantRequiresCallerTeamEvenForAdmin(t *testing.T) {
-	grant := sentinelaccess.SubjectRef{HumanID: "user-123", AgentID: "agt_01arz3ndektsv4rrffq69g5fav", TeamID: "team-b"}
+	grant := mcpaccess.SubjectRef{HumanID: "user-123", AgentID: "agt_01arz3ndektsv4rrffq69g5fav", TeamID: "team-b"}
 	if _, ok := matchingAdapterGrantTeamID(grant, "user-123", "agt_01arz3ndektsv4rrffq69g5fav", []string{"team-a"}, "team-a", true); ok {
 		t.Fatal("admin without membership in the subject team matched a cross-team grant")
 	}
@@ -398,14 +398,14 @@ func TestSessionGrantLinkRequiresExactServerAndSubject(t *testing.T) {
 		Spec: mcpv1alpha1.MCPAccessGrantSpec{
 			ServerRef: mcpv1alpha1.ServerReference{Name: "demo", Namespace: "mcp-team-acme"},
 			Subject:   mcpv1alpha1.SubjectRef{HumanID: "user-123", AgentID: "agt_01arz3ndektsv4rrffq69g5fav", TeamID: "team-b"},
-			MaxTrust:  mcpv1alpha1.TrustLevel(sentinelaccess.TrustHigh),
+			MaxTrust:  mcpv1alpha1.TrustLevel(mcpaccess.TrustHigh),
 		},
 	}
 	fx := newAdapterTestFixture(t, grant)
 	req := accessSessionRequest{
 		Namespace: "mcp-team-acme", GrantName: "cross-team",
-		ServerRef: sentinelaccess.ServerReference{Name: "demo", Namespace: "mcp-team-acme"},
-		Subject:   sentinelaccess.SubjectRef{HumanID: "user-123", AgentID: "agt_01arz3ndektsv4rrffq69g5fav", TeamID: "team-b"},
+		ServerRef: mcpaccess.ServerReference{Name: "demo", Namespace: "mcp-team-acme"},
+		Subject:   mcpaccess.SubjectRef{HumanID: "user-123", AgentID: "agt_01arz3ndektsv4rrffq69g5fav", TeamID: "team-b"},
 	}
 	annotations, linked, err := fx.server.Access().sessionGrantLink(t.Context(), req)
 	if err != nil || linked == nil || annotations[adapterGrantNameAnnotation] != grant.Name {
@@ -439,7 +439,7 @@ func TestGrantRevokeSessionsOnlyTouchesLinkedSessionsAndIsRetrySafe(t *testing.T
 		ObjectMeta: metav1.ObjectMeta{Name: "unlinked", Namespace: "mcp-team-acme"},
 		Spec:       mcpv1alpha1.MCPAgentSessionSpec{Subject: grant.Spec.Subject},
 	}
-	accessMgr := sentinelaccess.NewManager(dynamicfake.NewSimpleDynamicClient(scheme,
+	accessMgr := mcpaccess.NewManager(dynamicfake.NewSimpleDynamicClient(scheme,
 		&mcpv1alpha1.MCPServer{ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "mcp-team-acme"}, Spec: mcpv1alpha1.MCPServerSpec{TeamID: "team-a"}},
 		grant, linked, unlinked,
 	), nil)
@@ -557,10 +557,10 @@ func TestAdapterSessionDeterministicName(t *testing.T) {
 
 func TestAdapterSessionReusableRejectsExpiredOrRevoked(t *testing.T) {
 	now := time.Now()
-	ok := &sentinelaccess.MCPAgentSession{
-		Spec: sentinelaccess.MCPAgentSessionSpec{
+	ok := &mcpaccess.MCPAgentSession{
+		Spec: mcpaccess.MCPAgentSessionSpec{
 			PolicyVersion:  "v1",
-			ConsentedTrust: sentinelaccess.TrustLow,
+			ConsentedTrust: mcpaccess.TrustLow,
 			ExpiresAt:      &metav1.Time{Time: now.Add(time.Hour)},
 		},
 	}
@@ -571,16 +571,16 @@ func TestAdapterSessionReusableRejectsExpiredOrRevoked(t *testing.T) {
 	mismatchPolicy := *ok
 	mismatchPolicy.Spec.PolicyVersion = "v2"
 
-	if !adapterSessionReusable(ok, "v1", sentinelaccess.TrustLow) {
+	if !adapterSessionReusable(ok, "v1", mcpaccess.TrustLow) {
 		t.Fatal("happy path should be reusable")
 	}
-	if adapterSessionReusable(&revoked, "v1", sentinelaccess.TrustLow) {
+	if adapterSessionReusable(&revoked, "v1", mcpaccess.TrustLow) {
 		t.Fatal("revoked session must not be reused")
 	}
-	if adapterSessionReusable(&soon, "v1", sentinelaccess.TrustLow) {
+	if adapterSessionReusable(&soon, "v1", mcpaccess.TrustLow) {
 		t.Fatal("session inside refresh buffer must not be reused")
 	}
-	if adapterSessionReusable(&mismatchPolicy, "v1", sentinelaccess.TrustLow) {
+	if adapterSessionReusable(&mismatchPolicy, "v1", mcpaccess.TrustLow) {
 		t.Fatal("policy-version mismatch must not be reused")
 	}
 }

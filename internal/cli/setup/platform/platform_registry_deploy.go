@@ -34,7 +34,7 @@ func deployRegistryClientGo(logger *zap.Logger, namespace string, port int, regi
 		return err
 	}
 	if err := k8sclient.EnsureNamespace(context.Background(), clients, namespace, nil); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrEnsureNamespaceFailed,
 			err,
 			fmt.Sprintf("failed to ensure namespace: %v", err),
@@ -50,7 +50,7 @@ func deployRegistryClientGo(logger *zap.Logger, namespace string, port int, regi
 	}
 	manifest, err := renderRegistryKustomizeManifest(manifestPath)
 	if err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrDeployRegistryFailed,
 			err,
 			fmt.Sprintf("failed to render registry manifest %q: %v", manifestPath, err),
@@ -73,7 +73,7 @@ func deployRegistryClientGo(logger *zap.Logger, namespace string, port int, regi
 	}
 	manifest, err = mutateRegistryManifest(manifest, registryHost, overrideImage)
 	if err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrDeployRegistryFailed,
 			err,
 			err.Error(),
@@ -85,7 +85,7 @@ func deployRegistryClientGo(logger *zap.Logger, namespace string, port int, regi
 	}
 	results, err := k8sclient.ApplyManifestYAML(context.Background(), clients, []byte(manifest), namespace)
 	if err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrDeployRegistryFailed,
 			err,
 			fmt.Sprintf("failed to deploy registry: %v", err),
@@ -131,7 +131,7 @@ func applyRegistryCompatibilityOverlay(logger *zap.Logger, clients *k8sclient.Cl
 	}
 	manifest, err := renderRegistryKustomizeManifest(compatPath)
 	if err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrDeployRegistryFailed,
 			err,
 			fmt.Sprintf("failed to render registry compatibility overlay %q: %v", compatPath, err),
@@ -143,7 +143,7 @@ func applyRegistryCompatibilityOverlay(logger *zap.Logger, clients *k8sclient.Cl
 	}
 	results, err := k8sclient.ApplyManifestYAML(context.Background(), clients, []byte(manifest), namespace)
 	if err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrDeployRegistryFailed,
 			err,
 			fmt.Sprintf("failed to apply registry compatibility overlay: %v", err),
@@ -177,7 +177,7 @@ func validateRegistryType(registryType string) error {
 	case "", "docker":
 		return nil
 	default:
-		return core.NewWithSentinel(core.ErrUnsupportedRegistryType, fmt.Sprintf("unsupported registry type %q; only docker is supported today", registryType))
+		return core.NewWithBase(core.ErrUnsupportedRegistryType, fmt.Sprintf("unsupported registry type %q; only docker is supported today", registryType))
 	}
 }
 
@@ -287,7 +287,7 @@ func ensureRegistryStorageSizeClientGo(logger *zap.Logger, clients *k8sclient.Cl
 	}
 	currentSize, err := k8sclient.PersistentVolumeClaimStorage(context.Background(), clients, namespace, core.RegistryPVCName)
 	if err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrReadRegistryStorageFailed,
 			err,
 			fmt.Sprintf("failed to read current registry storage size: %v", err),
@@ -307,7 +307,7 @@ func ensureRegistryStorageSizeClientGo(logger *zap.Logger, clients *k8sclient.Cl
 		logger.Info("Updating registry storage size", zap.String("from", currentSize), zap.String("to", storageSize))
 	}
 	if err := k8sclient.UpdatePersistentVolumeClaimStorage(context.Background(), clients, namespace, core.RegistryPVCName, storageSize); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrUpdateRegistryStorageFailed,
 			err,
 			fmt.Sprintf("failed to update registry storage size to %s: %v", storageSize, err),
