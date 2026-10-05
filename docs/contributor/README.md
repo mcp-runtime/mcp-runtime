@@ -1,11 +1,26 @@
-# Contributor Guide
+# Development and Testing
+
+<span id="contributor-guide"></span>
 
 Use this runbook when you need to set up a disposable cluster, change code, rebuild one service,
 exercise tenant isolation, or debug the platform UI and MCP request path.
 
 For product concepts, start with [Architecture](../architecture.md). For code
-package boundaries, use [Internals](../internals/README.md). This guide focuses
+package boundaries, use [Implementation Details](../internals/README.md). This guide focuses
 on the day-to-day loop for contributors.
+
+## Guide order
+
+Start with [Local Cluster Setup](local-kind.md), then use
+[Service Iteration](service-iteration.md) to rebuild the part you are changing.
+[Contributor Troubleshooting](troubleshooting.md) covers failures in that loop.
+
+For verification, [MCP Runtime Tests](runtime-mcp-testing.md) covers real request
+and governance flows, [Staging End-to-End Tests](staging-e2e.md) exercises a
+production-style installation on a disposable VM, and
+[Regression Coverage](regression-index.md) maps known incidents to checks.
+Choose checks for the changed behavior; the contribution loop below explains
+when to use each guide.
 
 ## Contribution Loop
 

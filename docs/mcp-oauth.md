@@ -494,3 +494,11 @@ exchange boundaries.
   and confirm the bundled auth server resource list reflects current OAuth MCPServers.
 - tokens fail after restart: use a persistent RSA signing-key Secret; do not
   rely on the test-mode ephemeral key.
+
+## Next steps
+
+Once the OAuth resource and authorization server are configured, use
+[Client Connections](connect-clients.md) to supply the bearer token together
+with adapter identity, and follow this guide's verification steps.
+[Identity and Authorization](identity-and-authorization.md) explains how the
+OAuth subject is bound to the session human during enforcement.

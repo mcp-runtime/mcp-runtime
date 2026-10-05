@@ -36,24 +36,12 @@ them.
 | Develop or test changes locally | [Local Kind and test mode](contributor/local-kind.md) | Source checkout and contributor prerequisites | Local setup and cluster health checks pass |
 | Learn grants and client identity | [Guided tutorials](learn/README.md) | Running platform; adapter-certificate identity for successful governed calls | An allowed tool call succeeds and a denied call is rejected |
 
-### Where to go next
+<span id="where-to-go-next"></span>
 
-After deployment, [connect a client](connect-clients.md). To control who can
-call tools, read [identity and authorization](identity-and-authorization.md)
-and work through [multi-team access](learn/03-multi-team-access.md). For routine
-administration, use [runtime operations](runtime-operations.md).
-
-For the complete hosting lifecycle, start with the
-[Self-Host and Operate overview](hosting-overview.md). This section uses our
-public platform as the reference deployment and connects infrastructure
-choices, provisioning, installation, identity, backups, and daily operations.
-
-A ready server confirms deployment; a successful governed tool call also needs
-a matching grant, valid session, and verified client identity. The
-[hosted quickstart](hosted-quickstart.md) explains the public instance's identity
-limitation. If a call fails, start with the matching error in
-[troubleshooting](troubleshooting.md), then check the
-[CLI reference](cli-reference.md) for the command's flags.
+For a guided entry point, use [Getting Started](start-here.md). Once a platform
+is running, follow [Server and Client Guides](usage-overview.md) to publish a
+server, grant access, and connect a client. A ready server confirms deployment;
+a successful governed tool call also requires valid caller identity and policy.
 
 ## Start here
 
@@ -150,87 +138,19 @@ DNS, ingress, TLS, and Kubernetes distribution configuration, start with
 then [Cluster Requirements](cluster-readiness.md) for distribution-specific
 preparation.
 
-## Where to go next
+<span id="where-to-go-next_1"></span>
 
-<div class="docs-grid docs-grid-2">
-<a class="docs-card" href="self-hosting/">
-  <span class="docs-card-kicker">Start here</span>
-  <strong>Get started</strong>
-  <span>Install the CLI, prepare your cluster, configure the platform, and verify health.</span>
-</a>
+## Documentation sections
 
-<a class="docs-card" href="architecture/">
-  <span class="docs-card-kicker">Understand</span>
-  <strong>Architecture</strong>
-  <span>How the control plane, registry, operator, and platform services fit together.</span>
-</a>
-</div>
-
-**Developer guide:** publish and govern MCP servers
-
-<div class="docs-grid docs-grid-3">
-<a class="docs-card" href="publish-mcp-server/">
-  <span class="docs-card-kicker">Build</span>
-  <strong>Publish an MCP server</strong>
-  <span>Write metadata, build and push an image, deploy it, and verify what the platform creates.</span>
-</a>
-
-<a class="docs-card" href="agent-adapters/">
-  <span class="docs-card-kicker">Connect</span>
-  <strong>Agent adapters</strong>
-  <span>A Streamable HTTP adapter that presents session-bound certificate identity and forwards OAuth when the target enables it.</span>
-</a>
-
-<a class="docs-card" href="multi-team/">
-  <span class="docs-card-kicker">Govern</span>
-  <strong>Multi-team isolation</strong>
-  <span>Namespace-per-team isolation, RBAC, and cross-team server access.</span>
-</a>
-</div>
-
-**Operator guide:** deploy and operate the platform
-
-<div class="docs-grid docs-grid-3">
-<a class="docs-card" href="deployment-targets/">
-  <span class="docs-card-kicker">Plan</span>
-  <strong>Deployment targets</strong>
-  <span>Choose the right install shape for k3s, EKS, GKE, AKS, and other distributions.</span>
-</a>
-
-<a class="docs-card" href="runtime/">
-  <span class="docs-card-kicker">Operate</span>
-  <strong>Runtime</strong>
-  <span>CRDs, reconciliation outputs, image resolution, ingress wiring, and rollout flow.</span>
-</a>
-
-<a class="docs-card" href="namespaces/">
-  <span class="docs-card-kicker">Operate</span>
-  <strong>Namespaces</strong>
-  <span>Where the operator, control plane, telemetry, and MCP servers run.</span>
-</a>
-
-<a class="docs-card" href="platform-services/">
-  <span class="docs-card-kicker">Observe</span>
-  <strong>Platform services</strong>
-  <span>Gateway policy evaluation, analytics, audit events, and observability services.</span>
-</a>
-</div>
-
-**Reference**
-
-<div class="docs-grid docs-grid-2">
-<a class="docs-card" href="cli/">
-  <span class="docs-card-kicker">CLI</span>
-  <strong>Command reference</strong>
-  <span>Every command with flags, examples, and a full end-to-end walkthrough.</span>
-</a>
-
-<a class="docs-card" href="api-reference/">
-  <span class="docs-card-kicker">API</span>
-  <strong>API and CRDs</strong>
-  <span>MCPServer, MCPAccessGrant, MCPAgentSession fields and HTTP endpoints.</span>
-</a>
-</div>
+| Section | What you will find |
+|---|---|
+| [Getting Started](start-here.md) | Hosted and self-hosted entry points, followed by guided tutorials |
+| [Server and Client Guides](usage-overview.md) | Publishing, team access, client connections, and optional OAuth |
+| [Deployment and Operations](hosting-overview.md) | Installation, the public reference deployment, and ongoing operations |
+| [Concepts and Architecture](concepts-overview.md) | Resources, identity, policy, and the platform's component model |
+| [CLI and API Reference](reference-overview.md) | Commands, API and resource contracts, endpoint authorization, and Go packages |
+| [Development and Testing](contributor/README.md) | Local setup, service iteration, verification, and regression coverage |
+| [Implementation Details](internals/README.md) | Source contracts, request flows, components, security, and lifecycle behavior |
 
 ## Project status
 

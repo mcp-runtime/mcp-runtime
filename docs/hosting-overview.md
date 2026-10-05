@@ -1,4 +1,6 @@
-# Self-Host and Operate
+# Deployment and Operations
+
+<span id="self-host-and-operate"></span>
 
 This section explains how to host and operate MCP Runtime, using our public
 platform at [platform.mcpruntime.org](https://platform.mcpruntime.org) as the

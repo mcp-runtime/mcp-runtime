@@ -328,3 +328,7 @@ server owner's team without joining through namespace names.
 - [CLI](cli-reference.md) for `team`, `access`, and namespace-scoped commands.
 - [Runtime](runtime-operations.md) for CRD and reconciliation behavior.
 - [API Reference](api-reference.md) for access resource fields.
+
+**Next:** [Client Connections](connect-clients.md) connects an authorized agent
+using its session certificate. Use [Server Publishing](publish-mcp-server.md)
+first if the team's server is not deployed yet.

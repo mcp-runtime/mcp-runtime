@@ -113,12 +113,13 @@ Pre-commit: `pre-commit install`; full suite `pre-commit run --all-files` (sets 
 
 **CI** (`.github/workflows/ci.yaml`): gofmt, vet, staticcheck, unit/golden/service/integration tests; path-selected QA E2E on PRs and manual dispatch (`test/e2e/select_pr_scenarios.sh`). QA E2E runs Kind on a fresh GitHub runner with unique cluster names, so PRs run in parallel, and reuses unchanged platform images from the content-hash GHCR cache. Staging E2E runs on the disposable VM from Pre-release Regression (`.github/workflows/pre-release-regression.yaml`) or by manual dispatch, one run at a time; it does not run on merges. Staging is the only cluster suite in Pre-release Regression; Kind QA stays in PR CI.
 
-**Docs reading order:** `docs/mkdocs.yml` owns navigation: start here → use
-MCP Runtime → self-host and operate → concepts → reference → contributors and
-internals. `docs/hosting-overview.md` introduces the self-hosting section using
-the public platform as its reference deployment, grouped into Installation,
-Public Reference, and Operations. Keep `docs/README.md` and
-`docs/llms.txt` aligned. Release-install
+**Docs reading order:** `docs/mkdocs.yml` owns navigation: Getting Started →
+Server and Client Guides → Deployment and Operations → Concepts and Architecture
+→ CLI and API Reference → Development and Testing → Implementation Details.
+Each section starts with an overview explaining audience, prerequisites, and
+reading order. Deployment and Operations uses the public platform as its
+reference, grouped into Installation, Public Reference, and Operations.
+Keep `docs/README.md` and `docs/llms.txt` aligned. Release-install
 examples use `mcp-runtime` on `PATH`; `./bin/mcp-runtime` is for source builds.
 Preserve existing heading anchors when reorganizing linked guides.
 

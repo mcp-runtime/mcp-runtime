@@ -426,4 +426,6 @@ it by hand. Then run `server validate` before deploying to catch mismatches.
     it to see what enforcement *would* deny on a new server, fix the tool
     inventory, then switch back to `allow-list`.
 
-**Next:** [Publish an MCP Server](publish-mcp-server.md): build, push, and deploy your first governed server.
+**Next:** [Identity and Authorization](identity-and-authorization.md) explains
+how grants, sessions, certificates, and OAuth combine in an access decision.
+For a hands-on workflow, follow [Server and Client Guides](usage-overview.md).

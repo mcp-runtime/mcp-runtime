@@ -393,3 +393,14 @@ test-mode defaults the issuer to `mcp-runtime-ca`.
 
 The gateway derives adapter governance identity from the verified SPIFFE URI
 and the operator-rendered session binding.
+
+## Next steps
+
+Verify an allowed and a denied tool call, then inspect the gateway decisions in
+[Services and Observability](platform-services.md). For identity or policy
+failures, use [Troubleshooting](troubleshooting.md) and
+[Identity and Authorization](identity-and-authorization.md).
+
+For a server requiring OAuth, follow [MCP OAuth](mcp-oauth.md) for token and
+resource configuration. Return to [Server and Client Guides](usage-overview.md)
+for the complete publishing and access flow.

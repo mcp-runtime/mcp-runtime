@@ -1,10 +1,25 @@
-# Internals
+# Implementation Details
+
+<span id="internals"></span>
 
 These pages describe how the MCP Runtime codebase is organized: the CLI, operator, Kubernetes API types, platform services, manifests, and tests. Read them before changing one of those areas.
 
 For platform usage, start with the [user docs](../README.md). This section is
 for contributors who need to understand package boundaries, runtime flows, and
 the checks that protect each subsystem.
+
+## Reading path
+
+Start with [API Types](api-types.md) and [Request Flows](request-flows.md), then
+follow the component involved in your change. Use
+[Development and Testing](../contributor/README.md) for the local contribution loop.
+
+| Guide group | What it covers | Entry points |
+|---|---|---|
+| Contracts and Flows | Resource shapes, request paths, server metadata, and manifests | [API Types](api-types.md), [Request Flows](request-flows.md) |
+| Components | CLI startup and commands, operator reconciliation, and workload inventory | [CLI Implementation](cli.md), [Operator](operator.md), [Component Inventory](component-inventory.md) |
+| Security and Lifecycle | Credential consumers, Secret access, rollouts, and log collector admission | [Credential Ownership](credential-consumers.md), [Operator Secret Access](operator-secret-access.md), [Dependency Rollouts](dependency-rollouts.md) |
+| Developer References | Package documentation, design background, and test coverage | [Go Package Reference](go-package-reference.md), [Tests and Coverage](testing.md) |
 
 ## Mental model
 

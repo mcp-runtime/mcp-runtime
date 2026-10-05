@@ -10,7 +10,7 @@ a cluster, use the [Quickstart](hosted-quickstart.md).
 - **Try the hosted platform:** follow the [Quickstart](hosted-quickstart.md); no cluster is required.
 - **Self-host on an existing cluster:** install the CLI, check cluster readiness,
   then follow the production-style setup below.
-- **Contribute on local Kind:** use the [Contributor Guide](contributor/README.md)
+- **Contribute on local Kind:** use the [Development and Testing](contributor/README.md)
   and [Local Kind and Test Mode](contributor/local-kind.md).
 
 To adapt the project's complete infrastructure example, use
@@ -42,7 +42,7 @@ STRICT_DEPS_CHECK=1 make deps-check
 ```
 
 These checks cannot start Docker Desktop, create cloud credentials, or configure
-your kubeconfig. The [Contributor Guide](contributor/README.md) owns source
+your kubeconfig. The [Development and Testing](contributor/README.md) owns source
 checkout and local cluster setup.
 
 ## 1. Install the CLI
@@ -430,7 +430,7 @@ mcp-runtime sentinel logs gateway --follow    # Tail the proxy
 For local development, CI, or contributing to the repo, use the Kind-based
 test-mode path. The contributor docs own this path completely:
 
-- [Contributor Guide](contributor/README.md)
+- [Development and Testing](contributor/README.md)
 - [Local Kind and Test Mode](contributor/local-kind.md)
 
 Quick path (requires `kind` on `PATH`; the linked guide creates an isolated

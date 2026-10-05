@@ -377,5 +377,6 @@ from platform roles and gateway policy.
 | Who enforces the tool call? | MCP gateway |
 | Who can change cluster resources? | Kubernetes ServiceAccount and RBAC |
 
-**Next:** [Concepts](core-concepts.md) for the individual resource model, or
-[Multi-Team Isolation](teams-and-access.md) for namespace and team boundaries.
+**Next:** [Architecture](architecture.md) shows where identity and policy are
+enforced across components. Use [Teams and Access](teams-and-access.md) to
+apply the model to namespace boundaries and cross-team delegation.
