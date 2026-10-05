@@ -41,7 +41,7 @@ The root command wires these internal command groups:
 | `agent` | `internal/cli/agent` | `agent.go` |
 | `adapter` | `internal/cli/adapter` | `adapter.go`, `flags.go`, `platformsession.go`, `proxy.go`, `enroll.go`; transport behavior in `internal/agentadapter` |
 | `auth` | `internal/cli/auth` | `auth.go` |
-| `sentinel` | `internal/cli/sentinel` | `sentinel.go`, `manager.go`, `grafana.go`; admin-only status, logs, events, port-forward, restart, and Grafana recovery across the platform-owned namespaces (`mcp-runtime`, `mcp-platform`, `mcp-observability`, `mcp-log-collector`), using shared workload/probe helpers in `internal/cli/platformstatus` |
+| `ops` | `internal/cli/ops` | `ops.go`, `manager.go`, `grafana.go`; admin-only platform stack status, logs, events, port-forward, restart, and Grafana recovery across the platform-owned namespaces (`mcp-runtime`, `mcp-platform`, `mcp-observability`, `mcp-log-collector`), using shared workload/probe helpers in `internal/cli/platformstatus` |
 | `team` | `internal/cli/team` | `team.go`, `manager.go` |
 | `update` | `internal/cli/update` | `update.go`, `plan.go`, `apply.go`, `build.go`, `crds.go`, `output.go` |
 | `admin` | `internal/cli/admin` | `admin.go` (hidden; operator-only kubectl helpers such as `admin registry push`) |

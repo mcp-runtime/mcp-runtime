@@ -18,6 +18,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 ### Removed
 
 - The checked-in Go Package Reference page and its generator are removed; contributors use the hosted [pkgsite](https://docs.pkg.mcpruntime.org/github.com/mcp-runtime/mcp-runtime) or `go doc`, and the generated-file drift checks now cover only CRDs and manifests. The `Staging E2E (Remote Cluster)` workflow and `test/e2e/staging-remote.sh` are removed: Staging E2E runs only on the disposable VM through `Staging E2E (Disposable VM)`.
+- **Breaking:** `mcp-runtime sentinel` is renamed to `mcp-runtime ops` (`ops status`, `ops logs`, `ops events`, `ops port-forward`, `ops restart`, `ops grafana`). The old name has no alias; update scripts and runbooks that call `mcp-runtime sentinel`.
 
 ### Fixed
 

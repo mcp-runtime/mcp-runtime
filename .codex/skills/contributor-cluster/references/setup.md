@@ -128,7 +128,7 @@ The skill must not exit Step 5 successfully until every check passes.
 ./bin/mcp-runtime status
 ./bin/mcp-runtime cluster status
 ./bin/mcp-runtime registry status
-./bin/mcp-runtime sentinel status
+./bin/mcp-runtime ops status
 ./bin/mcp-runtime cluster doctor
 kubectl get pods -A | grep -Ev 'Running|Completed' || echo OK
 ```

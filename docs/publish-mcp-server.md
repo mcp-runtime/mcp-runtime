@@ -340,7 +340,7 @@ If the server uses governed access:
 
 ```bash
 mcp-runtime server policy inspect payments
-mcp-runtime sentinel status
+mcp-runtime ops status
 ```
 
 If traffic is failing:
@@ -350,7 +350,7 @@ mcp-runtime server policy inspect payments
 mcp-runtime status
 
 # Admin/operator only
-mcp-runtime sentinel logs gateway --follow
+mcp-runtime ops logs gateway --follow
 mcp-runtime server logs payments --follow --use-kube
 ```
 
@@ -380,7 +380,7 @@ Check:
 
 - `mcp-runtime server policy inspect <name>`
 - your grant and session objects
-- `mcp-runtime sentinel logs gateway --follow`
+- `mcp-runtime ops logs gateway --follow`
 
 ### Event count is 0
 
@@ -390,9 +390,9 @@ Check:
 - `GatewayReady=True` and `PolicyReady=True` on the MCPServer status
 - the server pod is `2/2` and includes the `mcp-gateway` sidecar
 - `kubectl logs -n <namespace> <pod> -c mcp-gateway`
-- `mcp-runtime sentinel status`
-- `mcp-runtime sentinel logs ingest --follow`
-- `mcp-runtime sentinel logs processor --follow`
+- `mcp-runtime ops status`
+- `mcp-runtime ops logs ingest --follow`
+- `mcp-runtime ops logs processor --follow`
 
 Request analytics only exist for traffic that flows through `mcp-gateway`.
 The gateway is on by default; the adapter is optional for analytics and is

@@ -22,5 +22,5 @@ transient setup jobs keep their own identities. The inventory does not grant
 authority over those namespaces.
 
 CLI inspection and platform status read this inventory. Adding an inventory
-entry does not add it to `sentinel restart --all` or release updates. Release
+entry does not add it to `ops restart --all` or release updates. Release
 image and container metadata stay in `internal/platformrelease`.

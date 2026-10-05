@@ -1,4 +1,4 @@
-package sentinel
+package ops
 
 import (
 	"fmt"
@@ -15,40 +15,40 @@ import (
 	"mcp-runtime/pkg/platforminventory"
 )
 
-// SentinelManager operates the bundled platform stack via kubectl.
-type SentinelManager struct {
+// Manager operates the bundled platform stack via kubectl.
+type Manager struct {
 	kubectl *core.KubectlClient
 	logger  *zap.Logger
 }
 
-type sentinelComponent = platforminventory.Component
+type platformComponent = platforminventory.Component
 
-var sentinelComponents = platforminventory.SentinelComponents(false)
+var platformComponents = platforminventory.SentinelComponents(false)
 
-// NewSentinelManager creates a SentinelManager with explicit dependencies.
-func NewSentinelManager(kubectl *core.KubectlClient, logger *zap.Logger) *SentinelManager {
-	return &SentinelManager{kubectl: kubectl, logger: logger}
+// NewManager creates a Manager with explicit dependencies.
+func NewManager(kubectl *core.KubectlClient, logger *zap.Logger) *Manager {
+	return &Manager{kubectl: kubectl, logger: logger}
 }
 
-// DefaultSentinelManager returns a SentinelManager using the shared runtime clients.
-func DefaultSentinelManager(runtime *core.Runtime) *SentinelManager {
-	return NewSentinelManager(runtime.KubectlClient(), runtime.Logger())
+// DefaultManager returns a Manager using the shared runtime clients.
+func DefaultManager(runtime *core.Runtime) *Manager {
+	return NewManager(runtime.KubectlClient(), runtime.Logger())
 }
 
 // ComponentKeys returns sorted valid component names for cobra completion.
 func ComponentKeys() []string {
-	keys := make([]string, 0, len(sentinelComponents))
-	for _, component := range sentinelComponents {
+	keys := make([]string, 0, len(platformComponents))
+	for _, component := range platformComponents {
 		keys = append(keys, component.Key)
 	}
 	sort.Strings(keys)
 	return keys
 }
 
-func findSentinelComponent(name string) (*sentinelComponent, error) {
+func findPlatformComponent(name string) (*platformComponent, error) {
 	candidate := strings.ToLower(strings.TrimSpace(name))
-	for i := range sentinelComponents {
-		component := &sentinelComponents[i]
+	for i := range platformComponents {
+		component := &platformComponents[i]
 		if component.Key == candidate {
 			return component, nil
 		}
@@ -59,15 +59,15 @@ func findSentinelComponent(name string) (*sentinelComponent, error) {
 		}
 	}
 
-	return nil, core.NewWithSentinel(nil, fmt.Sprintf("unknown sentinel component %q (use one of: %s)", name, strings.Join(ComponentKeys(), ", ")))
+	return nil, core.NewWithSentinel(nil, fmt.Sprintf("unknown platform component %q (use one of: %s)", name, strings.Join(ComponentKeys(), ", ")))
 }
 
-// ShowSentinelStatus prints a status table for sentinel workloads.
-func (m *SentinelManager) ShowSentinelStatus() error {
+// ShowStatus prints a status table for platform workloads.
+func (m *Manager) ShowStatus() error {
 	if err := m.requireAdminClusterAccess(); err != nil {
 		return err
 	}
-	core.Header("MCP Sentinel Status")
+	core.Header("MCP Platform Stack Status")
 	core.DefaultPrinter.Println()
 
 	tableData := [][]string{{"Component", "Namespace", "Resource", "Status", "Details"}}
@@ -96,12 +96,12 @@ func (m *SentinelManager) ShowSentinelStatus() error {
 	return nil
 }
 
-// ViewSentinelLogs streams logs for a sentinel component.
-func (m *SentinelManager) ViewSentinelLogs(component string, follow, previous bool, tail int, since string) error {
+// ViewLogs streams logs for a platform component.
+func (m *Manager) ViewLogs(component string, follow, previous bool, tail int, since string) error {
 	if err := m.requireAdminClusterAccess(); err != nil {
 		return err
 	}
-	target, err := findSentinelComponent(component)
+	target, err := findPlatformComponent(component)
 	if err != nil {
 		return err
 	}
@@ -133,8 +133,8 @@ func (m *SentinelManager) ViewSentinelLogs(component string, follow, previous bo
 	return nil
 }
 
-// ShowSentinelEvents lists events from each platform-owned namespace.
-func (m *SentinelManager) ShowSentinelEvents() error {
+// ShowEvents lists events from each platform-owned namespace.
+func (m *Manager) ShowEvents() error {
 	if err := m.requireAdminClusterAccess(); err != nil {
 		return err
 	}
@@ -149,19 +149,19 @@ func (m *SentinelManager) ShowSentinelEvents() error {
 		if err := m.kubectl.RunWithOutput(args, os.Stdout, os.Stderr); err != nil {
 			return core.WrapWithSentinelAndContext(nil, err, fmt.Sprintf("failed to list platform events in %s: %v", namespace, err), map[string]any{
 				"namespace": namespace,
-				"component": "sentinel",
+				"component": "ops",
 			})
 		}
 	}
 	return nil
 }
 
-// PortForwardSentinelTarget runs kubectl port-forward for a known service target.
-func (m *SentinelManager) PortForwardSentinelTarget(target string, localPort int, address string) error {
+// PortForwardTarget runs kubectl port-forward for a known service target.
+func (m *Manager) PortForwardTarget(target string, localPort int, address string) error {
 	if err := m.requireAdminClusterAccess(); err != nil {
 		return err
 	}
-	component, err := findSentinelComponent(target)
+	component, err := findPlatformComponent(target)
 	if err != nil {
 		return err
 	}
@@ -185,19 +185,19 @@ func (m *SentinelManager) PortForwardSentinelTarget(target string, localPort int
 		return core.WrapWithSentinelAndContext(nil, err, fmt.Sprintf("failed to port-forward sentinel target %q: %v", target, err), map[string]any{
 			"target":    target,
 			"namespace": component.Namespace,
-			"component": "sentinel",
+			"component": "ops",
 		})
 	}
 	return nil
 }
 
-// RestartSentinel restarts one component or all sentinel workloads.
-func (m *SentinelManager) RestartSentinel(component string, restartAll bool) error {
+// Restart restarts one component or all platform workloads.
+func (m *Manager) Restart(component string, restartAll bool) error {
 	if err := m.requireAdminClusterAccess(); err != nil {
 		return err
 	}
 	if restartAll {
-		for _, target := range sentinelComponents {
+		for _, target := range platformComponents {
 			args := []string{"rollout", "restart", fmt.Sprintf("%s/%s", target.Kind, target.Resource), "-n", target.Namespace}
 			if err := m.kubectl.RunWithOutput(args, os.Stdout, os.Stderr); err != nil {
 				return core.WrapWithSentinelAndContext(nil, err, fmt.Sprintf("failed to restart sentinel component %q: %v", target.Key, err), map[string]any{
@@ -209,7 +209,7 @@ func (m *SentinelManager) RestartSentinel(component string, restartAll bool) err
 		return nil
 	}
 
-	target, err := findSentinelComponent(component)
+	target, err := findPlatformComponent(component)
 	if err != nil {
 		return err
 	}
@@ -223,18 +223,18 @@ func (m *SentinelManager) RestartSentinel(component string, restartAll bool) err
 	return nil
 }
 
-func (m *SentinelManager) requireAdminClusterAccess() error {
+func (m *Manager) requireAdminClusterAccess() error {
 	if m.kubectl == nil {
-		return core.NewWithSentinel(nil, kubeerr.DirectModeFailureMessage("sentinel commands require admin cluster access", "kubectl client is unavailable"))
+		return core.NewWithSentinel(nil, kubeerr.DirectModeFailureMessage("ops commands require admin cluster access", "kubectl client is unavailable"))
 	}
 	cmd, err := m.kubectl.CommandArgs([]string{"cluster-info"})
 	if err != nil {
-		return core.NewWithSentinel(nil, kubeerr.DirectModeFailureMessage("sentinel commands require admin cluster access", err.Error()))
+		return core.NewWithSentinel(nil, kubeerr.DirectModeFailureMessage("ops commands require admin cluster access", err.Error()))
 	}
 	output, execErr := cmd.CombinedOutput()
 	if execErr != nil {
 		detail := kubeerr.CommandDetail(string(output), execErr)
-		return core.NewWithSentinel(nil, kubeerr.DirectModeFailureMessage("sentinel commands require admin cluster access", detail))
+		return core.NewWithSentinel(nil, kubeerr.DirectModeFailureMessage("ops commands require admin cluster access", detail))
 	}
 	return nil
 }

@@ -1,7 +1,7 @@
 Port-forward a common platform service
 
 Usage:
-  mcp-runtime sentinel port-forward [target] [flags]
+  mcp-runtime ops port-forward [target] [flags]
 
 Flags:
       --address string   Addresses to listen on (default "127.0.0.1")

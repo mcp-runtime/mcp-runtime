@@ -1,7 +1,7 @@
 Diagnose and recover the bundled Grafana admin account. The platform ingress gate and Grafana's own login are separate layers: these commands probe from inside the Grafana pod, so they report only the Grafana login layer.
 
 Usage:
-  mcp-runtime sentinel grafana [command]
+  mcp-runtime ops grafana [command]
 
 Available Commands:
   check                Check that Grafana accepts the configured admin credentials (read-only)
@@ -13,4 +13,4 @@ Flags:
 Global Flags:
       --debug   Enable debug mode with structured error logging
 
-Use "mcp-runtime sentinel grafana [command] --help" for more information about a command.
+Use "mcp-runtime ops grafana [command] --help" for more information about a command.

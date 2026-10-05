@@ -142,7 +142,7 @@ classify_path() {
       return
       ;;
     internal/cli/core/*|internal/cli/platformapi/*|internal/cli/kube/*|internal/cli/kubeerr/*|internal/cli/status/*|internal/cli/platformstatus/*|internal/cli/agent/*|internal/cli/admin/*|internal/cli/bootstrap/*|\
-    internal/cli/auth/*|internal/cli/cluster/*|internal/cli/registry/*|internal/cli/server/*|internal/cli/setup/*|internal/cli/sentinel/*)
+    internal/cli/auth/*|internal/cli/cluster/*|internal/cli/registry/*|internal/cli/server/*|internal/cli/setup/*|internal/cli/ops/*)
       add_scenario "cli-platform"
       return
       ;;

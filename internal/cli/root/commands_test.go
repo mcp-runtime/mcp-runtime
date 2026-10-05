@@ -25,7 +25,7 @@ func TestAddCommandsRegistersTopLevelCommands(t *testing.T) {
 		"bootstrap",
 		"setup",
 		"status",
-		"sentinel",
+		"ops",
 		"team",
 		"update",
 	}

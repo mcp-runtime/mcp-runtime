@@ -124,9 +124,9 @@ After rolling either service, generate one MCP request and check both logs
 (admin kubectl):
 
 ```bash
-./bin/mcp-runtime sentinel logs ingest --since 10m
-./bin/mcp-runtime sentinel logs processor --since 10m
-./bin/mcp-runtime sentinel events
+./bin/mcp-runtime ops logs ingest --since 10m
+./bin/mcp-runtime ops logs processor --since 10m
+./bin/mcp-runtime ops events
 ```
 
 ## Operator
