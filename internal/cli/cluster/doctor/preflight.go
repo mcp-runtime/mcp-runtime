@@ -9,9 +9,13 @@ import (
 )
 
 func checkClusterNodesReady(kubectl core.KubectlRunner) DoctorCheck {
-	raw, err := readKubectlOutput(kubectl, []string{"get", "nodes", "-o", "json"})
+	cmd, err := kubectl.CommandArgs([]string{"--request-timeout=8s", "get", "nodes", "-o", "json"})
 	if err != nil {
-		return DoctorCheck{Name: "Kubernetes nodes ready", OK: false, Detail: fmt.Sprintf("cannot read cluster nodes: %v", err), Remedy: "check kubeconfig, RBAC, and Kubernetes API availability"}
+		return DoctorCheck{Name: "Kubernetes API access", OK: false, Detail: fmt.Sprintf("cannot run kubectl: %v", err), Remedy: "install kubectl and select a valid kubeconfig context"}
+	}
+	output, err := runKubectlBytes(cmd)
+	if err != nil {
+		return DoctorCheck{Name: "Kubernetes API access", OK: false, Detail: fmt.Sprintf("cannot reach or read the Kubernetes API: %v", err), Remedy: "check the active kubeconfig context, API server address and network access; confirm the kubeconfig user can list nodes"}
 	}
 	var payload struct {
 		Items []struct {
@@ -26,7 +30,7 @@ func checkClusterNodesReady(kubectl core.KubectlRunner) DoctorCheck {
 			} `json:"status"`
 		} `json:"items"`
 	}
-	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+	if err := json.Unmarshal(output, &payload); err != nil {
 		return DoctorCheck{Name: "Kubernetes nodes ready", OK: false, Detail: fmt.Sprintf("cannot parse node status: %v", err), Remedy: "inspect `kubectl get nodes` and node controller events"}
 	}
 	if len(payload.Items) == 0 {

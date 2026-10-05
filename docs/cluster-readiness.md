@@ -676,6 +676,15 @@ before `setup`. It checks:
 - Prints the distribution-specific registry remediation hint only when registry or image-pull checks fail; Traefik and Sentinel failures use their own check-specific remedies.
 
 Diagnostics discover cluster-specific values where Kubernetes exposes them.
+Failed kubectl reads include the underlying diagnostic, such as RBAC denial,
+missing resources, or a network error. If the initial node-list request fails,
+doctor stops dependent checks and reports that they were skipped; it cannot
+infer that storage or ingress is missing from an inaccessible cluster.
+`mcp-runtime status` reports platform API errors and a remedy, and skips the
+server list when its authentication check fails. Platform status requests use
+a 10-second deadline, and the Kubernetes connectivity probe uses an 8-second
+request timeout.
+
 For non-default values, set these overrides:
 
 ```bash
