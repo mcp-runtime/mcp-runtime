@@ -32,8 +32,9 @@ This file is the **onboarding index** for the MCP Runtime repo. It complements `
 | Sentinel packages | `pkg/events/`, `pkg/clickhouse/`, `pkg/serviceutil/`, `pkg/sentinel/` | Events, analytics, service utilities |
 | Sentinel services | `services/platform-api`, `services/runtime-api`, `services/analytics-api`, `services/ui`, `services/ingest`, `services/processor`, `services/mcp-gateway`, … | Separate `go.mod` where present; Go 1.26 for shared imports. Namespaces come from `pkg/platforminventory`: `mcp-platform`, `mcp-observability`, `mcp-log-collector`. See `docs/namespaces.md`. |
 | Samples / install YAML | `examples/oauth-example-go-2025-11-25/`, `k8s/`, `config/` | Demo server; overlays and CRDs |
-| Team isolation | `docs/multi-team.md` | Namespaces, RBAC, ingress watch scope |
-| Deployment targets | `docs/deployment-targets.md`, `docs/k3s-on-prem-cluster.md` | Before distribution-specific runbooks |
+| Team isolation | `docs/teams-and-access.md` | Namespaces, RBAC, ingress watch scope |
+| Deployment targets and reference | `docs/deployment-targets.md`, `docs/cluster-provisioning.md`, `docs/reference-deployment.md` | Choose a distribution, provision the reference cluster, then operate Runtime and its external identity provider |
+| Demo Keycloak identity provider | `config/deployments/mcpruntime-org-keycloak-compose.yaml`, `docs/reference-deployment.md` | Separate Docker/Caddy service on the Buddy VM; retain its realm data during recovery |
 | E2E | `test/e2e/`, `test/integration/` | Kind script; envtest integration; Staging E2E on the disposable VM (`test/e2e/staging-*.sh`, `docs/contributor/staging-e2e.md`) |
 | Agent skills | `.codex/skills/`, `.claude/skills` → `../.codex/skills` | Canonical skills tree |
 
@@ -110,9 +111,19 @@ Pre-commit: `pre-commit install`; full suite `pre-commit run --all-files` (sets 
 - Reuse the contributor cluster with `E2E_CACHE_MODE=1 E2E_SCENARIOS=smoke-auth bash test/e2e/qa-e2e.sh`, and set `CLUSTER_NAME=mcp-runtime E2E_CACHE_MODE=1 E2E_KEEP_CLUSTER=1`.
 - Sentinel: `go test -race -count=1 ./...` inside touched `services/*` dirs
 
-**CI** (`.github/workflows/ci.yaml`): gofmt, vet, staticcheck, unit/golden/service/integration tests; path-selected QA E2E on PRs and manual dispatch (`test/e2e/select_pr_scenarios.sh`). QA E2E runs Kind on a fresh GitHub runner with unique cluster names, so PRs run in parallel, and reuses unchanged platform images from the content-hash GHCR cache. Staging E2E runs on the disposable VM from Pre-release Regression (`.github/workflows/pre-release-regression.yaml`) or by manual dispatch, one run at a time; it does not run on merges.
+**CI** (`.github/workflows/ci.yaml`): gofmt, vet, staticcheck, unit/golden/service/integration tests; path-selected QA E2E on PRs and manual dispatch (`test/e2e/select_pr_scenarios.sh`). QA E2E runs Kind on a fresh GitHub runner with unique cluster names, so PRs run in parallel, and reuses unchanged platform images from the content-hash GHCR cache. Staging E2E runs on the disposable VM from Pre-release Regression (`.github/workflows/pre-release-regression.yaml`) or by manual dispatch, one run at a time; it does not run on merges. Staging is the only cluster suite in Pre-release Regression; Kind QA stays in PR CI.
 
-**CLI docs sync:** when editing `docs/cli.md`, `docs/getting-started.md`, or command examples, copy wording from `./bin/mcp-runtime <group> <subcommand> --help`. Do not paraphrase from memory.
+**Docs reading order:** `docs/mkdocs.yml` owns navigation: Getting Started →
+Server and Client Guides → Deployment and Operations → Concepts and Architecture
+→ CLI and API Reference → Development and Testing → Implementation Details.
+Each section starts with an overview explaining audience, prerequisites, and
+reading order. Deployment and Operations uses the public platform as its
+reference, grouped into Installation, Public Reference, and Operations.
+Keep `docs/README.md` and `docs/llms.txt` aligned. Release-install
+examples use `mcp-runtime` on `PATH`; `./bin/mcp-runtime` is for source builds.
+Preserve existing heading anchors when reorganizing linked guides.
+
+**CLI docs sync:** when editing `docs/cli-reference.md`, `docs/self-hosting.md`, or command examples, copy wording from `./bin/mcp-runtime <group> <subcommand> --help`. Do not paraphrase from memory.
 
 **Kubernetes deployment QA:** when a test environment supports the platform API,
 exercise the user-facing CLI flow (`server build image` → `server push` →
@@ -134,6 +145,45 @@ failed platform API flow and re-run the CLI/UI journey before accepting it.
 - **Secrets:** this is an alpha repo, so do not add real credentials to the tree.
 - **Skills:** keep `.claude/skills` linked to `../.codex/skills`. After non-trivial changes, update affected `.codex/skills/*/SKILL.md` files when workflows or gotchas shift. Prefer extending `references/` (for example `cluster-ops/references/` or `dashboard-browser-qa/references/`) instead of growing `SKILL.md` past ~250–400 lines.
 
+## Release policy before the first external customer
+
+Current deployment phase (confirmed 2026-10-05): the only customer deployment
+is our own hosted reference platform at `platform.mcpruntime.org`. Apply this
+policy to all releases until the project has its first external customer
+deployment and this section is updated.
+
+- Breaking changes are allowed. Target the current architecture and contracts;
+  do not add legacy compatibility layers, dual-version APIs or schemas,
+  backfill frameworks, or in-place upgrade paths just to support earlier
+  releases of our own platform.
+- The release deployment model is **backup → fresh setup → restore required
+  data → verify** on the reference platform. Document that procedure instead
+  of designing a general customer migration system.
+- Release instructions must identify the exact revision, install configuration,
+  backup contents and location, clean setup steps, restore steps, and recovery
+  procedure. Include platform databases, registry images, required Secrets and
+  certificates, and the separately hosted identity provider's data and TLS
+  state where applicable. Keep backup material and credentials out of git and
+  logs.
+- Rehearse fresh installation and recovery on disposable infrastructure before
+  resetting the reference platform. Check that required data can be restored
+  into the new model; document any manual recovery or intentional data reset
+  explicitly. A backup alone is not proof of recoverability.
+- Verify login, image publishing and pulls, server deployment, agent enrollment,
+  grants and sessions, allowed/denied tool calls, and audit/observability after
+  setup and recovery. Existing CI, security, and Pre-release Regression gates
+  still apply.
+- Record breaking contracts, configuration changes, and fresh-install/recovery
+  requirements in the changelog and release notes. Breaking `0.x` releases use
+  a new minor version.
+
+When the first external customer is onboarded, update this policy and define
+upgrade, compatibility, and data-migration commitments for that customer's
+deployed version before the next breaking release. This policy sets release
+planning and implementation scope; it does not authorize an unrequested reset
+of the hosted platform. Follow the existing production guardrails for actual
+deployment work.
+
 ## Changelog maintenance
 
 `CHANGELOG.md` follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
@@ -141,9 +191,10 @@ and [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 (reviewed 2026-09-29). Write concise, curated entries describing effects on
 users/operators, rather than copying commit logs. Add entries under `Unreleased`
 using only applicable `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, or
-`Security` headings. Link the relevant issue/PR and explain migration steps for
-compatibility changes. Features, behavior/config/default changes, removals,
-user-visible fixes, and security fixes need entries. Internal refactors,
+`Security` headings. Link the relevant issue/PR and explain upgrade or fresh
+setup/recovery requirements according to the release policy above. Features,
+behavior/config/default changes, removals, user-visible fixes, and security
+fixes need entries. Internal refactors,
 test-only work, and spelling/formatting changes can skip an entry when the PR
 explains why; operational CI/setup fixes need one when they affect contributors.
 
@@ -151,7 +202,8 @@ Before publishing a release, move its `Unreleased` entries into a dated
 `[X.Y.Z] - YYYY-MM-DD` section, retain an empty `Unreleased` section, and update
 version comparison links. Keep releases newest first and omit empty categories.
 Use the changelog to prepare GitHub release notes. While versions are `0.x`,
-put breaking changes in a new minor version and call out the migration.
+put breaking changes in a new minor version and document the required release
+deployment procedure.
 Correct factual errors in released notes with traceable context; do not rewrite
 published tag contents or invent historical entries without source evidence.
 
@@ -176,7 +228,7 @@ Endpoints, API keys, test logins: **`contributor-cluster`** (local-development r
 
 Do not inline the full failure checklist here. Use **`cluster-ops`** mode
 `troubleshoot`, and **`production-platform`** for public TLS/DNS and k3s ops
-(`docs/k3s-deployment-runbook.md`).
+(`docs/reference-deployment.md`).
 
 ## Prod guardrails
 
@@ -195,7 +247,7 @@ Grants, sessions, adapter flows, MCP curl examples: **`access-governance`** skil
 
 ## Logs and observability
 
-For production incidents, start with [Grafana](https://platform.mcpruntime.org/grafana): inspect metrics, aggregated logs, and distributed traces for the same incident window. Read private credentials from `~/.mcpruntime/infra.env` without displaying them. Verify collection coverage and correlate request/trace IDs with the affected client's own logs. See the [production observability workflow](docs/k3s-deployment-runbook.md#production-observability-and-debugging).
+For production incidents, start with [Grafana](https://platform.mcpruntime.org/grafana): inspect metrics, aggregated logs, and distributed traces for the same incident window. Read private credentials from `~/.mcpruntime/infra.env` without displaying them. Verify collection coverage and correlate request/trace IDs with the affected client's own logs. See the [production observability workflow](docs/reference-deployment.md#production-observability-and-debugging).
 
 When work reveals a concrete maintainability or debuggability improvement, search for an existing issue first. Create an actionable ticket in `mcp-runtime/mcp-runtime` when none exists, then attach the new or existing ticket to [Maintainability and Debuggability Improvement](https://github.com/orgs/mcp-runtime/projects/1) (organization project 1). Include redacted evidence, affected components, proposed scope, and acceptance checks; never include credentials, tokens, private user content, or tool payloads. Record missing instrumentation and collection/correlation gaps explicitly.
 
@@ -216,7 +268,7 @@ Grafana: dev ingress `/grafana` or `https://platform.<domain>/grafana` (admin). 
 
 - `README.md`: product overview
 - `k8s/`, `config/crd/bases/`
-- https://mcpruntime.org/docs/ and https://mcpruntime.org/docs/api
+- https://mcpruntime.org/docs/ and https://mcpruntime.org/docs/api-reference
 - `examples/oauth-example-go-2025-11-25/`
 
 ---

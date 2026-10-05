@@ -1,0 +1,6 @@
+# Append this site to /opt/workspace/Caddyfile on devbox1 after DNS points here.
+# Caddy obtains and renews the certificate through Let's Encrypt.
+keycloak.mcpruntime.org {
+    encode gzip
+    reverse_proxy keycloak:8080
+}

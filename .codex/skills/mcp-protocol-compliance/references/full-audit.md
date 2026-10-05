@@ -261,7 +261,7 @@ Several places encode protocol assumptions; they must agree.
 # probe, and the docs.
 PIN_AGENT="$(grep -oE '"20[0-9]{2}-[0-9]{2}-[0-9]{2}"' internal/agentadapter/config.go | head -1)"
 PIN_DOCTOR="$(grep -oE '"20[0-9]{2}-[0-9]{2}-[0-9]{2}"' internal/cli/cluster/doctor_impl.go | head -1)"
-PIN_DOCS="$(grep -oE '20[0-9]{2}-[0-9]{2}-[0-9]{2}' docs/getting-started.md | head -1)"
+PIN_DOCS="$(grep -oE '20[0-9]{2}-[0-9]{2}-[0-9]{2}' docs/self-hosting.md | head -1)"
 echo "agent=$PIN_AGENT doctor=$PIN_DOCTOR docs=$PIN_DOCS"
 [ "$PIN_AGENT" = "\"$PIN_DOCS\"" ] && [ "$PIN_AGENT" = "$PIN_DOCTOR" ] \
   || echo "FAIL: protocol version drift across agent adapter / doctor / docs"

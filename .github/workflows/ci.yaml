@@ -324,7 +324,7 @@ jobs:
           # Upstream mirror pulls are network-bound; three workers keeps local
           # registry pushes from contending while cutting the serial pull time.
           E2E_IMAGE_MIRROR_PARALLELISM: "3"
-          # Local image builds are CPU-bound; two workers matches docs/internals/tests.md guidance.
+          # Local image builds are CPU-bound; two workers matches docs/internals/testing.md guidance.
           E2E_IMAGE_BUILD_PARALLELISM: "2"
           E2E_IMAGE_PREP_PARALLELISM: "2"
           E2E_EXAMPLE_DEPLOY_PARALLELISM: "3"

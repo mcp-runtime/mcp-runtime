@@ -200,7 +200,7 @@ and `team user` call the platform API through `internal/cli/platformapi`.
 Team behavior spans CLI and API code: platform-backed team creation and
 membership routes live in `services/runtime-api/internal/runtimeapi`, durable identity
 state lives in `services/platform-api/internal/platformstore`, and user-facing guidance
-lives in `docs/multi-team.md`.
+lives in `docs/teams-and-access.md`.
 
 Tests: `team/manager_test.go`; for platform team API changes, run focused tests
 inside `services/platform-api` and `services/runtime-api`.

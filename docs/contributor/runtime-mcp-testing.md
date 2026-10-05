@@ -151,7 +151,7 @@ The example below is a contributor-only runtime policy test. It uses synthetic
 identity values and the explicit `--use-kube` path to test the gateway's CRD
 policy behavior in a disposable cluster. It does not test managed-agent
 directory checks or platform-issued sessions. For a platform-backed access
-flow, use the [Quickstart](../quickstart.md) or the [staging E2E guide](staging-e2e.md).
+flow, use the [Quickstart](../hosted-quickstart.md) or the [staging E2E guide](staging-e2e.md).
 
 Gateway policy requires both an access grant and an agent session when the
 server has `spec.session.required=true`.

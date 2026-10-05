@@ -12,7 +12,7 @@ import (
 
 // MinCARemainingLifetime is the minimum remaining root lifetime accepted for
 // the bundled workload CA in production. Below this, operators must plan a
-// dual-trust rotation (docs/cli.md, "Bundled workload CA lifecycle") before
+// dual-trust rotation (docs/cli-reference.md, "Bundled workload CA lifecycle") before
 // setup will treat the CA as healthy.
 const MinCARemainingLifetime = 180 * 24 * time.Hour
 

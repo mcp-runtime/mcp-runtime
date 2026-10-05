@@ -12,11 +12,11 @@ user-facing commands and scripts over private shortcuts.
 
 - Env profile: `config/deployments/mcpruntime-org.env`
 - Example profile: `config/deployments/mcpruntime-org.env.example`
-- Runbook: `docs/k3s-deployment-runbook.md`
+- Runbook: `docs/reference-deployment.md`
 - Readiness/debug guide: `docs/cluster-readiness.md`
 - Scripts (canonical): `hack/deploy/mcpruntime-org/{backup,setup,clean,restore,rollout,multitenancy-test}.sh`
 - Script index: `hack/README.md`
-- User path: `docs/quickstart.md` (published CLI install, hosted platform login,
+- User path: `docs/hosted-quickstart.md` (published CLI install, hosted platform login,
   server publish, grant, adapter, and analytics UI)
 - CLI release workflow: `.github/workflows/release.yaml`
 
@@ -28,7 +28,7 @@ user-facing commands and scripts over private shortcuts.
   `~/.kube/prod-mcp-runtime-config`, context `prod-mcp-runtime`. The default
   `~/.kube/config` stays on the test context `test-mcp-runtime`; do not merge
   production credentials into it. If the named production file is unavailable,
-  follow [Obtain and select cluster access](../../../docs/k3s-deployment-runbook.md#obtain-and-select-cluster-access)
+  follow [Obtain and select cluster access](../../../../docs/reference-deployment.md#obtain-and-select-cluster-access)
   to retrieve a kubeconfig securely and validate its API endpoint, context, and
   TLS. Never assume a contributor temp path exists or commit kubeconfig material.
 
@@ -59,7 +59,7 @@ KUBECONFIG="$PROD_KUBECONFIG" ./bin/mcp-runtime cluster doctor
   window. Load private credentials from `~/.mcpruntime/infra.env` without
   displaying them. Verify coverage, freshness, and request/trace correlation;
   do not infer health from missing telemetry. Follow the
-  [production observability workflow](../../../docs/k3s-deployment-runbook.md#production-observability-and-debugging).
+  [production observability workflow](../../../../docs/reference-deployment.md#production-observability-and-debugging).
   For each concrete maintainability or debugging gap, find or create an
   evidence-based repository issue and attach it to
   [Maintainability and Debuggability Improvement](https://github.com/orgs/mcp-runtime/projects/1).
@@ -231,7 +231,7 @@ change the default test context. The production profile remains the source for
 the domain and other deployment settings.
 
 The user-facing release check is separate from the rollout command. Follow
-`docs/quickstart.md` with the candidate CLI, then verify the same server,
+`docs/hosted-quickstart.md` with the candidate CLI, then verify the same server,
 connect configuration, and Analytics → Tools output in the hosted UI. The
 GitHub release workflow only publishes CLI binaries; do not publish a new CLI
 or mcp-auth release until these checks pass.
