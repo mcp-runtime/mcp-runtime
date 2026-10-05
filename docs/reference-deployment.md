@@ -1,9 +1,16 @@
-# Reference Deployment
+# Public Reference Deployment
+
+<span id="reference-deployment"></span>
 
 <span id="mcp-runtime-k3s-deployment-runbook"></span>
 
-Deploy and operate a complete MCP Runtime installation using the project's
-`mcpruntime.org` deployment as a worked example. The Runtime cluster uses
+This guide documents the project's public reference deployment at
+[platform.mcpruntime.org](https://platform.mcpruntime.org). To use that hosted
+platform, start with the [Hosted Quickstart](hosted-quickstart.md). The
+operations below explain how its infrastructure is configured and maintained,
+and provide a worked example for operators building their own deployment.
+
+The Runtime cluster uses
 **K3s**; the external identity provider runs on a separate VM with Docker and
 Caddy. K3s is the distribution selected for this example, not a requirement
 for MCP Runtime. See [Deployment Targets](deployment-targets.md) for other
@@ -32,7 +39,7 @@ managed cluster.
 
 Cluster size, node names, and addresses can change. Inspect the selected
 kubeconfig with `kubectl get nodes`; the multi-node layout in
-[Provision the Reference Cluster](cluster-provisioning.md) is a reference
+[Cluster Provisioning](cluster-provisioning.md) is a reference
 design, not a statement of the live cluster's node count. Keycloak and Caddy
 have their own backup and recovery boundary outside Kubernetes.
 

@@ -423,7 +423,7 @@ k3s uses embedded containerd. The steps below cover **lab HTTP** registry
 mirrors (`registry.local`, NodePort). For **public TLS + bundled HTTPS**
 (`registry.<domain>` with Let's Encrypt), skip the insecure mirror path and
 follow [Deployment Targets - k3s production](deployment-targets.md#option-a-bundled-https-registry-on-prem-reference)
-and [Reference Deployment](reference-deployment.md). Set
+and [Public Reference Deployment](reference-deployment.md). Set
 `MCP_REGISTRY_ENDPOINT=registry.<domain>` and use `--ingress none` when k3s
 Traefik already runs in `kube-system`.
 

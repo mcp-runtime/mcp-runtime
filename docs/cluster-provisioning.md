@@ -1,4 +1,6 @@
-# Provision the Reference Cluster
+# Cluster Provisioning
+
+<span id="provision-the-reference-cluster"></span>
 
 <span id="k3s-on-prem-cluster"></span>
 
@@ -19,7 +21,7 @@ its HA topology with three server nodes and separate datastore backups.
 
 This guide provisions the Runtime cluster. The reference deployment's external
 Keycloak identity provider runs separately; its VM and Docker/Caddy lifecycle
-are covered in [Reference Deployment](reference-deployment.md#identity-provider).
+are covered in [Public Reference Deployment](reference-deployment.md#identity-provider).
 
 ## Reference Topology
 
@@ -326,7 +328,7 @@ Set `PLATFORM_TRAEFIK_NAMESPACE=kube-system` and
 repo-managed Traefik when k3s Traefik is already active.
 
 For reruns, clean+restore, rollout-only updates, and the full environment
-variable reference, use [Reference Deployment](reference-deployment.md).
+variable reference, use [Public Reference Deployment](reference-deployment.md).
 
 Use `--platform-mode tenant` for private team-isolated installs, or
 `--platform-mode org` for a shared internal catalog. `public` exposes the

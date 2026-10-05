@@ -115,7 +115,7 @@ component-level paths, and E2E scenario mapping.
 |-------|-------------|-------|
 | Kind + `--test-mode` | Local contributor development | [Contributor Local Kind](contributor/local-kind.md) |
 | k3s lab (HTTP registry) | Single-node evaluation | [Deployment Targets - k3s lab](deployment-targets.md#k3s-lab-example) |
-| k3s / on-prem + bundled HTTPS | Public domain with Let's Encrypt | [Deployment Targets](deployment-targets.md), [Reference Deployment](reference-deployment.md) |
+| k3s / on-prem + bundled HTTPS | Public domain with Let's Encrypt | [Deployment Targets](deployment-targets.md), [Public Reference Deployment](reference-deployment.md) |
 | Managed Kubernetes + external registry | EKS, GKE, AKS | [Deployment Targets - Managed Kubernetes](deployment-targets.md#managed-kubernetes) |
 
 ## Related reading

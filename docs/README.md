@@ -45,8 +45,8 @@ administration, use [runtime operations](runtime-operations.md).
 
 For a complete infrastructure example, start with
 [Deployment Targets](deployment-targets.md), then
-[Provision the Reference Cluster](cluster-provisioning.md) and
-[Reference Deployment](reference-deployment.md). The reference uses K3s for
+[Cluster Provisioning](cluster-provisioning.md) and
+[Public Reference Deployment](reference-deployment.md). The reference uses K3s for
 Kubernetes and a separate Docker/Caddy VM for Keycloak; those are documented
 deployment choices.
 

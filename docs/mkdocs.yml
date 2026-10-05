@@ -72,8 +72,8 @@ nav:
   - Self-Host and Operate:
       - Choose a Deployment Target: deployment-targets.md
       - Prepare Your Cluster: cluster-readiness.md
-      - Provision the Reference Cluster: cluster-provisioning.md
-      - Reference Deployment: reference-deployment.md
+      - Cluster Provisioning: cluster-provisioning.md
+      - Public Reference Deployment: reference-deployment.md
       - Runtime Operations: runtime-operations.md
       - Namespaces: namespaces.md
       - Platform Services and Observability: platform-services.md
