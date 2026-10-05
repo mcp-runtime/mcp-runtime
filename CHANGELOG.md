@@ -9,6 +9,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Fixed
 
+- Port-transition promotion reads candidate pods directly from the API instead of starting a Pod informer the operator RBAC cannot watch, so promotion no longer acts on a stale pod view ([#617](https://github.com/mcp-runtime/mcp-runtime/issues/617)).
 - MCPServer port-changing rollouts retain the existing Service route until a Ready candidate declares the new listener, use a zero-unavailable rollout during the transition, and select only compatible pods after switching. Gateway network policies resolve the named listener per pod so retained ports stay reachable. Readiness requires current Deployment replicas and ready EndpointSlices on the requested port ([#533](https://github.com/mcp-runtime/mcp-runtime/issues/533)).
 
 ### Changed
