@@ -698,12 +698,17 @@ fieldset.field > .field-label {
   font-size: var(--fs-body);
 }
 
+.data-table-fixed {
+  table-layout: fixed;
+}
+
 .data-table th,
 .data-table td {
   padding: 10px 14px;
   text-align: left;
   vertical-align: top;
   border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
 }
 
 .data-table tbody tr:last-child th,
@@ -791,13 +796,12 @@ fieldset.field > .field-label {
   color: var(--text-secondary);
 }
 
-/* Status plus its inline action: never let the pair break across lines inside a
-   narrow table column. */
+/* Wrap action groups within the column, keeping each badge/button intact. */
 .cell-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  white-space: nowrap;
 }
 
 .cell-code {
