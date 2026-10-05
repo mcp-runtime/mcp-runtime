@@ -4013,30 +4013,20 @@ echo "[cache] resetting Traefik namespace watches before E2E flows"
 reset_traefik_namespace_watches
 
 echo "[cli] checking platform status commands"
-./bin/mcp-runtime status | tee "${WORKDIR}/cli-status.raw"
-# status colours its table even when piped; strip the escapes before matching.
-sed $'s/\x1b\\[[0-9;]*m//g' "${WORKDIR}/cli-status.raw" >"${WORKDIR}/cli-status.txt"
-# QA has no saved login, so status must read the Kind cluster. A remote
-# profile (for example Staging's platform.e2e.* login) shows up as ERROR.
-assert_file_contains "Not logged in" "${WORKDIR}/cli-status.txt"
-if grep -E -q '\|[[:space:]]+ERROR[[:space:]]+\|' "${WORKDIR}/cli-status.txt"; then
-  echo "[assert][fail] mcp-runtime status reported an ERROR row" >&2
+# Status requires platform credentials even when the Kind cluster is healthy.
+# Isolate both saved profiles and environment overrides from the caller.
+if env -u MCP_PLATFORM_API_TOKEN -u MCP_PLATFORM_API_URL -u MCP_PLATFORM_API_PROFILE \
+  MCP_RUNTIME_CONFIG_DIR="${WORKDIR}/auth-config" ./bin/mcp-runtime status \
+  >"${WORKDIR}/cli-status-no-login.txt" 2>&1; then
+  echo "[assert][fail] mcp-runtime status succeeded without a login" >&2
   exit 1
 fi
+assert_file_contains "Status: LOGIN REQUIRED" "${WORKDIR}/cli-status-no-login.txt"
 ./bin/mcp-runtime cluster status
 ./bin/mcp-runtime registry status
 ./bin/mcp-runtime registry info
 
-echo "[cli] checking auth, bootstrap, cluster, registry, and sentinel commands"
-MCP_RUNTIME_CONFIG_DIR="${WORKDIR}/auth-config" ./bin/mcp-runtime auth status
-MCP_RUNTIME_CONFIG_DIR="${WORKDIR}/auth-config" ./bin/mcp-runtime auth login \
-  --api-url "http://127.0.0.1:${SENTINEL_PORT}" \
-  --token e2e-token \
-  --skip-verify \
-  --registry-host "${LOCAL_REGISTRY_PUSH_HOST}"
-MCP_RUNTIME_CONFIG_DIR="${WORKDIR}/auth-config" ./bin/mcp-runtime auth status
-MCP_RUNTIME_CONFIG_DIR="${WORKDIR}/auth-config" ./bin/mcp-runtime auth logout
-
+echo "[cli] checking bootstrap, cluster, registry, and sentinel commands"
 ./bin/mcp-runtime bootstrap --provider generic
 ./bin/mcp-runtime cluster init
 ./bin/mcp-runtime cluster config --ingress none
@@ -4137,6 +4127,22 @@ if [[ -z "${API_KEY}" ]]; then
   echo "[error] failed to resolve UI/API key from owner Secrets" >&2
   exit 1
 fi
+
+echo "[cli] checking saved login and authenticated platform status"
+ensure_gateway_port_forward
+MCP_RUNTIME_CONFIG_DIR="${WORKDIR}/auth-config" ./bin/mcp-runtime auth status
+printf '%s' "${API_KEY}" | MCP_RUNTIME_CONFIG_DIR="${WORKDIR}/auth-config" ./bin/mcp-runtime auth login \
+  --api-url "http://127.0.0.1:${SENTINEL_PORT}" \
+  --token-stdin \
+  --registry-host "${LOCAL_REGISTRY_PUSH_HOST}"
+MCP_RUNTIME_CONFIG_DIR="${WORKDIR}/auth-config" ./bin/mcp-runtime auth status
+env -u MCP_PLATFORM_API_TOKEN -u MCP_PLATFORM_API_URL -u MCP_PLATFORM_API_PROFILE \
+  KUBECONFIG=/dev/null MCP_RUNTIME_CONFIG_DIR="${WORKDIR}/auth-config" \
+  ./bin/mcp-runtime status | tee "${WORKDIR}/cli-status.txt"
+assert_file_contains "Platform: http://127.0.0.1:${SENTINEL_PORT}" "${WORKDIR}/cli-status.txt"
+assert_file_contains "Status: READY" "${WORKDIR}/cli-status.txt"
+MCP_RUNTIME_CONFIG_DIR="${WORKDIR}/auth-config" ./bin/mcp-runtime auth logout
+
 INGEST_API_KEY="$(kubectl get secret mcp-ingest-credentials -n mcp-observability -o jsonpath='{.data.INGEST_API_KEYS}' | decode_base64 | cut -d',' -f1)"
 if [[ -z "${INGEST_API_KEY}" ]]; then
   INGEST_API_KEY="${API_KEY}"
