@@ -243,3 +243,12 @@ func TestTeamAndNamespaceRoutes(t *testing.T) {
 		})
 	}
 }
+
+func (f *fakeStore) CreateTeamUser(ctx context.Context, slug, email, password, role string) (platformstore.User, platformstore.TeamMembership, error) {
+	user, err := f.CreatePasswordUser(ctx, email, password, "user")
+	if err != nil {
+		return platformstore.User{}, platformstore.TeamMembership{}, err
+	}
+	membership, err := f.UpsertTeamMembership(ctx, slug, user.ID, role)
+	return user, membership, err
+}

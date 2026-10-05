@@ -12,6 +12,7 @@ import { PageHeader } from "../../ui/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../../ui/States";
 import { useAdminReload, useTeamMembers, useTeams } from "../../hooks/useAdminData";
 import { createTeam, createTeamUser, removeTeamMember, setTeamMemberRole } from "../../api/admin";
+import { APIRequestError } from "../../api/client";
 import type { TeamMembership, TeamRecord } from "../../api/types";
 
 type TeamsPanelProps = { onSignIn: () => void };
@@ -26,10 +27,11 @@ export function TeamsPanel({ onSignIn }: TeamsPanelProps) {
   const [selectedSlug, setSelectedSlug] = useState("");
   const [busyKey, setBusyKey] = useState("");
   const [error, setError] = useState("");
+  const [userConflict, setUserConflict] = useState(false);
   const [notice, setNotice] = useState("");
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   const [teamForm, setTeamForm] = useState<{ slug: string; name: string } | null>(null);
-  const [userForm, setUserForm] = useState<{ email: string; password: string; role: string } | null>(null);
+  const [userForm, setUserForm] = useState<{ email: string; password: string; role: string; existing?: boolean; userID?: string } | null>(null);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   // Keep a valid selection without ever pointing at a team that has gone away.
@@ -51,12 +53,14 @@ export function TeamsPanel({ onSignIn }: TeamsPanelProps) {
     setBusyKey(key);
     setError("");
     setNotice("");
+    setUserConflict(false);
     try {
       await action();
       setNotice(successMessage);
       reload();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The change could not be applied.");
+      setUserConflict(key === "create-user" && cause instanceof APIRequestError && cause.status === 409);
     } finally {
       setBusyKey("");
       setConfirm(null);
@@ -93,18 +97,25 @@ export function TeamsPanel({ onSignIn }: TeamsPanelProps) {
       return;
     }
     const next: Record<string, string> = {};
-    if (!userForm.email.trim()) {
+    if (userForm.existing && !userForm.userID?.trim()) {
+      next.userID = "Enter the existing user ID.";
+    }
+    if (!userForm.existing && !userForm.email.trim()) {
       next.email = "Enter an email address.";
     }
-    if (userForm.password.length < 8) {
+    if (!userForm.existing && userForm.password.length < 8) {
       next.password = "Use at least 8 characters.";
     }
     setFormErrors(next);
     if (Object.keys(next).length > 0) {
       return;
     }
-    void runAction("create-user", `Account created for ${userForm.email.trim()}.`, async () => {
-      await createTeamUser(selectedSlug, userForm.email.trim(), userForm.password, userForm.role);
+    void runAction("create-user", userForm.existing ? "Existing user added to the team." : `Account created for ${userForm.email.trim()}.`, async () => {
+      if (userForm.existing) {
+        await setTeamMemberRole(selectedSlug, userForm.userID?.trim() || "", userForm.role);
+      } else {
+        await createTeamUser(selectedSlug, userForm.email.trim(), userForm.password, userForm.role);
+      }
       setUserForm(null);
     });
   }
@@ -287,7 +298,7 @@ export function TeamsPanel({ onSignIn }: TeamsPanelProps) {
           <span className="notice-body">{notice}</span>
         </p>
       ) : null}
-      {error ? (
+      {error && !userForm ? (
         <p className="notice notice-danger" role="alert" data-testid="teams-action-error">
           <Icon name="alert" />
           <span className="notice-body">{error}</span>
@@ -380,48 +391,94 @@ export function TeamsPanel({ onSignIn }: TeamsPanelProps) {
               variant="secondary"
               icon="plus"
               data-testid="team-user-toggle"
+              disabled={busyKey !== ""}
               onClick={() => {
                 setFormErrors({});
+                setError("");
+                setUserConflict(false);
                 setUserForm((current) => (current ? null : { email: "", password: "", role: "member" }));
               }}
             >
               Create account in this team
+            </Button>
+            <Button
+              variant="secondary"
+              data-testid="team-existing-user-toggle"
+              disabled={busyKey !== ""}
+              onClick={() => {
+                setFormErrors({});
+                setError("");
+                setUserConflict(false);
+                setUserForm({ email: "", password: "", role: "member", existing: true, userID: "" });
+              }}
+            >
+              Add existing user
             </Button>
           </div>
         ) : null}
 
         {userForm && selectedTeam ? (
           <form className="form-panel" onSubmit={submitUser} data-testid="team-user-form" noValidate>
-            <h3 className="form-panel-title">Create an account in {selectedTeam.name || selectedTeam.slug}</h3>
+            <h3 className="form-panel-title">{userForm.existing ? "Add an existing user to" : "Create an account in"} {selectedTeam.name || selectedTeam.slug}</h3>
             <p className="section-note" style={{ marginBottom: "var(--space-4)" }}>
-              This creates a new platform account with the password you set. It does not invite an existing
-              user; the API has no invite flow.
+              {userForm.existing ? "Use the existing account's user ID from a team's member list. Their password stays unchanged." : "This creates a new platform account with the temporary password you set. For an account that already exists, choose Add existing user."}
             </p>
+            {error ? (
+              <p role="alert" className="notice notice-danger" data-testid="team-user-error">{error}</p>
+            ) : null}
+            {userConflict ? (
+              <Button
+                variant="secondary"
+                data-testid="team-user-conflict-existing"
+                onClick={() => {
+                  setError("");
+                  setUserConflict(false);
+                  setFormErrors({});
+                  setUserForm({ email: "", password: "", role: userForm.role, existing: true, userID: "" });
+                }}
+              >
+                Add existing user
+              </Button>
+            ) : null}
             <div className="form-grid">
-              <TextField
-                label="Email"
-                type="email"
-                value={userForm.email}
-                required
-                error={formErrors.email}
-                announceError
-                autoComplete="off"
-                data-testid="team-user-email"
-                onChange={(event) => setUserForm({ ...userForm, email: event.target.value })}
-              />
-              <TextField
-                label="Temporary password"
-                type="password"
-                value={userForm.password}
-                required
-                minLength={8}
-                error={formErrors.password}
-                announceError
-                autoComplete="new-password"
-                hint="Share it out of band; the member should change it after signing in."
-                data-testid="team-user-password"
-                onChange={(event) => setUserForm({ ...userForm, password: event.target.value })}
-              />
+              {userForm.existing ? (
+                <TextField
+                  label="User ID"
+                  value={userForm.userID || ""}
+                  required
+                  error={formErrors.userID}
+                  announceError
+                  data-testid="team-existing-user-id"
+                  onChange={(event) => setUserForm({ ...userForm, userID: event.target.value })}
+                />
+              ) : (
+                <>
+                  <TextField
+                    label="Email"
+                    type="email"
+                    value={userForm.email}
+                    required
+                    error={formErrors.email}
+                    announceError
+                    autoComplete="off"
+                    data-testid="team-user-email"
+                    onChange={(event) => setUserForm({ ...userForm, email: event.target.value })}
+                  />
+                  <TextField
+                    label="Temporary password"
+                    type="password"
+                    value={userForm.password}
+                    required
+                    minLength={8}
+                    error={formErrors.password}
+                    announceError
+                    autoComplete="new-password"
+                    hint="Use at least 8 characters. Share it out of band; the member should change it after signing in."
+                    data-testid="team-user-password"
+                    onChange={(event) => setUserForm({ ...userForm, password: event.target.value })}
+                  />
+                </>
+              )}
               <SelectField
                 label="Role"
                 value={userForm.role}
@@ -438,7 +495,7 @@ export function TeamsPanel({ onSignIn }: TeamsPanelProps) {
                 Cancel
               </Button>
               <Button type="submit" variant="primary" busy={busyKey === "create-user"} data-testid="team-user-submit">
-                {busyKey === "create-user" ? "Creating…" : "Create account"}
+                {busyKey === "create-user" ? "Saving…" : userForm.existing ? "Add member" : "Create account"}
               </Button>
             </div>
           </form>

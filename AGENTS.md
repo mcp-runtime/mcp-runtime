@@ -58,6 +58,11 @@ the gap and implement the supported management path instead of silently using
 a workaround. For server examples, generate `.mcp/servers.yaml` with
 `mcp-runtime server init`, then validate it with `mcp-runtime server validate`.
 
+Team account creation through `team user create` and the UI uses the same atomic
+account-and-membership operation. For an existing account, use `team user add`
+or **Add existing user** in the Teams UI; membership changes preserve passwords.
+Check validation/conflict messages and rollback when changing these paths.
+
 ## Agent workflow passes
 
 Use repo-local skills as the source of truth for review, QA, security, and

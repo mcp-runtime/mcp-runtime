@@ -71,8 +71,8 @@ accepts an explicit foreign `subject.teamID` only after verifying the named
 human or active agent belongs to that team and the grant has a capped expiry.
 
 Use `team user create` as a platform admin when you need a new local
-password-login user for a team. The command creates the user, adds them to the
-team as `member` or `owner`, and then the user can sign in with:
+password-login user for a team. The command creates the user and team membership
+in one transaction as `member` or `owner`, and then the user can sign in with:
 
 ```bash
 mcp-runtime auth login \
@@ -84,7 +84,11 @@ mcp-runtime auth login \
 For an existing platform user, find their user ID in the platform UI and run
 `mcp-runtime team user add <team-slug> <user-id> --role member` (or set the role
 to `owner`). This changes only the team membership and does not reset the user's
-password. Platform admins and team owners can manage members in their teams.
+password. In the UI, open Administration → Teams and choose **Add existing user**,
+then enter that user ID and select a role. **Create account in this team** is for
+new accounts and requires a temporary password of at least eight characters.
+Validation failures appear in the form; an existing email offers the membership
+form rather than resetting the account password. Platform admins and team owners can manage members in their teams.
 A saved login token keeps the membership from the moment it was issued, so
 run `mcp-runtime auth login` again before `server build`, `server push`, or
 `server deploy` for that team.

@@ -25,7 +25,7 @@ function stubTeams(options: { gateSlug?: string } = {}) {
     release = resolve;
   });
 
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
     const url = String(input);
     const memberMatch = url.match(/\/runtime\/teams\/([^/]+)\/members/);
     if (memberMatch) {
@@ -123,6 +123,75 @@ describe("TeamsPanel", () => {
 
     await user.click(screen.getByTestId("team-user-toggle"));
     const form = await screen.findByTestId("team-user-form");
-    expect(form).toHaveTextContent("It does not invite an existing user");
+    expect(form).toHaveTextContent("For an account that already exists, choose Add existing user");
+  });
+});
+
+describe("team account errors and existing users", () => {
+  it("shows the API validation message inside the account form", async () => {
+    const user = userEvent.setup();
+    const { fetchMock } = stubTeams();
+    const read = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input, ...args) => {
+      const init = args[0] as RequestInit | undefined;
+      if (init?.method === "POST") return {
+        ok: false, status: 400,
+        text: async () => JSON.stringify({ error: "invalid_request_body", message: "valid email required" }),
+      } as Response;
+      return read(input);
+    });
+    renderTeams();
+    await screen.findByTestId("team-members-table");
+    await user.click(screen.getByTestId("team-user-toggle"));
+    await user.type(screen.getByTestId("team-user-email"), "invalid-email");
+    await user.type(screen.getByTestId("team-user-password"), "password123");
+    await user.click(screen.getByTestId("team-user-submit"));
+    expect(await screen.findByTestId("team-user-error")).toHaveTextContent("valid email required");
+    expect(screen.getByTestId("team-user-form")).not.toHaveTextContent("invalid_request_body");
+  });
+
+  it("offers adding the existing user after a conflict without sending a password", async () => {
+    const user = userEvent.setup();
+    const { fetchMock } = stubTeams();
+    const read = fetchMock.getMockImplementation()!;
+    const writes: Array<[string, RequestInit]> = [];
+    fetchMock.mockImplementation(async (input, ...args) => {
+      const init = args[0] as RequestInit | undefined;
+      if (init?.method === "POST") {
+        writes.push([String(input), init]);
+        return { ok: false, status: 409, text: async () => JSON.stringify({ error: "conflict", message: "a user with this email already exists; add them as a member instead" }) } as Response;
+      }
+      if (init?.method === "PUT") {
+        writes.push([String(input), init]);
+        return { ok: true, status: 200, json: async () => ({ membership: {} }) } as Response;
+      }
+      return read(input);
+    });
+    renderTeams();
+    await screen.findByTestId("team-members-table");
+    await user.click(screen.getByTestId("team-user-toggle"));
+    await user.type(screen.getByTestId("team-user-email"), "alice@example.com");
+    await user.type(screen.getByTestId("team-user-password"), "password123");
+    await user.click(screen.getByTestId("team-user-submit"));
+    await user.click(await screen.findByTestId("team-user-conflict-existing"));
+    expect(screen.queryByTestId("team-user-password")).not.toBeInTheDocument();
+    await user.type(screen.getByTestId("team-existing-user-id"), "u-1");
+    await user.click(screen.getByTestId("team-user-submit"));
+    expect(await screen.findByTestId("teams-action-notice")).toHaveTextContent("Existing user added");
+    expect(writes[1][0]).toBe("/api/ui/v1/runtime/teams/acme/members/u-1");
+    expect(JSON.parse(String(writes[1][1].body))).toEqual({ role: "member" });
+  });
+
+  it("rejects a short password locally and explains the minimum", async () => {
+    const user = userEvent.setup();
+    const { fetchMock } = stubTeams();
+    renderTeams();
+    await screen.findByTestId("team-members-table");
+    await user.click(screen.getByTestId("team-user-toggle"));
+    await user.type(screen.getByTestId("team-user-email"), "member@example.com");
+    await user.type(screen.getByTestId("team-user-password"), "short");
+    await user.click(screen.getByTestId("team-user-submit"));
+    expect(screen.getByTestId("team-user-form")).toHaveTextContent("Use at least 8 characters.");
+    expect(fetchMock.mock.calls.every(call => !String(call[0]).endsWith("/users"))).toBe(true);
   });
 });
