@@ -9,6 +9,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Changed
 
+- `mcp-runtime status` performs one authenticated platform API check with a five-second timeout and prints only the platform URL and readiness result. It requires a platform login, reports failed checks with a nonzero exit code, and leaves server listings and Kubernetes diagnostics to `server list`, `cluster status`, and `sentinel status`.
+
 - Release development follows a pre-customer policy: breaking changes may use a backed-up fresh setup and tested recovery of the hosted reference platform, without legacy compatibility layers or general upgrade infrastructure. Release instructions must cover required data, identity-provider backups, recovery, and verification; customer migration commitments will be defined when the first external customer is onboarded.
 
 - Documentation sections use descriptive names and start with audience and reading-path overviews. Getting Started separates hosted, self-hosted, and contributor paths; Server and Client Guides connects publishing, access, and client setup. Deployment and Operations groups installation, the public reference, and maintenance. Development and Testing and Implementation Details use shorter grouped menus. The home page consolidates repeated guide lists; existing page URLs and heading anchors remain available. Platform Installation owns reusable setup and enterprise certificate instructions, with Cluster Provisioning handing off once infrastructure is ready.
@@ -17,7 +19,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Fixed
 
-- `mcp-runtime cluster doctor` reports the underlying kubectl/API error and stops dependent checks when the cluster cannot be queried. `mcp-runtime status` explains platform authentication and Kubernetes access failures, skips duplicate server-list requests after auth errors, and bounds its status probes ([#591](https://github.com/mcp-runtime/mcp-runtime/issues/591)).
+- `mcp-runtime cluster doctor` reports the underlying kubectl/API error and stops dependent checks when the cluster cannot be queried. `mcp-runtime status` explains rejected platform credentials and bounds its API check ([#591](https://github.com/mcp-runtime/mcp-runtime/issues/591)).
 
 ## [0.5.2] - 2026-10-05
 

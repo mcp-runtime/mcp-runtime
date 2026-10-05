@@ -148,13 +148,20 @@ See [MCP authorization](mcp-oauth.md) for the full provider flow.
 
 ## status
 
-**[User]** (kubeconfig optional for sentinel detail)
+**[User]** (saved platform login required)
 
 ```bash
-mcp-runtime status                                         # registry, operator, platform API
+mcp-runtime status                                         # quick platform API check
 mcp-runtime registry status                               # registry pod + endpoint
 KUBECONFIG=~/.kube/config mcp-runtime sentinel status     # sentinel stack
 ```
+
+`status` checks whether the platform API is reachable and accepts your saved
+login, with a five-second timeout. It prints the platform URL and `READY`,
+`NOT READY`, `LOGIN REQUIRED`, or `NOT CONFIGURED`; a failed check exits nonzero.
+`READY` means the authenticated API request succeeded. Use `server list` for
+servers and `cluster status` or `sentinel status` for cluster and workload health.
+The command does not query Kubernetes or list servers.
 
 ## server
 
