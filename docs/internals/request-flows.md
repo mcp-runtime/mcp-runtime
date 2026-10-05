@@ -89,6 +89,7 @@ sequenceDiagram
     Server-->>Gateway: MCP result
     Gateway-->>Client: initialize response with Mcp-Session-Id
     Client->>Ingress: POST /{server}/mcp tools/call
+    Ingress->>Gateway: Request with verified identity when configured
     Gateway->>Policy: match identity, session, grant, trust, side effect, tool rule
     alt allowed
         Gateway->>Server: forward JSON-RPC request
@@ -145,7 +146,13 @@ sequenceDiagram
     Adapter->>Traefik: forward MCP request with client certificate (+ bearer when OAuth is enabled)
     Traefik->>Gateway: verify certificate and inject trusted SPIFFE identity
     Gateway->>Gateway: resolve the SPIFFE identity against session and grant policy
-    Gateway->>Server: allow and proxy, or deny from policy
+    alt policy allows
+        Gateway->>Server: Proxy the authorized MCP request
+    else policy denies
+        Gateway-->>Traefik: 401 or 403 with denial reason
+        Traefik-->>Adapter: Error response
+        Adapter-->>Agent: Error response
+    end
 ```
 
 Primary request paths:
@@ -179,7 +186,11 @@ sequenceDiagram
 
     Browser->>Ingress: GET /
     Ingress->>UI: static app shell
-    Browser->>UI: POST /auth/login
+    Browser->>Ingress: POST /auth/login
+    Ingress->>UI: Login request
+    UI->>Platform: POST /api/v1/auth/login
+    Platform->>DB: Validate password and load identity
+    Platform-->>UI: Platform credential
     UI-->>Browser: mcp_ui_session cookie
     Browser->>Ingress: GET /api/ui/v1/runtime/servers
     Ingress->>UI: session BFF
@@ -206,7 +217,7 @@ Primary request paths:
 - API auth: `/api/v1/auth/login`, `/api/v1/auth/signup`, `/api/v1/auth/oidc`,
   `/api/v1/auth/me`
 - Dashboard and analytics: `/api/v1/dashboard/summary`, `/api/v1/events`,
-  `/api/v1/events`, `/api/v1/stats`, `/api/v1/sources`, `/api/v1/event-types`,
+  `/api/v1/stats`, `/api/v1/sources`, `/api/v1/event-types`,
   `/api/v1/analytics/usage`, `/api/v1/user/analytics/usage`
 
 ## Policy And Access Resources
@@ -219,6 +230,7 @@ sequenceDiagram
     participant API as runtime-api
     participant K8s as Kubernetes API
     participant Operator
+    participant Policy as Mounted policy ConfigMap
     participant Gateway
     participant Client as MCP client
 
@@ -226,8 +238,9 @@ sequenceDiagram
     API->>K8s: apply MCPAccessGrant or MCPAgentSession
     K8s-->>Operator: watch grant/session
     Operator->>K8s: write {server}-gateway-policy ConfigMap
-    Client->>Gateway: tools/call with identity/session headers
-    Gateway->>K8s: read mounted or cached policy file
+    K8s-->>Policy: Project the ConfigMap into the pod
+    Client->>Gateway: tools/call with ingress-verified identity when configured
+    Gateway->>Policy: Read local policy snapshot
     Gateway-->>Client: allow, tool_not_granted, session_not_found, revoked, expired, trust denied
 ```
 
@@ -378,7 +391,7 @@ Primary request paths:
 | Direct ingest event | `POST /events` | ingest, auth, Kafka, processor, ClickHouse | event envelope and API key auth | `observability` |
 | View Grafana/Prometheus | `/grafana/*`, `/prometheus/*` | ingress, UI admin-check, Grafana/Prometheus | cookie/API-key admin forward auth | `ui-auth`, `observability` |
 | Admin audit/operations | `/api/v1/admin/*` | API, Postgres, K8s, audit store | admin role checks, audit payloads | `api-platform` |
-| Pre-release full sweep | manual workflow | static checks, tests, Kind modes, registry, API, UI, CLI, MCP, cache replay | tenant/org/public behavior, cache reuse | `all` with `E2E_DEEP_REQUEST_FLOWS=1` |
+| Pre-release regression | manual workflow | static checks, tests, security scans, Staging E2E on disposable k3s | production setup, TLS, registry, tenant deployment and governed calls | `staging-e2e.yaml` with multi-tenancy enabled |
 
 ## Coverage Guidance
 
@@ -387,7 +400,9 @@ plane. If a change touches shared contracts, generated manifests, API auth,
 policy evaluation, or namespace scoping, prefer the broader scenario or let CI
 fall back to `all`.
 
-For pre-release, cover every row in the matrix through `E2E_SCENARIOS=all` with
-`E2E_DEEP_REQUEST_FLOWS=1`, in tenant, org, and public platform modes. Include
-one cache replay so setup reuse, image reuse, adapter deterministic session
-reuse, and retained cluster state are exercised before release.
+For pre-release, run Pre-release Regression: Staging E2E is its only cluster
+suite. Staging currently uses tenant platform mode and exercises the production
+install and tenant journey. Use focused PR Kind scenarios for changed request
+paths. Run additional full Kind sweeps with `E2E_SCENARIOS=all` and
+`E2E_DEEP_REQUEST_FLOWS=1` when org/public modes or cache reuse need explicit
+coverage; these sweeps are not automatic pre-release jobs.

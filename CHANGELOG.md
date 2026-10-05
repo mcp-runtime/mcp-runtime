@@ -10,6 +10,31 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 ### Security
 
 - Fresh cert-manager installs use v1.21.2 instead of the retired v1.16.2; TLS doctor checks flag unsupported Kubernetes/version pairs and inconsistent controller/webhook/cainjector versions. Existing installations remain unchanged and require staged minor upgrades with certificate/Secret backups ([#534](https://github.com/mcp-runtime/mcp-runtime/issues/534)).
+### Changed
+
+- Release development follows a pre-customer policy: breaking changes may use a backed-up fresh setup and tested recovery of the hosted reference platform, without legacy compatibility layers or general upgrade infrastructure. Release instructions must cover required data, identity-provider backups, recovery, and verification; customer migration commitments will be defined when the first external customer is onboarded.
+
+- Documentation sections use descriptive names and start with audience and reading-path overviews. Getting Started separates hosted, self-hosted, and contributor paths; Server and Client Guides connects publishing, access, and client setup. Deployment and Operations groups installation, the public reference, and maintenance. Development and Testing and Implementation Details use shorter grouped menus. The home page consolidates repeated guide lists; existing page URLs and heading anchors remain available. Platform Installation owns reusable setup and enterprise certificate instructions, with Cluster Provisioning handing off once infrastructure is ready.
+
+- Deployment documentation uses distribution-neutral names: `reference-deployment.md` covers Runtime and its external identity provider, while `cluster-provisioning.md` describes the reference cluster with K3s as the worked distribution choice. Navigation, indexes, and operational links follow the new names; published URLs redirect and existing section anchors remain available. The reference guide separates configuration, installation and updates, identity-provider setup, backups and recovery, and verification, and clarifies that Keycloak DNS and backups belong to its separate VM.
+
+## [0.5.2] - 2026-10-05
+
+### Changed
+
+- The reference deployment's demo Keycloak identity provider runs as a separate Docker/Caddy service with its own Let's Encrypt certificate, so a Runtime namespace reset does not remove it. K3s backups no longer include its old Kubernetes Secrets; back up Keycloak's realm data and Caddy state on the Buddy VM separately before recovery ([#589](https://github.com/mcp-runtime/mcp-runtime/pull/589)).
+- Pre-release Regression uses Staging E2E as its only cluster suite, avoiding repeated Kind tenant/org/public runs and cache replay. Static, unit, integration, service, benchmark, and security checks remain; Kind QA stays in PR CI ([#588](https://github.com/mcp-runtime/mcp-runtime/pull/588)).
+
+### Fixed
+
+- The reference deployment includes a tracked, non-secret Keycloak connector configuration with public HTTPS token and JWKS endpoints. Setup reruns using that configuration preserve the working login endpoints after the identity provider moves to its separate VM; the client secret remains supplied through the deployment environment ([#589](https://github.com/mcp-runtime/mcp-runtime/pull/589)).
+
+## [0.5.1] - 2026-10-04
+
+### Changed
+
+- CLI installation on macOS/Linux reports each step with terminal colors and download progress, bounds stalled transfers, and explains download or destination failures. Set `NO_COLOR` to disable colors ([#586](https://github.com/mcp-runtime/mcp-runtime/pull/586)).
+- Documentation starts with hosted and self-hosted paths, followed by task guides, operations, concepts, and reference. Self-hosting instructions distinguish release installs from source builds and avoid an extra unconfigured setup run. Pages use descriptive filenames, with redirects preserving published URLs ([#586](https://github.com/mcp-runtime/mcp-runtime/pull/586)).
 
 ## [0.5.0] - 2026-10-02
 
@@ -49,7 +74,7 @@ upgrade from 0.4.x; see the migration note under **Changed**.
 ### Security
 
 - Adapter certificates require a workload-issuer approval policy. Outside `--test-mode`, setup refuses `MCP_ADAPTER_CERTIFICATES=true` unless cert-manager approver-policy is installed or `MCP_WORKLOAD_ISSUER_APPROVAL_ACK=true` acknowledges another approver. The runtime API rejects an issued certificate whose SPIFFE URI, key, usage, or lifetime differs from the submitted CSR, and its ClusterRole no longer grants `list` or `watch` on CertificateRequests. Adapter issuance stays off by default ([#538](https://github.com/mcp-runtime/mcp-runtime/issues/538)).
-- Setup validates the bundled `mcp-runtime-ca` workload CA before use (key and certificate match, CA constraints, validity). Production setup fails on a missing, invalid, expired, or under-180-day CA instead of generating or accepting it; test mode still generates a missing CA and warns near expiry. Migration: production installs using `--mtls-cluster-issuer mcp-runtime-ca` must have the CA Secret in place before setup. Rotation and backup guidance is in `docs/cli.md` ([#535](https://github.com/mcp-runtime/mcp-runtime/issues/535)).
+- Setup validates the bundled `mcp-runtime-ca` workload CA before use (key and certificate match, CA constraints, validity). Production setup fails on a missing, invalid, expired, or under-180-day CA instead of generating or accepting it; test mode still generates a missing CA and warns near expiry. Migration: production installs using `--mtls-cluster-issuer mcp-runtime-ca` must have the CA Secret in place before setup. Rotation and backup guidance is in `docs/cli-reference.md` ([#535](https://github.com/mcp-runtime/mcp-runtime/issues/535)).
 - Operator Secret permissions are scoped to MCPServer namespaces, and Secret reads bypass the controller cache. Runtime-managed namespaces get a scoped binding automatically, and setup backfills existing ones. The TLS namespace grants named read and update access only to the public adapter trust bundle ([#540](https://github.com/mcp-runtime/mcp-runtime/issues/540)).
 - Platform application workloads run under restricted Pod Security admission. Node log collection runs in `mcp-log-collector`, the only namespace with the hostPath exception ([#548](https://github.com/mcp-runtime/mcp-runtime/issues/548)).
 - The internal registry NetworkPolicy no longer admits tenant workload namespaces (`mcp-servers*` and team namespaces), closing the unauthenticated in-cluster registry read and write path from tenant pods. Node pulls and platform publish paths are unchanged. Registry-native authentication remains a follow-up ([#531](https://github.com/mcp-runtime/mcp-runtime/issues/531)).
@@ -99,7 +124,9 @@ upgrade from 0.4.x; see the migration note under **Changed**.
 
 - Targeted platform updates through `mcp-runtime update`, including embedded CRD updates and `--build` to build/push missing component images before rollout ([#491](https://github.com/mcp-runtime/mcp-runtime/pull/491)).
 
-[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.5.1...v0.5.2
+[0.5.1]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.3.2...v0.4.0

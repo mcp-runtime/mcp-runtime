@@ -6,9 +6,16 @@ roll only that Deployment.
 
 ## Test First
 
+Keep tests isolated from the live cluster. Run test commands in a subshell
+with an empty kubeconfig; restore the contributor kubeconfig only for the
+explicit local-cluster steps below.
+
 Use focused tests while iterating:
 
 ```bash
+(
+export KUBECONFIG=$(mktemp)
+trap 'rm -f "$KUBECONFIG"' EXIT
 go test ./internal/operator/... ./internal/cli/... -count=1
 go test ./internal/agentadapter -count=1
 (cd services/platform-api && go test ./... -count=1)
@@ -16,22 +23,33 @@ go test ./internal/agentadapter -count=1
 (cd services/analytics-api && go test ./... -count=1)
 (cd services/ui && go test ./... -count=1)
 (cd services/ui/frontend && npm run build && npm run test)
+)
 ```
 
 Run wider checks before handing off a broad change:
 
 ```bash
+(
+export KUBECONFIG=$(mktemp)
+trap 'rm -f "$KUBECONFIG"' EXIT
 gofmt -s -l .
 go vet ./...
 go test ./... -count=1
 git diff --check
+)
 ```
 
 ## API and UI
 
+The following workload-image mutations are for a disposable contributor Kind
+cluster only. They test internal platform components, not the user-facing MCP
+server deployment path. Use the isolated kubeconfig from
+[Local Kind and Test Mode](local-kind.md) and verify `kubectl get nodes` before
+continuing. Use `mcp-runtime update` for release rollouts on retained clusters.
+
 API and UI changes often need coordinated rollout when browser flows depend on
 new `/api/v1/*` behavior. Traefik routes API traffic directly; the UI serves
-static assets and auth session cookies only.
+static assets, auth sessions, and an allowlisted read-only session BFF.
 
 The UI service remains a Go backend for `/config.js`, `/auth/*`, API proxying,
 security headers, and static asset embedding. React, Vite, and TypeScript source
@@ -76,6 +94,10 @@ Use the same shape for each split API service:
 | runtime-api | `mcp-runtime-api` | `services/runtime-api/Dockerfile` | `mcp-runtime-api` | `runtime-api` | 8084 |
 | analytics-api | `mcp-analytics-api` | `services/analytics-api/Dockerfile` | `mcp-analytics-api` | `analytics-api` | 8085 |
 
+The UI, platform-api, and runtime-api run in `mcp-platform`; analytics-api
+runs in `mcp-observability`. Change the namespace in both `kubectl` commands
+when rolling analytics-api.
+
 Set `BUILD_CONTEXT=.` and pick a unique `TAG` per build. Example for platform-api:
 
 ```bash
@@ -113,7 +135,11 @@ Operator changes affect how `MCPServer`, `MCPAccessGrant`, and
 `MCPAgentSession` objects reconcile. Run the operator tests first:
 
 ```bash
-go test ./internal/operator/... -count=1
+(
+  export KUBECONFIG=$(mktemp)
+  trap 'rm -f "$KUBECONFIG"' EXIT
+  go test ./internal/operator/... -count=1
+)
 ```
 
 For a local Kind-only debug build, build an image, load it into the Kind node,

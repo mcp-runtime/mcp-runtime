@@ -88,16 +88,16 @@ mcp-runtime auth logout
 | Command | Role | What it does | Guide |
 |---|---|---|---|
 | `auth` | User | Save and switch platform credentials | [auth](#auth) |
-| `auth provider-check` | Operator | Inspect an OIDC provider before `setup --with-mcp-auth-server` | [MCP authorization](mcp-authorization.md) |
+| `auth provider-check` | Operator | Inspect an OIDC provider before `setup --with-mcp-auth-server` | [MCP authorization](mcp-oauth.md) |
 | `status` | User | Platform health at a glance | [status](#status) |
 | `catalog` | User | Search tools across visible servers | [catalog](#catalog) |
 | `server` | User / Admin | Scaffold, validate, build, push, deploy, manage | [Publish a server](publish-mcp-server.md) |
 | `registry` | Operator | Inspect or configure a registry | [registry](#registry) |
-| `access` | User / Admin | Grants and sessions for gateway policy | [API reference](api.md) |
-| `adapter` | User | Certificate-authenticated HTTP proxy and enrollment for agents | [Agent adapter](agent-adapters.md) |
-| `team` | Admin | Create teams and add password users | [Multi-team](multi-team.md) |
+| `access` | User / Admin | Grants and sessions for gateway policy | [API reference](api-reference.md) |
+| `adapter` | User | Certificate-authenticated HTTP proxy and enrollment for agents | [Agent adapter](connect-clients.md) |
+| `team` | Admin | Create teams and add password users | [Multi-team](teams-and-access.md) |
 | `sentinel` | Operator | Inspect and operate the analytics stack | [Platform services](platform-services.md) |
-| `bootstrap` | Operator | Pre-install cluster checks | [Cluster readiness](cluster-readiness.md) |
+| `bootstrap` | Operator | Pre-install cluster checks | [Cluster Requirements](cluster-readiness.md) |
 | `setup` | Operator | Install the full platform stack | [setup](#setup) |
 | `update` | Operator | Update installed platform services to a release | [update](#update) |
 | `cluster` | Operator | Initialize clusters, run readiness and post-install checks, manage cert-manager | [Deployment targets](deployment-targets.md) |
@@ -144,7 +144,7 @@ authorization server. The command fetches
 mcp-runtime auth provider-check --issuer-url https://keycloak.example.com/realms/mcp
 ```
 
-See [MCP authorization](mcp-authorization.md) for the full provider flow.
+See [MCP authorization](mcp-oauth.md) for the full provider flow.
 
 ## status
 
@@ -383,7 +383,7 @@ debugging and requires cluster-admin access.
 
 **[User]** for grants, **[Admin]** for session `apply`
 
-> Full reference: [API reference](api.md)
+> Full reference: [API reference](api-reference.md)
 
 Tool names in grants must exactly match `.mcp/servers.yaml`. Run
 `server validate --grant-file grant.yaml` before applying to catch mismatches
@@ -506,7 +506,7 @@ MCP_PLATFORM_API_PROFILE=admin \
   mcp-runtime access session apply --file session-cross.yaml
 ```
 
-See [Multi-team isolation](multi-team.md).
+See [Multi-team isolation](teams-and-access.md).
 
 The grant expiry is the maximum lifetime of the delegation. Any session issued
 from it expires no later than that time, and `--auto-refresh` cannot renew a
@@ -517,7 +517,7 @@ fixed deadline is more appropriate than a duration.
 
 **[User]**
 
-> Full guide: [Agent adapters](agent-adapters.md)
+> Full guide: [Agent adapters](connect-clients.md)
 
 The adapter identifies its enrolled session with a client certificate. When the
 target configures OAuth (`spec.auth`), it also forwards the local MCP client's
@@ -567,7 +567,7 @@ The local MCP client normally sends OAuth `Authorization` through the proxy.
 `Bearer <token>` for clients that cannot attach one. It does not set adapter
 identity. Certificate identity requires an `https` runtime URL.
 
-See [Agent adapters](agent-adapters.md#enterprise-mtls-and-spiffe) for gateway and Traefik certificate setup.
+See [Agent adapters](connect-clients.md#enterprise-mtls-and-spiffe) for gateway and Traefik certificate setup.
 
 ## agent
 
@@ -598,7 +598,7 @@ team. The API rejects unknown, malformed, inactive, and wrong-team agent IDs.
 Platform admins create teams. A team owner can add users to their own team
 or update their team role.
 
-> Full guide: [Multi-team isolation](multi-team.md)
+> Full guide: [Multi-team isolation](teams-and-access.md)
 
 ```bash
 MCP_PLATFORM_API_PROFILE=admin mcp-runtime team list
@@ -670,7 +670,7 @@ Component names for `logs` and `restart`:
 
 **[Operator]** Run before `setup` on a fresh cluster.
 
-> Full guide: [Cluster readiness](cluster-readiness.md)
+> Full guide: [Cluster Requirements](cluster-readiness.md)
 
 ```bash
 mcp-runtime bootstrap
@@ -727,9 +727,10 @@ mcp-runtime setup \
 `--strict-prod` requires TLS, rejects dev-only registry assumptions such as
 `registry.local`, and forces a stable production-style registry endpoint.
 `--mtls-cluster-issuer` names the cert-manager `ClusterIssuer` for workload
-certificates; name your enterprise issuer, or the bundled `mcp-runtime-ca` to
-have setup provision one. `--test-mode` defaults it to `mcp-runtime-ca`. Full
-flow: [Agent adapters](agent-adapters.md#enterprise-mtls-and-spiffe).
+certificates; name your enterprise issuer, or use a pre-provisioned bundled
+`mcp-runtime-ca` in production. Only `--test-mode` generates a missing bundled
+CA and defaults the workload issuer to `mcp-runtime-ca`. Full
+flow: [Agent adapters](connect-clients.md#enterprise-mtls-and-spiffe).
 
 #### Bundled workload CA lifecycle
 
@@ -787,7 +788,7 @@ operator reconciles accepted resources from OAuth MCPServer audiences, so
 `--mcp-auth-resource-url` is only an optional bootstrap value. The signing-key
 Secret remains required. With managed TLS, setup provisions the issuer
 certificate. Full walkthrough:
-[MCP authorization](mcp-authorization.md).
+[MCP authorization](mcp-oauth.md).
 
 Key env vars for `--env-file` (see `config/deployments/mcpruntime-org.env.example`):
 
@@ -803,9 +804,9 @@ Key env vars for `--env-file` (see `config/deployments/mcpruntime-org.env.exampl
 | `MCP_SETUP_INGRESS=none` | `--ingress` |
 | `MCP_SETUP_SKIP_CERT_MANAGER_INSTALL=1` | `--skip-cert-manager-install` |
 
-Deeper guides: [Cluster readiness](cluster-readiness.md),
+Deeper guides: [Cluster Requirements](cluster-readiness.md),
 [Deployment targets](deployment-targets.md), and
-[Getting started](getting-started.md#4-production-style-install).
+[Getting started](self-hosting.md#4-production-style-install).
 
 ## update
 
@@ -930,9 +931,9 @@ KUBECONFIG=~/.kube/config mcp-runtime cluster diagnostics    # post-setup diagno
 | Topic | Link |
 |---|---|
 | Build, push, deploy flow | [Publish an MCP Server](publish-mcp-server.md) |
-| MCPServer, MCPAccessGrant, MCPAgentSession fields | [API reference](api.md) |
-| Certificate-authenticated HTTP adapter | [Agent adapter](agent-adapters.md) |
-| Multi-team namespaces and RBAC | [Multi-team isolation](multi-team.md) |
+| MCPServer, MCPAccessGrant, MCPAgentSession fields | [API reference](api-reference.md) |
+| Certificate-authenticated HTTP adapter | [Agent adapter](connect-clients.md) |
+| Multi-team namespaces and RBAC | [Multi-team isolation](teams-and-access.md) |
 | Platform service logs, events, restart | [Platform services](platform-services.md) |
-| Distro-specific cluster prerequisites | [Cluster readiness](cluster-readiness.md) |
+| Distro-specific cluster prerequisites | [Cluster Requirements](cluster-readiness.md) |
 | Kind, EKS, k3s deployment | [Deployment targets](deployment-targets.md) |

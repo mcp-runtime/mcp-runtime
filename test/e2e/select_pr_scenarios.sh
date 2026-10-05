@@ -3,8 +3,8 @@ set -euo pipefail
 
 # Select the QA E2E scenarios for a PR/manual run.
 # Read changed paths from arguments or stdin. smoke-auth is the install check.
-# A path adds only the scenario that exercises that path. The full matrix stays
-# on the manual pre-release workflow (E2E_SCENARIOS=all).
+# A path adds only the scenario that exercises that path. Pre-release uses
+# Staging E2E; full Kind sweeps remain available through E2E_SCENARIOS=all.
 
 declare -a changed_paths=()
 if [[ "$#" -gt 0 ]]; then
@@ -71,7 +71,7 @@ classify_path() {
       ;;
     test/e2e/*|.github/workflows/ci.yaml|.github/workflows/pre-release-regression.yaml|go.mod|go.sum|Makefile*|Dockerfile*)
       # The baseline install builds the images and runs setup. Pre-release
-      # still runs every scenario.
+      # uses the separate Staging E2E suite.
       return
       ;;
     internal/operator/mtls*|internal/cli/certmanager/*|traefik-plugins/spiffe-identity/*|config/cert-manager/*|pkg/identity/*|pkg/certauth/*)

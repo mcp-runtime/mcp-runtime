@@ -1,0 +1,25 @@
+# Demo identity provider on the Buddy VM. Caddy on workspace_workspace serves
+# keycloak.mcpruntime.org and obtains its public certificate independently.
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.3.3
+    container_name: demo-keycloak
+    command: start-dev
+    restart: unless-stopped
+    environment:
+      KC_HOSTNAME: https://keycloak.mcpruntime.org
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_ENABLED: "true"
+      JAVA_OPTS_APPEND: -Xms128m -Xmx512m
+    mem_limit: 900m
+    ports:
+      - 127.0.0.1:18085:8080
+    volumes:
+      - /opt/keycloak/data:/opt/keycloak/data
+    networks:
+      - workspace
+
+networks:
+  workspace:
+    external: true
+    name: workspace_workspace

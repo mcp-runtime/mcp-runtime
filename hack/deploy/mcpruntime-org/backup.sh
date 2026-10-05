@@ -29,7 +29,7 @@ snapshots also contain the k3s server token/configuration, SQLite cluster
 database, and every local-path volume. Bundles are not encrypted by this
 command; store them on encrypted storage and copy them off the production host.
 Do not apply resources/*.yaml as a bulk restore. See
-docs/k3s-deployment-runbook.md for restore guidance.
+docs/reference-deployment.md for restore guidance.
 
 The Kubernetes database is captured with SQLite's online backup API. PVC data
 is archived live from the k3s node. Such file copies can require database WAL

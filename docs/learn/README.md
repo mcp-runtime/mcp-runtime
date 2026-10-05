@@ -1,8 +1,11 @@
 # Learn MCP Runtime
 
-Three modules take you from a first install to a multi-team production
-deployment. Each module builds on the previous one; you can also start at the
-module that matches your setup.
+Three modules take you from the core concepts to a sample server and then to
+multi-team access. Module 2 uses the public reference platform for user and
+team workflows. Module 3 needs an installation in your own environment
+because it covers platform administration. Start with the
+[public platform walkthrough](../hosted-quickstart.md) or
+[Platform Installation](../self-hosting.md), depending on what you want to try.
 
 ## Module 1: Core concepts
 
@@ -11,32 +14,35 @@ Adapter) and how they fit together.
 
 **Time:** 15 minutes reading
 
-[Start Module 1 →](module-1-concepts.md)
+[Start Module 1 →](01-core-concepts.md)
 
 ## Module 2: Your first governed server
 
 **What you will learn:** Deploy an example server, create a grant, connect an
 MCP client, and see traffic in the analytics dashboard.
 
-**Prerequisites:** Module 1 completed; platform account or local cluster running.
+**Prerequisites:** Module 1 completed; a user account with team access on the
+public reference platform, or your own installation.
 
 **Time:** 30–45 minutes
 
-[Start Module 2 →](module-2-first-server.md)
+[Start Module 2 →](02-first-governed-server.md)
 
-## Module 3: Multi-team production setup
+## Module 3: Multi-team access
 
 **What you will learn:** Create two teams, grant cross-team access, deploy servers
 into separate namespaces, and validate isolation.
 
-**Prerequisites:** Module 2 completed; admin credentials.
+**Prerequisites:** Module 2 completed; your own MCP Runtime installation,
+platform admin credentials, and agent identity verification enabled for
+successful governed calls.
 
 **Time:** 45–60 minutes
 
-[Start Module 3 →](module-3-multi-team.md)
+[Start Module 3 →](03-multi-team-access.md)
 
 ## After the modules
 
-- [CLI reference](../cli.md): every command with flags
+- [CLI reference](../cli-reference.md): every command with flags
 - [Troubleshooting](../troubleshooting.md): common errors and fixes
-- [API reference](../api.md): full CRD field documentation
+- [API reference](../api-reference.md): full CRD field documentation

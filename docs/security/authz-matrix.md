@@ -16,13 +16,17 @@ Source of routes: per-service `routes.go` files (public surface is `/api/v1/*`
 only). Path items ending with `/` route to a handler that parses sub-paths
 internally; include both the prefix and the meaningful sub-paths in the table.
 
+Status expectations assume valid inputs, healthy dependencies, and access to the
+requested resource. A static service key has no user identity; it cannot perform
+user-owned credential or activity operations even when its role is admin.
+
 ## Roles
 
 | Role             | Credential                                                   | Source secret key                                             |
 |------------------|--------------------------------------------------------------|---------------------------------------------------------------|
 | `anon`           | none                                                         | n/a                                                           |
 | `user-cookie`    | logged-in browser session (platform identity)                | seeded via `PLATFORM_DEV_*` in test mode, OIDC otherwise      |
-| `user-key`       | `x-api-key` matching a user-scoped key                       | `mcp-ui-credentials` `UI_API_KEY` in `mcp-platform` |
+| `user-key`       | `x-api-key` matching a user-scoped key                       | Created for a platform user through the CLI or UI |
 | `admin-key`      | `x-api-key` matching `ADMIN_API_KEYS` entry                  | `mcp-platform-api-credentials` `ADMIN_API_KEYS` in `mcp-platform` |
 | `ingest-key`     | `x-api-key` matching `INGEST_API_KEYS` entry                 | `mcp-ingest-credentials` `INGEST_API_KEYS` in `mcp-observability` |
 
@@ -34,7 +38,7 @@ unless the explicit legacy dev/test fallback is enabled.
 
 Expected codes:
 
-- **200/204**: allowed; handler returns successfully.
+- **200/201/202/204**: allowed; handler returns successfully.
 - **401**: auth missing/invalid.
 - **403**: auth valid but role insufficient.
 - **404**: handler returns not-found for valid auth (path-item endpoints).
@@ -58,11 +62,11 @@ Expected codes:
 | Path                                                  | Methods       | anon | user-cookie | user-key | admin-key | ingest-key | Notes |
 |-------------------------------------------------------|---------------|------|-------------|----------|-----------|------------|-------|
 | `/api/v1/auth/me`                                        | GET           | 401  | 200         | 200      | 200       | 401/403    | Returns identity claims; ingest-only keys are not API auth identities. |
-| `/api/v1/user/registry-credentials`                      | GET, POST     | 401  | 200         | 200      | 200       | 401/403    | Ingest-only key must NOT manage user creds. Verify rejection. |
-| `/api/v1/user/registry-credentials/{id}`                 | GET, PUT, DEL | 401  | 200         | 200      | 200       | 401/403    | Same. |
-| `/api/v1/user/activity/image-publish`                    | GET           | 401  | 200         | 200      | 200       | 401/403    | User-scoped read; ingest key should not see other users. |
-| `/api/v1/user/api-keys`                                  | GET, POST     | 401  | 200         | 200      | 200       | 401/403    | Lifecycle for user-owned keys. |
-| `/api/v1/user/api-keys/{id}`                             | GET, DEL      | 401  | 200         | 200      | 200       | 401/403    | |
+| `/api/v1/user/registry-credentials`                      | GET, POST     | 401  | 200         | 200      | 401       | 401/403    | Ingest-only key must NOT manage user creds. Verify rejection. |
+| `/api/v1/user/registry-credentials/{id}`                 | DELETE        | 401  | 200         | 200      | 401       | 401/403    | Revoke an owned credential. Legacy POST uses `{id}/revoke`. |
+| `/api/v1/user/activity/image-publish`                    | POST          | 401  | 202         | 202      | 401       | 401/403    | Record an image publication for the authenticated user. |
+| `/api/v1/user/api-keys`                                  | GET, POST     | 401  | 200         | 200      | 401       | 401/403    | Lifecycle for user-owned keys. |
+| `/api/v1/user/api-keys/{id}`                             | DELETE        | 401  | 200         | 200      | 401       | 401/403    | |
 | `/api/v1/runtime/servers`                                | GET, POST     | 401  | 200         | 200      | 200       | 401/403    | List/create MCP servers. |
 | `/api/v1/runtime/observability/links`                    | GET           | 401  | 200/403     | 200/403  | 200       | 401/403    | Normal users are limited to team namespaces or caller-owned catalog servers. |
 | `/api/v1/runtime/observability/prometheus/query`         | GET           | 401  | 200/403     | 200/403  | 200       | 401/403    | PromQL is allowlisted and server-scoped by the API. |
@@ -80,7 +84,7 @@ Expected codes:
 | `/api/v1/runtime/namespaces`                             | GET           | 401  | 200         | 200      | 200       | 401/403    | |
 | `/api/v1/runtime/namespaces/{name}`                      | GET           | 401  | 200         | 200      | 200       | 401/403    | |
 | `/api/v1/deployments`                                    | GET           | 401  | 200         | 200      | 200       | 401/403    | |
-| `/api/v1/deployments/{id}`                               | GET           | 401  | 200         | 200      | 200       | 401/403    | |
+| `/api/v1/deployments/{namespace}/{name}`                               | GET           | 401  | 200         | 200      | 200       | 401/403    | |
 | `/api/v1/runtime/server-events`                          | GET           | 401  | 200/403     | 200/403  | 200       | 401/403    | Full event details only for admin, server owner, or team owner; regular namespace readers are forbidden. |
 | `/api/v1/runtime/grants`                                 | GET           | 401  | 200         | 200      | 200       | 401/403    | Lists only grants for servers the caller can administer; regular team/catalog readers receive an empty scoped set. |
 | `/api/v1/runtime/grants`                                 | POST          | 401  | 200/403/422/503 | 200/403/422/503 | 200/422/503 | 401/403 | Create/update requires admin, server owner, or team owner. Agent subjects must be active directory entries belonging to the subject team; cross-team human/agent subjects must also belong to the named team and require an expiry within `MCP_CROSS_TEAM_GRANT_MAX_TTL` (default seven days). Invalid subjects/expiry return 422; unavailable directory returns 503; invalid TTL configuration returns 500. |
@@ -107,7 +111,7 @@ Expected codes:
 | `/api/v1/event-types`                | GET           | 401  | 403                     | 403      | 200       | 403        | |
 | `/api/v1/analytics/usage`            | GET           | 401  | 403                     | 403      | 200       | 403        | |
 | `/api/v1/dashboard/summary`          | GET           | 401  | 403                     | 403      | 200       | 403        | |
-| `/api/v1/admin/namespaces`           | GET, POST     | 401  | 403                     | 403      | 200       | 403        | |
+| `/api/v1/admin/namespaces`           | GET           | 401  | 403                     | 403      | 200       | 403        | |
 | `/api/v1/admin/audit`                | GET           | 401  | 403                     | 403      | 200       | 403        | |
 | `/api/v1/admin/operations`           | GET           | 401  | 403                     | 403      | 200       | 403        | |
 | `/api/v1/admin/deployments`          | GET           | 401  | 403                     | 403      | 200       | 403        | |

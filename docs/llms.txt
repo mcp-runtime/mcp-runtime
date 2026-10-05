@@ -1,43 +1,65 @@
 # MCP Runtime documentation
 > Open-source Kubernetes control plane for deploying and governing MCP servers. The CLI generates Kubernetes resources; allow-list policy checks tool calls through the gateway and records decisions. Observe mode records calls without enforcing policy.
 
-## Start here
+## Getting started
 
-- Quickstart: https://docs.mcpruntime.org/quickstart/ — Deploy a sample server on the hosted platform, grant an active managed agent access, and connect through the adapter.
-- Getting Started: https://docs.mcpruntime.org/getting-started/ — Install MCP Runtime on your own Kubernetes cluster.
-- Concepts: https://docs.mcpruntime.org/concepts/ — MCPServer, grants, sessions, trust levels, tool effects, the gateway, and the adapter.
+- Overview: https://docs.mcpruntime.org/start-here/ — Choose a hosted, self-hosted, or contributor path and follow the tutorial sequence.
+
+- Quickstart: https://docs.mcpruntime.org/hosted-quickstart/ — Deploy a sample server on the hosted platform, grant an active managed agent access, and connect through the adapter.
+- Learn overview: https://docs.mcpruntime.org/learn/ — Guided path from core concepts through a first server and multi-team setup.
+- Module 1: https://docs.mcpruntime.org/learn/01-core-concepts/
+- Module 2: https://docs.mcpruntime.org/learn/02-first-governed-server/
+- Module 3: https://docs.mcpruntime.org/learn/03-multi-team-access/
+
+## Server and client guides
+
+- Overview: https://docs.mcpruntime.org/usage-overview/ — Follow server publishing, team access, client connections, and optional OAuth setup.
+
+- Publish an MCP server: https://docs.mcpruntime.org/publish-mcp-server/ — Generate metadata, build and push an image, deploy, and verify the server.
+- Multi-team isolation: https://docs.mcpruntime.org/teams-and-access/ — Team namespaces, RBAC, NetworkPolicy, and cross-team grants.
+- Agent adapters: https://docs.mcpruntime.org/connect-clients/ — Enroll a session-bound certificate, configure the local HTTP proxy, and pass OAuth tokens when the target uses OAuth.
+- MCP authorization: https://docs.mcpruntime.org/mcp-oauth/ — Configure the optional authorization server and OAuth resource settings.
+
+## Deployment and operations
+
+- Overview: https://docs.mcpruntime.org/hosting-overview/ — Learn how to host and operate MCP Runtime using the public platform as the reference deployment, then adapt its infrastructure choices to your environment.
+
+### Installation
+
+- Deployment options: https://docs.mcpruntime.org/deployment-targets/ — Choose an install shape for k3s, EKS, GKE, AKS, or another distribution.
+- Cluster requirements: https://docs.mcpruntime.org/cluster-readiness/ — Check registry trust, DNS, TLS, storage, and ingress prerequisites.
+- Platform installation: https://docs.mcpruntime.org/self-hosting/ — Install the CLI and platform, select registry and TLS modes, and publish a first server.
+
+### Public reference
+
+- Cluster provisioning: https://docs.mcpruntime.org/cluster-provisioning/ — Provision the reference Kubernetes topology, with K3s as the worked distribution example.
+- Deployment guide: https://docs.mcpruntime.org/reference-deployment/ — Operate the complete Runtime and external identity-provider deployment: configuration, updates, backups, recovery, and verification.
+
+### Operations
+
+- Runtime operations: https://docs.mcpruntime.org/runtime-operations/ — CRDs, reconciliation, image resolution, ingress, and rollouts.
+- Namespaces: https://docs.mcpruntime.org/namespaces/ — Component placement, team boundaries, service DNS, and credential ownership.
+- Services and observability: https://docs.mcpruntime.org/platform-services/ — Gateway policy, audit events, analytics, and observability.
+- Troubleshooting: https://docs.mcpruntime.org/troubleshooting/ — Diagnose deployment, access, registry, analytics, and cluster issues.
+
+## Concepts and architecture
+
+- Overview: https://docs.mcpruntime.org/concepts-overview/ — Read the resource model, identity and authorization, then component architecture.
+
+- Concepts: https://docs.mcpruntime.org/core-concepts/ — MCPServer, grants, sessions, trust levels, tool effects, the gateway, and the adapter.
 - Identity and authorization: https://docs.mcpruntime.org/identity-and-authorization/ — Platform principals, managed agents, grants, sessions, gateway decisions, and Kubernetes workload identity.
 - Architecture: https://docs.mcpruntime.org/architecture/ — Control, runtime, policy, and observability planes.
 
-## Develop and connect
+## CLI and API reference
 
-- Publish an MCP server: https://docs.mcpruntime.org/publish-mcp-server/ — Generate metadata, build and push an image, deploy, and verify the server.
-- Agent adapters: https://docs.mcpruntime.org/agent-adapters/ — Enroll a session-bound certificate, configure the local HTTP proxy, and pass OAuth tokens when the target uses OAuth.
-- MCP authorization: https://docs.mcpruntime.org/mcp-authorization/ — Configure the optional authorization server and OAuth resource settings.
-- Multi-team isolation: https://docs.mcpruntime.org/multi-team/ — Team namespaces, RBAC, NetworkPolicy, and cross-team grants.
-- Learn overview: https://docs.mcpruntime.org/learn/ — Guided path from core concepts through a first server and multi-team setup.
-- Module 1: https://docs.mcpruntime.org/learn/module-1-concepts/
-- Module 2: https://docs.mcpruntime.org/learn/module-2-first-server/
-- Module 3: https://docs.mcpruntime.org/learn/module-3-multi-team/
+- Overview: https://docs.mcpruntime.org/reference-overview/ — Choose commands, API/resource contracts, endpoint authorization, or Go package documentation.
 
-## Operate
-
-- Deployment targets: https://docs.mcpruntime.org/deployment-targets/ — Choose an install shape for k3s, EKS, GKE, AKS, or another distribution.
-- Cluster readiness: https://docs.mcpruntime.org/cluster-readiness/ — Check registry trust, DNS, TLS, storage, and ingress prerequisites.
-- k3s on-prem cluster: https://docs.mcpruntime.org/k3s-on-prem-cluster/ — Plan and configure a multi-node k3s installation.
-- k3s deployment runbook: https://docs.mcpruntime.org/k3s-deployment-runbook/ — Deploy and operate MCP Runtime on k3s.
-- Runtime: https://docs.mcpruntime.org/runtime/ — CRDs, reconciliation, image resolution, ingress, and rollouts.
-- Sentinel: https://docs.mcpruntime.org/sentinel/ — Gateway policy, audit events, analytics, and observability.
-- Troubleshooting: https://docs.mcpruntime.org/troubleshooting/ — Diagnose deployment, access, registry, analytics, and cluster issues.
-
-## Reference
-
-- CLI: https://docs.mcpruntime.org/cli/ — Commands, flags, defaults, and examples.
-- API and CRDs: https://docs.mcpruntime.org/api/ — Resource fields and HTTP endpoints.
+- CLI: https://docs.mcpruntime.org/cli-reference/ — Commands, flags, defaults, and examples.
+- API and CRDs: https://docs.mcpruntime.org/api-reference/ — Resource fields and HTTP endpoints.
 - API authorization matrix: https://docs.mcpruntime.org/security/authz-matrix/ — Authentication and authorization by endpoint.
 - Go packages: https://docs.pkg.mcpruntime.org/github.com/mcp-runtime/mcp-runtime — Browse Go package symbols and source for the root, service, and example modules.
 
-## Contribute
+## Development and testing
 
 - Contributor overview: https://docs.mcpruntime.org/contributor/ — Repository structure and contribution workflow.
 - Local Kind: https://docs.mcpruntime.org/contributor/local-kind/ — Contributor cluster setup and test mode.
@@ -45,7 +67,11 @@
 - Runtime MCP testing: https://docs.mcpruntime.org/contributor/runtime-mcp-testing/ — Test deployment, catalog, and gateway behavior locally.
 - Staging E2E: https://docs.mcpruntime.org/contributor/staging-e2e/ — Run and inspect the disposable VM test suite.
 - Contributor troubleshooting: https://docs.mcpruntime.org/contributor/troubleshooting/ — Fix common development environment failures.
-- Internals: https://docs.mcpruntime.org/internals/ — Source-oriented guides for the API types, request flows, packages, CLI, operator, config, and tests.
+- Regression coverage: https://docs.mcpruntime.org/contributor/regression-index/ — Map confirmed incidents to regression checks.
+
+## Implementation details
+
+- Overview: https://docs.mcpruntime.org/internals/ — Source-oriented guides for the API types, request flows, packages, CLI, operator, config, and tests.
 
 ## Key concepts
 

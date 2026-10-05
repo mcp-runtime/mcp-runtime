@@ -9,6 +9,15 @@ Public / production Kubernetes operations and hostname/TLS configuration.
 Current public deployment uses k3s. Staging E2E on the disposable VM is the
 deterministic strict-prod install gate (`docs/contributor/staging-e2e.md`).
 
+## Release deployment policy
+
+Follow [the pre-customer release policy in AGENTS.md](../../../AGENTS.md#release-policy-before-the-first-external-customer).
+Until the first external customer deployment, releases may break compatibility
+and use backed-up fresh setup and verified recovery of the hosted reference
+platform. Do not add legacy compatibility or general migration infrastructure
+for earlier reference-platform releases. Existing production and Staging E2E
+guardrails still apply.
+
 ## Modes
 
 | Mode | Load |
