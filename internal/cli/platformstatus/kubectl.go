@@ -19,7 +19,7 @@ func runKubectlCombinedOutput(kubectl core.KubectlRunner, args []string) (string
 
 // CheckClusterStatusQuiet probes cluster connectivity without printing status.
 func CheckClusterStatusQuiet(kubectl core.KubectlRunner) error {
-	output, err := runKubectlCombinedOutput(kubectl, []string{"cluster-info"})
+	output, err := runKubectlCombinedOutput(kubectl, []string{"--request-timeout=8s", "cluster-info"})
 	if err == nil {
 		return nil
 	}

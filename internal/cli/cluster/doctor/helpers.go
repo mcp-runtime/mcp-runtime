@@ -2,13 +2,16 @@ package doctor
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
 
 	"mcp-runtime/internal/cli/core"
+	"mcp-runtime/internal/cli/kubeerr"
 	"mcp-runtime/pkg/mcpdefaults"
 	"mcp-runtime/pkg/platforminventory"
 )
@@ -89,11 +92,46 @@ func readKubectlOutput(kubectl core.KubectlRunner, args []string) (string, error
 	if err != nil {
 		return "", err
 	}
-	out, execErr := cmd.Output()
-	if execErr != nil {
-		return "", execErr
+	return runKubectlOutput(cmd)
+}
+
+// runKubectlOutput returns kubectl's diagnostic text with its process error,
+// so callers do not reduce useful API/RBAC errors to the generic "exit status 1".
+func runKubectlOutput(cmd core.Command) (string, error) {
+	out, err := runKubectlBytes(cmd)
+	if err != nil {
+		return "", err
 	}
 	return string(out), nil
+}
+
+func runKubectlBytes(cmd core.Command) ([]byte, error) {
+	out, execErr := cmd.Output()
+	if execErr != nil {
+		diagnostic := out
+		var exitErr *exec.ExitError
+		if errors.As(execErr, &exitErr) && len(exitErr.Stderr) > 0 {
+			diagnostic = exitErr.Stderr
+		}
+		detail := kubeerr.CommandDetail(string(diagnostic), execErr)
+		return nil, kubectlOutputError{detail: detail, cause: execErr}
+	}
+	return out, nil
+}
+
+type kubectlOutputError struct {
+	detail string
+	cause  error
+}
+
+func (e kubectlOutputError) Error() string { return e.detail }
+func (e kubectlOutputError) Unwrap() error { return e.cause }
+
+func kubectlResultDetail(err error, fallback string) string {
+	if err != nil {
+		return err.Error()
+	}
+	return fallback
 }
 
 func decodeBase64(value string) (string, error) {

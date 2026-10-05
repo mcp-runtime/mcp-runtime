@@ -19,6 +19,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 - The checked-in Go Package Reference page and its generator are removed; contributors use the hosted [pkgsite](https://docs.pkg.mcpruntime.org/github.com/mcp-runtime/mcp-runtime) or `go doc`, and the generated-file drift checks now cover only CRDs and manifests. The `Staging E2E (Remote Cluster)` workflow and `test/e2e/staging-remote.sh` are removed: Staging E2E runs only on the disposable VM through `Staging E2E (Disposable VM)`.
 
+### Fixed
+
+- `mcp-runtime cluster doctor` reports the underlying kubectl/API error and stops dependent checks when the cluster cannot be queried. `mcp-runtime status` explains platform authentication and Kubernetes access failures, skips duplicate server-list requests after auth errors, and bounds its status probes ([#591](https://github.com/mcp-runtime/mcp-runtime/issues/591)).
+
 ### Security
 
 - Fresh cert-manager installs use v1.21.2 instead of the retired v1.16.2; TLS doctor checks flag unsupported Kubernetes/version pairs and inconsistent controller/webhook/cainjector versions. Existing installations remain unchanged and require staged minor upgrades with certificate/Secret backups ([#534](https://github.com/mcp-runtime/mcp-runtime/issues/534)).

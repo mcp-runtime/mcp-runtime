@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -61,17 +62,22 @@ func showPlatformStatusFromAPI(logger *zap.Logger, plat *platformapi.PlatformCli
 
 	platformStatus := core.Green("OK")
 	platformDetails := "Authenticated"
-	if err := plat.ValidateCredentials(context.Background()); err != nil {
+	var platformErr error
+	validationCtx, cancelValidation := context.WithTimeout(context.Background(), 10*time.Second)
+	if err := plat.ValidateCredentials(validationCtx); err != nil {
+		platformErr = err
 		platformStatus = core.Red("ERROR")
 		platformDetails = err.Error()
 	}
+	cancelValidation()
 	tableData = append(tableData, []string{"Platform API", "-", "auth", platformStatus, platformDetails})
 
 	if host := strings.TrimSpace(resolveStatusRegistryHost()); host != "" {
 		tableData = append(tableData, []string{"Registry", "-", "host", core.Cyan("CONFIGURED"), host})
 	}
 
-	clusterReachable := platformstatus.CheckClusterStatusQuiet(kubectl) == nil
+	clusterErr := platformstatus.CheckClusterStatusQuiet(kubectl)
+	clusterReachable := clusterErr == nil
 	if clusterReachable {
 		tableData = append(tableData, platformstatus.WorkloadStatusRow(
 			kubectl,
@@ -84,14 +90,35 @@ func showPlatformStatusFromAPI(logger *zap.Logger, plat *platformapi.PlatformCli
 			true,
 		))
 	} else {
-		tableData = append(tableData, []string{"Cluster", "-", "kube-api", core.Yellow("SKIPPED"), "kubectl unavailable (platform API view only)"})
+		clusterDetails := "Kubernetes API unavailable"
+		if clusterErr != nil {
+			clusterDetails = clusterErr.Error()
+		}
+		tableData = append(tableData, []string{"Cluster", "-", "kube-api", core.Yellow("SKIPPED"), clusterDetails})
 	}
 
 	core.TableBoxed(tableData)
 	core.DefaultPrinter.Println()
 	core.Section("MCP Servers")
+	if platformErr != nil {
+		core.Warn("Skipping MCP server list because the platform API request failed")
+		if strings.Contains(platformErr.Error(), "API 401") {
+			core.Info("Remedy: saved platform credentials were rejected; run `mcp-runtime auth login` to sign in again")
+		} else if strings.Contains(strings.ToLower(platformErr.Error()), "no such host") {
+			core.Info("Remedy: the platform hostname did not resolve; check DNS/network access and retry")
+		} else {
+			core.Info("Remedy: check the platform API URL and network access, then retry `mcp-runtime status`")
+		}
+		if clusterErr != nil {
+			core.Info("Cluster remedy: check `kubectl config current-context`, kubeconfig API server address, network access, and node-list permissions")
+		}
+		core.DefaultPrinter.Println()
+		return nil
+	}
 
-	servers, err := plat.ListRuntimeServers(context.Background(), "")
+	listCtx, cancelList := context.WithTimeout(context.Background(), 10*time.Second)
+	servers, err := plat.ListRuntimeServers(listCtx, "")
+	cancelList()
 	if err != nil {
 		core.Warn("Failed to list MCP servers from platform API: " + err.Error())
 	} else if len(servers) == 0 {

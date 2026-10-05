@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/pterm/pterm"
@@ -171,11 +174,32 @@ func runShowPlatformStatusWithCalls(t *testing.T, responses map[string]commandRe
 }
 
 func TestShowPlatformStatus(t *testing.T) {
+	t.Run("explains-rejected-credentials-and-skips-server-list", func(t *testing.T) {
+		resetStatusTestConfig(t)
+		var serverListRequests atomic.Int64
+		api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/api/v1/runtime/servers" {
+				serverListRequests.Add(1)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":"authentication required"}`))
+		}))
+		defer api.Close()
+		t.Setenv("MCP_PLATFORM_API_TOKEN", "test-rejected-key")
+		t.Setenv("MCP_PLATFORM_API_URL", api.URL)
+		output := runShowPlatformStatus(t, map[string]commandResponse{
+			commandKey("kubectl", "--request-timeout=8s", "cluster-info"): {Stderr: "Unable to connect to the server: connection refused", ExitCode: 1},
+		})
+		if !strings.Contains(output, "API 401: authentication required") || !strings.Contains(output, "saved platform credentials were rejected") || serverListRequests.Load() != 0 {
+			t.Fatalf("expected rejected credential remedy without a server-list request, got %s", output)
+		}
+	})
 	t.Run("marks-operator-pending-when-replicas-start-with-zero", func(t *testing.T) {
 		resetStatusTestConfig(t)
 
 		responses := map[string]commandResponse{
-			commandKey("kubectl", "cluster-info"): {Stdout: "cluster ok\n"},
+			commandKey("kubectl", "--request-timeout=8s", "cluster-info"): {Stdout: "cluster ok\n"},
 			commandKey("kubectl", "get", "deployment", "registry", "-n", "registry", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
 				Stdout: "1/1",
 			},
@@ -205,7 +229,7 @@ func TestShowPlatformStatus(t *testing.T) {
 		resetStatusTestConfig(t)
 
 		responses := map[string]commandResponse{
-			commandKey("kubectl", "cluster-info"): {
+			commandKey("kubectl", "--request-timeout=8s", "cluster-info"): {
 				Stderr:   "exec: \"kubectl\": executable file not found in $PATH\n",
 				ExitCode: 127,
 			},
@@ -227,7 +251,7 @@ func TestShowPlatformStatus(t *testing.T) {
 
 		var calls []string
 		responses := map[string]commandResponse{
-			commandKey("kubectl", "cluster-info"): {Stdout: "cluster ok\n"},
+			commandKey("kubectl", "--request-timeout=8s", "cluster-info"): {Stdout: "cluster ok\n"},
 			commandKey("kubectl", "get", "deployment", "mcp-runtime-operator-controller-manager", "-n", "mcp-runtime", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
 				Stdout: "1/1",
 			},
@@ -254,7 +278,7 @@ func TestShowPlatformStatus(t *testing.T) {
 		var calls []string
 
 		responses := map[string]commandResponse{
-			commandKey("kubectl", "cluster-info"): {Stdout: "cluster ok\n"},
+			commandKey("kubectl", "--request-timeout=8s", "cluster-info"): {Stdout: "cluster ok\n"},
 			commandKey("kubectl", "get", "deployment", "registry", "-n", "registry", "-o", "jsonpath={.status.readyReplicas}/{.spec.replicas}"): {
 				Stdout: "1/1",
 			},

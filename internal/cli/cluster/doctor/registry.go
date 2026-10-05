@@ -17,16 +17,15 @@ func checkRegistryService(kubectl core.KubectlRunner) DoctorCheck {
 	if err != nil {
 		return DoctorCheck{Name: "registry Service", OK: false, Detail: fmt.Sprintf("kubectl error: %v", err), Remedy: "run `./bin/mcp-runtime setup` to install the registry, or check cluster connectivity"}
 	}
-	out, err := cmd.Output()
+	out, err := runKubectlBytes(cmd)
 	fields := strings.Fields(string(out))
-	missing := DoctorCheck{
-		Name:   "registry Service",
-		OK:     false,
-		Detail: "Service registry/registry not found or exposes no port",
-		Remedy: "run `./bin/mcp-runtime setup` to install the registry",
-	}
 	if err != nil || len(fields) < 2 {
-		return missing
+		return DoctorCheck{
+			Name:   "registry Service",
+			OK:     false,
+			Detail: kubectlResultDetail(err, "Service registry/registry exposes no port"),
+			Remedy: "run `./bin/mcp-runtime setup` to install the registry",
+		}
 	}
 	// HTTP installs expose the registry on a NodePort for node mirrors. HTTPS
 	// installs keep it ClusterIP and publish it through the ingress host.
@@ -36,7 +35,12 @@ func checkRegistryService(kubectl core.KubectlRunner) DoctorCheck {
 	if fields[0] == "ClusterIP" {
 		return DoctorCheck{Name: "registry Service", OK: true, Detail: fmt.Sprintf("ClusterIP port %s (published through the registry ingress host)", fields[1])}
 	}
-	return missing
+	return DoctorCheck{
+		Name:   "registry Service",
+		OK:     false,
+		Detail: fmt.Sprintf("Service registry/registry is %s with no node port", fields[0]),
+		Remedy: "run `./bin/mcp-runtime setup` to install the registry",
+	}
 }
 
 // checkRegistryReachableFromCluster verifies that an in-cluster pod can talk to
