@@ -144,8 +144,8 @@ KUBECONFIG="$PROD_KUBECONFIG" ./bin/mcp-runtime cluster doctor
   UI surfaces when credentials are available. Clean up every temporary resource
   and report any skipped authenticated/browser flow as blocked; do not treat
   `cluster doctor` alone as release acceptance.
-- The Staging E2E suites (`test/e2e/staging-remote.sh`, `staging-vm.sh`, see
-  [Staging E2E](#staging-e2e-disposable-vm)) reset and provision the
+- The Staging E2E suite (`test/e2e/staging-vm.sh`, see
+  [Staging E2E](#staging-e2e-disposable-vm)) resets and provision the
   disposable VM. Never point them at the `mcpruntime.org` production cluster;
   use targeted temporary user resources for production acceptance instead.
 - `cluster doctor` uses `KUBECONFIG` env, not `--kubeconfig`:
@@ -306,23 +306,22 @@ sessions already exist for the selected `RUN_ID`.
 ## Staging E2E (disposable VM)
 
 Runbook: [`docs/contributor/staging-e2e.md`](../../../docs/contributor/staging-e2e.md).
-The on-VM staging workflow runs automatically after relevant changes land on
-`main`; the remote workflow is manual. CI runs QA E2E on PRs or manual dispatch,
-using `test/e2e/qa-e2e.sh` with Kind, and skips it on main pushes.
+Pre-release Regression runs the staging workflow, and it can be dispatched
+manually; merges to `main` do not run it. CI runs QA E2E on PRs or manual
+dispatch, using `test/e2e/qa-e2e.sh` with Kind, and skips it on main pushes.
 
-Workflows `Staging E2E (Disposable VM)` / `Staging E2E (Remote Cluster)` drive
-the full strict-prod install on the disposable VM (`*.e2e.mcpruntime.org`) and
-upload `summary.md`, `summary.json`, `stages/NN-<stage>.log`, and
+Workflow `Staging E2E (Disposable VM)` runs `test/e2e/staging-vm.sh` on the
+disposable VM to drive the full strict-prod install (`*.e2e.mcpruntime.org`) and
+uploads `summary.md`, `summary.json`, `stages/NN-<stage>.log`, and
 `diagnostics/`. Start triage from the first failed stage in `summary.md`.
-Both runners enable the content-hash GHCR image cache for setup. The remote
-runner logs in to GHCR after the target guard; the on-VM runner receives the
-workflow's package-read token over SSH stdin and removes its temporary Docker
-config during cleanup. A cache miss builds locally without publishing from
+The runner enables the content-hash GHCR image cache for setup, receives the
+workflow's package-read token over SSH stdin after the target guard, and
+removes its temporary Docker config during cleanup. A cache miss builds locally without publishing from
 Staging. Use `E2E_IMAGE_CACHE=0` when testing a full image rebuild.
 
 Safety rules:
 
-- The runners refuse to start unless `test/e2e/lib/staging.sh` proves the
+- The runner refuses to start unless `test/e2e/lib/staging.sh` proves the
   target is disposable: E2E hosts under `.e2e.mcpruntime.org`, no address
   shared with the production hostnames (resolved by DNS at run time; never
   hardcode production addresses), E2E hosts resolving to the VM, and the
@@ -347,10 +346,10 @@ Gotchas seen on real runs:
 - "TLS snapshot incomplete": setup died before the platform certificate was
   issued, so the previous snapshot was kept on purpose.
 - `adapter-enrollment` needs the opt-in adapter-certificate platform feature:
-  the runners export `MCP_ADAPTER_CERTIFICATES=true`, `MCP_TRUST_DOMAIN`, and
+  the runner exports `MCP_ADAPTER_CERTIFICATES=true`, `MCP_TRUST_DOMAIN`, and
   `MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE=mcp-servers` before setup and the
   stage enrolls on a gateway-enabled MCPServer. OAuth is optional and is
   enabled only when `spec.auth` is present; adapter PKI is platform-wide. On failure, open the
   stage's `adapter-enrollment/` evidence directory first.
-- Exit 255 in the on-VM workflow is an SSH drop, not a test failure; the step
-  uses keepalives, and the remote runner avoids the long-lived session.
+- Exit 255 in the staging workflow is an SSH drop, not a test failure; the step
+  uses keepalives.
