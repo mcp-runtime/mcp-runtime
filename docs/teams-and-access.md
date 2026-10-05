@@ -1,9 +1,12 @@
 # Multi-Team Isolation
 
-MCP Runtime's multi-team model combines team identity with Kubernetes
-namespace boundaries. `MCPServer.spec.teamID` records the owning
-platform team. `SubjectRef.teamID` constrains grants and sessions to callers
-from that team. Namespaces and RBAC still isolate who can create resources.
+Each team has its own place to deploy servers and manage access. Kubernetes
+namespaces keep those resources separate, and the platform checks team
+membership before allowing changes. A team can share a server with another
+team through an explicit grant.
+
+In the resource definitions, `MCPServer.spec.teamID` records the owning team.
+`SubjectRef.teamID` identifies the team allowed to use a grant or session.
 
 The source-of-truth data plane is:
 
@@ -179,9 +182,11 @@ when present, or the sole team ID when there is only one.
 
 ## Platform API Enforcement
 
-The platform API fails closed for team-scoped writes. The setup-time
-`--platform-mode` decides which catalog namespace non-admin users see by
-default:
+The platform API blocks changes outside a user's allowed team namespaces.
+When you install MCP Runtime, `--platform-mode` chooses which catalog users see
+by default. In `public` mode, visitors can browse that catalog without signing
+in. This is a setting for your own platform; the public reference deployment
+at `platform.mcpruntime.org` is a separate installation.
 
 | Mode | Default namespace behavior | Non-admin behavior |
 |---|---|---|

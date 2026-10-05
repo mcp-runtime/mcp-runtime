@@ -83,6 +83,16 @@ mcp-runtime server push --image ...
 
 ## Access control
 
+### `401 missing_identity`
+
+The platform could not verify who made the tool call, so it blocked the call
+before checking the grant. Adding another grant will not fix missing identity.
+
+This is the expected result for the example tool calls on the public reference
+platform. You can still try its deployment, grant, and connection workflows.
+On your own installation, ask the platform administrator to check the
+[adapter identity setup](connect-clients.md#enterprise-mtls-and-spiffe).
+
 ### Grant applied but calls still denied
 
 1. Confirm the grant exists:

@@ -22,10 +22,12 @@ builds can add their checkout’s `bin` directory to `PATH`.
 
 You can describe a server in two ways:
 
-- `MCPServer` manifest
-  Best when you want direct control over the Kubernetes resource the operator will reconcile.
 - `.mcp` metadata
-  Best when you want a lighter authoring format and `server generate` / `server deploy` from `.mcp` metadata.
+  Use this for user and team deployments. The CLI creates the metadata and
+  handles build, push, and deploy.
+- `MCPServer` manifest
+  Use this for an admin/operator or GitOps workflow that directly manages the
+  Kubernetes resource.
 
 Either way, the operator reconciles a server deployment, service, route, and optional governed request path.
 

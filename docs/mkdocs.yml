@@ -59,7 +59,7 @@ nav:
   - Home: README.md
   - Getting Started:
       - Overview: start-here.md
-      - Hosted Quickstart: hosted-quickstart.md
+      - Public Platform Walkthrough: hosted-quickstart.md
       - Guided Tutorials:
           - Overview: learn/README.md
           - Core Concepts: learn/01-core-concepts.md
