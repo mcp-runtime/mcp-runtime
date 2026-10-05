@@ -104,6 +104,15 @@ classify_path() {
       add_scenario "oauth"
       return
       ;;
+    internal/operator/deployment.go)
+      # Deployment rendering sets gateway TLS and upstream auth env, which the
+      # OAuth and certificate-adapter request paths both depend on.
+      add_scenario "governance"
+      add_scenario "trust"
+      add_scenario "oauth"
+      add_scenario "adapter-certificates"
+      return
+      ;;
     api/*|cmd/operator/*|internal/operator/*|config/*|k8s/*|pkg/controlplane/*|pkg/k8sclient/*|pkg/kubeworkload/*|pkg/manifest/*|pkg/metadata/*)
       # Setup plus the namespace-placement check in smoke-auth covers install
       # and reconcile. Product flows are selected from their own paths.
