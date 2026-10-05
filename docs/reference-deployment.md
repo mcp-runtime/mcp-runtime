@@ -5,8 +5,8 @@
 <span id="mcp-runtime-k3s-deployment-runbook"></span>
 
 This guide documents the project's public reference deployment at
-[platform.mcpruntime.org](https://platform.mcpruntime.org). To use that hosted
-platform, start with the [Hosted Quickstart](hosted-quickstart.md). The
+[platform.mcpruntime.org](https://platform.mcpruntime.org). To try its user and
+team workflows, start with the [Public Platform Walkthrough](hosted-quickstart.md). The
 operations below explain how its infrastructure is configured and maintained,
 and provide a worked example for operators building their own deployment.
 

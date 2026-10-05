@@ -1,6 +1,10 @@
 # Runtime
 
-The runtime is the Kubernetes control plane for MCP servers. It handles cluster bootstrap, the registry, ingress setup, operator reconciliation, deployment resources, rollout, and the access model for each server. Requests then pass to the [platform services](platform-services.md) request path.
+MCP Runtime turns a server description into a running deployment, gives it a
+route clients can reach, and updates it when the description changes. This
+page explains the Kubernetes resources it creates and the settings used to
+operate them. See [Services and Observability](platform-services.md) for tool
+call handling and audit data.
 
 The runtime runs on top of your ingress and networking layer and handles MCP-specific delivery, access, and rollout. It does not route general cluster traffic.
 

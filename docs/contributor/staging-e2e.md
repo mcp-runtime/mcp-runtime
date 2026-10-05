@@ -8,35 +8,18 @@ QA E2E, which uses a local Kind test-mode cluster. Staging was previously called
 "Production E2E"; the name changed
 because it never touches the production cluster.
 
-## Two runners
+## Runner
 
-| Runner | Workflow | Where the CLI runs |
-| --- | --- | --- |
-| `test/e2e/staging-remote.sh` | `Staging E2E (Remote Cluster)` | On the runner, against the VM's kubeconfig |
-| `test/e2e/staging-vm.sh` | `Staging E2E (Disposable VM)` | On the VM itself, over SSH |
+The `Staging E2E (Disposable VM)` workflow packages the checkout, copies it to
+the disposable VM, and runs `test/e2e/staging-vm.sh` there over SSH, so the CLI
+runs next to k3s. The assertions, the target guard, and the stage runner live
+in `test/e2e/lib/staging.sh`. The workflow holds one concurrency group so only
+one run drives the VM at a time.
 
-Both share their assertions, the target guard, and the stage runner through
-`test/e2e/lib/staging.sh`, and both workflows share one concurrency group so
-they never drive the VM at the same time.
-
-The remote runner models how an operator actually installs MCP Runtime, using the
-CLI on a workstation or CI runner and the cluster reached through a kubeconfig.
-It also avoids environment failures the on-VM runner is exposed to (no repository
-tarball, no login-shell working directory, the runner's own Go and Docker, and
-no dependence on one SSH session staying open through multi-minute image
-builds). The on-VM runner exercises the path where the CLI runs next to k3s.
-
-Image pushes need no registry reachability from the runner. Setup runs
-`docker save` locally and starts a short-lived helper pod inside the cluster
-that pushes into the internal registry, so only the Kubernetes API must be
-reachable. k3s already lists the node's public IP in the API server
-certificate SANs, so the fetched kubeconfig only needs its loopback server URL
-rewritten.
-
-Both staging runners authenticate to GHCR with the workflow's short-lived
-package-read token and reuse content-hash platform images when available.
-The on-VM runner passes that token over SSH stdin after the disposable-target
-guard and removes its temporary Docker credentials during cleanup. Cache misses
+The runner authenticates to GHCR with the workflow's short-lived
+package-read token and reuses content-hash platform images when available.
+The workflow passes that token over SSH stdin after the disposable-target
+guard, and the runner removes its temporary Docker credentials during cleanup. Cache misses
 build locally; Staging does not publish to GHCR. Pull-request QA E2E does not
 use GHCR: it keeps one local `:latest` image per component on the VM and
 compares the next checkout to that image's content-hash label. Set
@@ -48,7 +31,7 @@ The suite installs and uninstalls k3s, prunes every Docker image, and wipes
 kubelet/CNI state. It must never run against the live production install
 (`platform.mcpruntime.org`, `registry.mcpruntime.org`, `mcp.mcpruntime.org`,
 `auth.mcpruntime.org`). Before anything is copied to or run on the VM, the
-workflows run `test/e2e/staging-target.sh check`, and each runner repeats the
+workflow runs `test/e2e/staging-target.sh check`, and the runner repeats the
 check before its first destructive action. The guard refuses unless:
 
 1. every E2E hostname ends in `.e2e.mcpruntime.org`
@@ -72,7 +55,7 @@ E2E_VM_HOST=<vm-address> E2E_CONFIRM_DISPOSABLE_VM=<vm-address> \
   bash test/e2e/staging-target.sh bootstrap
 ```
 
-or, from CI, by dispatching either workflow once with
+or, from CI, by dispatching the workflow once with
 `bootstrap-disposable-marker=true`. Never bootstrap a machine that is not the
 disposable E2E VM, and never set the guard escape hatches
 (`E2E_GUARD_ALLOW_UNRESOLVED_PRODUCTION`, `E2E_GUARD_ALLOW_VM_DNS_MISMATCH`)
@@ -121,7 +104,7 @@ password is generated on first run and persisted in `e2e.env`.
 
 `E2E_MTLS_CLUSTER_ISSUER` defaults to `mcp-runtime-ca`, so setup runs with
 `--mtls-cluster-issuer`. Adapter certificates are an opt-in platform feature
-on gateway MCPServer routes (OAuth optional), so the runners also export
+on gateway MCPServer routes (OAuth optional), so the runner also exports
 `MCP_ADAPTER_CERTIFICATES=true`, `MCP_TRUST_DOMAIN` (default
 `e2e.mcpruntime.org`; override with `E2E_ADAPTER_TRUST_DOMAIN`), and
 `MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE=mcp-servers` before setup. Path routes
@@ -145,13 +128,13 @@ and test user.
 | `fresh-certificate` | `false` | Issue a brand-new staging certificate for `run-<id>.e2e.mcpruntime.org`, serve it through Traefik, and verify it; routine runs reuse the TLS snapshot |
 | `bootstrap-disposable-marker` | `false` | One-time marker bootstrap (see above) |
 
-Both runners use the Let's Encrypt **staging** CA by default (`E2E_ACME_STAGING=1`).
+The runner uses the Let's Encrypt **staging** CA by default (`E2E_ACME_STAGING=1`).
 The production CA allows five certificates per exact set of identifiers per
 week; staging exercises the identical ACME order, HTTP-01 challenge, and
-cert-manager path with far higher limits. The runners install the staging roots
+cert-manager path with far higher limits. The runner installs the staging roots
 into the VM trust store before k3s starts (containerd needs them to pull from
-the registry) and, on the remote runner, into the process trust bundle, so
-every HTTPS check verifies the chain properly instead of using `curl -k`.
+the registry), so every HTTPS check verifies the chain properly instead of
+using `curl -k`.
 Use `fresh-certificate` sparingly and `E2E_ACME_STAGING=0` only for an
 occasional production-CA run.
 
@@ -178,7 +161,7 @@ first; a failed critical stage skips the stages that depend on it.
 | --- | --- |
 | `target-guard` | The disposable-target guard above |
 | `prerequisites` / `dependencies`, `go-toolchain` | Local tools; the CLI builds |
-| `staging-roots` | Let's Encrypt staging roots trusted on the VM (and runner) |
+| `staging-roots` | Let's Encrypt staging roots trusted on the VM |
 | `k3s`, `traefik` | Node Ready, kubeconfig reachable, disk headroom, bundled Traefik exposed |
 | `doctor-before` | Advisory pre-setup `cluster doctor` |
 | `restore-snapshot` | TLS snapshot restored before setup so cert-manager reuses issued certificates |
@@ -203,11 +186,10 @@ first; a failed critical stage skips the stages that depend on it.
 
 ## Snapshot and cleanup
 
-Before uninstalling k3s, the runners refresh the TLS snapshot on the VM (the
-remote runner stores certificate Secrets and Certificates under
-`/var/lib/mcp-runtime-e2e-backup/platform-runtime/tls`; the on-VM runner uses
-the deployment backup helper under `platform-runtime/<timestamp>` with a
-`latest` link). A run that never issued the public certificates keeps the
+Before uninstalling k3s, the runner refreshes the TLS snapshot on the VM with
+the deployment backup helper under
+`/var/lib/mcp-runtime-e2e-backup/platform-runtime/<timestamp>` and a `latest`
+link. A run that never issued the public certificates keeps the
 previous snapshot instead of replacing it with an empty one. The next run
 restores the snapshot before setup so cert-manager reuses the certificates.
 This VM-side directory is the source of truth; uploaded GitHub artifacts
@@ -215,11 +197,11 @@ contain diagnostics only.
 
 If certificates, registry credentials, or an identity-provider installation
 must survive a VM reset, place access-controlled backup material in the same
-directory. The on-VM runner supports either an executable `restore.sh` hook or
+directory. The runner supports either an executable `restore.sh` hook or
 declarative files below `manifests/`. Cleanup removes everything except the
 backup directory: k3s with its CNI and kubelet state, all Docker images,
 containers, volumes and build cache, and any repository or scratch directory an
-earlier run left behind. The runners check free disk before setup (about 6 GiB,
+earlier run left behind. The runner checks free disk before setup (about 6 GiB,
 `E2E_MIN_DISK_GIB` overrides it) because a full disk evicts pods and surfaces
 only as an unexplained deployment timeout. On-VM run directories live in
 `/var/lib/mcp-runtime-e2e-backup/runs/<run-id>`; the ten most recent are kept.
@@ -233,35 +215,19 @@ PR CI. The staging setup currently uses tenant platform mode.
 Merges to `main` do not run it. The job holds the `staging-e2e-disposable-vm`
 lock, so only one Staging run uses the VM at a time. Pull requests do not
 receive the disposable-VM secrets; QA E2E runs on GitHub runners instead.
-Dispatch a workflow manually when you need staging evidence before a release
-or are iterating on a PR. The remote workflow keeps the repository on the runner;
-the disposable-VM workflow packages it and runs it on the VM:
+Dispatch the workflow manually when you need staging evidence before a release
+or are iterating on a PR:
 
 ```bash
-gh workflow run staging-e2e-remote.yaml --ref <branch> -f run-multitenancy=true
 gh workflow run staging-e2e.yaml --ref <branch> -f run-multitenancy=true
 # Add this input only when a fresh staging certificate is part of the check:
 gh workflow run staging-e2e.yaml --ref <branch> -f run-multitenancy=true -f fresh-certificate=true
 ```
 
 `gh workflow run` only dispatches workflow files that exist on the default
-branch. The runners accept `1`/`true`/`yes`/`on` for boolean `E2E_*` values.
+branch. The runner accepts `1`/`true`/`yes`/`on` for boolean `E2E_*` values.
 
-The remote runner can also be driven directly, which is the fastest way to
-iterate on a failure:
-
-```bash
-E2E_VM_HOST=<vm-address> E2E_CLEANUP=0 bash test/e2e/staging-remote.sh
-```
-
-`E2E_CLEANUP=0` keeps the cluster up so a failure can be inspected. Any
-`E2E_*` value already exported wins; anything missing is read from the VM's
-`e2e.env`. When the cluster nodes and the machine running the CLI differ in
-architecture, setup builds for the node's platform, so a non-amd64
-workstation needs an emulator registered
-(`docker run --privileged --rm tonistiigi/binfmt --install amd64`).
-
-The on-VM runner additionally needs a Go toolchain on the VM new enough to
+The runner needs a Go toolchain on the VM new enough to
 honor the `go` directive in `go.mod`; it selects the newest installed toolchain
 and installs one when none is new enough.
 
