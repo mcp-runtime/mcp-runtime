@@ -4107,6 +4107,10 @@ fi
 run_cli_allowing_cert_prereq_failure cluster-cert-status ./bin/mcp-runtime cluster cert status
 run_cli_allowing_cert_prereq_failure cluster-cert-apply-dry-run ./bin/mcp-runtime cluster cert apply --dry-run
 run_cli_allowing_cert_prereq_failure cluster-cert-wait ./bin/mcp-runtime cluster cert wait --timeout 1s
+if e2e_adapter_certificates_enabled; then
+  source "${PROJECT_ROOT}/test/e2e/lib/certmanager-acceptance.sh"
+  run_certmanager_issuance_acceptance
+fi
 ./bin/mcp-runtime registry provision \
   --url "${LOCAL_REGISTRY_PUSH_HOST}" \
   --username e2e \

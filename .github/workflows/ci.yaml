@@ -391,13 +391,10 @@ jobs:
       - name: Regenerate CRDs/manifests
         run: make -f Makefile.operator generate manifests
 
-      - name: Regenerate Go package reference
-        run: python3 docs/scripts/generate_go_package_reference.py
-
       - name: Check for drift
         run: |
           if ! git diff --quiet; then
-            echo "Generated files are out of date. Run 'make -f Makefile.operator generate manifests' and 'python3 docs/scripts/generate_go_package_reference.py'."
+            echo "Generated files are out of date. Run 'make -f Makefile.operator generate manifests'."
             git diff
             exit 1
           fi
