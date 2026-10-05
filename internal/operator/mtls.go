@@ -351,12 +351,13 @@ func (r *MCPServerReconciler) reconcileMTLSNetworkPolicy(ctx context.Context, mc
 		return nil
 	}
 
-	gatewayPort := mcpServer.Spec.Gateway.Port
 	metricsPort := int32(DefaultGatewayMetricsPort)
 	tcp := corev1.ProtocolTCP
 
 	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, policy, func() error {
-		gatewayTarget := intstr.FromInt32(gatewayPort)
+		// Resolve the listener on each selected pod. During a port transition,
+		// the retained pod and the candidate use different numeric ports.
+		gatewayTarget := intstr.FromString("gateway")
 		metricsTarget := intstr.FromInt32(metricsPort)
 		policy.Spec = networkingv1.NetworkPolicySpec{
 			PodSelector: metav1.LabelSelector{
