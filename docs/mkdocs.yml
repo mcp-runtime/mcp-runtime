@@ -70,6 +70,7 @@ nav:
       - Configure MCP OAuth: mcp-oauth.md
       - Manage Teams and Isolation: teams-and-access.md
   - Self-Host and Operate:
+      - Overview: hosting-overview.md
       - Choose a Deployment Target: deployment-targets.md
       - Prepare Your Cluster: cluster-readiness.md
       - Cluster Provisioning: cluster-provisioning.md

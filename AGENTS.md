@@ -115,7 +115,9 @@ Pre-commit: `pre-commit install`; full suite `pre-commit run --all-files` (sets 
 
 **Docs reading order:** `docs/mkdocs.yml` owns navigation: start here → use
 MCP Runtime → self-host and operate → concepts → reference → contributors and
-internals. Keep `docs/README.md` and `docs/llms.txt` aligned. Release-install
+internals. `docs/hosting-overview.md` introduces the self-hosting section using
+the public platform as its reference deployment. Keep `docs/README.md` and
+`docs/llms.txt` aligned. Release-install
 examples use `mcp-runtime` on `PATH`; `./bin/mcp-runtime` is for source builds.
 Preserve existing heading anchors when reorganizing linked guides.
 

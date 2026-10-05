@@ -43,12 +43,10 @@ call tools, read [identity and authorization](identity-and-authorization.md)
 and work through [multi-team access](learn/03-multi-team-access.md). For routine
 administration, use [runtime operations](runtime-operations.md).
 
-For a complete infrastructure example, start with
-[Deployment Targets](deployment-targets.md), then
-[Cluster Provisioning](cluster-provisioning.md) and
-[Public Reference Deployment](reference-deployment.md). The reference uses K3s for
-Kubernetes and a separate Docker/Caddy VM for Keycloak; those are documented
-deployment choices.
+For the complete hosting lifecycle, start with the
+[Self-Host and Operate overview](hosting-overview.md). This section uses our
+public platform as the reference deployment and connects infrastructure
+choices, provisioning, installation, identity, backups, and daily operations.
 
 A ready server confirms deployment; a successful governed tool call also needs
 a matching grant, valid session, and verified client identity. The

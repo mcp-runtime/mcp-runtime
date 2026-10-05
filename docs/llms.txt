@@ -19,6 +19,7 @@
 - Multi-team isolation: https://docs.mcpruntime.org/teams-and-access/ — Team namespaces, RBAC, NetworkPolicy, and cross-team grants.
 ## Self-host and operate
 
+- Overview: https://docs.mcpruntime.org/hosting-overview/ — Learn how to host and operate MCP Runtime using the public platform as the reference deployment, then adapt its infrastructure choices to your environment.
 - Deployment targets: https://docs.mcpruntime.org/deployment-targets/ — Choose an install shape for k3s, EKS, GKE, AKS, or another distribution.
 - Cluster readiness: https://docs.mcpruntime.org/cluster-readiness/ — Check registry trust, DNS, TLS, storage, and ingress prerequisites.
 - Cluster provisioning: https://docs.mcpruntime.org/cluster-provisioning/ — Provision the reference Kubernetes topology, with K3s as the worked distribution example.
