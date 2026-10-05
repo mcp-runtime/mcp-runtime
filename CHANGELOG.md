@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Changed
+
+- Deployment documentation uses distribution-neutral names: `reference-deployment.md` covers Runtime and its external identity provider, while `cluster-provisioning.md` describes the reference cluster with K3s as the worked distribution choice. Navigation, indexes, and operational links follow the new names; published URLs redirect and existing section anchors remain available. The reference guide separates configuration, installation and updates, identity-provider setup, backups and recovery, and verification, and clarifies that Keycloak DNS and backups belong to its separate VM.
+
 ## [0.5.2] - 2026-10-05
 
 ### Changed

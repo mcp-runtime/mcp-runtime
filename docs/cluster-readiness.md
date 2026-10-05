@@ -121,7 +121,7 @@ issuer, set `MCP_REGISTRY_ENDPOINT=registry.<domain>` before setup so kubelet
 pulls match the certificate SANs. Do **not** use the registry Service ClusterIP
 (for example `10.43.x.x:5000`) on this path; pulls fail with
 `x509: cannot validate certificate ... doesn't contain any IP SANs`. See
-[k3s Deployment Runbook - Environment variable reference](k3s-deployment-runbook.md#environment-variable-reference)
+[Reference Deployment - Environment variable reference](reference-deployment.md#environment-variable-reference)
 and [Deployment Targets - bundled HTTPS](deployment-targets.md#option-a-bundled-https-registry-on-prem-reference).
 
 When using the built-in issuer for internal registry pod TLS, setup creates
@@ -423,7 +423,7 @@ k3s uses embedded containerd. The steps below cover **lab HTTP** registry
 mirrors (`registry.local`, NodePort). For **public TLS + bundled HTTPS**
 (`registry.<domain>` with Let's Encrypt), skip the insecure mirror path and
 follow [Deployment Targets - k3s production](deployment-targets.md#option-a-bundled-https-registry-on-prem-reference)
-and [k3s Deployment Runbook](k3s-deployment-runbook.md). Set
+and [Reference Deployment](reference-deployment.md). Set
 `MCP_REGISTRY_ENDPOINT=registry.<domain>` and use `--ingress none` when k3s
 Traefik already runs in `kube-system`.
 

@@ -33,8 +33,8 @@ This file is the **onboarding index** for the MCP Runtime repo. It complements `
 | Sentinel services | `services/platform-api`, `services/runtime-api`, `services/analytics-api`, `services/ui`, `services/ingest`, `services/processor`, `services/mcp-gateway`, … | Separate `go.mod` where present; Go 1.26 for shared imports. Namespaces come from `pkg/platforminventory`: `mcp-platform`, `mcp-observability`, `mcp-log-collector`. See `docs/namespaces.md`. |
 | Samples / install YAML | `examples/oauth-example-go-2025-11-25/`, `k8s/`, `config/` | Demo server; overlays and CRDs |
 | Team isolation | `docs/teams-and-access.md` | Namespaces, RBAC, ingress watch scope |
-| Deployment targets | `docs/deployment-targets.md`, `docs/k3s-on-prem-cluster.md` | Before distribution-specific runbooks |
-| Demo Keycloak identity provider | `config/deployments/mcpruntime-org-keycloak-compose.yaml`, `docs/k3s-deployment-runbook.md` | Separate Docker/Caddy service on the Buddy VM; retain its realm data during recovery |
+| Deployment targets and reference | `docs/deployment-targets.md`, `docs/cluster-provisioning.md`, `docs/reference-deployment.md` | Choose a distribution, provision the reference cluster, then operate Runtime and its external identity provider |
+| Demo Keycloak identity provider | `config/deployments/mcpruntime-org-keycloak-compose.yaml`, `docs/reference-deployment.md` | Separate Docker/Caddy service on the Buddy VM; retain its realm data during recovery |
 | E2E | `test/e2e/`, `test/integration/` | Kind script; envtest integration; Staging E2E on the disposable VM (`test/e2e/staging-*.sh`, `docs/contributor/staging-e2e.md`) |
 | Agent skills | `.codex/skills/`, `.claude/skills` → `../.codex/skills` | Canonical skills tree |
 
@@ -183,7 +183,7 @@ Endpoints, API keys, test logins: **`contributor-cluster`** (local-development r
 
 Do not inline the full failure checklist here. Use **`cluster-ops`** mode
 `troubleshoot`, and **`production-platform`** for public TLS/DNS and k3s ops
-(`docs/k3s-deployment-runbook.md`).
+(`docs/reference-deployment.md`).
 
 ## Prod guardrails
 
@@ -202,7 +202,7 @@ Grants, sessions, adapter flows, MCP curl examples: **`access-governance`** skil
 
 ## Logs and observability
 
-For production incidents, start with [Grafana](https://platform.mcpruntime.org/grafana): inspect metrics, aggregated logs, and distributed traces for the same incident window. Read private credentials from `~/.mcpruntime/infra.env` without displaying them. Verify collection coverage and correlate request/trace IDs with the affected client's own logs. See the [production observability workflow](docs/k3s-deployment-runbook.md#production-observability-and-debugging).
+For production incidents, start with [Grafana](https://platform.mcpruntime.org/grafana): inspect metrics, aggregated logs, and distributed traces for the same incident window. Read private credentials from `~/.mcpruntime/infra.env` without displaying them. Verify collection coverage and correlate request/trace IDs with the affected client's own logs. See the [production observability workflow](docs/reference-deployment.md#production-observability-and-debugging).
 
 When work reveals a concrete maintainability or debuggability improvement, search for an existing issue first. Create an actionable ticket in `mcp-runtime/mcp-runtime` when none exists, then attach the new or existing ticket to [Maintainability and Debuggability Improvement](https://github.com/orgs/mcp-runtime/projects/1) (organization project 1). Include redacted evidence, affected components, proposed scope, and acceptance checks; never include credentials, tokens, private user content, or tool payloads. Record missing instrumentation and collection/correlation gaps explicitly.
 

@@ -1,17 +1,25 @@
-# k3s On-Prem Cluster
+# Provision the Reference Cluster
 
-Build a small public or on-prem k3s cluster that runs MCP Runtime with real
-DNS, TLS, ingress, registry pulls, and multi-node scheduling. This is the
-production-style version of the lab path in
-[Deployment Targets](deployment-targets.md), sized for a demo or pilot.
+<span id="k3s-on-prem-cluster"></span>
 
-The reference layout has four nodes, the smallest shape that separates the
-control plane, public ingress, and general workloads. A five-node variant is
-covered below.
+Provision a Kubernetes cluster for the [reference deployment](reference-deployment.md),
+with DNS, TLS, ingress, storage, and registry access. The worked example uses
+**K3s** as its Kubernetes distribution; MCP Runtime can also run on the other
+distributions described in [Deployment Targets](deployment-targets.md).
 
-The control plane in this topology is not highly available. For a production
-control plane, use the k3s HA topology with three server nodes and plan
-datastore backups separately.
+The node layout, packaged Traefik, ServiceLB labels, install commands, and
+container-runtime configuration below are specific to the K3s example. If you
+choose another distribution, use its provisioning instructions and the shared
+[Cluster Readiness](cluster-readiness.md) checks before installing Runtime.
+
+The four-node layout is a demo or pilot reference design, not an inventory of
+the current public deployment. A five-node variant is covered below. The
+control plane is not highly available; a production K3s control plane needs
+its HA topology with three server nodes and separate datastore backups.
+
+This guide provisions the Runtime cluster. The reference deployment's external
+Keycloak identity provider runs separately; its VM and Docker/Caddy lifecycle
+are covered in [Reference Deployment](reference-deployment.md#identity-provider).
 
 ## Reference Topology
 
@@ -318,7 +326,7 @@ Set `PLATFORM_TRAEFIK_NAMESPACE=kube-system` and
 repo-managed Traefik when k3s Traefik is already active.
 
 For reruns, clean+restore, rollout-only updates, and the full environment
-variable reference, use [k3s Deployment Runbook](k3s-deployment-runbook.md).
+variable reference, use [Reference Deployment](reference-deployment.md).
 
 Use `--platform-mode tenant` for private team-isolated installs, or
 `--platform-mode org` for a shared internal catalog. `public` exposes the
@@ -449,7 +457,7 @@ your enterprise issuer, or pre-created TLS secrets.
 
 **Reinstalling on the same public domain** (app-namespace wipe, setup rerun):
 Let's Encrypt limits duplicate certificates to five per domain set per seven days.
-Use [k3s Deployment Runbook - Step 0](k3s-deployment-runbook.md#step-0-back-up-platform-runtime-state-before-any-wipe)
+Use [Reference Deployment - Step 0](reference-deployment.md#step-0-back-up-platform-runtime-state-before-any-wipe)
 or `hack/deploy/mcpruntime-org/clean.sh --yes` to back up platform-runtime TLS
 before delete, then `hack/deploy/mcpruntime-org/setup.sh` to restore after setup.
 

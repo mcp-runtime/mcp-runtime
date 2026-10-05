@@ -32,6 +32,7 @@ them.
 |---|---|---|---|
 | Try an existing platform | [Hosted quickstart](hosted-quickstart.md) | Platform account and team; Git, Go, and Docker for the example | Login succeeds and your deployed server becomes ready |
 | Run MCP Runtime on your own cluster | [Self-hosting](self-hosting.md) | Prepared Kubernetes cluster, Docker, and kubectl | Setup passes its smoke gate and authenticated platform access works |
+| Adapt the project's deployment | [Reference deployment](reference-deployment.md) | A chosen Kubernetes distribution and deployment profile | Runtime and identity-provider endpoints work, with separate backups |
 | Develop or test changes locally | [Local Kind and test mode](contributor/local-kind.md) | Source checkout and contributor prerequisites | Local setup and cluster health checks pass |
 | Learn grants and client identity | [Guided tutorials](learn/README.md) | Running platform; adapter-certificate identity for successful governed calls | An allowed tool call succeeds and a denied call is rejected |
 
@@ -41,6 +42,13 @@ After deployment, [connect a client](connect-clients.md). To control who can
 call tools, read [identity and authorization](identity-and-authorization.md)
 and work through [multi-team access](learn/03-multi-team-access.md). For routine
 administration, use [runtime operations](runtime-operations.md).
+
+For a complete infrastructure example, start with
+[Deployment Targets](deployment-targets.md), then
+[Provision the Reference Cluster](cluster-provisioning.md) and
+[Reference Deployment](reference-deployment.md). The reference uses K3s for
+Kubernetes and a separate Docker/Caddy VM for Keycloak; those are documented
+deployment choices.
 
 A ready server confirms deployment; a successful governed tool call also needs
 a matching grant, valid session, and verified client identity. The
@@ -139,7 +147,7 @@ installs the operator and platform services, and wires ingress and registry
 resources for your environment.
 
 For provider-specific prerequisites such as container runtime registry trust,
-DNS, ingress, TLS, and k3s configuration, start with
+DNS, ingress, TLS, and Kubernetes distribution configuration, start with
 [Deployment Targets](deployment-targets.md) to choose the right install shape,
 then [Cluster readiness](cluster-readiness.md) for distribution-specific
 preparation.

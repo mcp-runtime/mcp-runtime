@@ -14,11 +14,13 @@ runtime trust only where a documented provider path says so.
 ## Tested public reference
 
 The public example platform at [platform.mcpruntime.org](https://platform.mcpruntime.org)
-is deployed on the project's k3s cluster. Use the [k3s Deployment Runbook](k3s-deployment-runbook.md)
-for its production operations, including secure cluster access, certificate
-reuse, image rollout, and verification. It is the only production-validated
-deployment. The other entries below describe supported installation shapes and
-prerequisites.
+uses K3s for its Runtime cluster and a separate Docker/Caddy VM for its
+Keycloak identity provider. Use [Provision the Reference Cluster](cluster-provisioning.md)
+for the worked cluster example and [Reference Deployment](reference-deployment.md)
+for configuration, secure access, certificate reuse, image rollout, identity
+integration, backups, and verification. K3s is the distribution chosen by this
+reference. It is the only production-validated deployment; the other entries
+below describe installation shapes and prerequisites.
 
 ## Common Deployment Model
 
@@ -127,7 +129,7 @@ For an existing external registry:
 | kind | Contributor development, CI-like smoke tests, disposable clusters | Bundled HTTP registry with the documented kind mirror | Use [Contributor Local Kind](contributor/local-kind.md) and `setup --test-mode`. |
 | Docker Desktop Kubernetes | Laptop demos and local evaluation | Bundled HTTP registry or Docker Desktop image loading | Good for local UI/API exploration, not production. |
 | minikube | Laptop or VM evaluation | Insecure registry flag at cluster start, or `minikube image load` | Recreate minikube when changing insecure registry settings. |
-| k3s | Single-node lab, edge, small self-managed clusters | Bundled HTTP for labs; bundled HTTPS or external for production | **Tested public reference:** [platform.mcpruntime.org](https://platform.mcpruntime.org). See [k3s Deployment Runbook](k3s-deployment-runbook.md) (production operations), [k3s On-Prem Cluster](k3s-on-prem-cluster.md) (topology), and [Cluster Readiness - k3s](cluster-readiness.md#k3s). |
+| k3s | Single-node lab, edge, small self-managed clusters | Bundled HTTP for labs; bundled HTTPS or external for production | **Tested public reference:** [platform.mcpruntime.org](https://platform.mcpruntime.org). See [Reference Deployment](reference-deployment.md) (production operations), [Provision the Reference Cluster](cluster-provisioning.md) (topology), and [Cluster Readiness - k3s](cluster-readiness.md#k3s). |
 | kubeadm / vanilla Kubernetes | Self-managed production or staging | External registry, or bundled HTTPS with node CA trust | Configure containerd, DNS, ingress, storage, and TLS on every node. |
 | RKE2 | Self-managed production or staging | External registry, or bundled HTTPS with node CA trust | Treat it like a hardened self-managed cluster; use provider tooling for runtime config. |
 | EKS | AWS managed Kubernetes | ECR | Use AWS-managed node registry auth, a real ingress/load balancer, Route 53 or equivalent DNS, and cert-manager or enterprise TLS. |
@@ -230,7 +232,7 @@ setup so pod pulls match the certificate. Using the registry Service ClusterIP
 causes `ImagePullBackOff` with `x509: ... doesn't contain any IP SANs`.
 
 Copy `config/deployments/mcpruntime-org.env.example` to
-`mcpruntime-org.env`, then follow **[k3s Deployment Runbook](k3s-deployment-runbook.md)**
+`mcpruntime-org.env`, then follow **[Reference Deployment](reference-deployment.md)**
 for first install (`--acme-email`), reruns (`hack/deploy/mcpruntime-org/setup.sh`
 intentionally omits `--acme-email` and uses `--tls-cluster-issuer` instead),
 safe clean+restore, rollout-only updates, the full environment variable reference,
@@ -259,7 +261,7 @@ cluster already has an enterprise `ClusterIssuer`.
 
 For a complete four-node reference topology, worker join commands, ServiceLB
 pinning, public DNS, Cloudflare or enterprise proxy front doors, TLS, registry,
-validation, and a five-node extension, use [k3s On-Prem Cluster](k3s-on-prem-cluster.md).
+validation, and a five-node extension, use [Provision the Reference Cluster](cluster-provisioning.md).
 
 ### kubeadm, RKE2, and other self-managed clusters
 

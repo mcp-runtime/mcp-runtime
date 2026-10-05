@@ -255,7 +255,7 @@ deploy this authorization server.
 The mcp-auth server image is released independently from the MCP Runtime CLI
 and platform images. For a public production rollout, use a unique image ref
 such as `registry.mcpruntime.org/mcp-auth-server:<tag>` and update it through
-the [k3s deployment runbook](k3s-deployment-runbook.md#separate-release-tracks-and-user-verification).
+the [reference deployment guide](reference-deployment.md#separate-release-tracks-and-user-verification).
 An image-only update preserves the existing connector configuration, SQLite
 PVC, signing key, and TLS Secret; it does not require rerunning `setup` or
 issuing a certificate.

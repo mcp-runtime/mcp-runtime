@@ -21,8 +21,8 @@
 
 - Deployment targets: https://docs.mcpruntime.org/deployment-targets/ — Choose an install shape for k3s, EKS, GKE, AKS, or another distribution.
 - Cluster readiness: https://docs.mcpruntime.org/cluster-readiness/ — Check registry trust, DNS, TLS, storage, and ingress prerequisites.
-- k3s on-prem cluster: https://docs.mcpruntime.org/k3s-on-prem-cluster/ — Plan and configure a multi-node k3s installation.
-- k3s deployment runbook: https://docs.mcpruntime.org/k3s-deployment-runbook/ — Deploy and operate MCP Runtime on k3s.
+- Provision the reference cluster: https://docs.mcpruntime.org/cluster-provisioning/ — Provision the reference Kubernetes topology, with K3s as the worked distribution example.
+- Reference deployment: https://docs.mcpruntime.org/reference-deployment/ — Operate the complete Runtime and external identity-provider deployment: configuration, updates, backups, recovery, and verification.
 - Runtime: https://docs.mcpruntime.org/runtime-operations/ — CRDs, reconciliation, image resolution, ingress, and rollouts.
 - Platform services: https://docs.mcpruntime.org/platform-services/ — Gateway policy, audit events, analytics, and observability.
 - Troubleshooting: https://docs.mcpruntime.org/troubleshooting/ — Diagnose deployment, access, registry, analytics, and cluster issues.

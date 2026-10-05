@@ -37,7 +37,7 @@ For production incidents, inspect metrics, aggregated logs, and traces at
 `https://platform.mcpruntime.org/grafana` for a shared incident window.
 Read private credentials from `~/.mcpruntime/infra.env` without displaying
 them. Check collection coverage and correlate request/trace IDs with client
-logs. Follow the [production observability workflow](../../../docs/k3s-deployment-runbook.md#production-observability-and-debugging).
+logs. Follow the [production observability workflow](../../../../docs/reference-deployment.md#production-observability-and-debugging).
 Find or create an actionable repository ticket for each concrete
 maintainability or debugging gap and attach it to
 [Maintainability and Debuggability Improvement](https://github.com/orgs/mcp-runtime/projects/1).

@@ -11,6 +11,12 @@ a cluster, use the [Quickstart](hosted-quickstart.md).
 - **Contribute on local Kind:** use the [Contributor Guide](contributor/README.md)
   and [Local Kind and Test Mode](contributor/local-kind.md).
 
+To adapt the project's complete infrastructure example, use
+[Provision the Reference Cluster](cluster-provisioning.md) and
+[Reference Deployment](reference-deployment.md). The reference chooses K3s
+for Kubernetes and Docker/Caddy for a separate Keycloak VM. Select your
+distribution and identity provider before adopting its configuration.
+
 ## Prerequisites
 
 For a release CLI install, you need `curl` or `wget` on macOS/Linux, or
