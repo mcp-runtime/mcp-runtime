@@ -31,16 +31,19 @@ The root command wires these internal command groups:
 | Command | Routing package | Behavior files |
 |---|---|---|
 | `bootstrap` | `internal/cli/bootstrap` | `bootstrap.go` |
+| `catalog` | `internal/cli/catalog` | `catalog.go` |
 | `cluster` | `internal/cli/cluster` | `cluster.go`, `manager.go`, `doctor.go`, `register.go`, doctor implementation under `internal/cli/cluster/doctor/`, … |
 | `setup` | `internal/cli/setup` | `setup.go`, `providers.go`, setup workflow under `internal/cli/setup/platform/`, setup-owned helpers under `internal/cli/setup/` |
 | `status` | `internal/cli/status` | `status.go`, shared workload/probe helpers in `internal/cli/platformstatus` |
 | `registry` | `internal/cli/registry` | `registry.go`, `manager.go`, `defaults.go`, registry-owned helpers under `internal/cli/registry/` |
 | `server` | `internal/cli/server` | `server.go`, `manager.go`, `validation.go`, `build.go`, `build_image.go`, server-owned helpers under `internal/cli/server/` |
 | `access` | `internal/cli/access` | `access.go`, `manager.go`, `validation.go` |
+| `agent` | `internal/cli/agent` | `agent.go` |
 | `adapter` | `internal/cli/adapter` | `adapter.go`, `flags.go`, `platformsession.go`, `proxy.go`, `enroll.go`; transport behavior in `internal/agentadapter` |
 | `auth` | `internal/cli/auth` | `auth.go` |
-| `sentinel` | `internal/cli/sentinel` | `sentinel.go`, `manager.go`, shared workload/probe helpers in `internal/cli/platformstatus` |
+| `sentinel` | `internal/cli/sentinel` | `sentinel.go`, `manager.go`, `grafana.go`; admin-only status, logs, events, port-forward, restart, and Grafana recovery across the platform-owned namespaces (`mcp-runtime`, `mcp-platform`, `mcp-observability`, `mcp-log-collector`), using shared workload/probe helpers in `internal/cli/platformstatus` |
 | `team` | `internal/cli/team` | `team.go`, `manager.go` |
+| `update` | `internal/cli/update` | `update.go`, `plan.go`, `apply.go`, `build.go`, `crds.go`, `output.go` |
 | `admin` | `internal/cli/admin` | `admin.go` (hidden; operator-only kubectl helpers such as `admin registry push`) |
 
 When adding a command, wire it here only after the implementation has focused

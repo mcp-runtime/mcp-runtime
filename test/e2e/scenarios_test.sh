@@ -198,14 +198,10 @@ assert "  packages: read" in workflow, "staging must be allowed to pull private 
 assert workflow.index("Verify disposable target") < workflow.index("E2E_GHCR_AUTH_STDIN=1"), (
     "the VM must pass the disposable-target guard before receiving a GHCR token"
 )
-remote_workflow = pathlib.Path(sys.argv[1]).with_name("staging-e2e-remote.yaml").read_text(encoding="utf-8")
-assert "  packages: read" in remote_workflow
-assert remote_workflow.index("Verify disposable target") < remote_workflow.index("Log in to GHCR for cached images")
 print("[pass] staging E2E is a single-VM pre-release gate")
 
 staging_docs = pathlib.Path(sys.argv[3]).read_text(encoding="utf-8")
 assert "gh workflow run staging-e2e.yaml" in staging_docs, "staging E2E docs must name the on-VM workflow"
-assert "gh workflow run staging-e2e-remote.yaml" in staging_docs, "staging E2E docs must name the runner-driven workflow"
 
 ci_workflow = pathlib.Path(sys.argv[4]).read_text(encoding="utf-8")
 assert "predicate-quantifier: some-with-excludes" in ci_workflow, (
@@ -247,11 +243,10 @@ assert "CLUSTER_NAME=mcp-e2e-${suffix}" in qa_job, "parallel QA runs need unique
 assert 'E2E_IMAGE_CACHE: "1"' in qa_job and 'E2E_GHCR_PUSH: "1"' in qa_job, (
     "QA E2E must use and refresh the content-hash GHCR cache that Staging E2E reads"
 )
-for runner in ("staging-vm.sh", "staging-remote.sh"):
-    staging_script = pathlib.Path(sys.argv[2]).parent / runner
-    assert 'E2E_IMAGE_CACHE:-1' in staging_script.read_text(encoding="utf-8"), (
-        f"{runner} must enable the content-hash GHCR cache"
-    )
+staging_script = pathlib.Path(sys.argv[2]).parent / "staging-vm.sh"
+assert 'E2E_IMAGE_CACHE:-1' in staging_script.read_text(encoding="utf-8"), (
+    "staging-vm.sh must enable the content-hash GHCR cache"
+)
 assert "prune_kind_platform_images" in kind, "setup must evict stale node-local platform image tags"
 assert "restart_kind_platform_deployments" in kind, "setup must restart deployments to pull refreshed image tags"
 setup_branch = kind.index('echo "[setup] running platform setup in test mode')

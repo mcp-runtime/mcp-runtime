@@ -1,6 +1,6 @@
 # shellcheck shell=bash
-# Shared helpers for the Staging E2E runners (staging-vm.sh, staging-remote.sh)
-# and the runner-side target check (staging-target.sh).
+# Shared helpers for the Staging E2E runner (staging-vm.sh) and the
+# workflow-side target check (staging-target.sh).
 #
 # Three groups of helpers live here:
 #
@@ -14,7 +14,7 @@
 #      bootstrap`.
 #   2. A stage runner that records pass/fail/skip per stage, keeps one log per
 #      stage, and renders summary.json and summary.md.
-#   3. The post-setup assertions both runners share: TLS, registry auth, image
+#   3. The post-setup assertions the runner runs: TLS, registry auth, image
 #      pulls, platform API/UI, OIDC, adapter enrollment, governance, analytics.
 #
 # The caller must set KUBECONFIG before running cluster assertions. Nothing
@@ -1975,7 +1975,7 @@ staging_check_analytics() {
   }
 }
 
-# The stages both runners share once setup has run.
+# The stages the runner runs once setup has finished.
 staging_run_platform_stages() {
   STAGING_MT_RUN_ID="${STAGING_MT_RUN_ID:-mt$(printf '%s' "${RUN_ID}" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9' | tail -c 10)}"
   STAGING_MT_CONFIG_DIR="${STAGING_MT_CONFIG_DIR:-${WORK_DIR}/mcpruntime-config}"
