@@ -1,14 +1,20 @@
-# Hosted Quickstart
+# Explore the public reference platform
 
-Deploy a governed MCP server on the live
-[platform.mcpruntime.org](https://platform.mcpruntime.org) instance. You do not
-need a Kubernetes cluster. It takes about 10 minutes. Login, image publish,
-deploy, grants, and adapter certificate enrollment work on that instance.
-A non-OAuth allow-list `tools/call` is identified only when the operator has
-set `MCP_ADAPTER_CERTIFICATES=true`; the live instance leaves that off, so the
-gateway denies the call with `missing_identity`.
+<span id="hosted-quickstart"></span>
 
-To self-host MCP Runtime on your own cluster, see [Getting Started](self-hosting.md).
+[platform.mcpruntime.org](https://platform.mcpruntime.org) is MCP Runtime's
+public reference deployment. With a user account and team access, you can
+publish and deploy a sample MCP server, create grants, connect a client, and
+explore the user and team views. You do not need your own Kubernetes cluster.
+Allow about 10 minutes.
+
+This platform is for getting a feel for the user and team workflows. To try
+platform setup and administration, install MCP Runtime in your own cloud or
+on-premises environment; see [Platform Installation](self-hosting.md).
+
+One limit: the public platform cannot verify which agent makes the example
+tool calls, so it denies them. You can still try the deployment, grant,
+connection, and dashboard workflows below.
 
 ## 1. Install the CLI
 
@@ -56,16 +62,17 @@ mcp-runtime --version
 ```
 
 To upgrade the CLI, run the installer again and verify `mcp-runtime --version`.
-The CLI binary and the hosted platform are
+The CLI binary and the public reference platform are
 separate release tracks: the CLI changes only when a new release is published;
-the platform UI at `platform.mcpruntime.org` is updated by its operator and
+the UI at `platform.mcpruntime.org` is updated by its operator and
 does not need a local install.
 
 ## 2. Log in
 
-Get credentials from the [live platform](https://platform.mcpruntime.org) or use
-an existing account. You need a team and a user account. Ask your platform
-admin, or [self-host MCP Runtime](self-hosting.md) to create your own.
+Use an account on the [public reference platform](https://platform.mcpruntime.org).
+You need team access to deploy the sample server. Ask for a user account and
+team membership if you do not have them; this walkthrough does not require a
+platform administrator account.
 
 ```bash
 mcp-runtime auth login \
@@ -156,10 +163,9 @@ mcp-runtime server validate --metadata-dir .mcp --grant-file grant.yaml
 mcp-runtime access grant apply --file grant.yaml
 ```
 
-With that grant applied, start the adapter proxy. It enrolls a session-bound
-client certificate and refreshes it before expiry. The platform issues the
-session only when an enabled grant matches the server, the signed-in user, and
-the agent, so the grant has to exist first:
+With the grant applied, start the adapter proxy to connect an MCP client to
+your server. The grant must exist before the platform can issue the agent's
+session:
 
 ```bash
 mcp-runtime adapter proxy \
@@ -171,31 +177,24 @@ mcp-runtime adapter proxy \
 ```
 
 Point **Claude Desktop**, **Cursor**, or any MCP client at `http://127.0.0.1:8099`.
-This quickstart does not configure `spec.auth`. The adapter still enrolls a
-session certificate when the platform has a workload issuer. The gateway uses
-that certificate as the caller identity only after the operator sets
-`MCP_ADAPTER_CERTIFICATES=true`, which makes Traefik verify it and assert the
-SPIFFE id. Until then a plain Ingress does not ask for a client certificate,
-`initialize` succeeds, and an allow-list `tools/call` returns `401`
-`missing_identity`. With the setting on, call `echo` or `add`. The allow-list
-policy from `server init` checks the grant and required session on each tool
-call. If you enable OAuth for the server, the client must also send its bearer
-through the adapter; see [Agent adapters](connect-clients.md).
+The client can connect on the public platform. If it calls `echo` or `add`,
+the platform denies the call because it cannot verify which agent made it. The
+error is `401 missing_identity`. See [Client Connections](connect-clients.md)
+for the identity setup needed to allow these calls on your own installation.
 
 ## 5. See it in the analytics
 
-Open [platform.mcpruntime.org](https://platform.mcpruntime.org), go to
-**Analytics → Tools** tab. You will see your tool calls broken down by
-user, team, agent, call count, and allow/deny.
+Open [platform.mcpruntime.org](https://platform.mcpruntime.org) and go to
+**Analytics → Tools**. You can inspect recorded calls and their decisions. Calls
+blocked because the platform could not verify the agent appear as denied.
 
 In **Server Catalog** or **My Activity**, confirm the deployed server is
 visible to your account. Open its details to review the endpoint and connect
-configuration. The platform UI uses the same deployment and policy state as
-the CLI; it does not require a separate server install.
+configuration. The UI uses the same deployment and policy state as the CLI.
 
 ## What's next
 
 - [Concepts](core-concepts.md): understand Grants, Sessions, Trust levels, and Side effects
 - [Publish an MCP Server](publish-mcp-server.md): full build, push, deploy guide
-- [Getting Started](self-hosting.md): self-host MCP Runtime on your own Kubernetes cluster
+- [Platform Installation](self-hosting.md): install MCP Runtime in your own cloud or on-premises environment
 - [CLI reference](cli-reference.md): every command with flags and examples

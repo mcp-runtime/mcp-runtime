@@ -1,10 +1,9 @@
 # MCP Runtime
 
-MCP Runtime is an open-source Kubernetes control plane for MCP servers. It
-deploys servers into your cluster and can route tool calls through a gateway
-sidecar for policy checks and audit. Use allow-list policy to enforce grants,
-sessions, and per-tool rules; observe mode records decisions without enforcing
-them.
+MCP Runtime lets teams deploy MCP servers, control which agents may use each
+tool, and see what happened when an agent made a call. You can explore user and
+team workflows on the public reference platform, then install MCP Runtime in
+your own cloud or on-premises environment to manage it yourself.
 
 <div class="docs-home">
 <p class="docs-brand-banner"><img src="assets/brand/mcp-runtime-banner.png" alt="MCP Runtime: deploy, govern, and broker MCP servers using a Kubernetes-native control plane" /></p>
@@ -15,10 +14,10 @@ them.
   <p class="docs-lead">Build and push an MCP server image, deploy it as an <code>MCPServer</code> resource, and control which agents may call which tools with grants and sessions.</p>
 
   <div class="docs-actions">
-    <a class="docs-button docs-button-primary" href="hosted-quickstart/">Try in 10 min</a>
+    <a class="docs-button docs-button-primary" href="hosted-quickstart/">Try the public platform</a>
     <a class="docs-button" href="core-concepts/">Concepts</a>
     <a class="docs-button" href="architecture/">Architecture</a>
-    <a class="docs-button" href="self-hosting/">Self-host</a>
+    <a class="docs-button" href="self-hosting/">Install your platform</a>
     <a class="docs-button" href="api-reference/">API reference</a>
     <a class="docs-button" href="https://docs.pkg.mcpruntime.org/github.com/mcp-runtime/mcp-runtime">Go packages</a>
   </div>
@@ -30,11 +29,11 @@ them.
 
 | Your goal | Start with | Have ready | Success check |
 |---|---|---|---|
-| Try an existing platform | [Hosted quickstart](hosted-quickstart.md) | Platform account and team; Git, Go, and Docker for the example | Login succeeds and your deployed server becomes ready |
-| Run MCP Runtime on your own cluster | [Self-hosting](self-hosting.md) | Prepared Kubernetes cluster, Docker, and kubectl | Setup passes its smoke gate and authenticated platform access works |
+| Try user and team workflows | [Public platform walkthrough](hosted-quickstart.md) | User account and team access; Git, Go, and Docker for the example | Your sample server becomes ready and your grant appears |
+| Try platform setup and administration | [Platform Installation](self-hosting.md) | Prepared Kubernetes cluster, Docker, and kubectl | Setup passes its smoke gate and authenticated platform access works |
 | Adapt the project's deployment | [Reference deployment](reference-deployment.md) | A chosen Kubernetes distribution and deployment profile | Runtime and identity-provider endpoints work, with separate backups |
 | Develop or test changes locally | [Local Kind and test mode](contributor/local-kind.md) | Source checkout and contributor prerequisites | Local setup and cluster health checks pass |
-| Learn grants and client identity | [Guided tutorials](learn/README.md) | Running platform; adapter-certificate identity for successful governed calls | An allowed tool call succeeds and a denied call is rejected |
+| Learn grants and client identity | [Guided tutorials](learn/README.md) | Public platform for user and team steps; your own installation for successful governed calls | A grant is applied and its tool-call decision is visible |
 
 <span id="where-to-go-next"></span>
 
@@ -45,8 +44,8 @@ a successful governed tool call also requires valid caller identity and policy.
 
 ## Start here
 
-1. [Hosted Quickstart](hosted-quickstart.md): install the CLI and try an existing platform.
-2. [Self-host MCP Runtime](self-hosting.md): prepare a cluster and install the platform.
+1. [Public platform walkthrough](hosted-quickstart.md): deploy a sample server and try user and team paths.
+2. [Platform Installation](self-hosting.md): install MCP Runtime in your environment to try setup and admin paths.
 3. [Guided tutorials](learn/README.md): learn concepts, deploy a server, and set up teams.
 
 OAuth setup and identity-provider configuration: [MCP authorization](mcp-oauth.md).
@@ -66,7 +65,11 @@ OAuth setup and identity-provider configuration: [MCP authorization](mcp-oauth.m
 
 See [Concepts](core-concepts.md) for details.
 
-## Deploy an MCP server
+## Try a server deployment on the public platform
+
+These commands use `platform.mcpruntime.org` to try the user workflow. For
+your own organization, first follow [Platform Installation](self-hosting.md)
+and use your platform, registry, and MCP route hostnames.
 
 ```bash
 mcp-runtime auth login --api-url https://platform.mcpruntime.org
@@ -81,8 +84,9 @@ Run these commands from your server’s source directory, with a Dockerfile
 and Docker running. Use the exact image reference printed by the build command.
 The CLI generates the Kubernetes resources. To connect a client, run the
 [adapter](connect-clients.md) and point Claude Desktop, Cursor, or any MCP client
-at it. The adapter presents a session-bound client certificate the gateway
-uses for grant and session checks (and forwards OAuth when the target enables it).
+at it. The public platform lets you test the connection. The example tool
+calls are denied because it cannot verify which agent made them. The
+[walkthrough](hosted-quickstart.md) explains what to expect.
 
 ## Who is this for?
 
@@ -91,7 +95,7 @@ uses for grant and session checks (and forwards OAuth when the target enables it
 | **Platform engineer** | Operator, registry, and ingress wiring generated from one resource |
 | **Security team** | Per-tool audit trail, trust levels, session revocation, deny rules, compliance evidence |
 | **Team lead** | Isolated namespace per team, grants scoped to teams, cross-team access without sharing credentials |
-| **Developer** | Use the hosted platform to deploy with the CLI and connect through the adapter, without managing Kubernetes |
+| **Developer** | Try user and team workflows, including sample server deployment and access grants, on the public reference platform |
 
 ## Why I built this
 
@@ -144,7 +148,7 @@ preparation.
 
 | Section | What you will find |
 |---|---|
-| [Getting Started](start-here.md) | Hosted and self-hosted entry points, followed by guided tutorials |
+| [Getting Started](start-here.md) | Try user and team workflows on the public platform, or install your own platform for admin workflows |
 | [Server and Client Guides](usage-overview.md) | Publishing, team access, client connections, and optional OAuth |
 | [Deployment and Operations](hosting-overview.md) | Installation, the public reference deployment, and ongoing operations |
 | [Concepts and Architecture](concepts-overview.md) | Resources, identity, policy, and the platform's component model |

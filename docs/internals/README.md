@@ -19,7 +19,7 @@ follow the component involved in your change. Use
 | Contracts and Flows | Resource shapes, request paths, server metadata, and manifests | [API Types](api-types.md), [Request Flows](request-flows.md) |
 | Components | CLI startup and commands, operator reconciliation, and workload inventory | [CLI Implementation](cli.md), [Operator](operator.md), [Component Inventory](component-inventory.md) |
 | Security and Lifecycle | Credential consumers, Secret access, rollouts, and log collector admission | [Credential Ownership](credential-consumers.md), [Operator Secret Access](operator-secret-access.md), [Dependency Rollouts](dependency-rollouts.md) |
-| Developer References | Package documentation, design background, and test coverage | [Go Package Reference](go-package-reference.md), [Tests and Coverage](testing.md) |
+| Developer References | Package documentation, design background, and test coverage | [Go package docs](https://docs.pkg.mcpruntime.org/github.com/mcp-runtime/mcp-runtime), [Tests and Coverage](testing.md) |
 
 ## Mental model
 
@@ -69,7 +69,6 @@ flowchart LR
 | Request flows | [`request-flows.md`](request-flows.md) | Maps CLI, UI/API, registry, adapter, MCP runtime, policy, analytics, tenancy, and pre-release paths to components and E2E scenarios. |
 | Platform API services | [`../platform-services.md`](../platform-services.md) | Three-service split (platform-api, runtime-api, analytics-api): Traefik `/api/v1` routing, RBAC, `/internal/*` contracts, OpenAPI per service. |
 | Go package docs | [pkgsite](https://docs.pkg.mcpruntime.org/github.com/mcp-runtime/mcp-runtime) | Browse the full source tree with package indexes, symbols, and source links. See [`pkgsite.md`](pkgsite.md) for hosting. |
-| Generated Go reference | [`go-package-reference.md`](go-package-reference.md) | Captures `go doc` output for the main contributor-facing packages. |
 | Agent adapter | `internal/agentadapter/`, `internal/cli/adapter/` | Streamable HTTP proxy behavior with session-bound client certificates; exposed via `mcp-runtime adapter proxy`. |
 | Operator Secret access | [`operator-secret-access.md`](operator-secret-access.md) | Scoped tenant Secret permissions and the named public trust bundle exception. |
 | Operator | [`operator.md`](operator.md) | Explains manager startup and reconciliation from desired state to Kubernetes resources. |
@@ -195,18 +194,12 @@ Keep shared behavior in `pkg/` only when multiple binaries or services need it. 
 7. Use the change playbooks below to choose the narrowest useful tests before
    broadening to full CI coverage.
 
-## Refreshing Package Reference
+## Package Reference
 
-These pages are contributor guides. The Go package reference is generated
-into [Go Package Reference](go-package-reference.md). Refresh it from the current
-checkout with:
-
-```bash
-python3 docs/scripts/generate_go_package_reference.py
-```
-
-Use the generated output to verify exported types, functions, and comments. Keep
-the narrative internals pages focused on stable contracts and contributor
+These pages are contributor guides. For exported types, functions, and doc
+comments, use [pkgsite](https://docs.pkg.mcpruntime.org/github.com/mcp-runtime/mcp-runtime),
+which is rebuilt from `main`, or run `go doc <package>` against your checkout.
+Keep the narrative internals pages focused on stable contracts and contributor
 workflows.
 
 ## Change playbooks

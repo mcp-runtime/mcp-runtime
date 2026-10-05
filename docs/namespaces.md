@@ -1,9 +1,13 @@
 # Namespaces
 
-`pkg/platforminventory` is the only owner-to-namespace map. `mcp-runtime setup`
-installs into these namespaces.
-Setup creates `mcp-platform` and `mcp-observability` before applying the
-Traefik bundle because its Roles and RoleBindings live in both namespaces.
+This page shows where MCP Runtime's components run in your Kubernetes cluster.
+A namespace groups related services and their configuration. `mcp-runtime
+setup` creates the platform namespaces; team workflows create separate
+namespaces for each team's servers.
+
+For contributors, `pkg/platforminventory` defines the component placement.
+Setup creates `mcp-platform` and `mcp-observability` before installing Traefik
+because its permissions refer to both namespaces.
 
 | Namespace | What runs there |
 |---|---|

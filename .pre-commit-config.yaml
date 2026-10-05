@@ -37,7 +37,7 @@ repos:
         files: ^(api/v1alpha1/|internal/operator/|test/integration/)
       - id: generated-file-drift
         name: generated file drift
-        entry: bash -c 'make -f Makefile.operator generate manifests && python3 docs/scripts/generate_go_package_reference.py && git diff --exit-code -- api/v1alpha1/zz_generated.deepcopy.go config/crd/bases docs/internals/go-package-reference.md'
+        entry: bash -c 'make -f Makefile.operator generate manifests && git diff --exit-code -- api/v1alpha1/zz_generated.deepcopy.go config/crd/bases'
         language: system
         pass_filenames: false
         always_run: true

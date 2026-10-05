@@ -154,6 +154,7 @@ selector_expect "ui-manifest" "smoke-auth,ui-auth" "k8s/09-ui.yaml"
 selector_expect "api-manifest" "smoke-auth,api-platform" "k8s/08-runtime-api.yaml"
 selector_expect "observability-manifest" "smoke-auth,governance,trust,oauth,observability" "k8s/12-grafana.yaml"
 selector_expect "operator-policy" "smoke-auth,governance,trust,oauth" "internal/operator/policy.go"
+selector_expect "operator-deployment" "smoke-auth,governance,trust,oauth,adapter-certificates" "internal/operator/deployment.go"
 selector_expect "cli-platform-client" "smoke-auth,cli-platform" "internal/cli/platformapi/client.go"
 selector_expect "ui-flow-harness" "smoke-auth,ui-auth" "test/e2e/ui_auth_flows.py"
 selector_expect "api-flow-harness" "smoke-auth,api-platform,multitenancy" "test/e2e/api_platform_flows.py"
@@ -198,14 +199,10 @@ assert "  packages: read" in workflow, "staging must be allowed to pull private 
 assert workflow.index("Verify disposable target") < workflow.index("E2E_GHCR_AUTH_STDIN=1"), (
     "the VM must pass the disposable-target guard before receiving a GHCR token"
 )
-remote_workflow = pathlib.Path(sys.argv[1]).with_name("staging-e2e-remote.yaml").read_text(encoding="utf-8")
-assert "  packages: read" in remote_workflow
-assert remote_workflow.index("Verify disposable target") < remote_workflow.index("Log in to GHCR for cached images")
 print("[pass] staging E2E is a single-VM pre-release gate")
 
 staging_docs = pathlib.Path(sys.argv[3]).read_text(encoding="utf-8")
 assert "gh workflow run staging-e2e.yaml" in staging_docs, "staging E2E docs must name the on-VM workflow"
-assert "gh workflow run staging-e2e-remote.yaml" in staging_docs, "staging E2E docs must name the runner-driven workflow"
 
 ci_workflow = pathlib.Path(sys.argv[4]).read_text(encoding="utf-8")
 assert "predicate-quantifier: some-with-excludes" in ci_workflow, (
@@ -247,11 +244,10 @@ assert "CLUSTER_NAME=mcp-e2e-${suffix}" in qa_job, "parallel QA runs need unique
 assert 'E2E_IMAGE_CACHE: "1"' in qa_job and 'E2E_GHCR_PUSH: "1"' in qa_job, (
     "QA E2E must use and refresh the content-hash GHCR cache that Staging E2E reads"
 )
-for runner in ("staging-vm.sh", "staging-remote.sh"):
-    staging_script = pathlib.Path(sys.argv[2]).parent / runner
-    assert 'E2E_IMAGE_CACHE:-1' in staging_script.read_text(encoding="utf-8"), (
-        f"{runner} must enable the content-hash GHCR cache"
-    )
+staging_script = pathlib.Path(sys.argv[2]).parent / "staging-vm.sh"
+assert 'E2E_IMAGE_CACHE:-1' in staging_script.read_text(encoding="utf-8"), (
+    "staging-vm.sh must enable the content-hash GHCR cache"
+)
 assert "prune_kind_platform_images" in kind, "setup must evict stale node-local platform image tags"
 assert "restart_kind_platform_deployments" in kind, "setup must restart deployments to pull refreshed image tags"
 setup_branch = kind.index('echo "[setup] running platform setup in test mode')
@@ -267,7 +263,7 @@ for prefix in (
 ):
     assert prefix in kind, f"Traefik E2E cleanup must reset {prefix}"
 setup_ready = kind.index("wait_core_platform_rollouts\n\n# Setup can reuse an existing IngressClass")
-user_flows = kind.index('echo "[cli] checking platform status commands"', setup_ready)
+user_flows = kind.index('echo "[cli] checking cluster status commands"', setup_ready)
 assert "reset_traefik_namespace_watches" in kind[setup_ready:user_flows], (
     "Traefik watch reset must run after setup for cache and fresh-install paths"
 )

@@ -15,7 +15,9 @@ lifecycle while selecting another Kubernetes distribution, registry, ingress
 controller, storage system, or compatible identity provider.
 
 To use the existing public platform, follow the
-[Hosted Quickstart](hosted-quickstart.md). The pages in this section are for
+[Public Platform Walkthrough](hosted-quickstart.md) to try user and team paths.
+To try platform setup and administration, install it in your own environment.
+The pages in this section are for
 operators hosting their own platform or learning how the public reference is
 operated.
 
