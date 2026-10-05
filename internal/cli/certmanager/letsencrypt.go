@@ -19,7 +19,7 @@ import (
 
 const (
 	// certManagerRelease is pinned for reproducible installs (kubectl apply).
-	certManagerRelease           = "v1.16.2"
+	certManagerRelease           = "v1.21.2"
 	letsencryptProdURL           = "https://acme-v02.api.letsencrypt.org/directory"
 	letsencryptStagingURL        = "https://acme-staging-v02.api.letsencrypt.org/directory"
 	letsencryptProdIssuerName    = "letsencrypt-prod"
