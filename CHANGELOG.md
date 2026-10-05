@@ -11,8 +11,12 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Changed
 
-- The demo Keycloak identity provider runs as a separate Docker/Caddy service with its own Let's Encrypt certificate. K3s backups no longer include its old Kubernetes Secrets; back up its data and Caddy state on the Buddy VM separately ([#589](https://github.com/mcp-runtime/mcp-runtime/pull/589)).
+- The reference deployment's demo Keycloak identity provider runs as a separate Docker/Caddy service with its own Let's Encrypt certificate, so a Runtime namespace reset does not remove it. K3s backups no longer include its old Kubernetes Secrets; back up Keycloak's realm data and Caddy state on the Buddy VM separately before recovery ([#589](https://github.com/mcp-runtime/mcp-runtime/pull/589)).
 - Pre-release Regression uses Staging E2E as its only cluster suite, avoiding repeated Kind tenant/org/public runs and cache replay. Static, unit, integration, service, benchmark, and security checks remain; Kind QA stays in PR CI ([#588](https://github.com/mcp-runtime/mcp-runtime/pull/588)).
+
+### Fixed
+
+- The reference deployment includes a tracked, non-secret Keycloak connector configuration with public HTTPS token and JWKS endpoints. Setup reruns using that configuration preserve the working login endpoints after the identity provider moves to its separate VM; the client secret remains supplied through the deployment environment ([#589](https://github.com/mcp-runtime/mcp-runtime/pull/589)).
 
 ## [0.5.1] - 2026-10-04
 
