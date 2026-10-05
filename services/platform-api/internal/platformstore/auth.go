@@ -95,7 +95,12 @@ func (s *Store) CreateTeamUser(ctx context.Context, teamSlug, email, password, r
 	}
 	defer tx.Rollback()
 	var team Team
-	err = tx.QueryRowContext(ctx, `SELECT id, slug, name, namespace FROM teams WHERE slug = $1 AND deleted_at IS NULL FOR SHARE`, NormalizeTeamSlug(teamSlug)).Scan(&team.ID, &team.Slug, &team.Name, &team.Namespace)
+	err = tx.QueryRowContext(ctx, `
+SELECT t.id, t.slug, t.display_name, COALESCE(n.namespace, '')
+FROM teams t
+LEFT JOIN namespaces n ON n.team_id = t.id AND n.deleted_at IS NULL AND COALESCE(n.scope, 'team') = 'team'
+WHERE t.slug = $1 AND t.deleted_at IS NULL
+FOR SHARE OF t`, NormalizeTeamSlug(teamSlug)).Scan(&team.ID, &team.Slug, &team.Name, &team.Namespace)
 	if err != nil {
 		return User{}, TeamMembership{}, err
 	}

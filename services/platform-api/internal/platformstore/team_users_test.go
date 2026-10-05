@@ -21,7 +21,7 @@ func TestCreateTeamUserTransaction(t *testing.T) {
 			store := &Store{db: db}
 			failure := errors.New("database operation failed")
 			mock.ExpectBegin()
-			team := mock.ExpectQuery("SELECT id, slug, name, namespace FROM teams").WithArgs("acme")
+			team := mock.ExpectQuery("(?s)SELECT t.id, t.slug, t.display_name.*LEFT JOIN namespaces n.*FOR SHARE OF t").WithArgs("acme")
 			if scenario == "missing team" {
 				team.WillReturnRows(sqlmock.NewRows([]string{"id", "slug", "name", "namespace"}))
 			} else {
