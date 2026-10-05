@@ -1,4 +1,4 @@
-package sentinel_test
+package ops_test
 
 import (
 	"strings"
@@ -7,24 +7,24 @@ import (
 	"go.uber.org/zap"
 
 	"mcp-runtime/internal/cli/core"
-	"mcp-runtime/internal/cli/sentinel"
+	"mcp-runtime/internal/cli/ops"
 )
 
 func TestParseGrafanaProbe(t *testing.T) {
 	cases := []struct {
 		out  string
-		want sentinel.GrafanaState
+		want ops.GrafanaState
 	}{
-		{"health=200 auth=200\n", sentinel.GrafanaAuthOK},
-		{"health=200 auth=401\n", sentinel.GrafanaCredentialDrift},
-		{"health=200 auth=403\n", sentinel.GrafanaUnknown},
-		{"health=200 auth=\n", sentinel.GrafanaUnknown},
-		{"health= auth=\n", sentinel.GrafanaUnhealthy},
-		{"health=503 auth=401\n", sentinel.GrafanaUnhealthy},
-		{"", sentinel.GrafanaUnhealthy},
+		{"health=200 auth=200\n", ops.GrafanaAuthOK},
+		{"health=200 auth=401\n", ops.GrafanaCredentialDrift},
+		{"health=200 auth=403\n", ops.GrafanaUnknown},
+		{"health=200 auth=\n", ops.GrafanaUnknown},
+		{"health= auth=\n", ops.GrafanaUnhealthy},
+		{"health=503 auth=401\n", ops.GrafanaUnhealthy},
+		{"", ops.GrafanaUnhealthy},
 	}
 	for _, tc := range cases {
-		if got := sentinel.ParseGrafanaProbe(tc.out).State; got != tc.want {
+		if got := ops.ParseGrafanaProbe(tc.out).State; got != tc.want {
 			t.Errorf("ParseGrafanaProbe(%q) = %q, want %q", tc.out, got, tc.want)
 		}
 	}
@@ -59,7 +59,7 @@ func grafanaMock(probes ...string) (*core.MockExecutor, *[]string) {
 
 func TestGrafanaCheckIsReadOnly(t *testing.T) {
 	mock, scripts := grafanaMock("health=200 auth=401\n")
-	mgr := sentinel.NewSentinelManager(core.NewTestKubectlClient(mock), zap.NewNop())
+	mgr := ops.NewManager(core.NewTestKubectlClient(mock), zap.NewNop())
 
 	if err := mgr.ShowGrafanaCheck(); err == nil {
 		t.Fatal("expected error on credential drift")
@@ -76,7 +76,7 @@ func TestGrafanaCheckIsReadOnly(t *testing.T) {
 
 func TestGrafanaCheckHealthy(t *testing.T) {
 	mock, _ := grafanaMock("health=200 auth=200\n")
-	mgr := sentinel.NewSentinelManager(core.NewTestKubectlClient(mock), zap.NewNop())
+	mgr := ops.NewManager(core.NewTestKubectlClient(mock), zap.NewNop())
 	if err := mgr.ShowGrafanaCheck(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestGrafanaCheckHealthy(t *testing.T) {
 
 func TestGrafanaResetRequiresConfirmation(t *testing.T) {
 	mock, scripts := grafanaMock("health=200 auth=401\n")
-	mgr := sentinel.NewSentinelManager(core.NewTestKubectlClient(mock), zap.NewNop())
+	mgr := ops.NewManager(core.NewTestKubectlClient(mock), zap.NewNop())
 	if err := mgr.ResetGrafanaAdminPassword(false); err == nil {
 		t.Fatal("expected confirmation error")
 	}
@@ -95,7 +95,7 @@ func TestGrafanaResetRequiresConfirmation(t *testing.T) {
 
 func TestGrafanaResetSkipsWhenHealthy(t *testing.T) {
 	mock, scripts := grafanaMock("health=200 auth=200\n")
-	mgr := sentinel.NewSentinelManager(core.NewTestKubectlClient(mock), zap.NewNop())
+	mgr := ops.NewManager(core.NewTestKubectlClient(mock), zap.NewNop())
 	if err := mgr.ResetGrafanaAdminPassword(true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestGrafanaResetSkipsWhenHealthy(t *testing.T) {
 
 func TestGrafanaResetRefusesWhenUnhealthy(t *testing.T) {
 	mock, scripts := grafanaMock("health= auth=\n")
-	mgr := sentinel.NewSentinelManager(core.NewTestKubectlClient(mock), zap.NewNop())
+	mgr := ops.NewManager(core.NewTestKubectlClient(mock), zap.NewNop())
 	if err := mgr.ResetGrafanaAdminPassword(true); err == nil {
 		t.Fatal("expected refusal when Grafana is unhealthy")
 	}
@@ -117,7 +117,7 @@ func TestGrafanaResetRefusesWhenUnhealthy(t *testing.T) {
 
 func TestGrafanaResetBacksUpThenResetsAndVerifies(t *testing.T) {
 	mock, scripts := grafanaMock("health=200 auth=401\n", "health=200 auth=200\n")
-	mgr := sentinel.NewSentinelManager(core.NewTestKubectlClient(mock), zap.NewNop())
+	mgr := ops.NewManager(core.NewTestKubectlClient(mock), zap.NewNop())
 	if err := mgr.ResetGrafanaAdminPassword(true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestGrafanaResetBacksUpThenResetsAndVerifies(t *testing.T) {
 
 func TestGrafanaResetFailsWhenVerifyStillRejected(t *testing.T) {
 	mock, _ := grafanaMock("health=200 auth=401\n", "health=200 auth=401\n")
-	mgr := sentinel.NewSentinelManager(core.NewTestKubectlClient(mock), zap.NewNop())
+	mgr := ops.NewManager(core.NewTestKubectlClient(mock), zap.NewNop())
 	if err := mgr.ResetGrafanaAdminPassword(true); err == nil {
 		t.Fatal("expected verification failure")
 	}

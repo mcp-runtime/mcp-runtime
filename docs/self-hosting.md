@@ -393,7 +393,7 @@ registry, and workload health.
 mcp-runtime status
 mcp-runtime cluster status
 mcp-runtime registry status
-mcp-runtime sentinel status
+mcp-runtime ops status
 ```
 
 ## 6. Deploy your first server { #7-deploy-your-first-server }
@@ -428,9 +428,9 @@ mcp-runtime status
 Admin/operator kubectl diagnostics (`sentinel *` requires admin cluster access):
 
 ```bash
-mcp-runtime sentinel port-forward ui          # Governance + dashboard
-mcp-runtime sentinel port-forward grafana     # Metrics + traces + logs
-mcp-runtime sentinel logs gateway --follow    # Tail the proxy
+mcp-runtime ops port-forward ui          # Governance + dashboard
+mcp-runtime ops port-forward grafana     # Metrics + traces + logs
+mcp-runtime ops logs gateway --follow    # Tail the proxy
 ```
 
 ## Local alternative: contributor test-mode cluster (Kind) { #3-contributor-test-mode-cluster-local-kind }

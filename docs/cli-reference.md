@@ -20,7 +20,7 @@ with `mcp-runtime agent create <team-slug> --name <name>`.
 | Create a team and assign users | `team create` → `team user create` or `team user add` |
 | Check platform health | `status` |
 | Inspect a running server | `server list` · `server get` · `server policy inspect` |
-| View analytics logs | `sentinel status` · `sentinel logs api` |
+| View analytics logs | `ops status` · `ops logs api` |
 | Check setup readiness | `cluster doctor` |
 | Diagnose an installed cluster | `cluster diagnostics` |
 | Check an OIDC provider before mcp-auth | `auth provider-check` |
@@ -96,7 +96,7 @@ mcp-runtime auth logout
 | `access` | User / Admin | Grants and sessions for gateway policy | [API reference](api-reference.md) |
 | `adapter` | User | Certificate-authenticated HTTP proxy and enrollment for agents | [Agent adapter](connect-clients.md) |
 | `team` | Admin | Create teams and add password users | [Multi-team](teams-and-access.md) |
-| `sentinel` | Operator | Inspect and operate the analytics stack | [Platform services](platform-services.md) |
+| `ops` | Operator | Inspect and operate the bundled platform stack | [Platform services](platform-services.md) |
 | `bootstrap` | Operator | Pre-install cluster checks | [Cluster Requirements](cluster-readiness.md) |
 | `setup` | Operator | Install the full platform stack | [setup](#setup) |
 | `update` | Operator | Update installed platform services to a release | [update](#update) |
@@ -153,7 +153,7 @@ See [MCP authorization](mcp-oauth.md) for the full provider flow.
 ```bash
 mcp-runtime status                                         # quick platform API check
 mcp-runtime registry status                               # registry pod + endpoint
-KUBECONFIG=~/.kube/config mcp-runtime sentinel status     # sentinel stack
+KUBECONFIG=~/.kube/config mcp-runtime ops status     # platform stack
 ```
 
 `status` checks whether the platform API is reachable and accepts your saved
@@ -639,34 +639,34 @@ mcp-runtime auth login \
 exists, use `team user add` with the existing user's ID. Team owners can manage
 users in their own teams. `team init` is deprecated; use `team create`.
 
-## sentinel
+## ops
 
 **[Operator]** Requires `KUBECONFIG` with cluster-admin RBAC.
 
 > Full guide: [Platform services](platform-services.md)
 
 ```bash
-KUBECONFIG=~/.kube/config mcp-runtime sentinel status
-KUBECONFIG=~/.kube/config mcp-runtime sentinel events
+KUBECONFIG=~/.kube/config mcp-runtime ops status
+KUBECONFIG=~/.kube/config mcp-runtime ops events
 
 # Logs support --follow, --tail, --since, and --previous
-KUBECONFIG=~/.kube/config mcp-runtime sentinel logs api --since 15m --follow
-KUBECONFIG=~/.kube/config mcp-runtime sentinel logs ingest --tail 200
+KUBECONFIG=~/.kube/config mcp-runtime ops logs api --since 15m --follow
+KUBECONFIG=~/.kube/config mcp-runtime ops logs ingest --tail 200
 
 # Restart
-KUBECONFIG=~/.kube/config mcp-runtime sentinel restart gateway
-KUBECONFIG=~/.kube/config mcp-runtime sentinel restart --all
+KUBECONFIG=~/.kube/config mcp-runtime ops restart gateway
+KUBECONFIG=~/.kube/config mcp-runtime ops restart --all
 
 # Grafana admin credential drift: read-only check, then deliberate recovery
-KUBECONFIG=~/.kube/config mcp-runtime sentinel grafana check
-KUBECONFIG=~/.kube/config mcp-runtime sentinel grafana reset-admin-password --yes
+KUBECONFIG=~/.kube/config mcp-runtime ops grafana check
+KUBECONFIG=~/.kube/config mcp-runtime ops grafana reset-admin-password --yes
 
 # Port-forward a component locally
-KUBECONFIG=~/.kube/config mcp-runtime sentinel port-forward ui
-KUBECONFIG=~/.kube/config mcp-runtime sentinel port-forward grafana
+KUBECONFIG=~/.kube/config mcp-runtime ops port-forward ui
+KUBECONFIG=~/.kube/config mcp-runtime ops port-forward grafana
 ```
 
-`sentinel events` lists operator, platform, observability, and log collector
+`ops events` lists operator, platform, observability, and log collector
 events by namespace so failures in the telemetry stack remain visible.
 
 Component names for `logs` and `restart`:
