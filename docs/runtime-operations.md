@@ -94,7 +94,7 @@ flowchart LR
 | Describe servers | `server init`, hand-written `MCPServer` YAML, or metadata in `.mcp/` |
 | Publish + deploy | `auth login`, `server build image`, `server push`, `server deploy`, `server generate` for GitOps YAML |
 | Grant access | `auth login`, `access grant init`, `access grant apply`; sessions via `adapter proxy --server … --agent …` or admin `access session init/apply` |
-| Observe | `status`, platform UI/API; admin: `sentinel status`, `sentinel port-forward ui` |
+| Observe | `status`, platform UI/API; admin: `ops status`, `ops port-forward ui` |
 
 ## Traffic and enforcement model
 

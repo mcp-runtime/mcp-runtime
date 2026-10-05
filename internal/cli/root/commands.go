@@ -13,8 +13,8 @@ import (
 	"mcp-runtime/internal/cli/catalog"
 	"mcp-runtime/internal/cli/cluster"
 	"mcp-runtime/internal/cli/core"
+	"mcp-runtime/internal/cli/ops"
 	"mcp-runtime/internal/cli/registry"
-	"mcp-runtime/internal/cli/sentinel"
 	"mcp-runtime/internal/cli/server"
 	"mcp-runtime/internal/cli/setup"
 	"mcp-runtime/internal/cli/status"
@@ -40,6 +40,6 @@ func AddCommands(root *cobra.Command, logger *zap.Logger) {
 	root.AddCommand(setup.New(runtime, clusterMgr))
 	root.AddCommand(update.New(runtime))
 	root.AddCommand(status.New(runtime))
-	root.AddCommand(sentinel.New(runtime))
+	root.AddCommand(ops.New(runtime))
 	root.AddCommand(team.New(runtime))
 }

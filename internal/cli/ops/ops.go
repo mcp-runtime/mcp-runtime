@@ -1,5 +1,5 @@
-// Package sentinel owns routing for the sentinel top-level command.
-package sentinel
+// Package ops owns routing for the ops top-level command.
+package ops
 
 import (
 	"github.com/spf13/cobra"
@@ -7,15 +7,15 @@ import (
 	"mcp-runtime/internal/cli/core"
 )
 
-// New returns the sentinel command.
+// New returns the ops command.
 func New(runtime *core.Runtime) *cobra.Command {
-	return NewWithManager(DefaultSentinelManager(runtime))
+	return NewWithManager(DefaultManager(runtime))
 }
 
-// NewWithManager returns the sentinel command using the provided manager.
-func NewWithManager(mgr *SentinelManager) *cobra.Command {
+// NewWithManager returns the ops command using the provided manager.
+func NewWithManager(mgr *Manager) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "sentinel",
+		Use:   "ops",
 		Short: "Operate the bundled platform stack (admin only)",
 		Long:  "Inspect and operate the bundled platform analytics, gateway, and observability stack. These commands require admin/operator Kubernetes access with kubectl; normal users should use the platform API and dashboard instead.",
 	}
@@ -24,7 +24,7 @@ func NewWithManager(mgr *SentinelManager) *cobra.Command {
 		Use:   "status",
 		Short: "Show platform stack status",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return mgr.ShowSentinelStatus()
+			return mgr.ShowStatus()
 		},
 	}
 
@@ -38,7 +38,7 @@ func NewWithManager(mgr *SentinelManager) *cobra.Command {
 		Args:      cobra.ExactArgs(1),
 		ValidArgs: ComponentKeys(),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return mgr.ViewSentinelLogs(args[0], follow, previous, tail, since)
+			return mgr.ViewLogs(args[0], follow, previous, tail, since)
 		},
 	}
 	logsCmd.Flags().BoolVar(&follow, "follow", false, "Follow log output")
@@ -50,7 +50,7 @@ func NewWithManager(mgr *SentinelManager) *cobra.Command {
 		Use:   "events",
 		Short: "Show recent Kubernetes events for the platform namespaces",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return mgr.ShowSentinelEvents()
+			return mgr.ShowEvents()
 		},
 	}
 
@@ -61,7 +61,7 @@ func NewWithManager(mgr *SentinelManager) *cobra.Command {
 		Short: "Port-forward a common platform service",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return mgr.PortForwardSentinelTarget(args[0], localPort, address)
+			return mgr.PortForwardTarget(args[0], localPort, address)
 		},
 	}
 	portForwardCmd.Flags().IntVar(&localPort, "port", 0, "Local port to bind (defaults to the target service port)")
@@ -82,7 +82,7 @@ func NewWithManager(mgr *SentinelManager) *cobra.Command {
 			if len(args) > 0 {
 				component = args[0]
 			}
-			return mgr.RestartSentinel(component, restartAll)
+			return mgr.Restart(component, restartAll)
 		},
 	}
 	restartCmd.Flags().BoolVar(&restartAll, "all", false, "Restart every platform workload")
