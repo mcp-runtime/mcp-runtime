@@ -2,12 +2,13 @@
 
 <span id="self-hosting-mcp-runtime"></span>
 
-Install MCP Runtime on your own Kubernetes cluster. To try the platform without
-a cluster, use the [Quickstart](hosted-quickstart.md).
+Install MCP Runtime on a Kubernetes cluster in your cloud or on-premises
+environment. To try user and team workflows first, use the
+[public platform walkthrough](hosted-quickstart.md).
 
 ## Choose your path
 
-- **Try the hosted platform:** follow the [Quickstart](hosted-quickstart.md); no cluster is required.
+- **Try the public reference platform:** follow the [walkthrough](hosted-quickstart.md); no cluster is required.
 - **Self-host on an existing cluster:** install the CLI, check cluster readiness,
   then follow the production-style setup below.
 - **Contribute on local Kind:** use the [Development and Testing](contributor/README.md)
@@ -281,7 +282,10 @@ configured install.
 wiring, the operator, and the bundled Sentinel stack for gateway policy,
 analytics, audit, and observability.
 
-`--platform-mode` selects the namespace model:
+`--platform-mode` chooses who can browse and publish servers on your
+installation. In `public` mode, visitors can browse its public catalog without
+signing in. This setting applies to your installation; it does not connect it
+to `platform.mcpruntime.org`.
 
 | Mode | Default namespace behavior | Behavior |
 |---|---|---|

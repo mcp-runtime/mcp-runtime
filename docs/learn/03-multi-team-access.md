@@ -1,13 +1,18 @@
-# Module 3: Multi-team production setup
+# Module 3: Multi-team access
+
+<span id="module-3-multi-team-production-setup"></span>
 
 Set up two teams in separate namespaces, share one server between them, and
 control cross-team access with explicit grants. Production deployments use
-the same isolation model.
+the same isolation model. This module requires MCP Runtime in your own
+environment; the public reference platform is for user and team workflows,
+not platform administration. Start with [Platform Installation](../self-hosting.md)
+if you have not installed it yet.
 
 **Prerequisites:**
 
 - Module 2 completed (you have deployed a server and understand grants)
-- Admin credentials on the platform
+- Platform admin credentials for your own installation
 - Git, Go `1.26+`, and Docker for the example build
 - Adapter-certificate identity enabled on the platform for successful tool calls
 

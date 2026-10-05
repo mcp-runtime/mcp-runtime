@@ -4,3 +4,8 @@ resources:
   - ../hostpath
 patches:
   - path: ingress-tls.yaml
+  - path: service-clusterip.yaml
+    target:
+      version: v1
+      kind: Service
+      name: registry

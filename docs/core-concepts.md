@@ -1,9 +1,12 @@
 # Concepts
 
-MCP Runtime has three Kubernetes resources (`MCPServer`, `MCPAccessGrant`,
-`MCPAgentSession`), a managed agent directory in the platform API, and two
-runtime components (the gateway and the adapter). For the full authorization
-model, see
+MCP Runtime helps a team publish MCP servers and decide which agents can use
+their tools. A server describes what runs, a grant says what an agent may do,
+and a session records time-limited access. The gateway checks each tool call.
+The adapter helps an MCP client connect with the right identity.
+
+The sections below explain the resources behind these ideas. For the full
+authorization model, see
 [Identity and authorization](identity-and-authorization.md).
 
 ## The whole thing, as a building

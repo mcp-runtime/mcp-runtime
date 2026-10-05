@@ -7,13 +7,15 @@ how a server, grant, session, gateway, and client fit together.
 
 | Your goal | Start with | What you need |
 |---|---|---|
-| Try the existing public platform | [Hosted Quickstart](hosted-quickstart.md) | A platform account; follow the guide's CLI and example prerequisites |
-| Host your own platform | [Deployment and Operations](hosting-overview.md) | A Kubernetes cluster or infrastructure to provision one |
+| Try user and team workflows on the public platform | [Public platform walkthrough](hosted-quickstart.md) | A user account and team access; follow the guide's example prerequisites |
+| Try setup and platform administration | [Deployment and Operations](hosting-overview.md) | Your own Kubernetes cluster or infrastructure to provision one |
 | Change or test MCP Runtime itself | [Development and Testing](contributor/README.md) | A source checkout and a disposable development cluster |
 
-The public platform's quickstart explains which deployment and identity flows
-are available there. For a complete governed tool-call exercise, use a platform
-with adapter-certificate identity enabled, as described in the tutorials.
+The public platform lets you deploy a sample server, create grants, and see
+user and team views. Its example tool calls are denied because it cannot
+verify which agent made them. To run the full tool-call exercise or try
+platform admin paths, install MCP Runtime in your own environment and follow
+the tutorials.
 
 ## Learn in order
 

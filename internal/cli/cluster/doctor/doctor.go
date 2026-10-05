@@ -369,6 +369,7 @@ func doctorSetupCheckSpecs(kubectl core.KubectlRunner, distro Distribution) []do
 		{Name: "traefik service exposure", Detail: "checking LoadBalancer or NodePort exposure for the web entrypoint", Run: func() DoctorCheck { return checkTraefikServiceExposure(kubectl, distro) }},
 		{Name: "public ingress host config", Detail: "resolving platform, registry, and MCP public hosts from the environment", Run: checkPublicIngressHostConfig},
 		{Name: "public ingress DNS", Detail: "resolving configured public hosts through the local DNS resolver", Run: checkPublicIngressDNS},
+		{Name: "cert-manager compatibility", Detail: "checking installed cert-manager versions against Kubernetes support", Run: func() DoctorCheck { return checkCertManagerCompatibility(kubectl) }},
 		{Name: "cert-manager readiness", Detail: "checking cert-manager deployments when TLS preflight is requested", Run: func() DoctorCheck { return checkCertManagerReadiness(kubectl) }},
 		{Name: "TLS ClusterIssuer", Detail: "checking the configured cert-manager ClusterIssuer when MCP_TLS_CLUSTER_ISSUER is set", Run: func() DoctorCheck { return checkDoctorTLSClusterIssuer(kubectl) }},
 		{Name: "ACME HTTP-01 exposure", Detail: "verifying the active Traefik web entrypoint exposes public port 80 when MCP_ACME_EMAIL is set", Run: func() DoctorCheck { return checkDoctorACMEHTTP01Exposure(kubectl, distro) }},

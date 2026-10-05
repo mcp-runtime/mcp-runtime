@@ -1,16 +1,17 @@
 # Agent HTTP Adapter
 
-MCP Runtime provides one agent-side adapter: `mcp-runtime adapter proxy`. It
-exposes a local Streamable HTTP MCP endpoint and forwards requests to a
-platform route over HTTPS.
+Use `mcp-runtime adapter proxy` to connect Claude Desktop, Cursor, or another
+MCP client to a server on your platform. It runs beside the client: the client
+connects to a local URL, and the adapter forwards requests to the platform over
+HTTPS.
 
-The adapter presents a session-bound SPIFFE client certificate when it
-establishes its HTTPS connection to the runtime. When the target MCP server
-configures OAuth, the adapter also forwards the local client's bearer token on
-each HTTP request. The gateway derives the human, agent, team, and session
-identity from the verified certificate. For OAuth targets, it requires the
-token subject to match the session's human and checks any team claim against
-the session. It never accepts caller-supplied governance identity headers.
+The adapter gets a certificate for the agent's session and keeps it refreshed.
+On an installation configured to verify these certificates, the gateway uses
+it to identify the human, agent, team, and session making a tool call. If the
+server also requires OAuth, the client must send its bearer token; the adapter
+forwards it on each request. The token's user must match the session's user,
+and any team claim must match the session. The gateway does not trust identity
+headers supplied by the client.
 
 Use an active managed agent from the team's agent directory. List agents with
 `mcp-runtime agent list <team-slug> --status active`; a team owner or platform
