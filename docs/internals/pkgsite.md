@@ -4,8 +4,6 @@ The Go package browser at [docs.pkg.mcpruntime.org](https://docs.pkg.mcpruntime.
 runs the [official pkgsite server](https://github.com/golang/pkgsite) on the same
 host as the MkDocs site. Its image is built from each main-branch source
 snapshot by [Go Package Docs](https://github.com/mcp-runtime/mcp-runtime/actions/workflows/deploy-go-docs.yaml).
-The existing [generated Go reference](go-package-reference.md) remains a
-checked-in, reviewable snapshot of selected packages.
 
 ## How deployment works
 
