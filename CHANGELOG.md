@@ -15,6 +15,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 - Deployment documentation uses distribution-neutral names: `reference-deployment.md` covers Runtime and its external identity provider, while `cluster-provisioning.md` describes the reference cluster with K3s as the worked distribution choice. Navigation, indexes, and operational links follow the new names; published URLs redirect and existing section anchors remain available. The reference guide separates configuration, installation and updates, identity-provider setup, backups and recovery, and verification, and clarifies that Keycloak DNS and backups belong to its separate VM.
 
+### Fixed
+
+- `mcp-runtime cluster doctor` reports the underlying kubectl/API error and stops dependent checks when the cluster cannot be queried. `mcp-runtime status` explains platform authentication and Kubernetes access failures, skips duplicate server-list requests after auth errors, and bounds its status probes ([#591](https://github.com/mcp-runtime/mcp-runtime/issues/591)).
+
 ## [0.5.2] - 2026-10-05
 
 ### Changed

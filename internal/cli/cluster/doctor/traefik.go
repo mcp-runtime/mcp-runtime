@@ -23,13 +23,14 @@ func checkTraefikIngressClass(kubectl core.KubectlRunner) DoctorCheck {
 			Remedy: "install or expose Traefik ingress controller",
 		}
 	}
-	out, err := cmd.Output()
+	out, err := runKubectlBytes(cmd)
 	got := strings.TrimSpace(string(out))
 	if err != nil || got != "traefik" {
+		detail := kubectlResultDetail(err, "ingressClass traefik not found")
 		return DoctorCheck{
 			Name:   "traefik ingressClass",
 			OK:     false,
-			Detail: "ingressClass traefik not found",
+			Detail: detail,
 			Remedy: "ensure Traefik is installed and ingressClassName is `traefik`",
 		}
 	}
@@ -159,9 +160,9 @@ func readTraefikServicePorts(kubectl core.KubectlRunner, endpoint doctorTraefikE
 	if err != nil {
 		return "", core.WrapWithSentinel(core.ErrDoctorKubectlError, err, fmt.Sprintf("kubectl error: %v", err))
 	}
-	out, err := cmd.Output()
+	out, err := runKubectlBytes(cmd)
 	if err != nil {
-		return "", core.NewWithSentinel(core.ErrDoctorTraefikServiceNotFound, fmt.Sprintf("service %s/%s not found", endpoint.Namespace, endpoint.Name))
+		return "", core.WrapWithSentinel(core.ErrDoctorTraefikServiceNotFound, err, fmt.Sprintf("cannot read Traefik service %s/%s: %v", endpoint.Namespace, endpoint.Name, err))
 	}
 	return strings.TrimSpace(string(out)), nil
 }
@@ -201,12 +202,12 @@ func checkTraefikServiceExposureAt(kubectl core.KubectlRunner, endpoint doctorTr
 			Detail: fmt.Sprintf("kubectl error: %v", err),
 		}
 	}
-	out, execErr := cmd.Output()
+	out, execErr := runKubectlBytes(cmd)
 	if execErr != nil {
 		return DoctorCheck{
 			Name:   "traefik service exposure",
 			OK:     false,
-			Detail: fmt.Sprintf("failed reading service exposure fields for %s/%s", endpoint.Namespace, endpoint.Name),
+			Detail: fmt.Sprintf("failed reading service exposure fields for %s/%s: %v", endpoint.Namespace, endpoint.Name, execErr),
 		}
 	}
 	parts := strings.SplitN(strings.TrimSpace(string(out)), "|", 4)
@@ -552,10 +553,10 @@ func doctorDeploymentReplicaStatus(kubectl core.KubectlRunner, namespace, name s
 	if err != nil {
 		return "", false, core.WrapWithSentinel(core.ErrDoctorKubectlError, err, fmt.Sprintf("kubectl error: %v", err))
 	}
-	out, execErr := cmd.Output()
+	out, execErr := runKubectlBytes(cmd)
 	pair := strings.TrimSpace(string(out))
 	if execErr != nil || pair == "" {
-		return "", false, core.NewWithSentinel(core.ErrDoctorDeploymentNotFound, "deployment not found")
+		return "", false, core.WrapWithSentinel(core.ErrDoctorDeploymentNotFound, execErr, kubectlResultDetail(execErr, "deployment not found"))
 	}
 	parts := strings.SplitN(pair, "/", 2)
 	if len(parts) != 2 {
@@ -590,12 +591,13 @@ func checkDoctorTLSClusterIssuer(kubectl core.KubectlRunner) DoctorCheck {
 			Remedy: "install the ClusterIssuer first or fix MCP_TLS_CLUSTER_ISSUER",
 		}
 	}
-	out, execErr := cmd.Output()
+	out, execErr := runKubectlBytes(cmd)
 	if execErr != nil || strings.TrimSpace(string(out)) != name {
+		detail := kubectlResultDetail(execErr, fmt.Sprintf("ClusterIssuer %q not found", name))
 		return DoctorCheck{
 			Name:   "TLS ClusterIssuer",
 			OK:     false,
-			Detail: fmt.Sprintf("ClusterIssuer %q not found", name),
+			Detail: detail,
 			Remedy: "install the ClusterIssuer first or fix MCP_TLS_CLUSTER_ISSUER",
 		}
 	}

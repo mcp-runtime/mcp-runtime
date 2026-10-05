@@ -17,13 +17,14 @@ func checkRegistryService(kubectl core.KubectlRunner) DoctorCheck {
 	if err != nil {
 		return DoctorCheck{Name: "registry Service", OK: false, Detail: fmt.Sprintf("kubectl error: %v", err), Remedy: "run `./bin/mcp-runtime setup` to install the registry, or check cluster connectivity"}
 	}
-	out, err := cmd.Output()
+	out, err := runKubectlBytes(cmd)
 	port := strings.TrimSpace(string(out))
 	if err != nil || port == "" {
+		detail := kubectlResultDetail(err, "Service registry/registry has no NodePort")
 		return DoctorCheck{
 			Name:   "registry Service",
 			OK:     false,
-			Detail: "Service registry/registry not found or has no NodePort",
+			Detail: detail,
 			Remedy: "run `./bin/mcp-runtime setup` to install the registry",
 		}
 	}
