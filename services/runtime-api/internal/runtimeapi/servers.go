@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -357,6 +358,16 @@ func (s *RuntimeServer) applyPublishedServerDefaults(ctx context.Context, namesp
 	}
 	if spec.Analytics == nil {
 		spec.Analytics = &mcpv1alpha1.AnalyticsConfig{}
+	}
+	if strings.TrimSpace(spec.Analytics.IngestURL) == "" {
+		// The API injects analytics credentials, so it must also supply the
+		// configured ingest URL when the operator has no fallback of its own.
+		spec.Analytics.IngestURL = strings.TrimSpace(os.Getenv("MCP_ANALYTICS_INGEST_URL"))
+		if spec.Analytics.IngestURL == "" {
+			// Upgrade-managed ConfigMaps can retain the pre-0.6 key until setup
+			// migrates them. Preserve analytics for those existing installs.
+			spec.Analytics.IngestURL = strings.TrimSpace(os.Getenv("MCP_SENTINEL_INGEST_URL"))
+		}
 	}
 	if spec.Analytics.APIKeySecretRef != nil {
 		return nil

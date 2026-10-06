@@ -1113,7 +1113,7 @@ func TestRuntimeServerApplyDefaultsGatewayAndExplicitAnalyticsSecret(t *testing.
 		"scope": "public",
 		"spec": {
 			"image":"registry.example.com/public/demo",
-			"analytics":{"ingestURL":"http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events"}
+			"analytics":{"ingestURL":"http://custom-ingest.example/events"}
 		}
 	}`)))
 	request = request.WithContext(withPrincipal(request.Context(), principal{
@@ -1137,6 +1137,9 @@ func TestRuntimeServerApplyDefaultsGatewayAndExplicitAnalyticsSecret(t *testing.
 	}
 	if current.Spec.Analytics == nil || current.Spec.Analytics.APIKeySecretRef == nil {
 		t.Fatalf("analytics = %#v, want api key secret ref", current.Spec.Analytics)
+	}
+	if got := current.Spec.Analytics.IngestURL; got != "http://custom-ingest.example/events" {
+		t.Fatalf("analytics ingest URL = %q, want explicit URL", got)
 	}
 	if current.Spec.Analytics.APIKeySecretRef.Name != "demo-analytics-creds" || current.Spec.Analytics.APIKeySecretRef.Key != "api-key" {
 		t.Fatalf("analytics secret ref = %#v", current.Spec.Analytics.APIKeySecretRef)
@@ -1195,6 +1198,9 @@ func TestRuntimeServerApplyEnablesAnalyticsByDefault(t *testing.T) {
 	}
 	if current.Spec.Analytics == nil || current.Spec.Analytics.APIKeySecretRef == nil {
 		t.Fatalf("analytics = %#v, want default api key secret ref", current.Spec.Analytics)
+	}
+	if got := current.Spec.Analytics.IngestURL; got != "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events" {
+		t.Fatalf("analytics ingest URL = %q, want configured default", got)
 	}
 	if _, err := server.k8sClients.Clientset.CoreV1().Secrets(defaultPublicCatalogNamespace).Get(context.Background(), "demo-analytics-creds", metav1.GetOptions{}); err != nil {
 		t.Fatalf("analytics secret lookup err = %v, want created", err)
@@ -1257,7 +1263,8 @@ func TestRuntimeServerApplyDefaultsAnalyticsSecretNameFitsDNSLabelLimit(t *testi
 func TestRuntimeServerApplyAllowsMissingDefaultAnalyticsSecret(t *testing.T) {
 	t.Setenv("PLATFORM_MODE", "public")
 	t.Setenv("PLATFORM_TEAM_TRAEFIK_WATCH", "disabled")
-	t.Setenv("MCP_ANALYTICS_INGEST_URL", "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events")
+	t.Setenv("MCP_ANALYTICS_INGEST_URL", "")
+	t.Setenv("MCP_SENTINEL_INGEST_URL", "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events")
 	scheme := runtime.NewScheme()
 	if err := mcpv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("AddToScheme: %v", err)
@@ -1294,6 +1301,9 @@ func TestRuntimeServerApplyAllowsMissingDefaultAnalyticsSecret(t *testing.T) {
 	}
 	if current.Spec.Analytics != nil && current.Spec.Analytics.APIKeySecretRef != nil {
 		t.Fatalf("analytics api key ref = %#v, want nil when source secret is missing", current.Spec.Analytics.APIKeySecretRef)
+	}
+	if current.Spec.Analytics == nil || current.Spec.Analytics.IngestURL != "http://mcp-ingest.mcp-observability.svc.cluster.local:8081/events" {
+		t.Fatalf("analytics = %#v, want legacy ingest URL", current.Spec.Analytics)
 	}
 }
 
