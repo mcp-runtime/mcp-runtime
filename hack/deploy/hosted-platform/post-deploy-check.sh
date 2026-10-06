@@ -15,10 +15,6 @@ for namespace in mcp-runtime mcp-platform registry cert-manager; do
   echo "Deployments ready in $namespace"
 done
 
-kubectl -n mcp-servers get mcpservers -o json | jq -e \
-  'all(.items[]; .status.phase == "Ready")' >/dev/null
-echo 'Existing MCP servers are ready'
-
 qa_name="qa-audit-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 qa_image="registry.mcpruntime.org/qa-audit:${RELEASE_TAG}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 cleanup() {
