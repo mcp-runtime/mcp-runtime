@@ -93,49 +93,14 @@ jobs:
 
           export KUBECONFIG="$kubeconfig"
           make build
-          if [[ "$VERIFY_ONLY" != true ]]; then
-            ./bin/mcp-runtime cluster operator-rbac apply --dry-run \
-              --kubeconfig "$kubeconfig" --context default
-            ./bin/mcp-runtime cluster operator-rbac apply --yes \
-              --kubeconfig "$kubeconfig" --context default
-            operator=system:serviceaccount:mcp-runtime:mcp-runtime-operator-controller-manager
-            test "$(kubectl auth can-i list endpointslices --all-namespaces --as="$operator")" = yes
-            test "$(kubectl auth can-i create secrets -n mcp-servers --as="$operator")" = yes
-            test "$(kubectl auth can-i patch deployment/mcp-auth-server -n mcp-platform --as="$operator")" = yes
-            ./bin/mcp-runtime cluster doctor
-            ./bin/mcp-runtime update --to "$RELEASE_TAG" --release-manifest "$RUNNER_TEMP/release/platform-manifest.json" --dry-run --build --source . \
-              --image-platform linux/amd64 --kubeconfig "$kubeconfig" --context default
-            ./bin/mcp-runtime update --to "$RELEASE_TAG" --release-manifest "$RUNNER_TEMP/release/platform-manifest.json" --build --source . \
-              --image-platform linux/amd64 --kubeconfig "$kubeconfig" --context default --yes
-          fi
-          ./bin/mcp-runtime update --to "$RELEASE_TAG" --release-manifest "$RUNNER_TEMP/release/platform-manifest.json" --dry-run --output json \
-            --kubeconfig "$kubeconfig" --context default > "$RUNNER_TEMP/live-plan.json"
-          jq -c '{pendingComponents:[.plan.components[] | select(.action == "update") | .component],crdRecheck:(.plan.applyCRDs // false)}' \
-            "$RUNNER_TEMP/live-plan.json"
-          jq -e '[.plan.components[] | select(.action == "update")] | length == 0' \
-            "$RUNNER_TEMP/live-plan.json"
-          if [[ -n "$MCP_AUTH_VERSION" ]]; then
-            ./bin/mcp-runtime cluster mcp-auth-connector apply \
-              --file config/deployments/mcpruntime-org-keycloak-connectors.json \
-              --connector keycloak --kubeconfig "$kubeconfig" --context default --dry-run
-            ./bin/mcp-runtime cluster mcp-auth-connector apply \
-              --file config/deployments/mcpruntime-org-keycloak-connectors.json \
-              --connector keycloak --kubeconfig "$kubeconfig" --context default --yes
-
-            # Roll out the public image setup installs. The mcp-auth-server
-            # Deployment has no imagePullSecrets, so a copy re-tagged into the
-            # private platform registry fails with ImagePullBackOff.
-            auth_repository="docker.io/princekrroshan01/mcp-auth-server"
-            docker manifest inspect "$auth_repository:$MCP_AUTH_VERSION" >/dev/null
-            jq -n --arg version "$RELEASE_TAG" --arg repository "$auth_repository" --arg tag "$MCP_AUTH_VERSION" \
-              '{apiVersion:"mcpruntime.org/v1alpha1",kind:"PlatformRelease",version:$version,components:[{name:"mcp-auth",repository:$repository,tag:$tag}]}' \
-              > "$RUNNER_TEMP/auth-manifest.json"
-            ./bin/mcp-runtime update --to "$RELEASE_TAG" \
-              --release-manifest "$RUNNER_TEMP/auth-manifest.json" --only mcp-auth \
-              --kubeconfig "$kubeconfig" --context default --yes
-          fi
-          ./bin/mcp-runtime cluster doctor
-          curl -fsS https://auth.mcpruntime.org/.well-known/oauth-authorization-server/mcp-auth \
-            | jq -e '.issuer == "https://auth.mcpruntime.org/mcp-auth" and (["tools:read", "tools:write"] - .scopes_supported | length == 0)'
-          kubectl -n mcp-platform get deployments mcp-auth-server mcp-platform-api mcp-runtime-api mcp-ui -o json | jq -e 'all(.items[]; (.status.availableReplicas // 0) >= (.spec.replicas // 1))'
-          kubectl -n mcp-observability get deployment mcp-analytics-api -o json | jq -e '(.status.availableReplicas // 0) >= (.spec.replicas // 1)'
+          export MCP_RUNTIME_CONFIG_DIR="$RUNNER_TEMP/qa-profile"
+          mkdir -m 700 "$MCP_RUNTIME_CONFIG_DIR"
+          admin_email="$(kubectl -n mcp-platform get secret mcp-platform-api-credentials -o jsonpath='{.data.PLATFORM_ADMIN_EMAIL}' | base64 -d)"
+          admin_password="$(kubectl -n mcp-platform get secret mcp-platform-api-credentials -o jsonpath='{.data.PLATFORM_ADMIN_PASSWORD}' | base64 -d)"
+          test -n "$admin_email"
+          test -n "$admin_password"
+          ./bin/mcp-runtime auth login --api-url https://platform.mcpruntime.org --email "$admin_email" --password "$admin_password" --profile qa-audit > /dev/null
+          unset admin_email admin_password
+          ./bin/mcp-runtime auth status > /dev/null
+          echo 'Production CLI login passed'
+          ./bin/mcp-runtime team list
