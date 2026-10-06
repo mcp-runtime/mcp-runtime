@@ -30,15 +30,19 @@ try {
   });
 
   await page.goto('https://platform.mcpruntime.org/#/admin/analytics', { waitUntil: 'domcontentloaded' });
-  const signedOut = page.getByTestId('admin-signed-out');
+  // The app redirects unauthorized admin routes to the public Servers page.
+  const signedOut = page.getByTestId('catalog-signed-out');
   await signedOut.waitFor({ state: 'visible', timeout: 20000 });
+  if (!page.url().endsWith('#/servers')) {
+    throw new Error(`signed-out admin route did not redirect to Servers: ${page.url().split('#')[1]}`);
+  }
   if (await page.getByTestId('tool-usage-table').count()) {
     throw new Error('signed-out browser rendered the protected tool usage table');
   }
   await signedOut.screenshot({ path: `${evidenceDir}/signed-out.png` });
   console.log(JSON.stringify({ role: 'signed-out', route: page.url().split('#')[1], guard: 'visible' }));
 
-  await signedOut.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByTestId('landing-signin-button').click();
   await page.getByTestId('login-email').fill(process.env.QA_ADMIN_EMAIL);
   await page.getByTestId('login-password').fill(process.env.QA_ADMIN_PASSWORD);
   const loginResponse = page.waitForResponse((response) =>
