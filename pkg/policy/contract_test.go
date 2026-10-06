@@ -23,6 +23,7 @@ func TestPolicyDocumentRoundTrip(t *testing.T) {
 			TokenHeader: "Authorization",
 			IssuerURL:   "https://auth.example.com",
 			Audience:    "mcp-runtime",
+			Scopes:      []string{"tools:read", "tools:write"},
 		},
 		Policy: &Config{
 			Mode:            "allow-list",
@@ -163,6 +164,16 @@ func verifyAuth(t *testing.T, expected, actual *Auth) {
 	}
 	if expected.Audience != actual.Audience {
 		t.Errorf("Auth.Audience mismatch: expected %q, got %q", expected.Audience, actual.Audience)
+	}
+	if len(expected.Scopes) != len(actual.Scopes) {
+		t.Errorf("Auth.Scopes mismatch: expected %v, got %v", expected.Scopes, actual.Scopes)
+	} else {
+		for i := range expected.Scopes {
+			if expected.Scopes[i] != actual.Scopes[i] {
+				t.Errorf("Auth.Scopes mismatch: expected %v, got %v", expected.Scopes, actual.Scopes)
+				break
+			}
+		}
 	}
 }
 

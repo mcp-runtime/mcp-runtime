@@ -72,6 +72,9 @@ func (s *gatewayServer) handleOAuthProtectedResource(w http.ResponseWriter, r *h
 		"authorization_servers":    []string{strings.TrimSpace(policy.Auth.IssuerURL)},
 		"bearer_methods_supported": []string{"header"},
 	}
+	if len(policy.Auth.Scopes) > 0 {
+		payload["scopes_supported"] = policy.Auth.Scopes
+	}
 	_ = json.NewEncoder(w).Encode(payload)
 	return true
 }
