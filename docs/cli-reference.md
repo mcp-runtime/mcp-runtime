@@ -931,7 +931,16 @@ mcp-runtime cluster cert wait --timeout 10m
 
 mcp-runtime cluster doctor                                   # pre-setup readiness
 KUBECONFIG=~/.kube/config mcp-runtime cluster diagnostics    # post-setup diagnostic
+
+# Repair operator RBAC from this release after an image-only update.
+mcp-runtime cluster operator-rbac apply --kubeconfig /path/to/kubeconfig --context prod --dry-run
+mcp-runtime cluster operator-rbac apply --kubeconfig /path/to/kubeconfig --context prod --yes
 ```
+
+`operator-rbac apply` reconciles the product-owned operator ClusterRole. If
+bundled MCP Auth is installed, it also grants the operator `patch` on only the
+`mcp-platform/mcp-auth-server` Deployment. It does not change workload images,
+Secrets, or tenant namespace bindings.
 
 ## Further reading
 

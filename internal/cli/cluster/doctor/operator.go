@@ -352,7 +352,7 @@ func checkOperatorRecentReconcileErrors(kubectl core.KubectlRunner) DoctorCheck 
 
 func checkOperatorClusterRoleRules(kubectl core.KubectlRunner) DoctorCheck {
 	const name = "operator ClusterRole rules"
-	const remedy = "re-run `./bin/mcp-runtime setup` (or `kubectl apply -k config/rbac/`) to reapply config/rbac/role.yaml; the controller-runtime informer cache will not sync without these"
+	const remedy = "run `mcp-runtime cluster operator-rbac apply --kubeconfig <path> --context <name> --yes` to restore the shipped ClusterRole; the controller-runtime informer cache will not sync without these"
 
 	cmd, err := kubectl.CommandArgs([]string{"get", "clusterrole", "mcp-runtime-operator-role", "-o", "json"})
 	if err != nil {

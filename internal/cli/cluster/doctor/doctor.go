@@ -457,6 +457,7 @@ var operatorClusterRoleResources = []operatorClusterRoleResource{
 	{Resource: "services", APIGroup: ""},
 	{Resource: "deployments", APIGroup: "apps"},
 	{Resource: "ingresses", APIGroup: "networking.k8s.io"},
+	{Resource: "endpointslices", APIGroup: "discovery.k8s.io"},
 }
 
 type imagePullPodCandidate struct {

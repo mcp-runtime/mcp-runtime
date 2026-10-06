@@ -166,6 +166,9 @@ func deployMCPAuthServer(opts mcpAuthServerOptions, deps SetupDeps) error {
 	}
 
 	core.Info("Applying optional bundled mcp-auth authorization server")
+	if err := applyManifestFile("k8s/23-mcp-auth-rbac.yaml", "", os.Stdout); err != nil {
+		return fmt.Errorf("apply mcp-auth operator RBAC: %w", err)
+	}
 	if err := applyManifestYAML(manifest, "", os.Stdout); err != nil {
 		return fmt.Errorf("apply mcp-auth authorization server: %w", err)
 	}

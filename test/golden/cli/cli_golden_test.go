@@ -84,6 +84,8 @@ func TestCLIHelpGoldens(t *testing.T) {
 		{name: "cluster_help", args: []string{"cluster", "--help"}, golden: "mcp-runtime_cluster_help.golden"},
 		{name: "cluster_mcp_auth_connector_help", args: []string{"cluster", "mcp-auth-connector", "--help"}, golden: "mcp-runtime_cluster_mcp_auth_connector_help.golden"},
 		{name: "cluster_mcp_auth_connector_apply_help", args: []string{"cluster", "mcp-auth-connector", "apply", "--help"}, golden: "mcp-runtime_cluster_mcp_auth_connector_apply_help.golden"},
+		{name: "cluster_operator_rbac_help", args: []string{"cluster", "operator-rbac", "--help"}, golden: "mcp-runtime_cluster_operator_rbac_help.golden"},
+		{name: "cluster_operator_rbac_apply_help", args: []string{"cluster", "operator-rbac", "apply", "--help"}, golden: "mcp-runtime_cluster_operator_rbac_apply_help.golden"},
 		{name: "cluster_init_help", args: []string{"cluster", "init", "--help"}, golden: "mcp-runtime_cluster_init_help.golden"},
 		{name: "cluster_status_help", args: []string{"cluster", "status", "--help"}, golden: "mcp-runtime_cluster_status_help.golden"},
 		{name: "cluster_config_help", args: []string{"cluster", "config", "--help"}, golden: "mcp-runtime_cluster_config_help.golden"},

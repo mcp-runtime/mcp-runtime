@@ -10,6 +10,7 @@ Available Commands:
   doctor             Check whether a cluster is ready for MCP Runtime setup
   init               Initialize cluster configuration
   mcp-auth-connector Manage the bundled MCP Auth identity connector
+  operator-rbac      Reconcile operator permissions from this release
   provision          Provision a new cluster
   status             Check cluster status
 
