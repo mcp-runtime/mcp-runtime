@@ -1152,6 +1152,10 @@ func TestEnsureAnalyticsImagePullSecret(t *testing.T) {
 	if !strings.Contains(manifest, "namespace: "+core.ComponentNamespace("platform-api")) || !strings.Contains(manifest, "namespace: "+core.ComponentNamespace("analytics-api")) {
 		t.Fatalf("expected platform and observability namespaces in secret manifests, got %q", manifest)
 	}
+	// promtail in the log collector namespace references the same secret.
+	if !strings.Contains(manifest, "namespace: "+core.LogCollectorNamespace) {
+		t.Fatalf("expected log collector namespace in secret manifests, got %q", manifest)
+	}
 	if !strings.Contains(manifest, "kubernetes.io/dockerconfigjson") {
 		t.Fatalf("expected dockerconfigjson secret manifest, got %q", manifest)
 	}
@@ -1202,6 +1206,10 @@ func TestEnsureAnalyticsImagePullSecretForBundledPublicRegistry(t *testing.T) {
 	}
 	if !strings.Contains(manifest, "namespace: "+core.ComponentNamespace("platform-api")) || !strings.Contains(manifest, "namespace: "+core.ComponentNamespace("analytics-api")) {
 		t.Fatalf("expected platform and observability namespaces in secret manifests, got %q", manifest)
+	}
+	// promtail in the log collector namespace references the same secret.
+	if !strings.Contains(manifest, "namespace: "+core.LogCollectorNamespace) {
+		t.Fatalf("expected log collector namespace in secret manifests, got %q", manifest)
 	}
 	if !strings.Contains(manifest, "kubernetes.io/dockerconfigjson") {
 		t.Fatalf("expected public registry dockerconfigjson secret, got %q", manifest)

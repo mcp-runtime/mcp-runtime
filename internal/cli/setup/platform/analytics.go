@@ -1487,6 +1487,14 @@ func publishedWorkloadNamespaces() []string {
 	return []string{core.ComponentNamespace("platform-api"), core.ComponentNamespace("analytics-api")}
 }
 
+// imagePullSecretNamespaces lists every namespace whose rendered workloads
+// reference the platform pull secret. renderAnalyticsManifest injects it into
+// all analytics manifests, including the promtail DaemonSet in the log
+// collector namespace.
+func imagePullSecretNamespaces() []string {
+	return append(publishedWorkloadNamespaces(), core.LogCollectorNamespace)
+}
+
 func ensureAnalyticsImagePullSecret(kubectl core.KubectlRunner, images AnalyticsImageSet) (string, error) {
 	if explicit := platformImagePullSecretOverride(); explicit != "" {
 		return explicit, nil
@@ -1496,7 +1504,7 @@ func ensureAnalyticsImagePullSecret(kubectl core.KubectlRunner, images Analytics
 		return "", err
 	}
 	secretName := ""
-	for _, namespace := range publishedWorkloadNamespaces() {
+	for _, namespace := range imagePullSecretNamespaces() {
 		if extRegistry == nil || extRegistry.URL == "" || (extRegistry.Username == "" && extRegistry.Password == "") {
 			secretName, err = ensureBundledPublicRegistryPullSecret(
 				kubectl,
@@ -1530,7 +1538,7 @@ func ensureAnalyticsImagePullSecretClientGo(images AnalyticsImageSet) (string, e
 		return "", err
 	}
 	secretName := ""
-	for _, namespace := range publishedWorkloadNamespaces() {
+	for _, namespace := range imagePullSecretNamespaces() {
 		if extRegistry == nil || extRegistry.URL == "" || (extRegistry.Username == "" && extRegistry.Password == "") {
 			secretName, err = ensureBundledPublicRegistryPullSecretClientGo(namespace, analyticsImagePullSecretCandidates(images))
 		} else {
