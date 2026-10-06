@@ -352,6 +352,7 @@ func doctorCheckSpecs(kubectl core.KubectlRunner, distro Distribution) []doctorC
 			Detail: "applying a temporary MCPServer and waiting up to 150s for deployment/service/ingress resources",
 			Run:    func() DoctorCheck { return checkMCPServerReconcileSmoke(kubectl, doctorMCPServersNamespace) },
 		},
+		{Name: platformPullSecretsCheckName, Detail: "checking platform deployments that pull from the platform registry carry an image pull secret", Run: func() DoctorCheck { return checkPlatformPullSecrets(kubectl) }},
 	}
 }
 

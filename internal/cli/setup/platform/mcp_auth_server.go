@@ -12,7 +12,9 @@ import (
 
 	"mcp-runtime/internal/cli/core"
 	"mcp-runtime/internal/cli/kube"
+	"mcp-runtime/internal/cli/registry/config"
 	"mcp-runtime/internal/cli/setup/assetpath"
+	setupplan "mcp-runtime/internal/cli/setup/plan"
 	"mcp-runtime/pkg/metadata"
 )
 
@@ -52,9 +54,74 @@ type mcpAuthServerOptions struct {
 	ConnectorsFile   string
 	Connector        string
 	TestMode         bool
+	// ImagePullSecret is the platform registry pull Secret attached to the
+	// Deployment. Empty leaves the pod spec without imagePullSecrets, which is
+	// correct for public images and the unauthenticated in-cluster registry.
+	ImagePullSecret string
 }
 
-func deployMCPAuthServer(image, configuredIssuer string, configuredResources []string, tlsSecret, signingKeySecret, connectorsFile, connector string, testMode bool, deps SetupDeps) error {
+// mcpAuthPullSecretSources supplies the inputs resolveMCPAuthImagePullSecret
+// needs. The provisioning functions are injected so the resolution rules are
+// testable without a cluster.
+type mcpAuthPullSecretSources struct {
+	// Override is the operator-supplied pull Secret name
+	// (MCP_PLATFORM_IMAGE_PULL_SECRET / MCP_REGISTRY_PULL_SECRET_NAME).
+	Override string
+	// ExternalRegistry is the resolved external registry, if any.
+	ExternalRegistry *config.ExternalRegistryConfig
+	// EnsureExternal writes a dockerconfigjson Secret for an external registry.
+	EnsureExternal func(namespace, name, registry, username, password string) error
+	// EnsureBundled writes the bundled public registry pull Secret when one of
+	// images is hosted there, returning its name or empty when not needed.
+	EnsureBundled func(namespace string, images []string) (string, error)
+}
+
+// resolveMCPAuthImagePullSecret applies the same rules the other platform
+// workloads use (see ensureAnalyticsImagePullSecretClientGo): an explicit
+// override wins; an external registry with credentials gets the canonical
+// pull Secret; otherwise the bundled public registry Secret is provisioned
+// only when the mcp-auth image is hosted on it. The Secret is ensured in the
+// mcp-auth namespace so setup does not depend on analytics having run.
+func resolveMCPAuthImagePullSecret(image, namespace string, src mcpAuthPullSecretSources) (string, error) {
+	if explicit := strings.TrimSpace(src.Override); explicit != "" {
+		return explicit, nil
+	}
+	ext := src.ExternalRegistry
+	if ext != nil && strings.TrimSpace(ext.URL) != "" && (ext.Username != "" || ext.Password != "") {
+		if src.EnsureExternal == nil {
+			return "", fmt.Errorf("no pull secret provisioner configured for external registry %q", ext.URL)
+		}
+		if err := src.EnsureExternal(namespace, defaultRegistrySecretName, ext.URL, ext.Username, ext.Password); err != nil {
+			return "", fmt.Errorf("ensure mcp-auth image pull secret: %w", err)
+		}
+		return defaultRegistrySecretName, nil
+	}
+	if src.EnsureBundled == nil {
+		return "", nil
+	}
+	name, err := src.EnsureBundled(namespace, []string{image})
+	if err != nil {
+		return "", fmt.Errorf("ensure mcp-auth image pull secret: %w", err)
+	}
+	return name, nil
+}
+
+// newMCPAuthServerOptions maps the setup plan onto the renderer input.
+func newMCPAuthServerOptions(plan setupplan.Plan, imagePullSecret string) mcpAuthServerOptions {
+	return mcpAuthServerOptions{
+		Image:            plan.MCPAuthServerImage,
+		IssuerURL:        plan.MCPAuthIssuerURL,
+		ResourceURLs:     plan.MCPAuthResourceURLs,
+		TLSSecret:        plan.MCPAuthTLSSecret,
+		SigningKeySecret: plan.MCPAuthSigningKeySecret,
+		ConnectorsFile:   plan.MCPAuthConnectorsFile,
+		Connector:        plan.MCPAuthConnector,
+		TestMode:         plan.TestMode,
+		ImagePullSecret:  imagePullSecret,
+	}
+}
+
+func deployMCPAuthServer(opts mcpAuthServerOptions, deps SetupDeps) error {
 	path, err := assetpath.ResolveRepoAssetPath("k8s/23-mcp-auth-server.yaml")
 	if err != nil {
 		return err
@@ -63,16 +130,9 @@ func deployMCPAuthServer(image, configuredIssuer string, configuredResources []s
 	if err != nil {
 		return err
 	}
-	opts := mcpAuthServerOptions{
-		Image:            image,
-		IssuerURL:        configuredIssuer,
-		ResourceURLs:     configuredResources,
-		TLSSecret:        tlsSecret,
-		SigningKeySecret: signingKeySecret,
-		ConnectorsFile:   connectorsFile,
-		Connector:        connector,
-		TestMode:         testMode,
-	}
+	testMode := opts.TestMode
+	connectorsFile := opts.ConnectorsFile
+	connector := opts.Connector
 	if strings.TrimSpace(opts.IssuerURL) == "" {
 		if testMode {
 			opts.IssuerURL = "http://localhost:18080/mcp-auth"
@@ -289,6 +349,16 @@ func renderMCPAuthServerManifest(raw string, opts mcpAuthServerOptions) (string,
 	}
 	if remaining := unresolvedManifestPlaceholders(manifest); len(remaining) > 0 {
 		return "", fmt.Errorf("mcp-auth manifest has unresolved placeholders: %s", strings.Join(remaining, ", "))
+	}
+	// Attach the platform pull Secret the same way the other platform
+	// workloads receive it, so an image hosted in the platform registry pulls
+	// on a fresh setup without a manual patch.
+	if secret := strings.TrimSpace(opts.ImagePullSecret); secret != "" {
+		rendered, err := injectImagePullSecretsIntoManifest(manifest, secret)
+		if err != nil {
+			return "", fmt.Errorf("inject mcp-auth image pull secret: %w", err)
+		}
+		manifest = rendered
 	}
 	return manifest, nil
 }
