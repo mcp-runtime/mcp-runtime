@@ -114,6 +114,13 @@ spec:
                     type: string
                   issuerURL:
                     type: string
+                  scopes:
+                    description: |-
+                      Scopes are the OAuth scopes this MCP resource permits clients to request.
+                      The bundled authorization server publishes and enforces them per resource.
+                    items:
+                      type: string
+                    type: array
                   tokenHeader:
                     type: string
                 type: object

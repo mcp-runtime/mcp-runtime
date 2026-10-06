@@ -140,7 +140,7 @@ default. Override the path with `MCP_DEPLOY_ENV=/path/to/other.env`. See
 | `MCP_REGISTRY_PUSH_MODE` | `internal` | rollout | `public` pushes directly to `registry.<domain>` using the workstation's selected Docker daemon. |
 | `MCP_UPDATE_MCP_AUTH` | `0` | rollout | Set to `1` only when updating the bundled authorization server. |
 | `MCP_AUTH_IMAGE_SOURCE` | `published` | rollout | `published` pulls Docker Hub `latest`; choose `local` only when intentionally testing a selected mcp-auth source ref. |
-| `MCP_AUTH_DOCKERHUB_IMAGE` | `docker.io/princekrroshan01/mcp-auth-server:latest` | rollout | Published image source, copied to the Runtime registry under a unique candidate tag. |
+| `MCP_AUTH_DOCKERHUB_IMAGE` | `docker.io/princekrroshan01/mcp-auth-server:0.4.2` | rollout | Published image source, copied to the Runtime registry under a unique candidate tag. |
 | `MCP_AUTH_SOURCE` | sibling `mcp-auth` checkout | rollout | Source checkout, used only with `MCP_AUTH_IMAGE_SOURCE=local`. |
 | `MCP_AUTH_BUILD_REF` | required for local source | rollout | Selected branch, tag, or commit; rollout requires a clean checkout at this ref. |
 | `MCP_AUTH_IMAGE_TAG` | `<MCP_ROLLOUT_TAG>-auth` | rollout | Unique tag for the candidate mcp-auth image. |

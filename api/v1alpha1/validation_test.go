@@ -450,3 +450,18 @@ func TestMCPServerValidateAllowsStandaloneOAuthServer(t *testing.T) {
 		t.Fatalf("standalone OAuth server rejected: %v", err)
 	}
 }
+
+func TestMCPServerValidateAuthScopes(t *testing.T) {
+	server := &MCPServer{Spec: MCPServerSpec{
+		Image: "example.com/server", PublicPathPrefix: "server",
+		Gateway: &GatewayConfig{Enabled: BoolPtr(false)},
+		Auth:    &AuthConfig{IssuerURL: "https://auth.example.com/mcp-auth", Audience: "https://mcp.example.com/server/mcp", Scopes: []string{"tools:read", "tools:write"}},
+	}}
+	if err := server.validate(); err != nil {
+		t.Fatalf("valid scopes rejected: %v", err)
+	}
+	server.Spec.Auth.Scopes = []string{"tools:read", "tools:read"}
+	if err := server.validate(); err == nil || !strings.Contains(err.Error(), "auth.scopes") {
+		t.Fatalf("duplicate scope was accepted: %v", err)
+	}
+}

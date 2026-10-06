@@ -90,6 +90,25 @@ func TestReconcileBundledOAuthResourcesPublishesOnlyServedAudiences(t *testing.T
 	if env["MCP_AUTH_RESOURCE"] != "https://mcp.example.com/buddy/mcp" {
 		t.Fatalf("MCP_AUTH_RESOURCE = %q", env["MCP_AUTH_RESOURCE"])
 	}
+	if _, ok := env["MCP_AUTH_RESOURCE_SCOPES"]; ok {
+		t.Fatal("unexpected scope policy for servers without auth.scopes")
+	}
+}
+
+func TestReconcileBundledOAuthResourcesPublishesServerScopes(t *testing.T) {
+	scheme := bundledOAuthScheme(t)
+	cully := oauthMCPServer("cully", "")
+	cully.Spec.Auth.Scopes = []string{"tools:write", "tools:read"}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(bundledAuthDeployment(), cully).Build()
+	r := MCPServerReconciler{GatewayProxyImage: "example.com/mcp-gateway:test", Client: c, Scheme: scheme, OAuthIssuerURL: testBundledIssuer, DefaultIngressHost: "mcp.example.com", DefaultIngressTLS: true}
+	if err := r.reconcileBundledOAuthResources(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	got := bundledAuthEnv(t, c)["MCP_AUTH_RESOURCE_SCOPES"]
+	want := `{"https://mcp.example.com/cully/mcp":["tools:read","tools:write"]}`
+	if got != want {
+		t.Fatalf("MCP_AUTH_RESOURCE_SCOPES = %q, want %q", got, want)
+	}
 }
 
 // Local test mode has no default MCP host; audiences live on the issuer host.

@@ -2,6 +2,7 @@ package operator
 
 import (
 	"context"
+	"encoding/json"
 	"net/url"
 	"path"
 	"reflect"
@@ -49,6 +50,7 @@ func (r *MCPServerReconciler) reconcileBundledOAuthResources(ctx context.Context
 		defaulted = append(defaulted, *r.defaultedMCPServerForReconcile(&servers.Items[i]))
 	}
 	resources := make([]string, 0, len(defaulted))
+	resourceScopes := make(map[string][]string)
 	seen := make(map[string]struct{}, len(defaulted))
 	for i := range defaulted {
 		server := &defaulted[i]
@@ -72,6 +74,10 @@ func (r *MCPServerReconciler) reconcileBundledOAuthResources(ctx context.Context
 		}
 		seen[audience] = struct{}{}
 		resources = append(resources, audience)
+		if len(server.Spec.Auth.Scopes) > 0 {
+			resourceScopes[audience] = append([]string(nil), server.Spec.Auth.Scopes...)
+			sort.Strings(resourceScopes[audience])
+		}
 	}
 	sort.Strings(resources)
 
@@ -109,6 +115,15 @@ func (r *MCPServerReconciler) reconcileBundledOAuthResources(ctx context.Context
 		envs = filtered
 	}
 	upsertEnv("MCP_AUTH_RESOURCES", strings.Join(resources, ","))
+	if len(resourceScopes) == 0 {
+		removeEnv("MCP_AUTH_RESOURCE_SCOPES")
+	} else {
+		encoded, err := json.Marshal(resourceScopes)
+		if err != nil {
+			return err
+		}
+		upsertEnv("MCP_AUTH_RESOURCE_SCOPES", string(encoded))
+	}
 	if len(resources) == 0 {
 		removeEnv("MCP_AUTH_RESOURCE")
 	} else {
