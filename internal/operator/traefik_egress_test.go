@@ -9,10 +9,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -321,5 +323,92 @@ func TestRequestsForTraefikEgressPolicy(t *testing.T) {
 	}
 	if got := r.requestsForTraefikEgressPolicy(ctx, traefikDefaultDeny("mcp-servers")); len(got) != 0 {
 		t.Fatalf("unrelated namespace policy must not enqueue servers, got %v", got)
+	}
+}
+
+func traefikPod(namespace string, labels map[string]string) *corev1.Pod {
+	return &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "traefik-0", Namespace: namespace, Labels: labels}}
+}
+
+func traefikEgressCondition(t *testing.T, c client.Client, server *mcpv1alpha1.MCPServer) *metav1.Condition {
+	t.Helper()
+	latest := &mcpv1alpha1.MCPServer{}
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(server), latest); err != nil {
+		t.Fatal(err)
+	}
+	return meta.FindStatusCondition(latest.Status.Conditions, TraefikEgressReadyCondition)
+}
+
+func drainEvents(recorder *events.FakeRecorder) []string {
+	var got []string
+	for {
+		select {
+		case event := <-recorder.Events:
+			got = append(got, event)
+		default:
+			return got
+		}
+	}
+}
+
+// When the operator is pointed at the wrong Traefik namespace (for example
+// the default traefik on k3s, where Traefik runs in kube-system), it must not
+// silently skip: the server reports TraefikEgressReady=False and a Warning.
+func TestTraefikEgressWarnsWhenTraefikPodsNotFound(t *testing.T) {
+	ctx := context.Background()
+	server := egressTestServer(8101)
+	c := fake.NewClientBuilder().WithScheme(traefikEgressScheme(t)).WithStatusSubresource(server).
+		WithObjects(server, traefikPod("kube-system", map[string]string{"app": "traefik"})).Build()
+	recorder := events.NewFakeRecorder(10)
+	r := &MCPServerReconciler{Client: c, Scheme: c.Scheme(), Recorder: recorder}
+
+	for i := 0; i < 2; i++ {
+		if err := r.reconcileTraefikEgress(ctx, server); err != nil {
+			t.Fatal(err)
+		}
+	}
+	condition := traefikEgressCondition(t, c, server)
+	if condition == nil || condition.Status != metav1.ConditionFalse || condition.Reason != traefikEgressReasonPodsNotFound {
+		t.Fatalf("condition = %+v, want TraefikEgressReady=False/TraefikPodsNotFound", condition)
+	}
+	if !strings.Contains(condition.Message, "namespace traefik") || !strings.Contains(condition.Message, "PLATFORM_TRAEFIK_NAMESPACE") {
+		t.Fatalf("condition message lacks namespace or remedy: %q", condition.Message)
+	}
+	got := drainEvents(recorder)
+	if len(got) != 1 || !strings.HasPrefix(got[0], "Warning TraefikPodsNotFound") {
+		t.Fatalf("events = %v, want one Warning TraefikPodsNotFound (not repeated)", got)
+	}
+}
+
+func TestTraefikEgressConditionReportsAppliedAndUnrestricted(t *testing.T) {
+	ctx := context.Background()
+	server := egressTestServer(8101)
+	deny := traefikDefaultDeny("traefik")
+	c := fake.NewClientBuilder().WithScheme(traefikEgressScheme(t)).WithStatusSubresource(server).
+		WithObjects(server, deny, traefikPod("traefik", map[string]string{"app": "traefik"})).Build()
+	recorder := events.NewFakeRecorder(10)
+	r := &MCPServerReconciler{Client: c, Scheme: c.Scheme(), Recorder: recorder}
+
+	if err := r.reconcileTraefikEgress(ctx, server); err != nil {
+		t.Fatal(err)
+	}
+	if condition := traefikEgressCondition(t, c, server); condition == nil || condition.Status != metav1.ConditionTrue || condition.Reason != traefikEgressReasonPolicyApplied {
+		t.Fatalf("condition = %+v, want True/PolicyApplied", condition)
+	}
+
+	if err := c.Delete(ctx, deny); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.reconcileTraefikEgress(ctx, server); err != nil {
+		t.Fatal(err)
+	}
+	if condition := traefikEgressCondition(t, c, server); condition == nil || condition.Status != metav1.ConditionTrue || condition.Reason != traefikEgressReasonUnrestricted {
+		t.Fatalf("condition = %+v, want True/EgressUnrestricted", condition)
+	}
+	if _, ok := getEgressPolicy(t, c, "traefik", server); ok {
+		t.Fatal("policy must be removed once Traefik egress is unrestricted")
+	}
+	if got := drainEvents(recorder); len(got) != 0 {
+		t.Fatalf("healthy states must not emit warnings, got %v", got)
 	}
 }

@@ -46,6 +46,18 @@ func TestTraefikStaticEgressCoversOnlyPlatformNamespaces(t *testing.T) {
 	}
 }
 
+// The static policies ship with the repo-managed Traefik, which setup installs
+// only into the traefik namespace. An external Traefik (k3s kube-system) gets
+// no static egress restriction, so the operator leaves its egress unrestricted
+// instead of adding a per-server policy that would isolate it.
+func TestTraefikStaticPoliciesTargetRepoManagedNamespace(t *testing.T) {
+	for name, policy := range loadTraefikNetworkPolicies(t) {
+		if policy.Metadata.Namespace != "traefik" {
+			t.Fatalf("policy %s targets namespace %q, want the repo-managed traefik namespace", name, policy.Metadata.Namespace)
+		}
+	}
+}
+
 func loadTraefikNetworkPolicies(t *testing.T) map[string]networkPolicyDoc {
 	t.Helper()
 

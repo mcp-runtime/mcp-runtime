@@ -67,6 +67,16 @@ was down. The operator creates the policy only when another NetworkPolicy
 already restricts Traefik egress; adding an egress policy to an unrestricted
 Traefik (such as k3s Traefik in `kube-system`) would isolate it.
 
+Setup always passes the live Traefik identity (`MCP_INGRESS_CONTROLLER_*`) to
+the operator, resolved the same way as `PLATFORM_TRAEFIK_NAMESPACE`: the
+explicit env value, otherwise the active `traefik` Deployment (`traefik`
+before `kube-system`). Each server reports a `TraefikEgressReady` condition
+with reason `PolicyApplied`, `EgressUnrestricted`, or `NotTraefikIngress`.
+When no pod matching the Traefik labels exists in the configured namespace,
+the condition is `False` with reason `TraefikPodsNotFound`, the operator emits
+a Warning event, and `mcp-runtime cluster doctor` fails the
+`MCPServer Traefik egress` check.
+
 ## Defaults
 
 Default values are intentionally centralized in `api/v1alpha1` so the admission

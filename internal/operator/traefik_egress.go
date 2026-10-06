@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -45,7 +46,18 @@ const (
 	labelServerNamespace        = "mcpruntime.org/server-namespace"
 	traefikEgressPolicyPrefix   = "mcp-egress-"
 	traefikEgressNameHashLength = 8
+
+	// TraefikEgressReadyCondition reports whether Traefik can reach the
+	// server through the managed egress policy (or needs none).
+	TraefikEgressReadyCondition      = "TraefikEgressReady"
+	traefikEgressReasonPolicyApplied = "PolicyApplied"
+	traefikEgressReasonUnrestricted  = "EgressUnrestricted"
+	traefikEgressReasonNotApplicable = "NotTraefikIngress"
+	traefikEgressReasonPodsNotFound  = "TraefikPodsNotFound"
 )
+
+// Warning events use the events.k8s.io API (controller-runtime GetEventRecorder).
+//+kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch;update
 
 func traefikEgressPolicyName(namespace, name string) string {
 	sum := sha256.Sum256([]byte(namespace + "/" + name))
@@ -76,10 +88,30 @@ func routesThroughTraefik(mcpServer *mcpv1alpha1.MCPServer) bool {
 // reconcileTraefikEgress keeps the per-server egress policy aligned with the
 // ports the server's Service can route to. Run it after reconcileService so a
 // promoted port transition drops the retired port in the same pass.
+//
+// It also records the TraefikEgressReady condition. When no Traefik pods match
+// the configured identity, routing cannot be verified (typically the operator
+// was not told the real Traefik namespace), so the condition turns False and a
+// Warning event is emitted instead of silently skipping the policy.
 func (r *MCPServerReconciler) reconcileTraefikEgress(ctx context.Context, mcpServer *mcpv1alpha1.MCPServer) error {
-	traefikNamespace := r.ingressControllerNamespace()
+	key := types.NamespacedName{Namespace: mcpServer.Namespace, Name: mcpServer.Name}
 	if !routesThroughTraefik(mcpServer) {
-		return r.deleteTraefikEgressPolicy(ctx, types.NamespacedName{Namespace: mcpServer.Namespace, Name: mcpServer.Name})
+		r.setTraefikEgressCondition(ctx, mcpServer, true, traefikEgressReasonNotApplicable,
+			fmt.Sprintf("ingress class %q does not route through Traefik", mcpServer.Spec.IngressClass))
+		return r.deleteTraefikEgressPolicy(ctx, key)
+	}
+	traefikNamespace := r.ingressControllerNamespace()
+	podLabels := r.ingressControllerPodLabels()
+	podsFound, err := r.traefikPodsPresent(ctx, traefikNamespace)
+	if err != nil {
+		return err
+	}
+	if !podsFound {
+		r.setTraefikEgressCondition(ctx, mcpServer, false, traefikEgressReasonPodsNotFound, fmt.Sprintf(
+			"no Traefik pods match %s in namespace %s, so Traefik egress to this server cannot be managed or verified; "+
+				"rerun setup so it passes the live Traefik identity (PLATFORM_TRAEFIK_NAMESPACE), or set MCP_INGRESS_CONTROLLER_NAMESPACE "+
+				"and MCP_INGRESS_CONTROLLER_POD_LABELS on the operator",
+			labels.SelectorFromSet(podLabels).String(), traefikNamespace))
 	}
 	restricted, err := r.traefikEgressRestricted(ctx, traefikNamespace)
 	if err != nil {
@@ -89,7 +121,11 @@ func (r *MCPServerReconciler) reconcileTraefikEgress(ctx context.Context, mcpSer
 		// Traefik egress is unrestricted (for example k3s Traefik without the
 		// bundled default-deny). A new egress policy would isolate those pods
 		// and cut every other backend, so leave egress alone.
-		return r.deleteTraefikEgressPolicy(ctx, types.NamespacedName{Namespace: mcpServer.Namespace, Name: mcpServer.Name})
+		if podsFound {
+			r.setTraefikEgressCondition(ctx, mcpServer, true, traefikEgressReasonUnrestricted,
+				fmt.Sprintf("Traefik egress in namespace %s is not restricted by a NetworkPolicy; no per-server rule is needed", traefikNamespace))
+		}
+		return r.deleteTraefikEgressPolicy(ctx, key)
 	}
 	ports, err := r.traefikEgressPorts(ctx, mcpServer)
 	if err != nil {
@@ -109,7 +145,7 @@ func (r *MCPServerReconciler) reconcileTraefikEgress(ctx context.Context, mcpSer
 			policyPorts = append(policyPorts, networkingv1.NetworkPolicyPort{Protocol: &tcp, Port: &target})
 		}
 		policy.Spec = networkingv1.NetworkPolicySpec{
-			PodSelector: metav1.LabelSelector{MatchLabels: r.ingressControllerPodLabels()},
+			PodSelector: metav1.LabelSelector{MatchLabels: podLabels},
 			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeEgress},
 			Egress: []networkingv1.NetworkPolicyEgressRule{{
 				To: []networkingv1.NetworkPolicyPeer{{
@@ -125,18 +161,68 @@ func (r *MCPServerReconciler) reconcileTraefikEgress(ctx context.Context, mcpSer
 		}
 		return nil
 	})
-	if apierrors.IsNotFound(err) {
-		// The ingress controller namespace disappeared between the check and
-		// the write; nothing routes through it.
-		return nil
-	}
 	if err != nil {
 		return err
 	}
 	if op != controllerutil.OperationResultNone {
 		log.FromContext(ctx).Info("Traefik egress NetworkPolicy reconciled", "operation", op, "name", policy.Name, "namespace", policy.Namespace, "ports", ports)
 	}
+	if podsFound {
+		r.setTraefikEgressCondition(ctx, mcpServer, true, traefikEgressReasonPolicyApplied,
+			fmt.Sprintf("NetworkPolicy %s/%s allows Traefik egress on TCP %v", policy.Namespace, policy.Name, ports))
+	}
 	return nil
+}
+
+// traefikPodsPresent reports whether any pod in the ingress controller
+// namespace matches the configured Traefik pod labels. Pods are read
+// uncached: the operator may list but not watch pods.
+func (r *MCPServerReconciler) traefikPodsPresent(ctx context.Context, traefikNamespace string) (bool, error) {
+	reader := r.APIReader
+	if reader == nil {
+		reader = r.Client
+	}
+	var pods corev1.PodList
+	if err := reader.List(ctx, &pods, client.InNamespace(traefikNamespace), client.MatchingLabels(r.ingressControllerPodLabels()), client.Limit(1)); err != nil {
+		return false, err
+	}
+	return len(pods.Items) > 0, nil
+}
+
+// setTraefikEgressCondition writes the TraefikEgressReady condition when it
+// changes and emits a Warning event when it turns False. Failures are logged,
+// not returned: the condition is diagnostic and must not block routing.
+func (r *MCPServerReconciler) setTraefikEgressCondition(ctx context.Context, mcpServer *mcpv1alpha1.MCPServer, ready bool, reason, message string) {
+	logger := log.FromContext(ctx)
+	status := metav1.ConditionFalse
+	if ready {
+		status = metav1.ConditionTrue
+	}
+	latest := &mcpv1alpha1.MCPServer{}
+	if err := r.Get(ctx, types.NamespacedName{Namespace: mcpServer.Namespace, Name: mcpServer.Name}, latest); err != nil {
+		logger.V(1).Info("Skipping TraefikEgressReady condition update", "error", err.Error())
+		return
+	}
+	existing := meta.FindStatusCondition(latest.Status.Conditions, TraefikEgressReadyCondition)
+	if existing != nil && existing.Status == status && existing.Reason == reason && existing.Message == message && existing.ObservedGeneration == latest.Generation {
+		return
+	}
+	if !ready {
+		logger.Info("Traefik egress cannot be managed", "reason", reason, "message", message)
+		if r.Recorder != nil && (existing == nil || existing.Status != status || existing.Reason != reason) {
+			r.Recorder.Eventf(latest, nil, corev1.EventTypeWarning, reason, "ReconcileTraefikEgress", "%s", message)
+		}
+	}
+	meta.SetStatusCondition(&latest.Status.Conditions, metav1.Condition{
+		Type:               TraefikEgressReadyCondition,
+		Status:             status,
+		Reason:             reason,
+		Message:            message,
+		ObservedGeneration: latest.Generation,
+	})
+	if err := r.Status().Update(ctx, latest); err != nil {
+		logger.V(1).Info("TraefikEgressReady condition update failed; retrying on next reconcile", "error", err.Error())
+	}
 }
 
 // traefikEgressPorts returns the desired serving port plus the port the

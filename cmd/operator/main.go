@@ -88,6 +88,7 @@ func main() {
 		IngressControllerNamespace:       strings.TrimSpace(os.Getenv("MCP_INGRESS_CONTROLLER_NAMESPACE")),
 		IngressControllerServiceAccount:  strings.TrimSpace(os.Getenv("MCP_INGRESS_CONTROLLER_SERVICE_ACCOUNT")),
 		IngressControllerPodLabels:       ingressControllerPodLabels,
+		Recorder:                         mgr.GetEventRecorder("mcp-runtime-operator"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MCPServer")
 		os.Exit(1)
