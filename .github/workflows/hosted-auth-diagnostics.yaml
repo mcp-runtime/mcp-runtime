@@ -122,7 +122,18 @@ jobs:
           ./bin/mcp-runtime server build image "$qa_name" --metadata-dir "$qa_dir" --dockerfile examples/oauth-example-go-2025-11-25/Dockerfile --context examples/oauth-example-go-2025-11-25 --tag "$qa_tag"
           image_ref="$(awk '$1=="image:"{i=$2} $1=="imageTag:"{t=$2} END{if(i==""||t=="")exit 1; print i ":" t}' "$qa_dir/servers.yaml")"
           ./bin/mcp-runtime server push --scope tenant --image "$image_ref"
-          ./bin/mcp-runtime server deploy "$qa_name" --scope tenant --team ait --metadata-dir "$qa_dir"
+          if ! ./bin/mcp-runtime server deploy "$qa_name" --scope tenant --team ait --metadata-dir "$qa_dir"; then
+            echo 'CLI deployment failed; collecting read-only resource status before cleanup'
+            kubectl -n mcp-team-ait get mcpserver "$qa_name" -o json \
+              | jq -c '{name:.metadata.name,image:.spec.image,phase:.status.phase,conditions:.status.conditions,message:.status.message}' || true
+            kubectl -n mcp-team-ait get pods -o json \
+              | jq -c --arg name "$qa_name" '[.items[] | select(.metadata.name | startswith($name)) | {name:.metadata.name,phase:.status.phase,containers:[.status.containerStatuses[]? | {name,ready,state}]}]' || true
+            kubectl -n mcp-team-ait get events -o json \
+              | jq -c --arg name "$qa_name" '[.items[] | select((.involvedObject.name // "") | contains($name)) | {time:(.lastTimestamp // .eventTime),object:.involvedObject.name,reason,message}] | .[-30:]' || true
+            kubectl -n mcp-runtime logs deployment/mcp-runtime-operator-controller-manager --since=10m --all-containers=true \
+              | grep -F "$qa_name" | tail -40 || true
+            exit 1
+          fi
           ready=false
           for attempt in $(seq 1 60); do
             phase="$(kubectl -n mcp-team-ait get mcpserver "$qa_name" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
