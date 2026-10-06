@@ -34,6 +34,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Fixed
 
+- Access control tables use consistent column widths, wrap long subject identifiers within their cells, and keep status actions usable without squeezing grant and server names ([#606](https://github.com/mcp-runtime/mcp-runtime/issues/606)).
 - Team account creation preserves validation and conflict messages, creates accounts and memberships atomically, and offers an existing-user membership form without changing their password. Duplicate emails no longer expose database errors; temporary passwords require at least eight characters ([#605](https://github.com/mcp-runtime/mcp-runtime/issues/605)).
 
 - `mcp-runtime cluster doctor` reports the underlying kubectl/API error and stops dependent checks when the cluster cannot be queried ([#591](https://github.com/mcp-runtime/mcp-runtime/issues/591)).
