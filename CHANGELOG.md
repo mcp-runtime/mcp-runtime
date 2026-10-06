@@ -7,24 +7,22 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
-### Security
+## [0.6.0] - 2026-10-06
 
-- Add opt-in native Distribution authentication with `registry enable-auth`: repository-scoped five-minute tokens, namespace-bound read-only node credentials, trusted publication helpers, legacy copied-admin-key rotation with resumable recovery, and ClusterIP-only exposure. Activation requires updated API images and an external/public platform-api bootstrap image ([#531](https://github.com/mcp-runtime/mcp-runtime/issues/531)).
-
-### Fixed
-
-- Port-transition promotion reads candidate pods directly from the API instead of starting a Pod informer the operator RBAC cannot watch, so promotion no longer acts on a stale pod view ([#617](https://github.com/mcp-runtime/mcp-runtime/issues/617)).
-- MCPServer port-changing rollouts retain the existing Service route until a Ready candidate declares the new listener, use a zero-unavailable rollout during the transition, and select only compatible pods after switching. Gateway network policies resolve the named listener per pod so retained ports stay reachable. Readiness requires current Deployment replicas and ready EndpointSlices on the requested port ([#533](https://github.com/mcp-runtime/mcp-runtime/issues/533)).
+This release removes the "Sentinel" name, renames `mcp-runtime sentinel` to
+`mcp-runtime ops`, makes `mcp-runtime status` an authenticated platform API
+check, adds opt-in native registry authentication, and fixes team account
+creation, access tables, image uploads, and port-changing rollouts. Several
+changes are breaking. There is no in-place upgrade from 0.5.x: back up,
+run a fresh `mcp-runtime setup`, restore required data, and verify; see
+**Upgrading from 0.5.x** below.
 
 ### Changed
 
 - **Breaking:** the "Sentinel" name is removed from the product. `setup --without-sentinel` and `MCP_WITHOUT_SENTINEL` become `--without-platform-stack` and `MCP_WITHOUT_PLATFORM_STACK`, and the hidden `--without-analytics` alias is gone. The operator and CLI read only `MCP_ANALYTICS_INGEST_URL` (`MCP_SENTINEL_INGEST_URL` is no longer read). The Traefik middleware guarding `/grafana` is renamed `platform-admin-auth`. `pkg/sentinel` becomes `pkg/platformstack`, `cluster doctor` checks are named "platform …", and the UI is titled "MCP Runtime Control Plane". The operator no longer rewrites analytics or OTLP URLs that point at the removed combined namespace, and setup no longer guards against it. Apply with a fresh setup on the reference platform; setup writes the new env var and middleware name.
 - `mcp-runtime status` makes one authenticated platform API readiness check with a five-second timeout and returns a failure exit code for missing or rejected credentials and unavailable APIs. Workload and server inventories remain available through `cluster status`, `ops status`, and `server list`. QA checks status using its isolated saved login after authentication.
-
 - Release development follows a pre-customer policy: breaking changes may use a backed-up fresh setup and tested recovery of the hosted reference platform, without legacy compatibility layers or general upgrade infrastructure. Release instructions must cover required data, identity-provider backups, recovery, and verification; customer migration commitments will be defined when the first external customer is onboarded.
-
 - Documentation sections use descriptive names and start with audience and reading-path overviews. Getting Started separates hosted, self-hosted, and contributor paths; Server and Client Guides connects publishing, access, and client setup. Deployment and Operations groups installation, the public reference, and maintenance. Development and Testing and Implementation Details use shorter grouped menus. The home page consolidates repeated guide lists; existing page URLs and heading anchors remain available. Platform Installation owns reusable setup and enterprise certificate instructions, with Cluster Provisioning handing off once infrastructure is ready.
-
 - Deployment documentation uses distribution-neutral names: `reference-deployment.md` covers Runtime and its external identity provider, while `cluster-provisioning.md` describes the reference cluster with K3s as the worked distribution choice. Navigation, indexes, and operational links follow the new names; published URLs redirect and existing section anchors remain available. The reference guide separates configuration, installation and updates, identity-provider setup, backups and recovery, and verification, and clarifies that Keycloak DNS and backups belong to its separate VM.
 
 ### Removed
@@ -34,16 +32,41 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Fixed
 
+- Registry image pushes can extend upload deadlines through request logging and metrics middleware, allowing uploads beyond the server's default timeout; unsupported deadline extensions are logged ([#615](https://github.com/mcp-runtime/mcp-runtime/issues/615)).
+- Port-transition promotion reads candidate pods directly from the API instead of starting a Pod informer the operator RBAC cannot watch, so promotion no longer acts on a stale pod view ([#617](https://github.com/mcp-runtime/mcp-runtime/issues/617)).
+- MCPServer port-changing rollouts retain the existing Service route until a Ready candidate declares the new listener, use a zero-unavailable rollout during the transition, and select only compatible pods after switching. Gateway network policies resolve the named listener per pod so retained ports stay reachable. Readiness requires current Deployment replicas and ready EndpointSlices on the requested port ([#533](https://github.com/mcp-runtime/mcp-runtime/issues/533)). The bundled Traefik egress policy still permits only its configured backend ports; allow a custom listener there before rolling it out ([#618](https://github.com/mcp-runtime/mcp-runtime/issues/618)).
 - Access control tables use consistent column widths, wrap long subject identifiers within their cells, and keep status actions usable without squeezing grant and server names ([#606](https://github.com/mcp-runtime/mcp-runtime/issues/606)).
 - Team account creation preserves validation and conflict messages, creates accounts and memberships atomically, and offers an existing-user membership form without changing their password. Duplicate emails no longer expose database errors; temporary passwords require at least eight characters ([#605](https://github.com/mcp-runtime/mcp-runtime/issues/605)).
-
 - `mcp-runtime cluster doctor` reports the underlying kubectl/API error and stops dependent checks when the cluster cannot be queried ([#591](https://github.com/mcp-runtime/mcp-runtime/issues/591)).
 - Gateway-enabled OAuth apps receive the derived issuer and public resource audience, and the TypeScript example listens on the reconciled upstream path while retaining bearer validation. Apps that validate tokens themselves now need network access to the issuer's JWKS endpoint even when the gateway is enabled; the Go example exits at startup if it cannot reach it ([#532](https://github.com/mcp-runtime/mcp-runtime/issues/532)).
 
 ### Security
 
+- Add opt-in native Distribution authentication with `registry enable-auth`: repository-scoped five-minute tokens, namespace-bound read-only node credentials, trusted publication helpers, legacy copied-admin-key rotation with resumable recovery, and ClusterIP-only exposure. Activation requires updated API images and an external/public platform-api bootstrap image ([#531](https://github.com/mcp-runtime/mcp-runtime/issues/531)).
 - Fresh cert-manager installs use v1.21.2 instead of the retired v1.16.2; TLS doctor checks flag unsupported Kubernetes/version pairs and inconsistent controller/webhook/cainjector versions. Existing installations remain unchanged and require staged minor upgrades with certificate/Secret backups ([#534](https://github.com/mcp-runtime/mcp-runtime/issues/534)).
-- HTTPS registry overlays no longer expose the unauthenticated backend through NodePort 32000. Before upgrading, migrate any node mirrors using that port to the supported HTTPS pull endpoint and verify CA trust and fresh pulls. HTTP lab overlays retain their NodePort. Internal repository-scoped authentication remains pending ([#531](https://github.com/mcp-runtime/mcp-runtime/issues/531)).
+- HTTPS registry overlays no longer expose the unauthenticated backend through NodePort 32000. Before upgrading, migrate any node mirrors using that port to the supported HTTPS pull endpoint and verify CA trust and fresh pulls. HTTP lab overlays retain their NodePort. Native authentication is available through `registry enable-auth` ([#531](https://github.com/mcp-runtime/mcp-runtime/issues/531)).
+
+### Upgrading from 0.5.x
+
+Follow the release deployment model (backup → fresh setup → restore → verify):
+
+1. Back up the platform Postgres database, registry images, required Secrets
+   and certificates, and the separately hosted identity provider's realm data
+   and TLS state.
+2. Update automation and runbooks: `mcp-runtime sentinel` → `mcp-runtime ops`;
+   `setup --without-sentinel` / `MCP_WITHOUT_SENTINEL` →
+   `--without-platform-stack` / `MCP_WITHOUT_PLATFORM_STACK`;
+   `MCP_SENTINEL_INGEST_URL` → `MCP_ANALYTICS_INGEST_URL`; Traefik references to
+   `sentinel-admin-auth@file` → `platform-admin-auth@file`. Run
+   `mcp-runtime auth login` before `mcp-runtime status`, which now needs a
+   saved login.
+3. Move any node registry mirror that used NodePort 32000 on an HTTPS install to
+   the registry ingress host. Make sure OAuth apps behind the gateway can reach
+   their issuer's JWKS endpoint.
+4. Run a fresh `mcp-runtime setup` from this release, restore the backed-up
+   data, then verify login, image push and pull, server deployment, agent
+   enrollment, grants and sessions, allowed and denied tool calls, and
+   audit/observability.
 
 ## [0.5.2] - 2026-10-05
 
@@ -151,7 +174,8 @@ upgrade from 0.4.x; see the migration note under **Changed**.
 
 - Targeted platform updates through `mcp-runtime update`, including embedded CRD updates and `--build` to build/push missing component images before rollout ([#491](https://github.com/mcp-runtime/mcp-runtime/pull/491)).
 
-[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.4.1...v0.5.0
