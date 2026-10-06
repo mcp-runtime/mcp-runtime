@@ -553,7 +553,6 @@ but never stores the client secret. The relevant fields are:
     "client_secret_env": "KEYCLOAK_CLIENT_SECRET",
     "exchange_client_id": "mcp-auth",
     "scopes": ["openid", "profile", "email"],
-    "mcp_scopes": ["tools:read"],
     "identity_claims": ["preferred_username"],
     "token_endpoint_auth_method": "client_secret_post",
     "allowed_upstream_callback_uris": [

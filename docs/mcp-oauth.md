@@ -40,9 +40,12 @@ auth:
 The operator publishes this scope list to the bundled authorization server
 for that exact resource. MCP Auth rejects requests for scopes outside the
 resource list and advertises the list in protected-resource metadata. The
-Runtime gateway still checks token scope and per-call policy when a tool is
+Runtime gateway also advertises the server's scopes in its public resource
+metadata and checks token scope and per-call policy when a tool is
 invoked. For existing servers without `auth.scopes`, MCP Auth uses its legacy
-default scopes; set `auth.scopes` for an explicit policy.
+default scopes; set `auth.scopes` for an explicit policy. An existing
+connector's `mcp_scopes` remains a fallback for servers without `auth.scopes`;
+retain it until those servers declare scopes in their manifests.
 
 ## Responsibility boundary
 
@@ -168,7 +171,6 @@ export KEYCLOAK_CLIENT_SECRET="$(tr -d '\n' < /secure/keycloak-client-secret)"
     "client_secret_env": "KEYCLOAK_CLIENT_SECRET",
     "exchange_client_id": "mcp-auth",
     "scopes": ["openid", "profile", "email"],
-    "mcp_scopes": ["tools:read"],
     "identity_claims": ["preferred_username"],
     "token_endpoint_auth_method": "client_secret_post",
     "allowed_upstream_callback_uris": [
@@ -367,7 +369,6 @@ and callback settings from that provider's console:
     "client_secret_env": "OIDC_CLIENT_SECRET",
     "exchange_client_id": "mcp-auth",
     "scopes": ["openid", "profile", "email"],
-    "mcp_scopes": ["tools:read"],
     "identity_claims": ["sub", "email"],
     "token_endpoint_auth_method": "client_secret_post",
     "allowed_upstream_callback_uris": [
