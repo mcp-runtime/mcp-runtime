@@ -1,0 +1,14 @@
+Apply the shipped operator ClusterRole and optional MCP Auth binding
+
+Usage:
+  mcp-runtime cluster operator-rbac apply [flags]
+
+Flags:
+      --context string      Explicit Kubernetes context
+      --dry-run             Show changes without writing them
+  -h, --help                help for apply
+      --kubeconfig string   Explicit kubeconfig path
+      --yes                 Apply the changes without an interactive prompt
+
+Global Flags:
+      --debug   Enable debug mode with structured error logging

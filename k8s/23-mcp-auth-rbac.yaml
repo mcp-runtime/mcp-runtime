@@ -1,0 +1,27 @@
+# The operator updates the bundled authorization server's resource and scope
+# environment when MCPServers change. Restrict this cross-namespace write to
+# that one Deployment; managed workload bindings must stay in server namespaces.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mcp-runtime-operator-bundled-auth
+  namespace: mcp-platform
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["mcp-auth-server"]
+    verbs: ["patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mcp-runtime-operator-bundled-auth
+  namespace: mcp-platform
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: mcp-runtime-operator-bundled-auth
+subjects:
+  - kind: ServiceAccount
+    name: mcp-runtime-operator-controller-manager
+    namespace: mcp-runtime

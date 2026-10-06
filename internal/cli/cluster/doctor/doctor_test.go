@@ -2147,7 +2147,8 @@ func TestCheckOperatorClusterRoleRules(t *testing.T) {
 				{"apiGroups":["apps"],"resources":["deployments"],"verbs":["get","list"]},
 				{"apiGroups":["apps"],"resources":["deployments"],"verbs":["watch"]},
 				{"apiGroups":["networking.k8s.io"],"resources":["ingresses"],"verbs":["get"]},
-				{"apiGroups":["networking.k8s.io"],"resources":["ingresses"],"verbs":["list","watch"]}
+				{"apiGroups":["networking.k8s.io"],"resources":["ingresses"],"verbs":["list","watch"]},
+				{"apiGroups":["discovery.k8s.io"],"resources":["endpointslices"],"verbs":["get","list","watch"]}
 			]
 		}`)
 		if !check.OK {
@@ -2169,6 +2170,19 @@ func TestCheckOperatorClusterRoleRules(t *testing.T) {
 			if !strings.Contains(check.Detail, want) {
 				t.Fatalf("detail should mention %q, got %q", want, check.Detail)
 			}
+		}
+	})
+
+	t.Run("reports missing EndpointSlice informer permission", func(t *testing.T) {
+		check := checkOperatorClusterRoleRulesFromJSON(t, `{
+			"rules": [
+				{"apiGroups":[""],"resources":["serviceaccounts","configmaps","services"],"verbs":["get","list","watch"]},
+				{"apiGroups":["apps"],"resources":["deployments"],"verbs":["get","list","watch"]},
+				{"apiGroups":["networking.k8s.io"],"resources":["ingresses"],"verbs":["get","list","watch"]}
+			]
+		}`)
+		if check.OK || !strings.Contains(check.Detail, "endpointslices.discovery.k8s.io") {
+			t.Fatalf("missing EndpointSlice permission went undetected: %+v", check)
 		}
 	})
 

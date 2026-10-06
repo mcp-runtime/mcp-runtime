@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Fixed
+
+- The operator receives a named, namespace-scoped permission to patch the bundled MCP Auth Deployment when server OAuth resources or scopes change. `cluster operator-rbac apply` repairs existing installations without changing images, Secrets, or other workloads. The hosted release workflow runs this repair before updating and checks the effective EndpointSlice, Secret, and MCP Auth permissions. `cluster doctor` now detects missing EndpointSlice informer access.
+
 ## [0.6.2] - 2026-10-06
 
 ### Fixed

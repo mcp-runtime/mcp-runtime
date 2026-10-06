@@ -1,0 +1,15 @@
+Reconcile operator permissions from this release
+
+Usage:
+  mcp-runtime cluster operator-rbac [command]
+
+Available Commands:
+  apply       Apply the shipped operator ClusterRole and optional MCP Auth binding
+
+Flags:
+  -h, --help   help for operator-rbac
+
+Global Flags:
+      --debug   Enable debug mode with structured error logging
+
+Use "mcp-runtime cluster operator-rbac [command] --help" for more information about a command.

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/yaml"
 
@@ -31,6 +32,47 @@ func mcpAuthManifestTemplate(t *testing.T) string {
 		t.Fatalf("read manifest: %v", err)
 	}
 	return string(raw)
+}
+
+func TestMCPAuthOperatorRBACIsLimitedToNamedDeployment(t *testing.T) {
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("cannot resolve test file location")
+	}
+	path := filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "..", "k8s", "23-mcp-auth-rbac.yaml")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoder := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(raw), 4096)
+	var role rbacv1.Role
+	if err := decoder.Decode(&role); err != nil {
+		t.Fatal(err)
+	}
+	if role.Kind != "Role" || role.Namespace != "mcp-platform" || role.Name != "mcp-runtime-operator-bundled-auth" || len(role.Rules) != 1 {
+		t.Fatalf("unexpected bundled Auth Role: %+v", role)
+	}
+	rule := role.Rules[0]
+	if len(rule.APIGroups) != 1 || rule.APIGroups[0] != "apps" ||
+		len(rule.Resources) != 1 || rule.Resources[0] != "deployments" ||
+		len(rule.ResourceNames) != 1 || rule.ResourceNames[0] != "mcp-auth-server" ||
+		len(rule.Verbs) != 1 || rule.Verbs[0] != "patch" {
+		t.Fatalf("bundled Auth Role is broader than the one Deployment patch: %+v", rule)
+	}
+	var binding rbacv1.RoleBinding
+	if err := decoder.Decode(&binding); err != nil {
+		t.Fatal(err)
+	}
+	if binding.Kind != "RoleBinding" || binding.Namespace != role.Namespace || binding.Name != role.Name ||
+		binding.RoleRef.Kind != "Role" || binding.RoleRef.Name != role.Name || len(binding.Subjects) != 1 ||
+		binding.Subjects[0].Kind != "ServiceAccount" || binding.Subjects[0].Name != "mcp-runtime-operator-controller-manager" ||
+		binding.Subjects[0].Namespace != "mcp-runtime" {
+		t.Fatalf("unexpected bundled Auth RoleBinding: %+v", binding)
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		t.Fatalf("unexpected extra RBAC document: %v", err)
+	}
 }
 
 func TestRenderMCPAuthServerManifestTestModeDefaults(t *testing.T) {
