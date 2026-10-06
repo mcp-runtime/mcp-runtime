@@ -466,11 +466,15 @@ but hand-written YAML must state them explicitly.
   set `spec.policy` (for example allow-list + deny) when you want grant/session
   enforcement with the adapter.
 - `spec.analytics`
-  Analytics emission is on by default whenever the gateway is on and the
-  operator has an ingest URL (`MCP_ANALYTICS_INGEST_URL` or
-  `spec.analytics.ingestURL`). Set `spec.analytics.disabled: true` to opt out.
-  Platform API deploys create a namespace-local ingest-key Secret and set
-  `spec.analytics.apiKeySecretRef` automatically when analytics is not disabled.
+  Analytics emission is on by default whenever the gateway is on and an
+  ingest URL is configured. The platform API fills `spec.analytics.ingestURL`
+  from `MCP_SENTINEL_INGEST_URL` when publishing a server; an explicit URL in
+  the server metadata takes precedence. `MCP_ANALYTICS_INGEST_URL` remains a
+  legacy fallback. The operator also accepts its own ingest URL setting.
+  Set `spec.analytics.disabled: true`
+  to opt out. Platform API deploys create a namespace-local ingest-key Secret
+  and set `spec.analytics.apiKeySecretRef` automatically when analytics is not
+  disabled.
 
 `mcp-runtime server deploy` and the platform API (`POST /api/v1/runtime/servers`)
 default the gateway on. Hand-written YAML can omit `gateway` or use
