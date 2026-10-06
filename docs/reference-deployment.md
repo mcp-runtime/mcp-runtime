@@ -804,14 +804,16 @@ Expected: platform and telemetry pods `1/1 Running`, certificate `READY=True`.
 
 The Runtime CLI binaries and hosted platform images are separate artifacts.
 Publishing a stable Runtime release runs `.github/workflows/release.yaml` to
-publish the CLI binaries and `hosted-platform-release-deploy.yaml` to update
-the hosted platform. The deploy workflow waits for the release manifest,
+publish the CLI binaries. An operator then manually starts
+`hosted-platform-release-deploy.yaml` with that published tag to update the
+hosted platform. The deploy workflow waits for the release manifest,
 prints a dry-run plan, builds and rolls changed Runtime images, and leaves
-Secrets, PVCs, and the bundled MCP Auth image in place. MCP Auth follows its
-own release track. The workflow uses GitHub's `production` environment and
+Secrets and PVCs in place. It leaves MCP Auth on its current image unless an
+operator passes `mcp_auth_version` for a manual Auth upgrade. The workflow uses
+GitHub's `production` environment and
 updates the README's live-version badge only after platform health and a
 temporary `qa-audit-*` MCP server pass their post-deploy checks. Publishing a
-prerelease does not trigger the production deploy.
+release never triggers the production deploy automatically.
 
 Verify the user path after rollout:
 
