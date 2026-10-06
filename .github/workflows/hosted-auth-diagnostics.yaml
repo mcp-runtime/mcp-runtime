@@ -1,4 +1,4 @@
-name: Hosted MCP Auth diagnostics
+name: Runtime v0.6.3 CLI production acceptance
 
 on:
   workflow_dispatch:
@@ -6,37 +6,192 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: hosted-platform-production
+  cancel-in-progress: false
+
 jobs:
-  inspect:
+  deploy:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 90
     steps:
-      - name: Inspect Auth rollout from a disposable runner
+      - name: Check out the selected candidate CLI
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: f5fded16fb21dfede1d1d65fe420dc6e97bf4d3e
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Exercise the deployed candidate with the selected CLI
         env:
           SSHPASS: ${{ secrets.MCP_PROD_BOOTSTRAP_PASSWORD }}
+          GH_TOKEN: ${{ github.token }}
+          MCP_IMAGE_PLATFORM: linux/amd64
         shell: bash
         run: |
           set -euo pipefail
           test -n "$SSHPASS"
+          test "$(git rev-parse HEAD)" = f5fded16fb21dfede1d1d65fe420dc6e97bf4d3e
+          test -z "$(git status --porcelain)"
           sudo apt-get update -qq
           sudo apt-get install -y -qq sshpass
+
           known_hosts="$RUNNER_TEMP/platform-known-hosts"
+          kubeconfig="$RUNNER_TEMP/platform-kubeconfig"
+          tunnel_pid=""
+          cleanup() {
+            docker logout registry.mcpruntime.org >/dev/null 2>&1 || true
+            if [[ -n "$tunnel_pid" ]]; then kill "$tunnel_pid" 2>/dev/null || true; fi
+            if [[ -f "$kubeconfig" ]]; then shred -u "$kubeconfig"; fi
+          }
+          trap cleanup EXIT
+
           ssh-keyscan -T 10 -t ed25519 163.61.31.14 > "$known_hosts" 2>/dev/null
           fingerprint="$(ssh-keygen -lf "$known_hosts" -E sha256 | awk '{print $2}')"
           test "$fingerprint" = 'SHA256:uLP3I92NNheo+MIPWs77aU11NCTK5NrZGwUV0l1QgQI'
-          ssh_opts=(-o "UserKnownHostsFile=$known_hosts" -o StrictHostKeyChecking=yes)
-          remote=(sshpass -e ssh "${ssh_opts[@]}" root@163.61.31.14)
-          test "$("${remote[@]}" hostname)" = '1c4mdvegg6'
+          ssh_opts=(-o "UserKnownHostsFile=$known_hosts" -o StrictHostKeyChecking=yes \
+            -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -o TCPKeepAlive=yes)
+          test "$(sshpass -e ssh "${ssh_opts[@]}" root@163.61.31.14 hostname)" = '1c4mdvegg6'
+          sshpass -e scp "${ssh_opts[@]}" root@163.61.31.14:/etc/rancher/k3s/k3s.yaml "$kubeconfig"
+          chmod 600 "$kubeconfig"
+          grep -q 'server: https://127.0.0.1:6443' "$kubeconfig"
+          sed -i 's#server: https://127.0.0.1:6443#server: https://127.0.0.1:16443#' "$kubeconfig"
+          sshpass -e ssh "${ssh_opts[@]}" -o ExitOnForwardFailure=yes \
+            -N -L 127.0.0.1:16443:127.0.0.1:6443 root@163.61.31.14 \
+            > "$RUNNER_TEMP/platform-tunnel.log" 2>&1 &
+          tunnel_pid=$!
+          for attempt in $(seq 1 30); do
+            if timeout 1 bash -c '</dev/tcp/127.0.0.1/16443' 2>/dev/null; then break; fi
+            kill -0 "$tunnel_pid"
+            sleep 1
+          done
+          timeout 1 bash -c '</dev/tcp/127.0.0.1/16443'
 
-          echo 'MCP Auth Deployment'
-          "${remote[@]}" 'kubectl -n mcp-platform get deployment mcp-auth-server -o json' |
-            jq -c '{image: [.spec.template.spec.containers[].image], readyReplicas: (.status.readyReplicas // 0), replicas: (.status.replicas // 0), conditions: [.status.conditions[]? | {type,status,reason,message}]}'
-          echo 'MCP Auth ReplicaSets'
-          "${remote[@]}" 'kubectl -n mcp-platform get replicasets -o json' |
-            jq -c '.items[] | select(.metadata.name | startswith("mcp-auth-server-")) | {name:.metadata.name, image:[.spec.template.spec.containers[].image], desired:(.spec.replicas // 0), ready:(.status.readyReplicas // 0)}'
-          echo 'MCP Auth Pods'
-          "${remote[@]}" 'kubectl -n mcp-platform get pods -o json' |
-            jq -c '.items[] | select(.metadata.name | startswith("mcp-auth-server-")) | {name:.metadata.name, phase:.status.phase, conditions:[.status.conditions[]? | {type,status,reason,message}], containers:[.status.containerStatuses[]? | {name,ready,restartCount,state,lastState}]}'
-          echo 'MCP Auth Pod events'
-          "${remote[@]}" 'kubectl -n mcp-platform get events -o json' |
-            jq -c '.items[] | select(.involvedObject.name | startswith("mcp-auth-server-")) | {time:(.lastTimestamp // .eventTime), object:.involvedObject.name, reason,message}'
+          sshpass -e ssh "${ssh_opts[@]}" root@163.61.31.14 \
+            'kubectl -n mcp-platform get secret mcp-ui-credentials -o jsonpath="{.data.UI_API_KEY}"' \
+            | base64 -d \
+            | docker login registry.mcpruntime.org --username platform-service --password-stdin
+          unset SSHPASS
+
+          export KUBECONFIG="$kubeconfig"
+          make build
+          ./bin/mcp-runtime cluster doctor
+          export MCP_RUNTIME_CONFIG_DIR="$RUNNER_TEMP/qa-profile"
+          mkdir -m 700 "$MCP_RUNTIME_CONFIG_DIR"
+          admin_email="$(kubectl -n mcp-platform get secret mcp-platform-api-credentials -o jsonpath='{.data.PLATFORM_ADMIN_EMAIL}' | base64 -d)"
+          admin_password="$(kubectl -n mcp-platform get secret mcp-platform-api-credentials -o jsonpath='{.data.PLATFORM_ADMIN_PASSWORD}' | base64 -d)"
+          test -n "$admin_email"
+          test -n "$admin_password"
+          ./bin/mcp-runtime auth login --api-url https://platform.mcpruntime.org --email "$admin_email" --password "$admin_password" --profile qa-audit > /dev/null
+          ./bin/mcp-runtime auth status > /dev/null
+          echo 'Production CLI login passed'
+          ./bin/mcp-runtime team list
+
+          # This is the same authenticated analytics route the UI uses.
+          cookie_jar="$RUNNER_TEMP/ui-cookie-jar"
+          curl -fsS -c "$cookie_jar" -H 'content-type: application/json' \
+            --data "$(jq -nc --arg email "$admin_email" --arg password "$admin_password" '{email:$email,password:$password}')" \
+            https://platform.mcpruntime.org/auth/login \
+            | jq -e '.authenticated == true and .principal.role == "admin"' >/dev/null
+          unset admin_email admin_password
+          curl -fsS -b "$cookie_jar" https://platform.mcpruntime.org/auth/status \
+            | jq -e '.authenticated == true' >/dev/null
+
+          qa_name="qa-audit-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          qa_tag="v063-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          qa_dir="$RUNNER_TEMP/qa-server/.mcp"
+          grant_name="$qa_name-grant"
+          agent_id=""
+          created_agent=false
+          adapter_pid=""
+          cleanup_qa() {
+            if [[ -n "$grant_name" ]]; then ./bin/mcp-runtime access grant delete "$grant_name" --namespace mcp-team-ait >/dev/null 2>&1 || true; fi
+            if [[ -n "$qa_name" ]]; then ./bin/mcp-runtime server delete "$qa_name" --namespace mcp-team-ait >/dev/null 2>&1 || true; fi
+            if [[ "$created_agent" == true && -n "$agent_id" ]]; then ./bin/mcp-runtime agent deactivate "$agent_id" >/dev/null 2>&1 || true; fi
+            if [[ -n "$adapter_pid" ]]; then kill "$adapter_pid" 2>/dev/null || true; fi
+          }
+          trap 'cleanup_qa; cleanup' EXIT
+          mkdir -p "$qa_dir"
+          ./bin/mcp-runtime server init "$qa_name" --metadata-dir "$qa_dir" --scope tenant --image "ait/$qa_name" --tag "$qa_tag" --port 8088 --tool aaa-ping --policy-mode observe --default-decision allow --session-required=false --force
+          ./bin/mcp-runtime server validate --metadata-dir "$qa_dir"
+          ./bin/mcp-runtime server build image "$qa_name" --metadata-dir "$qa_dir" --dockerfile examples/oauth-example-go-2025-11-25/Dockerfile --context examples/oauth-example-go-2025-11-25 --tag "$qa_tag"
+          image_ref="$(awk '$1=="image:"{i=$2} $1=="imageTag:"{t=$2} END{if(i==""||t=="")exit 1; print i ":" t}' "$qa_dir/servers.yaml")"
+          ./bin/mcp-runtime server push --scope tenant --image "$image_ref"
+          ./bin/mcp-runtime server deploy "$qa_name" --scope tenant --team ait --metadata-dir "$qa_dir"
+          ready=false
+          for attempt in $(seq 1 60); do
+            phase="$(kubectl -n mcp-team-ait get mcpserver "$qa_name" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+            if [[ "$phase" == Ready ]]; then ready=true; break; fi
+            sleep 5
+          done
+          test "$ready" = true
+          echo "CLI-published server is Ready: $qa_name"
+          agent_id="$(./bin/mcp-runtime agent list ait --status active | awk 'NR==2{print $1}')"
+          if [[ -z "$agent_id" ]]; then
+            agent_output="$(./bin/mcp-runtime agent create ait --name "$qa_name")"
+            agent_id="$(printf '%s' "$agent_output" | sed -n 's/.*(\(agt_[^)]*\)).*/\1/p')"
+            created_agent=true
+          fi
+          test -n "$agent_id"
+          ./bin/mcp-runtime access grant init "$grant_name" --namespace mcp-team-ait --server "$qa_name" --agent-id "$agent_id" --tool aaa-ping --expires-in 1h --output "$RUNNER_TEMP/qa-grant.yaml"
+          ./bin/mcp-runtime access grant apply --file "$RUNNER_TEMP/qa-grant.yaml"
+          ./bin/mcp-runtime adapter proxy --runtime-url "https://mcp.mcpruntime.org/$qa_name/mcp" --server "$qa_name" --agent "$agent_id" --auto-refresh --listen 127.0.0.1:8099 > "$RUNNER_TEMP/adapter.log" 2>&1 &
+          adapter_pid=$!
+          adapter_ready=false
+          for attempt in $(seq 1 30); do
+            if timeout 1 bash -c '</dev/tcp/127.0.0.1/8099' 2>/dev/null; then adapter_ready=true; break; fi
+            kill -0 "$adapter_pid"
+            sleep 1
+          done
+          test "$adapter_ready" = true
+          echo 'CLI grant and adapter started'
+
+          mcp_url=http://127.0.0.1:8099
+          response_headers="$RUNNER_TEMP/adapter-response-headers"
+          response_body="$RUNNER_TEMP/adapter-response-body"
+          init_status="$(curl -sS -D "$response_headers" -o "$response_body" -w '%{http_code}' \
+            -H 'accept: application/json, text/event-stream' -H 'content-type: application/json' \
+            --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"qa-v063","version":"1"}}}' \
+            "$mcp_url")"
+          test "$init_status" = 200
+          session_id="$(awk 'tolower($1)=="mcp-session-id:" {gsub("\\r", "", $2); print $2}' "$response_headers" | tail -1)"
+          session_header=()
+          if [[ -n "$session_id" ]]; then session_header=(-H "mcp-session-id: $session_id"); fi
+          curl -fsS -o /dev/null \
+            -H 'accept: application/json, text/event-stream' -H 'content-type: application/json' \
+            "${session_header[@]}" \
+            --data '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            "$mcp_url"
+          call_status="$(curl -sS -D "$response_headers" -o "$response_body" -w '%{http_code}' \
+            -H 'accept: application/json, text/event-stream' -H 'content-type: application/json' \
+            "${session_header[@]}" \
+            --data '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"aaa-ping","arguments":{}}}' \
+            "$mcp_url")"
+          # The hosted preview can deny tool calls with missing_identity; the
+          # customer guide documents that expected policy result.
+          case "$call_status" in 200|401|403) ;; *) echo "Unexpected tool call HTTP $call_status" >&2; exit 1 ;; esac
+          if [[ "$call_status" != 200 ]]; then
+            grep -Eq 'missing_identity|tool_denied|forbidden' "$response_body"
+          fi
+          echo "Adapter tool call returned HTTP $call_status"
+
+          analytics_found=false
+          for attempt in $(seq 1 30); do
+            curl -fsS -b "$cookie_jar" \
+              "https://platform.mcpruntime.org/api/ui/v1/events?limit=100&server=$qa_name&tool_name=aaa-ping" \
+              > "$RUNNER_TEMP/qa-events.json"
+            if jq -e --arg server "$qa_name" \
+              '[.events[]? | select(.server == $server and .tool_name == "aaa-ping")] | length > 0' \
+              "$RUNNER_TEMP/qa-events.json" >/dev/null; then analytics_found=true; break; fi
+            sleep 5
+          done
+          test "$analytics_found" = true
+          jq -c --arg server "$qa_name" \
+            '.events[] | select(.server == $server and .tool_name == "aaa-ping") | {server,tool_name,decision,timestamp}' \
+            "$RUNNER_TEMP/qa-events.json"
+          echo 'Authenticated UI analytics event passed'
