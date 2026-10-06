@@ -12,7 +12,7 @@ import {
   type RowData,
   type SortingState,
 } from "@tanstack/react-table";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 
 import { IconButton } from "./Button";
 import { Icon } from "./Icon";
@@ -24,6 +24,8 @@ export type MCPColumnMeta = {
   rowHeader?: boolean;
   /** Right-align and tabular-align a numeric column. */
   numeric?: boolean;
+  /** Shared header/body width; opting in uses fixed table layout. */
+  width?: CSSProperties["width"];
 };
 
 // One feature set for every table in the console, so only sorting and
@@ -74,6 +76,8 @@ type DataTableProps<T extends RowData> = {
   selectedKey?: string;
   onRowClick?: (row: T) => void;
   pageSize?: number;
+  /** Keep dense tables readable inside their horizontally scrollable region. */
+  minWidth?: number;
   /** Extra sentence under the pager, e.g. how the window was loaded. */
   pageNote?: string;
   initialSorting?: SortingState;
@@ -94,6 +98,7 @@ export function DataTable<T extends RowData>({
   selectedKey,
   onRowClick,
   pageSize = 25,
+  minWidth,
   pageNote,
   initialSorting = [],
   rowTestId,
@@ -135,8 +140,17 @@ export function DataTable<T extends RowData>({
         tabIndex={0}
         data-testid={`${testId}-scroll`}
       >
-        <table className="data-table" data-testid={testId}>
+        <table
+          className={`data-table${columns.some((column) => column.meta?.width !== undefined) ? " data-table-fixed" : ""}`}
+          style={minWidth === undefined ? undefined : { minWidth }}
+          data-testid={testId}
+        >
           <caption className="visually-hidden">{caption}</caption>
+          <colgroup>
+            {table.getAllLeafColumns().map((column) => (
+              <col key={column.id} style={{ width: column.columnDef.meta?.width }} />
+            ))}
+          </colgroup>
           <thead>
             {table.getHeaderGroups().map((group) => (
               <tr key={group.id}>
@@ -258,6 +272,7 @@ export type SimpleColumn<T extends RowData> = {
   cell: (row: T) => ReactNode;
   rowHeader?: boolean;
   numeric?: boolean;
+  width?: CSSProperties["width"];
   sortValue?: (row: T) => string | number;
 };
 
@@ -272,7 +287,7 @@ export function buildColumns<T extends RowData>(columns: Array<SimpleColumn<T>>)
       header: column.header,
       enableSorting: Boolean(column.sortValue),
       sortFn: "basic",
-      meta: { rowHeader: column.rowHeader, numeric: column.numeric },
+      meta: { rowHeader: column.rowHeader, numeric: column.numeric, width: column.width },
       cell: ({ row }) => column.cell(row.original),
     })
   ) as Array<DataColumn<T>>;

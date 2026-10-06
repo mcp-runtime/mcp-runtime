@@ -217,6 +217,7 @@ export function AccessControlPanel({
         {
           id: "name",
           header: "Grant",
+          width: "16%",
           rowHeader: true,
           sortValue: (grant) => grant.name,
           cell: (grant) => (
@@ -236,30 +237,35 @@ export function AccessControlPanel({
         {
           id: "server",
           header: "Server",
+          width: "16%",
           sortValue: (grant) => grant.serverRef?.name || "",
           cell: (grant) => grant.serverRef?.name || "—",
         },
-        { id: "subject", header: "Subject", cell: (grant) => subjectLabel(grant.subject) },
+        { id: "subject", header: "Subject", width: "24%", cell: (grant) => subjectLabel(grant.subject) },
         {
           id: "trust",
           header: "Trust ceiling",
+          width: "11%",
           sortValue: (grant) => grant.maxTrust || "",
           cell: (grant) => grant.maxTrust || "—",
         },
         {
           id: "effects",
           header: "Side effects",
+          width: "10%",
           cell: (grant) => (grant.allowedSideEffects || []).join(", ") || "—",
         },
         {
           id: "expires",
           header: "Expires",
+          width: "11%",
           sortValue: (grant) => grant.expiresAt || "",
           cell: (grant) => (grant.expiresAt ? formatTimestamp(grant.expiresAt) : "No expiry"),
         },
         {
           id: "status",
           header: "Status",
+          width: "12%",
           sortValue: (grant) => grantStatus(grant).label,
           cell: (grant) => (
             <div className="cell-actions">
@@ -298,6 +304,7 @@ export function AccessControlPanel({
         {
           id: "name",
           header: "Session",
+          width: "20%",
           rowHeader: true,
           sortValue: (session) => session.name,
           cell: (session) => (
@@ -317,19 +324,22 @@ export function AccessControlPanel({
         {
           id: "server",
           header: "Server",
+          width: "16%",
           sortValue: (session) => session.serverRef?.name || "",
           cell: (session) => session.serverRef?.name || "—",
         },
-        { id: "subject", header: "Subject", cell: (session) => subjectLabel(session.subject) },
+        { id: "subject", header: "Subject", width: "22%", cell: (session) => subjectLabel(session.subject) },
         {
           id: "trust",
           header: "Consented trust",
+          width: "14%",
           sortValue: (session) => session.consentedTrust || "",
           cell: (session) => session.consentedTrust || "—",
         },
         {
           id: "expires",
           header: "Expires",
+          width: "14%",
           sortValue: (session) => Date.parse(session.expiresAt || "") || 0,
           cell: (session) => (
             <span title={formatAbsolute(session.expiresAt)}>{expiryText(session)}</span>
@@ -338,6 +348,7 @@ export function AccessControlPanel({
         {
           id: "status",
           header: "Status",
+          width: "14%",
           cell: (session) => {
             const state = sessionState(session);
             return (
@@ -560,6 +571,7 @@ export function AccessControlPanel({
             caption="Access grants with server, subject, trust ceiling, allowed side effects, and status."
             regionLabel="Access grants"
             testId="grants-table"
+            minWidth={1200}
             emptyMessage={
               grants.length === 0 ? "No access grants found." : "No grants match this filter."
             }
@@ -589,6 +601,7 @@ export function AccessControlPanel({
             caption="Agent sessions with server, subject, consented trust, expiry, and status."
             regionLabel="Agent sessions"
             testId="sessions-table"
+            minWidth={1100}
             emptyMessage={
               sessions.length === 0 ? "No agent sessions found." : "No sessions match this filter."
             }
