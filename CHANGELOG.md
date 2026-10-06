@@ -7,6 +7,16 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-06
+
+### Added
+
+- MCP server manifests can set `auth.scopes` per resource. The operator passes those scopes to MCP Auth, while resources without an explicit list retain MCP Auth's read-only default. `mcp-runtime cluster mcp-auth-connector apply` updates the selected identity-provider connector without replacing its credential Secret ([#620](https://github.com/mcp-runtime/mcp-runtime/pull/620)).
+
+### Changed
+
+- The bundled authorization server is MCP Auth 0.4.4. Reference connector configuration no longer carries `mcp_scopes`; move any required write scope into each server's `auth.scopes` before updating the platform ([#620](https://github.com/mcp-runtime/mcp-runtime/pull/620)).
+
 ## [0.6.0] - 2026-10-06
 
 This release removes the "Sentinel" name, renames `mcp-runtime sentinel` to
@@ -174,7 +184,8 @@ upgrade from 0.4.x; see the migration note under **Changed**.
 
 - Targeted platform updates through `mcp-runtime update`, including embedded CRD updates and `--build` to build/push missing component images before rollout ([#491](https://github.com/mcp-runtime/mcp-runtime/pull/491)).
 
-[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.5.0...v0.5.1
