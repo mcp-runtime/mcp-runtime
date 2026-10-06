@@ -16,7 +16,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"mcp-runtime/pkg/k8sclient"
-	"mcp-runtime/pkg/platforminventory"
 )
 
 type nativeAdminRotation struct {
@@ -46,18 +45,6 @@ func planRegistryAdminRotation(ctx context.Context, cs kubernetes.Interface, nam
 		}
 		if err != nil {
 			return plan, fmt.Errorf("read registry credential owner %s/%s: %w", o.namespace, o.name, err)
-		}
-		plan.Secrets = append(plan.Secrets, secret)
-	}
-	// Include the compatibility mirror if it still exists; never resurrect a key
-	// through a later setup run reading that mirror.
-	for _, namespace := range []string{"mcp-platform", "mcp-observability", "mcp-sentinel"} {
-		secret, err := cs.CoreV1().Secrets(namespace).Get(ctx, platforminventory.LegacyCredentialSecret, metav1.GetOptions{})
-		if apierrors.IsNotFound(err) {
-			continue
-		}
-		if err != nil {
-			return plan, err
 		}
 		plan.Secrets = append(plan.Secrets, secret)
 	}
