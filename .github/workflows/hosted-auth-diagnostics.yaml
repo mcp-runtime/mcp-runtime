@@ -56,8 +56,10 @@ jobs:
           known_hosts="$RUNNER_TEMP/platform-known-hosts"
           kubeconfig="$RUNNER_TEMP/platform-kubeconfig"
           tunnel_pid=""
+          telemetry_pids=()
           cleanup() {
             docker logout registry.mcpruntime.org >/dev/null 2>&1 || true
+            for pid in "${telemetry_pids[@]}"; do kill "$pid" 2>/dev/null || true; done
             if [[ -n "$tunnel_pid" ]]; then kill "$tunnel_pid" 2>/dev/null || true; fi
             if [[ -f "$kubeconfig" ]]; then shred -u "$kubeconfig"; fi
           }
@@ -100,6 +102,60 @@ jobs:
               | jq -c '{image:.spec.template.spec.containers[0].image,ingestEnv:[.spec.template.spec.containers[0].env[]? | select(.name == "MCP_SENTINEL_INGEST_URL" or .name == "MCP_ANALYTICS_INGEST_URL") | {name,value}]}'
             kubectl get services -A -o json \
               | jq -c '[.items[] | select(.metadata.name | contains("ingest")) | {namespace:.metadata.namespace,name:.metadata.name,ports:[.spec.ports[] | {name,port,targetPort}]}]'
+            kubectl -n mcp-observability get services prometheus loki tempo grafana -o json \
+              | jq -c '[.items[] | {name:.metadata.name,ports:[.spec.ports[].port]}]'
+            for spec in 'grafana 13000:3000' 'prometheus 19090:9090' 'loki 13100:3100' 'tempo 13200:3200'; do
+              read -r service ports <<< "$spec"
+              kubectl -n mcp-observability port-forward "svc/$service" "$ports" \
+                > "$RUNNER_TEMP/$service-port-forward.log" 2>&1 &
+              telemetry_pids+=("$!")
+            done
+            sleep 3
+            export GRAFANA_USER GRAFANA_PASSWORD
+            GRAFANA_USER="$(kubectl -n mcp-observability get secret mcp-grafana-credentials -o jsonpath='{.data.GRAFANA_ADMIN_USER}' | base64 -d)"
+            GRAFANA_PASSWORD="$(kubectl -n mcp-observability get secret mcp-grafana-credentials -o jsonpath='{.data.GRAFANA_ADMIN_PASSWORD}' | base64 -d)"
+            python3 - <<'PY'
+          import base64
+          import datetime as dt
+          import json
+          import os
+          from urllib.error import HTTPError, URLError
+          from urllib.parse import urlencode
+          from urllib.request import Request, urlopen
+
+          start = int(dt.datetime(2026, 10, 6, 22, 36, tzinfo=dt.timezone.utc).timestamp())
+          end = int(dt.datetime(2026, 10, 6, 22, 45, tzinfo=dt.timezone.utc).timestamp())
+
+          def query(label, url, headers=None):
+              try:
+                  with urlopen(Request(url, headers=headers or {}), timeout=15) as response:
+                      return json.load(response)
+              except (HTTPError, URLError, TimeoutError, ValueError) as error:
+                  print(json.dumps({'source': label, 'error': type(error).__name__, 'http': getattr(error, 'code', None)}))
+                  return None
+
+          credential = base64.b64encode(f"{os.environ['GRAFANA_USER']}:{os.environ['GRAFANA_PASSWORD']}".encode()).decode()
+          grafana = query('grafana', 'http://127.0.0.1:13000/grafana/api/datasources', {'Authorization': f'Basic {credential}'})
+          if isinstance(grafana, list):
+              print(json.dumps({'source': 'grafana', 'datasources': [item.get('name') for item in grafana]}))
+
+          prometheus = query('prometheus', 'http://127.0.0.1:19090/prometheus/api/v1/query?' + urlencode({'query': 'up', 'time': start + 360}))
+          if prometheus:
+              targets = prometheus.get('data', {}).get('result', [])
+              print(json.dumps({'source': 'prometheus', 'window': [start, end], 'targets': len(targets), 'down': [item.get('metric', {}).get('job') for item in targets if item.get('value', [None, None])[1] == '0']}))
+
+          for namespace in ('mcp-runtime', 'mcp-platform', 'mcp-team-ait'):
+              loki = query('loki', 'http://127.0.0.1:13100/loki/api/v1/query_range?' + urlencode({'query': f'{{namespace="{namespace}"}}', 'start': start * 10**9, 'end': end * 10**9, 'limit': 100}))
+              if loki:
+                  streams = loki.get('data', {}).get('result', [])
+                  print(json.dumps({'source': 'loki', 'namespace': namespace, 'window': [start, end], 'streams': len(streams), 'entries': sum(len(item.get('values', [])) for item in streams)}))
+
+          tempo = query('tempo', 'http://127.0.0.1:13200/api/search?' + urlencode({'start': start, 'end': end, 'limit': 20}))
+          if tempo:
+              traces = tempo.get('traces', [])
+              print(json.dumps({'source': 'tempo', 'window': [start, end], 'traces': len(traces)}))
+          PY
+            unset GRAFANA_USER GRAFANA_PASSWORD
             exit 0
           fi
           make build
