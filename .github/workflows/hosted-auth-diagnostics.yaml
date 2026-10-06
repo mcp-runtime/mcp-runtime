@@ -86,14 +86,14 @@ jobs:
 
           export KUBECONFIG="$kubeconfig"
           if [[ "$DIAGNOSTICS_ONLY" == true ]]; then
-            kubectl -n mcp-sentinel get configmap mcp-sentinel-config -o json \
-              | jq -c '{sentinelIngestURL:.data.MCP_SENTINEL_INGEST_URL,legacyIngestURL:.data.MCP_ANALYTICS_INGEST_URL}'
-            kubectl -n mcp-sentinel get deployment mcp-runtime-api -o json \
-              | jq -c '{image:.spec.template.spec.containers[0].image,configMaps:[.spec.template.spec.containers[0].envFrom[]?.configMapRef.name]}'
+            kubectl -n mcp-platform get configmaps -o json \
+              | jq -c '[.items[] | {name:.metadata.name,sentinelIngestURL:.data.MCP_SENTINEL_INGEST_URL,legacyIngestURL:.data.MCP_ANALYTICS_INGEST_URL} | select(.sentinelIngestURL != null or .legacyIngestURL != null)]'
+            kubectl -n mcp-platform get deployments -o json \
+              | jq -c '[.items[] | select(.metadata.name | contains("runtime-api")) | {name:.metadata.name,image:.spec.template.spec.containers[0].image,configMaps:[.spec.template.spec.containers[0].envFrom[]?.configMapRef.name]}]'
             kubectl -n mcp-runtime get deployment mcp-runtime-operator-controller-manager -o json \
               | jq -c '{image:.spec.template.spec.containers[0].image,ingestEnv:[.spec.template.spec.containers[0].env[]? | select(.name == "MCP_SENTINEL_INGEST_URL" or .name == "MCP_ANALYTICS_INGEST_URL") | {name,value}]}'
-            kubectl -n mcp-sentinel get service mcp-sentinel-ingest -o json \
-              | jq -c '{name:.metadata.name,ports:[.spec.ports[] | {name,port,targetPort}]}'
+            kubectl get services -A -o json \
+              | jq -c '[.items[] | select(.metadata.name | contains("ingest")) | {namespace:.metadata.namespace,name:.metadata.name,ports:[.spec.ports[] | {name,port,targetPort}]}]'
             exit 0
           fi
           make build
