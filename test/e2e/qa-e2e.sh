@@ -6703,8 +6703,13 @@ for stream in server_logs.get("data", {}).get("result", []):
     missing = [key for key in ("namespace", "pod", "container", "node", "app") if not stream_labels.get(key)]
     if missing:
         fail(f"loki mcp-servers stream missing labels {missing}: {stream_labels}")
-    if "filename" in stream_labels:
-        fail(f"loki mcp-servers stream came from a path-based fallback job: {stream_labels}")
+    # Promtail labels every file target with its path; it must be the CRI log
+    # file of the pod and container the Kubernetes labels name.
+    filename = stream_labels.get("filename", "")
+    expected_prefix = f"/var/log/pods/{stream_labels['namespace']}_{stream_labels['pod']}_"
+    expected_container = f"/{stream_labels['container']}/"
+    if filename and (not filename.startswith(expected_prefix) or expected_container not in filename):
+        fail(f"loki mcp-servers stream labels do not match its log file: {stream_labels}")
 ok("loki mcp-servers streams carry namespace/pod/container/node/app labels")
 
 rows = [
