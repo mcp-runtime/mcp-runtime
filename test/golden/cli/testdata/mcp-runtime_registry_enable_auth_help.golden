@@ -4,6 +4,7 @@ Usage:
   mcp-runtime registry enable-auth [flags]
 
 Flags:
+      --allow-bundled-broker     Accept a platform-api image served by this registry (new broker pulls then need a running broker)
       --dry-run                  Inspect targets without changing resources or creating credentials
   -h, --help                     help for enable-auth
       --pull-namespace strings   Runtime namespaces to provision (default: all existing managed namespaces)

@@ -21,21 +21,29 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-    # Tenant workload namespaces (mcp-servers*, platform-managed team
-    # namespaces) are intentionally absent: the internal registry has no
-    # registry-native auth, and node image pulls come from the kubelet, not
-    # from tenant pods. Only platform control-plane callers may reach it.
+    # Only Traefik (the authenticated public route) and labeled publication
+    # helpers may reach the backend. Tenant namespaces (mcp-servers*,
+    # platform-managed team namespaces), the operator namespace, and ordinary
+    # platform service pods are intentionally absent (#531). Production-shaped
+    # setups also enable Distribution token authentication on this port.
+    # Kubelet pulls come from the node, not from tenant pods.
     - from:
-        - podSelector: {}
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: registry-push-helper
+        # cluster doctor's in-cluster reachability probe (registry namespace only)
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: registry-probe
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: traefik
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: mcp-platform
-        - namespaceSelector:
+          podSelector:
             matchLabels:
-              kubernetes.io/metadata.name: mcp-runtime
+              app.kubernetes.io/name: registry-push-helper
       ports:
         - protocol: TCP
           port: 5000
@@ -69,3 +77,50 @@ spec:
       ports:
         - protocol: TCP
           port: 5000
+---
+# Native registry authentication runs publication helpers in this namespace.
+# They fetch the image archive from runtime-api and exchange the publisher
+# credential for a short-lived token at the public HTTPS token realm.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: registry-push-helper-egress
+  namespace: registry
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: registry-push-helper
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: mcp-platform
+          podSelector:
+            matchLabels:
+              app: mcp-runtime-api
+      ports:
+        - protocol: TCP
+          port: 8084
+    # The token realm is the public platform host. Inside the cluster it may
+    # resolve to the load balancer address or hairpin to Traefik directly.
+    # The distribution compatibility overlay adds Traefik in kube-system.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: traefik
+          podSelector:
+            matchLabels:
+              app: traefik
+      ports:
+        - protocol: TCP
+          port: 8443
+        - protocol: TCP
+          port: 443
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443

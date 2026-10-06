@@ -27,6 +27,7 @@ import (
 	"mcp-runtime/pkg/k8sclient"
 	"mcp-runtime/pkg/kubeworkload"
 	"mcp-runtime/pkg/publishscope"
+	"mcp-runtime/pkg/registrypush"
 )
 
 const defaultRegistryImage = "registry:2.8.3"
@@ -1084,7 +1085,14 @@ func (m *RegistryManager) PushInCluster(source, target, helperNS string) error {
 		return wrappedErr
 	}
 
-	overrides, err := registryPushHelperOverrides(helperName)
+	publisherSecret := ""
+	if registryNativeAuthActive() {
+		if helperNS != core.NamespaceRegistry {
+			return core.NewWithBase(core.ErrStartHelperPodFailed, fmt.Sprintf("native registry publication helpers must run in the %s namespace", core.NamespaceRegistry))
+		}
+		publisherSecret = registryPublisherSecret
+	}
+	overrides, err := registryPushHelperOverrides(helperName, publisherSecret)
 	if err != nil {
 		wrappedErr := core.WrapWithBase(core.ErrStartHelperPodFailed, err, fmt.Sprintf("failed to build helper pod security overrides: %v", err))
 		core.Error("Failed to build helper pod security overrides")
@@ -1153,8 +1161,12 @@ func (m *RegistryManager) PushInCluster(source, target, helperNS string) error {
 
 	// Push using skopeo from inside cluster (registry is http, so disable tls verify)
 	// #nosec G204 -- command arguments are built from trusted inputs and fixed verbs.
-	if err := m.kubectl.RunWithOutput([]string{"exec", "-n", helperNS, helperName, "--",
-		"skopeo", "copy", "--dest-tls-verify=false", "docker-archive:/tmp/image.tar", "docker://" + pushTarget}, os.Stdout, os.Stderr); err != nil {
+	skopeoArgs := []string{"exec", "-n", helperNS, helperName, "--", "skopeo", "copy", "--dest-tls-verify=false"}
+	if publisherSecret != "" {
+		skopeoArgs = append(skopeoArgs, "--dest-authfile="+registryPublisherAuthFile)
+	}
+	skopeoArgs = append(skopeoArgs, "docker-archive:/tmp/image.tar", "docker://"+pushTarget)
+	if err := m.kubectl.RunWithOutput(skopeoArgs, os.Stdout, os.Stderr); err != nil {
 		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrPushImageFromHelperFailed,
 			err,
@@ -1174,22 +1186,59 @@ func (m *RegistryManager) PushInCluster(source, target, helperNS string) error {
 	return nil
 }
 
-func registryPushHelperOverrides(helperName string) (string, error) {
+// registryPublisherSecret is the trusted publication credential installed by
+// native registry authentication. It exists only in the registry namespace.
+const registryPublisherSecret = "mcp-registry-publisher" // #nosec G101 -- Kubernetes Secret name, not credential material.
+const registryPublisherAuthFile = "/registry-publisher/config.json"
+
+// registryNativeAuthActive reports whether the bundled registry enforces
+// token authentication. Read errors report false: an unauthenticated push to
+// a protected registry is rejected by the registry itself.
+var registryNativeAuthActive = func() bool {
+	clients, err := newRegistryKubernetesClients()
+	if err != nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), registryClientGoProbeTimeout)
+	defer cancel()
+	active, err := NativeAuthActive(ctx, clients.Clientset)
+	return err == nil && active
+}
+
+func registryPushHelperOverrides(helperName string, publisherSecret string) (string, error) {
+	container := map[string]any{
+		"name":            helperName,
+		"image":           core.GetSkopeoImage(),
+		"command":         []string{"sh", "-c", "while true; do sleep 3600; done"},
+		"securityContext": kubeworkload.RestrictedContainerSecurityContext(),
+	}
+	podSecurity := kubeworkload.RestrictedPodSecurityContext()
+	spec := map[string]any{
+		"automountServiceAccountToken": false,
+		"securityContext":              podSecurity,
+	}
+	if publisherSecret != "" {
+		group := int64(1000)
+		podSecurity.FSGroup = &group
+		mode := int32(0440)
+		spec["volumes"] = []map[string]any{{
+			"name": "publisher",
+			"secret": map[string]any{
+				"secretName":  publisherSecret,
+				"defaultMode": mode,
+				"items":       []map[string]any{{"key": ".dockerconfigjson", "path": "config.json"}},
+			},
+		}}
+		container["volumeMounts"] = []map[string]any{{"name": "publisher", "mountPath": "/registry-publisher", "readOnly": true}}
+	}
+	spec["containers"] = []map[string]any{container}
 	overrides := map[string]any{
 		"apiVersion": "v1",
 		"kind":       "Pod",
-		"spec": map[string]any{
-			"automountServiceAccountToken": false,
-			"securityContext":              kubeworkload.RestrictedPodSecurityContext(),
-			"containers": []map[string]any{
-				{
-					"name":            helperName,
-					"image":           core.GetSkopeoImage(),
-					"command":         []string{"sh", "-c", "while true; do sleep 3600; done"},
-					"securityContext": kubeworkload.RestrictedContainerSecurityContext(),
-				},
-			},
+		"metadata": map[string]any{
+			"labels": map[string]string{registrypush.HelperLabelKey: registrypush.HelperLabelValue},
 		},
+		"spec": spec,
 	}
 	b, err := json.Marshal(overrides)
 	if err != nil {

@@ -213,6 +213,9 @@ type SetupDeps struct {
 	// checks. Nil skips the smoke (tests); production defaults fail setup when
 	// nodes, Postgres, platform-api, platform rollouts, or auth probes are bad.
 	RunPostSetupSmoke func() error
+	// EnableNativeRegistryAuth turns on Distribution token authentication for
+	// the bundled registry backend on production-shaped installs (#531).
+	EnableNativeRegistryAuth func(logger *zap.Logger, realm string) error
 }
 
 func (d SetupDeps) withDefaults(logger *zap.Logger) SetupDeps {
@@ -306,6 +309,9 @@ func (d SetupDeps) withDefaults(logger *zap.Logger) SetupDeps {
 	}
 	if d.EnableRegistryIngressAuth == nil {
 		d.EnableRegistryIngressAuth = enableRegistryIngressAuth
+	}
+	if d.EnableNativeRegistryAuth == nil {
+		d.EnableNativeRegistryAuth = enableNativeRegistryAuthClientGo
 	}
 	if d.ConfigureProvisionedRegistryEnv == nil {
 		d.ConfigureProvisionedRegistryEnv = configureProvisionedRegistryEnv

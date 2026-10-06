@@ -693,6 +693,44 @@ func TestCheckRegistryReachableFromCluster(t *testing.T) {
 		if !strings.Contains(overrides, "registry.registry.svc.cluster.local:5000/v2/") {
 			t.Fatalf("registry reachability override missing registry URL: %s", overrides)
 		}
+		if !strings.Contains(overrides, `"app.kubernetes.io/name":"registry-probe"`) {
+			t.Fatalf("registry reachability probe must carry the NetworkPolicy probe label: %s", overrides)
+		}
+	})
+
+	t.Run("ok on native registry token challenge", func(t *testing.T) {
+		mock := &core.MockExecutor{
+			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
+				switch {
+				case len(spec.Args) > 0 && spec.Args[0] == "get" && contains(spec.Args, "pod"):
+					return &core.MockCommand{OutputData: []byte("Succeeded")}
+				case len(spec.Args) > 0 && spec.Args[0] == "logs":
+					return &core.MockCommand{OutputData: []byte("HTTP/1.1 401 Unauthorized\r\nWww-Authenticate: Bearer realm=\"https://platform.example.com/api/v1/registry/token\",service=\"mcp-runtime-registry\"\r\n")}
+				}
+				return &core.MockCommand{}
+			},
+		}
+		check := checkRegistryReachableFromCluster(core.NewTestKubectlClient(mock))
+		if !check.OK || !strings.Contains(check.Detail, "native registry authentication") {
+			t.Fatalf("expected token challenge to pass, got ok=%v detail=%q", check.OK, check.Detail)
+		}
+	})
+
+	t.Run("fails on 401 without token challenge", func(t *testing.T) {
+		mock := &core.MockExecutor{
+			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
+				switch {
+				case len(spec.Args) > 0 && spec.Args[0] == "get" && contains(spec.Args, "pod"):
+					return &core.MockCommand{OutputData: []byte("Succeeded")}
+				case len(spec.Args) > 0 && spec.Args[0] == "logs":
+					return &core.MockCommand{OutputData: []byte("HTTP/1.1 401 Unauthorized\nWww-Authenticate: Basic realm=\"x\"\n")}
+				}
+				return &core.MockCommand{}
+			},
+		}
+		if check := checkRegistryReachableFromCluster(core.NewTestKubectlClient(mock)); check.OK {
+			t.Fatalf("basic-auth 401 must not count as native token enforcement: %q", check.Detail)
+		}
 	})
 
 	t.Run("fails on non-200", func(t *testing.T) {

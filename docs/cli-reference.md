@@ -987,7 +987,9 @@ Secrets, or tenant namespace bindings.
 | Distro-specific cluster prerequisites | [Cluster Requirements](cluster-readiness.md) |
 | Kind, EKS, k3s deployment | [Deployment targets](deployment-targets.md) |
 
-Native backend registry authentication is activated with
+Production-shaped `setup` runs (`--with-tls`, a public platform host, the
+bundled registry, not `--test-mode`) enable native backend registry
+authentication automatically. On an existing install, activate it with
 `mcp-runtime registry enable-auth --realm https://api.example.com/api/v1/registry/token`.
 See [registry authentication](internals/registry-auth.md) for prerequisites,
 read-only node credential rotation, and recovery after a partial activation.
