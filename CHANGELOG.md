@@ -7,9 +7,14 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-10-06
+
 ### Fixed
 
-- The operator receives a named, namespace-scoped permission to patch the bundled MCP Auth Deployment when server OAuth resources or scopes change. `cluster operator-rbac apply` repairs existing installations without changing images, Secrets, or other workloads. The hosted release workflow runs this repair before updating and checks the effective EndpointSlice, Secret, and MCP Auth permissions. `cluster doctor` now detects missing EndpointSlice informer access.
+- The operator receives a named, namespace-scoped permission to patch the bundled MCP Auth Deployment when server OAuth resources or scopes change. `cluster operator-rbac apply` repairs existing installations without changing images, Secrets, or other workloads. The hosted release workflow runs this repair before updating and checks the effective EndpointSlice, Secret, and MCP Auth permissions. `cluster doctor` now detects missing EndpointSlice informer access ([#634](https://github.com/mcp-runtime/mcp-runtime/pull/634)).
+- Fresh setup attaches the platform registry pull Secret to a bundled MCP Auth Deployment that uses a private platform image. `cluster doctor` reports platform Deployments that pull from the platform registry without a pull Secret ([#627](https://github.com/mcp-runtime/mcp-runtime/pull/627)).
+
+Existing installations can repair operator permissions with `cluster operator-rbac apply` from this release's source checkout. The bundled MCP Auth pull Secret is attached by a fresh setup; `mcp-runtime update` changes images only.
 
 ## [0.6.2] - 2026-10-06
 
@@ -198,7 +203,8 @@ upgrade from 0.4.x; see the migration note under **Changed**.
 
 - Targeted platform updates through `mcp-runtime update`, including embedded CRD updates and `--build` to build/push missing component images before rollout ([#491](https://github.com/mcp-runtime/mcp-runtime/pull/491)).
 
-[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.3...HEAD
+[0.6.3]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.5.2...v0.6.0
