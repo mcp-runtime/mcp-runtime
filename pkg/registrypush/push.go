@@ -37,6 +37,8 @@ var (
 
 // Config controls in-cluster registry push helper behavior.
 type Config struct {
+	// AuthSecretName optionally selects a Docker config Secret in the trusted helper namespace.
+	AuthSecretName  string
 	HelperNamespace string
 	SkopeoImage     string
 	HelperTimeout   time.Duration
@@ -72,6 +74,22 @@ func PushDockerArchive(ctx context.Context, client kubernetes.Interface, restCon
 		timeout = 5 * time.Minute
 	}
 
+	deployment, err := client.AppsV1().Deployments("registry").Get(ctx, "registry", metav1.GetOptions{})
+	if err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("read registry authentication configuration: %w", err)
+	}
+	if err == nil {
+		for _, container := range deployment.Spec.Template.Spec.Containers {
+			for _, env := range container.Env {
+				if env.Name == "REGISTRY_AUTH" && env.Value == "token" {
+					if helperNS != "registry" {
+						return fmt.Errorf("native registry publication helpers must run in registry namespace")
+					}
+					cfg.AuthSecretName = "mcp-registry-publisher"
+				}
+			}
+		}
+	}
 	helperName := newHelperName()
 	containerName := helperName
 	pushTarget := RewritePushTarget(target, cfg.Hosts)
@@ -99,6 +117,13 @@ func PushDockerArchive(ctx context.Context, client kubernetes.Interface, restCon
 				}},
 			}},
 		},
+	}
+	if cfg.AuthSecretName != "" {
+		mode := int32(0440)
+		group := int64(1000)
+		pod.Spec.SecurityContext.FSGroup = &group
+		pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{Name: "publisher", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: cfg.AuthSecretName, DefaultMode: &mode, Items: []corev1.KeyToPath{{Key: corev1.DockerConfigJsonKey, Path: "config.json"}}}}})
+		pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{Name: "publisher", MountPath: "/registry-publisher", ReadOnly: true})
 	}
 	if _, err := client.CoreV1().Pods(helperNS).Create(ctx, pod, metav1.CreateOptions{}); err != nil {
 		return fmt.Errorf("start registry push helper pod: %w", err)
@@ -129,7 +154,11 @@ func PushDockerArchive(ctx context.Context, client kubernetes.Interface, restCon
 		return fmt.Errorf("copy image tar to helper pod %s/%s: %w", helperNS, helperName, pushErr)
 	}
 
-	skopeoArgs := []string{"skopeo", "copy", "--dest-tls-verify=false", "docker-archive:" + defaultImageTarPath, "docker://" + pushTarget}
+	skopeoArgs := []string{"skopeo", "copy", "--dest-tls-verify=false"}
+	if cfg.AuthSecretName != "" {
+		skopeoArgs = append(skopeoArgs, "--dest-authfile=/registry-publisher/config.json")
+	}
+	skopeoArgs = append(skopeoArgs, "docker-archive:"+defaultImageTarPath, "docker://"+pushTarget)
 	if pushErr = execInPodHook(ctx, client, restConfig, helperNS, helperName, containerName, skopeoArgs); pushErr != nil {
 		return fmt.Errorf("push image from helper pod %s/%s to %s (requested %s): %w", helperNS, helperName, pushTarget, target, pushErr)
 	}
@@ -139,11 +168,16 @@ func PushDockerArchive(ctx context.Context, client kubernetes.Interface, restCon
 func helperCommand(cfg Config, pushTarget string) []string {
 	if url := strings.TrimSpace(cfg.TarFetchURL); url != "" {
 		token := strings.TrimSpace(cfg.TarFetchToken)
+		authFlag := ""
+		if cfg.AuthSecretName != "" {
+			authFlag = " --dest-authfile=/registry-publisher/config.json"
+		}
 		script := fmt.Sprintf(
-			"set -eu; curl -fsSL -H %q -o %q %q; skopeo copy --dest-tls-verify=false docker-archive:%q docker://%s",
+			"set -eu; curl -fsSL -H %q -o %q %q; skopeo copy --dest-tls-verify=false%s docker-archive:%q docker://%s",
 			TransferTokenHeader+": "+token,
 			defaultImageTarPath,
 			url,
+			authFlag,
 			defaultImageTarPath,
 			pushTarget,
 		)

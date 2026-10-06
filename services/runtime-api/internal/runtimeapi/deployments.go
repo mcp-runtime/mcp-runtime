@@ -543,6 +543,9 @@ func (s *DeploymentService) ensureNamespaceRegistryPullSecretAfterBinding(ctx co
 }
 
 func (s *DeploymentService) ensureNamespaceRegistryPullSecret(ctx context.Context, client kubernetes.Interface, namespace string) error {
+	if strings.EqualFold(os.Getenv("MCP_REGISTRY_NATIVE_AUTH"), "true") {
+		return s.ensureNativeRegistryPullSecret(ctx, client, namespace)
+	}
 	registryHost := registryPullSecretHost()
 	if registryHost == "" {
 		return nil

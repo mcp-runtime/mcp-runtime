@@ -3,6 +3,80 @@ info:
   title: MCP Runtime Platform API
   version: 1.0.0
 paths:
+  /api/v1/registry/token:
+    get:
+      summary: Exchange registry credentials for a five-minute scoped bearer
+      parameters:
+        - in: query
+          name: service
+          required: true
+          schema: {type: string, enum: [mcp-runtime-registry]}
+        - in: query
+          name: scope
+          schema: {type: array, items: {type: string}}
+          style: form
+          explode: true
+      responses:
+        "200":
+          description: Scoped token; Cache-Control is no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, access_token, expires_in, issued_at]
+                properties:
+                  token: {type: string}
+                  access_token: {type: string}
+                  expires_in: {type: integer, const: 300}
+                  issued_at: {type: string, format: date-time}
+        "400": {description: Invalid service or scope}
+        "401": {description: Authentication required}
+        "403": {description: Requested repository action denied}
+        "503": {description: Credential store or signer unavailable}
+  /api/v1/registry/pull-credentials:
+    post:
+      summary: Administrator creates a namespace-bound read-only node credential
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [namespace]
+              additionalProperties: false
+              properties:
+                namespace: {type: string}
+                repositories: {type: array, maxItems: 128, items: {type: string}}
+      responses:
+        "201":
+          description: Credential returned once; Cache-Control is no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: {type: string}
+                  username: {type: string}
+                  password: {type: string}
+                  expires_at: {type: string, format: date-time}
+        "400": {description: Invalid namespace or repositories}
+        "401": {description: Authentication required}
+        "403": {description: Administrator required}
+        "503": {description: Credential store unavailable}
+    delete:
+      summary: Administrator revokes a node credential
+      parameters:
+        - in: query
+          name: id
+          required: true
+          schema: {type: string}
+      responses:
+        "204": {description: Revoked; existing bearers expire within five minutes}
+        "400": {description: Invalid credential ID}
+        "401": {description: Authentication required}
+        "403": {description: Administrator required}
+        "404": {description: Credential not found}
+        "503": {description: Credential store unavailable}
   /health:
     get:
       responses:

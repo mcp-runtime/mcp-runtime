@@ -127,3 +127,4 @@ nav:
           - Package Docs Hosting: internals/pkgsite.md
           - Design Background: internals/gateway-platform-inspirations.md
           - Tests and Coverage: internals/testing.md
+      - Registry Authentication: internals/registry-auth.md
