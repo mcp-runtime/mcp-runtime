@@ -142,8 +142,9 @@ func rewriteBuiltTargetsToTags(plan *Plan) error {
 }
 
 // planImageBuilds lists unique Built-component images from plan.Changed().
-// Every component the release changes is included; Action is reuse when the
-// registry already has the tag, otherwise build.
+// Every component the release changes is included. Commit-tagged release
+// images are always rebuilt from their source revision; other tags are reused
+// when already present in the registry.
 func planImageBuilds(ctx context.Context, plan *Plan, opts BuildOptions) ([]ImageBuildAction, error) {
 	if plan == nil {
 		return nil, nil
@@ -170,6 +171,15 @@ func planImageBuilds(ctx context.Context, plan *Plan, opts BuildOptions) ([]Imag
 		}
 		seen[image] = true
 		action := ImageBuildAction{Component: row.Component, Image: image, Action: ImageActionBuild, Reason: "target tag missing from registry"}
+		ref, err := platformrelease.ParseImageRef(image)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", row.Component, err)
+		}
+		if _, ok := platformrelease.ReleaseCommitFromImageTag(ref.Tag); ok {
+			action.Reason = "release image requires build from its source commit"
+			out = append(out, action)
+			continue
+		}
 		if opts.SkipRegistryProbe {
 			action.Reason = "registry not checked (dry-run)"
 			out = append(out, action)
@@ -189,8 +199,7 @@ func planImageBuilds(ctx context.Context, plan *Plan, opts BuildOptions) ([]Imag
 }
 
 // buildAndPushChanged builds and pushes only images marked Action=build.
-// Components already in the registry are left alone; Deployments still roll
-// via Apply when the cluster runs an older tag.
+// Commit-tagged release images require the exact clean source checkout.
 func buildAndPushChanged(ctx context.Context, actions []ImageBuildAction, opts BuildOptions) error {
 	if !opts.Enabled {
 		return nil
@@ -245,6 +254,26 @@ func buildAndPushChanged(ctx context.Context, actions []ImageBuildAction, opts B
 	}
 	if len(toBuild) == 0 {
 		return nil
+	}
+	var releaseCommit string
+	for _, a := range toBuild {
+		ref, err := platformrelease.ParseImageRef(a.Image)
+		if err != nil {
+			return core.WrapWithBase(core.ErrUpdateBuildFailed, err, err.Error())
+		}
+		commit, ok := platformrelease.ReleaseCommitFromImageTag(ref.Tag)
+		if !ok {
+			continue
+		}
+		if releaseCommit != "" && releaseCommit != commit {
+			return core.NewWithBase(core.ErrUpdateBuildFailed, "release manifest names images from different source commits")
+		}
+		releaseCommit = commit
+	}
+	if releaseCommit != "" {
+		if err := verifyReleaseSource(ctx, source, releaseCommit); err != nil {
+			return core.WrapWithBase(core.ErrUpdateBuildFailed, err, err.Error())
+		}
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -323,6 +352,26 @@ func buildAndPushChanged(ctx context.Context, actions []ImageBuildAction, opts B
 			msg = fmt.Sprintf("%s; already published (re-run --build to reuse): %s", msg, strings.Join(published, ", "))
 		}
 		return core.WrapWithBase(core.ErrUpdateBuildFailed, firstErr, msg)
+	}
+	return nil
+}
+
+func verifyReleaseSource(ctx context.Context, source, commit string) error {
+	cmd := exec.CommandContext(ctx, "git", "-C", source, "rev-parse", "HEAD")
+	got, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("read release source commit: %w", err)
+	}
+	if strings.TrimSpace(string(got)) != commit {
+		return fmt.Errorf("release image requires source commit %s; checkout is %s", commit, strings.TrimSpace(string(got)))
+	}
+	cmd = exec.CommandContext(ctx, "git", "-C", source, "status", "--porcelain", "--untracked-files=normal")
+	status, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("check release source cleanliness: %w", err)
+	}
+	if len(status) != 0 {
+		return fmt.Errorf("release source checkout has local changes; use a clean checkout of %s", commit)
 	}
 	return nil
 }

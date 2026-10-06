@@ -220,6 +220,9 @@ func BuildPlan(ctx context.Context, cs kubernetes.Interface, m *platformrelease.
 			continue
 		}
 		row.TargetVersion = entry.Tag
+		if c.Built {
+			row.TargetVersion = platformrelease.ReleaseVersionFromImageTag(entry.Tag)
+		}
 		if !c.HasWorkload() {
 			row.Action, row.Reason = ActionSkip, "on-demand image; no workload to update"
 			plan.Rows = append(plan.Rows, row)
@@ -293,6 +296,9 @@ func planComponent(ctx context.Context, cs kubernetes.Interface, m *platformrele
 		return nil
 	}
 	row.CurrentVersion = currentRef.Tag
+	if c.Built {
+		row.CurrentVersion = platformrelease.ReleaseVersionFromImageTag(currentRef.Tag)
+	}
 	// A semver image tag is authoritative (it cannot go stale after a manual
 	// `kubectl set image`); the setup/update annotation fills in for
 	// non-semver tags such as test-mode "latest".

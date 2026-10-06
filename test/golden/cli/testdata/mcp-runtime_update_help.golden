@@ -18,12 +18,13 @@ Issuers/Certificates, Services, or Ingresses, and never deletes or recreates
 workloads. mcp-auth and cert-manager are skipped unless selected with
 --include-auth, --include-cert-manager, or --only.
 
-With --build, update builds and pushes only Built-component images from the
-release that are missing from the registry (sequential by default; use
+With --build, update builds and pushes Built-component images from the release
+that are missing from the registry (sequential by default; use
 --build-parallelism to raise concurrency), then rolls those Deployments.
-Images already present are reused; Deployments still on an older tag are
-patched. Failed builds retry once and cancel sibling builds. Without --build,
-images must already be published.
+Commit-tagged release images are always rebuilt from the exact clean source
+commit, even when the tag exists. Other images already present are reused.
+Deployments still on an older tag are patched. Failed builds retry once and
+cancel sibling builds. Without --build, images must already be published.
 
 The plan always shows the kube context and cluster ID. Without --dry-run,
 update asks for confirmation (or requires --yes when not interactive).
@@ -41,7 +42,7 @@ Examples:
 
 Flags:
       --allow-downgrade           Allow a target version lower than the installed version
-      --build                     Build and push missing Built-component images from --source before rolling Deployments
+      --build                     Build and push Built-component images from --source before rolling Deployments; release commit images are always rebuilt
       --build-parallelism int     Max concurrent image builds with --build (default 1; raise carefully) (default 1)
       --context string            Kubernetes context to use (default: current context)
       --crds string               CRD multi-document YAML path or https URL when the manifest omits embedded crds (optional; --to also tries platform-crds.yaml)

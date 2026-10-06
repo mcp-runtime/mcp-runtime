@@ -858,12 +858,20 @@ Services, or Ingresses, and never deletes or recreates workloads. mcp-auth and
 cert-manager are skipped unless selected with `--include-auth`,
 `--include-cert-manager`, or `--only`.
 
-With `--build`, update builds and pushes only Built-component images from the
-release plan that are missing from the registry (from `--source`, default `.`),
-then rolls Deployments that still run an older tag. Builds run sequentially by
+With `--build`, update builds and pushes Built-component images from the release
+plan that are missing from the registry (from `--source`, default `.`), then
+rolls Deployments that still run an older tag. Builds run sequentially by
 default (`--build-parallelism 1`); raise carefully. Failed builds retry once
-and cancel sibling builds. Tags already in the registry are reused. Without
-`--build`, images must already be published.
+and cancel sibling builds. Existing tags are reused except for commit-tagged
+release images: these are rebuilt from a clean checkout of the exact source
+commit even if the tag exists. Without `--build`, images must already be
+published.
+Published release manifests tag Runtime-built images with the full source
+commit (`vX.Y.Z-g<commit>`), so images from another release commit have a
+different registry tag. update compares their release version without treating
+the commit suffix as a prerelease downgrade. A registry that permits overwrites
+can still change the contents of an existing tag; use immutable tags or digest
+pins when that guarantee is needed.
 
 The plan always shows the kube context and cluster ID. Without `--dry-run`,
 update asks for confirmation (or requires `--yes` when not interactive).
@@ -883,7 +891,7 @@ Relative repositories resolve against the registry of the running image.
 | `--rollback-on-failure` | `true` | Restore previous images of workloads changed in this run if a rollout fails |
 | `--timeout` | `5m0s` | Rollout wait timeout per workload |
 | `--output` | `text` | Output format: text or json |
-| `--build` | `false` | Build and push missing Built-component images from `--source` before rolling |
+| `--build` | `false` | Build and push Built-component images from `--source` before rolling; release commit images are always rebuilt |
 | `--source` | `.` | Repository root used with `--build` |
 | `--image-platform` | `MCP_IMAGE_PLATFORM` or `linux/amd64` | Docker `--platform` for `--build` |
 | `--build-parallelism` | `1` | Max concurrent image builds with `--build` |
@@ -907,7 +915,7 @@ Manifest shape (`platform-manifest.json`, attached to each GitHub release):
   "crdChange": true,
   "crds": "apiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\n...",
   "components": [
-    {"name": "platform-api", "repository": "mcp-platform-api", "tag": "v0.5.0", "digest": "sha256:..."}
+    {"name": "platform-api", "repository": "mcp-platform-api", "tag": "v0.5.0-g0123456789abcdef0123456789abcdef01234567", "digest": "sha256:..."}
   ]
 }
 ```

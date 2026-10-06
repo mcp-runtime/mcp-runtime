@@ -101,3 +101,42 @@ func CompareVersionStrings(a, b string) (cmp int, ok bool) {
 	}
 	return av.Compare(bv), true
 }
+
+// ReleaseVersionFromImageTag removes the full Git revision suffix from tags
+// emitted for built release images. Other prerelease tags retain their semantic
+// version ordering.
+func ReleaseVersionFromImageTag(tag string) string {
+	if _, ok := ReleaseCommitFromImageTag(tag); !ok {
+		return tag
+	}
+	return tag[:strings.LastIndexByte(tag, '-')]
+}
+
+// ReleaseCommitFromImageTag recognizes the commit suffix used by release
+// manifests. A short or arbitrary prerelease suffix is not a source revision.
+func ReleaseCommitFromImageTag(tag string) (string, bool) {
+	lastDash := strings.LastIndexByte(tag, '-')
+	if lastDash < 0 {
+		return "", false
+	}
+	version, suffix := tag[:lastDash], tag[lastDash+1:]
+	if !isReleaseCommitSuffix(suffix) {
+		return "", false
+	}
+	if _, err := ParseVersion(version); err != nil {
+		return "", false
+	}
+	return suffix[1:], true
+}
+
+func isReleaseCommitSuffix(s string) bool {
+	if !strings.HasPrefix(s, "g") || len(s) != 41 {
+		return false
+	}
+	for _, ch := range s[1:] {
+		if (ch < '0' || ch > '9') && (ch < 'a' || ch > 'f') {
+			return false
+		}
+	}
+	return true
+}
