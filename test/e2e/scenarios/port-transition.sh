@@ -11,11 +11,10 @@ run_e2e_port_transition_scenario() {
   kubectl get service "${SERVER_NAME}" -n mcp-servers -o json >"${directory}/service-before.json"
   kubectl get deployment "${SERVER_NAME}" -n mcp-servers -o json >"${directory}/deployment-before.json"
   old_port="$(jq -r '.spec.ports[0].targetPort' "${directory}/service-before.json")"
-  # Traefik's egress NetworkPolicy (config/ingress/base/networkpolicy.yaml)
-  # only allows listed backend ports; an unlisted candidate is dropped and
-  # every request hangs. Use a listed port not taken by this pod.
-  candidate_port=8088
-  [[ "${candidate_port}" != "${old_port}" ]] || candidate_port=8086
+  # Use a port outside the retired static Traefik egress list (#618). The
+  # operator must open Traefik egress for it through the per-server policy.
+  candidate_port=8101
+  [[ "${candidate_port}" != "${old_port}" ]] || candidate_port=8102
   gateway_image="$(jq -er '.spec.template.spec.containers[] | select(.name == "mcp-gateway") | .image' "${directory}/deployment-before.json")"
   jq --arg image 'registry.registry.svc.cluster.local:5000/mcp-gateway:missing-port-transition-fixture' \
     --argjson port "${candidate_port}" \
@@ -91,6 +90,8 @@ port_transition_capture_route() {
     '{items: [.items[] | {metadata: {name: .metadata.name, labels: .metadata.labels, deletionTimestamp: .metadata.deletionTimestamp}, ports: [.spec.containers[] | {name, ports}], status}]}' \
     >"${directory}/pods.json" || true
   kubectl get networkpolicy "${SERVER_NAME}-mtls-gateway" -n mcp-servers -o json >"${directory}/networkpolicy.json" || true
+  kubectl get networkpolicy -n traefik -l "mcpruntime.org/component=traefik-egress,mcpruntime.org/server=${SERVER_NAME},mcpruntime.org/server-namespace=mcp-servers" -o json \
+    >"${directory}/traefik-egress-networkpolicy.json" || true
   kubectl logs -n mcp-servers -l "app=${SERVER_NAME}" -c mcp-gateway --prefix --tail=100 \
     >"${directory}/gateway.log" 2>&1 || true
   kubectl logs -n mcp-runtime deployment/mcp-runtime-operator-controller-manager --tail=100 \
