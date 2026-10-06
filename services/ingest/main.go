@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/MicahParks/keyfunc"
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/segmentio/kafka-go"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
@@ -32,7 +32,7 @@ type eventWriter interface {
 
 type ingestServer struct {
 	writer       eventWriter
-	brokers      []string
+	readiness    *kafkaReadiness
 	topic        string
 	apiKeys      map[string]struct{}
 	jwks         *keyfunc.JWKS
@@ -86,10 +86,12 @@ func main() {
 	}
 
 	writer := newKafkaWriter(brokers, topic)
+	readiness := newKafkaReadiness(brokers, newKafkaReadinessMetrics(prometheus.DefaultRegisterer))
+	go readiness.Run(ctx)
 
 	server := &ingestServer{
 		writer:       writer,
-		brokers:      brokers,
+		readiness:    readiness,
 		topic:        topic,
 		apiKeys:      apiKeys,
 		jwks:         jwks,
@@ -165,39 +167,23 @@ func newKafkaWriter(brokers []string, topic string) *kafka.Writer {
 
 const ingestEventMaxBytes = 1 << 20 // 1MB
 
-func (s *ingestServer) handleReady(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-	defer cancel()
-
-	if err := s.checkKafkaReady(ctx); err != nil {
+// handleReady answers from the background Kafka readiness check so the
+// kubelet probe never waits on DNS or a TCP dial.
+func (s *ingestServer) handleReady(w http.ResponseWriter, _ *http.Request) {
+	ok, reason := false, readinessReasonPending
+	if s.readiness != nil {
+		ok, reason = s.readiness.Status()
+	}
+	if !ok {
 		serviceutil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{
-			"ok":    false,
-			"error": "kafka_unavailable",
+			"ok":     false,
+			"error":  "kafka_unavailable",
+			"reason": reason,
 		})
 		return
 	}
 
 	serviceutil.WriteJSON(w, http.StatusOK, map[string]any{"ok": true})
-}
-
-func (s *ingestServer) checkKafkaReady(ctx context.Context) error {
-	var lastErr error
-	for _, broker := range s.brokers {
-		broker = strings.TrimSpace(broker)
-		if broker == "" {
-			continue
-		}
-		conn, err := kafka.DialContext(ctx, "tcp", broker)
-		if err == nil {
-			_ = conn.Close()
-			return nil
-		}
-		lastErr = err
-	}
-	if lastErr != nil {
-		return lastErr
-	}
-	return fmt.Errorf("no Kafka brokers configured")
 }
 
 // handleEvents handles POST /events requests.
