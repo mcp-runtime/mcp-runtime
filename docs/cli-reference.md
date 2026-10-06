@@ -271,6 +271,16 @@ profile (the registry host saved at login), then `MCP_REGISTRY_INGRESS_HOST`,
 `MCP_REGISTRY_HOST`, or `MCP_PLATFORM_DOMAIN`, then cluster discovery.
 
 Use `--platform linux/amd64` when building on Apple Silicon for k3s or EKS nodes.
+For a user in multiple teams, select the team repository when initializing
+the server:
+
+```bash
+mcp-runtime server init workspace-demo --scope tenant \
+  --image registry.example.com/acme/workspace-demo
+```
+The build keeps that repository, prints it before Docker runs, and rejects an
+unscoped tenant repository when the team choice is ambiguous. Use the printed
+image ref for `server push` and `server deploy` in the same team.
 
 ### server push
 

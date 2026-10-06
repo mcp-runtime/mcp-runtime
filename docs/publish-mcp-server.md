@@ -237,8 +237,13 @@ may be a resolved public registry host such as `registry.example.com/org/payment
 or a registry Service address when no public registry Ingress is configured.
 Use `--scope public` for public catalog images. Use `--scope tenant` for team
 images; if the image name has no repository prefix, the CLI prefixes it with
-the authenticated user's active team slug. Explicit repository prefixes for
-tenant images must match one of the user's teams.
+the authenticated user's sole team slug. For users in multiple teams, initialize
+the metadata with a team-scoped repository, for example
+`mcp-runtime server init payments --scope tenant --image registry.example.com/acme/payments`,
+then run `server build image`, push
+the printed image ref and deploy to that team. Explicit tenant repository
+prefixes must match one of the user's teams; ambiguous unscoped tenant
+repositories are rejected before Docker runs.
 `--scope org` and `--scope public` are accepted only when the platform runs in
 the matching mode (`PLATFORM_MODE=org` or `public`); `server push` and
 `server deploy` reject a disabled scope the same way and list the enabled
