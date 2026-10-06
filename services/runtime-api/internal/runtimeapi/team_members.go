@@ -5,11 +5,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
 	"time"
 
+	"mcp-runtime/pkg/apihttp"
 	"mcp-runtime/pkg/serviceutil"
 )
 
@@ -148,7 +150,7 @@ func (s *RuntimeServer) handleRuntimeTeamMemberUpsertDecoded(w http.ResponseWrit
 			writeAPIError(w, http.StatusNotFound, "team or user not found")
 			return
 		}
-		writeAPIError(w, http.StatusBadRequest, err.Error())
+		writeIdentityError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"membership": membership})
@@ -211,7 +213,6 @@ func (s *RuntimeServer) handleRuntimeTeamUserCreate(w http.ResponseWriter, r *ht
 		return
 	}
 	req.Email = strings.TrimSpace(req.Email)
-	req.Password = strings.TrimSpace(req.Password)
 	teamRole := strings.TrimSpace(req.Role)
 	if req.Email == "" || req.Password == "" {
 		writeAPIError(w, http.StatusBadRequest, "email and password are required")
@@ -224,12 +225,35 @@ func (s *RuntimeServer) handleRuntimeTeamUserCreate(w http.ResponseWriter, r *ht
 	defer cancel()
 	u, membership, err := s.identity.CreateTeamUser(ctx, teamSlug, req.Email, req.Password, teamRole)
 	if err != nil {
+		diagnostic := "platform identity request failed"
+		var upstream *apihttp.Error
+		if errors.As(err, &upstream) {
+			diagnostic = fmt.Sprintf("status=%d code=%s", upstream.Status, upstream.Code)
+			switch upstream.Message {
+			case "valid email required", "password must be at least 8 characters", "password must be at most 72 bytes", "membership role must be owner or member", "a user with this email already exists; add them as a member instead", "team not found", "failed to create user":
+				diagnostic += " message=" + upstream.Message
+			}
+		}
+		log.Printf("team account creation failed: %s", diagnostic)
+		s.writeAudit(r.Context(), auditEvent{UserID: p.Subject, Action: "team_user_create", Resource: teamSlug, Status: "error", Message: diagnostic})
 		if errors.Is(err, sql.ErrNoRows) {
 			writeAPIError(w, http.StatusNotFound, "team not found")
 			return
 		}
-		writeAPIError(w, http.StatusBadRequest, err.Error())
+		writeIdentityError(w, err)
 		return
 	}
+	s.writeAudit(r.Context(), auditEvent{UserID: p.Subject, Action: "team_user_create", Resource: teamSlug, Status: "success"})
 	writeJSON(w, http.StatusCreated, map[string]any{"user": u, "membership": membership})
+}
+
+func writeIdentityError(w http.ResponseWriter, err error) {
+	var upstream *apihttp.Error
+	if errors.As(err, &upstream) {
+		// Log only status/code: upstream messages may contain submitted user data.
+		log.Printf("platform identity request failed: status=%d code=%s", upstream.Status, upstream.Code)
+		apihttp.WriteError(w, nil, upstream)
+		return
+	}
+	writeAPIError(w, http.StatusInternalServerError, "platform identity request failed")
 }

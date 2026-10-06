@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"mcp-runtime/pkg/apihttp"
 	"mcp-runtime/pkg/internalapi"
 	"mcp-runtime/pkg/platformauth"
 )
@@ -39,6 +40,10 @@ func (c *Client) httpClient() *http.Client {
 }
 
 func (c *Client) authorizedJSON(ctx context.Context, method, path string, body any, out any) (int, error) {
+	return c.requestJSON(ctx, method, path, body, out, false)
+}
+
+func (c *Client) requestJSON(ctx context.Context, method, path string, body any, out any, decodeError bool) (int, error) {
 	var reader io.Reader
 	if body != nil {
 		payload, err := json.Marshal(body)
@@ -60,6 +65,16 @@ func (c *Client) authorizedJSON(ctx context.Context, method, path string, body a
 		return 0, err
 	}
 	defer resp.Body.Close()
+	if decodeError && (resp.StatusCode < 200 || resp.StatusCode >= 300) {
+		var envelope struct {
+			Code    string `json:"error"`
+			Message string `json:"message"`
+		}
+		if err := json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&envelope); err != nil || envelope.Message == "" || envelope.Code == "" {
+			return resp.StatusCode, apihttp.Internal("platform identity request failed")
+		}
+		return resp.StatusCode, &apihttp.Error{Status: resp.StatusCode, Code: envelope.Code, Message: envelope.Message}
+	}
 	if out != nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
 			return resp.StatusCode, err
@@ -300,9 +315,9 @@ func (c *Client) ListTeamMemberships(ctx context.Context, teamSlug string) ([]Te
 func (c *Client) UpsertTeamMembership(ctx context.Context, teamSlug, userID, role string) (TeamMembership, error) {
 	var result internalapi.TeamMembershipResponse
 	path := "/internal/identity/teams/" + url.PathEscape(teamSlug) + "/members/" + url.PathEscape(userID)
-	status, err := c.authorizedJSON(ctx, http.MethodPut, path, internalapi.TeamMembershipPutRequest{
+	status, err := c.requestJSON(ctx, http.MethodPut, path, internalapi.TeamMembershipPutRequest{
 		Role: role,
-	}, &result)
+	}, &result, true)
 	if err != nil {
 		return TeamMembership{}, err
 	}
@@ -332,11 +347,11 @@ func (c *Client) DeleteTeamMembership(ctx context.Context, teamSlug, userID stri
 
 func (c *Client) CreatePasswordUser(ctx context.Context, email, password, role string) (User, error) {
 	var result internalapi.CreateUserResponse
-	status, err := c.authorizedJSON(ctx, http.MethodPost, "/internal/identity/users", internalapi.CreateUserRequest{
+	status, err := c.requestJSON(ctx, http.MethodPost, "/internal/identity/users", internalapi.CreateUserRequest{
 		Email:    email,
 		Password: password,
 		Role:     role,
-	}, &result)
+	}, &result, true)
 	if err != nil {
 		return User{}, err
 	}
@@ -349,11 +364,11 @@ func (c *Client) CreatePasswordUser(ctx context.Context, email, password, role s
 func (c *Client) CreateTeamUser(ctx context.Context, teamSlug, email, password, role string) (User, TeamMembership, error) {
 	var result internalapi.TeamUserCreateResponse
 	path := "/internal/identity/teams/" + url.PathEscape(teamSlug) + "/users"
-	status, err := c.authorizedJSON(ctx, http.MethodPost, path, internalapi.TeamUserCreateRequest{
+	status, err := c.requestJSON(ctx, http.MethodPost, path, internalapi.TeamUserCreateRequest{
 		Email:    email,
 		Password: password,
 		Role:     role,
-	}, &result)
+	}, &result, true)
 	if err != nil {
 		return User{}, TeamMembership{}, err
 	}

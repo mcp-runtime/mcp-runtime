@@ -14,6 +14,7 @@ import (
 	"mcp-platform-api/internal/apiauth"
 	"mcp-platform-api/internal/httperrors"
 	"mcp-platform-api/internal/platformstore"
+	"mcp-runtime/pkg/apihttp"
 )
 
 const imageActivityRequestMaxBytes = 16 * 1024
@@ -106,7 +107,7 @@ func HandleSignup(w http.ResponseWriter, r *http.Request, deps Dependencies) {
 	}
 	u, err := deps.Platform.CreatePasswordUser(r.Context(), req.Email, req.Password, role)
 	if err != nil {
-		httperrors.BadRequest(w, err.Error())
+		writePasswordUserError(w, err)
 		return
 	}
 	token, err := deps.Platform.CreateAccessToken(u, auth.PlatformAccessTokenTTL)
@@ -150,7 +151,7 @@ func HandleUsers(w http.ResponseWriter, r *http.Request, deps Dependencies) {
 	}
 	u, err := deps.Platform.CreatePasswordUser(r.Context(), req.Email, req.Password, role)
 	if err != nil {
-		httperrors.BadRequest(w, err.Error())
+		writePasswordUserError(w, err)
 		return
 	}
 	deps.Platform.WriteAudit(r.Context(), platformstore.AuditEvent{UserID: p.UserID(), Action: "user_create", Resource: "user", Namespace: u.Namespace, Status: "success", ActorIP: deps.RequestIP(r), Source: deps.RequestSource(r), AuthIdentity: deps.AuditIdentityLabel(p)})
@@ -424,5 +425,17 @@ func parseRegistryCredentialItemPath(method, path string) (credentialID string, 
 		return parts[0], true, true
 	default:
 		return "", false, false
+	}
+}
+
+func writePasswordUserError(w http.ResponseWriter, err error) {
+	var input platformstore.UserInputError
+	switch {
+	case errors.Is(err, platformstore.ErrEmailAlreadyRegistered):
+		apihttp.WriteEnvelope(w, http.StatusConflict, apihttp.CodeConflict, platformstore.ErrEmailAlreadyRegistered.Error())
+	case errors.As(err, &input):
+		apihttp.WriteEnvelope(w, http.StatusBadRequest, apihttp.CodeInvalidRequestBody, input.Error())
+	default:
+		apihttp.WriteEnvelope(w, http.StatusInternalServerError, apihttp.CodeInternalError, "failed to create user")
 	}
 }

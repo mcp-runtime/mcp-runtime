@@ -322,7 +322,7 @@ func TestPlatformClientTeamAndServerRoutes(t *testing.T) {
 					StatusCode: http.StatusOK,
 					Body:       io.NopCloser(strings.NewReader(`{"team":{"slug":"core","name":"Core Team","namespace":"mcp-team-core"}}`)),
 				}, nil
-			case r.Method == http.MethodPost && r.URL.Path == "/api/v1/users":
+			case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runtime/teams/core/users":
 				body, _ := io.ReadAll(r.Body)
 				var payload map[string]string
 				_ = json.Unmarshal(body, &payload)
@@ -330,8 +330,8 @@ func TestPlatformClientTeamAndServerRoutes(t *testing.T) {
 					t.Fatalf("create user payload = %#v", payload)
 				}
 				return &http.Response{
-					StatusCode: http.StatusOK,
-					Body:       io.NopCloser(strings.NewReader(`{"user":{"id":"user-1","email":"member@example.com","role":"user"}}`)),
+					StatusCode: http.StatusCreated,
+					Body:       io.NopCloser(strings.NewReader(`{"user":{"id":"user-1","email":"member@example.com","role":"user"},"membership":{"team_slug":"core","user_id":"user-1","role":"member"}}`)),
 				}, nil
 			case r.Method == http.MethodPut && r.URL.Path == "/api/v1/runtime/teams/core/members/user-1":
 				body, _ := io.ReadAll(r.Body)
