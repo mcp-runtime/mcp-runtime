@@ -802,13 +802,16 @@ Expected: platform and telemetry pods `1/1 Running`, certificate `READY=True`.
 
 ### Separate release tracks and user verification
 
-The Runtime CLI release and the hosted platform images are separate artifacts.
-Tagging a Runtime release publishes platform-specific CLI binaries through
-`.github/workflows/release.yaml` (triggered when a GitHub Release is published
-from the UI for a pushed `v*` tag); it does not update the hosted platform.
-The production rollout updates platform APIs/UI (and mcp-auth only when explicitly
-selected); it does not publish a new CLI release. Publish either project's
-release only after its candidate passes the checks below.
+The Runtime CLI binaries and hosted platform images are separate artifacts.
+Publishing a stable Runtime release runs `.github/workflows/release.yaml` to
+publish the CLI binaries and `hosted-platform-release-deploy.yaml` to update
+the hosted platform. The deploy workflow waits for the release manifest,
+prints a dry-run plan, builds and rolls changed Runtime images, and leaves
+Secrets, PVCs, and the bundled MCP Auth image in place. MCP Auth follows its
+own release track. The workflow uses GitHub's `production` environment and
+updates the README's live-version badge only after platform health and a
+temporary `qa-audit-*` MCP server pass their post-deploy checks. Publishing a
+prerelease does not trigger the production deploy.
 
 Verify the user path after rollout:
 

@@ -4,26 +4,45 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Published stable MCP Runtime release tag
+        required: true
+        type: string
+      verify_only:
+        description: Check an already deployed release and update the live-version badge
+        required: false
+        default: false
+        type: boolean
+      mcp_auth_version:
+        description: Optional MCP Auth version to deploy with a manual Runtime run
+        required: false
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: hosted-platform-release-v0.6.1
+  group: hosted-platform-production
   cancel-in-progress: false
 
 jobs:
   deploy:
-    if: >-
-      (github.event_name == 'release' && github.event.release.tag_name == 'v0.6.1') ||
-      github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    environment:
+      name: production
+      url: https://platform.mcpruntime.org
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      VERIFY_ONLY: ${{ inputs.verify_only || false }}
+      MCP_AUTH_VERSION: ${{ inputs.mcp_auth_version || '' }}
     steps:
       - name: Check out the selected release
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: v0.6.1
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
           fetch-depth: 0
 
       - name: Set up Go
@@ -38,27 +57,35 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          if [[ -n "$MCP_AUTH_VERSION" ]]; then
+            [[ "$MCP_AUTH_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+            [[ "$VERIFY_ONLY" != true ]]
+          fi
           mkdir -p "$RUNNER_TEMP/release"
           for attempt in $(seq 1 60); do
-            if gh release download v0.6.1 --repo "$GITHUB_REPOSITORY" \
+            if gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
               --pattern platform-manifest.json --dir "$RUNNER_TEMP/release" >/dev/null 2>&1; then
               test -s "$RUNNER_TEMP/release/platform-manifest.json"
+              jq -e --arg version "$RELEASE_TAG" '.version == $version' \
+                "$RUNNER_TEMP/release/platform-manifest.json"
               exit 0
             fi
             sleep 30
           done
-          echo 'The v0.6.1 platform manifest was not published' >&2
+          echo "The $RELEASE_TAG platform manifest was not published" >&2
           exit 1
 
-      - name: Deploy Runtime and MCP Auth from a disposable runner
+      - name: Deploy and verify Runtime from a disposable runner
         env:
           SSHPASS: ${{ secrets.MCP_PROD_BOOTSTRAP_PASSWORD }}
+          GH_TOKEN: ${{ github.token }}
           MCP_IMAGE_PLATFORM: linux/amd64
         shell: bash
         run: |
           set -euo pipefail
           test -n "$SSHPASS"
-          test "$(git rev-parse HEAD)" = "$(git rev-list -n 1 v0.6.1)"
+          test "$(git rev-parse HEAD)" = "$(git rev-list -n 1 "$RELEASE_TAG")"
           test -z "$(git status --porcelain)"
           sudo apt-get update -qq
           sudo apt-get install -y -qq sshpass
@@ -76,7 +103,8 @@ jobs:
           ssh-keyscan -T 10 -t ed25519 163.61.31.14 > "$known_hosts" 2>/dev/null
           fingerprint="$(ssh-keygen -lf "$known_hosts" -E sha256 | awk '{print $2}')"
           test "$fingerprint" = 'SHA256:uLP3I92NNheo+MIPWs77aU11NCTK5NrZGwUV0l1QgQI'
-          ssh_opts=(-o "UserKnownHostsFile=$known_hosts" -o StrictHostKeyChecking=yes)
+          ssh_opts=(-o "UserKnownHostsFile=$known_hosts" -o StrictHostKeyChecking=yes \
+            -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -o TCPKeepAlive=yes)
           test "$(sshpass -e ssh "${ssh_opts[@]}" root@163.61.31.14 hostname)" = '1c4mdvegg6'
           sshpass -e scp "${ssh_opts[@]}" root@163.61.31.14:/etc/rancher/k3s/k3s.yaml "$kubeconfig"
           chmod 600 "$kubeconfig"
@@ -101,30 +129,79 @@ jobs:
 
           export KUBECONFIG="$kubeconfig"
           make build
-          ./bin/mcp-runtime cluster doctor
-          ./bin/mcp-runtime update --to v0.6.1 --dry-run --build --source . \
-            --image-platform linux/amd64 --kubeconfig "$kubeconfig" --context default
-          ./bin/mcp-runtime update --to v0.6.1 --build --source . \
-            --image-platform linux/amd64 --kubeconfig "$kubeconfig" --context default --yes
+          if [[ "$VERIFY_ONLY" != true ]]; then
+            ./bin/mcp-runtime cluster doctor
+            ./bin/mcp-runtime update --to "$RELEASE_TAG" --dry-run --build --source . \
+              --image-platform linux/amd64 --kubeconfig "$kubeconfig" --context default
+            ./bin/mcp-runtime update --to "$RELEASE_TAG" --build --source . \
+              --image-platform linux/amd64 --kubeconfig "$kubeconfig" --context default --yes
+          fi
+          ./bin/mcp-runtime update --to "$RELEASE_TAG" --dry-run --output json \
+            --kubeconfig "$kubeconfig" --context default > "$RUNNER_TEMP/live-plan.json"
+          jq -e '(.plan.applyCRDs // false) == false and ([.plan.components[] | select(.action == "update")] | length == 0)' \
+            "$RUNNER_TEMP/live-plan.json"
+          if [[ -n "$MCP_AUTH_VERSION" ]]; then
+            ./bin/mcp-runtime cluster mcp-auth-connector apply \
+              --file config/deployments/mcpruntime-org-keycloak-connectors.json \
+              --connector keycloak --kubeconfig "$kubeconfig" --context default --dry-run
+            ./bin/mcp-runtime cluster mcp-auth-connector apply \
+              --file config/deployments/mcpruntime-org-keycloak-connectors.json \
+              --connector keycloak --kubeconfig "$kubeconfig" --context default --yes
 
-          ./bin/mcp-runtime cluster mcp-auth-connector apply \
-            --file config/deployments/mcpruntime-org-keycloak-connectors.json \
-            --connector keycloak --kubeconfig "$kubeconfig" --context default --dry-run
-          ./bin/mcp-runtime cluster mcp-auth-connector apply \
-            --file config/deployments/mcpruntime-org-keycloak-connectors.json \
-            --connector keycloak --kubeconfig "$kubeconfig" --context default --yes
-
-          auth_image='docker.io/princekrroshan01/mcp-auth-server:0.4.4'
-          auth_tag="auth-v0.4.4-${GITHUB_RUN_ID}"
-          docker pull --platform linux/amd64 "$auth_image"
-          docker tag "$auth_image" "registry.mcpruntime.org/mcp-auth-server:$auth_tag"
-          docker push "registry.mcpruntime.org/mcp-auth-server:$auth_tag"
-          cat > "$RUNNER_TEMP/auth-manifest.json" <<JSON
-          {"apiVersion":"mcpruntime.org/v1alpha1","kind":"PlatformRelease","version":"v0.6.1","components":[{"name":"mcp-auth","repository":"registry.mcpruntime.org/mcp-auth-server","tag":"$auth_tag"}]}
-          JSON
-          ./bin/mcp-runtime update --to v0.6.1 \
-            --release-manifest "$RUNNER_TEMP/auth-manifest.json" --only mcp-auth \
-            --kubeconfig "$kubeconfig" --context default --yes
+            auth_image="docker.io/princekrroshan01/mcp-auth-server:${MCP_AUTH_VERSION}"
+            auth_tag="auth-v${MCP_AUTH_VERSION}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            docker pull --platform linux/amd64 "$auth_image"
+            docker tag "$auth_image" "registry.mcpruntime.org/mcp-auth-server:$auth_tag"
+            docker push "registry.mcpruntime.org/mcp-auth-server:$auth_tag"
+            jq -n --arg version "$RELEASE_TAG" --arg tag "$auth_tag" \
+              '{apiVersion:"mcpruntime.org/v1alpha1",kind:"PlatformRelease",version:$version,components:[{name:"mcp-auth",repository:"registry.mcpruntime.org/mcp-auth-server",tag:$tag}]}' \
+              > "$RUNNER_TEMP/auth-manifest.json"
+            ./bin/mcp-runtime update --to "$RELEASE_TAG" \
+              --release-manifest "$RUNNER_TEMP/auth-manifest.json" --only mcp-auth \
+              --kubeconfig "$kubeconfig" --context default --yes
+          fi
           ./bin/mcp-runtime cluster doctor
           curl -fsS https://auth.mcpruntime.org/.well-known/oauth-authorization-server/mcp-auth \
-            | jq -e '.issuer == "https://auth.mcpruntime.org/mcp-auth"'
+            | jq -e '.issuer == "https://auth.mcpruntime.org/mcp-auth" and (["tools:read", "tools:write"] - .scopes_supported | length == 0)'
+          gh api "repos/$GITHUB_REPOSITORY/contents/hack/deploy/hosted-platform/post-deploy-check.sh?ref=main" \
+            --jq .content | base64 -d > "$RUNNER_TEMP/post-deploy-check.sh"
+          bash "$RUNNER_TEMP/post-deploy-check.sh"
+
+  publish-live-version:
+    needs: deploy
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+      - name: Mark the verified live version
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path('.github/status/live-platform.json')
+          path.parent.mkdir(parents=True, exist_ok=True)
+          path.write_text(json.dumps({
+              'schemaVersion': 1,
+              'label': 'Live platform',
+              'message': os.environ['RELEASE_TAG'],
+              'color': 'brightgreen',
+          }, separators=(',', ':')) + '\n')
+          PY
+          git add .github/status/live-platform.json
+          if git diff --cached --quiet; then
+            echo 'Live-version badge already matches the verified release'
+            exit 0
+          fi
+          git -c user.name=Agent-Hellboy -c user.email=princekrroshan01@gmail.com \
+            commit -m "Record verified live platform $RELEASE_TAG"
+          git push origin HEAD:main
