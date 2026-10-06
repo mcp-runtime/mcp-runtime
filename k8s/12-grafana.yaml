@@ -89,6 +89,8 @@ spec:
             items:
               - key: mcp-server.json
                 path: mcp-server.json
+              - key: scrape-coverage.json
+                path: scrape-coverage.json
         - name: grafana-storage
           persistentVolumeClaim:
             claimName: grafana-pvc

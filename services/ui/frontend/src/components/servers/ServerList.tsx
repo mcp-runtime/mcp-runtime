@@ -122,9 +122,13 @@ export function ServerList({
             server.access_json && Object.keys(server.access_json).length
           );
           const observability = server.observability;
-          const hasObservability = Boolean(
-            observability && ((observability.grafana.available && observability.grafana.url) || observability.prometheus.queries.some((query) => query.grafana_url))
-          );
+          // Grafana links are shown only when runtime-api marks the dashboard
+          // link available; panel links never render without it (issue #543).
+          const grafanaAvailable = Boolean(observability?.grafana.available && observability.grafana.url);
+          const grafanaPanelLinks = grafanaAvailable
+            ? observability?.prometheus.queries.filter((query) => query.grafana_url) ?? []
+            : [];
+          const hasObservability = grafanaAvailable;
 
           return (
             <li key={key}>
@@ -240,7 +244,7 @@ export function ServerList({
                 {hasObservability ? (
                   <div className="server-card-observability" data-testid="server-card-observability">
                     <span className="observability-label">Metrics</span>
-                    {observability?.grafana.available && observability.grafana.url ? (
+                    {grafanaAvailable && observability?.grafana.url ? (
                       <a
                         className="quiet-link"
                         href={observability.grafana.url}
@@ -251,7 +255,7 @@ export function ServerList({
                         Grafana <Icon name="external" size={11} />
                       </a>
                     ) : null}
-                    {observability?.prometheus.queries.filter((query) => query.grafana_url).map((query) => (
+                    {grafanaPanelLinks.map((query) => (
                       <a
                         key={query.id}
                         className="quiet-link"
