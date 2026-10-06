@@ -36,10 +36,12 @@ run_e2e_port_transition_scenario() {
   rollout_status_with_logs mcp-runtime deploy mcp-runtime-operator-controller-manager 180s
   for _ in 1 2 3 4 5; do
     port_transition_assert_old_route "${directory}"
-    # Allow one recovery retry: a 502/EOF from a dead Traefik port-forward
-    # triggers recover_ingress_mcp_path, which needs a further attempt. The
-    # Service assertion above is the retained-route invariant.
-    wait_for_mcp_tool_result "${MCP_SESSION_URL}" aaa-ping '{}' 200 pong 3 '' port-transition-retained
+    # A recovered Traefik port-forward needs a further probe attempt.
+    # The Service assertion above checks the retained-route invariant.
+    if ! wait_for_mcp_tool_result "${MCP_SESSION_URL}" aaa-ping '{}' 200 pong 3 '' port-transition-retained; then
+      port_transition_capture_route "${directory}/retained-failed"
+      return 1
+    fi
     sleep 2
   done
   jq --argjson port "${candidate_port}" --arg image "${gateway_image}" \
