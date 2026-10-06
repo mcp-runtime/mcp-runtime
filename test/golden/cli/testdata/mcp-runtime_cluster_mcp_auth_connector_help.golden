@@ -1,0 +1,15 @@
+Manage the bundled MCP Auth identity connector
+
+Usage:
+  mcp-runtime cluster mcp-auth-connector [command]
+
+Available Commands:
+  apply       Update the existing MCP Auth connector configuration
+
+Flags:
+  -h, --help   help for mcp-auth-connector
+
+Global Flags:
+      --debug   Enable debug mode with structured error logging
+
+Use "mcp-runtime cluster mcp-auth-connector [command] --help" for more information about a command.

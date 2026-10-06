@@ -209,6 +209,9 @@ type InventoryItem struct {
 type AuthConfig struct {
 	TokenHeader string `json:"tokenHeader,omitempty"`
 	IssuerURL   string `json:"issuerURL,omitempty"`
+	// Scopes are the OAuth scopes this MCP resource permits clients to request.
+	// The bundled authorization server publishes and enforces them per resource.
+	Scopes []string `json:"scopes,omitempty"`
 	// Audience is the OAuth resource identifier tokens must be issued for and
 	// that protected-resource metadata advertises. When
 	// this is unset, it defaults to the public MCP URL built from the ingress

@@ -27,7 +27,7 @@ Flags:
       --mcp-auth-connectors-file string      Provider connector JSON file for the bundled mcp-auth authorization server
       --mcp-auth-issuer-url string           Public HTTPS issuer URL for the bundled mcp-auth authorization server (defaults to https://auth.<MCP_PLATFORM_DOMAIN>/mcp-auth)
       --mcp-auth-resource-url strings        Optional initial resource URI for the bundled mcp-auth server; the operator reconciles this list from OAuth MCPServer audiences
-      --mcp-auth-server-image string         Container image for the optional bundled mcp-auth authorization server (default "docker.io/princekrroshan01/mcp-auth-server:latest")
+      --mcp-auth-server-image string         Container image for the optional bundled mcp-auth authorization server (default "docker.io/princekrroshan01/mcp-auth-server:0.4.4")
       --mcp-auth-signing-key-secret string   Secret holding the mcp-auth RSA signing key as private-key.pem (required outside --test-mode)
       --mcp-auth-tls-secret string           Override the managed TLS Secret for the bundled mcp-auth ingress (default: mcp-auth-server-tls)
       --mtls-cluster-issuer string           Enable adapter client-certificate authentication on gateway server routes using this workload ClusterIssuer (requires --with-tls). Name an enterprise issuer, or the bundled mcp-runtime-ca to have setup provision it. Test mode defaults to mcp-runtime-ca. Production must also set MCP_TRUST_DOMAIN. Overrides env MCP_SETUP_MTLS_CLUSTER_ISSUER

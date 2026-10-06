@@ -139,8 +139,8 @@ default. Override the path with `MCP_DEPLOY_ENV=/path/to/other.env`. See
 | `MCP_REGISTRY_INTERNAL` | optional | rollout | Override registry ClusterIP:port for **build/push** inside rollout script only. Pull path still uses `MCP_REGISTRY_ENDPOINT` in configmap. |
 | `MCP_REGISTRY_PUSH_MODE` | `internal` | rollout | `public` pushes directly to `registry.<domain>` using the workstation's selected Docker daemon. |
 | `MCP_UPDATE_MCP_AUTH` | `0` | rollout | Set to `1` only when updating the bundled authorization server. |
-| `MCP_AUTH_IMAGE_SOURCE` | `published` | rollout | `published` pulls Docker Hub `latest`; choose `local` only when intentionally testing a selected mcp-auth source ref. |
-| `MCP_AUTH_DOCKERHUB_IMAGE` | `docker.io/princekrroshan01/mcp-auth-server:latest` | rollout | Published image source, copied to the Runtime registry under a unique candidate tag. |
+| `MCP_AUTH_IMAGE_SOURCE` | `published` | rollout | `published` pulls the configured Docker Hub image (default `0.4.4`); choose `local` only when intentionally testing a selected mcp-auth source ref. |
+| `MCP_AUTH_DOCKERHUB_IMAGE` | `docker.io/princekrroshan01/mcp-auth-server:0.4.4` | rollout | Published image source, copied to the Runtime registry under a unique candidate tag. |
 | `MCP_AUTH_SOURCE` | sibling `mcp-auth` checkout | rollout | Source checkout, used only with `MCP_AUTH_IMAGE_SOURCE=local`. |
 | `MCP_AUTH_BUILD_REF` | required for local source | rollout | Selected branch, tag, or commit; rollout requires a clean checkout at this ref. |
 | `MCP_AUTH_IMAGE_TAG` | `<MCP_ROLLOUT_TAG>-auth` | rollout | Unique tag for the candidate mcp-auth image. |
@@ -336,7 +336,7 @@ the key is not printed or stored in the deployment profile. Record the previous
 image tags before rollout so they remain available for rollback.
 
 By default, rollout leaves the mcp-auth Deployment on its current release. To
-deploy the published Docker Hub image, opt in to copying `latest` into the
+deploy the published Docker Hub image, opt in to copying `0.4.4` into the
 Runtime registry under a unique tag:
 
 ```bash
@@ -370,7 +370,7 @@ MCP_ROLLOUT_TAG="$ROLLOUT_TAG" \
 bash hack/deploy/mcpruntime-org/rollout.sh
 ```
 
-Local mode builds, while published mode pulls Docker Hub `latest`; both copy
+Local mode builds, while published mode pulls the configured Docker Hub image; both copy
 the candidate to `registry.mcpruntime.org/mcp-auth-server:<tag>` and deploy
 that immutable candidate ref while
 preserving the existing mcp-auth configuration, SQLite PVC, signing key, and
@@ -553,7 +553,6 @@ but never stores the client secret. The relevant fields are:
     "client_secret_env": "KEYCLOAK_CLIENT_SECRET",
     "exchange_client_id": "mcp-auth",
     "scopes": ["openid", "profile", "email"],
-    "mcp_scopes": ["tools:read"],
     "identity_claims": ["preferred_username"],
     "token_endpoint_auth_method": "client_secret_post",
     "allowed_upstream_callback_uris": [
@@ -563,6 +562,24 @@ but never stores the client secret. The relevant fields are:
   }
 }
 ```
+
+For an existing installation, update the identity connector without changing
+its credential Secret or other platform configuration:
+
+```bash
+./bin/mcp-runtime cluster mcp-auth-connector apply \
+  --file config/deployments/mcpruntime-org-keycloak-connectors.json \
+  --connector keycloak --kubeconfig "$PROD_KUBECONFIG" \
+  --context "$PROD_CONTEXT" --dry-run
+./bin/mcp-runtime cluster mcp-auth-connector apply \
+  --file config/deployments/mcpruntime-org-keycloak-connectors.json \
+  --connector keycloak --kubeconfig "$PROD_KUBECONFIG" \
+  --context "$PROD_CONTEXT" --yes
+```
+
+The next MCP Auth rollout loads the updated file. Connector configuration
+selects the identity provider; MCP scope policy belongs in each server's
+`auth.scopes`, which the operator passes to MCP Auth per resource.
 
 Deploy the optional bundled server through normal setup:
 

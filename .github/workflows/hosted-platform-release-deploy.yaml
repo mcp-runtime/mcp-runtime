@@ -1,0 +1,130 @@
+name: Hosted platform release deploy
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hosted-platform-release-v0.6.1
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      (github.event_name == 'release' && github.event.release.tag_name == 'v0.6.1') ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Check out the selected release
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: v0.6.1
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Wait for release manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/release"
+          for attempt in $(seq 1 60); do
+            if gh release download v0.6.1 --repo "$GITHUB_REPOSITORY" \
+              --pattern platform-manifest.json --dir "$RUNNER_TEMP/release" >/dev/null 2>&1; then
+              test -s "$RUNNER_TEMP/release/platform-manifest.json"
+              exit 0
+            fi
+            sleep 30
+          done
+          echo 'The v0.6.1 platform manifest was not published' >&2
+          exit 1
+
+      - name: Deploy Runtime and MCP Auth from a disposable runner
+        env:
+          SSHPASS: ${{ secrets.MCP_PROD_BOOTSTRAP_PASSWORD }}
+          MCP_IMAGE_PLATFORM: linux/amd64
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSHPASS"
+          test "$(git rev-parse HEAD)" = "$(git rev-list -n 1 v0.6.1)"
+          test -z "$(git status --porcelain)"
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq sshpass
+
+          known_hosts="$RUNNER_TEMP/platform-known-hosts"
+          kubeconfig="$RUNNER_TEMP/platform-kubeconfig"
+          tunnel_pid=""
+          cleanup() {
+            docker logout registry.mcpruntime.org >/dev/null 2>&1 || true
+            if [[ -n "$tunnel_pid" ]]; then kill "$tunnel_pid" 2>/dev/null || true; fi
+            if [[ -f "$kubeconfig" ]]; then shred -u "$kubeconfig"; fi
+          }
+          trap cleanup EXIT
+
+          ssh-keyscan -T 10 -t ed25519 163.61.31.14 > "$known_hosts" 2>/dev/null
+          fingerprint="$(ssh-keygen -lf "$known_hosts" -E sha256 | awk '{print $2}')"
+          test "$fingerprint" = 'SHA256:uLP3I92NNheo+MIPWs77aU11NCTK5NrZGwUV0l1QgQI'
+          ssh_opts=(-o "UserKnownHostsFile=$known_hosts" -o StrictHostKeyChecking=yes)
+          test "$(sshpass -e ssh "${ssh_opts[@]}" root@163.61.31.14 hostname)" = '1c4mdvegg6'
+          sshpass -e scp "${ssh_opts[@]}" root@163.61.31.14:/etc/rancher/k3s/k3s.yaml "$kubeconfig"
+          chmod 600 "$kubeconfig"
+          grep -q 'server: https://127.0.0.1:6443' "$kubeconfig"
+          sed -i 's#server: https://127.0.0.1:6443#server: https://127.0.0.1:16443#' "$kubeconfig"
+          sshpass -e ssh "${ssh_opts[@]}" -o ExitOnForwardFailure=yes \
+            -N -L 127.0.0.1:16443:127.0.0.1:6443 root@163.61.31.14 \
+            > "$RUNNER_TEMP/platform-tunnel.log" 2>&1 &
+          tunnel_pid=$!
+          for attempt in $(seq 1 30); do
+            if timeout 1 bash -c '</dev/tcp/127.0.0.1/16443' 2>/dev/null; then break; fi
+            kill -0 "$tunnel_pid"
+            sleep 1
+          done
+          timeout 1 bash -c '</dev/tcp/127.0.0.1/16443'
+
+          sshpass -e ssh "${ssh_opts[@]}" root@163.61.31.14 \
+            'kubectl -n mcp-platform get secret mcp-ui-credentials -o jsonpath="{.data.UI_API_KEY}"' \
+            | base64 -d \
+            | docker login registry.mcpruntime.org --username platform-service --password-stdin
+          unset SSHPASS
+
+          export KUBECONFIG="$kubeconfig"
+          make build
+          ./bin/mcp-runtime cluster doctor
+          ./bin/mcp-runtime update --to v0.6.1 --dry-run --build --source . \
+            --image-platform linux/amd64 --kubeconfig "$kubeconfig" --context default
+          ./bin/mcp-runtime update --to v0.6.1 --build --source . \
+            --image-platform linux/amd64 --kubeconfig "$kubeconfig" --context default --yes
+
+          ./bin/mcp-runtime cluster mcp-auth-connector apply \
+            --file config/deployments/mcpruntime-org-keycloak-connectors.json \
+            --connector keycloak --kubeconfig "$kubeconfig" --context default --dry-run
+          ./bin/mcp-runtime cluster mcp-auth-connector apply \
+            --file config/deployments/mcpruntime-org-keycloak-connectors.json \
+            --connector keycloak --kubeconfig "$kubeconfig" --context default --yes
+
+          auth_image='docker.io/princekrroshan01/mcp-auth-server:0.4.4'
+          auth_tag="auth-v0.4.4-${GITHUB_RUN_ID}"
+          docker pull --platform linux/amd64 "$auth_image"
+          docker tag "$auth_image" "registry.mcpruntime.org/mcp-auth-server:$auth_tag"
+          docker push "registry.mcpruntime.org/mcp-auth-server:$auth_tag"
+          cat > "$RUNNER_TEMP/auth-manifest.json" <<JSON
+          {"apiVersion":"mcpruntime.org/v1alpha1","kind":"PlatformRelease","version":"v0.6.1","components":[{"name":"mcp-auth","repository":"registry.mcpruntime.org/mcp-auth-server","tag":"$auth_tag"}]}
+          JSON
+          ./bin/mcp-runtime update --to v0.6.1 \
+            --release-manifest "$RUNNER_TEMP/auth-manifest.json" --only mcp-auth \
+            --kubeconfig "$kubeconfig" --context default --yes
+          ./bin/mcp-runtime cluster doctor
+          curl -fsS https://auth.mcpruntime.org/.well-known/oauth-authorization-server/mcp-auth \
+            | jq -e '.issuer == "https://auth.mcpruntime.org/mcp-auth"'

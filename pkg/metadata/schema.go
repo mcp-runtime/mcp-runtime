@@ -184,9 +184,10 @@ type InventoryItem struct {
 
 // AuthConfig enables optional OAuth authentication at the gateway.
 type AuthConfig struct {
-	TokenHeader string `yaml:"tokenHeader,omitempty" json:"tokenHeader,omitempty"`
-	IssuerURL   string `yaml:"issuerURL,omitempty" json:"issuerURL,omitempty"`
-	Audience    string `yaml:"audience,omitempty" json:"audience,omitempty"`
+	TokenHeader string   `yaml:"tokenHeader,omitempty" json:"tokenHeader,omitempty"`
+	IssuerURL   string   `yaml:"issuerURL,omitempty" json:"issuerURL,omitempty"`
+	Audience    string   `yaml:"audience,omitempty" json:"audience,omitempty"`
+	Scopes      []string `yaml:"scopes,omitempty" json:"scopes,omitempty"`
 }
 
 // PolicyConfig configures authorization behavior at the gateway.

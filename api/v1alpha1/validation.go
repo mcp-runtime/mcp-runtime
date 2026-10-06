@@ -337,6 +337,13 @@ func (r *MCPServer) validate() error {
 		allErrs = append(allErrs, field.Invalid(specPath.Child("gateway", "port"), r.Spec.Gateway.Port, "gateway.port must differ from spec.port"))
 	}
 	if r.Spec.Auth != nil {
+		seenScopes := make(map[string]bool, len(r.Spec.Auth.Scopes))
+		for i, scope := range r.Spec.Auth.Scopes {
+			if scope == "" || strings.TrimSpace(scope) != scope || strings.ContainsAny(scope, " \t\r\n\"\\") || seenScopes[scope] {
+				allErrs = append(allErrs, field.Invalid(specPath.Child("auth", "scopes").Index(i), scope, "scope must be nonempty, unique, and contain no whitespace, quote, or backslash"))
+			}
+			seenScopes[scope] = true
+		}
 		// auth.audience is also the resource identifier the gateway advertises
 		// in protected resource metadata, so it must be a URI a conforming
 		// client can send back as the RFC 8707 resource parameter. An unset

@@ -95,7 +95,7 @@ KUBECONFIG="$PROD_KUBECONFIG" ./bin/mcp-runtime cluster doctor
   `registry.<domain>/<image>:<unique-tag>`.
 - mcp-auth is a separate release track. Leave its Deployment unchanged unless
   an update is requested. The default candidate source is the published Docker
-  Hub image `docker.io/princekrroshan01/mcp-auth-server:latest`; copy it into
+  Hub image `docker.io/princekrroshan01/mcp-auth-server:0.4.4`; copy it into
   the Runtime registry under a unique `MCP_AUTH_IMAGE_TAG`. Build from
   `/Users/proshan/mcp-auth` only when intentionally testing source changes;
   then require a selected `MCP_AUTH_BUILD_REF`, a clean checkout whose HEAD
@@ -108,7 +108,7 @@ KUBECONFIG="$PROD_KUBECONFIG" ./bin/mcp-runtime cluster doctor
   credentials do not mask CIMD behavior. See the TypeScript SDK resource example
   in `examples/oauth-example-typescript-2025-06-18/`.
 - Ask whether this rollout should update mcp-auth. If yes, ask whether to
-  deploy published Docker Hub `latest` (recommended) or intentionally build a
+  deploy the configured published Docker Hub version (recommended) or intentionally build a
   selected local mcp-auth ref for source testing. For local-source testing,
   inspect `/Users/proshan/mcp-auth`, check out the requested ref only with the
   user's direction, and require a clean worktree. For a published-image

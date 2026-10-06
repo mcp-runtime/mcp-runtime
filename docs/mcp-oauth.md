@@ -15,7 +15,7 @@ MCP client → optional mcp-auth-server → Keycloak/OIDC provider
 ```
 
 - The bundled `mcp-auth-server` is the OAuth authorization server. It logs the
-  user in through one configured identity provider and mints MCP tokens.
+  user in through one configured identity provider and mints resource-bound MCP tokens.
 - Keycloak is an external identity provider. It owns the realm, users, and
   upstream OIDC client credentials.
 - The Runtime gateway is the protected-resource boundary. It validates the
@@ -25,6 +25,25 @@ MCP client → optional mcp-auth-server → Keycloak/OIDC provider
 The gateway is the policy decision point because governance must inspect the
 actual MCP JSON-RPC tool call and current grant/session state. The
 authorization server only sees login and token requests.
+
+Each MCP server can declare its allowed OAuth scopes in its `.mcp/servers.yaml`
+manifest. The selected identity-provider connector supplies login and claims;
+it does not need to define the MCP server's scopes:
+
+```yaml
+auth:
+  issuerURL: https://auth.example.com/mcp-auth
+  audience: https://mcp.example.com/cully/mcp
+  scopes: [tools:read, tools:write]
+```
+
+The operator publishes this scope list to the bundled authorization server
+for that exact resource. MCP Auth rejects requests for scopes outside the
+resource list and advertises the list in protected-resource metadata. The
+Runtime gateway also advertises the server's scopes in its public resource
+metadata and checks token scope and per-call policy when a tool is
+invoked. Servers without `auth.scopes` receive MCP Auth's read-only default;
+set `auth.scopes` in the server manifest to grant write access explicitly.
 
 ## Responsibility boundary
 
@@ -42,8 +61,8 @@ decision point.
 
 Before enabling the feature, confirm that the provider exposes HTTPS OIDC
 discovery, has a confidential client with authorization-code flow and S256
-PKCE enabled, has the exact callback URI registered, can issue `tools:read`,
-and includes a stable subject claim. Runtime cannot repair an incorrect realm,
+PKCE enabled, has the exact callback URI registered, and includes a stable
+subject claim. Runtime cannot repair an incorrect realm,
 client registration, redirect URI, claim mapping, or provider outage.
 
 ## Public hostnames and TLS
@@ -150,7 +169,6 @@ export KEYCLOAK_CLIENT_SECRET="$(tr -d '\n' < /secure/keycloak-client-secret)"
     "client_secret_env": "KEYCLOAK_CLIENT_SECRET",
     "exchange_client_id": "mcp-auth",
     "scopes": ["openid", "profile", "email"],
-    "mcp_scopes": ["tools:read"],
     "identity_claims": ["preferred_username"],
     "token_endpoint_auth_method": "client_secret_post",
     "allowed_upstream_callback_uris": [
@@ -247,7 +265,7 @@ The TLS certificate for the issuer host is provisioned by setup using the
 configured TLS ClusterIssuer. Pass `--mcp-auth-tls-secret` only when the
 certificate is externally managed (and use `--provided-tls-secrets`).
 
-The default image is `docker.io/princekrroshan01/mcp-auth-server:latest`.
+The default image is `docker.io/princekrroshan01/mcp-auth-server:0.4.4`.
 The server uses SQLite on a PVC in production and memory storage only in
 `--test-mode`. The setup flag is opt-in; when it is absent, Runtime does not
 deploy this authorization server.
@@ -349,7 +367,6 @@ and callback settings from that provider's console:
     "client_secret_env": "OIDC_CLIENT_SECRET",
     "exchange_client_id": "mcp-auth",
     "scopes": ["openid", "profile", "email"],
-    "mcp_scopes": ["tools:read"],
     "identity_claims": ["sub", "email"],
     "token_endpoint_auth_method": "client_secret_post",
     "allowed_upstream_callback_uris": [

@@ -34,7 +34,9 @@ import (
 func TestHandleProxyOAuthProtectedResourceMetadata(t *testing.T) {
 	issuer := newTestJWTIssuer(t)
 	upstreamCalled := false
-	proxy := newTestGatewayServer(t, oauthPolicy(issuer.url), func(w http.ResponseWriter, _ *http.Request) {
+	serverPolicy := oauthPolicy(issuer.url)
+	serverPolicy.Auth.Scopes = []string{"tools:read", "tools:write"}
+	proxy := newTestGatewayServer(t, serverPolicy, func(w http.ResponseWriter, _ *http.Request) {
 		upstreamCalled = true
 		w.WriteHeader(http.StatusNoContent)
 	})
@@ -54,6 +56,7 @@ func TestHandleProxyOAuthProtectedResourceMetadata(t *testing.T) {
 	var payload struct {
 		Resource             string   `json:"resource"`
 		AuthorizationServers []string `json:"authorization_servers"`
+		ScopesSupported      []string `json:"scopes_supported"`
 	}
 	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("Unmarshal() error = %v", err)
@@ -66,6 +69,9 @@ func TestHandleProxyOAuthProtectedResourceMetadata(t *testing.T) {
 	}
 	if len(payload.AuthorizationServers) != 1 || payload.AuthorizationServers[0] != issuer.url {
 		t.Fatalf("authorization_servers = %#v, want [%q]", payload.AuthorizationServers, issuer.url)
+	}
+	if len(payload.ScopesSupported) != 2 || payload.ScopesSupported[0] != "tools:read" || payload.ScopesSupported[1] != "tools:write" {
+		t.Fatalf("scopes_supported = %#v", payload.ScopesSupported)
 	}
 }
 

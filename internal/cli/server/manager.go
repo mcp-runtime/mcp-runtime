@@ -1008,6 +1008,7 @@ func mergeDeployMetadata(spec *mcpv1alpha1.MCPServerSpec, src *metadata.ServerMe
 			TokenHeader: src.Auth.TokenHeader,
 			IssuerURL:   src.Auth.IssuerURL,
 			Audience:    src.Auth.Audience,
+			Scopes:      append([]string(nil), src.Auth.Scopes...),
 		}
 	}
 	if src.Policy != nil {
