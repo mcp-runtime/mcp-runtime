@@ -15,6 +15,24 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+// Pods are not watched, so readiness must come from the uncached APIReader
+// rather than starting a cached Pod informer the RBAC cannot watch.
+func TestPortTransitionReadsCandidatePodsFromAPIReader(t *testing.T) {
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	_ = mcpv1alpha1.AddToScheme(scheme)
+	server := &mcpv1alpha1.MCPServer{ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "team"}, Spec: mcpv1alpha1.MCPServerSpec{Port: 8081, ServicePort: 80, Gateway: &mcpv1alpha1.GatewayConfig{Enabled: mcpv1alpha1.BoolPtr(true), Port: 8091}}}
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "candidate", Namespace: server.Namespace, Labels: map[string]string{LabelApp: server.Name, LabelManagedBy: LabelManagedByValue, servingPortLabel: "8091", "mcpruntime.org/rollout-track": "stable"}}, Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "gateway", Ports: []corev1.ContainerPort{{ContainerPort: 8091}}}}}, Status: corev1.PodStatus{Phase: corev1.PodRunning, Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}}}}
+	cached := fake.NewClientBuilder().WithScheme(scheme).Build()
+	uncached := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pod).Build()
+	r := &MCPServerReconciler{Client: cached, APIReader: uncached, Scheme: scheme}
+	ready, err := r.hasReadyServingPod(ctx, server)
+	if err != nil || !ready {
+		t.Fatalf("hasReadyServingPod = %v, %v; want ready candidate from APIReader", ready, err)
+	}
+}
+
 func TestPortTransitionRetainsLastRouteAndPromotesReadyCandidate(t *testing.T) {
 	ctx := context.Background()
 	scheme := runtime.NewScheme()
