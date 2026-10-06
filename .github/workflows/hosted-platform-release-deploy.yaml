@@ -147,13 +147,13 @@ jobs:
               --file config/deployments/mcpruntime-org-keycloak-connectors.json \
               --connector keycloak --kubeconfig "$kubeconfig" --context default --yes
 
-            auth_image="docker.io/princekrroshan01/mcp-auth-server:${MCP_AUTH_VERSION}"
-            auth_tag="auth-v${MCP_AUTH_VERSION}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-            docker pull --platform linux/amd64 "$auth_image"
-            docker tag "$auth_image" "registry.mcpruntime.org/mcp-auth-server:$auth_tag"
-            docker push "registry.mcpruntime.org/mcp-auth-server:$auth_tag"
-            jq -n --arg version "$RELEASE_TAG" --arg tag "$auth_tag" \
-              '{apiVersion:"mcpruntime.org/v1alpha1",kind:"PlatformRelease",version:$version,components:[{name:"mcp-auth",repository:"registry.mcpruntime.org/mcp-auth-server",tag:$tag}]}' \
+            # Roll out the public image setup installs. The mcp-auth-server
+            # Deployment has no imagePullSecrets, so a copy re-tagged into the
+            # private platform registry fails with ImagePullBackOff.
+            auth_repository="docker.io/princekrroshan01/mcp-auth-server"
+            docker manifest inspect "$auth_repository:$MCP_AUTH_VERSION" >/dev/null
+            jq -n --arg version "$RELEASE_TAG" --arg repository "$auth_repository" --arg tag "$MCP_AUTH_VERSION" \
+              '{apiVersion:"mcpruntime.org/v1alpha1",kind:"PlatformRelease",version:$version,components:[{name:"mcp-auth",repository:$repository,tag:$tag}]}' \
               > "$RUNNER_TEMP/auth-manifest.json"
             ./bin/mcp-runtime update --to "$RELEASE_TAG" \
               --release-manifest "$RUNNER_TEMP/auth-manifest.json" --only mcp-auth \
