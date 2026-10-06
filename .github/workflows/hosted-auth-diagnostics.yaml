@@ -7,6 +7,10 @@ on:
         description: Inspect read-only production analytics configuration
         type: boolean
         default: false
+      rollout_candidate:
+        description: Roll out the selected runtime-api candidate image before CLI acceptance
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -23,7 +27,7 @@ jobs:
       - name: Check out the selected candidate CLI
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: f5fded16fb21dfede1d1d65fe420dc6e97bf4d3e
+          ref: f72759e441dcb6f1826d89fde93d100fbe2c0e98
           fetch-depth: 0
 
       - name: Set up Go
@@ -37,12 +41,14 @@ jobs:
           SSHPASS: ${{ secrets.MCP_PROD_BOOTSTRAP_PASSWORD }}
           GH_TOKEN: ${{ github.token }}
           MCP_IMAGE_PLATFORM: linux/amd64
+          MCP_REGISTRY_PUSH_MODE: public
           DIAGNOSTICS_ONLY: ${{ inputs.diagnostics_only }}
+          ROLLOUT_CANDIDATE: ${{ inputs.rollout_candidate }}
         shell: bash
         run: |
           set -euo pipefail
           test -n "$SSHPASS"
-          test "$(git rev-parse HEAD)" = f5fded16fb21dfede1d1d65fe420dc6e97bf4d3e
+          test "$(git rev-parse HEAD)" = f72759e441dcb6f1826d89fde93d100fbe2c0e98
           test -z "$(git status --porcelain)"
           sudo apt-get update -qq
           sudo apt-get install -y -qq sshpass
@@ -98,6 +104,24 @@ jobs:
           fi
           make build
           ./bin/mcp-runtime cluster doctor
+          if [[ "$ROLLOUT_CANDIDATE" == true ]]; then
+            auth_image_before="$(kubectl -n mcp-platform get deployment mcp-auth-server -o jsonpath='{.spec.template.spec.containers[0].image}')"
+            candidate_tag="v063-f72759e4-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            jq -n --arg tag "$candidate_tag" \
+              '{apiVersion:"mcpruntime.org/v1alpha1",kind:"PlatformRelease",version:"v0.6.3",components:[{name:"runtime-api",repository:"registry.mcpruntime.org/mcp-runtime-api",tag:$tag}]}' \
+              > "$RUNNER_TEMP/runtime-api-candidate.json"
+            ./bin/mcp-runtime update --to v0.6.3 \
+              --release-manifest "$RUNNER_TEMP/runtime-api-candidate.json" \
+              --only runtime-api --dry-run --build --source . --image-platform linux/amd64 \
+              --kubeconfig "$kubeconfig" --context default
+            ./bin/mcp-runtime update --to v0.6.3 \
+              --release-manifest "$RUNNER_TEMP/runtime-api-candidate.json" \
+              --only runtime-api --build --source . --image-platform linux/amd64 \
+              --kubeconfig "$kubeconfig" --context default --yes
+            test "$(kubectl -n mcp-platform get deployment mcp-auth-server -o jsonpath='{.spec.template.spec.containers[0].image}')" = "$auth_image_before"
+            ./bin/mcp-runtime cluster doctor
+            echo "Rolled out selected runtime-api candidate image with tag $candidate_tag"
+          fi
           export MCP_RUNTIME_CONFIG_DIR="$RUNNER_TEMP/qa-profile"
           mkdir -m 700 "$MCP_RUNTIME_CONFIG_DIR"
           admin_email="$(kubectl -n mcp-platform get secret mcp-platform-api-credentials -o jsonpath='{.data.PLATFORM_ADMIN_EMAIL}' | base64 -d)"
@@ -115,7 +139,6 @@ jobs:
             --data "$(jq -nc --arg email "$admin_email" --arg password "$admin_password" '{email:$email,password:$password}')" \
             https://platform.mcpruntime.org/auth/login \
             | jq -e '.authenticated == true and .principal.role == "admin"' >/dev/null
-          unset admin_email admin_password
           curl -fsS -b "$cookie_jar" https://platform.mcpruntime.org/auth/status \
             | jq -e '.authenticated == true' >/dev/null
 
@@ -223,3 +246,21 @@ jobs:
             '.events[] | select(.server == $server and .tool_name == "aaa-ping") | {server,tool_name,decision,timestamp}' \
             "$RUNNER_TEMP/qa-events.json"
           echo 'Authenticated UI analytics event passed'
+
+          npm install --prefix "$RUNNER_TEMP/browser" --no-save --no-audit --no-fund playwright@1.63.0
+          "$RUNNER_TEMP/browser/node_modules/.bin/playwright" install --with-deps chromium
+          gh api "repos/$GITHUB_REPOSITORY/contents/test/e2e/hosted-browser-check.mjs?ref=qa/v063-cli-acceptance" \
+            --jq .content | base64 -d > "$RUNNER_TEMP/hosted-browser-check.mjs"
+          PLAYWRIGHT_MODULE="$RUNNER_TEMP/browser/node_modules/playwright/index.mjs" \
+            BROWSER_EVIDENCE_DIR="$RUNNER_TEMP/browser-evidence" \
+            QA_NAME="$qa_name" QA_ADMIN_EMAIL="$admin_email" QA_ADMIN_PASSWORD="$admin_password" \
+            node "$RUNNER_TEMP/hosted-browser-check.mjs"
+          unset admin_email admin_password
+
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: production-browser-${{ github.run_id }}
+          path: ${{ runner.temp }}/browser-evidence/*.png
+          if-no-files-found: ignore
