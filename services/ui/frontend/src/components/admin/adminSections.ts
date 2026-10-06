@@ -28,7 +28,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     id: "platform",
     label: "Platform health",
     group: "Platform",
-    description: "Operator, Sentinel services, and observability components.",
+    description: "Operator, platform services, and observability components.",
   },
   {
     id: "analytics",

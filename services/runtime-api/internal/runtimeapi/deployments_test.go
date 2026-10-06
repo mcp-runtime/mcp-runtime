@@ -27,7 +27,7 @@ import (
 
 	"mcp-runtime/pkg/k8sclient"
 	"mcp-runtime/pkg/kubeworkload"
-	"mcp-runtime/pkg/sentinel"
+	"mcp-runtime/pkg/platformstack"
 )
 
 type fakeAuditWriter struct {
@@ -152,7 +152,7 @@ func TestEnsureDefaultDenyNetworkPolicyIncludesDNSEgress(t *testing.T) {
 	}
 }
 
-func TestEnsureDefaultDenyNetworkPolicyAllowsSentinelEgress(t *testing.T) {
+func TestEnsureDefaultDenyNetworkPolicyAllowsPlatformEgress(t *testing.T) {
 	client := kubernetesfake.NewSimpleClientset()
 	if err := ensureDefaultDenyNetworkPolicy(context.Background(), client, "user-1"); err != nil {
 		t.Fatalf("ensureDefaultDenyNetworkPolicy() error = %v", err)
@@ -161,10 +161,10 @@ func TestEnsureDefaultDenyNetworkPolicyAllowsSentinelEgress(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get networkpolicy: %v", err)
 	}
-	foundSentinel := false
+	foundPlatform := false
 	for _, rule := range policy.Spec.Egress {
 		for _, peer := range rule.To {
-			if peer.NamespaceSelector == nil || peer.NamespaceSelector.MatchLabels["kubernetes.io/metadata.name"] != sentinel.ObservabilityNamespace {
+			if peer.NamespaceSelector == nil || peer.NamespaceSelector.MatchLabels["kubernetes.io/metadata.name"] != platformstack.ObservabilityNamespace {
 				continue
 			}
 			seen := map[int32]bool{}
@@ -173,13 +173,13 @@ func TestEnsureDefaultDenyNetworkPolicyAllowsSentinelEgress(t *testing.T) {
 					seen[port.Port.IntVal] = true
 				}
 			}
-			if seen[sentinelIngestPort] && seen[sentinelOTLPPort] {
-				foundSentinel = true
+			if seen[platformIngestPort] && seen[platformOTLPPort] {
+				foundPlatform = true
 			}
 		}
 	}
-	if !foundSentinel {
-		t.Fatalf("expected sentinel egress rule, got %#v", policy.Spec.Egress)
+	if !foundPlatform {
+		t.Fatalf("expected platform egress rule, got %#v", policy.Spec.Egress)
 	}
 }
 
@@ -320,7 +320,7 @@ func TestManagedNamespaceHTTPSOnlyReachesConfiguredIngressController(t *testing.
 	}
 }
 
-func TestEnsureDefaultDenyNetworkPolicyAllowsSentinelAPILiveInventoryIngress(t *testing.T) {
+func TestEnsureDefaultDenyNetworkPolicyAllowsPlatformAPILiveInventoryIngress(t *testing.T) {
 	client := kubernetesfake.NewSimpleClientset()
 	if err := ensureDefaultDenyNetworkPolicy(context.Background(), client, "mcp-team-acme", "kube-system"); err != nil {
 		t.Fatalf("ensureDefaultDenyNetworkPolicy() error = %v", err)
@@ -329,7 +329,7 @@ func TestEnsureDefaultDenyNetworkPolicyAllowsSentinelAPILiveInventoryIngress(t *
 	if err != nil {
 		t.Fatalf("get networkpolicy: %v", err)
 	}
-	for _, namespace := range []string{sentinel.PlatformNamespace, sentinel.ObservabilityNamespace} {
+	for _, namespace := range []string{platformstack.PlatformNamespace, platformstack.ObservabilityNamespace} {
 		if !networkPolicyAllowsNamespace(policy, namespace) {
 			t.Fatalf("network policy does not allow ingress from %s: %#v", namespace, policy.Spec.Ingress)
 		}
@@ -672,7 +672,7 @@ func TestEnsureTeamNamespaceCreatesRegistryPullSecret(t *testing.T) {
 	if binding.RoleRef.Kind != "ClusterRole" || binding.RoleRef.Name != platformNamespaceAPISecretAccessName {
 		t.Fatalf("namespace API secret access rolebinding ref = %#v", binding.RoleRef)
 	}
-	if len(binding.Subjects) != 1 || binding.Subjects[0].Kind != rbacv1.ServiceAccountKind || binding.Subjects[0].Name != platformNamespaceAPIServiceAccountName || binding.Subjects[0].Namespace != sentinel.PlatformNamespace {
+	if len(binding.Subjects) != 1 || binding.Subjects[0].Kind != rbacv1.ServiceAccountKind || binding.Subjects[0].Name != platformNamespaceAPIServiceAccountName || binding.Subjects[0].Namespace != platformstack.PlatformNamespace {
 		t.Fatalf("namespace API secret access subjects = %#v", binding.Subjects)
 	}
 }

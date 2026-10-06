@@ -77,7 +77,7 @@ const (
 )
 
 // catalog is ordered in rollout order: cert-manager first (when selected),
-// then the operator, then Sentinel services, then mcp-auth.
+// then the operator, then platform services, then mcp-auth.
 var catalog = withInventoryPlacement([]Component{
 	{Name: "cert-manager-controller", Container: "cert-manager-controller", OptIn: OptInCertManager},
 	{Name: "cert-manager-webhook", Container: "cert-manager-webhook", OptIn: OptInCertManager},

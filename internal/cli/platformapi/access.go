@@ -18,50 +18,50 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
-	sentinelaccess "mcp-runtime/pkg/access"
+	mcpaccess "mcp-runtime/pkg/access"
 )
 
 type grantsListResponse struct {
-	Grants []sentinelaccess.GrantSummary `json:"grants"`
+	Grants []mcpaccess.GrantSummary `json:"grants"`
 }
 
 type sessionsListResponse struct {
-	Sessions []sentinelaccess.SessionSummary `json:"sessions"`
+	Sessions []mcpaccess.SessionSummary `json:"sessions"`
 }
 
 type grantGetResponse struct {
-	Grant sentinelaccess.GrantSummary `json:"grant"`
+	Grant mcpaccess.GrantSummary `json:"grant"`
 }
 
 type sessionGetResponse struct {
-	Session sentinelaccess.SessionSummary `json:"session"`
+	Session mcpaccess.SessionSummary `json:"session"`
 }
 
 type grantAPIBody struct {
-	Name               string                          `json:"name"`
-	Namespace          string                          `json:"namespace"`
-	ServerRef          sentinelaccess.ServerReference  `json:"serverRef"`
-	Subject            sentinelaccess.SubjectRef       `json:"subject"`
-	MaxTrust           sentinelaccess.TrustLevel       `json:"maxTrust"`
-	ExpiresAt          *metav1.Time                    `json:"expiresAt,omitempty"`
-	AllowedSideEffects []sentinelaccess.ToolSideEffect `json:"allowedSideEffects,omitempty"`
-	PolicyVersion      string                          `json:"policyVersion,omitempty"`
-	Disabled           *bool                           `json:"disabled,omitempty"`
-	ToolRules          []sentinelaccess.ToolRule       `json:"toolRules"`
+	Name               string                     `json:"name"`
+	Namespace          string                     `json:"namespace"`
+	ServerRef          mcpaccess.ServerReference  `json:"serverRef"`
+	Subject            mcpaccess.SubjectRef       `json:"subject"`
+	MaxTrust           mcpaccess.TrustLevel       `json:"maxTrust"`
+	ExpiresAt          *metav1.Time               `json:"expiresAt,omitempty"`
+	AllowedSideEffects []mcpaccess.ToolSideEffect `json:"allowedSideEffects,omitempty"`
+	PolicyVersion      string                     `json:"policyVersion,omitempty"`
+	Disabled           *bool                      `json:"disabled,omitempty"`
+	ToolRules          []mcpaccess.ToolRule       `json:"toolRules"`
 }
 
 type sessionAPIBody struct {
-	Name           string                         `json:"name"`
-	Namespace      string                         `json:"namespace"`
-	ServerRef      sentinelaccess.ServerReference `json:"serverRef"`
-	Subject        sentinelaccess.SubjectRef      `json:"subject"`
-	ConsentedTrust sentinelaccess.TrustLevel      `json:"consentedTrust"`
-	ExpiresAt      *metav1.Time                   `json:"expiresAt,omitempty"`
-	Revoked        *bool                          `json:"revoked,omitempty"`
-	PolicyVersion  string                         `json:"policyVersion"`
+	Name           string                    `json:"name"`
+	Namespace      string                    `json:"namespace"`
+	ServerRef      mcpaccess.ServerReference `json:"serverRef"`
+	Subject        mcpaccess.SubjectRef      `json:"subject"`
+	ConsentedTrust mcpaccess.TrustLevel      `json:"consentedTrust"`
+	ExpiresAt      *metav1.Time              `json:"expiresAt,omitempty"`
+	Revoked        *bool                     `json:"revoked,omitempty"`
+	PolicyVersion  string                    `json:"policyVersion"`
 }
 
-func (c *PlatformClient) ListGrants(ctx context.Context, namespace string) ([]sentinelaccess.GrantSummary, error) {
+func (c *PlatformClient) ListGrants(ctx context.Context, namespace string) ([]mcpaccess.GrantSummary, error) {
 	resp, err := c.do(ctx, http.MethodGet, "/runtime/grants", listQuery(namespace), nil)
 	if err != nil {
 		return nil, err
@@ -81,7 +81,7 @@ func (c *PlatformClient) ListGrants(ctx context.Context, namespace string) ([]se
 	return out.Grants, nil
 }
 
-func (c *PlatformClient) ListSessions(ctx context.Context, namespace string) ([]sentinelaccess.SessionSummary, error) {
+func (c *PlatformClient) ListSessions(ctx context.Context, namespace string) ([]mcpaccess.SessionSummary, error) {
 	resp, err := c.do(ctx, http.MethodGet, "/runtime/sessions", listQuery(namespace), nil)
 	if err != nil {
 		return nil, err
@@ -101,44 +101,44 @@ func (c *PlatformClient) ListSessions(ctx context.Context, namespace string) ([]
 	return out.Sessions, nil
 }
 
-func (c *PlatformClient) GetGrant(ctx context.Context, namespace, name string) (sentinelaccess.GrantSummary, error) {
+func (c *PlatformClient) GetGrant(ctx context.Context, namespace, name string) (mcpaccess.GrantSummary, error) {
 	p := fmt.Sprintf("/runtime/grants/%s/%s", url.PathEscape(namespace), url.PathEscape(name))
 	resp, err := c.do(ctx, http.MethodGet, p, "", nil)
 	if err != nil {
-		return sentinelaccess.GrantSummary{}, err
+		return mcpaccess.GrantSummary{}, err
 	}
 	defer resp.Body.Close()
 	b, err := readBody(resp.Body)
 	if err != nil {
-		return sentinelaccess.GrantSummary{}, err
+		return mcpaccess.GrantSummary{}, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return sentinelaccess.GrantSummary{}, httpAPIError(resp.StatusCode, b)
+		return mcpaccess.GrantSummary{}, httpAPIError(resp.StatusCode, b)
 	}
 	var out grantGetResponse
 	if err := json.Unmarshal(b, &out); err != nil {
-		return sentinelaccess.GrantSummary{}, err
+		return mcpaccess.GrantSummary{}, err
 	}
 	return out.Grant, nil
 }
 
-func (c *PlatformClient) GetSession(ctx context.Context, namespace, name string) (sentinelaccess.SessionSummary, error) {
+func (c *PlatformClient) GetSession(ctx context.Context, namespace, name string) (mcpaccess.SessionSummary, error) {
 	p := fmt.Sprintf("/runtime/sessions/%s/%s", url.PathEscape(namespace), url.PathEscape(name))
 	resp, err := c.do(ctx, http.MethodGet, p, "", nil)
 	if err != nil {
-		return sentinelaccess.SessionSummary{}, err
+		return mcpaccess.SessionSummary{}, err
 	}
 	defer resp.Body.Close()
 	b, err := readBody(resp.Body)
 	if err != nil {
-		return sentinelaccess.SessionSummary{}, err
+		return mcpaccess.SessionSummary{}, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return sentinelaccess.SessionSummary{}, httpAPIError(resp.StatusCode, b)
+		return mcpaccess.SessionSummary{}, httpAPIError(resp.StatusCode, b)
 	}
 	var out sessionGetResponse
 	if err := json.Unmarshal(b, &out); err != nil {
-		return sentinelaccess.SessionSummary{}, err
+		return mcpaccess.SessionSummary{}, err
 	}
 	return out.Session, nil
 }
@@ -302,27 +302,27 @@ func (c *PlatformClient) ApplyAccessFromYAMLFile(ctx context.Context, path strin
 func grantFromV1(g *mcpv1alpha1.MCPAccessGrant) grantAPIBody {
 	ns := g.Namespace
 	if ns == "" {
-		ns = sentinelaccess.DefaultMCPResourceNamespace
+		ns = mcpaccess.DefaultMCPResourceNamespace
 	}
-	trust := sentinelaccess.TrustLevel(g.Spec.MaxTrust)
-	allowedSideEffects := make([]sentinelaccess.ToolSideEffect, 0, len(g.Spec.AllowedSideEffects))
+	trust := mcpaccess.TrustLevel(g.Spec.MaxTrust)
+	allowedSideEffects := make([]mcpaccess.ToolSideEffect, 0, len(g.Spec.AllowedSideEffects))
 	for _, sideEffect := range g.Spec.AllowedSideEffects {
-		allowedSideEffects = append(allowedSideEffects, sentinelaccess.ToolSideEffect(sideEffect))
+		allowedSideEffects = append(allowedSideEffects, mcpaccess.ToolSideEffect(sideEffect))
 	}
-	rules := make([]sentinelaccess.ToolRule, 0, len(g.Spec.ToolRules))
+	rules := make([]mcpaccess.ToolRule, 0, len(g.Spec.ToolRules))
 	for _, tr := range g.Spec.ToolRules {
-		rules = append(rules, sentinelaccess.ToolRule{
+		rules = append(rules, mcpaccess.ToolRule{
 			Name:          tr.Name,
-			Decision:      sentinelaccess.PolicyDecision(tr.Decision),
-			RequiredTrust: sentinelaccess.TrustLevel(tr.RequiredTrust),
+			Decision:      mcpaccess.PolicyDecision(tr.Decision),
+			RequiredTrust: mcpaccess.TrustLevel(tr.RequiredTrust),
 		})
 	}
 	dis := g.Spec.Disabled
 	return grantAPIBody{
 		Name:               g.Name,
 		Namespace:          ns,
-		ServerRef:          sentinelaccess.ServerReference{Name: sentinelaccess.ServerName(g.Spec.ServerRef.Name), Namespace: sentinelaccess.Namespace(g.Spec.ServerRef.Namespace)},
-		Subject:            sentinelaccess.SubjectRef{HumanID: sentinelaccess.HumanID(g.Spec.Subject.HumanID), AgentID: sentinelaccess.AgentID(g.Spec.Subject.AgentID), TeamID: sentinelaccess.TeamID(g.Spec.Subject.TeamID)},
+		ServerRef:          mcpaccess.ServerReference{Name: mcpaccess.ServerName(g.Spec.ServerRef.Name), Namespace: mcpaccess.Namespace(g.Spec.ServerRef.Namespace)},
+		Subject:            mcpaccess.SubjectRef{HumanID: mcpaccess.HumanID(g.Spec.Subject.HumanID), AgentID: mcpaccess.AgentID(g.Spec.Subject.AgentID), TeamID: mcpaccess.TeamID(g.Spec.Subject.TeamID)},
 		MaxTrust:           trust,
 		ExpiresAt:          g.Spec.ExpiresAt,
 		AllowedSideEffects: allowedSideEffects,
@@ -335,15 +335,15 @@ func grantFromV1(g *mcpv1alpha1.MCPAccessGrant) grantAPIBody {
 func sessionFromV1(s *mcpv1alpha1.MCPAgentSession) sessionAPIBody {
 	ns := s.Namespace
 	if ns == "" {
-		ns = sentinelaccess.DefaultMCPResourceNamespace
+		ns = mcpaccess.DefaultMCPResourceNamespace
 	}
 	rev := s.Spec.Revoked
 	return sessionAPIBody{
 		Name:           s.Name,
 		Namespace:      ns,
-		ServerRef:      sentinelaccess.ServerReference{Name: sentinelaccess.ServerName(s.Spec.ServerRef.Name), Namespace: sentinelaccess.Namespace(s.Spec.ServerRef.Namespace)},
-		Subject:        sentinelaccess.SubjectRef{HumanID: sentinelaccess.HumanID(s.Spec.Subject.HumanID), AgentID: sentinelaccess.AgentID(s.Spec.Subject.AgentID), TeamID: sentinelaccess.TeamID(s.Spec.Subject.TeamID)},
-		ConsentedTrust: sentinelaccess.TrustLevel(s.Spec.ConsentedTrust),
+		ServerRef:      mcpaccess.ServerReference{Name: mcpaccess.ServerName(s.Spec.ServerRef.Name), Namespace: mcpaccess.Namespace(s.Spec.ServerRef.Namespace)},
+		Subject:        mcpaccess.SubjectRef{HumanID: mcpaccess.HumanID(s.Spec.Subject.HumanID), AgentID: mcpaccess.AgentID(s.Spec.Subject.AgentID), TeamID: mcpaccess.TeamID(s.Spec.Subject.TeamID)},
+		ConsentedTrust: mcpaccess.TrustLevel(s.Spec.ConsentedTrust),
 		PolicyVersion:  s.Spec.PolicyVersion,
 		Revoked:        &rev,
 		ExpiresAt:      s.Spec.ExpiresAt,

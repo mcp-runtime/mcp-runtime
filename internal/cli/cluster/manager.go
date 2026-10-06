@@ -60,7 +60,7 @@ func (m *ClusterManager) InitCluster(kubeconfig, context string) error {
 	m.logger.Info("Installing CRD")
 	// #nosec G204 -- fixed file path from repository.
 	if err := m.kubectl.Run([]string{"apply", "--validate=false", "-f", "config/crd/bases/mcpruntime.org_mcpservers.yaml"}); err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrInstallCRDFailed, err, fmt.Sprintf("failed to install CRD: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrInstallCRDFailed, err, fmt.Sprintf("failed to install CRD: %v", err))
 		core.Error("Failed to install CRD")
 		core.LogStructuredError(m.logger, wrappedErr, "Failed to install CRD")
 		return wrappedErr
@@ -69,7 +69,7 @@ func (m *ClusterManager) InitCluster(kubeconfig, context string) error {
 	// Create namespace
 	m.logger.Info("Creating mcp-runtime namespace")
 	if err := m.EnsureNamespace(core.NamespaceMCPRuntime); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrEnsureRuntimeNamespaceFailed,
 			err,
 			fmt.Sprintf("failed to ensure mcp-runtime namespace: %v", err),
@@ -82,7 +82,7 @@ func (m *ClusterManager) InitCluster(kubeconfig, context string) error {
 
 	m.logger.Info("Creating mcp-servers namespace")
 	if err := m.EnsureNamespace(core.NamespaceMCPServers); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrEnsureServersNamespaceFailed,
 			err,
 			fmt.Sprintf("failed to ensure mcp-servers namespace: %v", err),
@@ -103,7 +103,7 @@ func resolveKubeconfigPath(kubeconfig string) (string, error) {
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrGetHomeDirectoryFailed, err, fmt.Sprintf("failed to get home directory: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrGetHomeDirectoryFailed, err, fmt.Sprintf("failed to get home directory: %v", err))
 		core.Error("Failed to get home directory")
 		// Note: No logger available in this helper function
 		return "", wrappedErr
@@ -137,7 +137,7 @@ func (m *ClusterManager) ConfigureKubeconfig(kubeconfig, context string) error {
 		if hint, handled := kubeerr.SetupHint(err.Error()); handled {
 			msg = hint
 		}
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrKubeconfigNotReadable,
 			err,
 			msg,
@@ -149,7 +149,7 @@ func (m *ClusterManager) ConfigureKubeconfig(kubeconfig, context string) error {
 	}
 
 	if err := os.Setenv("KUBECONFIG", path); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrSetKubeconfigFailed,
 			err,
 			fmt.Sprintf("failed to set KUBECONFIG: %v", err),
@@ -163,7 +163,7 @@ func (m *ClusterManager) ConfigureKubeconfig(kubeconfig, context string) error {
 	if context != "" {
 		// #nosec G204 -- context from CLI flag, kubectl validates context names.
 		if err := m.kubectl.Run([]string{"config", "use-context", context}); err != nil {
-			wrappedErr := core.WrapWithSentinelAndContext(
+			wrappedErr := core.WrapWithBaseAndContext(
 				core.ErrSetContextFailed,
 				err,
 				fmt.Sprintf("failed to set context: %v", err),
@@ -183,17 +183,17 @@ func (m *ClusterManager) ConfigureKubeconfigFromProvider(provider, region, clust
 	case "eks":
 		return configureEKSKubeconfig(m.exec, region, clusterName, kubeconfig)
 	case "aks":
-		err := core.NewWithSentinel(core.ErrAKSKubeconfigNotImplemented, "AKS kubeconfig not yet implemented; planned support (use `az aks get-credentials --name <cluster> --resource-group <rg>`)")
+		err := core.NewWithBase(core.ErrAKSKubeconfigNotImplemented, "AKS kubeconfig not yet implemented; planned support (use `az aks get-credentials --name <cluster> --resource-group <rg>`)")
 		core.Error("AKS kubeconfig not implemented")
 		core.LogStructuredError(m.logger, err, "AKS kubeconfig not implemented")
 		return err
 	case "gke":
-		err := core.NewWithSentinel(core.ErrGKEKubeconfigNotImplemented, "GKE kubeconfig not yet implemented; planned support (use `gcloud container clusters get-credentials <cluster> --region <region> --project <project>`)")
+		err := core.NewWithBase(core.ErrGKEKubeconfigNotImplemented, "GKE kubeconfig not yet implemented; planned support (use `gcloud container clusters get-credentials <cluster> --region <region> --project <project>`)")
 		core.Error("GKE kubeconfig not implemented")
 		core.LogStructuredError(m.logger, err, "GKE kubeconfig not implemented")
 		return err
 	default:
-		err := core.NewWithSentinel(core.ErrUnsupportedProvider, fmt.Sprintf("unsupported provider: %s", provider))
+		err := core.NewWithBase(core.ErrUnsupportedProvider, fmt.Sprintf("unsupported provider: %s", provider))
 		core.Error("Unsupported provider")
 		core.LogStructuredError(m.logger, err, "Unsupported provider")
 		return err
@@ -231,7 +231,7 @@ func (m *ClusterManager) CheckClusterStatus() error {
 	// #nosec G204 -- fixed kubectl command.
 	output, err := m.kubectl.CombinedOutput([]string{"cluster-info"})
 	if err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrClusterNotAccessible, err, fmt.Sprintf("cluster not accessible: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrClusterNotAccessible, err, fmt.Sprintf("cluster not accessible: %v", err))
 		core.Error("Cluster not accessible")
 		core.LogStructuredError(m.logger, wrappedErr, "Cluster not accessible")
 		return wrappedErr
@@ -273,7 +273,7 @@ func (m *ClusterManager) ConfigureCluster(opts IngressOptions) error {
 		return nil
 	case "traefik":
 	default:
-		err := core.NewWithSentinel(core.ErrUnsupportedIngressController, fmt.Sprintf("unsupported ingress controller: %s", opts.Mode))
+		err := core.NewWithBase(core.ErrUnsupportedIngressController, fmt.Sprintf("unsupported ingress controller: %s", opts.Mode))
 		core.Error("Unsupported ingress controller")
 		core.LogStructuredError(m.logger, err, "Unsupported ingress controller")
 		return err
@@ -328,7 +328,7 @@ func (m *ClusterManager) ConfigureCluster(opts IngressOptions) error {
 
 	// #nosec G204 -- manifest path from internal config or CLI flag with file validation.
 	if err := m.kubectl.RunWithOutput(args, os.Stdout, os.Stderr); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrInstallIngressControllerFailed,
 			err,
 			fmt.Sprintf("failed to install ingress controller (%s): %v", opts.Mode, err),
@@ -447,13 +447,13 @@ func validateTraefikInstallPlan(installs []traefikInstall, force bool) error {
 		external = append(external, install.summary())
 	}
 	if len(managed) > 0 && len(external) > 0 {
-		return core.NewWithSentinel(
+		return core.NewWithBase(
 			core.ErrInstallIngressControllerFailed,
 			fmt.Sprintf("multiple Traefik installs detected: repo-managed %s and external %s. Remove one Traefik stack before re-running setup; on k3s, prefer kube-system/traefik and skip the repo-managed install with --ingress none if needed", strings.Join(managed, ", "), strings.Join(external, ", ")),
 		)
 	}
 	if force && len(external) > 0 {
-		return core.NewWithSentinel(
+		return core.NewWithBase(
 			core.ErrInstallIngressControllerFailed,
 			fmt.Sprintf("--force-ingress-install cannot install repo-managed Traefik while external Traefik exists: %s. Remove or disable the existing controller first, or run setup without forcing and reuse it", strings.Join(external, ", ")),
 		)
@@ -487,7 +487,7 @@ func (m *ClusterManager) ProvisionCluster(provider, region string, nodeCount int
 
 	provider = strings.ToLower(strings.TrimSpace(provider))
 	if nodeCount < 1 {
-		err := core.NewWithSentinel(core.ErrInvalidNodeCount, fmt.Sprintf("invalid node count %d: --nodes must be at least 1", nodeCount))
+		err := core.NewWithBase(core.ErrInvalidNodeCount, fmt.Sprintf("invalid node count %d: --nodes must be at least 1", nodeCount))
 		core.Error("Invalid node count")
 		core.LogStructuredError(m.logger, err, "Invalid node count")
 		return err
@@ -510,7 +510,7 @@ func (m *ClusterManager) ProvisionCluster(provider, region string, nodeCount int
 	case "aks":
 		return provisionAKSCluster(m.logger, region, nodeCount, clusterName, dryRun)
 	default:
-		err := core.NewWithSentinel(core.ErrUnsupportedProvider, fmt.Sprintf("unsupported provider: %s", provider))
+		err := core.NewWithBase(core.ErrUnsupportedProvider, fmt.Sprintf("unsupported provider: %s", provider))
 		core.Error("Unsupported provider")
 		core.LogStructuredError(m.logger, err, "Unsupported provider")
 		return err
@@ -519,14 +519,14 @@ func (m *ClusterManager) ProvisionCluster(provider, region string, nodeCount int
 
 func normalizeClusterName(name string) (string, error) {
 	if strings.ContainsAny(name, "\r\n\t") {
-		return "", core.NewWithSentinel(core.ErrInvalidClusterName, "invalid cluster name: must not contain control characters")
+		return "", core.NewWithBase(core.ErrInvalidClusterName, "invalid cluster name: must not contain control characters")
 	}
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return defaultClusterName, nil
 	}
 	if !core.ValidK8sName.MatchString(name) {
-		return "", core.NewWithSentinel(core.ErrInvalidClusterName, fmt.Sprintf("invalid cluster name %q: must be lowercase alphanumeric with optional hyphens", name))
+		return "", core.NewWithBase(core.ErrInvalidClusterName, fmt.Sprintf("invalid cluster name %q: must be lowercase alphanumeric with optional hyphens", name))
 	}
 	return name, nil
 }
@@ -563,7 +563,7 @@ nodes:
 		return err
 	}
 	if exists {
-		err := core.NewWithSentinel(
+		err := core.NewWithBase(
 			core.ErrKindClusterAlreadyExists,
 			fmt.Sprintf("kind cluster %q already exists; choose a different --name or delete it with `kind delete cluster --name %s`", clusterName, clusterName),
 		)
@@ -575,7 +575,7 @@ nodes:
 	// Write config to temp file
 	tmp, err := os.CreateTemp("", "mcp-kind-config-*.yaml")
 	if err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrCreateKindConfigFailed, err, fmt.Sprintf("failed to create temp kind config: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrCreateKindConfigFailed, err, fmt.Sprintf("failed to create temp kind config: %v", err))
 		core.Error("Failed to create kind config")
 		core.LogStructuredError(m.logger, wrappedErr, "Failed to create kind config")
 		return wrappedErr
@@ -583,18 +583,18 @@ nodes:
 	defer os.Remove(tmp.Name())
 	if _, err := tmp.WriteString(config); err != nil {
 		if closeErr := tmp.Close(); closeErr != nil {
-			wrappedErr := core.WrapWithSentinel(core.ErrCloseKindConfigFailed, errors.Join(err, closeErr), fmt.Sprintf("failed to close kind config after write error: %v", closeErr))
+			wrappedErr := core.WrapWithBase(core.ErrCloseKindConfigFailed, errors.Join(err, closeErr), fmt.Sprintf("failed to close kind config after write error: %v", closeErr))
 			core.Error("Failed to close kind config")
 			core.LogStructuredError(m.logger, wrappedErr, "Failed to close kind config")
 			return wrappedErr
 		}
-		wrappedErr := core.WrapWithSentinel(core.ErrWriteKindConfigFailed, err, fmt.Sprintf("failed to write kind config: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrWriteKindConfigFailed, err, fmt.Sprintf("failed to write kind config: %v", err))
 		core.Error("Failed to write kind config")
 		core.LogStructuredError(m.logger, wrappedErr, "Failed to write kind config")
 		return wrappedErr
 	}
 	if err := tmp.Close(); err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrCloseKindConfigFailed, err, fmt.Sprintf("failed to close kind config: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrCloseKindConfigFailed, err, fmt.Sprintf("failed to close kind config: %v", err))
 		core.Error("Failed to close kind config")
 		core.LogStructuredError(m.logger, wrappedErr, "Failed to close kind config")
 		return wrappedErr
@@ -609,7 +609,7 @@ nodes:
 	cmd.SetStderr(os.Stderr)
 
 	if err := cmd.Run(); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrCreateKindClusterFailed,
 			err,
 			fmt.Sprintf("failed to create kind cluster: %v", err),
@@ -632,10 +632,10 @@ func kindUsesDockerProvider() bool {
 func (m *ClusterManager) ensureDockerDaemonReachable() error {
 	cmd, err := m.exec.Command("docker", []string{"info"}, core.AllowlistBins("docker"), core.NoShellMeta(), core.NoControlChars())
 	if err != nil {
-		return core.WrapWithSentinel(core.ErrDockerDaemonNotReachable, err, fmt.Sprintf("failed to prepare docker preflight: %v", err))
+		return core.WrapWithBase(core.ErrDockerDaemonNotReachable, err, fmt.Sprintf("failed to prepare docker preflight: %v", err))
 	}
 	if err := cmd.Run(); err != nil {
-		wrappedErr := core.WrapWithSentinel(
+		wrappedErr := core.WrapWithBase(
 			core.ErrDockerDaemonNotReachable,
 			err,
 			fmt.Sprintf("docker daemon is not reachable: %v. Start Docker Desktop, Colima, dockerd, or another Docker-compatible daemon before provisioning a kind cluster", err),
@@ -654,7 +654,7 @@ func (m *ClusterManager) kindClusterExists(name string) (bool, error) {
 	}
 	out, err := cmd.Output()
 	if err != nil {
-		wrappedErr := core.WrapWithSentinel(
+		wrappedErr := core.WrapWithBase(
 			core.ErrCreateKindClusterFailed,
 			err,
 			fmt.Sprintf("failed to list existing kind clusters: %v. Ensure kind is installed and retry", err),
@@ -680,7 +680,7 @@ func provisionGKECluster(logger *zap.Logger, region string, nodeCount int, clust
 		core.Success("Dry-run complete; no GKE call made")
 		return nil
 	}
-	err := core.NewWithSentinel(core.ErrGKEProvisioningNotImplemented, fmt.Sprintf("GKE provisioning not yet implemented; create the cluster with gcloud, e.g. `gcloud container clusters create %s --region %s --num-nodes %d`", clusterName, region, nodeCount))
+	err := core.NewWithBase(core.ErrGKEProvisioningNotImplemented, fmt.Sprintf("GKE provisioning not yet implemented; create the cluster with gcloud, e.g. `gcloud container clusters create %s --region %s --num-nodes %d`", clusterName, region, nodeCount))
 	core.Error("GKE provisioning not implemented")
 	core.LogStructuredError(logger, err, "GKE provisioning not implemented")
 	return err
@@ -713,7 +713,7 @@ func provisionEKSCluster(logger *zap.Logger, exec core.Executor, region string, 
 
 	logger.Info("Provisioning EKS cluster with eksctl", zap.String("name", clusterName), zap.String("region", region), zap.Int("nodes", nodeCount))
 	if err := cmd.Run(); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrProvisionEKSFailed,
 			err,
 			fmt.Sprintf("failed to provision EKS cluster: %v", err),
@@ -736,7 +736,7 @@ func provisionAKSCluster(logger *zap.Logger, region string, nodeCount int, clust
 		core.Success("Dry-run complete; no AKS call made")
 		return nil
 	}
-	err := core.NewWithSentinel(core.ErrAKSProvisioningNotImplemented, fmt.Sprintf("AKS provisioning not yet implemented; create the cluster with az, e.g. `az aks create --name %s --resource-group <rg> --location %s --node-count %d`", clusterName, region, nodeCount))
+	err := core.NewWithBase(core.ErrAKSProvisioningNotImplemented, fmt.Sprintf("AKS provisioning not yet implemented; create the cluster with az, e.g. `az aks create --name %s --resource-group <rg> --location %s --node-count %d`", clusterName, region, nodeCount))
 	core.Error("AKS provisioning not implemented")
 	core.LogStructuredError(logger, err, "AKS provisioning not implemented")
 	return err

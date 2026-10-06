@@ -64,7 +64,7 @@ flowchart LR
 | Area | Start here | Why it matters |
 |---|---|---|
 | CLI entrypoint | [`cli-entrypoint.md`](cli-entrypoint.md) | Shows how the binary starts, wires foldered Cobra commands, and reports errors. |
-| CLI implementation | [`cli.md`](cli.md) | Covers the `internal/cli/root` routing layer plus setup, bootstrap, registry, server, access, adapter, auth, team, status, and sentinel behavior. |
+| CLI implementation | [`cli.md`](cli.md) | Covers the `internal/cli/root` routing layer plus setup, bootstrap, registry, server, access, adapter, auth, team, status, and platform behavior. |
 | Kubernetes API types | [`api-types.md`](api-types.md) | Defines the public CRD shapes consumed by users, tests, and the operator. |
 | Request flows | [`request-flows.md`](request-flows.md) | Maps CLI, UI/API, registry, adapter, MCP runtime, policy, analytics, tenancy, and pre-release paths to components and E2E scenarios. |
 | Platform API services | [`../platform-services.md`](../platform-services.md) | Three-service split (platform-api, runtime-api, analytics-api): Traefik `/api/v1` routing, RBAC, `/internal/*` contracts, OpenAPI per service. |

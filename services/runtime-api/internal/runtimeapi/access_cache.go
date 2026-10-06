@@ -7,22 +7,22 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	runtimeaccess "mcp-runtime-api/internal/runtimeapi/access"
 	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
-	sentinelaccess "mcp-runtime/pkg/access"
+	mcpaccess "mcp-runtime/pkg/access"
 )
 
 type accessServerCache map[string]mcpv1alpha1.MCPServer
 
-func (s *AccessService) grantVisibleToPrincipal(ctx context.Context, grant sentinelaccess.MCPAccessGrant) bool {
+func (s *AccessService) grantVisibleToPrincipal(ctx context.Context, grant mcpaccess.MCPAccessGrant) bool {
 	p, ok := principalFromContext(ctx)
 	return !ok || principalCanReadGrantSubject(p, grant)
 }
 
-func (s *AccessService) sessionVisibleToPrincipal(ctx context.Context, session sentinelaccess.MCPAgentSession) bool {
+func (s *AccessService) sessionVisibleToPrincipal(ctx context.Context, session mcpaccess.MCPAgentSession) bool {
 	p, ok := principalFromContext(ctx)
 	return !ok || principalCanReadSessionSubject(p, session)
 }
 
-func principalCanReadGrantSubject(p principal, grant sentinelaccess.MCPAccessGrant) bool {
+func principalCanReadGrantSubject(p principal, grant mcpaccess.MCPAccessGrant) bool {
 	if p.Role == roleAdmin {
 		return true
 	}
@@ -44,7 +44,7 @@ func principalCanReadGrantSubject(p principal, grant sentinelaccess.MCPAccessGra
 	return subject.HumanID != "" && string(subject.HumanID) == p.UserID()
 }
 
-func principalCanReadSessionSubject(p principal, session sentinelaccess.MCPAgentSession) bool {
+func principalCanReadSessionSubject(p principal, session mcpaccess.MCPAgentSession) bool {
 	if p.Role == roleAdmin {
 		return true
 	}
@@ -54,23 +54,23 @@ func principalCanReadSessionSubject(p principal, session sentinelaccess.MCPAgent
 	return session.Spec.Subject.HumanID != "" && string(session.Spec.Subject.HumanID) == p.UserID()
 }
 
-func (s *AccessService) accessServerCacheForGrantRefs(ctx context.Context, namespace string, grants []sentinelaccess.MCPAccessGrant) (accessServerCache, error) {
-	refs := make([]sentinelaccess.ServerReference, 0, len(grants))
+func (s *AccessService) accessServerCacheForGrantRefs(ctx context.Context, namespace string, grants []mcpaccess.MCPAccessGrant) (accessServerCache, error) {
+	refs := make([]mcpaccess.ServerReference, 0, len(grants))
 	for _, grant := range grants {
 		refs = append(refs, grant.Spec.ServerRef)
 	}
 	return s.accessServerCacheForRefs(ctx, namespace, refs)
 }
 
-func (s *AccessService) accessServerCacheForSessionRefs(ctx context.Context, namespace string, sessions []sentinelaccess.MCPAgentSession) (accessServerCache, error) {
-	refs := make([]sentinelaccess.ServerReference, 0, len(sessions))
+func (s *AccessService) accessServerCacheForSessionRefs(ctx context.Context, namespace string, sessions []mcpaccess.MCPAgentSession) (accessServerCache, error) {
+	refs := make([]mcpaccess.ServerReference, 0, len(sessions))
 	for _, session := range sessions {
 		refs = append(refs, session.Spec.ServerRef)
 	}
 	return s.accessServerCacheForRefs(ctx, namespace, refs)
 }
 
-func (s *AccessService) accessServerCacheForRefs(ctx context.Context, namespace string, refs []sentinelaccess.ServerReference) (accessServerCache, error) {
+func (s *AccessService) accessServerCacheForRefs(ctx context.Context, namespace string, refs []mcpaccess.ServerReference) (accessServerCache, error) {
 	namespaces := map[string]struct{}{}
 	for _, ref := range refs {
 		if strings.TrimSpace(string(ref.Name)) == "" {

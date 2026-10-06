@@ -104,14 +104,14 @@ func checkStorageClassReadiness(kubectl core.KubectlRunner) DoctorCheck {
 	return DoctorCheck{Name: "storage class readiness", OK: true, Detail: fmt.Sprintf("StorageClass %q is available", want)}
 }
 
-func checkSentinelSecretConsumerFreshness(kubectl core.KubectlRunner) DoctorCheck {
+func checkPlatformSecretConsumerFreshness(kubectl core.KubectlRunner) DoctorCheck {
 	namespace, secretName, ok := platforminventory.CredentialPlacement("API_KEYS")
 	if !ok {
-		return DoctorCheck{Name: "sentinel secret consumer freshness", OK: false, Detail: "API_KEYS has no credential owner", Remedy: "restore the platform credential catalog"}
+		return DoctorCheck{Name: "platform secret consumer freshness", OK: false, Detail: "API_KEYS has no credential owner", Remedy: "restore the platform credential catalog"}
 	}
 	secretRaw, err := readKubectlOutput(kubectl, []string{"get", "secret", secretName, "-n", namespace, "-o", "json"})
 	if err != nil {
-		return DoctorCheck{Name: "sentinel secret consumer freshness", OK: true, Detail: secretName + " is not installed; skipping freshness check"}
+		return DoctorCheck{Name: "platform secret consumer freshness", OK: true, Detail: secretName + " is not installed; skipping freshness check"}
 	}
 	var secret struct {
 		Metadata struct {
@@ -121,7 +121,7 @@ func checkSentinelSecretConsumerFreshness(kubectl core.KubectlRunner) DoctorChec
 		} `json:"metadata"`
 	}
 	if err := json.Unmarshal([]byte(secretRaw), &secret); err != nil {
-		return DoctorCheck{Name: "sentinel secret consumer freshness", OK: false, Detail: fmt.Sprintf("failed parsing %s metadata: %v", secretName, err), Remedy: "inspect the Secret metadata and redeploy Sentinel"}
+		return DoctorCheck{Name: "platform secret consumer freshness", OK: false, Detail: fmt.Sprintf("failed parsing %s metadata: %v", secretName, err), Remedy: "inspect the Secret metadata and redeploy platform"}
 	}
 	var secretUpdated time.Time
 	for _, field := range secret.Metadata.ManagedFields {
@@ -130,11 +130,11 @@ func checkSentinelSecretConsumerFreshness(kubectl core.KubectlRunner) DoctorChec
 		}
 	}
 	if secretUpdated.IsZero() {
-		return DoctorCheck{Name: "sentinel secret consumer freshness", OK: true, Detail: "Secret update timestamp is unavailable; runtime auth probes remain authoritative"}
+		return DoctorCheck{Name: "platform secret consumer freshness", OK: true, Detail: "Secret update timestamp is unavailable; runtime auth probes remain authoritative"}
 	}
 	podsRaw, err := readKubectlOutput(kubectl, []string{"get", "pods", "-n", componentNamespace("platform-api"), "-l", "app=mcp-runtime-api", "-o", `jsonpath={range .items[*]}{.metadata.name}|{.status.startTime}{"\n"}{end}`})
 	if err != nil {
-		return DoctorCheck{Name: "sentinel secret consumer freshness", OK: false, Detail: fmt.Sprintf("failed reading runtime-api pod start times: %v", err), Remedy: "inspect runtime-api pods and restart them after Secret changes"}
+		return DoctorCheck{Name: "platform secret consumer freshness", OK: false, Detail: fmt.Sprintf("failed reading runtime-api pod start times: %v", err), Remedy: "inspect runtime-api pods and restart them after Secret changes"}
 	}
 	for _, line := range strings.Split(podsRaw, "\n") {
 		parts := strings.SplitN(strings.TrimSpace(line), "|", 2)
@@ -143,35 +143,35 @@ func checkSentinelSecretConsumerFreshness(kubectl core.KubectlRunner) DoctorChec
 		}
 		started, parseErr := time.Parse(time.RFC3339, parts[1])
 		if parseErr == nil && started.Before(secretUpdated) {
-			return DoctorCheck{Name: "sentinel secret consumer freshness", OK: false, Detail: fmt.Sprintf("runtime-api pod %s started before the latest Secret update", parts[0]), Remedy: "roll out deployment/mcp-runtime-api and deployment/mcp-ui after changing " + secretName}
+			return DoctorCheck{Name: "platform secret consumer freshness", OK: false, Detail: fmt.Sprintf("runtime-api pod %s started before the latest Secret update", parts[0]), Remedy: "roll out deployment/mcp-runtime-api and deployment/mcp-ui after changing " + secretName}
 		}
 	}
-	return DoctorCheck{Name: "sentinel secret consumer freshness", OK: true, Detail: "runtime-api pods are not older than the latest Secret update"}
+	return DoctorCheck{Name: "platform secret consumer freshness", OK: true, Detail: "runtime-api pods are not older than the latest Secret update"}
 }
 
-func checkSentinelOIDCConfiguration(kubectl core.KubectlRunner) DoctorCheck {
+func checkPlatformOIDCConfiguration(kubectl core.KubectlRunner) DoctorCheck {
 	configName := platforminventory.SharedConfigName
 	raw, err := readKubectlOutput(kubectl, []string{"get", "configmap", configName, "-n", componentNamespace("platform-api"), "-o", "json"})
 	if err != nil {
-		return DoctorCheck{Name: "sentinel OIDC configuration", OK: true, Detail: configName + " not found; skipping OIDC configuration check"}
+		return DoctorCheck{Name: "platform OIDC configuration", OK: true, Detail: configName + " not found; skipping OIDC configuration check"}
 	}
 	var config struct {
 		Data map[string]string `json:"data"`
 	}
 	if err := json.Unmarshal([]byte(raw), &config); err != nil {
-		return DoctorCheck{Name: "sentinel OIDC configuration", OK: false, Detail: fmt.Sprintf("failed parsing %s: %v", configName, err), Remedy: "reapply the platform ConfigMap"}
+		return DoctorCheck{Name: "platform OIDC configuration", OK: false, Detail: fmt.Sprintf("failed parsing %s: %v", configName, err), Remedy: "reapply the platform ConfigMap"}
 	}
 	mode := strings.TrimSpace(config.Data["PLATFORM_MODE"])
 	if strings.EqualFold(strings.TrimSpace(config.Data["MCP_RUNTIME_TEST_MODE"]), "1") || strings.EqualFold(strings.TrimSpace(config.Data["MCP_RUNTIME_TEST_MODE"]), "true") {
-		return DoctorCheck{Name: "sentinel OIDC configuration", OK: true, Detail: "MCP Runtime test mode is enabled; production OIDC configuration is not required"}
+		return DoctorCheck{Name: "platform OIDC configuration", OK: true, Detail: "MCP Runtime test mode is enabled; production OIDC configuration is not required"}
 	}
 	google, issuer, audience := strings.TrimSpace(config.Data["GOOGLE_CLIENT_ID"]), strings.TrimSpace(config.Data["OIDC_ISSUER"]), strings.TrimSpace(config.Data["OIDC_AUDIENCE"])
 	if mode == "public" || mode == "tenant" {
 		if google == "" && (issuer == "" || audience == "") {
-			return DoctorCheck{Name: "sentinel OIDC configuration", OK: false, Detail: fmt.Sprintf("platform mode %q has incomplete Google/OIDC configuration", mode), Remedy: "configure GOOGLE_CLIENT_ID or both OIDC_ISSUER and OIDC_AUDIENCE; set OIDC_JWKS_URL only when issuer discovery is unavailable"}
+			return DoctorCheck{Name: "platform OIDC configuration", OK: false, Detail: fmt.Sprintf("platform mode %q has incomplete Google/OIDC configuration", mode), Remedy: "configure GOOGLE_CLIENT_ID or both OIDC_ISSUER and OIDC_AUDIENCE; set OIDC_JWKS_URL only when issuer discovery is unavailable"}
 		}
 	}
-	return DoctorCheck{Name: "sentinel OIDC configuration", OK: true, Detail: fmt.Sprintf("platform mode %q has a complete configured login contract", mode)}
+	return DoctorCheck{Name: "platform OIDC configuration", OK: true, Detail: fmt.Sprintf("platform mode %q has a complete configured login contract", mode)}
 }
 
 func uniqueNonEmptyLines(raw string) []string {

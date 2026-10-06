@@ -78,7 +78,7 @@ export function SignInPanel({ onSubmit, onCancel, error, busy }: SignInPanelProp
     <div className="signin-layout">
       <div>
         <PageHeader
-          title="Sign in to MCP Sentinel"
+          title="Sign in to MCP Runtime"
           description="The server catalog, tool governance data, and platform administration are scoped to your account."
         />
 
@@ -141,7 +141,7 @@ export function SignInPanel({ onSubmit, onCancel, error, busy }: SignInPanelProp
                 spellCheck={false}
                 value={apiKey}
                 error={validation.apiKey}
-                hint="An MCP Sentinel dashboard API key. It is exchanged for a session cookie and never stored in the browser."
+                hint="An MCP Runtime dashboard API key. It is exchanged for a session cookie and never stored in the browser."
                 data-testid="login-api-key"
                 onChange={(event) => {
                   setApiKey(event.target.value);

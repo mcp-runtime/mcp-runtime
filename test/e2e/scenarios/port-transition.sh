@@ -11,7 +11,11 @@ run_e2e_port_transition_scenario() {
   kubectl get service "${SERVER_NAME}" -n mcp-servers -o json >"${directory}/service-before.json"
   kubectl get deployment "${SERVER_NAME}" -n mcp-servers -o json >"${directory}/deployment-before.json"
   old_port="$(jq -r '.spec.ports[0].targetPort' "${directory}/service-before.json")"
-  candidate_port=$((old_port + 10))
+  # Traefik's egress NetworkPolicy (config/ingress/base/networkpolicy.yaml)
+  # only allows listed backend ports; an unlisted candidate is dropped and
+  # every request hangs. Use a listed port not taken by this pod.
+  candidate_port=8088
+  [[ "${candidate_port}" != "${old_port}" ]] || candidate_port=8086
   gateway_image="$(jq -er '.spec.template.spec.containers[] | select(.name == "mcp-gateway") | .image' "${directory}/deployment-before.json")"
   jq --arg image 'registry.registry.svc.cluster.local:5000/mcp-gateway:missing-port-transition-fixture' \
     --argjson port "${candidate_port}" \
@@ -32,7 +36,10 @@ run_e2e_port_transition_scenario() {
   rollout_status_with_logs mcp-runtime deploy mcp-runtime-operator-controller-manager 180s
   for _ in 1 2 3 4 5; do
     port_transition_assert_old_route "${directory}"
-    wait_for_mcp_tool_result "${MCP_SESSION_URL}" aaa-ping '{}' 200 pong 1 '' port-transition-retained
+    # Allow one recovery retry: a 502/EOF from a dead Traefik port-forward
+    # triggers recover_ingress_mcp_path, which needs a further attempt. The
+    # Service assertion above is the retained-route invariant.
+    wait_for_mcp_tool_result "${MCP_SESSION_URL}" aaa-ping '{}' 200 pong 3 '' port-transition-retained
     sleep 2
   done
   jq --argjson port "${candidate_port}" --arg image "${gateway_image}" \

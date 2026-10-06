@@ -1,6 +1,6 @@
 # `mcp-runtime update` checks for QA E2E. Sourced from qa-e2e.sh when the
 # platform-update scenario is selected. Requires a test-mode setup with the
-# Sentinel stack installed.
+# Platform stack installed.
 #
 # Proves:
 #   1. a release manifest matching the running images is an all-unchanged plan

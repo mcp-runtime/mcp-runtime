@@ -13,7 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"mcp-runtime-api/internal/platformclient"
-	sentinelaccess "mcp-runtime/pkg/access"
+	mcpaccess "mcp-runtime/pkg/access"
 )
 
 type agentIdentityStub struct {
@@ -121,7 +121,7 @@ func TestDeactivateAgentRevokesOnlyMatchingSessionsAndAuditsEach(t *testing.T) {
 	}
 	dyn := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), objects...)
 	audit := &auditCollector{}
-	server := &RuntimeServer{accessMgr: sentinelaccess.NewManager(dyn, nil), audit: audit}
+	server := &RuntimeServer{accessMgr: mcpaccess.NewManager(dyn, nil), audit: audit}
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/runtime/agents/agent-a/deactivate", nil)
 	if err := server.revokeAgentSessions(request.Context(), request, principal{Role: roleAdmin, Subject: "admin-id"}, platformclient.Agent{ID: "agent-a", TeamID: "team-a"}); err != nil {
 		t.Fatal(err)
@@ -180,10 +180,10 @@ func TestTeamListIncludesMembershipRoleForAgentControls(t *testing.T) {
 
 func TestAgentDirectoryTeamMemberCanList(t *testing.T) {
 	listKinds := map[schema.GroupVersionResource]string{
-		{Group: sentinelaccess.APIGroup, Version: sentinelaccess.APIVersion, Resource: sentinelaccess.AccessGrantResource}:   "MCPAccessGrantList",
-		{Group: sentinelaccess.APIGroup, Version: sentinelaccess.APIVersion, Resource: sentinelaccess.AccessSessionResource}: "MCPAgentSessionList",
+		{Group: mcpaccess.APIGroup, Version: mcpaccess.APIVersion, Resource: mcpaccess.AccessGrantResource}:   "MCPAccessGrantList",
+		{Group: mcpaccess.APIGroup, Version: mcpaccess.APIVersion, Resource: mcpaccess.AccessSessionResource}: "MCPAgentSessionList",
 	}
-	server := &RuntimeServer{identity: &agentIdentityStub{}, accessMgr: sentinelaccess.NewManager(dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), listKinds), nil)}
+	server := &RuntimeServer{identity: &agentIdentityStub{}, accessMgr: mcpaccess.NewManager(dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), listKinds), nil)}
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/runtime/teams/core/agents?status=active&limit=10", nil)
 	recorder := httptest.NewRecorder()
 	server.HandleRuntimeTeamAgents(recorder, request, principal{Role: roleUser, Subject: "member-id", Teams: []principalTeam{{Slug: "core", Role: teamRoleMember}}}, "core")
@@ -203,14 +203,14 @@ func TestAgentDirectoryTeamMemberCanList(t *testing.T) {
 func TestAgentAccessSnapshotHidesOtherUsersAndTeams(t *testing.T) {
 	viewer := principal{Role: roleUser, Subject: "user-one", Teams: []principalTeam{{ID: "team-one", Slug: "one", Role: teamRoleMember}}}
 	agent := platformclient.Agent{ID: "agent-one", TeamID: "team-one", Status: "active"}
-	snapshot := agentAccessSnapshot{principal: viewer, grants: []sentinelaccess.MCPAccessGrant{
-		{Spec: sentinelaccess.MCPAccessGrantSpec{Subject: sentinelaccess.SubjectRef{TeamID: "team-one", AgentID: "agent-one", HumanID: "user-two"}}},
-		{Spec: sentinelaccess.MCPAccessGrantSpec{Subject: sentinelaccess.SubjectRef{TeamID: "team-two", AgentID: "agent-one"}}},
+	snapshot := agentAccessSnapshot{principal: viewer, grants: []mcpaccess.MCPAccessGrant{
+		{Spec: mcpaccess.MCPAccessGrantSpec{Subject: mcpaccess.SubjectRef{TeamID: "team-one", AgentID: "agent-one", HumanID: "user-two"}}},
+		{Spec: mcpaccess.MCPAccessGrantSpec{Subject: mcpaccess.SubjectRef{TeamID: "team-two", AgentID: "agent-one"}}},
 	}}
 	if snapshot.canUse(agent) {
 		t.Fatal("foreign subject made agent visible")
 	}
-	snapshot.grants = append(snapshot.grants, sentinelaccess.MCPAccessGrant{Spec: sentinelaccess.MCPAccessGrantSpec{Subject: sentinelaccess.SubjectRef{TeamID: "team-one", AgentID: "agent-one", HumanID: "user-one"}}})
+	snapshot.grants = append(snapshot.grants, mcpaccess.MCPAccessGrant{Spec: mcpaccess.MCPAccessGrantSpec{Subject: mcpaccess.SubjectRef{TeamID: "team-one", AgentID: "agent-one", HumanID: "user-one"}}})
 	if !snapshot.canUse(agent) {
 		t.Fatal("own grant did not make agent visible")
 	}
@@ -224,13 +224,13 @@ func TestAgentAccessSnapshotMemberSeesApplicableGrantAndOwnSession(t *testing.T)
 	viewer := principal{Role: roleUser, Subject: "user-one", Teams: []principalTeam{{ID: "team-one", Slug: "one", Role: teamRoleMember}}}
 	agent := platformclient.Agent{ID: "agent-one", TeamID: "team-one", Status: "active"}
 	snapshot := agentAccessSnapshot{principal: viewer,
-		grants: []sentinelaccess.MCPAccessGrant{
-			{Spec: sentinelaccess.MCPAccessGrantSpec{Subject: sentinelaccess.SubjectRef{TeamID: "team-one", AgentID: "agent-one"}}},
-			{Spec: sentinelaccess.MCPAccessGrantSpec{Subject: sentinelaccess.SubjectRef{TeamID: "team-one", AgentID: "agent-one", HumanID: "user-two"}}},
+		grants: []mcpaccess.MCPAccessGrant{
+			{Spec: mcpaccess.MCPAccessGrantSpec{Subject: mcpaccess.SubjectRef{TeamID: "team-one", AgentID: "agent-one"}}},
+			{Spec: mcpaccess.MCPAccessGrantSpec{Subject: mcpaccess.SubjectRef{TeamID: "team-one", AgentID: "agent-one", HumanID: "user-two"}}},
 		},
-		sessions: []sentinelaccess.MCPAgentSession{
-			{Spec: sentinelaccess.MCPAgentSessionSpec{Subject: sentinelaccess.SubjectRef{TeamID: "team-one", AgentID: "agent-one", HumanID: "user-one"}}},
-			{Spec: sentinelaccess.MCPAgentSessionSpec{Subject: sentinelaccess.SubjectRef{TeamID: "team-one", AgentID: "agent-one", HumanID: "user-two"}}},
+		sessions: []mcpaccess.MCPAgentSession{
+			{Spec: mcpaccess.MCPAgentSessionSpec{Subject: mcpaccess.SubjectRef{TeamID: "team-one", AgentID: "agent-one", HumanID: "user-one"}}},
+			{Spec: mcpaccess.MCPAgentSessionSpec{Subject: mcpaccess.SubjectRef{TeamID: "team-one", AgentID: "agent-one", HumanID: "user-two"}}},
 		},
 	}
 	if !snapshot.canUse(agent) {
@@ -249,12 +249,12 @@ func TestAgentAccessSnapshotMemberSeesApplicableGrantAndOwnSession(t *testing.T)
 
 func TestAgentDetailRejectsUnrelatedDirectRequests(t *testing.T) {
 	listKinds := map[schema.GroupVersionResource]string{
-		{Group: sentinelaccess.APIGroup, Version: sentinelaccess.APIVersion, Resource: sentinelaccess.AccessGrantResource}:   "MCPAccessGrantList",
-		{Group: sentinelaccess.APIGroup, Version: sentinelaccess.APIVersion, Resource: sentinelaccess.AccessSessionResource}: "MCPAgentSessionList",
+		{Group: mcpaccess.APIGroup, Version: mcpaccess.APIVersion, Resource: mcpaccess.AccessGrantResource}:   "MCPAccessGrantList",
+		{Group: mcpaccess.APIGroup, Version: mcpaccess.APIVersion, Resource: mcpaccess.AccessSessionResource}: "MCPAgentSessionList",
 	}
 	server := &RuntimeServer{
 		identity:  &agentIdentityStub{agent: platformclient.Agent{ID: "agt_01arz3ndektsv4rrffq69g5fav", TeamID: "team-id", TeamSlug: "core", Status: "active"}},
-		accessMgr: sentinelaccess.NewManager(dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), listKinds), nil),
+		accessMgr: mcpaccess.NewManager(dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), listKinds), nil),
 	}
 	path := "/api/v1/runtime/agents/agt_01arz3ndektsv4rrffq69g5fav"
 	for _, tc := range []struct {
@@ -283,8 +283,8 @@ func TestAgentDetailRejectsUnrelatedDirectRequests(t *testing.T) {
 
 func TestAccessSubjectVisibilityByRole(t *testing.T) {
 	member := principal{Role: roleUser, Subject: "user-one", Teams: []principalTeam{{ID: "team-one", Namespace: "mcp-team-one", Role: teamRoleMember}}}
-	otherGrant := sentinelaccess.MCPAccessGrant{Spec: sentinelaccess.MCPAccessGrantSpec{Subject: sentinelaccess.SubjectRef{TeamID: "team-one", HumanID: "user-two"}}}
-	otherSession := sentinelaccess.MCPAgentSession{Spec: sentinelaccess.MCPAgentSessionSpec{Subject: sentinelaccess.SubjectRef{TeamID: "team-one", HumanID: "user-two"}}}
+	otherGrant := mcpaccess.MCPAccessGrant{Spec: mcpaccess.MCPAccessGrantSpec{Subject: mcpaccess.SubjectRef{TeamID: "team-one", HumanID: "user-two"}}}
+	otherSession := mcpaccess.MCPAgentSession{Spec: mcpaccess.MCPAgentSessionSpec{Subject: mcpaccess.SubjectRef{TeamID: "team-one", HumanID: "user-two"}}}
 	if principalCanReadGrantSubject(member, otherGrant) || principalCanReadSessionSubject(member, otherSession) {
 		t.Fatal("member can read another user's access")
 	}

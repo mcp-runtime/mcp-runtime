@@ -7,19 +7,19 @@ import (
 	"net/http"
 	"time"
 
-	"mcp-runtime/pkg/sentinel"
+	"mcp-runtime/pkg/platformstack"
 )
 
 const actionRestartMaxBytes = 4 * 1024
 
-// HandleActionRestart restarts one or all Sentinel runtime components.
+// HandleActionRestart restarts one or all platform runtime components.
 func (s *RuntimeServer) HandleActionRestart(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("allow", "POST")
 		writeAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed")
 		return
 	}
-	if s.sentinelMgr == nil {
+	if s.stackMgr == nil {
 		writeAPIError(w, http.StatusServiceUnavailable, "kubernetes not available")
 		return
 	}
@@ -39,7 +39,7 @@ func (s *RuntimeServer) HandleActionRestart(w http.ResponseWriter, r *http.Reque
 	defer cancel()
 
 	if req.All {
-		errs := s.sentinelMgr.RestartAllComponents(ctx)
+		errs := s.stackMgr.RestartAllComponents(ctx)
 		if len(errs) > 0 {
 			writeAPIError(w, http.StatusInternalServerError, "some components failed to restart", errors.Join(errs...))
 			return
@@ -57,12 +57,12 @@ func (s *RuntimeServer) HandleActionRestart(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Validate component exists
-	if _, err := sentinel.FindComponent(req.Component); err != nil {
+	if _, err := platformstack.FindComponent(req.Component); err != nil {
 		writeAPIError(w, http.StatusBadRequest, "unknown component")
 		return
 	}
 
-	if err := s.sentinelMgr.RestartComponent(ctx, req.Component); err != nil {
+	if err := s.stackMgr.RestartComponent(ctx, req.Component); err != nil {
 		writeAPIError(w, http.StatusInternalServerError, "failed to restart component")
 		return
 	}

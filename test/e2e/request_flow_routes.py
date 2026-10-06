@@ -14,13 +14,13 @@ check = _helpers.check
 ok = _helpers.ok
 fail = _helpers.fail
 
-gateway_base = os.environ["SENTINEL_GATEWAY_BASE"]
-api_base = os.environ["SENTINEL_API_BASE"]
-api_metrics_url = os.environ["SENTINEL_API_METRICS_URL"]
-ingest_base = os.environ["SENTINEL_INGEST_BASE"]
-ingest_metrics_url = os.environ["SENTINEL_INGEST_METRICS_URL"]
-processor_base = os.environ["SENTINEL_PROCESSOR_BASE"]
-ui_base = os.environ["SENTINEL_UI_BASE"]
+gateway_base = os.environ["PLATFORM_GATEWAY_BASE"]
+api_base = os.environ["PLATFORM_API_BASE"]
+api_metrics_url = os.environ["PLATFORM_API_METRICS_URL"]
+ingest_base = os.environ["PLATFORM_INGEST_BASE"]
+ingest_metrics_url = os.environ["PLATFORM_INGEST_METRICS_URL"]
+processor_base = os.environ["PLATFORM_PROCESSOR_BASE"]
+ui_base = os.environ["PLATFORM_UI_BASE"]
 server_proxy_base = os.environ["SERVER_PROXY_BASE"]
 server_upstream_base = os.environ["SERVER_UPSTREAM_BASE"]
 oauth_proxy_base = os.environ["OAUTH_PROXY_BASE"]
@@ -181,7 +181,7 @@ for key in ("total_events", "active_servers", "active_grants", "active_sessions"
     )
 expect_status(f"{gateway_base}/ping", 200, contains="OK")
 gateway_index = expect_status(
-    f"{gateway_base}/", 200, contains="MCP Sentinel Control Plane"
+    f"{gateway_base}/", 200, contains="MCP Runtime Control Plane"
 )
 gateway_config = expect_status(
     f"{gateway_base}/config.js", 200, contains="window.MCP_API_BASE"
@@ -201,7 +201,7 @@ expect_status(f"{gateway_base}/prometheus/-/healthy", 404, headers=auth_headers)
 
 # Direct UI service.
 expect_status(f"{ui_base}/health", 200, contains='"ok":true')
-ui_index = expect_status(f"{ui_base}/", 200, contains="MCP Sentinel Control Plane")
+ui_index = expect_status(f"{ui_base}/", 200, contains="MCP Runtime Control Plane")
 ui_config = expect_status(f"{ui_base}/config.js", 200, contains="window.MCP_API_BASE")
 check(
     f'window.MCP_PLATFORM_MODE = "{platform_mode}"' in ui_config,
@@ -518,7 +518,7 @@ if deep_request_flows:
         return {"Authorization": f"Basic {token}"}
 
     def registry_forwarded_headers(path):
-        # Traefik on the sentinel gateway overwrites X-Forwarded-Uri with the API
+        # Traefik on the platform gateway overwrites X-Forwarded-Uri with the API
         # route (/api/v1/registry/authz). Keep the registry repository path on
         # X-Forwarded-URL so scope checks still see /v2/... through the gateway.
         return {"X-Forwarded-Uri": path, "X-Forwarded-URL": path}

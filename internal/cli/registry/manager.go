@@ -69,7 +69,7 @@ func RunRegistryProvision(mgr *RegistryManager, url, username, password, operato
 		return err
 	}
 	if cfg == nil || cfg.URL == "" {
-		err := core.NewWithSentinel(core.ErrRegistryURLRequired, "registry url is required (flag, env PROVISIONED_REGISTRY_URL, or config file)")
+		err := core.NewWithBase(core.ErrRegistryURLRequired, "registry url is required (flag, env PROVISIONED_REGISTRY_URL, or config file)")
 		core.Error("Registry URL required")
 		core.LogStructuredError(mgr.logger, err, "Registry URL required")
 		return err
@@ -86,7 +86,7 @@ func RunRegistryProvision(mgr *RegistryManager, url, username, password, operato
 		return nil
 	}
 	if err := config.Save(cfg); err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrSaveRegistryConfigFailed, err, fmt.Sprintf("failed to save registry config: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrSaveRegistryConfigFailed, err, fmt.Sprintf("failed to save registry config: %v", err))
 		core.Error("Failed to save registry config")
 		core.LogStructuredError(mgr.logger, wrappedErr, "Failed to save registry config")
 		return wrappedErr
@@ -100,7 +100,7 @@ func RunRegistryProvision(mgr *RegistryManager, url, username, password, operato
 	if operatorImage != "" {
 		mgr.logger.Info("Building and pushing operator image to external registry", zap.String("image", operatorImage))
 		if err := buildOperatorImage(operatorImage); err != nil {
-			wrappedErr := core.WrapWithSentinelAndContext(
+			wrappedErr := core.WrapWithBaseAndContext(
 				core.ErrBuildOperatorImageFailed,
 				err,
 				fmt.Sprintf("failed to build operator image: %v", err),
@@ -111,7 +111,7 @@ func RunRegistryProvision(mgr *RegistryManager, url, username, password, operato
 			return wrappedErr
 		}
 		if err := pushOperatorImage(operatorImage); err != nil {
-			wrappedErr := core.WrapWithSentinelAndContext(
+			wrappedErr := core.WrapWithBaseAndContext(
 				core.ErrPushOperatorImageFailed,
 				err,
 				fmt.Sprintf("failed to push operator image: %v", err),
@@ -133,7 +133,7 @@ func RunRegistryPush(ctx context.Context, mgr *RegistryManager, image, registryU
 		ctx = context.Background()
 	}
 	if image == "" {
-		err := core.NewWithSentinel(core.ErrImageRequired, "image is required (use --image)")
+		err := core.NewWithBase(core.ErrImageRequired, "image is required (use --image)")
 		core.Error("Image required")
 		core.LogStructuredError(mgr.logger, err, "Image required")
 		return err
@@ -165,7 +165,7 @@ func RunAdminRegistryPush(ctx context.Context, mgr *RegistryManager, image, regi
 		return err
 	}
 	if image == "" {
-		err := core.NewWithSentinel(core.ErrImageRequired, "image is required (use --image)")
+		err := core.NewWithBase(core.ErrImageRequired, "image is required (use --image)")
 		core.Error("Image required")
 		core.LogStructuredError(mgr.logger, err, "Image required")
 		return err
@@ -177,7 +177,7 @@ func RunAdminRegistryPush(ctx context.Context, mgr *RegistryManager, image, regi
 	switch mode {
 	case "direct", "in-cluster":
 	default:
-		err := core.NewWithSentinel(core.ErrUnknownRegistryMode, fmt.Sprintf("admin registry push mode must be direct or in-cluster, not %q", mode))
+		err := core.NewWithBase(core.ErrUnknownRegistryMode, fmt.Sprintf("admin registry push mode must be direct or in-cluster, not %q", mode))
 		core.Error("Unknown registry mode")
 		core.LogStructuredError(mgr.logger, err, "Unknown registry mode")
 		return err
@@ -284,16 +284,16 @@ func buildRegistryPushTarget(ctx context.Context, mgr *RegistryManager, platform
 
 func requireAdminClusterAccess(mgr *RegistryManager) error {
 	if mgr == nil || mgr.kubectl == nil {
-		return core.NewWithSentinel(nil, kubeerr.DirectModeFailureMessage("admin registry push requires admin cluster access", "kubectl client is unavailable"))
+		return core.NewWithBase(nil, kubeerr.DirectModeFailureMessage("admin registry push requires admin cluster access", "kubectl client is unavailable"))
 	}
 	cmd, err := mgr.kubectl.CommandArgs([]string{"cluster-info"})
 	if err != nil {
-		return core.NewWithSentinel(nil, kubeerr.DirectModeFailureMessage("admin registry push requires admin cluster access", err.Error()))
+		return core.NewWithBase(nil, kubeerr.DirectModeFailureMessage("admin registry push requires admin cluster access", err.Error()))
 	}
 	output, execErr := cmd.CombinedOutput()
 	if execErr != nil {
 		detail := kubeerr.CommandDetail(string(output), execErr)
-		return core.NewWithSentinel(nil, kubeerr.DirectModeFailureMessage("admin registry push requires admin cluster access", detail))
+		return core.NewWithBase(nil, kubeerr.DirectModeFailureMessage("admin registry push requires admin cluster access", detail))
 	}
 	return nil
 }
@@ -413,12 +413,12 @@ func (m *RegistryManager) PushViaPlatform(ctx context.Context, client *platforma
 	core.Info(fmt.Sprintf("Saving local image %s to a temporary archive", source))
 	tmpFile, err := os.CreateTemp("", "mcp-img-*.tar")
 	if err != nil {
-		return core.WrapWithSentinel(core.ErrCreateTempFileFailed, err, fmt.Sprintf("failed to create temp file: %v", err))
+		return core.WrapWithBase(core.ErrCreateTempFileFailed, err, fmt.Sprintf("failed to create temp file: %v", err))
 	}
 	tmpPath := tmpFile.Name()
 	if err := tmpFile.Close(); err != nil {
 		_ = os.Remove(tmpPath)
-		return core.WrapWithSentinel(core.ErrCloseTempFileFailed, err, fmt.Sprintf("failed to close temp file: %v", err))
+		return core.WrapWithBase(core.ErrCloseTempFileFailed, err, fmt.Sprintf("failed to close temp file: %v", err))
 	}
 	defer os.Remove(tmpPath)
 
@@ -429,7 +429,7 @@ func (m *RegistryManager) PushViaPlatform(ctx context.Context, client *platforma
 	saveCmd.SetStdout(os.Stdout)
 	saveCmd.SetStderr(os.Stderr)
 	if err := saveCmd.Run(); err != nil {
-		return core.WrapWithSentinelAndContext(
+		return core.WrapWithBaseAndContext(
 			core.ErrSaveImageFailed,
 			err,
 			fmt.Sprintf("failed to save image: %v", err),
@@ -446,7 +446,7 @@ func (m *RegistryManager) PushViaPlatform(ctx context.Context, client *platforma
 	defer cancel()
 	core.Info(fmt.Sprintf("Uploading image for publish target %s", target))
 	if err := client.PushRegistryImage(uploadCtx, tmpPath, target, scope); err != nil {
-		return core.WrapWithSentinelAndContext(
+		return core.WrapWithBaseAndContext(
 			core.ErrPushImageInClusterFailed,
 			err,
 			fmt.Sprintf("failed to push image via platform API: %v", err),
@@ -492,12 +492,12 @@ func resolveExternalRegistryConfig(flagCfg *config.ExternalRegistryConfig) (*con
 		return cfg, nil
 	}
 	if errors.Is(err, config.ErrURLRequired) {
-		wrapped := core.NewWithSentinel(core.ErrRegistryURLRequired, "registry url is required")
+		wrapped := core.NewWithBase(core.ErrRegistryURLRequired, "registry url is required")
 		core.Error("Registry URL required")
 		return nil, wrapped
 	}
 	if errors.Is(err, config.ErrURLMissingInConfig) {
-		return nil, core.NewWithSentinel(core.ErrRegistryURLMissingInConfig, "registry url missing in config")
+		return nil, core.NewWithBase(core.ErrRegistryURLMissingInConfig, "registry url missing in config")
 	}
 	return nil, err
 }
@@ -525,7 +525,7 @@ func deployRegistry(logger *zap.Logger, namespace string, port int, registryType
 	case "docker":
 		// continue
 	default:
-		err := core.NewWithSentinel(core.ErrUnsupportedRegistryType, fmt.Sprintf("unsupported registry type %q (supported: docker; harbor coming soon)", registryType))
+		err := core.NewWithBase(core.ErrUnsupportedRegistryType, fmt.Sprintf("unsupported registry type %q (supported: docker; harbor coming soon)", registryType))
 		core.Error("Unsupported registry type")
 		core.LogStructuredError(logger, err, "Unsupported registry type")
 		return err
@@ -537,7 +537,7 @@ func deployRegistry(logger *zap.Logger, namespace string, port int, registryType
 
 	// Ensure Namespace
 	if err := ensureNamespace(namespace); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrEnsureNamespaceFailed,
 			err,
 			fmt.Sprintf("failed to ensure namespace: %v", err),
@@ -552,7 +552,7 @@ func deployRegistry(logger *zap.Logger, namespace string, port int, registryType
 	overrideImage := strings.TrimSpace(os.Getenv(registryImageOverrideEnv))
 	manifest, err := renderKustomizeManifest(core.DefaultKubectlClient(), manifestPath)
 	if err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrDeployRegistryFailed,
 			err,
 			fmt.Sprintf("failed to render registry manifest %q: %v", manifestPath, err),
@@ -579,7 +579,7 @@ func deployRegistry(logger *zap.Logger, namespace string, port int, registryType
 	}
 	if clientsErr == nil {
 		if err := k8sclient.CheckRegistryIngressManifest(context.Background(), clients, manifest); err != nil {
-			wrappedErr := core.WrapWithSentinelAndContext(
+			wrappedErr := core.WrapWithBaseAndContext(
 				core.ErrDeployRegistryFailed,
 				err,
 				err.Error(),
@@ -595,7 +595,7 @@ func deployRegistry(logger *zap.Logger, namespace string, port int, registryType
 		updated := strings.Replace(manifest, "image: "+defaultRegistryImage, "image: "+overrideImage, 1)
 		if updated == manifest {
 			err := fmt.Errorf("registry image reference %q not found in manifest", defaultRegistryImage)
-			wrappedErr := core.WrapWithSentinelAndContext(
+			wrappedErr := core.WrapWithBaseAndContext(
 				core.ErrDeployRegistryFailed,
 				err,
 				err.Error(),
@@ -606,7 +606,7 @@ func deployRegistry(logger *zap.Logger, namespace string, port int, registryType
 			return wrappedErr
 		}
 		if err := kube.ApplyManifestContentWithNamespace(core.DefaultKubectlClient().CommandArgs, updated, namespace); err != nil {
-			wrappedErr := core.WrapWithSentinelAndContext(
+			wrappedErr := core.WrapWithBaseAndContext(
 				core.ErrDeployRegistryFailed,
 				err,
 				fmt.Sprintf("failed to deploy registry with image override %q: %v", overrideImage, err),
@@ -618,7 +618,7 @@ func deployRegistry(logger *zap.Logger, namespace string, port int, registryType
 		}
 	} else {
 		if err := kube.ApplyManifestContentWithNamespace(core.DefaultKubectlClient().CommandArgs, manifest, namespace); err != nil {
-			wrappedErr := core.WrapWithSentinelAndContext(
+			wrappedErr := core.WrapWithBaseAndContext(
 				core.ErrDeployRegistryFailed,
 				err,
 				fmt.Sprintf("failed to deploy registry: %v", err),
@@ -664,7 +664,7 @@ func applyRegistryCompatibilityOverlay(logger *zap.Logger, namespace, manifestPa
 	}
 	manifest, err := renderKustomizeManifest(core.DefaultKubectlClient(), compatPath)
 	if err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrDeployRegistryFailed,
 			err,
 			fmt.Sprintf("failed to render registry compatibility overlay %q: %v", compatPath, err),
@@ -681,7 +681,7 @@ func applyRegistryCompatibilityOverlay(logger *zap.Logger, namespace, manifestPa
 		}
 	}
 	if err := kube.ApplyManifestContentWithNamespace(core.DefaultKubectlClient().CommandArgs, manifest, namespace); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrDeployRegistryFailed,
 			err,
 			fmt.Sprintf("failed to apply registry compatibility overlay: %v", err),
@@ -824,7 +824,7 @@ func ensureRegistryStorageSize(logger *zap.Logger, namespace, registryStorageSiz
 	getCmd.SetStdout(&stdout)
 	getCmd.SetStderr(&stderr)
 	if err := getCmd.Run(); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrReadRegistryStorageFailed,
 			err,
 			fmt.Sprintf("failed to read current registry storage size: %v (%s)", err, strings.TrimSpace(stderr.String())),
@@ -845,7 +845,7 @@ func ensureRegistryStorageSize(logger *zap.Logger, namespace, registryStorageSiz
 	patchPayload := fmt.Sprintf(`{"spec":{"resources":{"requests":{"storage":"%s"}}}}`, storageSize)
 	// #nosec G204 -- command arguments are built from trusted inputs and fixed verbs.
 	if err := core.DefaultKubectlClient().RunWithOutput([]string{"patch", "pvc", core.RegistryPVCName, "-n", namespace, "-p", patchPayload}, os.Stdout, os.Stderr); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrUpdateRegistryStorageFailed,
 			err,
 			fmt.Sprintf("failed to update registry storage size to %s: %v", storageSize, err),
@@ -913,7 +913,7 @@ func (m *RegistryManager) LoginRegistry(registryURL, username, password string) 
 	cmd.SetStderr(os.Stderr)
 
 	if err := cmd.Run(); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrRegistryLoginFailed,
 			err,
 			fmt.Sprintf("failed to login to registry: %v", err),
@@ -994,7 +994,7 @@ func (m *RegistryManager) PushDirect(source, target string) error {
 	tagCmd.SetStdout(os.Stdout)
 	tagCmd.SetStderr(os.Stderr)
 	if err := tagCmd.Run(); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrTagImageFailed,
 			err,
 			fmt.Sprintf("failed to tag image: %v", err),
@@ -1013,7 +1013,7 @@ func (m *RegistryManager) PushDirect(source, target string) error {
 	pushCmd.SetStdout(os.Stdout)
 	pushCmd.SetStderr(os.Stderr)
 	if err := pushCmd.Run(); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrPushImageFailed,
 			err,
 			fmt.Sprintf("failed to push image: %v", err),
@@ -1034,7 +1034,7 @@ func (m *RegistryManager) PushInCluster(source, target, helperNS string) error {
 
 	// #nosec G204 -- helperNS from CLI flag, kubectl validates namespace names.
 	if err := m.kubectl.Run([]string{"get", "namespace", helperNS}); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrHelperNamespaceNotFound,
 			err,
 			fmt.Sprintf("helper namespace %q not found (create it or pass --namespace): %v", helperNS, err),
@@ -1048,14 +1048,14 @@ func (m *RegistryManager) PushInCluster(source, target, helperNS string) error {
 	// Ensure source is saved to tar; use CWD to satisfy kubectl path validation.
 	tmpFile, err := os.CreateTemp(".", "mcp-img-*.tar")
 	if err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrCreateTempFileFailed, err, fmt.Sprintf("failed to create temp file: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrCreateTempFileFailed, err, fmt.Sprintf("failed to create temp file: %v", err))
 		core.Error("Failed to create temp file")
 		core.LogStructuredError(m.logger, wrappedErr, "Failed to create temp file")
 		return wrappedErr
 	}
 	tmpPath := tmpFile.Name()
 	if err := tmpFile.Close(); err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrCloseTempFileFailed, err, fmt.Sprintf("failed to close temp file: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrCloseTempFileFailed, err, fmt.Sprintf("failed to close temp file: %v", err))
 		core.Error("Failed to close temp file")
 		core.LogStructuredError(m.logger, wrappedErr, "Failed to close temp file")
 		return wrappedErr
@@ -1070,7 +1070,7 @@ func (m *RegistryManager) PushInCluster(source, target, helperNS string) error {
 	saveCmd.SetStdout(os.Stdout)
 	saveCmd.SetStderr(os.Stderr)
 	if err := saveCmd.Run(); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrSaveImageFailed,
 			err,
 			fmt.Sprintf("failed to save image: %v", err),
@@ -1083,7 +1083,7 @@ func (m *RegistryManager) PushInCluster(source, target, helperNS string) error {
 
 	overrides, err := registryPushHelperOverrides(helperName)
 	if err != nil {
-		wrappedErr := core.WrapWithSentinel(core.ErrStartHelperPodFailed, err, fmt.Sprintf("failed to build helper pod security overrides: %v", err))
+		wrappedErr := core.WrapWithBase(core.ErrStartHelperPodFailed, err, fmt.Sprintf("failed to build helper pod security overrides: %v", err))
 		core.Error("Failed to build helper pod security overrides")
 		core.LogStructuredError(m.logger, wrappedErr, "Failed to build helper pod security overrides")
 		return wrappedErr
@@ -1092,7 +1092,7 @@ func (m *RegistryManager) PushInCluster(source, target, helperNS string) error {
 	// Start helper pod with skopeo
 	// #nosec G204 -- command arguments are built from trusted inputs and fixed verbs.
 	if err := m.kubectl.RunWithOutput([]string{"run", helperName, "-n", helperNS, "--image=" + core.GetSkopeoImage(), "--restart=Never", "--overrides=" + overrides, "--command", "--", "sh", "-c", "while true; do sleep 3600; done"}, os.Stdout, os.Stderr); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrStartHelperPodFailed,
 			err,
 			fmt.Sprintf("failed to start helper pod: %v", err),
@@ -1116,7 +1116,7 @@ func (m *RegistryManager) PushInCluster(source, target, helperNS string) error {
 		// Best-effort diagnostics for common real-cluster failures (DiskPressure, taints, quotas, etc).
 		_ = m.kubectl.RunWithOutput([]string{"describe", "pod", helperName, "-n", helperNS, "--request-timeout=10s"}, os.Stdout, os.Stderr)
 		_ = m.kubectl.RunWithOutput([]string{"get", "events", "-n", helperNS, "--request-timeout=10s", "--field-selector", "involvedObject.name=" + helperName, "--sort-by=.lastTimestamp"}, os.Stdout, os.Stderr)
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrHelperPodNotReady,
 			err,
 			fmt.Sprintf("helper pod not ready: %v", err),
@@ -1130,7 +1130,7 @@ func (m *RegistryManager) PushInCluster(source, target, helperNS string) error {
 	// Copy tar into pod
 	// #nosec G204 -- command arguments are built from trusted inputs and fixed verbs.
 	if err := m.kubectl.RunWithOutput([]string{"cp", tmpPath, fmt.Sprintf("%s/%s:%s", helperNS, helperName, "/tmp/image.tar")}, os.Stdout, os.Stderr); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrCopyImageToHelperFailed,
 			err,
 			fmt.Sprintf("failed to copy image tar to helper pod: %v", err),
@@ -1152,7 +1152,7 @@ func (m *RegistryManager) PushInCluster(source, target, helperNS string) error {
 	// #nosec G204 -- command arguments are built from trusted inputs and fixed verbs.
 	if err := m.kubectl.RunWithOutput([]string{"exec", "-n", helperNS, helperName, "--",
 		"skopeo", "copy", "--dest-tls-verify=false", "docker-archive:/tmp/image.tar", "docker://" + pushTarget}, os.Stdout, os.Stderr); err != nil {
-		wrappedErr := core.WrapWithSentinelAndContext(
+		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrPushImageFromHelperFailed,
 			err,
 			fmt.Sprintf("failed to push image from helper pod: %v", err),

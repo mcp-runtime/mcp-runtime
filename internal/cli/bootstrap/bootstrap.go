@@ -22,7 +22,7 @@ func newManager(runtime *core.Runtime) *manager {
 func detectProvider(kubectl core.KubectlRunner) (string, error) {
 	out, err := kubectlOutput(kubectl, []string{"get", "nodes", "-o", "jsonpath={range .items[*]}{.status.nodeInfo.kubeletVersion}{\"\\n\"}{end}"})
 	if err != nil {
-		return "", core.WrapWithSentinel(core.ErrClusterNotAccessible, err, formatKubectlFailure("kubectl get nodes failed", out, err))
+		return "", core.WrapWithBase(core.ErrClusterNotAccessible, err, formatKubectlFailure("kubectl get nodes failed", out, err))
 	}
 	lower := strings.ToLower(string(out))
 	switch {
@@ -38,11 +38,11 @@ func detectProvider(kubectl core.KubectlRunner) (string, error) {
 func runBootstrapPreflight(kubectl core.KubectlRunner) error {
 	core.Info("Preflight: kubectl connectivity")
 	if err := kubectl.Run([]string{"version", "--client=true"}); err != nil {
-		return core.WrapWithSentinel(core.ErrClusterNotAccessible, err, fmt.Sprintf("kubectl not available: %v", err))
+		return core.WrapWithBase(core.ErrClusterNotAccessible, err, fmt.Sprintf("kubectl not available: %v", err))
 	}
 	out, err := kubectlOutput(kubectl, []string{"get", "nodes"})
 	if err != nil {
-		return core.WrapWithSentinel(core.ErrClusterNotAccessible, err, formatKubectlFailure("kubectl cannot reach cluster", out, err))
+		return core.WrapWithBase(core.ErrClusterNotAccessible, err, formatKubectlFailure("kubectl cannot reach cluster", out, err))
 	}
 
 	core.Info("Preflight: CoreDNS")
@@ -83,21 +83,21 @@ func bootstrapApplyK3s(kubectl core.KubectlRunner) error {
 	}
 	if len(missing) > 0 {
 		msg := fmt.Sprintf("k3s manifests missing on disk (%s); bootstrap --apply expects to run on the k3s server node", strings.Join(missing, ", "))
-		return core.WrapWithSentinel(core.ErrClusterConfigFailed, fmt.Errorf("missing manifests"), msg)
+		return core.WrapWithBase(core.ErrClusterConfigFailed, fmt.Errorf("missing manifests"), msg)
 	}
 
 	for _, p := range paths {
 		if err := kubectl.Run([]string{"apply", "-f", p}); err != nil {
-			return core.WrapWithSentinel(core.ErrClusterConfigFailed, err, fmt.Sprintf("failed to apply %s: %v", p, err))
+			return core.WrapWithBase(core.ErrClusterConfigFailed, err, fmt.Sprintf("failed to apply %s: %v", p, err))
 		}
 	}
 
 	core.Info("Waiting for kube-system addons to be ready")
 	if err := kubectl.Run([]string{"rollout", "status", "deployment/coredns", "-n", "kube-system", "--timeout=180s"}); err != nil {
-		return core.WrapWithSentinel(core.ErrDeploymentTimeout, err, fmt.Sprintf("coredns rollout failed: %v", err))
+		return core.WrapWithBase(core.ErrDeploymentTimeout, err, fmt.Sprintf("coredns rollout failed: %v", err))
 	}
 	if err := kubectl.Run([]string{"rollout", "status", "deployment/local-path-provisioner", "-n", "kube-system", "--timeout=180s"}); err != nil {
-		return core.WrapWithSentinel(core.ErrDeploymentTimeout, err, fmt.Sprintf("local-path-provisioner rollout failed: %v", err))
+		return core.WrapWithBase(core.ErrDeploymentTimeout, err, fmt.Sprintf("local-path-provisioner rollout failed: %v", err))
 	}
 
 	core.Info("Node disk-pressure check")

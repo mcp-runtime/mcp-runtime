@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	sentinelaccess "mcp-runtime/pkg/access"
+	mcpaccess "mcp-runtime/pkg/access"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtimeaccess "mcp-runtime-api/internal/runtimeapi/access"
@@ -197,7 +197,7 @@ func (s *AccessService) HandleAdapterSession(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	session := &sentinelaccess.MCPAgentSession{
+	session := &mcpaccess.MCPAgentSession{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      sessionName,
 			Namespace: runtimeaccess.DefaultAccessNamespace(req.Namespace),
@@ -206,15 +206,15 @@ func (s *AccessService) HandleAdapterSession(w http.ResponseWriter, r *http.Requ
 				adapterGrantNamespaceAnnotation: grant.Namespace,
 			},
 		},
-		Spec: sentinelaccess.MCPAgentSessionSpec{
-			ServerRef: sentinelaccess.ServerReference{
-				Name:      sentinelaccess.ServerName(req.ServerName),
-				Namespace: sentinelaccess.Namespace(runtimeaccess.DefaultAccessNamespace(req.Namespace)),
+		Spec: mcpaccess.MCPAgentSessionSpec{
+			ServerRef: mcpaccess.ServerReference{
+				Name:      mcpaccess.ServerName(req.ServerName),
+				Namespace: mcpaccess.Namespace(runtimeaccess.DefaultAccessNamespace(req.Namespace)),
 			},
-			Subject: sentinelaccess.SubjectRef{
-				HumanID: sentinelaccess.HumanID(humanID),
-				AgentID: sentinelaccess.AgentID(req.AgentID),
-				TeamID:  sentinelaccess.TeamID(teamID),
+			Subject: mcpaccess.SubjectRef{
+				HumanID: mcpaccess.HumanID(humanID),
+				AgentID: mcpaccess.AgentID(req.AgentID),
+				TeamID:  mcpaccess.TeamID(teamID),
 			},
 			ConsentedTrust: consentedTrust,
 			ExpiresAt:      &metav1.Time{Time: expiresAt},
@@ -251,7 +251,7 @@ func (s *AccessService) HandleAdapterSession(w http.ResponseWriter, r *http.Requ
 	})
 }
 
-func adapterSessionLinkedToGrant(session *sentinelaccess.MCPAgentSession, grant *sentinelaccess.MCPAccessGrant) bool {
+func adapterSessionLinkedToGrant(session *mcpaccess.MCPAgentSession, grant *mcpaccess.MCPAccessGrant) bool {
 	if session == nil || grant == nil || session.Annotations == nil {
 		return false
 	}
@@ -268,7 +268,7 @@ func containsString(values []string, target string) bool {
 	return false
 }
 
-func adapterSessionWithinGrant(session *sentinelaccess.MCPAgentSession, grant *sentinelaccess.MCPAccessGrant) bool {
+func adapterSessionWithinGrant(session *mcpaccess.MCPAgentSession, grant *mcpaccess.MCPAccessGrant) bool {
 	if session == nil || session.Spec.ExpiresAt == nil {
 		return false
 	}
@@ -310,7 +310,7 @@ func defaultAdapterSessionTeamID(p principal, namespace string, teamIDs []string
 // field empty (wildcard). When multiple grants match, the one with the highest
 // MaxTrust wins; ties are broken by oldest creationTimestamp so the result is
 // deterministic across replicas.
-func (s *AccessService) selectAdapterGrant(ctx context.Context, namespace, serverName, humanID, agentID string, teamIDs []string, defaultTeamID string, allowAnyTeam bool) (*sentinelaccess.MCPAccessGrant, string, error) {
+func (s *AccessService) selectAdapterGrant(ctx context.Context, namespace, serverName, humanID, agentID string, teamIDs []string, defaultTeamID string, allowAnyTeam bool) (*mcpaccess.MCPAccessGrant, string, error) {
 	if s == nil || s.accessMgr == nil {
 		return nil, "", fmt.Errorf("kubernetes not available")
 	}
@@ -319,7 +319,7 @@ func (s *AccessService) selectAdapterGrant(ctx context.Context, namespace, serve
 		return nil, "", fmt.Errorf("list grants in %s: %w", namespace, err)
 	}
 	type grantMatch struct {
-		grant  sentinelaccess.MCPAccessGrant
+		grant  mcpaccess.MCPAccessGrant
 		teamID string
 	}
 	var matches []grantMatch
@@ -352,7 +352,7 @@ func (s *AccessService) selectAdapterGrant(ctx context.Context, namespace, serve
 	return &g.grant, g.teamID, nil
 }
 
-func matchingAdapterGrantTeamID(subj sentinelaccess.SubjectRef, humanID, agentID string, teamIDs []string, defaultTeamID string, allowAnyTeam bool) (string, bool) {
+func matchingAdapterGrantTeamID(subj mcpaccess.SubjectRef, humanID, agentID string, teamIDs []string, defaultTeamID string, allowAnyTeam bool) (string, bool) {
 	if subj.HumanID != "" && string(subj.HumanID) != humanID {
 		return "", false
 	}
@@ -392,7 +392,7 @@ func adapterSessionName(humanID, agentID, teamID, serverName string) string {
 // adapterSessionReusable reports whether an existing session can be returned
 // to the caller as-is without writing to Kubernetes. Reuse fails closed: if
 // any condition is unmet we issue a fresh session.
-func adapterSessionReusable(s *sentinelaccess.MCPAgentSession, policyVersion string, consentedTrust sentinelaccess.TrustLevel) bool {
+func adapterSessionReusable(s *mcpaccess.MCPAgentSession, policyVersion string, consentedTrust mcpaccess.TrustLevel) bool {
 	if s == nil || s.Spec.Revoked {
 		return false
 	}
@@ -414,13 +414,13 @@ func adapterSessionReusable(s *sentinelaccess.MCPAgentSession, policyVersion str
 // parseAdapterTrust normalises the caller's requested trust level. Empty
 // requests default to "low" (least privilege) so callers explicitly opt in to
 // higher trust. Unknown values are rejected.
-func parseAdapterTrust(raw string) (sentinelaccess.TrustLevel, error) {
+func parseAdapterTrust(raw string) (mcpaccess.TrustLevel, error) {
 	raw = strings.ToLower(strings.TrimSpace(raw))
 	switch raw {
 	case "":
-		return sentinelaccess.TrustLow, nil
-	case string(sentinelaccess.TrustLow), string(sentinelaccess.TrustMedium), string(sentinelaccess.TrustHigh):
-		return sentinelaccess.TrustLevel(raw), nil
+		return mcpaccess.TrustLow, nil
+	case string(mcpaccess.TrustLow), string(mcpaccess.TrustMedium), string(mcpaccess.TrustHigh):
+		return mcpaccess.TrustLevel(raw), nil
 	default:
 		return "", fmt.Errorf("requestedTrust %q is not a known trust level (use low, medium, or high)", raw)
 	}
@@ -447,7 +447,7 @@ func parseAdapterTTL(raw string) (time.Duration, error) {
 // capTrust returns the requested trust capped at the grant's max trust.
 // Empty grant maxTrust is treated as "no ceiling" — the grant author has not
 // asserted a cap and we accept whatever the caller asked for (or the default).
-func capTrust(requested, max sentinelaccess.TrustLevel) sentinelaccess.TrustLevel {
+func capTrust(requested, max mcpaccess.TrustLevel) mcpaccess.TrustLevel {
 	if max == "" {
 		return requested
 	}
@@ -457,13 +457,13 @@ func capTrust(requested, max sentinelaccess.TrustLevel) sentinelaccess.TrustLeve
 	return requested
 }
 
-func trustRank(t sentinelaccess.TrustLevel) int {
+func trustRank(t mcpaccess.TrustLevel) int {
 	switch t {
-	case sentinelaccess.TrustLow:
+	case mcpaccess.TrustLow:
 		return 1
-	case sentinelaccess.TrustMedium:
+	case mcpaccess.TrustMedium:
 		return 2
-	case sentinelaccess.TrustHigh:
+	case mcpaccess.TrustHigh:
 		return 3
 	default:
 		return -1

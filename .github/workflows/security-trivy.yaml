@@ -68,7 +68,7 @@ jobs:
           sarif_file: trivy-misconfig.sarif
           category: trivy-fs-misconfig
 
-  trivy-sentinel-images:
+  trivy-platform-images:
     name: Trivy ${{ matrix.image }} Image
     runs-on: ubuntu-24.04
     permissions:

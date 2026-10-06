@@ -263,7 +263,7 @@ for prefix in (
 ):
     assert prefix in kind, f"Traefik E2E cleanup must reset {prefix}"
 setup_ready = kind.index("wait_core_platform_rollouts\n\n# Setup can reuse an existing IngressClass")
-user_flows = kind.index('echo "[cli] checking platform status commands"', setup_ready)
+user_flows = kind.index('echo "[cli] checking cluster status commands"', setup_ready)
 assert "reset_traefik_namespace_watches" in kind[setup_ready:user_flows], (
     "Traefik watch reset must run after setup for cache and fresh-install paths"
 )

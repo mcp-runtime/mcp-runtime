@@ -82,7 +82,7 @@ only for design questions; ordinary change-scoped security reviews do not need i
      then `govulncheck ./...` from the repo root and from each touched
      `services/<name>/`. Unlike gosec this catches reachable CVEs.
    - **Trivy repo scan:** mirror CI with
-     `bash hack/trivy-sentinel-images.sh` (builds + scans all sentinel images;
+     `bash hack/trivy-platform-images.sh` (builds + scans all platform images;
      stdlib CVEs require image/gobinary scan, not `go.mod` alone).
      For filesystem-only: `trivy fs --scanners vuln,secret,license,misconfig --severity CRITICAL,HIGH --ignore-unfixed --skip-dirs inspirations/mcp-gateway-registry .`.
    - **Dependency or workflow change:** review

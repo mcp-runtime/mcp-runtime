@@ -58,7 +58,7 @@ func (e *Error) Error() string {
 
 // Unwrap returns the immediate wrapped error (cause).
 // This follows Go's error wrapping convention where Unwrap() returns
-// the direct cause, not the base sentinel.
+// the direct cause, not the base error.
 func (e *Error) Unwrap() error {
 	if e == nil {
 		return nil
@@ -66,14 +66,14 @@ func (e *Error) Unwrap() error {
 	return e.cause
 }
 
-// Is implements error matching for sentinel errors.
-// This allows errors.Is(err, sentinel) to match the base sentinel
+// Is implements error matching for base errors.
+// This allows errors.Is(err, base) to match the base error
 // even though Unwrap() returns the cause.
 func (e *Error) Is(target error) bool {
 	if e == nil {
 		return false
 	}
-	// Check if target matches the base sentinel
+	// Check if target matches the base error
 	if e.base != nil && errors.Is(e.base, target) {
 		return true
 	}
@@ -121,7 +121,7 @@ func (e *Error) Cause() error {
 	return e.cause
 }
 
-// Base returns the sentinel base error, if any.
+// Base returns the base error, if any.
 func (e *Error) Base() error {
 	if e == nil {
 		return nil
@@ -190,7 +190,7 @@ func (e *Error) WithContextMap(ctx map[string]any) *Error {
 	return clone
 }
 
-// WithBase sets the sentinel base error used for errors.Is matching.
+// WithBase sets the base error used for errors.Is matching.
 // Returns a new error with the base set to avoid mutating the original.
 // Panics if called on a nil receiver.
 func (e *Error) WithBase(base error) *Error {

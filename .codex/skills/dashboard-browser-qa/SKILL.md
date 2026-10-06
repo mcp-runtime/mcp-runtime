@@ -1,13 +1,13 @@
 ---
 name: dashboard-browser-qa
-description: Browser-first real-cluster Sentinel UI/dashboard QA - role-based navigation, auth flows, every tab, forms, filters, destructive actions, rendered data, network/API evidence, console evidence, responsive/accessibility checks, cleanup, static assets, and public-host defenses. Use when Codex is asked to QA UI changes, dashboard regressions, login/admin/tenant flows, browser-visible API behavior, copyable MCP connect config, or backend analytics/observability changes that must be validated through UI controls. Complements cluster-ops with feature-correctness and browser interaction checks. Assumes contributor-cluster has run.
+description: Browser-first real-cluster platform UI/dashboard QA - role-based navigation, auth flows, every tab, forms, filters, destructive actions, rendered data, network/API evidence, console evidence, responsive/accessibility checks, cleanup, static assets, and public-host defenses. Use when Codex is asked to QA UI changes, dashboard regressions, login/admin/tenant flows, browser-visible API behavior, copyable MCP connect config, or backend analytics/observability changes that must be validated through UI controls. Complements cluster-ops with feature-correctness and browser interaction checks. Assumes contributor-cluster has run.
 ---
 
 # Dashboard Browser QA
 
 ## Overview
 
-This skill validates that the **Sentinel dashboard actually works as a user
+This skill validates that the **Platform dashboard actually works as a user
 experience** against the real UI + API + Traefik stack. Curl checks are useful
 smoke gates, but they are not a substitute for browser interaction. Use
 Playwright and Chrome DevTools MCP whenever available to collect:

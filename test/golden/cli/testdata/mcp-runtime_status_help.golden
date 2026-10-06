@@ -1,4 +1,4 @@
-Show MCP Runtime platform status using the platform API when logged in, with optional cluster diagnostics when kubectl is available.
+Check whether the platform API is reachable and accepts your saved login, with a five-second timeout. Use server list, cluster status, or ops status for details.
 
 Usage:
   mcp-runtime status [flags]

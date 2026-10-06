@@ -17,7 +17,7 @@ for a private coordination channel.
 Include:
 
 - affected commit, tag, or deployment version
-- the component involved, such as CLI, operator, CRD, gateway, or Sentinel
+- the component involved, such as CLI, operator, CRD, gateway, or platform
 - reproduction steps or a minimal proof of concept
 - expected impact and any known mitigations
 

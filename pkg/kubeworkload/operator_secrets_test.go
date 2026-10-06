@@ -11,7 +11,7 @@ import (
 )
 
 func TestOperatorSecretAccessReservedNamespaces(t *testing.T) {
-	for _, ns := range []string{"", "default", "kube-system", "kube-node-lease", "kube-public", "mcp-runtime", "mcp-sentinel", "mcp-platform", "mcp-observability", "mcp-log-collector", "cert-manager", "registry", "traefik"} {
+	for _, ns := range []string{"", "default", "kube-system", "kube-node-lease", "kube-public", "mcp-runtime", "mcp-platform", "mcp-observability", "mcp-log-collector", "cert-manager", "registry", "traefik"} {
 		client := fake.NewSimpleClientset()
 		if err := EnsureOperatorSecretAccess(context.Background(), client, ns); err == nil {
 			t.Errorf("accepted %q", ns)

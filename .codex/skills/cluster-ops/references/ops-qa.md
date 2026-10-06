@@ -231,7 +231,7 @@ setup output, not a host issue.
 
 ## Step 8 — Service rollout matrix (when services/**/ changed)
 
-For each touched Sentinel service, follow the contributor iterate-on-one
+For each touched platform service, follow the contributor iterate-on-one
 loop from `docs/contributor/service-iteration.md` (split API table for
 `platform-api`, `runtime-api`, and `analytics-api`):
 
@@ -257,7 +257,7 @@ kubectl -n mcp-platform rollout status "deployment/$DEPLOYMENT" --timeout=120s
 
 For `services/mcp-gateway/**` changes, also update operator env
 `MCP_GATEWAY_PROXY_IMAGE` and restart the operator (`CLAUDE.md` step under
-**Iterate on one Sentinel service**); then recreate the MCP server pod to
+**Iterate on one platform service**); then recreate the MCP server pod to
 refresh the sidecar image.
 
 ## Step 9 — Generated-file drift

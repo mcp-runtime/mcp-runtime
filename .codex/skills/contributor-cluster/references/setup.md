@@ -7,7 +7,7 @@ This skill provisions or recovers the **real** contributor cluster described in
 `docs/self-hosting.md#3-contributor-test-mode-cluster`. It is the entry
 point for every other `qa-e2e-*` skill. It is **not** a unit-test skill — it
 boots a Kind cluster, builds and pushes runtime images, installs the operator
-and Sentinel stack, deploys the bundled Go MCP server, applies a working
+and platform stack, deploys the bundled Go MCP server, applies a working
 grant + session, and exits only after a real MCP `tools/call` succeeds through
 Traefik.
 
@@ -264,7 +264,7 @@ to know the environment is ready.
 
 - Mode: reuse | create | rebuild-from-broken.
 - Cluster context: `kubectl config current-context`.
-- Image SHAs pushed (operator, gateway proxy, sentinel api/ui/ingest/processor,
+- Image SHAs pushed (operator, gateway proxy, platform api/ui/ingest/processor,
   oauth-example-go-2025-11-25-gateway).
 - `cluster doctor` summary line.
 - Traefik port-forward pid + log path.

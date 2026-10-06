@@ -1,4 +1,4 @@
-Authenticate to the Sentinel platform using email/password or an API token (not Kubernetes).
+Authenticate to the MCP Runtime platform using email/password or an API token (not Kubernetes).
 
 Use this for day-to-day deploy and registry-related flows. Cluster install and admin work
 use Kubernetes and the cluster commands, not this command.

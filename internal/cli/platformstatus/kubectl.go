@@ -25,7 +25,7 @@ func CheckClusterStatusQuiet(kubectl core.KubectlRunner) error {
 	}
 	detail := kubeerr.CommandDetail(output, err)
 	if hint, handled := kubeerr.SetupHint(detail); handled {
-		return core.WrapWithSentinel(core.ErrClusterNotAccessible, err, hint)
+		return core.WrapWithBase(core.ErrClusterNotAccessible, err, hint)
 	}
-	return core.WrapWithSentinel(core.ErrClusterNotAccessible, err, fmt.Sprintf("cluster not accessible: %s", detail))
+	return core.WrapWithBase(core.ErrClusterNotAccessible, err, fmt.Sprintf("cluster not accessible: %s", detail))
 }

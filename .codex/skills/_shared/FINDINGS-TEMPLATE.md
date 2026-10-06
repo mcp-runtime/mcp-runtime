@@ -38,8 +38,8 @@ cause reappears, list additional locations under `Other locations`.
 
 ```
 [SEV-{Critical|High|Medium|Low|Info}] <short title, imperative>
-Component: <operator | gateway | sentinel-api | sentinel-ui | sentinel-ingest |
-            sentinel-processor | mcp-gateway | registry | traefik | crd | ci |
+Component: <operator | gateway | platform-api | runtime-api | analytics-api | ui | ingest |
+            processor | mcp-gateway | registry | traefik | crd | ci |
             other>
 Location:  <path>:<line>            # use N/A only for design-level findings
 CWE:       CWE-XXX                  # omit if no clean mapping

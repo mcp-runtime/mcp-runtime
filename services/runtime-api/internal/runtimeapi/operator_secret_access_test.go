@@ -10,7 +10,7 @@ import (
 )
 
 func TestManagedNamespaceRejectsInfrastructureBeforeWriting(t *testing.T) {
-	for _, ns := range []string{"default", "kube-node-lease", "mcp-runtime", "mcp-sentinel", "mcp-platform", "mcp-observability", "mcp-log-collector", "cert-manager", "registry", "traefik"} {
+	for _, ns := range []string{"default", "kube-node-lease", "mcp-runtime", "mcp-platform", "mcp-observability", "mcp-log-collector", "cert-manager", "registry", "traefik"} {
 		client := fake.NewSimpleClientset()
 		service := &DeploymentService{k8sClients: &k8sclient.Clients{Clientset: client}}
 		if err := service.ensureManagedNamespace(context.Background(), ns, nil, managedNamespaceOptions{}); err == nil {

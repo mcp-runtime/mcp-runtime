@@ -1051,7 +1051,7 @@ func TestCheckOperatorRegistryEndpoint(t *testing.T) {
 	})
 }
 
-func TestCheckSentinelPipelineReadiness(t *testing.T) {
+func TestCheckPlatformPipelineReadiness(t *testing.T) {
 	t.Run("kafka fails when statefulset is not ready", func(t *testing.T) {
 		mock := &core.MockExecutor{
 			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
@@ -1065,7 +1065,7 @@ func TestCheckSentinelPipelineReadiness(t *testing.T) {
 				}
 			},
 		}
-		check := checkSentinelKafkaReadiness(core.NewTestKubectlClient(mock))
+		check := checkPlatformKafkaReadiness(core.NewTestKubectlClient(mock))
 		if check.OK {
 			t.Fatal("expected kafka readiness failure")
 		}
@@ -1087,7 +1087,7 @@ func TestCheckSentinelPipelineReadiness(t *testing.T) {
 				}
 			},
 		}
-		check := checkSentinelIngestReadiness(core.NewTestKubectlClient(mock))
+		check := checkPlatformIngestReadiness(core.NewTestKubectlClient(mock))
 		if !check.OK {
 			t.Fatalf("expected OK, got detail=%q remedy=%q", check.Detail, check.Remedy)
 		}
@@ -1423,11 +1423,11 @@ func TestDoctorPostSetupCheckSpecsAreOperationalBasics(t *testing.T) {
 		"Kubernetes nodes ready",
 		"persistent volume claims",
 		"pending pods",
-		"sentinel secrets",
-		"sentinel Postgres credential drift",
-		"sentinel platform API readiness",
-		"sentinel workload rollout health",
-		"sentinel API auth probe",
+		"platform secrets",
+		"platform Postgres credential drift",
+		"platform API readiness",
+		"platform workload rollout health",
+		"platform API auth probe",
 	}
 	if len(specs) != len(want) {
 		t.Fatalf("post-setup smoke check count = %d, want %d", len(specs), len(want))
@@ -1603,7 +1603,7 @@ func TestDoctorCurlProbesPassPathValidator(t *testing.T) {
 		}
 	})
 
-	t.Run("sentinel API auth probe", func(t *testing.T) {
+	t.Run("platform API auth probe", func(t *testing.T) {
 		var probeArgs []string
 		mock := &core.MockExecutor{
 			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
@@ -1617,7 +1617,7 @@ func TestDoctorCurlProbesPassPathValidator(t *testing.T) {
 					if contains(spec.Args, "/dev/null") {
 						t.Fatal("doctor curl helper should not pass /dev/null through kubectl validators")
 					}
-					return &core.MockCommand{OutputData: []byte("pod/doctor-sentinel-probe created\n")}
+					return &core.MockCommand{OutputData: []byte("pod/doctor-platform-probe created\n")}
 				case len(spec.Args) > 0 && spec.Args[0] == "get" && contains(spec.Args, "jsonpath={.status.phase}"):
 					return &core.MockCommand{OutputData: []byte("Succeeded")}
 				case len(spec.Args) > 0 && spec.Args[0] == "logs":
@@ -1630,23 +1630,23 @@ func TestDoctorCurlProbesPassPathValidator(t *testing.T) {
 			},
 		}
 		kubectl := core.NewTestKubectlClientWithValidators(mock, validators)
-		check := checkSentinelAPIAuthProbe(kubectl)
+		check := checkPlatformAPIAuthProbe(kubectl)
 		if !check.OK {
 			t.Fatalf("expected OK, got detail=%q", check.Detail)
 		}
 		overrides := argValueWithPrefix(probeArgs, "--overrides=")
 		if overrides == "" {
-			t.Fatalf("sentinel auth probe should use restricted-compliant overrides, got args=%v", probeArgs)
+			t.Fatalf("platform auth probe should use restricted-compliant overrides, got args=%v", probeArgs)
 		}
 		for _, notWant := range []string{"--attach", "--rm"} {
 			if contains(probeArgs, notWant) {
-				t.Fatalf("sentinel auth probe should read completed pod logs instead of using %s, got args=%v", notWant, probeArgs)
+				t.Fatalf("platform auth probe should read completed pod logs instead of using %s, got args=%v", notWant, probeArgs)
 			}
 		}
 	})
 }
 
-func TestCheckSentinelSecretsReportsInvalidBase64(t *testing.T) {
+func TestCheckPlatformSecretsReportsInvalidBase64(t *testing.T) {
 	mock := &core.MockExecutor{
 		CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
 			switch {
@@ -1665,7 +1665,7 @@ func TestCheckSentinelSecretsReportsInvalidBase64(t *testing.T) {
 			}
 		},
 	}
-	check := checkSentinelSecrets(core.NewTestKubectlClient(mock))
+	check := checkPlatformSecrets(core.NewTestKubectlClient(mock))
 	if check.OK {
 		t.Fatalf("expected invalid base64 to fail, got detail=%q", check.Detail)
 	}
@@ -1698,7 +1698,7 @@ func TestCheckRuntimeAPIKubernetesAPIEgressUsesLiveEndpointPort(t *testing.T) {
 	}
 }
 
-func TestCheckSentinelRuntimeCatalogProbeChecksServersAndTools(t *testing.T) {
+func TestCheckPlatformRuntimeCatalogProbeChecksServersAndTools(t *testing.T) {
 	var runs int
 	mock := &core.MockExecutor{
 		CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
@@ -1711,7 +1711,7 @@ func TestCheckSentinelRuntimeCatalogProbeChecksServersAndTools(t *testing.T) {
 				return &core.MockCommand{OutputData: []byte("YWRtaW4=")}
 			case len(spec.Args) > 0 && spec.Args[0] == "run":
 				runs++
-				return &core.MockCommand{OutputData: []byte("pod/doctor-sentinel-catalog created\n")}
+				return &core.MockCommand{OutputData: []byte("pod/doctor-platform-catalog created\n")}
 			case contains(spec.Args, "jsonpath={.status.phase}"):
 				return &core.MockCommand{OutputData: []byte("Succeeded")}
 			case len(spec.Args) > 0 && spec.Args[0] == "logs":
@@ -1721,7 +1721,7 @@ func TestCheckSentinelRuntimeCatalogProbeChecksServersAndTools(t *testing.T) {
 			}
 		},
 	}
-	check := checkSentinelRuntimeCatalogProbe(core.NewTestKubectlClient(mock))
+	check := checkPlatformRuntimeCatalogProbe(core.NewTestKubectlClient(mock))
 	if !check.OK {
 		t.Fatalf("expected catalog probe to pass, got detail=%q", check.Detail)
 	}
@@ -1740,8 +1740,8 @@ func TestRemediationHintPerDistro(t *testing.T) {
 }
 
 func TestReportHasRegistryOrPullFailure(t *testing.T) {
-	if reportHasRegistryOrPullFailure(DoctorReport{Checks: []DoctorCheck{{Name: "sentinel secrets", OK: false}}}) {
-		t.Fatal("sentinel-only failures should not print registry remediation")
+	if reportHasRegistryOrPullFailure(DoctorReport{Checks: []DoctorCheck{{Name: "platform secrets", OK: false}}}) {
+		t.Fatal("platform-only failures should not print registry remediation")
 	}
 	if !reportHasRegistryOrPullFailure(DoctorReport{Checks: []DoctorCheck{{Name: "registry HTTP pull mismatch", OK: false}}}) {
 		t.Fatal("registry pull failures should print registry remediation")
@@ -2701,25 +2701,25 @@ func TestCheckStorageClassReadinessDiscoversDefault(t *testing.T) {
 	}
 }
 
-func TestCheckSentinelOIDCConfigurationSkipsTestMode(t *testing.T) {
+func TestCheckPlatformOIDCConfigurationSkipsTestMode(t *testing.T) {
 	mock := &core.MockExecutor{
 		CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
 			return &core.MockCommand{OutputData: []byte(`{"data":{"PLATFORM_MODE":"tenant","MCP_RUNTIME_TEST_MODE":"1"}}`)}
 		},
 	}
-	check := checkSentinelOIDCConfiguration(core.NewTestKubectlClient(mock))
+	check := checkPlatformOIDCConfiguration(core.NewTestKubectlClient(mock))
 	if !check.OK || !strings.Contains(check.Detail, "test mode") {
 		t.Fatalf("expected test-mode OIDC check to pass, got %+v", check)
 	}
 }
 
-func TestCheckSentinelTelemetryPipelineSkipsMissingNamespace(t *testing.T) {
+func TestCheckPlatformTelemetryPipelineSkipsMissingNamespace(t *testing.T) {
 	mock := &core.MockExecutor{
 		CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
 			return &core.MockCommand{OutputErr: errors.New("not found")}
 		},
 	}
-	check := checkSentinelTelemetryPipeline(core.NewTestKubectlClient(mock))
+	check := checkPlatformTelemetryPipeline(core.NewTestKubectlClient(mock))
 	if !check.OK || !strings.Contains(check.Detail, "skipping") {
 		t.Fatalf("expected missing optional telemetry stack to be skipped, got %+v", check)
 	}
@@ -2788,7 +2788,7 @@ func argValueWithPrefix(args []string, prefix string) string {
 	return ""
 }
 
-func TestCheckSentinelStalePods(t *testing.T) {
+func TestCheckPlatformStalePods(t *testing.T) {
 	run := func(podsJSON string) DoctorCheck {
 		mock := &core.MockExecutor{
 			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
@@ -2802,7 +2802,7 @@ func TestCheckSentinelStalePods(t *testing.T) {
 				}
 			},
 		}
-		return checkSentinelStalePods(core.NewTestKubectlClient(mock))
+		return checkPlatformStalePods(core.NewTestKubectlClient(mock))
 	}
 
 	t.Run("fails on evicted and orphaned completed pods", func(t *testing.T) {
@@ -2836,7 +2836,7 @@ func TestCheckSentinelStalePods(t *testing.T) {
 	})
 }
 
-func TestCheckSentinelGrafanaProvisioning(t *testing.T) {
+func TestCheckPlatformGrafanaProvisioning(t *testing.T) {
 	const goodDS = "apiVersion: 1\ndatasources:\n  - name: Prometheus\n    type: prometheus\n    uid: prometheus\n"
 	const noUIDDS = "apiVersion: 1\ndatasources:\n  - name: Prometheus\n    type: prometheus\n"
 	const goodDash = `{"uid": "mcp-server", "panels": []}`
@@ -2868,7 +2868,7 @@ func TestCheckSentinelGrafanaProvisioning(t *testing.T) {
 				return &core.MockCommand{}
 			},
 		}
-		return checkSentinelGrafanaProvisioning(core.NewTestKubectlClient(mock))
+		return checkPlatformGrafanaProvisioning(core.NewTestKubectlClient(mock))
 	}
 
 	if c := run(goodDS, goodDash, goodDeploy); !c.OK {

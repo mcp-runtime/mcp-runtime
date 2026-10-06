@@ -30,8 +30,8 @@ import (
 	"mcp-runtime/pkg/kubeworkload"
 	"mcp-runtime/pkg/mcpdefaults"
 	"mcp-runtime/pkg/metadata"
+	"mcp-runtime/pkg/platformstack"
 	"mcp-runtime/pkg/publishscope"
-	"mcp-runtime/pkg/sentinel"
 	"mcp-runtime/pkg/serviceutil"
 )
 
@@ -46,8 +46,8 @@ const (
 	restrictedRunAsUser            = kubeworkload.RestrictedRunAsUser
 	traefikWatchRoleName           = "traefik-watch"
 	platformNamespaceOwnerRoleName = "platform-namespace-owner"
-	sentinelIngestPort             = 8081
-	sentinelOTLPPort               = 4318
+	platformIngestPort             = 8081
+	platformOTLPPort               = 4318
 	registryNamespace              = "registry"
 	registryPort                   = 5000
 	podSecurityEnforceLabel        = "pod-security.kubernetes.io/enforce"
@@ -660,7 +660,7 @@ func ensureNamespacePlatformAPISecretAccess(ctx context.Context, client kubernet
 			{
 				Kind:      rbacv1.ServiceAccountKind,
 				Name:      platformNamespaceAPIServiceAccountName,
-				Namespace: sentinel.PlatformNamespace,
+				Namespace: platformstack.PlatformNamespace,
 			},
 		},
 	}
@@ -773,7 +773,7 @@ func desiredDefaultDenyNetworkPolicy(ns string, ingressFromNamespaces ...string)
 			},
 		})
 	}
-	for _, namespace := range []string{sentinel.PlatformNamespace, sentinel.ObservabilityNamespace} {
+	for _, namespace := range []string{platformstack.PlatformNamespace, platformstack.ObservabilityNamespace} {
 		ingress = append(ingress, networkingv1.NetworkPolicyIngressRule{
 			From: []networkingv1.NetworkPolicyPeer{
 				{
@@ -811,13 +811,13 @@ func desiredDefaultDenyNetworkPolicy(ns string, ingressFromNamespaces ...string)
 					To: []networkingv1.NetworkPolicyPeer{
 						{
 							NamespaceSelector: &metav1.LabelSelector{
-								MatchLabels: map[string]string{"kubernetes.io/metadata.name": sentinel.ObservabilityNamespace},
+								MatchLabels: map[string]string{"kubernetes.io/metadata.name": platformstack.ObservabilityNamespace},
 							},
 						},
 					},
 					Ports: []networkingv1.NetworkPolicyPort{
-						{Protocol: &tcpProtocol, Port: intstrPtr(sentinelIngestPort)},
-						{Protocol: &tcpProtocol, Port: intstrPtr(sentinelOTLPPort)},
+						{Protocol: &tcpProtocol, Port: intstrPtr(platformIngestPort)},
+						{Protocol: &tcpProtocol, Port: intstrPtr(platformOTLPPort)},
 					},
 				},
 				{

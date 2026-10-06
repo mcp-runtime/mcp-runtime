@@ -1,7 +1,7 @@
 # Local Kind and Test Mode
 
 Use this flow when you need a full local platform: API, UI, operator, registry,
-Traefik, Sentinel services, and real MCP ingress routes.
+Traefik, platform services, and real MCP ingress routes.
 
 ## Prerequisites
 
