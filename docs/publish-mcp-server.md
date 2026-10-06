@@ -468,9 +468,10 @@ but hand-written YAML must state them explicitly.
 - `spec.analytics`
   Analytics emission is on by default whenever the gateway is on and an
   ingest URL is configured. The platform API fills `spec.analytics.ingestURL`
-  from `MCP_SENTINEL_INGEST_URL` when publishing a server; an explicit URL in
-  the server metadata takes precedence. `MCP_ANALYTICS_INGEST_URL` remains a
-  legacy fallback. The operator also accepts its own ingest URL setting.
+  from `MCP_ANALYTICS_INGEST_URL` when publishing a server; an explicit URL in
+  the server metadata takes precedence. The platform API reads the old
+  `MCP_SENTINEL_INGEST_URL` key as a fallback for installs awaiting setup
+  migration. The operator also accepts its own ingest URL setting.
   Set `spec.analytics.disabled: true`
   to opt out. Platform API deploys create a namespace-local ingest-key Secret
   and set `spec.analytics.apiKeySecretRef` automatically when analytics is not
