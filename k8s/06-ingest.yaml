@@ -97,6 +97,9 @@ spec:
               port: 8081
             initialDelaySeconds: 5
             periodSeconds: 10
+            # /ready allows its Kafka dial 2s; the 1s default would time out
+            # before the handler can answer.
+            timeoutSeconds: 3
           livenessProbe:
             httpGet:
               path: /live
