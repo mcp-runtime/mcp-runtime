@@ -7,6 +7,16 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-10-06
+
+### Fixed
+
+- The hosted platform deploy workflow rolls out MCP Auth from its public image. It previously re-tagged the image into the platform registry, which the `mcp-auth-server` Deployment cannot pull without a pull secret. The rollout then hit `ImagePullBackOff` and rolled back ([#621](https://github.com/mcp-runtime/mcp-runtime/pull/621)).
+- The `mcp-ingest` readiness probe allows 3s, which is longer than the 2s Kafka check behind `/ready`. Before, slow Kafka connections showed up as probe timeouts instead of a clean not-ready response ([#621](https://github.com/mcp-runtime/mcp-runtime/pull/621)).
+- Setup creates the platform registry pull Secret in `mcp-log-collector`, where the promtail DaemonSet already referenced it. This removes `FailedToRetrieveImagePullSecret` warnings and lets a mirrored promtail image be pulled ([#621](https://github.com/mcp-runtime/mcp-runtime/pull/621)).
+
+`mcp-runtime update` preserves probes and Secrets, so the ingest and promtail fixes take effect on a fresh `mcp-runtime setup`. No configuration changes are required.
+
 ## [0.6.1] - 2026-10-06
 
 ### Added
@@ -184,7 +194,8 @@ upgrade from 0.4.x; see the migration note under **Changed**.
 
 - Targeted platform updates through `mcp-runtime update`, including embedded CRD updates and `--build` to build/push missing component images before rollout ([#491](https://github.com/mcp-runtime/mcp-runtime/pull/491)).
 
-[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.5.1...v0.5.2
