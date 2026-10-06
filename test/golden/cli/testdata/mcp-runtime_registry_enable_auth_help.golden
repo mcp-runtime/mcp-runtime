@@ -1,0 +1,14 @@
+Enable repository-scoped authentication on the bundled registry
+
+Usage:
+  mcp-runtime registry enable-auth [flags]
+
+Flags:
+      --dry-run                  Inspect targets without changing resources or creating credentials
+  -h, --help                     help for enable-auth
+      --pull-namespace strings   Runtime namespaces to provision (default: all existing managed namespaces)
+      --realm string             Public HTTPS platform token URL ending /api/v1/registry/token
+      --test-mode                Allow a local HTTP token realm for disposable tests
+
+Global Flags:
+      --debug   Enable debug mode with structured error logging

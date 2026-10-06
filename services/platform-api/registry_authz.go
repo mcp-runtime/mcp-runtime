@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"mcp-platform-api/internal/apiauth"
@@ -14,6 +16,9 @@ type registryCredentialAuthenticator interface {
 }
 
 func (s *apiServer) handleRegistryAuthz(w http.ResponseWriter, r *http.Request) {
+	if s.nativeRegistryForwardAuth(w, r) {
+		return
+	}
 	registry.HandleAuthz(w, r, s.registryAuthzDependencies())
 }
 
@@ -98,4 +103,117 @@ func (s *apiServer) registryAuthzSettings() *registry.AuthzConfig {
 		}
 	})
 	return s.registryAuthz
+}
+
+func (s *apiServer) handleRegistryToken(w http.ResponseWriter, r *http.Request) {
+	registry.HandleToken(w, r, registry.TokenDependencies{AuthenticateRequest: s.authenticateRegistryRequest, Config: s.registryAuthzSettings(), Signer: s.registrySigner, Pull: s.platform})
+}
+
+func (s *apiServer) nativeRegistryForwardAuth(w http.ResponseWriter, r *http.Request) bool {
+	if s.registrySigner == nil {
+		return false
+	}
+	path := registry.RegistryForwardedPath(r)
+	if r.Header.Get("Authorization") == "" && r.Header.Get("x-api-key") == "" && os.Getenv("REGISTRY_TOKEN_REALM") != "" {
+		challenge := fmt.Sprintf("Bearer realm=%q,service=%q", os.Getenv("REGISTRY_TOKEN_REALM"), "mcp-runtime-registry")
+		repo := registry.RegistryRepoFromPath(strings.TrimPrefix(path, "/v2/"))
+		if repo != "" && path != "/v2/_catalog" {
+			action := "pull"
+			method := r.Header.Get("X-Forwarded-Method")
+			if method != "" && method != "GET" && method != "HEAD" {
+				action = "push"
+			}
+			challenge += fmt.Sprintf(",scope=%q", "repository:"+repo+":"+action)
+		}
+		w.Header().Set("WWW-Authenticate", challenge)
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusUnauthorized)
+		return true
+	}
+	method := r.Header.Get("X-Forwarded-Method")
+	if method == "" {
+		method = r.Method
+	}
+	if method != http.MethodGet && method != http.MethodHead && method != http.MethodPost && method != http.MethodPatch && method != http.MethodPut {
+		w.WriteHeader(http.StatusForbidden)
+		return true
+	}
+	action := "pull"
+	if method != http.MethodGet && method != http.MethodHead {
+		action = "push"
+	}
+	if username, password, ok := r.BasicAuth(); ok && strings.HasPrefix(password, "mcpp_") {
+		if s.platform == nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return true
+		}
+		scope, valid, err := s.platform.AuthenticateRegistryPullCredential(r.Context(), username, password)
+		if err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return true
+		}
+		if !valid {
+			w.WriteHeader(http.StatusUnauthorized)
+			return true
+		}
+		if action != "pull" {
+			w.WriteHeader(http.StatusForbidden)
+			return true
+		}
+		if path == "/v2/" || scope.Allows(registry.RegistryRepoFromPath(strings.TrimPrefix(path, "/v2/"))) {
+			w.WriteHeader(http.StatusNoContent)
+		} else {
+			w.WriteHeader(http.StatusForbidden)
+		}
+		return true
+	}
+	raw, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if !ok {
+		return false
+	}
+	grants, valid := s.registrySigner.VerifyAccess(raw)
+	if !valid {
+		return false
+	}
+	if path == "/v2/" && action == "pull" {
+		w.WriteHeader(http.StatusNoContent)
+		return true
+	}
+	if source := registry.RegistryMountSource(r); source != "" {
+		allowed := false
+		for _, grant := range grants {
+			if grant.Type == "repository" && grant.Name == source {
+				for _, a := range grant.Actions {
+					if a == "pull" {
+						allowed = true
+					}
+				}
+			}
+		}
+		if !allowed {
+			w.WriteHeader(http.StatusForbidden)
+			return true
+		}
+	}
+	repo := registry.RegistryRepoFromPath(strings.TrimPrefix(path, "/v2/"))
+	for _, grant := range grants {
+		if grant.Type == "registry" && grant.Name == "catalog" && path == "/v2/_catalog" && action == "pull" {
+			for _, a := range grant.Actions {
+				if a == "*" {
+					w.WriteHeader(http.StatusNoContent)
+					return true
+				}
+			}
+		}
+		if grant.Type == "repository" && grant.Name == repo {
+			for _, a := range grant.Actions {
+				if a == action {
+					w.WriteHeader(http.StatusNoContent)
+					return true
+				}
+			}
+		}
+	}
+	w.WriteHeader(http.StatusForbidden)
+	return true
 }

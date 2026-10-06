@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -238,5 +239,38 @@ func TestNewHelperNameIncludesRandomSuffix(t *testing.T) {
 	}
 	if first == second {
 		t.Fatalf("expected unique helper names, got %q", first)
+	}
+}
+
+func TestNativePublicationMountsCredentialFile(t *testing.T) {
+	client := fake.NewSimpleClientset(&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "registry", Namespace: "registry"}, Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "registry", Env: []corev1.EnvVar{{Name: "REGISTRY_AUTH", Value: "token"}}}}}}}})
+	old := waitPodSucceededHook
+	defer func() { waitPodSucceededHook = old }()
+	waitPodSucceededHook = func(ctx context.Context, client kubernetes.Interface, namespace, name string) error {
+		pod, err := client.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+		found := false
+		for _, volume := range pod.Spec.Volumes {
+			if volume.Secret != nil && volume.Secret.SecretName == "mcp-registry-publisher" {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatal("missing publisher credential volume")
+		}
+		if !strings.Contains(strings.Join(pod.Spec.Containers[0].Command, " "), "--dest-authfile=/registry-publisher/config.json") {
+			t.Fatal("missing credential file argument")
+		}
+		return nil
+	}
+	cfg := Config{TarFetchURL: "http://runtime-api/image.tar"}
+	if err := PushDockerArchive(context.Background(), client, &rest.Config{}, "fixture.tar", "registry.registry.svc:5000/acme/app:test", cfg); err != nil {
+		t.Fatal(err)
+	}
+	cfg.HelperNamespace = "mcp-team-acme"
+	if err := PushDockerArchive(context.Background(), client, &rest.Config{}, "fixture.tar", "registry.registry.svc:5000/acme/app:test", cfg); err == nil {
+		t.Fatal("publisher allowed outside trusted namespace")
 	}
 }

@@ -572,6 +572,12 @@ func deployRegistry(logger *zap.Logger, namespace string, port int, registryType
 	manifest = rewriteRegistryHost(manifest, registryHost)
 	manifest = stripRegistryClusterIssuerAnnotation(manifest)
 	if clientsErr == nil {
+		manifest, err = preserveNativeRegistryManifest(context.Background(), clients.Clientset, namespace, manifest)
+		if err != nil {
+			return err
+		}
+	}
+	if clientsErr == nil {
 		if err := k8sclient.CheckRegistryIngressManifest(context.Background(), clients, manifest); err != nil {
 			wrappedErr := core.WrapWithBaseAndContext(
 				core.ErrDeployRegistryFailed,
@@ -667,6 +673,12 @@ func applyRegistryCompatibilityOverlay(logger *zap.Logger, namespace, manifestPa
 		core.Error("Failed to render registry compatibility overlay")
 		core.LogStructuredError(logger, wrappedErr, "Failed to render registry compatibility overlay")
 		return wrappedErr
+	}
+	if clients, err := registryKubernetesClients(); err == nil {
+		manifest, err = preserveNativeRegistryManifest(context.Background(), clients.Clientset, namespace, manifest)
+		if err != nil {
+			return err
+		}
 	}
 	if err := kube.ApplyManifestContentWithNamespace(core.DefaultKubectlClient().CommandArgs, manifest, namespace); err != nil {
 		wrappedErr := core.WrapWithBaseAndContext(

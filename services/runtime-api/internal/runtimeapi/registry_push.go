@@ -57,10 +57,12 @@ func registryPushUploadTimeout() time.Duration {
 func extendRegistryPushDeadlines(w http.ResponseWriter, upload time.Duration) {
 	now := time.Now()
 	rc := http.NewResponseController(w)
-	if err := rc.SetReadDeadline(now.Add(upload)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+	// Log ErrNotSupported too: it means a middleware writer hides the
+	// connection and uploads stay capped at the server-wide read timeout.
+	if err := rc.SetReadDeadline(now.Add(upload)); err != nil {
 		log.Printf("registry push: extend read deadline: %v", err)
 	}
-	if err := rc.SetWriteDeadline(now.Add(upload + registryPushOperationTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+	if err := rc.SetWriteDeadline(now.Add(upload + registryPushOperationTimeout)); err != nil {
 		log.Printf("registry push: extend write deadline: %v", err)
 	}
 }

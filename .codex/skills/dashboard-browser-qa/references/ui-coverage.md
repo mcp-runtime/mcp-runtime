@@ -1,5 +1,11 @@
 # Platform UI Coverage Checklist
 
+For React Teams (`#/admin/teams`), check new-account password validation,
+inline API error messages, duplicate-email conflict recovery, and **Add existing
+user** by user ID. Existing-user submissions must send only membership role,
+without a password. Verify refreshed member rows after successful submissions;
+the CLI `team user create` must exercise the same atomic account/membership API.
+
 Use this reference for `full-ui` audits, for `git-range` audits where the diff
 touches a listed page, or when a finding requires detailed UI reproduction.
 For smoke checks, cover only dashboard load, one successful login, one protected

@@ -132,8 +132,15 @@ func (r *MCPServerReconciler) hasReadyServingPod(ctx context.Context, server *mc
 	if desiredStableReplicas(server) == 0 && canaryEnabled(server) {
 		track = "canary"
 	}
+	// Pods are not watched (RBAC grants list/patch only), so a cached List
+	// would start a cluster-wide Pod informer that cannot watch and serves a
+	// stale relisted view. Read pods uncached, like nudgeGatewayPodsForPolicy.
+	reader := r.APIReader
+	if reader == nil {
+		reader = r.Client
+	}
 	pods := &corev1.PodList{}
-	if err := r.List(ctx, pods, client.InNamespace(server.Namespace), client.MatchingLabels{LabelApp: server.Name, LabelManagedBy: LabelManagedByValue, servingPortLabel: strconv.Itoa(int(servingPort(server))), "mcpruntime.org/rollout-track": track}); err != nil {
+	if err := reader.List(ctx, pods, client.InNamespace(server.Namespace), client.MatchingLabels{LabelApp: server.Name, LabelManagedBy: LabelManagedByValue, servingPortLabel: strconv.Itoa(int(servingPort(server))), "mcpruntime.org/rollout-track": track}); err != nil {
 		return false, err
 	}
 	for _, pod := range pods.Items {

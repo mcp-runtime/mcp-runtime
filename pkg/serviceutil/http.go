@@ -92,6 +92,12 @@ func (r *statusRecorder) Write(body []byte) (int, error) {
 	return r.ResponseWriter.Write(body)
 }
 
+// Unwrap exposes the underlying writer so http.ResponseController can reach
+// the connection, e.g. for handlers that extend their read/write deadlines.
+func (r *statusRecorder) Unwrap() http.ResponseWriter {
+	return r.ResponseWriter
+}
+
 func (r *statusRecorder) Flush() {
 	if !r.wroteHeader {
 		r.WriteHeader(http.StatusOK)

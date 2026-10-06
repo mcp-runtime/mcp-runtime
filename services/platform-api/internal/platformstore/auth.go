@@ -9,52 +9,112 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"golang.org/x/crypto/bcrypt"
 	"mcp-runtime/pkg/platformauth"
 )
 
-// CreatePasswordUser creates a password-login platform account with the requested role.
-func (s *Store) CreatePasswordUser(ctx context.Context, email, password string, role string) (User, error) {
+// ErrEmailAlreadyRegistered is safe to report without exposing SQL or user data.
+var ErrEmailAlreadyRegistered = errors.New("a user with this email already exists; add them as a member instead")
+
+// UserInputError identifies safe account validation messages.
+type UserInputError string
+
+func (e UserInputError) Error() string { return string(e) }
+
+func preparePasswordUser(email, password, role string) (User, []byte, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	role = strings.TrimSpace(role)
 	if role == "" {
 		role = RoleUser
 	}
 	if role != RoleUser && role != RoleAdmin {
-		return User{}, errors.New("role must be user or admin")
+		return User{}, nil, UserInputError("role must be user or admin")
 	}
 	if !validEmail(email) {
-		return User{}, errors.New("valid email required")
+		return User{}, nil, UserInputError("valid email required")
 	}
 	if len(password) < 8 {
-		return User{}, errors.New("password must be at least 8 characters")
+		return User{}, nil, UserInputError("password must be at least 8 characters")
+	}
+	if len(password) > 72 {
+		return User{}, nil, UserInputError("password must be at most 72 bytes")
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), 12)
 	if err != nil {
+		return User{}, nil, err
+	}
+	return User{ID: uuid.NewString(), Email: email, Role: role}, hash, nil
+}
+
+func insertPasswordUser(ctx context.Context, tx *sql.Tx, user User, hash []byte) error {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO users (id,email,role) VALUES ($1,$2,$3)`, user.ID, user.Email, user.Role); err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23505" && pqErr.Constraint == "users_email_key" {
+			return ErrEmailAlreadyRegistered
+		}
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `INSERT INTO auth_identities (user_id,provider,subject,password_hash) VALUES ($1,$2,$3,$4)`, user.ID, passwordProvider, user.Email, string(hash))
+	return err
+}
+
+// CreatePasswordUser creates a password-login platform account with the requested role.
+func (s *Store) CreatePasswordUser(ctx context.Context, email, password, role string) (User, error) {
+	user, hash, err := preparePasswordUser(email, password, role)
+	if err != nil {
 		return User{}, err
 	}
-	userID := uuid.NewString()
-
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return User{}, err
 	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback()
-		}
-	}()
+	defer tx.Rollback()
+	if err := insertPasswordUser(ctx, tx, user, hash); err != nil {
+		return User{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return User{}, err
+	}
+	return user, nil
+}
 
-	if _, err = tx.ExecContext(ctx, `INSERT INTO users (id,email,role) VALUES ($1,$2,$3)`, userID, email, role); err != nil {
-		return User{}, err
+// CreateTeamUser atomically creates a password account and its team membership.
+func (s *Store) CreateTeamUser(ctx context.Context, teamSlug, email, password, role string) (User, TeamMembership, error) {
+	role = normalizeTeamMembershipRole(role)
+	if role == "" {
+		return User{}, TeamMembership{}, UserInputError("membership role must be owner or member")
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO auth_identities (user_id,provider,subject,password_hash) VALUES ($1,$2,$3,$4)`, userID, passwordProvider, email, string(hash)); err != nil {
-		return User{}, err
+	user, hash, err := preparePasswordUser(email, password, RoleUser)
+	if err != nil {
+		return User{}, TeamMembership{}, err
 	}
-	if err = tx.Commit(); err != nil {
-		return User{}, err
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return User{}, TeamMembership{}, err
 	}
-	return User{ID: userID, Email: email, Role: role}, nil
+	defer tx.Rollback()
+	var team Team
+	err = tx.QueryRowContext(ctx, `
+SELECT t.id, t.slug, t.display_name, COALESCE(n.namespace, '')
+FROM teams t
+LEFT JOIN namespaces n ON n.team_id = t.id AND n.deleted_at IS NULL AND COALESCE(n.scope, 'team') = 'team'
+WHERE t.slug = $1 AND t.deleted_at IS NULL
+FOR SHARE OF t`, NormalizeTeamSlug(teamSlug)).Scan(&team.ID, &team.Slug, &team.Name, &team.Namespace)
+	if err != nil {
+		return User{}, TeamMembership{}, err
+	}
+	if err := insertPasswordUser(ctx, tx, user, hash); err != nil {
+		return User{}, TeamMembership{}, err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO team_memberships (id, team_id, user_id, role) VALUES ($1, $2, $3, $4)`, uuid.NewString(), team.ID, user.ID, role)
+	if err != nil {
+		return User{}, TeamMembership{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return User{}, TeamMembership{}, err
+	}
+	return user, TeamMembership{TeamID: team.ID, TeamSlug: team.Slug, TeamName: team.Name, TeamNamespace: team.Namespace, UserID: user.ID, Role: role, CreatedAt: time.Now().UTC()}, nil
 }
 
 // EnsurePasswordUser creates or updates a password-login account for a fixed role.

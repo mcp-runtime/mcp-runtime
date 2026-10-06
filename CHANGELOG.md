@@ -11,7 +11,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 This release removes the "Sentinel" name, renames `mcp-runtime sentinel` to
 `mcp-runtime ops`, makes `mcp-runtime status` an authenticated platform API
-check, and tightens registry, cert-manager, and OAuth defaults. Several
+check, adds opt-in native registry authentication, and fixes team account
+creation, access tables, image uploads, and port-changing rollouts. Several
 changes are breaking. There is no in-place upgrade from 0.5.x: back up,
 run a fresh `mcp-runtime setup`, restore required data, and verify; see
 **Upgrading from 0.5.x** below.
@@ -31,14 +32,19 @@ run a fresh `mcp-runtime setup`, restore required data, and verify; see
 
 ### Fixed
 
+- Registry image pushes can extend upload deadlines through request logging and metrics middleware, allowing uploads beyond the server's default timeout; unsupported deadline extensions are logged ([#615](https://github.com/mcp-runtime/mcp-runtime/issues/615)).
+- Port-transition promotion reads candidate pods directly from the API instead of starting a Pod informer the operator RBAC cannot watch, so promotion no longer acts on a stale pod view ([#617](https://github.com/mcp-runtime/mcp-runtime/issues/617)).
 - MCPServer port-changing rollouts retain the existing Service route until a Ready candidate declares the new listener, use a zero-unavailable rollout during the transition, and select only compatible pods after switching. Gateway network policies resolve the named listener per pod so retained ports stay reachable. Readiness requires current Deployment replicas and ready EndpointSlices on the requested port ([#533](https://github.com/mcp-runtime/mcp-runtime/issues/533)).
+- Access control tables use consistent column widths, wrap long subject identifiers within their cells, and keep status actions usable without squeezing grant and server names ([#606](https://github.com/mcp-runtime/mcp-runtime/issues/606)).
+- Team account creation preserves validation and conflict messages, creates accounts and memberships atomically, and offers an existing-user membership form without changing their password. Duplicate emails no longer expose database errors; temporary passwords require at least eight characters ([#605](https://github.com/mcp-runtime/mcp-runtime/issues/605)).
 - `mcp-runtime cluster doctor` reports the underlying kubectl/API error and stops dependent checks when the cluster cannot be queried ([#591](https://github.com/mcp-runtime/mcp-runtime/issues/591)).
 - Gateway-enabled OAuth apps receive the derived issuer and public resource audience, and the TypeScript example listens on the reconciled upstream path while retaining bearer validation. Apps that validate tokens themselves now need network access to the issuer's JWKS endpoint even when the gateway is enabled; the Go example exits at startup if it cannot reach it ([#532](https://github.com/mcp-runtime/mcp-runtime/issues/532)).
 
 ### Security
 
+- Add opt-in native Distribution authentication with `registry enable-auth`: repository-scoped five-minute tokens, namespace-bound read-only node credentials, trusted publication helpers, legacy copied-admin-key rotation with resumable recovery, and ClusterIP-only exposure. Activation requires updated API images and an external/public platform-api bootstrap image ([#531](https://github.com/mcp-runtime/mcp-runtime/issues/531)).
 - Fresh cert-manager installs use v1.21.2 instead of the retired v1.16.2; TLS doctor checks flag unsupported Kubernetes/version pairs and inconsistent controller/webhook/cainjector versions. Existing installations remain unchanged and require staged minor upgrades with certificate/Secret backups ([#534](https://github.com/mcp-runtime/mcp-runtime/issues/534)).
-- HTTPS registry overlays no longer expose the unauthenticated backend through NodePort 32000. Before upgrading, migrate any node mirrors using that port to the supported HTTPS pull endpoint and verify CA trust and fresh pulls. HTTP lab overlays retain their NodePort. Internal repository-scoped authentication remains pending ([#531](https://github.com/mcp-runtime/mcp-runtime/issues/531)).
+- HTTPS registry overlays no longer expose the unauthenticated backend through NodePort 32000. Before upgrading, migrate any node mirrors using that port to the supported HTTPS pull endpoint and verify CA trust and fresh pulls. HTTP lab overlays retain their NodePort. Native authentication is available through `registry enable-auth` ([#531](https://github.com/mcp-runtime/mcp-runtime/issues/531)).
 
 ### Upgrading from 0.5.x
 

@@ -902,3 +902,32 @@ jobs:
           docker image prune -f >/dev/null
           REMOTE
           } | ssh "$ARTICLES_DEPLOY_USER@$ARTICLES_DEPLOY_HOST_CLEAN" bash -s
+
+  native-registry-acceptance:
+    name: Native registry authorization acceptance
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: disposable-registry-test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Test a disposable Distribution backend
+        working-directory: services/platform-api
+        env:
+          MCP_REGISTRY_NATIVE_E2E: "1"
+        run: go test ./registry -run TestDistributionEnforcesNativeRegistryScopes -count=1 -timeout=5m
+      - name: Test stored node scopes, expiry and revocation
+        working-directory: services/platform-api
+        env:
+          MCP_PLATFORM_TEST_POSTGRES_DSN: postgres://postgres:disposable-registry-test@127.0.0.1:5432/postgres?sslmode=disable
+        run: go test ./test/integration -run TestRegistryPullCredentialsRevocationAndExpiry -count=1 -timeout=2m

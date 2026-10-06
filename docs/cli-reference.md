@@ -944,3 +944,8 @@ KUBECONFIG=~/.kube/config mcp-runtime cluster diagnostics    # post-setup diagno
 | Platform service logs, events, restart | [Platform services](platform-services.md) |
 | Distro-specific cluster prerequisites | [Cluster Requirements](cluster-readiness.md) |
 | Kind, EKS, k3s deployment | [Deployment targets](deployment-targets.md) |
+
+Native backend registry authentication is activated with
+`mcp-runtime registry enable-auth --realm https://api.example.com/api/v1/registry/token`.
+See [registry authentication](internals/registry-auth.md) for prerequisites,
+read-only node credential rotation, and recovery after a partial activation.
