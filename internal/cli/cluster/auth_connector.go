@@ -36,7 +36,7 @@ func newMCPAuthConnectorCmd() *cobra.Command {
 			if !dryRun && !yes {
 				return errors.New("pass --yes to update the connector ConfigMap")
 			}
-			data, err := os.ReadFile(file)
+			data, err := os.ReadFile(file) // #nosec G304 -- explicit operator-supplied file, validated before use.
 			if err != nil {
 				return fmt.Errorf("read connector file: %w", err)
 			}
