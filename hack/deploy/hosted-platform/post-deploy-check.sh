@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Runs only on the disposable release runner with the production kubeconfig.
-# The temporary MCPServer is removed even when a probe fails.
+# The temporary server is published and removed through the customer CLI.
 test -n "${KUBECONFIG:-}"
 test -n "${RELEASE_TAG:-}"
 test -n "${GITHUB_RUN_ID:-}"
@@ -16,52 +16,37 @@ for namespace in mcp-runtime mcp-platform registry cert-manager; do
 done
 
 qa_name="qa-audit-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-qa_image="registry.mcpruntime.org/qa-audit:${RELEASE_TAG}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+qa_tag="${RELEASE_TAG}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+qa_dir="$RUNNER_TEMP/qa-server/.mcp"
+export MCP_RUNTIME_CONFIG_DIR="$RUNNER_TEMP/qa-profile"
 cleanup() {
-  kubectl -n mcp-servers delete mcpserver "$qa_name" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  ./bin/mcp-runtime server delete "$qa_name" --namespace mcp-team-ait >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
-docker build --platform linux/amd64 -t "$qa_image" examples/oauth-example-go-2025-11-25
-docker push "$qa_image"
+mkdir -m 700 "$MCP_RUNTIME_CONFIG_DIR"
+mkdir -p "$qa_dir"
+admin_email="$(kubectl -n mcp-platform get secret mcp-platform-api-credentials -o jsonpath='{.data.PLATFORM_ADMIN_EMAIL}' | base64 -d)"
+admin_password="$(kubectl -n mcp-platform get secret mcp-platform-api-credentials -o jsonpath='{.data.PLATFORM_ADMIN_PASSWORD}' | base64 -d)"
+test -n "$admin_email"
+test -n "$admin_password"
+./bin/mcp-runtime auth login --api-url https://platform.mcpruntime.org \
+  --email "$admin_email" --password "$admin_password" --profile qa-audit >/dev/null
+unset admin_email admin_password
 
-kubectl apply -f - <<YAML
-apiVersion: mcpruntime.org/v1alpha1
-kind: MCPServer
-metadata:
-  name: $qa_name
-  namespace: mcp-servers
-spec:
-  description: Temporary post-deployment MCP protocol audit.
-  image: $qa_image
-  port: 8088
-  publicPathPrefix: $qa_name
-  gateway:
-    enabled: true
-  policy:
-    mode: observe
-    defaultDecision: allow
-  session:
-    required: false
-  tools:
-    - name: aaa-ping
-      description: Check that the temporary audit server is reachable.
-      requiredTrust: low
-      sideEffect: read
-YAML
-
-ready=false
-for attempt in $(seq 1 60); do
-  phase="$(kubectl -n mcp-servers get mcpserver "$qa_name" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
-  if [[ "$phase" == Ready ]]; then
-    ready=true
-    break
-  fi
-  sleep 5
-done
-if [[ "$ready" != true ]]; then
-  kubectl -n mcp-servers describe mcpserver "$qa_name"
-  echo 'Temporary qa-audit MCP server did not become ready' >&2
+./bin/mcp-runtime server init "$qa_name" --metadata-dir "$qa_dir" \
+  --scope tenant --image "ait/$qa_name" --tag "$qa_tag" --port 8088 \
+  --tool aaa-ping --policy-mode observe --default-decision allow \
+  --session-required=false --force
+./bin/mcp-runtime server validate --metadata-dir "$qa_dir"
+./bin/mcp-runtime server build image "$qa_name" --metadata-dir "$qa_dir" \
+  --dockerfile examples/oauth-example-go-2025-11-25/Dockerfile \
+  --context examples/oauth-example-go-2025-11-25 --tag "$qa_tag"
+qa_image="$(awk '$1=="image:"{i=$2} $1=="imageTag:"{t=$2} END{if(i==""||t=="")exit 1; print i ":" t}' "$qa_dir/servers.yaml")"
+./bin/mcp-runtime server push --scope tenant --image "$qa_image"
+if ! ./bin/mcp-runtime server deploy "$qa_name" --scope tenant --team ait --metadata-dir "$qa_dir"; then
+  kubectl -n mcp-team-ait get mcpserver "$qa_name" -o json \
+    | jq -c '{phase:.status.phase,message:.status.message,conditions:.status.conditions}' || true
   exit 1
 fi
 

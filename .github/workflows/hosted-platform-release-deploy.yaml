@@ -168,8 +168,16 @@ jobs:
               --kubeconfig "$kubeconfig" --context default --yes
           fi
           ./bin/mcp-runtime cluster doctor
-          curl -fsS https://auth.mcpruntime.org/.well-known/oauth-authorization-server/mcp-auth \
-            | jq -e '.issuer == "https://auth.mcpruntime.org/mcp-auth" and (["tools:read", "tools:write"] - .scopes_supported | length == 0)'
+          auth_metadata_ready=false
+          for attempt in $(seq 1 12); do
+            if curl -fsS https://auth.mcpruntime.org/.well-known/oauth-authorization-server/mcp-auth \
+              | jq -e '.issuer == "https://auth.mcpruntime.org/mcp-auth" and (["tools:read", "tools:write"] - .scopes_supported | length == 0)' >/dev/null; then
+              auth_metadata_ready=true
+              break
+            fi
+            sleep 5
+          done
+          test "$auth_metadata_ready" = true
           gh api "repos/$GITHUB_REPOSITORY/contents/hack/deploy/hosted-platform/post-deploy-check.sh?ref=main" \
             --jq .content | base64 -d > "$RUNNER_TEMP/post-deploy-check.sh"
           bash "$RUNNER_TEMP/post-deploy-check.sh"

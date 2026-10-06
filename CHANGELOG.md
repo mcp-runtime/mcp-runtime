@@ -7,16 +7,14 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
-### Fixed
-
-- `server build image` keeps an explicit team repository from tenant metadata and rejects ambiguous unscoped repositories for accounts in multiple teams. It prints the chosen repository before Docker runs, preventing an image built for one team from silently being deployed to another ([#639](https://github.com/mcp-runtime/mcp-runtime/issues/639)).
-
 ## [0.6.3] - 2026-10-06
 
 ### Fixed
 
 - The operator receives a named, namespace-scoped permission to patch the bundled MCP Auth Deployment when server OAuth resources or scopes change. `cluster operator-rbac apply` repairs existing installations without changing images, Secrets, or other workloads. The hosted release workflow runs this repair before updating and checks the effective EndpointSlice, Secret, and MCP Auth permissions. `cluster doctor` now detects missing EndpointSlice informer access ([#634](https://github.com/mcp-runtime/mcp-runtime/pull/634)).
 - Fresh setup attaches the platform registry pull Secret to a bundled MCP Auth Deployment that uses a private platform image. `cluster doctor` reports platform Deployments that pull from the platform registry without a pull Secret ([#627](https://github.com/mcp-runtime/mcp-runtime/pull/627)).
+- `server build image` keeps an explicit team repository from tenant metadata and rejects ambiguous unscoped repositories for accounts in multiple teams. It prints the chosen repository before Docker runs, preventing an image built for one team from silently being deployed to another ([#640](https://github.com/mcp-runtime/mcp-runtime/pull/640)).
+- Published servers receive the configured Analytics ingest URL when the runtime API creates their credentials, including the legacy configuration key on existing installations. An explicit server URL is preserved ([#641](https://github.com/mcp-runtime/mcp-runtime/pull/641)).
 
 Existing installations can repair operator permissions with `cluster operator-rbac apply` from this release's source checkout. The bundled MCP Auth pull Secret is attached by a fresh setup; `mcp-runtime update` changes images only.
 
