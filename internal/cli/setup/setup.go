@@ -332,7 +332,7 @@ will use to push and pull container images.`,
 	cmd.Flags().BoolVar(&strictProd, "strict-prod", false, "Require production-style registry and TLS validation for non-test setup")
 	cmd.Flags().BoolVar(&withoutPlatformStack, "without-platform-stack", false, "Skip deploying the bundled platform stack")
 	cmd.Flags().BoolVar(&withMCPAuthServer, "with-mcp-auth-server", false, "Deploy the optional bundled mcp-auth authorization server; production requires a platform domain, connector, and TLS-enabled ingress")
-	cmd.Flags().StringVar(&mcpAuthServerImage, "mcp-auth-server-image", "docker.io/princekrroshan01/mcp-auth-server:0.4.2", "Container image for the optional bundled mcp-auth authorization server")
+	cmd.Flags().StringVar(&mcpAuthServerImage, "mcp-auth-server-image", "docker.io/princekrroshan01/mcp-auth-server:0.4.4", "Container image for the optional bundled mcp-auth authorization server")
 	cmd.Flags().StringVar(&mcpAuthIssuerURL, "mcp-auth-issuer-url", "", "Public HTTPS issuer URL for the bundled mcp-auth authorization server (defaults to https://auth.<MCP_PLATFORM_DOMAIN>/mcp-auth)")
 	cmd.Flags().StringSliceVar(&mcpAuthResourceURLs, "mcp-auth-resource-url", nil, "Optional initial resource URI for the bundled mcp-auth server; the operator reconciles this list from OAuth MCPServer audiences")
 	cmd.Flags().StringVar(&mcpAuthSigningKeySecret, "mcp-auth-signing-key-secret", "", "Secret holding the mcp-auth RSA signing key as private-key.pem (required outside --test-mode)")

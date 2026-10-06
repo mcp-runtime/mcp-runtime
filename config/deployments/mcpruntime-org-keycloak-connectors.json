@@ -11,9 +11,6 @@
       "profile",
       "email"
     ],
-    "mcp_scopes": [
-      "tools:read"
-    ],
     "identity_claims": [
       "preferred_username"
     ],

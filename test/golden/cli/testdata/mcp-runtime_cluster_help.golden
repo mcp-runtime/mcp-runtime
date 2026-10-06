@@ -4,13 +4,14 @@ Usage:
   mcp-runtime cluster [command]
 
 Available Commands:
-  cert        Manage cert-manager resources
-  config      Configure cluster settings
-  diagnostics Diagnose an installed MCP Runtime cluster
-  doctor      Check whether a cluster is ready for MCP Runtime setup
-  init        Initialize cluster configuration
-  provision   Provision a new cluster
-  status      Check cluster status
+  cert               Manage cert-manager resources
+  config             Configure cluster settings
+  diagnostics        Diagnose an installed MCP Runtime cluster
+  doctor             Check whether a cluster is ready for MCP Runtime setup
+  init               Initialize cluster configuration
+  mcp-auth-connector Manage the bundled MCP Auth identity connector
+  provision          Provision a new cluster
+  status             Check cluster status
 
 Flags:
   -h, --help   help for cluster

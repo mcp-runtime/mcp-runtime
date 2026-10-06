@@ -95,7 +95,7 @@ KUBECONFIG="$PROD_KUBECONFIG" ./bin/mcp-runtime cluster doctor
   `registry.<domain>/<image>:<unique-tag>`.
 - mcp-auth is a separate release track. Leave its Deployment unchanged unless
   an update is requested. The default candidate source is the published Docker
-  Hub image `docker.io/princekrroshan01/mcp-auth-server:0.4.2`; copy it into
+  Hub image `docker.io/princekrroshan01/mcp-auth-server:0.4.4`; copy it into
   the Runtime registry under a unique `MCP_AUTH_IMAGE_TAG`. Build from
   `/Users/proshan/mcp-auth` only when intentionally testing source changes;
   then require a selected `MCP_AUTH_BUILD_REF`, a clean checkout whose HEAD

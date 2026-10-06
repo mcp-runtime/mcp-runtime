@@ -201,7 +201,7 @@ not delete shared analytics or registry credentials as part of server cleanup.
 ## Optional: bundled mcp-auth integration fixture
 
 The bundled authorization server is opt-in and separate from MCP application
-deployment. Setup pulls `princekrroshan01/mcp-auth-server:0.4.2` from Docker
+deployment. Setup pulls `princekrroshan01/mcp-auth-server:0.4.4` from Docker
 Hub by default. Production deployments additionally require HTTPS
 issuer/resource URLs, a provider connector, signing-key Secret, and TLS
 Secret; test mode may use the local issuer:

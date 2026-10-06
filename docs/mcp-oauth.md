@@ -42,10 +42,8 @@ for that exact resource. MCP Auth rejects requests for scopes outside the
 resource list and advertises the list in protected-resource metadata. The
 Runtime gateway also advertises the server's scopes in its public resource
 metadata and checks token scope and per-call policy when a tool is
-invoked. For existing servers without `auth.scopes`, MCP Auth uses its legacy
-default scopes; set `auth.scopes` for an explicit policy. An existing
-connector's `mcp_scopes` remains a fallback for servers without `auth.scopes`;
-retain it until those servers declare scopes in their manifests.
+invoked. Servers without `auth.scopes` receive MCP Auth's read-only default;
+set `auth.scopes` in the server manifest to grant write access explicitly.
 
 ## Responsibility boundary
 
@@ -267,7 +265,7 @@ The TLS certificate for the issuer host is provisioned by setup using the
 configured TLS ClusterIssuer. Pass `--mcp-auth-tls-secret` only when the
 certificate is externally managed (and use `--provided-tls-secrets`).
 
-The default image is `docker.io/princekrroshan01/mcp-auth-server:0.4.2`.
+The default image is `docker.io/princekrroshan01/mcp-auth-server:0.4.4`.
 The server uses SQLite on a PVC in production and memory storage only in
 `--test-mode`. The setup flag is opt-in; when it is absent, Runtime does not
 deploy this authorization server.

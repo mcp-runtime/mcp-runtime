@@ -1,0 +1,16 @@
+Update the existing MCP Auth connector configuration
+
+Usage:
+  mcp-runtime cluster mcp-auth-connector apply [flags]
+
+Flags:
+      --connector string    Connector name used by the MCP Auth deployment
+      --context string      Explicit Kubernetes context
+      --dry-run             Show whether the connector ConfigMap would change
+      --file string         Connector JSON file without credentials
+  -h, --help                help for apply
+      --kubeconfig string   Explicit kubeconfig path
+      --yes                 Apply the change without an interactive prompt
+
+Global Flags:
+      --debug   Enable debug mode with structured error logging
