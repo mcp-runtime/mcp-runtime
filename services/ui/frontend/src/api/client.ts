@@ -157,6 +157,13 @@ function sameOriginInit(options: RequestInit): RequestInit {
   return { ...options, credentials: "same-origin", headers };
 }
 
+export class APIRequestError extends Error {
+  constructor(message: string, readonly status: number, readonly code?: string) {
+    super(message);
+    this.name = "APIRequestError";
+  }
+}
+
 async function readJSON(response: Response): Promise<unknown> {
   if (response.status === 401) {
     throw new UnauthorizedError();
@@ -169,7 +176,17 @@ async function readJSON(response: Response): Promise<unknown> {
       }
       throw new ForbiddenError(text || "forbidden");
     }
-    throw new Error(text || `Request failed: ${response.status}`);
+    let message = text || `Request failed: ${response.status}`;
+    let code: string | undefined;
+    try {
+      const envelope: unknown = JSON.parse(text);
+      if (envelope && typeof envelope === "object") {
+        const record = envelope as Record<string, unknown>;
+        if (typeof record.message === "string" && record.message) message = record.message;
+        if (typeof record.error === "string") code = record.error;
+      }
+    } catch { /* Older plain-text responses retain their message. */ }
+    throw new APIRequestError(message, response.status, code);
   }
   return response.json();
 }

@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Security
+
+- Add opt-in native Distribution authentication with `registry enable-auth`: repository-scoped five-minute tokens, namespace-bound read-only node credentials, trusted publication helpers, legacy copied-admin-key rotation with resumable recovery, and ClusterIP-only exposure. Activation requires updated API images and an external/public platform-api bootstrap image ([#531](https://github.com/mcp-runtime/mcp-runtime/issues/531)).
+
 ### Fixed
 
 - Port-transition promotion reads candidate pods directly from the API instead of starting a Pod informer the operator RBAC cannot watch, so promotion no longer acts on a stale pod view ([#617](https://github.com/mcp-runtime/mcp-runtime/issues/617)).
@@ -31,6 +35,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 ### Fixed
 
 - Access control tables use consistent column widths, wrap long subject identifiers within their cells, and keep status actions usable without squeezing grant and server names ([#606](https://github.com/mcp-runtime/mcp-runtime/issues/606)).
+- Team account creation preserves validation and conflict messages, creates accounts and memberships atomically, and offers an existing-user membership form without changing their password. Duplicate emails no longer expose database errors; temporary passwords require at least eight characters ([#605](https://github.com/mcp-runtime/mcp-runtime/issues/605)).
+
 - `mcp-runtime cluster doctor` reports the underlying kubectl/API error and stops dependent checks when the cluster cannot be queried ([#591](https://github.com/mcp-runtime/mcp-runtime/issues/591)).
 - Gateway-enabled OAuth apps receive the derived issuer and public resource audience, and the TypeScript example listens on the reconciled upstream path while retaining bearer validation. Apps that validate tokens themselves now need network access to the issuer's JWKS endpoint even when the gateway is enabled; the Go example exits at startup if it cannot reach it ([#532](https://github.com/mcp-runtime/mcp-runtime/issues/532)).
 

@@ -345,10 +345,13 @@ func (s *Store) UpsertTeamMembership(ctx context.Context, teamSlug, userID, role
 	userID = strings.TrimSpace(userID)
 	role = normalizeTeamMembershipRole(role)
 	if userID == "" {
-		return TeamMembership{}, errors.New("userID is required")
+		return TeamMembership{}, UserInputError("userID is required")
 	}
 	if role == "" {
-		return TeamMembership{}, errors.New("membership role is required")
+		return TeamMembership{}, UserInputError("membership role must be owner or member")
+	}
+	if _, err := uuid.Parse(userID); err != nil {
+		return TeamMembership{}, UserInputError("valid user ID required")
 	}
 	team, ok, err := s.GetTeamBySlug(ctx, teamSlug)
 	if err != nil {

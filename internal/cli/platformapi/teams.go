@@ -185,16 +185,31 @@ func (c *PlatformClient) ListTeamMembers(ctx context.Context, slug string) ([]Te
 }
 
 func (c *PlatformClient) CreateTeamUser(ctx context.Context, slug, email, password, role string) (TeamMembership, error) {
-	user, err := c.CreateUser(ctx, email, password, "")
+	payload, err := json.Marshal(map[string]string{"email": strings.TrimSpace(email), "password": password, "role": strings.TrimSpace(role)})
 	if err != nil {
 		return TeamMembership{}, err
 	}
-	membership, err := c.UpsertTeamMember(ctx, slug, user.ID, role)
+	resp, err := c.do(ctx, http.MethodPost, "/runtime/teams/"+url.PathEscape(strings.TrimSpace(slug))+"/users", "", bytes.NewReader(payload))
 	if err != nil {
 		return TeamMembership{}, err
 	}
-	membership.Email = user.Email
-	return membership, nil
+	defer resp.Body.Close()
+	body, err := readBody(resp.Body)
+	if err != nil {
+		return TeamMembership{}, err
+	}
+	if resp.StatusCode != http.StatusCreated {
+		return TeamMembership{}, httpAPIError(resp.StatusCode, body)
+	}
+	var out struct {
+		User       PlatformUser   `json:"user"`
+		Membership TeamMembership `json:"membership"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return TeamMembership{}, err
+	}
+	out.Membership.Email = out.User.Email
+	return out.Membership, nil
 }
 
 func (c *PlatformClient) UpsertTeamMember(ctx context.Context, slug, userID, role string) (TeamMembership, error) {

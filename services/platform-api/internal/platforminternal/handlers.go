@@ -37,6 +37,7 @@ type PlatformStore interface {
 	ListTeamMemberships(ctx context.Context, teamSlug string) ([]platformstore.TeamMembership, error)
 	UpsertTeamMembership(ctx context.Context, teamSlug, userID, role string) (platformstore.TeamMembership, error)
 	DeleteTeamMembership(ctx context.Context, teamSlug, userID string) error
+	CreateTeamUser(ctx context.Context, teamSlug, email, password, role string) (platformstore.User, platformstore.TeamMembership, error)
 	CreatePasswordUser(ctx context.Context, email, password, role string) (platformstore.User, error)
 	OperationsSnapshot(ctx context.Context, filter platformstore.OperationsFilter) (platformstore.OperationsSnapshot, error)
 }
@@ -401,7 +402,7 @@ func (h Handler) teamMembersUpsertBody(w http.ResponseWriter, r *http.Request, s
 			apihttp.WriteEnvelope(w, http.StatusNotFound, apihttp.CodeNotFound, "team or user not found")
 			return
 		}
-		apihttp.WriteEnvelope(w, http.StatusBadRequest, apihttp.CodeInvalidRequestBody, err.Error())
+		writeMembershipError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, internalapi.TeamMembershipResponse{Membership: membership})
@@ -425,7 +426,7 @@ func (h Handler) teamMemberUpsert(w http.ResponseWriter, r *http.Request, slug, 
 			apihttp.WriteEnvelope(w, http.StatusNotFound, apihttp.CodeNotFound, "team or user not found")
 			return
 		}
-		apihttp.WriteEnvelope(w, http.StatusBadRequest, apihttp.CodeInvalidRequestBody, err.Error())
+		writeMembershipError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, internalapi.TeamMembershipResponse{Membership: membership})
@@ -453,18 +454,9 @@ func (h Handler) teamUserCreate(w http.ResponseWriter, r *http.Request, teamSlug
 	if role == "" {
 		role = teamRoleMember
 	}
-	user, err := h.Store.CreatePasswordUser(r.Context(), strings.TrimSpace(request.Email), strings.TrimSpace(request.Password), roleUser)
+	user, membership, err := h.Store.CreateTeamUser(r.Context(), teamSlug, strings.TrimSpace(request.Email), request.Password, role)
 	if err != nil {
-		apihttp.WriteEnvelope(w, http.StatusBadRequest, apihttp.CodeInvalidRequestBody, err.Error())
-		return
-	}
-	membership, err := h.Store.UpsertTeamMembership(r.Context(), teamSlug, user.ID, role)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			apihttp.WriteEnvelope(w, http.StatusNotFound, apihttp.CodeNotFound, "team not found")
-			return
-		}
-		apihttp.WriteEnvelope(w, http.StatusBadRequest, apihttp.CodeInvalidRequestBody, err.Error())
+		writeUserCreateError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, internalapi.TeamUserCreateResponse{User: userToInternal(user), Membership: membership})
@@ -484,9 +476,9 @@ func (h Handler) createUser(w http.ResponseWriter, r *http.Request) {
 	if role == "" {
 		role = roleUser
 	}
-	user, err := h.Store.CreatePasswordUser(r.Context(), strings.TrimSpace(request.Email), strings.TrimSpace(request.Password), role)
+	user, err := h.Store.CreatePasswordUser(r.Context(), strings.TrimSpace(request.Email), request.Password, role)
 	if err != nil {
-		apihttp.WriteEnvelope(w, http.StatusBadRequest, apihttp.CodeInvalidRequestBody, err.Error())
+		writeUserCreateError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, internalapi.CreateUserResponse{User: userToInternal(user)})
@@ -637,4 +629,27 @@ func userToInternal(user platformstore.User) internalapi.User {
 		Email: user.Email,
 		Role:  user.Role,
 	}
+}
+
+func writeUserCreateError(w http.ResponseWriter, err error) {
+	var input platformstore.UserInputError
+	switch {
+	case errors.Is(err, platformstore.ErrEmailAlreadyRegistered):
+		apihttp.WriteEnvelope(w, http.StatusConflict, apihttp.CodeConflict, platformstore.ErrEmailAlreadyRegistered.Error())
+	case errors.Is(err, sql.ErrNoRows):
+		apihttp.WriteEnvelope(w, http.StatusNotFound, apihttp.CodeNotFound, "team not found")
+	case errors.As(err, &input):
+		apihttp.WriteEnvelope(w, http.StatusBadRequest, apihttp.CodeInvalidRequestBody, input.Error())
+	default:
+		apihttp.WriteEnvelope(w, http.StatusInternalServerError, apihttp.CodeInternalError, "failed to create user")
+	}
+}
+
+func writeMembershipError(w http.ResponseWriter, err error) {
+	var input platformstore.UserInputError
+	if errors.As(err, &input) {
+		apihttp.WriteEnvelope(w, http.StatusBadRequest, apihttp.CodeInvalidRequestBody, input.Error())
+		return
+	}
+	apihttp.WriteEnvelope(w, http.StatusInternalServerError, apihttp.CodeInternalError, "failed to update membership")
 }
