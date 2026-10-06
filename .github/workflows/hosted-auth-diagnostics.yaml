@@ -50,4 +50,4 @@ jobs:
           "${remote[@]}" 'kubectl -n mcp-team-ait get secrets -o json' | jq -c '[.items[] | select(.metadata.name == "mcp-runtime-registry-pull") | {name:.metadata.name,type,keys:(.data | keys)}]'
           "${remote[@]}" 'kubectl -n mcp-team-ait get serviceaccount mcp-workload -o json' | jq -c '{name:.metadata.name,imagePullSecrets:.imagePullSecrets}'
           echo 'Recent operator errors for QA server'
-          "${remote[@]}" 'kubectl -n mcp-runtime logs deployment/mcp-runtime-operator-controller-manager --since=30m --all-containers=true' | rg -i 'qa-audit-37526502868-1|forbidden|imagepull|secret|error' | tail -80 || true
+          "${remote[@]}" 'kubectl -n mcp-runtime logs deployment/mcp-runtime-operator-controller-manager --since=30m --all-containers=true' | grep -Ei 'qa-audit-37526502868-1|forbidden|imagepull|secret|error' | tail -80 || true
