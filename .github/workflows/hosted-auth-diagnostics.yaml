@@ -1,0 +1,42 @@
+name: Hosted MCP Auth diagnostics
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Inspect Auth rollout from a disposable runner
+        env:
+          SSHPASS: ${{ secrets.MCP_PROD_BOOTSTRAP_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSHPASS"
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq sshpass
+          known_hosts="$RUNNER_TEMP/platform-known-hosts"
+          ssh-keyscan -T 10 -t ed25519 163.61.31.14 > "$known_hosts" 2>/dev/null
+          fingerprint="$(ssh-keygen -lf "$known_hosts" -E sha256 | awk '{print $2}')"
+          test "$fingerprint" = 'SHA256:uLP3I92NNheo+MIPWs77aU11NCTK5NrZGwUV0l1QgQI'
+          ssh_opts=(-o "UserKnownHostsFile=$known_hosts" -o StrictHostKeyChecking=yes)
+          remote=(sshpass -e ssh "${ssh_opts[@]}" root@163.61.31.14)
+          test "$("${remote[@]}" hostname)" = '1c4mdvegg6'
+
+          echo 'MCP Auth Deployment'
+          "${remote[@]}" 'kubectl -n mcp-platform get deployment mcp-auth-server -o json' |
+            jq -c '{image: [.spec.template.spec.containers[].image], readyReplicas: (.status.readyReplicas // 0), replicas: (.status.replicas // 0), conditions: [.status.conditions[]? | {type,status,reason,message}]}'
+          echo 'MCP Auth ReplicaSets'
+          "${remote[@]}" 'kubectl -n mcp-platform get replicasets -o json' |
+            jq -c '.items[] | select(.metadata.name | startswith("mcp-auth-server-")) | {name:.metadata.name, image:[.spec.template.spec.containers[].image], desired:(.spec.replicas // 0), ready:(.status.readyReplicas // 0)}'
+          echo 'MCP Auth Pods'
+          "${remote[@]}" 'kubectl -n mcp-platform get pods -o json' |
+            jq -c '.items[] | select(.metadata.name | startswith("mcp-auth-server-")) | {name:.metadata.name, phase:.status.phase, conditions:[.status.conditions[]? | {type,status,reason,message}], containers:[.status.containerStatuses[]? | {name,ready,restartCount,state,lastState}]}'
+          echo 'MCP Auth Pod events'
+          "${remote[@]}" 'kubectl -n mcp-platform get events -o json' |
+            jq -c '.items[] | select(.involvedObject.name | startswith("mcp-auth-server-")) | {time:(.lastTimestamp // .eventTime), object:.involvedObject.name, reason,message}'
