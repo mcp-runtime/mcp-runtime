@@ -223,6 +223,74 @@ servers:
 		t.Fatal("expected docker command")
 	})
 
+	t.Run("respects_explicit_team_repository_for_multi_team_user", func(t *testing.T) {
+		mock := &core.MockExecutor{}
+		defer core.SwapExecExecutor(mock)()
+		api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/api/v1/auth/me" {
+				t.Fatalf("unexpected platform path %q", r.URL.Path)
+			}
+			w.Header().Set("content-type", "application/json")
+			_, _ = w.Write([]byte(`{"authenticated":true,"principal":{"role":"user","teams":[{"slug":"ait","namespace":"mcp-team-ait"},{"slug":"qa-audit","namespace":"mcp-team-qa-audit"}]}}`))
+		}))
+		defer api.Close()
+		t.Setenv("MCP_PLATFORM_API_TOKEN", "token-1")
+		t.Setenv("MCP_PLATFORM_API_URL", api.URL)
+		t.Setenv("MCP_RUNTIME_CONFIG_DIR", t.TempDir())
+
+		metadataFile := filepath.Join(t.TempDir(), "servers.yaml")
+		const original = "version: v1\nservers:\n  - name: qa-server\n    scope: tenant\n    namespace: mcp-team-qa-audit\n    image: registry.example.com/qa-audit/qa-server\n"
+		if err := os.WriteFile(metadataFile, []byte(original), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := buildImage(context.Background(), logger, "qa-server", "Dockerfile", metadataFile, ".", "registry.example.com", "v1", "", "."); err != nil {
+			t.Fatal(err)
+		}
+		if command := mock.LastCommand(); command.Name != "docker" || !contains(command.Args, "registry.example.com/qa-audit/qa-server:v1") {
+			t.Fatalf("docker command = %+v, want qa-audit image", command)
+		}
+		data, err := os.ReadFile(metadataFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(data), "image: registry.example.com/qa-audit/qa-server") {
+			t.Fatalf("metadata image changed team: %s", data)
+		}
+	})
+
+	t.Run("rejects_ambiguous_team_before_build", func(t *testing.T) {
+		mock := &core.MockExecutor{}
+		defer core.SwapExecExecutor(mock)()
+		api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("content-type", "application/json")
+			_, _ = w.Write([]byte(`{"authenticated":true,"principal":{"role":"user","teams":[{"slug":"ait","namespace":"mcp-team-ait"},{"slug":"qa-audit","namespace":"mcp-team-qa-audit"}]}}`))
+		}))
+		defer api.Close()
+		t.Setenv("MCP_PLATFORM_API_TOKEN", "token-1")
+		t.Setenv("MCP_PLATFORM_API_URL", api.URL)
+		t.Setenv("MCP_RUNTIME_CONFIG_DIR", t.TempDir())
+
+		metadataFile := filepath.Join(t.TempDir(), "servers.yaml")
+		const original = "version: v1\nservers:\n  - name: qa-server\n    scope: tenant\n    image: qa-server\n"
+		if err := os.WriteFile(metadataFile, []byte(original), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		err := buildImage(context.Background(), logger, "qa-server", "Dockerfile", metadataFile, ".", "registry.example.com", "v1", "", ".")
+		if err == nil || !strings.Contains(err.Error(), "multiple team memberships") {
+			t.Fatalf("build error = %v, want explicit team guidance", err)
+		}
+		if mock.HasCommand("docker") {
+			t.Fatal("Docker must not run when team selection is ambiguous")
+		}
+		data, err := os.ReadFile(metadataFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(data) != original {
+			t.Fatalf("failed build changed metadata: %s", data)
+		}
+	})
+
 	t.Run("returns_error_before_build_when_explicit_metadata_invalid", func(t *testing.T) {
 		mock := &core.MockExecutor{}
 		defer core.SwapExecExecutor(mock)()

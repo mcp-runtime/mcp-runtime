@@ -277,6 +277,13 @@ func TestScopedRegistryRepositoryHelpers(t *testing.T) {
 	if _, err := scopedTenantRegistryRepository("demo", platformapi.Principal{Namespace: "user-1", Subject: "user-1"}); err == nil || !strings.Contains(err.Error(), "no team membership") {
 		t.Fatalf("expected user namespace principal to be rejected, got %v", err)
 	}
+	multiTeam := platformapi.Principal{Teams: []platformapi.Team{{Slug: "ait", Namespace: "mcp-team-ait"}, {Slug: "qa-audit", Namespace: "mcp-team-qa-audit"}}}
+	if _, err := scopedTenantRegistryRepository("demo", multiTeam); err == nil || !strings.Contains(err.Error(), "multiple team memberships") {
+		t.Fatalf("expected unscoped repository to be rejected for multiple teams, got %v", err)
+	}
+	if got, err := scopedTenantRegistryRepository("qa-audit/demo", multiTeam); err != nil || got != "qa-audit/demo" {
+		t.Fatalf("scopedTenantRegistryRepository explicit team = %q, %v; want qa-audit/demo", got, err)
+	}
 }
 
 func TestEnsureRegistryStorageSize(t *testing.T) {

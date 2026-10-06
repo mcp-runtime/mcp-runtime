@@ -21,6 +21,7 @@ import (
 	"mcp-runtime/internal/cli/core"
 	"mcp-runtime/internal/cli/platformapi"
 	"mcp-runtime/internal/cli/registry"
+	"mcp-runtime/internal/cli/registry/ref"
 	"mcp-runtime/internal/cli/registry/resolve"
 	"mcp-runtime/pkg/metadata"
 	"mcp-runtime/pkg/publishscope"
@@ -63,6 +64,7 @@ func buildImage(ctx context.Context, logger *zap.Logger, serverName, dockerfile,
 	imageName := fmt.Sprintf("%s/%s", registryURL, repository)
 	fullImage := fmt.Sprintf("%s:%s", imageName, tag)
 	platform = normalizeDockerBuildPlatform(platform)
+	core.Info("Image repository: " + imageName)
 
 	// Build Docker image
 	buildArgs := []string{"build"}
@@ -133,13 +135,21 @@ func scopedRepositoryNameForBuild(ctx context.Context, serverName, metadataFile,
 		return serverName, nil
 	}
 	if scope == publishscope.Tenant {
+		repository := serverName
+		if image := strings.TrimSpace(server.Image); image != "" {
+			imageRepository, _ := ref.SplitImage(image)
+			imageRepository = ref.DropRegistryPrefix(imageRepository)
+			if strings.Contains(imageRepository, "/") {
+				repository = imageRepository
+			}
+		}
 		client, err := platformapi.NewPlatformClient()
 		if err != nil {
 			return "", fmt.Errorf("build tenant-scoped image requires platform credentials; run mcp-runtime auth login or set MCP_PLATFORM_API_TOKEN with a saved or explicit MCP_PLATFORM_API_URL: %w", err)
 		}
 		scopedCtx, cancel := context.WithTimeout(ctx, buildTenantScopeTimeout)
 		defer cancel()
-		return registry.ScopedRegistryRepository(scopedCtx, client, serverName, scope)
+		return registry.ScopedRegistryRepository(scopedCtx, client, repository, scope)
 	}
 	return registry.ScopedRegistryRepository(ctx, nil, serverName, scope)
 }

@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Fixed
+
+- `server build image` keeps an explicit team repository from tenant metadata and rejects ambiguous unscoped repositories for accounts in multiple teams. It prints the chosen repository before Docker runs, preventing an image built for one team from silently being deployed to another ([#639](https://github.com/mcp-runtime/mcp-runtime/issues/639)).
+
 ## [0.6.3] - 2026-10-06
 
 ### Fixed

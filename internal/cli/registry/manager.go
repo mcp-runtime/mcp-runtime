@@ -339,6 +339,9 @@ func scopedTenantRegistryRepository(repo string, principal platformapi.Principal
 		}
 		return "", fmt.Errorf("resolve tenant registry scope: repository must be scoped to one of your teams (%s)", strings.Join(quoteStrings(scopes), " or "))
 	}
+	if len(principal.Teams) > 1 {
+		return "", fmt.Errorf("resolve tenant registry scope: multiple team memberships; use a team-scoped repository such as <team>/%s", repo)
+	}
 	return scopes[0] + "/" + repo, nil
 }
 
