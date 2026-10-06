@@ -104,3 +104,52 @@ jobs:
           ./bin/mcp-runtime auth status > /dev/null
           echo 'Production CLI login passed'
           ./bin/mcp-runtime team list
+
+          qa_name="qa-audit-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          qa_tag="v063-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          qa_dir="$RUNNER_TEMP/qa-server/.mcp"
+          grant_name="$qa_name-grant"
+          agent_id=""
+          created_agent=false
+          adapter_pid=""
+          cleanup_qa() {
+            if [[ -n "$grant_name" ]]; then ./bin/mcp-runtime access grant delete "$grant_name" --namespace mcp-servers >/dev/null 2>&1 || true; fi
+            if [[ -n "$qa_name" ]]; then ./bin/mcp-runtime server delete "$qa_name" --namespace mcp-servers >/dev/null 2>&1 || true; fi
+            if [[ "$created_agent" == true && -n "$agent_id" ]]; then ./bin/mcp-runtime agent deactivate "$agent_id" >/dev/null 2>&1 || true; fi
+            if [[ -n "$adapter_pid" ]]; then kill "$adapter_pid" 2>/dev/null || true; fi
+          }
+          trap 'cleanup_qa; cleanup' EXIT
+          mkdir -p "$qa_dir"
+          ./bin/mcp-runtime server init "$qa_name" --metadata-dir "$qa_dir" --scope public --tag "$qa_tag" --port 8088 --tool aaa-ping --policy-mode observe --default-decision allow --session-required=false --force
+          ./bin/mcp-runtime server validate --metadata-dir "$qa_dir"
+          ./bin/mcp-runtime server build image "$qa_name" --metadata-dir "$qa_dir" --dockerfile examples/oauth-example-go-2025-11-25/Dockerfile --context examples/oauth-example-go-2025-11-25 --tag "$qa_tag"
+          image_ref="$(awk '$1=="image:"{i=$2} $1=="imageTag:"{t=$2} END{if(i==""||t=="")exit 1; print i ":" t}' "$qa_dir/servers.yaml")"
+          ./bin/mcp-runtime server push --scope public --image "$image_ref"
+          ./bin/mcp-runtime server deploy "$qa_name" --scope public --metadata-dir "$qa_dir"
+          ready=false
+          for attempt in $(seq 1 60); do
+            phase="$(kubectl -n mcp-servers get mcpserver "$qa_name" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+            if [[ "$phase" == Ready ]]; then ready=true; break; fi
+            sleep 5
+          done
+          test "$ready" = true
+          echo "CLI-published server is Ready: $qa_name"
+          agent_id="$(./bin/mcp-runtime agent list qa-audit --status active | awk 'NR==2{print $1}')"
+          if [[ -z "$agent_id" ]]; then
+            agent_output="$(./bin/mcp-runtime agent create qa-audit --name "$qa_name")"
+            agent_id="$(printf '%s' "$agent_output" | sed -n 's/.*(\(agt_[^)]*\)).*/\1/p')"
+            created_agent=true
+          fi
+          test -n "$agent_id"
+          ./bin/mcp-runtime access grant init "$grant_name" --namespace mcp-servers --server "$qa_name" --agent-id "$agent_id" --tool aaa-ping --expires-in 1h --output "$RUNNER_TEMP/qa-grant.yaml"
+          ./bin/mcp-runtime access grant apply --file "$RUNNER_TEMP/qa-grant.yaml"
+          ./bin/mcp-runtime adapter proxy --runtime-url "https://mcp.mcpruntime.org/$qa_name/mcp" --server "$qa_name" --agent "$agent_id" --auto-refresh --listen 127.0.0.1:8099 > "$RUNNER_TEMP/adapter.log" 2>&1 &
+          adapter_pid=$!
+          adapter_ready=false
+          for attempt in $(seq 1 30); do
+            if timeout 1 bash -c '</dev/tcp/127.0.0.1/8099' 2>/dev/null; then adapter_ready=true; break; fi
+            kill -0 "$adapter_pid"
+            sleep 1
+          done
+          test "$adapter_ready" = true
+          echo 'CLI grant and adapter started'
