@@ -27,7 +27,7 @@ jobs:
       - name: Check out the selected candidate CLI
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: f72759e441dcb6f1826d89fde93d100fbe2c0e98
+          ref: 22e38651e7043548e059528686ff36bcdcf9673c
           fetch-depth: 0
 
       - name: Set up Go
@@ -48,7 +48,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$SSHPASS"
-          test "$(git rev-parse HEAD)" = f72759e441dcb6f1826d89fde93d100fbe2c0e98
+          test "$(git rev-parse HEAD)" = 22e38651e7043548e059528686ff36bcdcf9673c
           test -z "$(git status --porcelain)"
           sudo apt-get update -qq
           sudo apt-get install -y -qq sshpass
@@ -162,17 +162,17 @@ jobs:
           ./bin/mcp-runtime cluster doctor
           if [[ "$ROLLOUT_CANDIDATE" == true ]]; then
             auth_image_before="$(kubectl -n mcp-platform get deployment mcp-auth-server -o jsonpath='{.spec.template.spec.containers[0].image}')"
-            candidate_tag="v063-f72759e4-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            candidate_tag="v0.6.3-22e38651"
             jq -n --arg tag "$candidate_tag" \
               '{apiVersion:"mcpruntime.org/v1alpha1",kind:"PlatformRelease",version:"v0.6.3",components:[{name:"runtime-api",repository:"registry.mcpruntime.org/mcp-runtime-api",tag:$tag}]}' \
               > "$RUNNER_TEMP/runtime-api-candidate.json"
             ./bin/mcp-runtime update --to v0.6.3 \
               --release-manifest "$RUNNER_TEMP/runtime-api-candidate.json" \
-              --only runtime-api --dry-run --build --source . --image-platform linux/amd64 \
+              --only runtime-api --allow-downgrade --dry-run --build --source . --image-platform linux/amd64 \
               --kubeconfig "$kubeconfig" --context default
             ./bin/mcp-runtime update --to v0.6.3 \
               --release-manifest "$RUNNER_TEMP/runtime-api-candidate.json" \
-              --only runtime-api --build --source . --image-platform linux/amd64 \
+              --only runtime-api --allow-downgrade --build --source . --image-platform linux/amd64 \
               --kubeconfig "$kubeconfig" --context default --yes
             test "$(kubectl -n mcp-platform get deployment mcp-auth-server -o jsonpath='{.spec.template.spec.containers[0].image}')" = "$auth_image_before"
             ./bin/mcp-runtime cluster doctor
