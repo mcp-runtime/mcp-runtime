@@ -135,7 +135,9 @@ jobs:
           fi
           ./bin/mcp-runtime update --to "$RELEASE_TAG" --dry-run --output json \
             --kubeconfig "$kubeconfig" --context default > "$RUNNER_TEMP/live-plan.json"
-          jq -e '(.plan.applyCRDs // false) == false and ([.plan.components[] | select(.action == "update")] | length == 0)' \
+          jq -c '{pendingComponents:[.plan.components[] | select(.action == "update") | .component],crdRecheck:(.plan.applyCRDs // false)}' \
+            "$RUNNER_TEMP/live-plan.json"
+          jq -e '[.plan.components[] | select(.action == "update")] | length == 0' \
             "$RUNNER_TEMP/live-plan.json"
           if [[ -n "$MCP_AUTH_VERSION" ]]; then
             ./bin/mcp-runtime cluster mcp-auth-connector apply \
