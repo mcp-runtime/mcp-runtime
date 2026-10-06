@@ -111,3 +111,11 @@ func TestRequestMetricsDoNotCountClientErrorsAsServiceErrors(t *testing.T) {
 		t.Fatalf("error count for client rejection = %v, want 0", got)
 	}
 }
+
+func TestStatusRecorderUnwrapsToUnderlyingWriter(t *testing.T) {
+	inner := httptest.NewRecorder()
+	recorder := &statusRecorder{ResponseWriter: inner, status: http.StatusOK}
+	if got := recorder.Unwrap(); got != inner {
+		t.Fatalf("Unwrap() = %T, want the wrapped writer", got)
+	}
+}
