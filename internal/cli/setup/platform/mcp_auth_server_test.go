@@ -3,6 +3,7 @@ package platform
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/yaml"
 
+	"mcp-runtime/internal/cli/registry/config"
 	setupplan "mcp-runtime/internal/cli/setup/plan"
 )
 
@@ -403,5 +405,146 @@ func TestMCPAuthTLSHost(t *testing.T) {
 				t.Fatalf("mcpAuthTLSHost() = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// mcpAuthDeploymentPullSecrets decodes the rendered manifest and returns the
+// Deployment pod spec's imagePullSecrets names.
+func mcpAuthDeploymentPullSecrets(t *testing.T, manifest string) []string {
+	t.Helper()
+	decoder := yaml.NewYAMLOrJSONDecoder(bytes.NewReader([]byte(manifest)), 4096)
+	for {
+		obj := &unstructured.Unstructured{}
+		err := decoder.Decode(obj)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("decode manifest: %v", err)
+		}
+		if obj.GetKind() != "Deployment" {
+			continue
+		}
+		entries, _, err := unstructured.NestedSlice(obj.Object, "spec", "template", "spec", "imagePullSecrets")
+		if err != nil {
+			t.Fatalf("read imagePullSecrets: %v", err)
+		}
+		var names []string
+		for _, entry := range entries {
+			names = append(names, entry.(map[string]any)["name"].(string))
+		}
+		return names
+	}
+	t.Fatal("manifest has no Deployment")
+	return nil
+}
+
+// Issue #623: an mcp-auth image hosted in the platform registry needs the
+// platform pull Secret, the same as every other platform workload.
+func TestRenderMCPAuthServerManifestInjectsImagePullSecret(t *testing.T) {
+	production := mcpAuthServerOptions{
+		Image:            "registry.example.com/mcp-auth-server:1.0.0",
+		IssuerURL:        "https://auth.example.com/mcp-auth",
+		TLSSecret:        "tls",
+		SigningKeySecret: "mcp-auth-signing-key",
+		ConnectorsFile:   "connectors.json",
+		Connector:        "keycloak",
+	}
+	withSecret := production
+	withSecret.ImagePullSecret = " mcp-runtime-registry-pull "
+	for _, tc := range []struct {
+		name string
+		opts mcpAuthServerOptions
+		want []string
+	}{
+		{name: "test mode without secret", opts: mcpAuthServerOptions{Image: "img", TestMode: true}},
+		{name: "production without secret", opts: production},
+		{name: "test mode with secret", opts: mcpAuthServerOptions{Image: "img", TestMode: true, ImagePullSecret: "mcp-runtime-registry-pull"}, want: []string{"mcp-runtime-registry-pull"}},
+		{name: "production with secret", opts: withSecret, want: []string{"mcp-runtime-registry-pull"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			manifest, err := renderMCPAuthServerManifest(mcpAuthManifestTemplate(t), tc.opts)
+			if err != nil {
+				t.Fatalf("renderMCPAuthServerManifest() error = %v", err)
+			}
+			got := mcpAuthDeploymentPullSecrets(t, manifest)
+			if strings.Join(got, ",") != strings.Join(tc.want, ",") {
+				t.Fatalf("imagePullSecrets = %v, want %v", got, tc.want)
+			}
+			for _, kind := range []string{"kind: Deployment", "kind: Service", "kind: Ingress", "kind: NetworkPolicy"} {
+				if !strings.Contains(manifest, kind) {
+					t.Fatalf("rendered manifest lost %q", kind)
+				}
+			}
+		})
+	}
+}
+
+func TestResolveMCPAuthImagePullSecret(t *testing.T) {
+	type call struct{ namespace, name, registry, username, password string }
+	const image = "registry.example.com/mcp-auth-server:1"
+	ext := func(url, user, pass string) *config.ExternalRegistryConfig {
+		return &config.ExternalRegistryConfig{URL: url, Username: user, Password: pass}
+	}
+	for _, tc := range []struct {
+		name          string
+		src           mcpAuthPullSecretSources
+		bundled       string
+		bundledErr    error
+		externalErr   error
+		want          string
+		wantErr       bool
+		wantExternal  *call
+		wantBundledNS string
+	}{
+		{name: "override wins", src: mcpAuthPullSecretSources{Override: " custom-pull ", ExternalRegistry: ext("ext.example.com", "u", "p")}, want: "custom-pull"},
+		{
+			name:         "external registry with credentials",
+			src:          mcpAuthPullSecretSources{ExternalRegistry: ext("ext.example.com", "u", "p")},
+			want:         defaultRegistrySecretName,
+			wantExternal: &call{"mcp-platform", defaultRegistrySecretName, "ext.example.com", "u", "p"},
+		},
+		{name: "external registry error", src: mcpAuthPullSecretSources{ExternalRegistry: ext("ext.example.com", "u", "")}, externalErr: errors.New("boom"), wantErr: true},
+		{name: "external registry without credentials uses bundled rules", src: mcpAuthPullSecretSources{ExternalRegistry: ext("ext.example.com", "", "")}, bundled: defaultRegistrySecretName, want: defaultRegistrySecretName, wantBundledNS: "mcp-platform"},
+		{name: "image in bundled public registry", bundled: defaultRegistrySecretName, want: defaultRegistrySecretName, wantBundledNS: "mcp-platform"},
+		{name: "image not in platform registry", wantBundledNS: "mcp-platform"},
+		{name: "bundled error", bundledErr: errors.New("boom"), wantErr: true, wantBundledNS: "mcp-platform"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotExternal *call
+			gotBundledNS := ""
+			src := tc.src
+			src.EnsureExternal = func(namespace, name, registry, username, password string) error {
+				gotExternal = &call{namespace, name, registry, username, password}
+				return tc.externalErr
+			}
+			src.EnsureBundled = func(namespace string, images []string) (string, error) {
+				gotBundledNS = namespace
+				if len(images) != 1 || images[0] != image {
+					t.Fatalf("bundled candidates = %v, want [%s]", images, image)
+				}
+				return tc.bundled, tc.bundledErr
+			}
+			got, err := resolveMCPAuthImagePullSecret(image, "mcp-platform", src)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tc.wantErr)
+			}
+			if got != tc.want {
+				t.Fatalf("secret = %q, want %q", got, tc.want)
+			}
+			if tc.wantExternal != nil && (gotExternal == nil || *gotExternal != *tc.wantExternal) {
+				t.Fatalf("external ensure = %+v, want %+v", gotExternal, tc.wantExternal)
+			}
+			if gotBundledNS != tc.wantBundledNS {
+				t.Fatalf("bundled namespace = %q, want %q", gotBundledNS, tc.wantBundledNS)
+			}
+		})
+	}
+}
+
+func TestNewMCPAuthServerOptionsCarriesPullSecret(t *testing.T) {
+	opts := newMCPAuthServerOptions(setupplan.Plan{MCPAuthServerImage: "img", TestMode: true}, "pull")
+	if opts.Image != "img" || !opts.TestMode || opts.ImagePullSecret != "pull" {
+		t.Fatalf("options = %+v", opts)
 	}
 }
