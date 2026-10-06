@@ -6680,6 +6680,33 @@ grafana_loki = wait_for_json(
 )
 grafana_streams = grafana_loki.get("data", {}).get("result", [])
 
+# MCP server logs must come from Kubernetes discovery with workload labels
+# (issue #496: discovery silently matched no pods and only path-based
+# fallback streams reached Loki).
+server_params = urllib.parse.urlencode(
+    {
+        "query": f'{{namespace="mcp-servers", app="{server_name}"}}',
+        "limit": "20",
+        "start": str(start_ns),
+        "end": str(end_ns),
+    }
+)
+server_logs = wait_for_json(
+    f"{loki_base}/loki/api/v1/query_range?{server_params}",
+    lambda doc: bool(doc.get("data", {}).get("result", [])),
+    retries=60,
+    delay=2,
+    description="loki mcp-servers log streams with workload labels",
+)
+for stream in server_logs.get("data", {}).get("result", []):
+    stream_labels = stream.get("stream", {})
+    missing = [key for key in ("namespace", "pod", "container", "node", "app") if not stream_labels.get(key)]
+    if missing:
+        fail(f"loki mcp-servers stream missing labels {missing}: {stream_labels}")
+    if "filename" in stream_labels:
+        fail(f"loki mcp-servers stream came from a path-based fallback job: {stream_labels}")
+ok("loki mcp-servers streams carry namespace/pod/container/node/app labels")
+
 rows = [
     ("audit.events_total", str(stats.get("events_total", "n/a"))),
     ("audit.server_events", str(len(all_server_events))),
