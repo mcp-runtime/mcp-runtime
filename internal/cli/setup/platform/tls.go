@@ -422,7 +422,7 @@ func ensureCertManagerInstalledClientGo(logger *zap.Logger) error {
 		}
 		core.Warn("cert-manager CRDs present but deployments not ready — reinstalling")
 	}
-	core.Info("Installing cert-manager v1.16.2")
+	core.Info("Installing cert-manager " + certmanager.CertManagerRelease())
 	warnMsg := "If this fails (no network), install cert-manager manually, then re-run setup with --skip-cert-manager-install"
 	core.Warn(warnMsg)
 	httpClient := &http.Client{Timeout: 30 * time.Second}
