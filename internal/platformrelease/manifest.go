@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -226,6 +227,29 @@ func GenerateManifest(version string, crdChange bool, crdsYAML string) (*Manifes
 			continue
 		}
 		m.Components = append(m.Components, ManifestComponent{Name: c.Name, Repository: c.Repository, Tag: version})
+	}
+	return m, m.Validate()
+}
+
+var releaseCommitPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
+// GenerateManifestForCommit gives built images a tag tied to the checked-out
+// release commit. A tag from another source revision can no longer be reused
+// merely because it has the same release version.
+func GenerateManifestForCommit(version, commit string, crdChange bool, crdsYAML string) (*Manifest, error) {
+	if !releaseCommitPattern.MatchString(commit) {
+		return nil, fmt.Errorf("release commit must be a full lowercase Git SHA-1")
+	}
+	m, err := GenerateManifest(version, crdChange, crdsYAML)
+	if err != nil {
+		return nil, err
+	}
+	tag := version + "-g" + commit
+	if !ValidTag(tag) {
+		return nil, fmt.Errorf("commit-specific image tag %q is invalid", tag)
+	}
+	for i := range m.Components {
+		m.Components[i].Tag = tag
 	}
 	return m, m.Validate()
 }

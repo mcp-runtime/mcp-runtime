@@ -62,6 +62,8 @@ jobs:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
+          export RELEASE_COMMIT="$(git rev-parse "${RELEASE_TAG}^{commit}")"
+          test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
           crd_flag=""
           previous_tag="$(git describe --tags --abbrev=0 "${RELEASE_TAG}^" 2>/dev/null || true)"
           if [[ -z "${previous_tag}" ]] || ! git diff --quiet "${previous_tag}" "${RELEASE_TAG}" -- config/crd/bases; then
@@ -69,12 +71,16 @@ jobs:
           fi
           go run ./hack/release/platformmanifest \
             -version "${RELEASE_TAG}" \
+            -commit "${RELEASE_COMMIT}" \
             ${crd_flag} \
             -write-crds ../dist/platform-crds.yaml \
             > ../dist/platform-manifest.json
           python3 - <<'PY'
-          import json
+          import json, os
           m=json.load(open("../dist/platform-manifest.json"))
+          expected=f"{os.environ['RELEASE_TAG']}-g{os.environ['RELEASE_COMMIT']}"
+          assert m['version'] == os.environ['RELEASE_TAG']
+          assert m['components'] and all(c['tag'] == expected for c in m['components'])
           print("version", m.get("version"), "crdChange", bool(m.get("crdChange")), "components", len(m.get("components",[])), "crds_bytes", len(m.get("crds") or ""))
           PY
 

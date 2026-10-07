@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -317,6 +319,37 @@ func TestPlanDowngradeGuard(t *testing.T) {
 	plan, _ = BuildPlan(context.Background(), cs, manifest(t, "v0.5.0"), Selection{})
 	if r := rowFor(t, plan, "ui"); r.Action != ActionBlocked || r.CurrentVersion != "v0.6.0" {
 		t.Fatalf("annotation version = %+v", r)
+	}
+}
+
+func TestPlanCommitTaggedImageUsesReleaseVersion(t *testing.T) {
+	tag := "v0.6.3-g" + strings.Repeat("a", 40)
+	cs := fake.NewSimpleClientset(installed("v0.6.3")...)
+	m := manifest(t, "v0.6.3", setComponent("runtime-api", "mcp-runtime-api", tag, ""))
+	plan, err := BuildPlan(context.Background(), cs, m, Selection{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row := rowFor(t, plan, "runtime-api"); row.Action != ActionUpdate || row.CurrentVersion != "v0.6.3" || row.TargetVersion != "v0.6.3" {
+		t.Fatalf("same-release image change = %+v", row)
+	}
+
+	cs = fake.NewSimpleClientset(installed("v0.6.3-g" + strings.Repeat("b", 40))...)
+	plan, err = BuildPlan(context.Background(), cs, m, Selection{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row := rowFor(t, plan, "runtime-api"); row.Action != ActionUpdate || row.CurrentVersion != "v0.6.3" {
+		t.Fatalf("same-release commit tag = %+v", row)
+	}
+
+	cs = fake.NewSimpleClientset(installed("v0.6.4")...)
+	plan, err = BuildPlan(context.Background(), cs, m, Selection{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row := rowFor(t, plan, "runtime-api"); row.Action != ActionBlocked {
+		t.Fatalf("actual release downgrade must stay blocked: %+v", row)
 	}
 }
 
@@ -685,6 +718,57 @@ func TestPlanImageBuildsChangedOnlyReuseAndBuild(t *testing.T) {
 	}
 	if _, ok := byComp["operator"]; !ok {
 		t.Fatal("operator must be in build plan when release changes it")
+	}
+}
+
+func TestPlanCommitTaggedImageRebuildsExistingTag(t *testing.T) {
+	tag := "v0.6.4-g" + strings.Repeat("a", 40)
+	cs := fake.NewSimpleClientset(installed("v0.6.3")...)
+	m := manifest(t, "v0.6.4", setComponent("runtime-api", "mcp-runtime-api", tag, ""))
+	plan, err := BuildPlan(context.Background(), cs, m, Selection{Only: []string{"runtime-api"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	probes := 0
+	actions, err := planImageBuilds(context.Background(), plan, BuildOptions{
+		RegistryHasImage: func(context.Context, string) (bool, error) {
+			probes++
+			return true, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(actions) != 1 || actions[0].Action != ImageActionBuild || probes != 0 {
+		t.Fatalf("commit-tagged image must build without registry reuse: actions=%+v probes=%d", actions, probes)
+	}
+}
+
+func TestVerifyReleaseSource(t *testing.T) {
+	source := t.TempDir()
+	git := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", source}, args...)...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	git("init", "-q")
+	git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-q", "-m", "init")
+	commit := git("rev-parse", "HEAD")
+	if err := verifyReleaseSource(context.Background(), source, commit); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyReleaseSource(context.Background(), source, strings.Repeat("a", 40)); err == nil || !strings.Contains(err.Error(), "requires source commit") {
+		t.Fatalf("mismatched commit error = %v", err)
+	}
+	if err := os.WriteFile(source+"/untracked.txt", []byte("changed"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyReleaseSource(context.Background(), source, commit); err == nil || !strings.Contains(err.Error(), "local changes") {
+		t.Fatalf("dirty checkout error = %v", err)
 	}
 }
 

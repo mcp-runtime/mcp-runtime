@@ -2,7 +2,7 @@
 // (platform-manifest.json) for a release version, generated from the CLI's
 // component catalog so `mcp-runtime update` and releases stay in sync.
 //
-//	go run ./hack/release/platformmanifest -version v0.5.0 [-crd-change] [-crds-dir config/crd/bases]
+//	go run ./hack/release/platformmanifest -version v0.5.0 -commit <full-git-sha> [-crd-change] [-crds-dir config/crd/bases]
 package main
 
 import (
@@ -17,6 +17,7 @@ import (
 
 func main() {
 	version := flag.String("version", "", "release version (semver, for example v0.5.0)")
+	commit := flag.String("commit", "", "full Git commit SHA of the release source")
 	crdChange := flag.Bool("crd-change", false, "mark the release as changing CRDs and embed them for update")
 	crdsDir := flag.String("crds-dir", "config/crd/bases", "directory of CRD YAML files to embed when -crd-change is set")
 	writeCRDs := flag.String("write-crds", "", "optional path to write the standalone platform-crds.yaml bundle")
@@ -38,7 +39,7 @@ func main() {
 		}
 	}
 
-	m, err := platformrelease.GenerateManifest(*version, *crdChange, crdsYAML)
+	m, err := platformrelease.GenerateManifestForCommit(*version, *commit, *crdChange, crdsYAML)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "platformmanifest: %v\n", err)
 		os.Exit(1)

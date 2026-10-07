@@ -164,6 +164,47 @@ func TestGenerateManifestCoversBuiltComponents(t *testing.T) {
 	}
 }
 
+func TestGenerateManifestForCommit(t *testing.T) {
+	commit := strings.Repeat("a", 40)
+	m, err := GenerateManifestForCommit("v0.6.4", commit, false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Version != "v0.6.4" {
+		t.Fatalf("release version = %q", m.Version)
+	}
+	for _, c := range m.Components {
+		if c.Tag != "v0.6.4-g"+commit {
+			t.Fatalf("%s image tag = %q", c.Name, c.Tag)
+		}
+	}
+	if _, err := GenerateManifestForCommit("v0.6.4", "abc123", false, ""); err == nil {
+		t.Fatal("abbreviated source revision must be rejected")
+	}
+}
+
+func TestReleaseVersionFromImageTag(t *testing.T) {
+	commit := strings.Repeat("a", 40)
+	for tag, want := range map[string]string{
+		"v0.6.4-g" + commit: "v0.6.4",
+		"v0.6.3-22e38651":   "v0.6.3-22e38651",
+		"v0.6.4-deadbeef":   "v0.6.4-deadbeef",
+		"v0.6.4-rc.1":       "v0.6.4-rc.1",
+		"v0.6.4":            "v0.6.4",
+		"latest":            "latest",
+	} {
+		if got := ReleaseVersionFromImageTag(tag); got != want {
+			t.Errorf("ReleaseVersionFromImageTag(%q) = %q, want %q", tag, got, want)
+		}
+	}
+	if got, ok := ReleaseCommitFromImageTag("v0.6.4-g" + commit); !ok || got != commit {
+		t.Fatalf("release commit = %q, %v", got, ok)
+	}
+	if _, ok := ReleaseCommitFromImageTag("v0.6.3-22e38651"); ok {
+		t.Fatal("short prerelease suffix is not a release commit")
+	}
+}
+
 func TestBundleAndCRDObjectNames(t *testing.T) {
 	dir := t.TempDir()
 	a := "apiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\nmetadata:\n  name: mcpservers.mcpruntime.org\n"

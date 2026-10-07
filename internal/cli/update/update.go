@@ -105,12 +105,13 @@ Issuers/Certificates, Services, or Ingresses, and never deletes or recreates
 workloads. mcp-auth and cert-manager are skipped unless selected with
 --include-auth, --include-cert-manager, or --only.
 
-With --build, update builds and pushes only Built-component images from the
-release that are missing from the registry (sequential by default; use
+With --build, update builds and pushes Built-component images from the release
+that are missing from the registry (sequential by default; use
 --build-parallelism to raise concurrency), then rolls those Deployments.
-Images already present are reused; Deployments still on an older tag are
-patched. Failed builds retry once and cancel sibling builds. Without --build,
-images must already be published.
+Commit-tagged release images are always rebuilt from the exact clean source
+commit, even when the tag exists. Other images already present are reused.
+Deployments still on an older tag are patched. Failed builds retry once and
+cancel sibling builds. Without --build, images must already be published.
 
 The plan always shows the kube context and cluster ID. Without --dry-run,
 update asks for confirmation (or requires --yes when not interactive).
@@ -140,7 +141,7 @@ Relative repositories resolve against the registry of the running image.`,
 	f.StringVar(&opts.Output, "output", "text", "Output format: text or json")
 	f.StringVar(&opts.Kubeconfig, "kubeconfig", "", "Path to kubeconfig file (default: KUBECONFIG or ~/.kube/config)")
 	f.StringVar(&opts.Context, "context", "", "Kubernetes context to use (default: current context)")
-	f.BoolVar(&opts.Build, "build", false, "Build and push missing Built-component images from --source before rolling Deployments")
+	f.BoolVar(&opts.Build, "build", false, "Build and push Built-component images from --source before rolling Deployments; release commit images are always rebuilt")
 	f.StringVar(&opts.Source, "source", ".", "Repository root used with --build (must contain go.mod, services/, k8s/)")
 	f.StringVar(&opts.ImagePlatform, "image-platform", "", "Docker --platform for --build (default: MCP_IMAGE_PLATFORM or linux/amd64)")
 	f.IntVar(&opts.BuildParallelism, "build-parallelism", defaultBuildParallelism, "Max concurrent image builds with --build (default 1; raise carefully)")

@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Fixed
+
+- Release manifests give Runtime images a tag tied to the full source commit. `update --build` rebuilds those images from a clean checkout of that commit even when the tag exists, preventing a stale registry tag from silently supplying an older build. Same-release image tags compare as the same release version during update ([#644](https://github.com/mcp-runtime/mcp-runtime/issues/644)).
+
 ## [0.6.3] - 2026-10-06
 
 ### Fixed

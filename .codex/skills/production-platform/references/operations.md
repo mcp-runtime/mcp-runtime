@@ -93,6 +93,12 @@ KUBECONFIG="$PROD_KUBECONFIG" ./bin/mcp-runtime cluster doctor
   production file only for each production command. Use
   `MCP_REGISTRY_PUSH_MODE=public` to push images to
   `registry.<domain>/<image>:<unique-tag>`.
+- Published release manifests use `vX.Y.Z-g<full-source-commit>` for Runtime
+  images. `mcp-runtime update --build` rebuilds those images even if the tag
+  already exists, and requires a clean source checkout at that exact commit.
+  Use the checked-out release tag as `--source`; a registry tag alone does not
+  prove its contents. Digest pinning or immutable registry tags are still
+  needed to protect against later overwrites.
 - mcp-auth is a separate release track. Leave its Deployment unchanged unless
   an update is requested. The default candidate source is the published Docker
   Hub image `docker.io/princekrroshan01/mcp-auth-server:0.4.4`; copy it into
