@@ -357,6 +357,8 @@ func buildAndPushChanged(ctx context.Context, actions []ImageBuildAction, opts B
 }
 
 func verifyReleaseSource(ctx context.Context, source, commit string) error {
+	// #nosec G204 -- source is a resolved repository directory, passed as one
+	// argument to fixed git subcommands without a shell.
 	cmd := exec.CommandContext(ctx, "git", "-C", source, "rev-parse", "HEAD")
 	got, err := cmd.Output()
 	if err != nil {
@@ -365,6 +367,8 @@ func verifyReleaseSource(ctx context.Context, source, commit string) error {
 	if strings.TrimSpace(string(got)) != commit {
 		return fmt.Errorf("release image requires source commit %s; checkout is %s", commit, strings.TrimSpace(string(got)))
 	}
+	// #nosec G204 -- source is a resolved repository directory, passed as one
+	// argument to fixed git subcommands without a shell.
 	cmd = exec.CommandContext(ctx, "git", "-C", source, "status", "--porcelain", "--untracked-files=normal")
 	status, err := cmd.Output()
 	if err != nil {
