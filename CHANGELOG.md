@@ -7,6 +7,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-10-07
+
 ### Fixed
 
 - Release manifests give Runtime images a tag tied to the full source commit. `update --build` rebuilds those images from a clean checkout of that commit even when the tag exists, preventing a stale registry tag from silently supplying an older build. Same-release image tags compare as the same release version during update ([#644](https://github.com/mcp-runtime/mcp-runtime/issues/644)).
@@ -210,7 +212,8 @@ upgrade from 0.4.x; see the migration note under **Changed**.
 
 - Targeted platform updates through `mcp-runtime update`, including embedded CRD updates and `--build` to build/push missing component images before rollout ([#491](https://github.com/mcp-runtime/mcp-runtime/pull/491)).
 
-[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.3...HEAD
+[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.4...HEAD
+[0.6.4]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.0...v0.6.1
