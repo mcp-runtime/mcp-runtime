@@ -74,7 +74,7 @@ flowchart LR
 
 ### Status
 
-`MCPServer.status` exposes `phase`, `message`, `conditions[]`, and per-resource readiness booleans `deploymentReady`, `serviceReady`, `ingressReady`, `gatewayReady`, `policyReady`, plus `canaryReady` for canary rollouts. `MCPAccessGrant` and `MCPAgentSession` expose `phase`, `message`, and `conditions[]`.
+`MCPServer.status` exposes `phase`, `message`, `conditions[]`, and per-resource readiness booleans `deploymentReady`, `serviceReady`, `ingressReady`, `gatewayReady`, `policyReady`, plus `canaryReady` for canary rollouts. Authorized runtime server list/get responses include the status message and conditions; an operator `Error` takes precedence over an older Deployment's ready replicas. `MCPAccessGrant` and `MCPAgentSession` expose `phase`, `message`, and `conditions[]`.
 
 ### MCPServer example
 

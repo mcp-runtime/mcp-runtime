@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -18,6 +19,7 @@ import (
 
 	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
 	"mcp-runtime/internal/cli/core"
+	"mcp-runtime/internal/cli/platformapi"
 	"mcp-runtime/pkg/authfile"
 	"mcp-runtime/pkg/metadata"
 )
@@ -1347,7 +1349,7 @@ func TestDeployServerFailsWhenServerDoesNotBecomeReady(t *testing.T) {
 			_, _ = w.Write([]byte(`{"server":{"name":"data-utility","namespace":"mcp-team-core","ready":"False","status":"PartiallyReady","age":"0s"}}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/runtime/servers":
 			w.Header().Set("content-type", "application/json")
-			_, _ = w.Write([]byte(`{"servers":[{"name":"data-utility","namespace":"mcp-team-core","ready":"False","status":"PartiallyReady","age":"1s"}]}`))
+			_, _ = w.Write([]byte(`{"servers":[{"name":"data-utility","namespace":"mcp-team-core","ready":"False","status":"PartiallyReady","message":"waiting for deployment","conditions":[{"type":"DeploymentReady","status":"False","reason":"ReplicasPending","message":"0 of 1 replicas ready","lastTransitionTime":"2026-10-06T22:08:44Z"}],"age":"1s"}]}`))
 		default:
 			t.Fatalf("unexpected %s %s", r.Method, r.URL.Path)
 		}
@@ -1373,8 +1375,93 @@ func TestDeployServerFailsWhenServerDoesNotBecomeReady(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected deploy readiness error")
 	}
-	if !strings.Contains(err.Error(), "did not become ready") || !strings.Contains(err.Error(), "PartiallyReady") {
+	if !strings.Contains(err.Error(), "did not become ready") || !strings.Contains(err.Error(), "PartiallyReady") || !strings.Contains(err.Error(), "waiting for deployment") || !strings.Contains(err.Error(), "ReplicasPending") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestDeployServerReportsOperatorErrorImmediately(t *testing.T) {
+	t.Setenv("MCP_RUNTIME_CONFIG_DIR", t.TempDir())
+	listCalls := 0
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runtime/servers":
+			_, _ = w.Write([]byte(`{"server":{"name":"data-utility","namespace":"mcp-team-core","ready":"False","status":"Pending","generation":1}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/runtime/servers":
+			listCalls++
+			_, _ = w.Write([]byte(`{"servers":[{"name":"data-utility","namespace":"mcp-team-core","ready":"1/1","status":"Error","generation":1,"message":"analytics.ingestURL is required when spec.analytics is set","conditions":[{"type":"DeploymentReady","status":"False","reason":"InvalidConfiguration","message":"analytics.ingestURL is required when spec.analytics is set","observedGeneration":1,"lastTransitionTime":"2026-10-06T22:08:44Z"}],"spec":{"analytics":{"apiKey":"private-value"}}}]}`))
+		default:
+			t.Fatalf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer api.Close()
+	t.Setenv(authfile.EnvAPIToken, "token-1")
+	t.Setenv(authfile.EnvAPIURL, api.URL)
+	origCfg := core.DefaultCLIConfig
+	origPoll := serverDeployPollInterval
+	core.DefaultCLIConfig = &core.CLIConfig{DeploymentTimeout: 2 * time.Second}
+	serverDeployPollInterval = 5 * time.Millisecond
+	t.Cleanup(func() {
+		core.DefaultCLIConfig = origCfg
+		serverDeployPollInterval = origPoll
+	})
+	mgr := NewServerManager(core.NewTestKubectlClient(&core.MockExecutor{}), zap.NewNop())
+	err := mgr.DeployServer("data-utility", "mcp-team-core", "", "tenant", "data-utility", "latest", 1, 8088, 80, "", t.TempDir(), false)
+	if err == nil {
+		t.Fatal("expected operator rejection")
+	}
+	if listCalls != 1 {
+		t.Fatalf("operator error should stop after first poll, got %d polls", listCalls)
+	}
+	for _, want := range []string{"failed to deploy", "analytics.ingestURL is required", "condition=DeploymentReady:False", "InvalidConfiguration"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q missing %q", err, want)
+		}
+	}
+	if strings.Contains(err.Error(), "private-value") {
+		t.Fatalf("error leaked spec value: %v", err)
+	}
+}
+
+func TestWaitForDeployedServerIgnoresPreviousGenerationError(t *testing.T) {
+	t.Setenv("MCP_RUNTIME_CONFIG_DIR", t.TempDir())
+	t.Setenv(authfile.EnvAPIToken, "token-1")
+	listCalls := 0
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/runtime/servers" {
+			t.Fatalf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+		listCalls++
+		w.Header().Set("content-type", "application/json")
+		if listCalls == 1 {
+			_, _ = w.Write([]byte(`{"servers":[{"name":"data-utility","namespace":"mcp-team-core","ready":"1/1","status":"Error","generation":2,"message":"old validation error","conditions":[{"type":"DeploymentReady","status":"False","reason":"Error","message":"old validation error","observedGeneration":1,"lastTransitionTime":"2026-10-06T22:08:44Z"}]}]}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"servers":[{"name":"data-utility","namespace":"mcp-team-core","ready":"1/1","status":"Ready","generation":2,"conditions":[{"type":"DeploymentReady","status":"True","reason":"Ready","message":"all resources reconciled","observedGeneration":2,"lastTransitionTime":"2026-10-06T22:08:46Z"}]}]}`))
+	}))
+	defer api.Close()
+	t.Setenv(authfile.EnvAPIURL, api.URL)
+	plat, err := platformapi.NewPlatformClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	origPoll := serverDeployPollInterval
+	serverDeployPollInterval = 5 * time.Millisecond
+	t.Cleanup(func() { serverDeployPollInterval = origPoll })
+	ready, err := waitForDeployedServer(context.Background(), plat, "data-utility", "mcp-team-core", "", "", 2)
+	if err != nil || ready.Status != "Ready" || listCalls != 2 {
+		t.Fatalf("ready=%+v err=%v polls=%d", ready, err, listCalls)
+	}
+}
+
+func TestServerStatusObservedForGenerationWithOlderAPI(t *testing.T) {
+	server := platformapi.ServerListItem{Generation: 2, Status: "Ready"}
+	if !serverStatusObservedForGeneration(server, 2) {
+		t.Fatal("older API without conditions must keep ready polling compatible")
+	}
+	if serverStatusObservedForGeneration(server, 3) {
+		t.Fatal("older server generation must not satisfy a newer apply")
 	}
 }
 

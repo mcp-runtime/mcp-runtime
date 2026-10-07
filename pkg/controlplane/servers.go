@@ -282,6 +282,11 @@ func ServerInfoFromMCPServer(mcpServer mcpv1alpha1.MCPServer, deploymentStatus S
 			status = phase
 		}
 	}
+	// An operator rejection is terminal even if an older backing Deployment
+	// still has ready replicas from a previous spec.
+	if strings.EqualFold(strings.TrimSpace(mcpServer.Status.Phase), "Error") {
+		status = "Error"
+	}
 	return ServerInfo{
 		Name:           mcpServer.Name,
 		Namespace:      mcpServer.Namespace,
@@ -292,6 +297,8 @@ func ServerInfoFromMCPServer(mcpServer mcpv1alpha1.MCPServer, deploymentStatus S
 		Description:    mcpServer.Spec.Description,
 		Ready:          deploymentStatus.Ready,
 		Status:         status,
+		Message:        strings.TrimSpace(mcpServer.Status.Message),
+		Conditions:     append([]metav1.Condition(nil), mcpServer.Status.Conditions...),
 		Labels:         mcpServer.Labels,
 		Age:            mcpServer.CreationTimestamp.Format("2006-01-02T15:04:05Z"),
 		Endpoint:       PublicMCPEndpoint(mcpServer),

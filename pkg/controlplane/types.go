@@ -1,6 +1,10 @@
 package controlplane
 
-import mcpv1alpha1 "mcp-runtime/api/v1alpha1"
+import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
+)
 
 // ServerInfo is the control-plane projection of an MCPServer and its backing
 // workload status.
@@ -14,6 +18,8 @@ type ServerInfo struct {
 	Description    string                      `json:"description,omitempty"`
 	Ready          string                      `json:"ready"`
 	Status         string                      `json:"status"`
+	Message        string                      `json:"message,omitempty"`
+	Conditions     []metav1.Condition          `json:"conditions,omitempty"`
 	Labels         map[string]string           `json:"labels,omitempty"`
 	Age            string                      `json:"age"`
 	Endpoint       string                      `json:"endpoint,omitempty"`
