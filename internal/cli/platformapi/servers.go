@@ -11,24 +11,29 @@ import (
 	"net/url"
 	"strings"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
 )
 
 // ServerListItem is one row from the platform API runtime servers list.
 type ServerListItem struct {
-	Name        string            `json:"name"`
-	Namespace   string            `json:"namespace"`
-	TeamID      string            `json:"team_id,omitempty"`
-	Image       string            `json:"image,omitempty"`
-	ImageTag    string            `json:"imageTag,omitempty"`
-	Description string            `json:"description,omitempty"`
-	Ready       string            `json:"ready"`
-	Status      string            `json:"status"`
-	Labels      map[string]string `json:"labels"`
-	Age         string            `json:"age"`
-	Endpoint    string            `json:"endpoint,omitempty"`
-	Tools       []ToolConfig      `json:"tools,omitempty"`
-	AccessJSON  map[string]any    `json:"access_json,omitempty"`
+	Name        string             `json:"name"`
+	Namespace   string             `json:"namespace"`
+	TeamID      string             `json:"team_id,omitempty"`
+	Image       string             `json:"image,omitempty"`
+	ImageTag    string             `json:"imageTag,omitempty"`
+	Description string             `json:"description,omitempty"`
+	Ready       string             `json:"ready"`
+	Status      string             `json:"status"`
+	Message     string             `json:"message,omitempty"`
+	Conditions  []metav1.Condition `json:"conditions,omitempty"`
+	Generation  int64              `json:"generation,omitempty"`
+	Labels      map[string]string  `json:"labels"`
+	Age         string             `json:"age"`
+	Endpoint    string             `json:"endpoint,omitempty"`
+	Tools       []ToolConfig       `json:"tools,omitempty"`
+	AccessJSON  map[string]any     `json:"access_json,omitempty"`
 }
 
 type serverListResponse struct {

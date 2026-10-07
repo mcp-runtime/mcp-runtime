@@ -18,6 +18,7 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
 	"mcp-runtime/internal/cli/core"
@@ -692,7 +693,7 @@ func (m *ServerManager) DeployServer(name, namespace, team, scope, image, imageT
 	if err != nil {
 		return err
 	}
-	ready, err := waitForDeployedServer(context.Background(), plat, applied.Name, applied.Namespace, expectedImage, imageTag)
+	ready, err := waitForDeployedServer(context.Background(), plat, applied.Name, applied.Namespace, expectedImage, imageTag, applied.Generation)
 	if err != nil {
 		return err
 	}
@@ -737,7 +738,7 @@ func (m *ServerManager) GenerateManifests(metadataFile, metadataDir, outputDir s
 
 var serverDeployPollInterval = 2 * time.Second
 
-func waitForDeployedServer(ctx context.Context, plat *platformapi.PlatformClient, name, namespace, expectedImage, expectedTag string) (platformapi.ServerListItem, error) {
+func waitForDeployedServer(ctx context.Context, plat *platformapi.PlatformClient, name, namespace, expectedImage, expectedTag string, expectedGeneration int64) (platformapi.ServerListItem, error) {
 	timeout := core.GetDeploymentTimeout()
 	if timeout <= 0 {
 		timeout = 5 * time.Minute
@@ -758,6 +759,15 @@ func waitForDeployedServer(ctx context.Context, plat *platformapi.PlatformClient
 				continue
 			}
 			last = &servers[i]
+			// An update can leave the previous generation's Error or Ready phase
+			// visible until the operator has processed the new spec.
+			if !serverStatusObservedForGeneration(servers[i], expectedGeneration) {
+				break
+			}
+			if strings.EqualFold(strings.TrimSpace(servers[i].Status), "Error") {
+				return platformapi.ServerListItem{}, core.NewWithBase(nil,
+					fmt.Sprintf("server %s in namespace %s failed to deploy (%s)", name, namespace, serverDeployStatusDetails(servers[i])))
+			}
 			if strings.EqualFold(strings.TrimSpace(servers[i].Ready), "true") || strings.EqualFold(strings.TrimSpace(servers[i].Status), "ready") {
 				if err := validateDeployedServerImage(servers[i], expectedImage, expectedTag); err != nil {
 					return platformapi.ServerListItem{}, err
@@ -770,14 +780,8 @@ func waitForDeployedServer(ctx context.Context, plat *platformapi.PlatformClient
 			if last != nil {
 				return platformapi.ServerListItem{}, core.NewWithBase(
 					nil,
-					fmt.Sprintf(
-						"server %s was applied in namespace %s but did not become ready within %s (status=%s ready=%s)",
-						name,
-						namespace,
-						timeout.Round(time.Second),
-						strings.TrimSpace(last.Status),
-						strings.TrimSpace(last.Ready),
-					),
+					fmt.Sprintf("server %s was applied in namespace %s but did not become ready within %s (%s)",
+						name, namespace, timeout.Round(time.Second), serverDeployStatusDetails(*last)),
 				)
 			}
 			return platformapi.ServerListItem{}, core.NewWithBase(
@@ -795,6 +799,65 @@ func waitForDeployedServer(ctx context.Context, plat *platformapi.PlatformClient
 		case <-time.After(serverDeployPollInterval):
 		}
 	}
+}
+
+func serverStatusObservedForGeneration(server platformapi.ServerListItem, expected int64) bool {
+	if expected <= 0 {
+		return true // older platform API versions may omit generation
+	}
+	if server.Generation < expected {
+		return false
+	}
+	if len(server.Conditions) == 0 {
+		return true // older platform API versions do not include conditions
+	}
+	for _, condition := range server.Conditions {
+		if condition.ObservedGeneration >= expected {
+			return true
+		}
+	}
+	return false
+}
+
+func serverDeployStatusDetails(server platformapi.ServerListItem) string {
+	parts := []string{fmt.Sprintf("status=%s ready=%s", safeServerStatusText(server.Status), safeServerStatusText(server.Ready))}
+	message := safeServerStatusText(server.Message)
+	if message != "" {
+		parts = append(parts, fmt.Sprintf("message=%q", message))
+	}
+	var latest *metav1.Condition
+	for i := range server.Conditions {
+		condition := &server.Conditions[i]
+		if condition.Status != metav1.ConditionFalse {
+			continue
+		}
+		if latest == nil || !condition.LastTransitionTime.Before(&latest.LastTransitionTime) {
+			latest = condition
+		}
+	}
+	if latest != nil {
+		parts = append(parts, fmt.Sprintf("condition=%s:%s reason=%q",
+			safeServerStatusText(latest.Type), latest.Status, safeServerStatusText(latest.Reason)))
+		if conditionMessage := safeServerStatusText(latest.Message); conditionMessage != "" && conditionMessage != message {
+			parts = append(parts, fmt.Sprintf("conditionMessage=%q", conditionMessage))
+		}
+	}
+	return strings.Join(parts, "; ")
+}
+
+func safeServerStatusText(value string) string {
+	value = strings.TrimSpace(value)
+	value = strings.Map(func(r rune) rune {
+		if r < ' ' || r == 0x7f {
+			return ' '
+		}
+		return r
+	}, value)
+	runes := []rune(value)
+	if len(runes) > 512 {
+		value = string(runes[:512]) + "..."
+	}
+	return value
 }
 
 func validateDeployedServerImage(server platformapi.ServerListItem, expectedImage, expectedTag string) error {

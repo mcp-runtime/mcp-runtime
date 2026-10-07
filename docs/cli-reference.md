@@ -312,6 +312,12 @@ mcp-runtime server deploy workspace-demo \
   --update
 ```
 
+`server deploy` waits up to five minutes for a pending server. If the operator
+sets the server to `Error`, the command stops on its next poll and prints the
+status message and the latest false condition reason. A pending timeout also
+includes the last observed status and condition. Correct the cause shown in
+the error, then rerun with `--update`.
+
 ### Full example: oauth-example-go-2025-11-25-gateway
 
 ```bash

@@ -78,6 +78,25 @@ func TestListServersProjectsMCPServerInventoryAndDeploymentStatus(t *testing.T) 
 	}
 }
 
+func TestServerInfoProjectsOperatorErrorOverReadyDeployment(t *testing.T) {
+	message := "analytics.ingestURL is required when spec.analytics is set"
+	server := mcpv1alpha1.MCPServer{
+		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "mcp-team-core"},
+		Status: mcpv1alpha1.MCPServerStatus{
+			Phase:   "Error",
+			Message: message,
+			Conditions: []metav1.Condition{{
+				Type: "DeploymentReady", Status: metav1.ConditionFalse,
+				Reason: "Error", Message: message,
+			}},
+		},
+	}
+	got := ServerInfoFromMCPServer(server, ServerDeploymentStatus{Ready: "1/1", Status: "Ready"})
+	if got.Status != "Error" || got.Ready != "1/1" || got.Message != message || len(got.Conditions) != 1 || got.Conditions[0].Reason != "Error" {
+		t.Fatalf("operator error projection = %+v", got)
+	}
+}
+
 func TestListServersEmptyCatalogDoesNotRequireDeploymentList(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := mcpv1alpha1.AddToScheme(scheme); err != nil {

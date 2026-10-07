@@ -11,6 +11,17 @@ configuration for any setup repair.
 
 ## Server deployment
 
+### `server deploy` reports an operator error
+
+`server deploy` prints the operator's status message and false condition reason
+as soon as the server enters `Error`. Fix the named field or resource in
+`.mcp/servers.yaml`, run `mcp-runtime server validate --metadata-dir .mcp`,
+then redeploy with `mcp-runtime server deploy <server-name> --scope tenant
+--metadata-dir .mcp --update`. A pending deployment still waits up to five
+minutes and reports its last observed condition on timeout. Use
+`mcp-runtime server status --namespace <team-namespace>` to inspect progress;
+an administrator can use Kubernetes events and pod details if it stays pending.
+
 ### `tool_side_effect_unknown`
 
 The gateway returned this error on a tool call.
