@@ -7,25 +7,6 @@
   flex-direction: column;
 }
 
-/* A faint dot grid gives the canvas depth near the top of the page and fades
-   out before it can compete with content. Purely decorative. */
-.shell::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background-image: radial-gradient(var(--grid-line) 1px, transparent 1px);
-  background-size: 24px 24px;
-  -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.9), transparent 62%);
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.9), transparent 62%);
-}
-
-.shell > * {
-  position: relative;
-  z-index: 1;
-}
-
 /* Topbar ------------------------------------------------------------------- */
 
 .topbar {
@@ -34,20 +15,8 @@
   z-index: 40;
   height: var(--topbar-h);
   border-bottom: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface) 82%, transparent);
-  backdrop-filter: blur(14px) saturate(140%);
-}
-
-/* Brand hairline under the chrome. */
-.topbar::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--accent-line), transparent);
-  opacity: 0.75;
+  background: var(--surface);
+  margin-left: var(--sidebar-w);
 }
 
 .topbar-inner {
@@ -55,8 +24,6 @@
   align-items: center;
   gap: var(--space-4);
   height: 100%;
-  max-width: var(--page-max);
-  margin: 0 auto;
   padding: 0 var(--space-5);
 }
 
@@ -85,8 +52,8 @@
 
 .primary-nav-list {
   display: flex;
-  align-items: center;
-  gap: var(--space-1);
+  flex-direction: column;
+  gap: 3px;
 }
 
 .nav-item {
@@ -94,7 +61,8 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  height: 32px;
+  height: 36px;
+  width: 100%;
   padding: 0 11px;
   border: 0;
   border-radius: var(--radius-md);
@@ -102,7 +70,7 @@
   color: var(--text-secondary);
   font: inherit;
   font-size: var(--fs-body);
-  font-weight: 600;
+  font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
   transition: background var(--transition), color var(--transition);
@@ -115,8 +83,112 @@
 
 .nav-item[aria-current="page"] {
   background: var(--accent-soft);
+  color: var(--accent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 35;
+  display: flex;
+  flex-direction: column;
+  width: var(--sidebar-w);
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  height: var(--topbar-h);
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+
+.sidebar-brand .brand-logo { width: 132px; }
+.console-tag {
+  padding: 2px 5px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+.sidebar-context {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-4) var(--space-3);
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+.sidebar-context-icon { color: var(--accent); }
+.sidebar-context strong { display: block; font-size: 12px; }
+.sidebar-context div > span { display: block; color: var(--text-tertiary); font-size: 11px; }
+.sidebar-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 var(--space-3) var(--space-4);
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--text-tertiary);
+}
+.sidebar-filter input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
   color: var(--text);
-  box-shadow: inset 0 0 0 1px var(--accent-line), 0 6px 18px -16px color-mix(in srgb, var(--accent) 90%, transparent);
+  font: inherit;
+  font-size: 12px;
+}
+.sidebar-filter input::placeholder { color: var(--text-tertiary); }
+.sidebar .primary-nav { flex: 1; overflow-y: auto; padding: 0 var(--space-2); }
+.sidebar-group { margin-bottom: var(--space-5); }
+.sidebar-group h2 {
+  margin: 0 10px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.sidebar .nav-item { gap: 11px; font-size: 13px; }
+.sidebar-empty { padding: 10px; font-size: 12px; color: var(--text-secondary); }
+.sidebar-footer { padding: 12px 12px 70px; border-top: 1px solid var(--border); }
+.sidebar-docs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.sidebar-docs .icon:last-child { margin-left: auto; }
+.mobile-brand { display: none; }
+.console-breadcrumb { display: flex; align-items: center; gap: 10px; color: var(--text-tertiary); font-size: 12px; }
+.console-breadcrumb strong { color: var(--text); font-weight: 500; }
+.session-indicator { display: flex; align-items: center; gap: 7px; color: var(--text-secondary); font-size: 11px; }
+.session-indicator > span { width: 6px; height: 6px; border-radius: 50%; background: var(--text-tertiary); }
+.session-indicator.is-authenticated > span { background: var(--success); box-shadow: 0 0 7px var(--success-soft); }
+
+@media (min-width: 901px) {
+  .topbar-actions .account-menu { position: fixed; left: 12px; bottom: 14px; z-index: 50; width: calc(var(--sidebar-w) - 24px); }
+  .topbar-actions .account-trigger { width: 100%; max-width: 100%; border-radius: var(--radius-sm); }
+  .topbar-actions .account-trigger-chevron { margin-left: auto; }
+  .topbar-actions .account-popover { top: auto; bottom: calc(100% + 10px); left: 0; right: auto; max-height: calc(100dvh - 90px); }
 }
 
 .topbar-actions {
@@ -208,9 +280,8 @@
 
 .main {
   flex: 1;
-  width: 100%;
-  max-width: var(--page-max);
-  margin: 0 auto;
+  width: calc(100% - var(--sidebar-w));
+  margin-left: var(--sidebar-w);
   padding: var(--space-5) var(--space-5) var(--space-7);
 }
 
@@ -804,6 +875,10 @@
 }
 
 @media (max-width: 900px) {
+  .sidebar { display: none; }
+  .topbar { margin-left: 0; }
+  .mobile-brand { display: inline-flex; }
+  .console-breadcrumb, .session-indicator { display: none; }
   .topbar-inner {
     padding: 0 var(--space-4);
     gap: var(--space-3);
@@ -834,6 +909,8 @@
   }
 
   .main {
+    width: 100%;
+    margin-left: 0;
     padding: var(--space-4) var(--space-4) var(--space-6);
   }
 

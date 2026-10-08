@@ -112,6 +112,36 @@ describe("App", () => {
     expect(window.localStorage.getItem("mcp-theme")).toBe("light");
   });
 
+  it("filters navigation without offering pages outside the account's access", async () => {
+    const user = userEvent.setup();
+    stubRoutes({ "/auth/status": SIGNED_OUT });
+    renderApp();
+    await screen.findByTestId("catalog-signed-out");
+
+    const filter = screen.getByRole("searchbox", { name: "Filter navigation" });
+    await user.type(filter, "access");
+    expect(screen.getByRole("status")).toHaveTextContent("No matching pages.");
+    expect(screen.queryByTestId("workspace-tab-access")).not.toBeInTheDocument();
+    await user.clear(filter);
+    expect(screen.getByTestId("workspace-tab-servers")).toBeInTheDocument();
+  });
+
+  it("closes compact navigation when reselecting the current page or pressing Escape", async () => {
+    const user = userEvent.setup();
+    stubRoutes({ "/auth/status": SIGNED_OUT });
+    renderApp();
+    await screen.findByTestId("catalog-signed-out");
+    const toggle = screen.getByTestId("nav-toggle");
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await user.click(screen.getByTestId("mobile-tab-servers"));
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(toggle);
+    await user.keyboard("{Escape}");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveFocus();
+  });
+
   it("signs in through the UI session endpoint and loads the catalog", async () => {
     const user = userEvent.setup();
     const { fetchMock, calls } = stubRoutes({
