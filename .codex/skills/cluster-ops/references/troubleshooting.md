@@ -50,7 +50,7 @@ maintainability or debugging gap and attach it to
 
 ## Full checklist
 
-Read **[reference.md](reference.md) end-to-end** before diagnosing (ingress, registry, cert-manager, ImagePullBackOff, UI redirect loops, registry push timeouts, k3s NetworkPolicy, duplicate Traefik, and more). Public TLS/DNS detail: `production-platform` skill.
+Read **[troubleshooting-checklist.md](troubleshooting-checklist.md) end-to-end** before diagnosing (ingress, registry, cert-manager, ImagePullBackOff, UI redirect loops, registry push timeouts, k3s NetworkPolicy, duplicate Traefik, and more). Public TLS/DNS detail: `production-platform` skill.
 
 ## Client can't connect (Cursor, Claude Desktop)
 

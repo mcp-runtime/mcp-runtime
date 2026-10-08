@@ -118,6 +118,21 @@ Local URLs:
 
 Keep the Traefik port-forward running while using the browser or `curl`.
 
+If pods are Ready but the UI returns 404, check Traefik logs. Repeated
+timeouts to `https://10.96.0.1:443` can mean its NetworkPolicy lacks the
+Kubernetes API endpoint port (normally 6443). The bundled policy allows both
+the Service and endpoint ports. For an existing repo-managed installation,
+reconcile the corrected policy through the CLI from this source checkout:
+
+```bash
+./bin/mcp-runtime cluster config --kubeconfig "$TEST_KUBECONFIG" \
+  --force-ingress-install \
+  --ingress-manifest config/ingress/base/networkpolicy.yaml
+```
+
+This applies the policy without reapplying workload replica counts. External
+ingress controllers retain their own network-policy configuration.
+
 Platform and plain Ingress URLs are HTTP over a port-forward because
 `--test-mode` with the HTTP ingress overlay is a local-only shape.
 Adapter-certificate IngressRoutes still terminate TLS on `:18443`. Any shared

@@ -9,6 +9,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Fixed
 
+- The bundled Traefik NetworkPolicy permits the Kubernetes API endpoint port 6443 as well as Service port 443. This restores ingress watches and prevents UI/registry 404s on CNIs that evaluate egress after Service address translation. Existing repo-managed installs can reconcile the policy with `cluster config --force-ingress-install --ingress-manifest config/ingress/base/networkpolicy.yaml` ([#653](https://github.com/mcp-runtime/mcp-runtime/issues/653)).
 - UI replicas retain bounded schema-race retries after waiting for Postgres, preventing a fresh two-replica install from exiting on concurrent session-table creation ([#651](https://github.com/mcp-runtime/mcp-runtime/issues/651)).
 - Platform Dockerfiles compile service binaries for the requested image architecture. ARM64 builds previously contained AMD64 executables, causing startup failures or unintended emulation on ARM64 nodes. Rebuild affected images to correct existing builds ([#649](https://github.com/mcp-runtime/mcp-runtime/issues/649)).
 
