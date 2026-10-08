@@ -8,8 +8,8 @@ COPY services/processor/go.mod services/processor/go.sum ./services/processor/
 RUN cd services/processor && go mod download
 
 COPY services/processor/*.go ./services/processor/
-ARG TARGETOS=linux
-ARG TARGETARCH=amd64
+ARG TARGETOS
+ARG TARGETARCH
 RUN cd services/processor && \
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /out/processor .
 

@@ -10,8 +10,8 @@ RUN cd services/runtime-api && go mod download
 
 COPY services/runtime-api/ ./services/runtime-api/
 
-ARG TARGETOS=linux
-ARG TARGETARCH=amd64
+ARG TARGETOS
+ARG TARGETARCH
 RUN cd services/runtime-api && \
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /out/runtime-api .
 

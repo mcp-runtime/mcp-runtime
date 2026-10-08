@@ -3587,6 +3587,12 @@ build_and_publish_image() {
   "${PLATFORM_ROOT}/bin/e2e-image-cache" ensure \
     --image "${image}" --dockerfile "${dockerfile}" \
     --context "${context_dir}" --root "${PLATFORM_ROOT}"
+  case "${image##*/}" in
+    mcp-runtime-operator:*|mcp-gateway:*|mcp-ingest:*|mcp-processor:*|mcp-platform-api:*|mcp-runtime-api:*|mcp-analytics-api:*|mcp-ui:*|doctor-smoke:*|mcp-doctor-smoke:*)
+      python3 "${SCRIPT_DIR}/image_architecture.py" "${image}" \
+        --expected-arch "$(kubectl get nodes -o jsonpath='{.items[0].status.nodeInfo.architecture}')"
+      ;;
+  esac
   publish_image_to_local_registry "${image}"
 }
 

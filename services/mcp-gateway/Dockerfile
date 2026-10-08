@@ -14,8 +14,8 @@ RUN cd services/mcp-gateway && go mod download
 # whole directory (rather than *.go) picks up subpackages, embedded assets,
 # and any non-Go source files added later.
 COPY services/mcp-gateway/ ./services/mcp-gateway/
-ARG TARGETOS=linux
-ARG TARGETARCH=amd64
+ARG TARGETOS
+ARG TARGETARCH
 RUN cd services/mcp-gateway && \
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /out/mcp-gateway .
 
