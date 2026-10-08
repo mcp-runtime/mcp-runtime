@@ -5,9 +5,6 @@
 </p>
 
 [![Unit + Integration Tests](https://img.shields.io/github/check-runs/mcp-runtime/mcp-runtime/main?nameFilter=Unit%20%2B%20Integration%20Tests&label=Unit%20%2B%20Integration%20Tests)](https://github.com/mcp-runtime/mcp-runtime/actions/workflows/ci.yaml?query=branch%3Amain+job%3AUnit%20%2B%20Integration%20Tests)
-[![Docs](https://img.shields.io/website?url=https%3A%2F%2Fdocs.mcpruntime.org%2F&label=Docs)](https://docs.mcpruntime.org/)
-[![Website](https://img.shields.io/website?url=https%3A%2F%2Fmcpruntime.org%2F&label=Website)](https://mcpruntime.org/)
-[![Platform](https://img.shields.io/website?url=https%3A%2F%2Fplatform.mcpruntime.org%2F&label=Platform)](https://platform.mcpruntime.org/)
 [![Live platform version](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmcp-runtime%2Fmcp-runtime%2Fmain%2F.github%2Fstatus%2Flive-platform.json)](https://github.com/mcp-runtime/mcp-runtime/deployments/production)
 [![QA E2E](https://img.shields.io/github/actions/workflow/status/mcp-runtime/mcp-runtime/ci.yaml?event=pull_request&label=QA%20E2E&job=QA%20E2E)](https://github.com/mcp-runtime/mcp-runtime/actions/workflows/ci.yaml?query=event%3Apull_request+job%3AQA%20E2E)
 [![Staging E2E](https://img.shields.io/github/actions/workflow/status/mcp-runtime/mcp-runtime/staging-e2e.yaml?branch=main&label=Staging%20E2E)](https://github.com/mcp-runtime/mcp-runtime/actions/workflows/staging-e2e.yaml)
