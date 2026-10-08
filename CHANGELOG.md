@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Fixed
+
+- Platform Dockerfiles compile service binaries for the requested image architecture. ARM64 builds previously contained AMD64 executables, causing startup failures or unintended emulation on ARM64 nodes. Rebuild affected images to correct existing builds ([#649](https://github.com/mcp-runtime/mcp-runtime/issues/649)).
+
 ### Changed
 
 - The platform console uses grouped sidebar navigation with page filtering, blue active states, and a charcoal dark theme. Account controls sit at the bottom of the desktop sidebar; compact screens retain a navigation menu and light mode remains available ([#648](https://github.com/mcp-runtime/mcp-runtime/pull/648)).

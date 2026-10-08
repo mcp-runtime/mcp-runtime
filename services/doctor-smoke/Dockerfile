@@ -3,8 +3,8 @@ WORKDIR /src
 COPY go.mod go.sum ./
 COPY pkg/ ./pkg/
 COPY cmd/doctor-smoke/ ./cmd/doctor-smoke/
-ARG TARGETOS=linux
-ARG TARGETARCH=amd64
+ARG TARGETOS
+ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /out/doctor-smoke ./cmd/doctor-smoke
 
 FROM gcr.io/distroless/base-debian12

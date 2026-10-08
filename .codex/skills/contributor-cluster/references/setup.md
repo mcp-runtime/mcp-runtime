@@ -167,6 +167,17 @@ the deployment image to the same ref, and wait for rollout.
 
 ## Step 6 — Expose the gateway
 
+Before rollout, verify the executable as well as the image manifest:
+`python3 test/e2e/image_architecture.py <image> --expected-arch arm64` (or
+`amd64` for an AMD64 node). A manifest can report ARM64 while its Go binary
+targets AMD64 if a Dockerfile overrides BuildKit's automatic `TARGETARCH`.
+Declare `ARG TARGETOS` / `ARG TARGETARCH` without defaults, following
+[Docker's predefined build arguments](https://docs.docker.com/build/building/variables/#multi-platform-build-arguments).
+This check copies
+the entrypoint from a temporary stopped container and reads its ELF header;
+it does not execute the service or mutate Kubernetes. QA E2E performs it
+before publishing platform images.
+
 ```bash
 pgrep -f 'port-forward.*svc/traefik' >/dev/null \
   || kubectl port-forward -n traefik svc/traefik 18080:8000 18443:8443 \

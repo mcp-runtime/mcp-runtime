@@ -10,8 +10,8 @@ RUN cd services/analytics-api && go mod download
 
 COPY services/analytics-api/ ./services/analytics-api/
 
-ARG TARGETOS=linux
-ARG TARGETARCH=amd64
+ARG TARGETOS
+ARG TARGETARCH
 RUN cd services/analytics-api && \
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /out/analytics-api .
 

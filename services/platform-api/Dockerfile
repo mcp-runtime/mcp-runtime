@@ -10,8 +10,8 @@ RUN cd services/platform-api && go mod download
 
 COPY services/platform-api/ ./services/platform-api/
 
-ARG TARGETOS=linux
-ARG TARGETARCH=amd64
+ARG TARGETOS
+ARG TARGETARCH
 RUN cd services/platform-api && \
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /out/platform-api .
 

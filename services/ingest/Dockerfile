@@ -8,8 +8,8 @@ COPY services/ingest/go.mod services/ingest/go.sum ./services/ingest/
 RUN cd services/ingest && go mod download
 
 COPY services/ingest/*.go ./services/ingest/
-ARG TARGETOS=linux
-ARG TARGETARCH=amd64
+ARG TARGETOS
+ARG TARGETARCH
 RUN cd services/ingest && \
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /out/ingest .
 
