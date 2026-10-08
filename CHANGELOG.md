@@ -7,22 +7,24 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
-### Fixed
-
-- The bundled Traefik NetworkPolicy permits the Kubernetes API endpoint port 6443 as well as Service port 443. This restores ingress watches and prevents UI/registry 404s on CNIs that evaluate egress after Service address translation. Existing repo-managed installs can reconcile the policy with `cluster config --force-ingress-install --ingress-manifest config/ingress/base/networkpolicy.yaml` ([#653](https://github.com/mcp-runtime/mcp-runtime/issues/653)).
-- UI replicas retain bounded schema-race retries after waiting for Postgres, preventing a fresh two-replica install from exiting on concurrent session-table creation ([#651](https://github.com/mcp-runtime/mcp-runtime/issues/651)).
-- Platform Dockerfiles compile service binaries for the requested image architecture. ARM64 builds previously contained AMD64 executables, causing startup failures or unintended emulation on ARM64 nodes. Rebuild affected images to correct existing builds ([#649](https://github.com/mcp-runtime/mcp-runtime/issues/649)).
+## [0.6.4] - 2026-10-09
 
 ### Changed
 
 - The platform console uses grouped sidebar navigation with page filtering, blue active states, and a charcoal dark theme. Account controls sit at the bottom of the desktop sidebar; compact screens retain a navigation menu and light mode remains available ([#648](https://github.com/mcp-runtime/mcp-runtime/pull/648)).
 
-## [0.6.4] - 2026-10-07
-
 ### Fixed
 
+- The bundled Traefik NetworkPolicy permits the Kubernetes API endpoint port 6443 as well as Service port 443. This restores ingress watches and prevents UI/registry 404s on CNIs that evaluate egress after Service address translation. Existing repo-managed installs can reconcile the policy with `cluster config --force-ingress-install --ingress-manifest config/ingress/base/networkpolicy.yaml` ([#653](https://github.com/mcp-runtime/mcp-runtime/issues/653)).
+- UI replicas retain bounded schema-race retries after waiting for Postgres, preventing a fresh two-replica install from exiting on concurrent session-table creation ([#651](https://github.com/mcp-runtime/mcp-runtime/issues/651)).
+- Platform Dockerfiles compile service binaries for the requested image architecture. ARM64 builds previously contained AMD64 executables, causing startup failures or unintended emulation on ARM64 nodes. Rebuild affected images to correct existing builds ([#649](https://github.com/mcp-runtime/mcp-runtime/issues/649)).
 - Release manifests give Runtime images a tag tied to the full source commit. `update --build` rebuilds those images from a clean checkout of that commit even when the tag exists, preventing a stale registry tag from silently supplying an older build. Same-release image tags compare as the same release version during update ([#644](https://github.com/mcp-runtime/mcp-runtime/issues/644)).
 - `server deploy` reports an operator rejection on the next poll with its status message and false condition reason instead of waiting for the five-minute timeout. Pending timeouts include the last observed condition ([#642](https://github.com/mcp-runtime/mcp-runtime/issues/642)).
+
+ARM64 installations must rebuild the affected platform images from this release.
+For the hosted reference platform, follow the documented backup, fresh setup,
+restore, and verification procedure in [Reference Deployment](docs/reference-deployment.md);
+retain the external identity provider data and TLS state.
 
 ## [0.6.3] - 2026-10-06
 
