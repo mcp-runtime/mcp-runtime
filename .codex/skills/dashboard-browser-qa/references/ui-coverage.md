@@ -22,6 +22,16 @@ revoke/unrevoke, empty states, and error states are separate rows.
 
 ## Role And Session Flows
 
+For the React console shell, check the desktop sidebar's Runtime, Workspace,
+and Platform groups against `visibleWorkspaceTabs(auth)`. **Filter navigation**
+must search only visible pages, show a no-match state, and restore links when
+cleared. Account controls sit at the bottom of the desktop sidebar and in the
+header on compact screens. Verify their popover stays within the viewport.
+At 390px, open the header navigation menu, reselect the current page, and check
+that the menu closes. Escape closes the menu and returns focus to its trigger.
+Check dark and light themes, keyboard focus, documentation links, and overflow
+at both sides of the 900px breakpoint.
+
 Run browser flows in order. Use test-mode credentials only in local Kind test
 mode.
 

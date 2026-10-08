@@ -192,6 +192,12 @@ In **Server Catalog** or **My Activity**, confirm the deployed server is
 visible to your account. Open its details to review the endpoint and connect
 configuration. The UI uses the same deployment and policy state as the CLI.
 
+The console sidebar groups pages under **Runtime**, **Workspace**, and
+**Platform**, according to your account's access. Use **Filter navigation** to
+find a page and the account control at the bottom to view your account or sign
+out. On compact screens, open the navigation menu in the header. The theme
+button switches between dark and light mode.
+
 ## What's next
 
 - [Concepts](core-concepts.md): understand Grants, Sessions, Trust levels, and Side effects

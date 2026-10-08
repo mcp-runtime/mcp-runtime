@@ -10,16 +10,16 @@
   color-scheme: dark;
 
   /* Surfaces, from furthest back to closest. */
-  --canvas: #070b13;
-  --surface: #0f1724;
-  --surface-raised: #131e2f;
-  --surface-hover: #172640;
-  --surface-selected: #16273f;
-  --surface-sunken: #0b1220;
+  --canvas: #101012;
+  --surface: #141416;
+  --surface-raised: #1a1a1e;
+  --surface-hover: #232328;
+  --surface-selected: #1b2b36;
+  --surface-sunken: #101012;
 
   /* Ambient depth. Kept behind content and never used for text contrast. */
-  --ambient-teal: rgba(124, 231, 211, 0.14);
-  --ambient-blue: rgba(115, 167, 255, 0.17);
+  --ambient-teal: transparent;
+  --ambient-blue: transparent;
   --grid-line: rgba(150, 184, 224, 0.055);
   --edge-highlight: rgba(255, 255, 255, 0.045);
   --elevation-1: 0 1px 0 var(--edge-highlight) inset, 0 10px 26px -22px rgba(0, 0, 0, 0.9);
@@ -27,22 +27,22 @@
   --accent-glow: 0 0 0 1px var(--accent-line), 0 12px 32px -20px rgba(124, 231, 211, 0.55);
 
   /* Text. */
-  --text: #f4f7fb;
-  --text-secondary: #a7b6ca;
-  --text-tertiary: #8ea0b6;
-  --text-on-accent: #04211c;
+  --text: #e6e6e9;
+  --text-secondary: #aaaab4;
+  --text-tertiary: #92929e;
+  --text-on-accent: #071b28;
 
   /* Lines. */
-  --border: #1f2e45;
-  --border-strong: #2c3f5c;
+  --border: #29292f;
+  --border-strong: #3a3a43;
 
   /* Brand and interactive. */
-  --accent: #7ce7d3;
-  --accent-hover: #9aeede;
-  --accent-soft: rgba(124, 231, 211, 0.13);
-  --accent-line: rgba(124, 231, 211, 0.45);
-  --link: #93bcff;
-  --link-hover: #b3d0ff;
+  --accent: #74b9e8;
+  --accent-hover: #98ccef;
+  --accent-soft: rgba(116, 185, 232, 0.12);
+  --accent-line: rgba(116, 185, 232, 0.4);
+  --link: #83bfe8;
+  --link-hover: #abd7f5;
 
   /* Status. */
   --success: #4ade80;
@@ -124,15 +124,16 @@
   --space-6: 32px;
   --space-7: 48px;
 
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
   --radius-pill: 999px;
 
   --control-h: 36px;
   --control-h-sm: 30px;
   --control-h-lg: 40px;
   --topbar-h: 58px;
+  --sidebar-w: 232px;
 
   --fs-page: 28px;
   --fs-section: 17px;
