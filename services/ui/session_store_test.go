@@ -28,6 +28,7 @@ type fakeSessionDB struct {
 	rows        map[string]fakeSessionRow
 	failAll     bool
 	failConnect int
+	failSchema  int
 }
 
 type fakeSessionRow struct {
@@ -77,6 +78,10 @@ func (s *fakeStmt) Exec(args []driver.Value) (driver.Result, error) {
 	}
 	if s.db.failAll {
 		return nil, errors.New("database unavailable")
+	}
+	if s.db.failSchema > 0 && (strings.HasPrefix(s.q, "CREATE TABLE") || strings.HasPrefix(s.q, "CREATE INDEX")) {
+		s.db.failSchema--
+		return nil, &pq.Error{Code: "23505", Constraint: "pg_type_typname_nsp_index"}
 	}
 	switch {
 	case strings.HasPrefix(s.q, "CREATE TABLE"), strings.HasPrefix(s.q, "CREATE INDEX"):
@@ -350,6 +355,33 @@ func TestEnsureSessionSchemaWaitsForPostgresDNS(t *testing.T) {
 	}
 	if fake.failConnect != 0 {
 		t.Fatalf("connect failures left = %d", fake.failConnect)
+	}
+}
+
+func TestEnsureSessionSchemaRetriesRaceAfterPostgresWait(t *testing.T) {
+	db, fake := openFakeSessionDB(t)
+	fake.failConnect = 4
+	fake.failSchema = 1
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := ensureSessionSchema(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	if fake.failConnect != 0 || fake.failSchema != 0 {
+		t.Fatalf("failures left: connect=%d schema=%d", fake.failConnect, fake.failSchema)
+	}
+}
+
+func TestEnsureSessionSchemaBoundsSchemaRetries(t *testing.T) {
+	db, fake := openFakeSessionDB(t)
+	fake.failSchema = 6
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := ensureSessionSchema(ctx, db); !concurrentSchemaRace(err) {
+		t.Fatalf("expected schema race error, got %v", err)
+	}
+	if fake.failSchema != 1 {
+		t.Fatalf("expected five attempts, failures left=%d", fake.failSchema)
 	}
 }
 

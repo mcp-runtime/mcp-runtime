@@ -202,7 +202,8 @@ func ensureSessionSchema(ctx context.Context, db *sql.DB) error {
 	for _, statement := range statements {
 		var err error
 		announced := false
-		for attempt := 0; ; attempt++ {
+		schemaRetries := 0
+		for {
 			if _, err = db.ExecContext(ctx, statement.query); err == nil {
 				break
 			}
@@ -212,7 +213,8 @@ func ensureSessionSchema(ctx context.Context, db *sql.DB) error {
 					log.Printf("session store waiting for postgres: %v", err)
 					announced = true
 				}
-			case concurrentSchemaRace(err) && attempt < 4:
+			case concurrentSchemaRace(err) && schemaRetries < 4:
+				schemaRetries++
 			default:
 				return fmt.Errorf("ensure %s: %w", statement.what, err)
 			}
