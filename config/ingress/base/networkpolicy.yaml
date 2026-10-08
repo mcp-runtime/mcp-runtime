@@ -99,6 +99,9 @@ spec:
         - protocol: TCP
           port: 8091
     # Traefik watches Ingress and TLS Secret objects through the Kubernetes API.
+    # CNIs can evaluate egress after Service DNAT, against the endpoint port.
     - ports:
         - protocol: TCP
           port: 443
+        - protocol: TCP
+          port: 6443
