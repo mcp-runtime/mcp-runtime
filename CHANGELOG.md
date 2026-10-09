@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Changed
+
+- Client connect snippets for header-auth servers include the configured credential header names with empty values. The console and `server connect-config` copy those names from the MCPServer spec. Credential values are not stored or returned ([#669](https://github.com/mcp-runtime/mcp-runtime/issues/669)).
+
 ## [0.6.5] - 2026-10-09
 
 ### Added
