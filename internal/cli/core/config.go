@@ -10,6 +10,7 @@ import (
 
 	"mcp-runtime/pkg/mcpdefaults"
 	"mcp-runtime/pkg/metadata"
+	"mcp-runtime/pkg/publicroutes"
 )
 
 // CLIConfig holds all CLI configuration loaded from environment variables.
@@ -33,6 +34,7 @@ type CLIConfig struct {
 	// PlatformIngressHost is the public dashboard UI host (e.g. platform.mcpruntime.com), from
 	// MCP_PLATFORM_INGRESS_HOST or platform.<MCP_PLATFORM_DOMAIN>. Empty falls back to path-based dev routing.
 	PlatformIngressHost string
+	PublicRoutes        publicroutes.Routes
 	// RegistryClusterIssuerName is the cert-manager ClusterIssuer selected by
 	// setup --with-tls for TLS-rendered resources (e.g. platform UI ingress).
 	// The registry Secret itself is owned by an explicit registry-cert Certificate.
@@ -94,6 +96,7 @@ func LoadCLIConfig() *CLIConfig {
 		RegistryIngressHost:         registryIngressHost,
 		McpIngressHost:              mcpIngressHost,
 		PlatformIngressHost:         platformIngressHost,
+		PublicRoutes:                publicroutes.Routes{Platform: os.Getenv("MCP_PLATFORM_PATH_PREFIX"), Grafana: os.Getenv("MCP_GRAFANA_PATH_PREFIX"), Docs: os.Getenv("MCP_DOCS_PATH"), DocsURL: os.Getenv("MCP_DOCS_URL"), Registry: os.Getenv("MCP_REGISTRY_PATH")}.WithDefaults(),
 		SkopeoImage:                 getEnvOrDefault("MCP_SKOPEO_IMAGE", defaultSkopeoImage),
 		OperatorImage:               os.Getenv("MCP_OPERATOR_IMAGE"), // No default, empty means auto
 		GatewayProxyImage:           os.Getenv("MCP_GATEWAY_PROXY_IMAGE"),

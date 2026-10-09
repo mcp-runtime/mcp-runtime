@@ -18,7 +18,7 @@ function loadRuntimeConfig(): Promise<void> {
 
   return new Promise((resolve) => {
     const script = document.createElement("script");
-    script.src = "/config.js";
+    script.src = new URL("config.js", document.baseURI).pathname;
     script.onload = () => resolve();
     script.onerror = () => resolve();
     document.head.appendChild(script);

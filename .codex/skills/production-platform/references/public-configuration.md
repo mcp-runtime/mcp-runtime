@@ -3,6 +3,18 @@
 
 ## Hostname model
 
+Customers may override each host independently or share one hostname. Configure
+the dashboard prefix with `MCP_PLATFORM_PATH_PREFIX` (`setup
+--platform-path-prefix`), registry catalog entry with `MCP_REGISTRY_PATH`, docs
+entry/destination with `MCP_DOCS_PATH`/`MCP_DOCS_URL`, and admin Grafana prefix
+with `MCP_GRAFANA_PATH_PREFIX`. See `docs/self-hosting.md` and
+`config/deployments/single-host.env.example`. Reuse the env file on setup reruns.
+OCI registry ingress must stay at `/v2`; `/registry` opens the server catalog.
+Platform APIs remain `/api/v1`. Bundled MCP Auth ingress, strip-prefix middleware,
+and well-known discovery follow the configured issuer URL's path. Preserve
+existing external auth routes; never treat a shared-host change as permission to
+replace them. Dashboard sessions live beneath the chosen dashboard prefix.
+
 With `export MCP_PLATFORM_DOMAIN=example.com` (apex only, no `https://`):
 
 | Role | Host |

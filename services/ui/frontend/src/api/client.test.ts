@@ -6,6 +6,7 @@ import {
   clearCSRFToken,
   fetchJSON,
   fetchUIJSON,
+	 fetchPublicJSON,
   setCSRFToken,
   withQuery,
 } from "./client";
@@ -16,6 +17,26 @@ afterEach(() => {
   vi.restoreAllMocks();
   clearCSRFToken();
   delete window.MCP_API_BASE;
+  delete window.MCP_PUBLIC_ROUTES;
+});
+
+it("keeps prefixed session calls on the UI origin with CSRF and without caller credentials", async () => {
+  window.MCP_PUBLIC_ROUTES = { prefix: "/platform" };
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({}) });
+  vi.stubGlobal("fetch", fetchMock);
+  setCSRFToken("session-csrf");
+  await fetchUIJSON("/auth/login", { method: "POST", headers: { Authorization: "Bearer dropped", "X-API-Key": "dropped" } });
+  expect(fetchMock.mock.calls[0][0]).toBe("/platform/auth/login");
+  const options = fetchMock.mock.calls[0][1];
+  expect(options.credentials).toBe("same-origin");
+  expect(options.headers.get("X-CSRF-Token")).toBe("session-csrf");
+  expect(options.headers.has("Authorization")).toBe(false);
+  expect(options.headers.has("X-API-Key")).toBe(false);
+  expect(apiURL("/runtime/servers")).toBe("/platform/api/ui/v1/runtime/servers");
+  expect(apiURL("/runtime/teams", "/api/v1", "POST")).toBe("/platform/api/ui/v1/runtime/teams");
+  await fetchPublicJSON("/runtime/servers");
+  expect(fetchMock.mock.calls[1][0]).toBe("/platform/api/public/v1/runtime/servers");
+  expect(fetchMock.mock.calls[1][1]).toEqual({ credentials: "omit" });
 });
 
 describe("apiURL", () => {

@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 interface Window {
+  MCP_PUBLIC_ROUTES?: { prefix?: string; docs?: string; grafana?: string; registry?: string };
   MCP_API_BASE?: string;
   MCP_DEFAULTS?: {
     namespace?: string;

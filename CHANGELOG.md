@@ -7,6 +7,14 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Added
+
+- Customers can configure dashboard, registry catalog entry, documentation, and admin Grafana paths alongside existing hostname overrides, allowing a single public hostname and enterprise certificate. Bundled MCP Auth ingress and discovery paths follow its configured issuer URL; setup rejects conflicting paths before cluster writes ([#658](https://github.com/mcp-runtime/mcp-runtime/issues/658)).
+
+### Changed
+
+- The bundled registry ingress matches `/v2` rather than `/`, so it can share a hostname with the platform. The configurable `/registry` browser entry opens the platform server catalog; Docker and Kubernetes clients continue using the registry authority's `/v2/` API. Apply the new ingress and route configuration during a fresh setup; image-only updates do not reconcile public routes ([#658](https://github.com/mcp-runtime/mcp-runtime/issues/658)).
+
 ## [0.6.4] - 2026-10-09
 
 ### Changed

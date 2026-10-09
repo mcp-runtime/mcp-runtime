@@ -1,3 +1,4 @@
+import { uiPath, docsPath } from "../api/config";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { visibleWorkspaceTabs, type WorkspaceId } from "./WorkspaceNavigation";
@@ -85,7 +86,7 @@ export function AppShell({
       <aside className="sidebar" aria-label="Console sidebar">
         <div className="sidebar-brand">
           <img className={`brand-logo${theme === "dark" ? " brand-logo-dark" : ""}`}
-            src={theme === "dark" ? "/brand/mcp-runtime-logo-dark.png" : "/brand/mcp-runtime-logo.png"}
+            src={uiPath(theme === "dark" ? "/brand/mcp-runtime-logo-dark.png" : "/brand/mcp-runtime-logo.png")}
             alt="MCP Runtime" />
           <span className="console-tag">Console</span>
         </div>
@@ -114,7 +115,7 @@ export function AppShell({
             <p className="sidebar-empty" role="status">No matching pages.</p> : null}
         </nav>
         <div className="sidebar-footer">
-          <a className="sidebar-docs" href="https://mcpruntime.org/docs/" target="_blank"
+          <a className="sidebar-docs" href={docsPath()} target="_blank"
             rel="noreferrer" aria-label="Documentation (opens in a new tab)" data-testid="docs-link">
             <Icon name="book" size={15} /> Documentation <Icon name="external" size={12} />
           </a>
@@ -126,7 +127,7 @@ export function AppShell({
           <span className="brand mobile-brand">
             <img
               className={`brand-logo${theme === "dark" ? " brand-logo-dark" : ""}`}
-              src={theme === "dark" ? "/brand/mcp-runtime-logo-dark.png" : "/brand/mcp-runtime-logo.png"}
+              src={uiPath(theme === "dark" ? "/brand/mcp-runtime-logo-dark.png" : "/brand/mcp-runtime-logo.png")}
               alt="MCP Runtime"
             />
           </span>
@@ -202,7 +203,7 @@ export function AppShell({
             </li>
           ))}
         </ul>
-        <a className="sidebar-docs" href="https://mcpruntime.org/docs/" target="_blank" rel="noreferrer">
+        <a className="sidebar-docs" href={docsPath()} target="_blank" rel="noreferrer">
           <Icon name="book" size={15} /> Documentation <Icon name="external" size={12} />
           <span className="visually-hidden"> (opens in a new tab)</span>
         </a>

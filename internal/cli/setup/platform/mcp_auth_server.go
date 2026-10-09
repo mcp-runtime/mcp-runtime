@@ -16,6 +16,7 @@ import (
 	"mcp-runtime/internal/cli/setup/assetpath"
 	setupplan "mcp-runtime/internal/cli/setup/plan"
 	"mcp-runtime/pkg/metadata"
+	"mcp-runtime/pkg/publicroutes"
 )
 
 // mcpAuthInternalIssuerURLForCluster returns the in-cluster address gateway
@@ -253,6 +254,12 @@ func renderMCPAuthServerManifest(raw string, opts mcpAuthServerOptions) (string,
 	if err != nil || parsedIssuer.Host == "" {
 		return "", fmt.Errorf("mcp-auth issuer URL %q is not an absolute URL", issuer)
 	}
+	if err := publicroutes.ValidatePath(parsedIssuer.Path, false); err != nil {
+		return "", fmt.Errorf("MCP Auth issuer path: %w", err)
+	}
+	if parsedIssuer.User != nil || parsedIssuer.RawQuery != "" || parsedIssuer.Fragment != "" || parsedIssuer.RawPath != "" {
+		return "", fmt.Errorf("MCP Auth issuer must not contain credentials, query, or fragment")
+	}
 	if !opts.TestMode {
 		if parsedIssuer.Scheme != "https" {
 			return "", fmt.Errorf("production mcp-auth deployment requires an absolute HTTPS issuer URL")
@@ -276,6 +283,12 @@ func renderMCPAuthServerManifest(raw string, opts mcpAuthServerOptions) (string,
 		return "", err
 	}
 
+	raw = strings.NewReplacer(
+		"prefixes: [/mcp-auth]", "prefixes: ["+parsedIssuer.Path+"]",
+		"- path: /mcp-auth\n", "- path: "+parsedIssuer.Path+"\n",
+		"/.well-known/oauth-authorization-server/mcp-auth\n", "/.well-known/oauth-authorization-server"+parsedIssuer.Path+"\n",
+		"/.well-known/openid-configuration/mcp-auth\n", "/.well-known/openid-configuration"+parsedIssuer.Path+"\n",
+	).Replace(raw)
 	manifest := strings.ReplaceAll(raw, "image: docker.io/princekrroshan01/mcp-auth-server:latest", "image: "+opts.Image)
 	manifest = strings.ReplaceAll(manifest, "MCP_AUTH_ISSUER_VALUE", issuer)
 	// Every resolved resource has to reach the authorization server, not just
@@ -384,7 +397,11 @@ func mcpAuthResourceURLs(configured []string, issuer string, testMode bool) ([]s
 		}
 		// Test mode serves the Go example's OAuth route through the Runtime
 		// gateway.
-		base := strings.TrimSuffix(issuer, "/mcp-auth")
+		parsed, err := url.Parse(issuer)
+		if err != nil || parsed.Host == "" {
+			return nil, fmt.Errorf("invalid test issuer URL")
+		}
+		base := parsed.Scheme + "://" + parsed.Host
 		return []string{
 			base + "/oauth-example-go-2025-11-25-gateway/mcp",
 		}, nil

@@ -1,3 +1,4 @@
+import { grafanaPath } from "../../api/config";
 import { useState } from "react";
 
 import { AsyncSection } from "./AsyncSection";
@@ -85,7 +86,7 @@ export function PlatformHealthPanel({ onSignIn }: PlatformHealthPanelProps) {
         {/* Keep the link direct so the platform ingress forward-auth still applies. */}
         <ButtonLink
           variant="secondary"
-          href="/grafana"
+          href={grafanaPath()}
           target="_blank"
           rel="noreferrer"
           trailingIcon="external"
