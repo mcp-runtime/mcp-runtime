@@ -13,6 +13,7 @@ import (
 	apiruntime "k8s.io/apimachinery/pkg/runtime"
 
 	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
+	"mcp-runtime/pkg/credentialheaders"
 	"mcp-runtime/pkg/metadata"
 )
 
@@ -288,28 +289,73 @@ func ServerInfoFromMCPServer(mcpServer mcpv1alpha1.MCPServer, deploymentStatus S
 		status = "Error"
 	}
 	return ServerInfo{
-		Name:           mcpServer.Name,
-		Namespace:      mcpServer.Namespace,
-		UID:            string(mcpServer.UID),
-		TeamID:         strings.TrimSpace(mcpServer.Spec.TeamID),
-		Image:          strings.TrimSpace(mcpServer.Spec.Image),
-		ImageTag:       strings.TrimSpace(mcpServer.Spec.ImageTag),
-		Description:    mcpServer.Spec.Description,
-		Ready:          deploymentStatus.Ready,
-		Status:         status,
-		Message:        strings.TrimSpace(mcpServer.Status.Message),
-		Conditions:     append([]metav1.Condition(nil), mcpServer.Status.Conditions...),
-		Labels:         mcpServer.Labels,
-		Age:            mcpServer.CreationTimestamp.Format("2006-01-02T15:04:05Z"),
-		Endpoint:       PublicMCPEndpoint(mcpServer),
-		GatewayEnabled: mcpv1alpha1.GatewayIsEnabled(mcpServer.Spec.Gateway),
-		ServicePort:    mcpServer.Spec.ServicePort,
-		Generation:     mcpServer.Generation,
-		Tools:          mcpServer.Spec.Tools,
-		Prompts:        inventoryItemsOrEmpty(mcpServer.Spec.Prompts),
-		Resources:      inventoryItemsOrEmpty(mcpServer.Spec.MCPResources),
-		Tasks:          inventoryItemsOrEmpty(mcpServer.Spec.Tasks),
+		Name:               mcpServer.Name,
+		Namespace:          mcpServer.Namespace,
+		UID:                string(mcpServer.UID),
+		TeamID:             strings.TrimSpace(mcpServer.Spec.TeamID),
+		Image:              strings.TrimSpace(mcpServer.Spec.Image),
+		ImageTag:           strings.TrimSpace(mcpServer.Spec.ImageTag),
+		Description:        mcpServer.Spec.Description,
+		Ready:              deploymentStatus.Ready,
+		Status:             status,
+		Message:            strings.TrimSpace(mcpServer.Status.Message),
+		Conditions:         append([]metav1.Condition(nil), mcpServer.Status.Conditions...),
+		Labels:             mcpServer.Labels,
+		Age:                mcpServer.CreationTimestamp.Format("2006-01-02T15:04:05Z"),
+		Endpoint:           PublicMCPEndpoint(mcpServer),
+		AuthMode:           headerAuthMode(mcpServer.Spec.Auth),
+		AuthHeaders:        headerAuthNames(mcpServer.Spec.Auth),
+		CredentialPresence: headerAuthPresence(mcpServer.Spec.Auth),
+		GatewayEnabled:     mcpv1alpha1.GatewayIsEnabled(mcpServer.Spec.Gateway),
+		ServicePort:        mcpServer.Spec.ServicePort,
+		Generation:         mcpServer.Generation,
+		Tools:              mcpServer.Spec.Tools,
+		Prompts:            inventoryItemsOrEmpty(mcpServer.Spec.Prompts),
+		Resources:          inventoryItemsOrEmpty(mcpServer.Spec.MCPResources),
+		Tasks:              inventoryItemsOrEmpty(mcpServer.Spec.Tasks),
 	}
+}
+
+func headerAuthMode(auth *mcpv1alpha1.AuthConfig) string {
+	if !mcpv1alpha1.AuthUsesHeaderMode(auth) {
+		return ""
+	}
+	return "header"
+}
+
+func headerAuthNames(auth *mcpv1alpha1.AuthConfig) []string {
+	if !mcpv1alpha1.AuthUsesHeaderMode(auth) {
+		return nil
+	}
+	names := make([]string, 0, len(auth.Headers))
+	seen := make(map[string]struct{}, len(auth.Headers))
+	for _, name := range auth.Headers {
+		name = strings.TrimSpace(name)
+		if credentialheaders.ValidateName(name) != nil {
+			continue
+		}
+		key := strings.ToLower(name)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		names = append(names, name)
+	}
+	if len(names) == 0 {
+		return nil
+	}
+	return names
+}
+
+func headerAuthPresence(auth *mcpv1alpha1.AuthConfig) string {
+	if !mcpv1alpha1.AuthUsesHeaderMode(auth) {
+		return ""
+	}
+	presence, err := credentialheaders.NormalizePresence(auth.CredentialPresence)
+	if err != nil {
+		return ""
+	}
+	return presence
 }
 
 func inventoryItemsOrEmpty(items []mcpv1alpha1.InventoryItem) []mcpv1alpha1.InventoryItem {

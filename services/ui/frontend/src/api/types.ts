@@ -85,6 +85,9 @@ export type ServerSummary = {
   status: string;
   age?: string;
   endpoint?: string;
+  authMode?: string;
+  authHeaders?: string[];
+  credentialPresence?: string;
   // The server's declared tools, with the governance metadata the gateway
   // enforces. Same shape as the catalog rows, scoped to this server.
   tools?: Array<{
@@ -183,13 +186,43 @@ export type ServerAuthInfo = {
   detail: string;
 };
 
-export function serverAuthInfo(): ServerAuthInfo {
+export function serverAuthInfo(server?: Pick<ServerSummary, "authMode" | "authHeaders" | "credentialPresence">): ServerAuthInfo {
+  if (server?.authMode === "header") {
+    const names = (server.authHeaders || []).filter((name) => name.trim()).join(", ");
+    const presence = server.credentialPresence === "all" ? "all" : "any";
+    const fill =
+      presence === "all"
+        ? "Fill every header. An empty header is rejected."
+        : "Fill one header with your credential and delete the other empty headers. An empty header is rejected.";
+    return {
+      label: "Header",
+      tone: "warning",
+      detail: names
+        ? `This server expects credential headers (${names}). Presence is ${presence}. ${fill} The platform does not store the credential.`
+        : `This server expects caller credential headers. Presence is ${presence}. ${fill}`,
+    };
+  }
   return {
     label: "OAuth optional",
     tone: "info",
     detail:
       "Direct clients use OAuth when configured. Adapters always present a session-bound certificate and add OAuth only when the server requires it.",
   };
+}
+
+export function clientConnectSnippet(
+  server: Pick<ServerSummary, "name" | "endpoint" | "access_json">,
+  wrapper: "mcpServers" | "servers",
+): Record<string, unknown> {
+  const name = server.name || "mcp-server";
+  const published = server.access_json?.["mcpServers"];
+  const entries = published && typeof published === "object" ? (published as Record<string, unknown>) : undefined;
+  const fromAccess = entries?.[name];
+  const entry =
+    fromAccess && typeof fromAccess === "object"
+      ? fromAccess
+      : { type: "http", url: server.endpoint || "" };
+  return { [wrapper]: { [name]: entry } };
 }
 
 export function serverPrompts(server: ServerSummary): string[] {

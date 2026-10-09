@@ -689,6 +689,23 @@ func serverInfosWithAccessJSON(items []controlplane.ServerInfo, r *http.Request)
 	return out
 }
 
+func connectServerEntry(endpoint string, info controlplane.ServerInfo) map[string]any {
+	entry := map[string]any{
+		"type": "http",
+		"url":  endpoint,
+	}
+	if !strings.EqualFold(info.AuthMode, "header") || len(info.AuthHeaders) == 0 {
+		return entry
+	}
+	headers := make(map[string]any, len(info.AuthHeaders))
+	for _, name := range info.AuthHeaders {
+		// Empty values are fill-in slots. Credential values are never known here.
+		headers[name] = ""
+	}
+	entry["headers"] = headers
+	return entry
+}
+
 func serverInfoWithAccessJSON(info controlplane.ServerInfo, r *http.Request) serverInfo {
 	info.Image = metadata.DisplayImageReference(info.Image)
 	out := serverInfo{ServerInfo: info}
@@ -696,10 +713,7 @@ func serverInfoWithAccessJSON(info controlplane.ServerInfo, r *http.Request) ser
 	if connectEndpoint != "" {
 		out.AccessJSON = map[string]any{
 			"mcpServers": map[string]any{
-				info.Name: map[string]any{
-					"type": "http",
-					"url":  connectEndpoint,
-				},
+				info.Name: connectServerEntry(connectEndpoint, info),
 			},
 		}
 	}
