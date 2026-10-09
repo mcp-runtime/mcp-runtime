@@ -251,16 +251,24 @@ For public/TLS setup, setup validates the host env even without
 `MCP_PLATFORM_INGRESS_HOST`, `MCP_REGISTRY_INGRESS_HOST`, and
 `MCP_MCP_INGRESS_HOST` explicitly. For bundled HTTPS with a public domain,
 set `MCP_REGISTRY_ENDPOINT=registry.<domain>` so kubelet pulls match the TLS
-certificate (not the registry ClusterIP). Set `MCP_PLATFORM_ADMIN_EMAIL` or
-`ADMIN_USERS` so the first OIDC login for that email is promoted to platform
-admin; `--acme-email` is only the certificate contact email.
+certificate (not the registry ClusterIP). Set `MCP_ADMIN_USERS` for the OIDC
+platform-admin allowlist, or provide the password-admin pair below.
+`--acme-email` is only the certificate contact email.
 
 A password dashboard login is separate from that OIDC promotion. Set both
 `MCP_PLATFORM_ADMIN_EMAIL` and `MCP_PLATFORM_ADMIN_PASSWORD` before setup.
-Setting only the email does not create the user: setup writes both secret
-keys empty and continues, and dev login is off outside test mode. A later
-setup rerun must receive the same pair or it can render the secret without
-them again.
+Setup rejects an incomplete pair before deploying the platform. A rerun
+preserves an existing complete pair when neither value is supplied; supplying
+both replaces it. With neither configured nor saved, setup warns that no
+password-admin account will be seeded and omits the empty Secret keys. Dev
+login remains off outside test mode. Keep passwords in a private env file.
+
+For TLS termination on an external proxy with HTTP Traefik, put both
+`UI_REQUIRE_HTTPS=false` and `UI_FORCE_SECURE_COOKIE=true` in the file passed
+to `setup --env-file`. Setup forwards these settings to the UI and preserves
+them on reruns. The public origin must use HTTPS and the HTTP origin should
+only accept traffic from the proxy. This avoids redirect loops while retaining
+Secure session cookies; see [reverse proxy setup](cluster-provisioning.md).
 
 When building setup images from a machine with a different CPU architecture
 than the cluster, set `MCP_IMAGE_PLATFORM` to the target node platform, for
@@ -401,11 +409,11 @@ config/ingress/overlays/http`, `--registry-mode auto`, `--registry-type docker`,
 dynamic`. `--parallel-builds` changes image build and publish only; cluster,
 registry, TLS, and rollout sequencing stay the same.
 
-`--registry-storage` cannot shrink a PVC that already exists. The bundled
-manifest requests `20Gi`, and setup applies that manifest before it patches
-the live claim. A smaller flag fails after the claim is bound because
-Kubernetes rejects a storage shrink. Pass a size at least as large as the
-manifest, or as large as the bound claim on a rerun.
+`--registry-storage` sets the PVC request before its first creation, so a
+fresh test install can use a smaller positive size such as `5Gi`. Setup checks
+an existing claim before applying registry resources and rejects a size below
+its requested or allocated capacity. Kubernetes cannot shrink a PVC. On a
+rerun, retain that size or increase it if the storage class supports expansion.
 
 To enable optional adapter client certificates on gateway server routes, add
 `--mtls-cluster-issuer <cluster-issuer>` alongside `--with-tls`. Name an
@@ -489,21 +497,36 @@ mcp-runtime server deploy my-server --scope tenant --metadata-dir .mcp
 
 `mcp-runtime auth login --api-url` and `MCP_PLATFORM_API_URL` must be the
 HTTPS origin when the front door redirects `http` to `https`. `server push`
-POSTs the image archive. A `301` to HTTPS makes the Go client resend that
-upload as GET, and the API then returns `405 method_not_allowed`. GET calls
-such as `team list` still succeed against the `http` base, so the failure
-looks like a routing or auth error.
+POSTs the image archive. The upload client rejects redirects that change the
+method, scheme, or origin and reports the final HTTPS origin to configure
+with `auth login --api-url`; it does not resend the upload as a GET. GET
+calls such as `team list` can still succeed against an HTTP base.
 
 The hop in front of `/api/v1/runtime/registry/push` must allow a large,
 long-lived request body. A server image archive can be hundreds of mebibytes.
 The bundled registry path already expects that for `/v2/`. An outer proxy
 that leaves `/api/` at the default 1 MiB limit rejects the push before the
-API sees it.
+API sees it. Configure a suitable body limit (for example Nginx
+`client_max_body_size 0` on this upload route) and request/read timeouts long
+enough for the largest supported image. Apply the same policy to the registry
+`/v2/` routes; this does not change API authorization.
 
 On a tenant-mode platform, `--scope org` and `--scope public` are rejected.
 Tenant publish also needs a team membership. An admin API key can create a
 team and still be unable to push, because that key has no team. Create the
-team, add a user as a member, and push with that user's token.
+team, add a user as a member, and push with that user's token. For example:
+
+```bash
+mcp-runtime team create first-team
+# Add an existing account using its user ID:
+mcp-runtime team user add first-team <user-id> --role owner
+# Or create a new account and membership together:
+mcp-runtime team user create first-team --email <email> --password <password> --role owner
+```
+
+Then sign in as that team member before publishing or deploying. The Teams UI
+also supports **Add existing user**. Membership changes preserve an existing
+account's password.
 
 ## 7. Observe live traffic and policy { #8-observe-live-traffic-and-policy }
 

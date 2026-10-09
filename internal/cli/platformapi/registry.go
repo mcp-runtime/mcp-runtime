@@ -43,6 +43,7 @@ func (c *PlatformClient) PushRegistryImage(ctx context.Context, tarPath, target,
 	joined := u.ResolveReference(rel)
 
 	pr, pw := io.Pipe()
+	defer pr.Close()
 	writer := multipart.NewWriter(pw)
 	contentType := writer.FormDataContentType()
 
@@ -85,7 +86,15 @@ func (c *PlatformClient) PushRegistryImage(ctx context.Context, tarPath, target,
 
 	// Covers the upload window (runtime API default 20m) plus the in-cluster
 	// push that follows it (up to 10m).
-	client := &http.Client{Timeout: 30 * time.Minute}
+	client := &http.Client{Timeout: 30 * time.Minute, CheckRedirect: func(next *http.Request, via []*http.Request) error {
+		if len(via) > 0 && (next.Method != via[0].Method || next.URL.Scheme != via[0].URL.Scheme || next.URL.Host != via[0].URL.Host) {
+			return fmt.Errorf("registry uploads cannot follow a redirect that changes method, scheme, or origin; save the final HTTPS platform API origin using auth login --api-url")
+		}
+		if len(via) >= 10 {
+			return fmt.Errorf("too many registry upload redirects")
+		}
+		return nil
+	}}
 	if c.http != nil && c.http.Transport != nil {
 		client.Transport = c.http.Transport
 	}
@@ -109,6 +118,9 @@ func (c *PlatformClient) PushRegistryImage(ctx context.Context, tarPath, target,
 // with a bare "Bad Gateway" page.
 func registryPushHTTPError(status int, body []byte) error {
 	err := httpAPIError(status, body)
+	if status >= 300 && status < 400 {
+		return fmt.Errorf("%w; registry uploads cannot follow redirects safely; save the final HTTPS platform API origin using auth login --api-url", err)
+	}
 	var m map[string]any
 	if json.Unmarshal(body, &m) == nil && (m["message"] != nil || m["error"] != nil) {
 		return err

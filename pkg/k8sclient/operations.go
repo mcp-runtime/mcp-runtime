@@ -332,7 +332,7 @@ func RestartDeployment(ctx context.Context, clients *Clients, namespace, name st
 func WaitForDeploymentAvailable(ctx context.Context, clients *Clients, namespace, name string, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(ctx, 5*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
 		deploy, err := clients.Clientset.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
-		if apierrors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) || IsTransient(err) {
 			return false, nil
 		}
 		if err != nil {
@@ -347,7 +347,7 @@ func WaitForDeploymentAvailable(ctx context.Context, clients *Clients, namespace
 func WaitForDeploymentRolledOut(ctx context.Context, clients *Clients, namespace, name string, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(ctx, 5*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
 		deploy, err := clients.Clientset.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
-		if apierrors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) || IsTransient(err) {
 			return false, nil
 		}
 		if err != nil {
@@ -384,7 +384,7 @@ func WaitForDeploymentRolledOut(ctx context.Context, clients *Clients, namespace
 func WaitForStatefulSetReady(ctx context.Context, clients *Clients, namespace, name string, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(ctx, 5*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
 		statefulSet, err := clients.Clientset.AppsV1().StatefulSets(namespace).Get(ctx, name, metav1.GetOptions{})
-		if apierrors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) || IsTransient(err) {
 			return false, nil
 		}
 		if err != nil {
@@ -404,7 +404,7 @@ func WaitForStatefulSetReady(ctx context.Context, clients *Clients, namespace, n
 func WaitForDaemonSetReady(ctx context.Context, clients *Clients, namespace, name string, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(ctx, 5*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
 		daemonSet, err := clients.Clientset.AppsV1().DaemonSets(namespace).Get(ctx, name, metav1.GetOptions{})
-		if apierrors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) || IsTransient(err) {
 			return false, nil
 		}
 		if err != nil {

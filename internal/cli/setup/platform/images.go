@@ -567,6 +567,9 @@ func analyticsImageFor(ext *config.ExternalRegistryConfig, repository string) st
 }
 
 func buildOperatorImage(image string) error {
+	if err := validateDockerImageBuilder(); err != nil {
+		return err
+	}
 	platform, err := resolveSetupImagePlatformClientGo()
 	if err != nil {
 		return err
@@ -586,6 +589,9 @@ func buildOperatorImage(image string) error {
 }
 
 func buildGatewayProxyImage(image string) error {
+	if err := validateDockerImageBuilder(); err != nil {
+		return err
+	}
 	platform, err := resolveSetupImagePlatformClientGo()
 	if err != nil {
 		return err
@@ -616,6 +622,9 @@ func buildGatewayProxyImage(image string) error {
 }
 
 func buildAnalyticsImage(image, dockerfilePath, buildContext string) error {
+	if err := validateDockerImageBuilder(); err != nil {
+		return err
+	}
 	platform, err := resolveSetupImagePlatformClientGo()
 	if err != nil {
 		return err
@@ -722,6 +731,20 @@ func pushAnalyticsImageToInternalRegistry(logger *zap.Logger, sourceImage, targe
 		core.Error("Failed to push image in-cluster")
 		core.LogStructuredError(logger, wrappedErr, "Failed to push image in-cluster")
 		return wrappedErr
+	}
+	return nil
+}
+
+func validateDockerImageBuilder() error {
+	if strings.TrimSpace(os.Getenv("DOCKER_BUILDKIT")) == "0" {
+		return nil
+	}
+	cmd, err := core.ExecCommandWithValidators("docker", []string{"buildx", "version"})
+	if err == nil {
+		err = cmd.Run()
+	}
+	if err != nil {
+		return fmt.Errorf("Docker BuildKit requires a working buildx plugin: install docker-buildx, or explicitly use DOCKER_BUILDKIT=0 with a Docker version that supports the legacy builder: %w", err)
 	}
 	return nil
 }

@@ -297,8 +297,8 @@ mcp-runtime server push --image ... --scope public   # anonymous catalog
 ```
 
 `server push` requires platform credentials. Use an `https://` API base URL.
-An `http://` base that `301`s to HTTPS turns the upload POST into GET, and
-the API returns `405 method_not_allowed`. The proxy in front of
+Uploads reject redirects that change method, scheme, or origin and report
+the final HTTPS origin to configure with `auth login --api-url`. The proxy in front of
 `/api/v1/runtime/registry/push` must also allow a large request body. A
 server image archive can be hundreds of mebibytes. Tenant mode accepts
 `--scope tenant` only. The caller must belong to a team. An admin API key
@@ -737,7 +737,7 @@ mcp-runtime setup --test-mode                                # local Kind dev
 | `--ingress-manifest` | `config/ingress/overlays/http` | Use the HTTP overlay for local Kind installs |
 | `--registry-mode` | `auto` | Uses a provisioned registry config when present, otherwise the bundled registry |
 | `--registry-type` | `docker` | Harbor is not available yet |
-| `--registry-storage` | `20Gi` | Bundled registry PVC size. Cannot shrink a bound claim. The manifest requests `20Gi` before setup patches the live size |
+| `--registry-storage` | `20Gi` | Bundled registry PVC request, set before first creation. Must be positive. Reruns reject shrinking an existing claim before applying registry resources |
 | `--platform-mode` | `tenant` | `org` and `public` change the default publish namespace |
 | `--pod-egress-cidrs` | empty | Comma-separated destinations team servers may reach on TCP 443. Empty adds no rule. `0.0.0.0/0` is rejected |
 | `--pod-egress-except-cidrs` | empty | Pod and service CIDRs kept out of `--pod-egress-cidrs`. Required for a private destination |
