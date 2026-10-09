@@ -249,7 +249,12 @@ the matching mode (`PLATFORM_MODE=org` or `public`); `server push` and
 `server deploy` reject a disabled scope the same way and list the enabled
 scopes, so use `--scope tenant` on a tenant-mode platform. Uploads may take up
 to `MCP_REGISTRY_PUSH_UPLOAD_TIMEOUT` (default `20m`) on `mcp-runtime-api`;
-archives over 512 MiB are rejected with `413`.
+archives over 512 MiB are rejected with `413`. The saved API URL must be
+`https://` when the front door redirects HTTP to HTTPS, or the upload POST
+becomes a GET and the API returns `405 method_not_allowed`. The proxy in
+front of `/api/v1/runtime/registry/push` must allow a body large enough for
+the archive. A 1 MiB default on `/api/` rejects the push even when `/v2/`
+is already unlimited.
 
 Then deploy from metadata:
 

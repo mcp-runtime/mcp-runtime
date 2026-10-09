@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"net/url"
 	"os"
 	"strconv"
@@ -30,6 +31,7 @@ import (
 	"mcp-runtime/internal/cli/setup/assetpath"
 	"mcp-runtime/internal/cli/setup/ingressmanifest"
 	setupplan "mcp-runtime/internal/cli/setup/plan"
+	"mcp-runtime/pkg/egresscidrs"
 	"mcp-runtime/pkg/k8sclient"
 	"mcp-runtime/pkg/platforminventory"
 
@@ -898,7 +900,10 @@ func renderAnalyticsManifest(content string, images AnalyticsImageSet, imagePull
 	if strings.TrimSpace(images.Grafana) != "" {
 		replacements["image: grafana/grafana:10.2.3"] = "image: " + images.Grafana
 	}
-	rendered := content
+	rendered, err := applyPodEgressManifestValues(content)
+	if err != nil {
+		return "", err
+	}
 	if dnsKey := strings.TrimSpace(os.Getenv("MCP_DNS_LABEL_KEY")); dnsKey != "" {
 		dnsValue := strings.TrimSpace(os.Getenv("MCP_DNS_LABEL_VALUE"))
 		if dnsValue == "" {
@@ -931,11 +936,41 @@ func renderAnalyticsManifest(content string, images AnalyticsImageSet, imagePull
 		return rendered, nil
 	}
 
-	rendered, err := injectImagePullSecretsIntoManifest(rendered, imagePullSecretName)
+	rendered, err = injectImagePullSecretsIntoManifest(rendered, imagePullSecretName)
 	if err != nil {
 		return "", err
 	}
 	return rendered, nil
+}
+
+func applyPodEgressManifestValues(content string) (string, error) {
+	allows, err := egresscidrs.Parse(os.Getenv("MCP_POD_EGRESS_CIDRS"))
+	if err != nil {
+		return "", err
+	}
+	except, err := egresscidrs.Parse(os.Getenv("MCP_POD_EGRESS_EXCEPT_CIDRS"))
+	if err != nil {
+		return "", err
+	}
+	if _, err := egresscidrs.Blocks(allows, except); err != nil {
+		return "", err
+	}
+	content = replacePodEgressValue(content, "MCP_POD_EGRESS_CIDRS", joinPrefixes(allows))
+	content = replacePodEgressValue(content, "MCP_POD_EGRESS_EXCEPT_CIDRS", joinPrefixes(except))
+	return content, nil
+}
+
+func replacePodEgressValue(content, name, value string) string {
+	marker := `value: "" # ` + name
+	return strings.ReplaceAll(content, marker, `value: "`+value+`" # `+name)
+}
+
+func joinPrefixes(prefixes []netip.Prefix) string {
+	parts := make([]string, 0, len(prefixes))
+	for _, prefix := range prefixes {
+		parts = append(parts, prefix.String())
+	}
+	return strings.Join(parts, ",")
 }
 
 type analyticsConfigMapReader func(namespace, name string) (map[string]string, error)

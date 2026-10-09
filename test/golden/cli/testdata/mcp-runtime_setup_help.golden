@@ -40,6 +40,8 @@ Flags:
       --parallel-builds                      Build and publish setup images in parallel; keeps cluster, registry, TLS, and rollout sequencing unchanged
       --platform-mode string                 Platform access model (tenant|org|public). public exposes the catalog without login and lets signed-in users publish to the public preview namespace. (default "tenant")
       --platform-path-prefix string          Public dashboard path prefix (e.g. /platform); session and asset routes use this prefix (default "/")
+      --pod-egress-cidrs string              Comma-separated destination CIDRs that team MCP servers may reach on TCP 443. Empty installs nothing. 0.0.0.0/0 is rejected. Private ranges also require --pod-egress-except-cidrs. Overrides env MCP_POD_EGRESS_CIDRS
+      --pod-egress-except-cidrs string       Cluster pod and service CIDRs to keep out of --pod-egress-cidrs. Required when a destination is private. Overrides env MCP_POD_EGRESS_EXCEPT_CIDRS
       --provided-tls-secrets                 Use operator-created Kubernetes TLS Secrets instead of issuing certificates. Requires --with-tls; do not combine with --acme-email or --tls-cluster-issuer
       --registry-mode string                 Registry setup mode (auto|bundled-http|bundled-https|external). auto uses a provisioned registry config when present, otherwise the bundled registry (default "auto")
       --registry-path string                 Public registry browser entry path; Docker and Kubernetes clients still use /v2/ (default "/registry")

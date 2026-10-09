@@ -83,7 +83,10 @@ PowerShell on Windows. Go and Make are only needed when building from source.
 
 To install the platform, you also need:
 
-- Docker or a Docker-compatible client, with the daemon running and reachable
+- Docker or a Docker-compatible client, with the daemon running and reachable.
+  Setup image builds use BuildKit when `DOCKER_BUILDKIT=1`. Docker 29 does not
+  always ship the buildx plugin. If build fails with "buildx component is
+  missing or broken", install buildx or run setup with `DOCKER_BUILDKIT=0`.
 - `kubectl` on `PATH`, configured for the intended target cluster
 - A running Kubernetes cluster with DNS, storage, and ingress prepared.
   Start with [Deployment Options](deployment-targets.md), then
@@ -252,6 +255,13 @@ certificate (not the registry ClusterIP). Set `MCP_PLATFORM_ADMIN_EMAIL` or
 `ADMIN_USERS` so the first OIDC login for that email is promoted to platform
 admin; `--acme-email` is only the certificate contact email.
 
+A password dashboard login is separate from that OIDC promotion. Set both
+`MCP_PLATFORM_ADMIN_EMAIL` and `MCP_PLATFORM_ADMIN_PASSWORD` before setup.
+Setting only the email does not create the user: setup writes both secret
+keys empty and continues, and dev login is off outside test mode. A later
+setup rerun must receive the same pair or it can render the secret without
+them again.
+
 When building setup images from a machine with a different CPU architecture
 than the cluster, set `MCP_IMAGE_PLATFORM` to the target node platform, for
 example `MCP_IMAGE_PLATFORM=linux/amd64` for standard VPS/k3s nodes.
@@ -391,6 +401,12 @@ config/ingress/overlays/http`, `--registry-mode auto`, `--registry-type docker`,
 dynamic`. `--parallel-builds` changes image build and publish only; cluster,
 registry, TLS, and rollout sequencing stay the same.
 
+`--registry-storage` cannot shrink a PVC that already exists. The bundled
+manifest requests `20Gi`, and setup applies that manifest before it patches
+the live claim. A smaller flag fails after the claim is bound because
+Kubernetes rejects a storage shrink. Pass a size at least as large as the
+manifest, or as large as the bound claim on a rerun.
+
 To enable optional adapter client certificates on gateway server routes, add
 `--mtls-cluster-issuer <cluster-issuer>` alongside `--with-tls`. Name an
 enterprise cert-manager issuer. In test mode, setup provisions the bundled
@@ -470,6 +486,24 @@ mcp-runtime server build image my-server --tag v1
 mcp-runtime server push --image ... --scope tenant
 mcp-runtime server deploy my-server --scope tenant --metadata-dir .mcp
 ```
+
+`mcp-runtime auth login --api-url` and `MCP_PLATFORM_API_URL` must be the
+HTTPS origin when the front door redirects `http` to `https`. `server push`
+POSTs the image archive. A `301` to HTTPS makes the Go client resend that
+upload as GET, and the API then returns `405 method_not_allowed`. GET calls
+such as `team list` still succeed against the `http` base, so the failure
+looks like a routing or auth error.
+
+The hop in front of `/api/v1/runtime/registry/push` must allow a large,
+long-lived request body. A server image archive can be hundreds of mebibytes.
+The bundled registry path already expects that for `/v2/`. An outer proxy
+that leaves `/api/` at the default 1 MiB limit rejects the push before the
+API sees it.
+
+On a tenant-mode platform, `--scope org` and `--scope public` are rejected.
+Tenant publish also needs a team membership. An admin API key can create a
+team and still be unable to push, because that key has no team. Create the
+team, add a user as a member, and push with that user's token.
 
 ## 7. Observe live traffic and policy { #8-observe-live-traffic-and-policy }
 
