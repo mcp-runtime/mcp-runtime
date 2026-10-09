@@ -1,4 +1,4 @@
-FROM golang:1.26.6 AS build
+FROM golang:1.26.9 AS build
 WORKDIR /src
 
 # Copy root module first to satisfy local replace directives used by the gateway module.
