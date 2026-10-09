@@ -806,7 +806,7 @@ func applyPlatformIngressIfConfigured() error {
 	}
 	issuerName := core.GetRegistryClusterIssuerName()
 	platformNamespace := core.ComponentNamespace("ui")
-	manifest := ingressmanifest.RenderPlatformUIIngress(host, issuerName, issuerName != "" || core.GetProvidedTLSSecrets(), platformNamespace, core.ComponentNamespace("grafana"))
+	manifest := ingressmanifest.RenderPlatformUIIngress(host, issuerName, issuerName != "" || core.GetProvidedTLSSecrets(), platformNamespace, core.ComponentNamespace("grafana"), core.DefaultCLIConfig.PublicRoutes)
 	core.Info(fmt.Sprintf("Applying platform UI ingress for %s", host))
 	if err := applyManifestYAML(manifest, "", os.Stdout); err != nil {
 		return core.WrapWithBase(core.ErrSetupApplyPlatformUIIngressFailed, err, fmt.Sprintf("apply platform UI ingress: %v", err))
@@ -841,6 +841,8 @@ func removePathBasedPlatformIngresses() error {
 
 func renderAnalyticsManifest(content string, images AnalyticsImageSet, imagePullSecretName, platformMode string) (string, error) {
 	replacements := map[string]string{}
+	routes := core.DefaultCLIConfig.PublicRoutes.WithDefaults()
+	replacements[`value: "%(protocol)s://%(domain)s/grafana/"`] = `value: "%(protocol)s://%(domain)s` + routes.Grafana + `/"`
 	if strings.Contains(content, "# MCP_KUBERNETES_API_PORT") {
 		port := core.DefaultCLIConfig.KubernetesAPIPort
 		if port < 1 || port > 65535 {
@@ -1018,6 +1020,12 @@ func renderAnalyticsConfigManifestWithReaders(content, platformMode string, imag
 	} else {
 		delete(manifest.Data, "MCP_RUNTIME_TEST_MODE")
 	}
+	routes := core.DefaultCLIConfig.PublicRoutes.WithDefaults()
+	manifest.Data["UI_PATH_PREFIX"] = routes.Platform
+	manifest.Data["UI_GRAFANA_PATH"] = routes.Grafana
+	manifest.Data["UI_DOCS_PATH"] = routes.Docs
+	manifest.Data["UI_DOCS_URL"] = routes.DocsURL
+	manifest.Data["UI_REGISTRY_PATH"] = routes.Registry
 	applyGoogleOIDCDefaults(manifest.Data)
 	if registryIngressHost := strings.TrimSpace(core.GetRegistryIngressHost()); registryIngressHost != "" && registryIngressHost != core.DefaultRegistryIngressHost {
 		manifest.Data["MCP_REGISTRY_ENDPOINT"] = registryIngressHost

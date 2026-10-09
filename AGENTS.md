@@ -40,6 +40,13 @@ This file is the **onboarding index** for the MCP Runtime repo. It complements `
 
 **Patterns:** mirror nearest similar packages; CLI errors → `internal/cli/core/errors.go`, `pkg/errx/`.
 
+Public route configuration uses the setup flags and `MCP_PLATFORM_PATH_PREFIX`,
+`MCP_REGISTRY_PATH`, `MCP_DOCS_PATH`, `MCP_DOCS_URL`, and
+`MCP_GRAFANA_PATH_PREFIX`. Validate shared paths with `pkg/publicroutes`; keep
+dashboard session/assets under its prefix, preserve `/api/v1` and OCI `/v2`,
+and derive bundled MCP Auth discovery from the issuer URL. See the single-host
+example in `config/deployments/single-host.env.example` and `docs/self-hosting.md`.
+
 **Manage through the CLI and UI:** Use supported `mcp-runtime` CLI and platform
 UI workflows for setup, teams/users, registry publishing, servers, grants,
 sessions, updates, and cleanup. Use `server init`, `server validate`,

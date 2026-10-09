@@ -268,7 +268,7 @@ func observabilityPrometheusAPIPath(r *http.Request, namespace, serverName, quer
 // The header only selects the link form; both paths enforce the same auth.
 func observabilityRuntimeAPIPrefix(r *http.Request) string {
 	if platformauth.RequestSource(r) == "ui" {
-		return "/api/ui/v1/runtime"
+		return strings.TrimSuffix(envOr("UI_PATH_PREFIX", "/"), "/") + "/api/ui/v1/runtime"
 	}
 	return "/api/v1/runtime"
 }
@@ -298,7 +298,7 @@ func grafanaLinkForServer(info controlplane.ServerInfo, p principal) observabili
 		values.Set("var-server", info.Name)
 		return observabilityGrafanaLink{
 			Available:       true,
-			URL:             "/grafana/d/mcp-server/mcp-server?" + values.Encode(),
+			URL:             strings.TrimSuffix(envOr("UI_GRAFANA_PATH", "/grafana"), "/") + "/d/mcp-server/mcp-server?" + values.Encode(),
 			DirectAdminOnly: true,
 		}
 	}

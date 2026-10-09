@@ -1,4 +1,4 @@
-import { readRuntimeConfig } from "./config";
+import { readRuntimeConfig, uiPath } from "./config";
 
 // Same-origin dashboard client. Auth is the HttpOnly mcp_ui_session cookie.
 // This module does not read credentials from window, localStorage, or
@@ -129,10 +129,10 @@ export function apiURL(
   const normalized = path.startsWith("/") ? path : `/${path}`;
   const pathname = normalized.split("?")[0];
   if (method.toUpperCase() === "GET" && sessionProxyGetAllowed(pathname)) {
-    return `${SESSION_PROXY_PREFIX}${normalized}`;
+    return uiPath(`${SESSION_PROXY_PREFIX}${normalized}`);
   }
   if (sessionProxyWriteAllowed(method, pathname)) {
-    return `${SESSION_PROXY_PREFIX}${normalized}`;
+    return uiPath(`${SESSION_PROXY_PREFIX}${normalized}`);
   }
   const base = apiBase.replace(/\/$/, "") || "/api/v1";
   return `${base}${normalized}`;
@@ -208,7 +208,7 @@ export async function fetchUIJSON(path: string, options: RequestInit = {}): Prom
   if (!UI_ORIGIN_PATHS.has(path)) {
     throw new Error(`unsupported UI origin path: ${path}`);
   }
-  return readJSON(await fetch(path, sameOriginInit(options)));
+  return readJSON(await fetch(uiPath(path), sameOriginInit(options)));
 }
 
 // Anonymous public-mode catalog reads (services/ui/public_catalog_proxy.go).
@@ -219,7 +219,7 @@ export async function fetchUIJSON(path: string, options: RequestInit = {}): Prom
 export const PUBLIC_CATALOG_PREFIX = "/api/public/v1";
 
 export async function fetchPublicJSON(path: string): Promise<unknown> {
-  return readJSON(await fetch(`${PUBLIC_CATALOG_PREFIX}${path}`, { credentials: "omit" }));
+  return readJSON(await fetch(uiPath(`${PUBLIC_CATALOG_PREFIX}${path}`), { credentials: "omit" }));
 }
 
 export function withQuery(path: string, params: Record<string, string | undefined>): string {

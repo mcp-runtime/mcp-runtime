@@ -5,12 +5,35 @@ import (
 	"testing"
 
 	"mcp-runtime/internal/cli/setup/ingressmanifest"
+	"mcp-runtime/pkg/publicroutes"
 )
 
 const (
 	testPlatformNS      = "mcp-platform"
 	testObservabilityNS = "mcp-observability"
 )
+
+func TestSingleHostnameCustomRoutes(t *testing.T) {
+	got := ingressmanifest.RenderPlatformUIIngress("customer.example.com", "", true, testPlatformNS, testObservabilityNS,
+		publicroutes.Routes{Platform: "/console", Grafana: "/monitoring", Docs: "/help", Registry: "/images"})
+	for _, route := range []string{"/console", "/monitoring", "/help", "/images", "/api/v1/auth"} {
+		if !strings.Contains(got, "- path: "+route+"\n") {
+			t.Errorf("missing route %s", route)
+		}
+	}
+	for _, route := range []string{"/", "/grafana", "/docs", "/registry"} {
+		if strings.Contains(got, "- path: "+route+"\n") {
+			t.Errorf("unexpected default/catch-all route %s", route)
+		}
+	}
+	if !strings.Contains(got, "router.middlewares: platform-admin-auth@file") {
+		t.Fatal("custom Grafana path lost admin authorization")
+	}
+	if strings.Count(got, "- path: /console\n") != 2 {
+		t.Fatal("HTTPS and HTTP UI routes do not share the configured prefix")
+	}
+	assertNoPrometheusRoute(t, got, "single-host routes")
+}
 
 func assertNoPrometheusRoute(t *testing.T, manifest, context string) {
 	t.Helper()

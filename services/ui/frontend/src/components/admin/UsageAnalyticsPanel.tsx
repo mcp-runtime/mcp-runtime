@@ -1,3 +1,4 @@
+import { grafanaPath } from "../../api/config";
 import { useMemo, useState } from "react";
 
 import { AsyncSection } from "./AsyncSection";
@@ -105,7 +106,7 @@ export function UsageAnalyticsPanel({ onSignIn }: UsageAnalyticsPanelProps) {
           <>
             <ButtonLink
               variant="secondary"
-              href="/grafana/explore"
+              href={`${grafanaPath()}/explore`}
               target="_blank"
               rel="noreferrer"
               trailingIcon="external"

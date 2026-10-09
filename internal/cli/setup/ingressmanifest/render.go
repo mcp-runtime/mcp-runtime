@@ -4,6 +4,8 @@ package ingressmanifest
 import (
 	"strconv"
 	"strings"
+
+	"mcp-runtime/pkg/publicroutes"
 )
 
 const (
@@ -38,7 +40,11 @@ const (
 // loaded by the platform Ingress. An HTTP Ingress on the web entrypoint sends
 // plain requests to the UI, which redirects to HTTPS. The prod overlay
 // disables Traefik's entrypoint redirect so HTTP-01 challenges keep working.
-func RenderPlatformUIIngress(host, issuerName string, tlsEnabled bool, platformNamespace, observabilityNamespace string) string {
+func RenderPlatformUIIngress(host, issuerName string, tlsEnabled bool, platformNamespace, observabilityNamespace string, configured ...publicroutes.Routes) string {
+	routes := publicroutes.Routes{}.WithDefaults()
+	if len(configured) > 0 {
+		routes = configured[0].WithDefaults()
+	}
 	host = strings.TrimSpace(host)
 	issuerName = strings.TrimSpace(issuerName)
 	platformNamespace = strings.TrimSpace(platformNamespace)
@@ -84,7 +90,8 @@ func RenderPlatformUIIngress(host, issuerName string, tlsEnabled bool, platformN
 	b.WriteString("      http:\n")
 	b.WriteString("        paths:\n")
 	writeAPIIngressPaths(&b, PlatformAPIPaths())
-	b.WriteString("          - path: /\n")
+	writeAPIIngressPaths(&b, []APIPath{{Path: routes.Docs, PathType: "Prefix", Service: "mcp-ui", Port: 8082}, {Path: routes.Registry, PathType: "Prefix", Service: "mcp-ui", Port: 8082}})
+	b.WriteString("          - path: " + routes.Platform + "\n")
 	b.WriteString("            pathType: Prefix\n")
 	b.WriteString("            backend:\n")
 	b.WriteString("              service:\n")
@@ -117,7 +124,7 @@ func RenderPlatformUIIngress(host, issuerName string, tlsEnabled bool, platformN
 	b.WriteString("\n")
 	b.WriteString("      http:\n")
 	b.WriteString("        paths:\n")
-	b.WriteString("          - path: /grafana\n")
+	b.WriteString("          - path: " + routes.Grafana + "\n")
 	b.WriteString("            pathType: Prefix\n")
 	b.WriteString("            backend:\n")
 	b.WriteString("              service:\n")
@@ -176,7 +183,8 @@ func RenderPlatformUIIngress(host, issuerName string, tlsEnabled bool, platformN
 		b.WriteString("\n")
 		b.WriteString("      http:\n")
 		b.WriteString("        paths:\n")
-		b.WriteString("          - path: /\n")
+		writeAPIIngressPaths(&b, []APIPath{{Path: routes.Docs, PathType: "Prefix", Service: "mcp-ui", Port: 8082}, {Path: routes.Registry, PathType: "Prefix", Service: "mcp-ui", Port: 8082}})
+		b.WriteString("          - path: " + routes.Platform + "\n")
 		b.WriteString("            pathType: Prefix\n")
 		b.WriteString("            backend:\n")
 		b.WriteString("              service:\n")

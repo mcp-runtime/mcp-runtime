@@ -23,7 +23,10 @@ var (
 	// grafanaProbeScript prints "health=<code> auth=<code>"; an empty code means
 	// no HTTP response. Busybox wget -S writes response headers to stderr.
 	grafanaProbeScript = oneLine(`code() { sed -n 's/^ *HTTP\/[0-9.]* \([0-9][0-9]*\).*/\1/p' | tail -n 1; }
-base=http://127.0.0.1:3000/grafana
+root=${GF_SERVER_ROOT_URL:-http://localhost:3000/grafana/}
+prefix=${root#*://}
+prefix=/${prefix#*/}
+base=http://127.0.0.1:3000${prefix%/}
 h=$(wget -q -S -O /dev/null "$base/api/health" 2>&1 | code)
 cred=$(printf '%s:%s' "$GF_SECURITY_ADMIN_USER" "$GF_SECURITY_ADMIN_PASSWORD" | base64 | tr -d '\n')
 a=$(wget -q -S -O /dev/null --header "Authorization: Basic $cred" "$base/api/user" 2>&1 | code)
@@ -149,8 +152,8 @@ func printGrafanaResult(res GrafanaCheckResult) {
 	core.TableBoxed([][]string{
 		{"Layer", "Check", "Result"},
 		{"Platform ingress gate", "platform-admin-auth (not exercised here)", "see docs/platform-services.md"},
-		{"Grafana health", "GET /grafana/api/health in pod", codeOrNone(res.HealthCode)},
-		{"Grafana login", "GET /grafana/api/user with configured admin credentials in pod", codeOrNone(res.AuthCode)},
+		{"Grafana health", "GET api/health at configured Grafana subpath in pod", codeOrNone(res.HealthCode)},
+		{"Grafana login", "GET api/user at configured Grafana subpath with admin credentials in pod", codeOrNone(res.AuthCode)},
 	})
 	core.DefaultPrinter.Println(grafanaStateMessage(res))
 }

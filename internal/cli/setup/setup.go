@@ -14,6 +14,7 @@ import (
 	"mcp-runtime/internal/cli/core"
 	setupplan "mcp-runtime/internal/cli/setup/plan"
 	setupplatform "mcp-runtime/internal/cli/setup/platform"
+	"mcp-runtime/pkg/publicroutes"
 )
 
 // loadEnvFile reads KEY=VALUE pairs from path and sets any that are not already
@@ -49,6 +50,7 @@ func newManager(runtime *core.Runtime, clusterMgr setupplatform.ClusterManagerAP
 // composition root so setup does not import the cluster command package.
 func New(runtime *core.Runtime, clusterMgr setupplatform.ClusterManagerAPI) *cobra.Command {
 	var envFile string
+	var routes publicroutes.Routes
 	var registryType string
 	var registryStorageSize string
 	var registryMode string
@@ -179,6 +181,12 @@ will use to push and pull container images.`,
 			envStr("ingress-manifest", &ingressManifest, "MCP_SETUP_INGRESS_MANIFEST")
 			envBool("force-ingress-install", &forceIngressInstall, "MCP_FORCE_INGRESS_INSTALL")
 
+			envStr("platform-path-prefix", &routes.Platform, "MCP_PLATFORM_PATH_PREFIX")
+			envStr("grafana-path-prefix", &routes.Grafana, "MCP_GRAFANA_PATH_PREFIX")
+			envStr("registry-path", &routes.Registry, "MCP_REGISTRY_PATH")
+			envStr("docs-path", &routes.Docs, "MCP_DOCS_PATH")
+			envStr("docs-url", &routes.DocsURL, "MCP_DOCS_URL")
+
 			// TLS
 			envBool("with-tls", &tlsEnabled, "MCP_SETUP_WITH_TLS")
 			envBool("provided-tls-secrets", &providedTLSSecrets, "MCP_SETUP_PROVIDED_TLS_SECRETS")
@@ -236,6 +244,25 @@ will use to push and pull container images.`,
 			if mcpAuthConnectorsFile != "" && !withMCPAuthServer {
 				return fmt.Errorf("--mcp-auth-connectors-file requires --with-mcp-auth-server")
 			}
+
+			// Validate public paths before any cluster mutation.
+			if err := routes.Validate(); err != nil {
+				return err
+			}
+			resolvedRoutes := routes.WithDefaults()
+			if core.GetPlatformIngressHost() == "" && (resolvedRoutes.Platform != "/" || resolvedRoutes.Grafana != "/grafana") {
+				return fmt.Errorf("custom platform or Grafana paths require MCP_PLATFORM_INGRESS_HOST or MCP_PLATFORM_DOMAIN so setup can render their public ingress routes")
+			}
+			if withMCPAuthServer {
+				issuer := mcpAuthIssuerURL
+				if issuer == "" && testMode {
+					issuer = "http://localhost:18080/mcp-auth"
+				}
+				if err := routes.ValidateAuth(core.GetPlatformIngressHost(), issuer); err != nil {
+					return err
+				}
+			}
+			core.DefaultCLIConfig.PublicRoutes = routes.WithDefaults()
 
 			// Validate after all env vars are applied.
 			if err := setupplatform.ValidateStorageMode(storageMode); err != nil {
@@ -306,6 +333,11 @@ will use to push and pull container images.`,
 		},
 	}
 
+	cmd.Flags().StringVar(&routes.Platform, "platform-path-prefix", "/", "Public dashboard path prefix (e.g. /platform); session and asset routes use this prefix")
+	cmd.Flags().StringVar(&routes.Grafana, "grafana-path-prefix", "/grafana", "Public admin-only Grafana path prefix")
+	cmd.Flags().StringVar(&routes.Registry, "registry-path", "/registry", "Public registry browser entry path; Docker and Kubernetes clients still use /v2/")
+	cmd.Flags().StringVar(&routes.Docs, "docs-path", "/docs", "Public path that redirects to the configured documentation URL")
+	cmd.Flags().StringVar(&routes.DocsURL, "docs-url", publicroutes.DefaultDocsURL, "HTTPS documentation destination used by the docs route and dashboard links")
 	cmd.Flags().StringVar(&envFile, "env-file", "", "Path to an env file to source before setup (e.g. config/deployments/mcpruntime-org.env); variables already in the environment are not overridden")
 	cmd.Flags().StringVar(&registryType, "registry-type", "docker", "Registry type (docker; harbor coming soon)")
 	cmd.Flags().StringVar(&registryStorageSize, "registry-storage", "20Gi", "Registry storage size (default: 20Gi)")

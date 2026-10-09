@@ -32,7 +32,7 @@ func printPlatformEntrypoints(tlsEnabled bool) {
 	fmt.Println()
 	fmt.Println("Public entrypoints:")
 	if platform != "" {
-		fmt.Printf("  Dashboard:  %s%s/\n", scheme, platform)
+		fmt.Printf("  Dashboard:  %s%s%s/\n", scheme, platform, core.DefaultCLIConfig.PublicRoutes.PlatformPrefix())
 	}
 	if registry != "" {
 		fmt.Printf("  Registry:   %s%s/v2/\n", scheme, registry)
@@ -41,7 +41,7 @@ func printPlatformEntrypoints(tlsEnabled bool) {
 		fmt.Printf("  MCP:        %s%s/<server-name>/mcp\n", scheme, mcp)
 	}
 	if platform != "" {
-		fmt.Println("  (Make sure DNS A/AAAA records point platform./registry./mcp.<domain> at the cluster ingress.)")
+		fmt.Println("  (Point DNS A/AAAA records for these configured hostnames at the cluster ingress.)")
 	}
 }
 

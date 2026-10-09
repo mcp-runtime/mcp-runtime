@@ -19,3 +19,11 @@ export function readRuntimeConfig(): RuntimeConfig {
     googleClientId: window.MCP_GOOGLE_CLIENT_ID || "",
   };
 }
+
+// Public route names come from the UI's validated deployment configuration.
+export function uiPath(path: string): string {
+  return `${window.MCP_PUBLIC_ROUTES?.prefix || ""}${path}`;
+}
+
+export function docsPath(): string { return window.MCP_PUBLIC_ROUTES?.docs || "/docs"; }
+export function grafanaPath(): string { return window.MCP_PUBLIC_ROUTES?.grafana || "/grafana"; }

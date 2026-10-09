@@ -1,3 +1,4 @@
+import { docsPath } from "../../api/config";
 import { Button } from "../../ui/Button";
 import { Icon } from "../../ui/Icon";
 
@@ -40,7 +41,7 @@ export function SignedOutServers({ onSignIn }: SignedOutServersProps) {
             <Button variant="primary" icon="login" onClick={onSignIn} data-testid="landing-signin-button">
               Sign in to your workspace
             </Button>
-            <a className="landing-doc-link" href="https://mcpruntime.org/docs/" target="_blank" rel="noreferrer">
+            <a className="landing-doc-link" href={docsPath()} target="_blank" rel="noreferrer">
               Read the platform docs <span aria-hidden="true">↗</span>
             </a>
           </div>
