@@ -27,6 +27,7 @@ const (
 	EnvRequestTimeout  = "MCP_RUNTIME_REQUEST_TIMEOUT"
 	EnvLogLevel        = "MCP_RUNTIME_LOG_LEVEL"
 	EnvAuthHeader      = "MCP_RUNTIME_AUTH_HEADER"
+	EnvAuthMode        = "MCP_RUNTIME_AUTH_MODE"
 	EnvTLSClientCert   = "MCP_RUNTIME_TLS_CLIENT_CERT"
 	EnvTLSClientKey    = "MCP_RUNTIME_TLS_CLIENT_KEY"
 	EnvTLSCABundle     = "MCP_RUNTIME_TLS_CA_BUNDLE"
@@ -49,7 +50,9 @@ type envLookup func(string) string
 // ProxyConfig configures the local HTTP reverse-proxy adapter that exposes
 // Streamable HTTP MCP to an agent SDK.
 type ProxyConfig struct {
-	RuntimeURL *url.URL
+	RuntimeURL        *url.URL
+	AuthMode          string
+	CredentialHeaders map[string]CredentialSource
 	// Identity is optional local metadata. Runtime
 	// governance identity is the TLS client certificate, not headers.
 	Identity  Identity
@@ -84,6 +87,7 @@ func loadProxyConfig(lookup envLookup) (ProxyConfig, error) {
 		return ProxyConfig{}, err
 	}
 	cfg := ProxyConfig{
+		AuthMode:        strings.TrimSpace(lookup(EnvAuthMode)),
 		RuntimeURL:      parsed.runtimeURL,
 		Identity:        parsed.identity,
 		Transport:       parsed.transport,
@@ -132,13 +136,63 @@ func parseNonNegativeBytes(s string) (int64, error) {
 	return n, nil
 }
 
-// Validate requires a runtime URL and a TLS client certificate.
+// Validate keeps certificate identity as the default. Explicit header mode
+// delegates credential authentication to the target and requires verified HTTPS.
 func (cfg ProxyConfig) Validate() error {
 	if err := validateRuntimeURL(cfg.RuntimeURL); err != nil {
 		return err
 	}
-	if !cfg.CertificateIdentity {
+	switch cfg.AuthMode {
+	case "", AuthModeCertificate:
+	case AuthModeHeader:
+		if cfg.RuntimeURL.Scheme != "https" || cfg.RuntimeURL.Host == "" || cfg.RuntimeURL.User != nil || cfg.RuntimeURL.RawQuery != "" || cfg.RuntimeURL.Fragment != "" {
+			return fmt.Errorf("header mode requires an HTTPS runtime URL without credentials, query, or fragment")
+		}
+		if cfg.CertificateIdentity || cfg.HostHeader != "" && !strings.EqualFold(cfg.HostHeader, cfg.RuntimeURL.Host) {
+			return fmt.Errorf("header mode cannot use certificate identity or override the runtime host")
+		}
+		if cfg.Transport != nil {
+			if cfg.Transport.AuthHeader != "" {
+				return fmt.Errorf("header mode uses credential sources or client headers, not a static OAuth auth-header")
+			}
+			if base, ok := cfg.Transport.Base.(*http.Transport); ok && base.TLSClientConfig != nil &&
+				(base.TLSClientConfig.InsecureSkipVerify || len(base.TLSClientConfig.Certificates) > 0 || base.TLSClientConfig.GetClientCertificate != nil) {
+				return fmt.Errorf("header mode requires verified HTTPS without a client certificate")
+			}
+		}
+	default:
+		return fmt.Errorf("auth mode must be certificate or header")
+	}
+	if cfg.AuthMode != AuthModeHeader && !cfg.CertificateIdentity {
 		return fmt.Errorf("TLS client certificate is required (%s and %s)", EnvTLSClientCert, EnvTLSClientKey)
+	}
+	if err := ValidateCredentialSources(cfg.CredentialHeaders); err != nil {
+		return err
+	}
+	if len(cfg.CredentialHeaders) > 0 {
+		if cfg.RuntimeURL.Scheme != "https" || cfg.RuntimeURL.User != nil || cfg.RuntimeURL.RawQuery != "" || cfg.RuntimeURL.Fragment != "" {
+			return fmt.Errorf("credential injection requires an HTTPS runtime URL without credentials, query, or fragment")
+		}
+		if cfg.HostHeader != "" && !strings.EqualFold(cfg.HostHeader, cfg.RuntimeURL.Host) {
+			return fmt.Errorf("credential injection cannot override the runtime host")
+		}
+		if cfg.Transport != nil {
+			if base, ok := cfg.Transport.Base.(*http.Transport); ok && base.TLSClientConfig != nil && base.TLSClientConfig.InsecureSkipVerify {
+				return fmt.Errorf("credential injection requires verified HTTPS")
+			}
+		}
+		if cfg.Transport != nil && cfg.Transport.AuthHeader != "" {
+			for name := range cfg.CredentialHeaders {
+				if strings.EqualFold(name, "Authorization") {
+					return fmt.Errorf("authorization credential source conflicts with static auth-header")
+				}
+			}
+		}
+		for _, name := range sortedCredentialNames(cfg.CredentialHeaders) {
+			if _, err := cfg.CredentialHeaders[name].value(); err != nil {
+				return fmt.Errorf("credential header %q: %w", name, err)
+			}
+		}
 	}
 	return nil
 }

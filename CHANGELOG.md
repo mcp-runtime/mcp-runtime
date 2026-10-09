@@ -14,6 +14,13 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 ### Changed
 
 - Install docs cover registry PVC size, Docker buildx, an external TLS terminator in front of HTTP Traefik, password-admin seeding, the HTTPS API base URL, registry upload body size, and tenant publish membership ([#666](https://github.com/mcp-runtime/mcp-runtime/issues/666)).
+- Customers can configure dashboard, registry catalog entry, documentation, and admin Grafana paths alongside existing hostname overrides, allowing a single public hostname and enterprise certificate. Bundled MCP Auth ingress and discovery paths follow its configured issuer URL; setup rejects conflicting paths before cluster writes ([#658](https://github.com/mcp-runtime/mcp-runtime/issues/658)).
+- Servers can opt in to upstream-owned header authentication with `auth.mode: header` and a customer-defined list of credential header names. The gateway forwards those headers, enforces allow-list tool rules with a default deny, and audits the caller as unverified. It does not accept grants, sessions, or observation mode on this path, and it does not fall back to header mode when OAuth fails. Set `auth.credentialPresence` to `all` when every configured header must be present; the default `any` accepts one or more without choosing among them ([#660](https://github.com/mcp-runtime/mcp-runtime/issues/660)).
+- `adapter proxy --auth-mode header` can inject customer-defined credential headers from local environment variables or files. The adapter remains optional: direct clients send those headers themselves. Header mode does not enroll a certificate or create a Runtime session. Credential values stay on the client and are pinned to the configured HTTPS server URL ([#661](https://github.com/mcp-runtime/mcp-runtime/issues/661)).
+
+### Changed
+
+- The bundled registry ingress matches `/v2` rather than `/`, so it can share a hostname with the platform. The configurable `/registry` browser entry opens the platform server catalog; Docker and Kubernetes clients continue using the registry authority's `/v2/` API. Apply the new ingress and route configuration during a fresh setup; image-only updates do not reconcile public routes ([#658](https://github.com/mcp-runtime/mcp-runtime/issues/658)).
 
 ## [0.6.4] - 2026-10-09
 

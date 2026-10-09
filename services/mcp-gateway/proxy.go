@@ -259,6 +259,10 @@ func (s *gatewayServer) auditPayload(
 		"reason":           decision.Reason,
 		"policy_version":   policypkg.FirstNonEmpty(decision.PolicyVersion, s.defaultPolicyVersion),
 	}
+	if policypkg.UsesDelegatedHeaders(policy) {
+		payload["auth_delegation"] = "upstream_header"
+		payload["caller_identity"] = "unverified"
+	}
 	if rpcMethod != "" {
 		payload["rpc_method"] = rpcMethod
 	}

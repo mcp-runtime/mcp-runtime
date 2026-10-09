@@ -24,12 +24,20 @@ const SchemaVersionGrantExpiry = "v2"
 // activate. Documents carrying any other version fail validation and are
 // rejected before activation.
 var supportedSchemaVersions = map[string]struct{}{
-	SchemaVersion:            {},
-	SchemaVersionGrantExpiry: {},
+	SchemaVersion:                 {},
+	SchemaVersionGrantExpiry:      {},
+	SchemaVersionDelegatedHeaders: {},
 }
+
+// SchemaVersionDelegatedHeaders is required when auth.mode is header. Older
+// gateways reject the document instead of ignoring delegated header fields.
+const SchemaVersionDelegatedHeaders = "v3"
 
 // RequiredSchemaVersion returns the lowest schema version that can carry doc.
 func RequiredSchemaVersion(doc *Document) string {
+	if doc != nil && doc.Auth != nil && strings.EqualFold(strings.TrimSpace(doc.Auth.Mode), "header") {
+		return SchemaVersionDelegatedHeaders
+	}
 	if doc != nil {
 		for _, grant := range doc.Grants {
 			if strings.TrimSpace(grant.ExpiresAt) != "" {
@@ -38,6 +46,19 @@ func RequiredSchemaVersion(doc *Document) string {
 		}
 	}
 	return SchemaVersion
+}
+
+func schemaRank(version string) int {
+	switch version {
+	case SchemaVersion:
+		return 1
+	case SchemaVersionGrantExpiry:
+		return 2
+	case SchemaVersionDelegatedHeaders:
+		return 3
+	default:
+		return 0
+	}
 }
 
 // ServerName identifies an MCP server in a rendered gateway policy.
@@ -91,19 +112,32 @@ type Server struct {
 
 // Auth configures authentication settings for the gateway.
 type Auth struct {
-	TokenHeader string   `json:"token_header,omitempty"`
-	IssuerURL   string   `json:"issuer_url,omitempty"`
-	Audience    string   `json:"audience,omitempty"`
-	Scopes      []string `json:"scopes,omitempty"`
-	TrustDomain string   `json:"trust_domain,omitempty"`
+	// Mode is "header" for upstream-delegated credentials. Empty keeps OAuth
+	// or adapter-certificate authentication.
+	Mode               string   `json:"mode,omitempty"`
+	Headers            []string `json:"headers,omitempty"`
+	CredentialPresence string   `json:"credential_presence,omitempty"`
+	TokenHeader        string   `json:"token_header,omitempty"`
+	IssuerURL          string   `json:"issuer_url,omitempty"`
+	Audience           string   `json:"audience,omitempty"`
+	Scopes             []string `json:"scopes,omitempty"`
+	TrustDomain        string   `json:"trust_domain,omitempty"`
+}
+
+// DelegatedToolRule is a server-scoped allow or deny used when auth.mode is header.
+type DelegatedToolRule struct {
+	Name     ToolName `json:"name"`
+	Decision string   `json:"decision"`
 }
 
 // Config contains policy enforcement configuration.
 type Config struct {
-	Mode            string `json:"mode,omitempty"`
-	DefaultDecision string `json:"default_decision,omitempty"`
-	EnforceOn       string `json:"enforce_on,omitempty"`
-	PolicyVersion   string `json:"policy_version,omitempty"`
+	Mode               string              `json:"mode,omitempty"`
+	DefaultDecision    string              `json:"default_decision,omitempty"`
+	EnforceOn          string              `json:"enforce_on,omitempty"`
+	PolicyVersion      string              `json:"policy_version,omitempty"`
+	DelegatedToolRules []DelegatedToolRule `json:"delegated_tool_rules,omitempty"`
+	MaxSideEffect      string              `json:"max_side_effect,omitempty"`
 }
 
 // Session configures session management settings.

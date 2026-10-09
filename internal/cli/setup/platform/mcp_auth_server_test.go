@@ -36,6 +36,37 @@ func mcpAuthManifestTemplate(t *testing.T) string {
 	return string(raw)
 }
 
+func TestMCPAuthCustomIssuerRoutes(t *testing.T) {
+	for _, issuerPath := range []string{"/auth", "/identity/mcp"} {
+		manifest, err := renderMCPAuthServerManifest(mcpAuthManifestTemplate(t), mcpAuthServerOptions{
+			Image: "registry.example.com/mcp-auth-server:custom", IssuerURL: "https://customer.example.com" + issuerPath,
+			TLSSecret: "auth-tls", SigningKeySecret: "auth-signing", ConnectorsFile: "connectors.json", Connector: "oidc",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, expected := range []string{"prefixes: [" + issuerPath + "]", "- path: " + issuerPath + "\n", "/.well-known/oauth-authorization-server" + issuerPath + "\n", "/.well-known/openid-configuration" + issuerPath + "\n", "image: registry.example.com/mcp-auth-server:custom"} {
+			if !strings.Contains(manifest, expected) {
+				t.Errorf("%s missing %q", issuerPath, expected)
+			}
+		}
+		if strings.Contains(manifest, "path: /mcp-auth\n") {
+			t.Fatal("hardcoded issuer route survived")
+		}
+		decoder := yaml.NewYAMLOrJSONDecoder(strings.NewReader(manifest), 4096)
+		for {
+			var object unstructured.Unstructured
+			err := decoder.Decode(&object)
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				t.Fatalf("custom issuer produced invalid YAML: %v", err)
+			}
+		}
+	}
+}
+
 func TestMCPAuthOperatorRBACIsLimitedToNamedDeployment(t *testing.T) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {

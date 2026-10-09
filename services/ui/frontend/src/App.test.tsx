@@ -91,7 +91,7 @@ describe("App", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Read the platform docs/ })).toHaveAttribute(
       "href",
-      "https://mcpruntime.org/docs/"
+      "/docs"
     );
   });
 

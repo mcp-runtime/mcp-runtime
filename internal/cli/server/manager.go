@@ -1068,18 +1068,28 @@ func mergeDeployMetadata(spec *mcpv1alpha1.MCPServerSpec, src *metadata.ServerMe
 	}
 	if src.Auth != nil {
 		spec.Auth = &mcpv1alpha1.AuthConfig{
-			TokenHeader: src.Auth.TokenHeader,
-			IssuerURL:   src.Auth.IssuerURL,
-			Audience:    src.Auth.Audience,
-			Scopes:      append([]string(nil), src.Auth.Scopes...),
+			Mode:               src.Auth.Mode,
+			Headers:            append([]string(nil), src.Auth.Headers...),
+			CredentialPresence: src.Auth.CredentialPresence,
+			TokenHeader:        src.Auth.TokenHeader,
+			IssuerURL:          src.Auth.IssuerURL,
+			Audience:           src.Auth.Audience,
+			Scopes:             append([]string(nil), src.Auth.Scopes...),
 		}
 	}
 	if src.Policy != nil {
 		spec.Policy = &mcpv1alpha1.PolicyConfig{
 			Mode:            mcpv1alpha1.PolicyMode(src.Policy.Mode),
+			MaxSideEffect:   mcpv1alpha1.ToolSideEffect(src.Policy.MaxSideEffect),
 			DefaultDecision: mcpv1alpha1.PolicyDecision(src.Policy.DefaultDecision),
 			EnforceOn:       src.Policy.EnforceOn,
 			PolicyVersion:   src.Policy.PolicyVersion,
+		}
+		for _, rule := range src.Policy.DelegatedToolRules {
+			spec.Policy.DelegatedToolRules = append(spec.Policy.DelegatedToolRules, mcpv1alpha1.DelegatedToolRule{
+				Name:     rule.Name,
+				Decision: mcpv1alpha1.PolicyDecision(rule.Decision),
+			})
 		}
 	}
 	if src.Session != nil {

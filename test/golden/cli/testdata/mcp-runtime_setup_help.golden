@@ -14,11 +14,14 @@ Flags:
       --acme-email string                    Contact email for Let's Encrypt (HTTP-01 via cert-manager). Mutually exclusive with --tls-cluster-issuer. Overrides env MCP_ACME_EMAIL
       --acme-staging                         Use Let's Encrypt staging CA (also set MCP_ACME_STAGING=1)
       --context string                       Kubernetes context to use
+      --docs-path string                     Public path that redirects to the configured documentation URL (default "/docs")
+      --docs-url string                      HTTPS documentation destination used by the docs route and dashboard links (default "https://mcpruntime.org/docs/")
       --env-file string                      Path to an env file to source before setup (e.g. config/deployments/mcpruntime-org.env); variables already in the environment are not overridden
       --external-registry-password string    External/provisioned registry password for --registry-mode external (prefer PROVISIONED_REGISTRY_PASSWORD for shells)
       --external-registry-url string         External/provisioned registry URL for --registry-mode external (overrides PROVISIONED_REGISTRY_URL and registry provision config)
       --external-registry-username string    External/provisioned registry username for --registry-mode external
       --force-ingress-install                Force repo-managed ingress install when only an IngressClass exists; refuses active external Traefik
+      --grafana-path-prefix string           Public admin-only Grafana path prefix (default "/grafana")
   -h, --help                                 help for setup
       --ingress string                       Ingress controller to install automatically during setup (traefik|none) (default "traefik")
       --ingress-manifest string              Manifest to apply when installing the ingress controller (default "config/ingress/overlays/http")
@@ -36,10 +39,12 @@ Flags:
       --operator-probe-addr string           Operator health probe bind address (default: :8081 from manager.yaml)
       --parallel-builds                      Build and publish setup images in parallel; keeps cluster, registry, TLS, and rollout sequencing unchanged
       --platform-mode string                 Platform access model (tenant|org|public). public exposes the catalog without login and lets signed-in users publish to the public preview namespace. (default "tenant")
+      --platform-path-prefix string          Public dashboard path prefix (e.g. /platform); session and asset routes use this prefix (default "/")
       --pod-egress-cidrs string              Comma-separated destination CIDRs that team MCP servers may reach on TCP 443. Empty installs nothing. 0.0.0.0/0 is rejected. Private ranges also require --pod-egress-except-cidrs. Overrides env MCP_POD_EGRESS_CIDRS
       --pod-egress-except-cidrs string       Cluster pod and service CIDRs to keep out of --pod-egress-cidrs. Required when a destination is private. Overrides env MCP_POD_EGRESS_EXCEPT_CIDRS
       --provided-tls-secrets                 Use operator-created Kubernetes TLS Secrets instead of issuing certificates. Requires --with-tls; do not combine with --acme-email or --tls-cluster-issuer
       --registry-mode string                 Registry setup mode (auto|bundled-http|bundled-https|external). auto uses a provisioned registry config when present, otherwise the bundled registry (default "auto")
+      --registry-path string                 Public registry browser entry path; Docker and Kubernetes clients still use /v2/ (default "/registry")
       --registry-storage string              Registry storage size (default: 20Gi) (default "20Gi")
       --registry-type string                 Registry type (docker; harbor coming soon) (default "docker")
       --skip-cert-manager-install            Do not install cert-manager; require CRDs to already exist

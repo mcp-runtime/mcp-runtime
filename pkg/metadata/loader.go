@@ -8,6 +8,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"mcp-runtime/pkg/credentialheaders"
 	"mcp-runtime/pkg/mcpdefaults"
 	"mcp-runtime/pkg/publishscope"
 )
@@ -111,7 +112,19 @@ func setDefaults(server *ServerMetadata) error {
 			server.Namespace = mcpdefaults.MCPServersNamespace
 		}
 	}
-	if server.Auth != nil {
+	if server.Auth != nil && strings.EqualFold(strings.TrimSpace(server.Auth.Mode), mcpdefaults.AuthModeHeader) {
+		if server.Auth.CredentialPresence == "" {
+			server.Auth.CredentialPresence = mcpdefaults.CredentialPresenceAny
+		}
+		if server.Policy == nil {
+			server.Policy = &PolicyConfig{
+				Mode:            PolicyModeAllowList,
+				DefaultDecision: PolicyDecisionDeny,
+				EnforceOn:       mcpdefaults.PolicyEnforceOn,
+				PolicyVersion:   mcpdefaults.PolicyVersion,
+			}
+		}
+	} else if server.Auth != nil {
 		if server.Auth.TokenHeader == "" {
 			server.Auth.TokenHeader = mcpdefaults.AuthTokenHeader
 		}
@@ -175,6 +188,31 @@ func setDefaults(server *ServerMetadata) error {
 		if server.Rollout.MaxSurge == "" {
 			server.Rollout.MaxSurge = "25%"
 		}
+	}
+	return validateHeaderAuth(server)
+}
+
+func validateHeaderAuth(server *ServerMetadata) error {
+	if server == nil || server.Auth == nil || !strings.EqualFold(strings.TrimSpace(server.Auth.Mode), mcpdefaults.AuthModeHeader) {
+		if server != nil && server.Policy != nil && (len(server.Policy.DelegatedToolRules) > 0 || server.Policy.MaxSideEffect != "") {
+			return fmt.Errorf("delegated tool rules require auth.mode header")
+		}
+		return nil
+	}
+	if server.Auth.TokenHeader != "" || server.Auth.IssuerURL != "" || server.Auth.Audience != "" || len(server.Auth.Scopes) > 0 {
+		return fmt.Errorf("header mode cannot set tokenHeader, issuerURL, audience, or scopes")
+	}
+	if err := credentialheaders.NormalizeNames(server.Auth.Headers); err != nil {
+		return err
+	}
+	if _, err := credentialheaders.NormalizePresence(server.Auth.CredentialPresence); err != nil {
+		return err
+	}
+	if server.Session != nil {
+		return fmt.Errorf("header mode cannot use a Runtime session")
+	}
+	if server.Policy != nil && (server.Policy.Mode != "" && server.Policy.Mode != PolicyModeAllowList || server.Policy.DefaultDecision != "" && server.Policy.DefaultDecision != PolicyDecisionDeny) {
+		return fmt.Errorf("header mode requires allow-list policy and default decision deny")
 	}
 	return nil
 }

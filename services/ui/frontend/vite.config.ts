@@ -11,6 +11,7 @@ const proxied = ["/auth", "/api/ui/v1", "/api/v1", "/config.js", "/grafana", "/p
 
 export default defineConfig({
   plugins: [react()],
+  base: "./",
   server: {
     proxy: Object.fromEntries(
       proxied.map((path) => [path, { target: upstream, changeOrigin: false }])

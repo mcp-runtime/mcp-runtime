@@ -20,6 +20,62 @@ To adapt the project's complete infrastructure example, use
 for Kubernetes and Docker/Caddy for a separate Keycloak VM. Select your
 distribution and identity provider before adopting its configuration.
 
+## Customer hostnames and shared-host routes
+
+Public hostnames and paths are separate settings. Choose any DNS names with
+`MCP_PLATFORM_INGRESS_HOST`, `MCP_REGISTRY_INGRESS_HOST`, and
+`MCP_MCP_INGRESS_HOST`; they may all be the same hostname. The existing
+`MCP_PLATFORM_DOMAIN` convention remains a shortcut for the default subdomains.
+Every chosen hostname must resolve to ingress and be covered by the serving
+certificate.
+
+For a single hostname, start from
+[`config/deployments/single-host.env.example`](https://github.com/mcp-runtime/mcp-runtime/blob/main/config/deployments/single-host.env.example).
+The public settings map to these setup flags:
+
+| Environment variable | Setup flag | Meaning |
+| --- | --- | --- |
+| `MCP_PLATFORM_PATH_PREFIX` | `--platform-path-prefix` | Public dashboard path prefix (e.g. /platform); session and asset routes use this prefix |
+| `MCP_REGISTRY_PATH` | `--registry-path` | Public registry browser entry path; Docker and Kubernetes clients still use /v2/ |
+| `MCP_DOCS_PATH` | `--docs-path` | Public path that redirects to the configured documentation URL |
+| `MCP_DOCS_URL` | `--docs-url` | HTTPS documentation destination used by the docs route and dashboard links |
+| `MCP_GRAFANA_PATH_PREFIX` | `--grafana-path-prefix` | Public admin-only Grafana path prefix |
+| `MCP_SETUP_MCP_AUTH_ISSUER_URL` | `--mcp-auth-issuer-url` | Public HTTPS issuer URL for the bundled mcp-auth authorization server |
+
+The example gives the dashboard `/platform/`, its browser sessions
+`/platform/auth/*`, documentation `/docs`, the registry browser entry `/registry`,
+and admin-only Grafana `/monitoring`. Platform APIs retain `/api/v1/*`. `/registry`
+opens the platform's server catalog; it is not an OCI API prefix or a new image
+registry administration UI. Image clients use `mcp.example.com/<team>/<image>:<tag>`
+and contact `https://mcp.example.com/v2/` automatically.
+
+Custom platform or Grafana prefixes require a configured public platform
+hostname so setup can generate their ingress rules. Local test-mode defaults
+continue using the existing hostless routes.
+
+When opting into bundled MCP Auth, an issuer of
+`https://mcp.example.com/auth` gives endpoints such as `/auth/register` and
+discovery at `/.well-known/oauth-authorization-server/auth`. Configure the
+identity provider's callback as `https://mcp.example.com/auth/identity/callback`.
+For an existing authorization server, retain it and configure your MCP servers'
+issuer accordingly; do not install a second server over an occupied `/auth` route.
+Individual MCP server prefixes remain configurable through server metadata.
+
+Use the same env file for setup reruns. Explicit flags override its route
+settings. Paths must start with `/`, have no trailing slash (except the root
+dashboard `/`), and contain clean segments using letters, digits, `_`, `-`, `.`,
+and `~`; traversal segments and escaped separators are rejected.
+Setup rejects overlapping managed paths and reserved `/api`, `/v2`, and
+`/.well-known` namespaces before writing to the cluster. When sharing the auth
+hostname, use a separate dashboard prefix to avoid its session `/auth` routes.
+
+Existing enterprise certificates use `--with-tls --provided-tls-secrets` after
+the required TLS Secrets are provisioned. Certificates cover hostnames, so a
+single certificate can serve all these paths. Keep Secret namespace ownership,
+certificate renewal, and any external proxy's streaming/registry upload support
+in your deployment plan. An image-only `update` does not apply route changes;
+include the new configuration in the release's fresh-setup procedure.
+
 ## Prerequisites
 
 For a release CLI install, you need `curl` or `wget` on macOS/Linux, or

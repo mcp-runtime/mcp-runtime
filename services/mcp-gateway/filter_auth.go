@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"mcp-runtime/pkg/credentialheaders"
 	"mcp-runtime/pkg/identity"
 	policypkg "mcp-runtime/pkg/policy"
 )
@@ -18,6 +19,19 @@ import (
 // authFilter always runs after policyFilter (stage 2) has set Exchange.Policy
 // and always completes before authzFilter (stage 4) reads Exchange.Identity.
 func (s *gatewayServer) authFilter(ex *Exchange) Result {
+	if policypkg.UsesDelegatedHeaders(ex.Policy) {
+		reason := credentialheaders.CheckRequest(ex.R.Header, ex.Policy.Auth.Headers, ex.Policy.Auth.CredentialPresence)
+		if reason != "" {
+			ex.Decision = policypkg.Deny(
+				http.StatusUnauthorized,
+				reason,
+				policypkg.ChoosePolicyVersion(policypkg.PolicyVersion(ex.Policy), s.defaultPolicyVersion),
+			)
+			s.writeDeniedResponse(ex)
+			return Reject
+		}
+		return Continue
+	}
 	var certificateIdentity *identityContext
 	// A presented adapter certificate proves the enrolled agent session. The
 	// request must also carry OAuth below because the upstream MCP server is

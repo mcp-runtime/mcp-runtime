@@ -2,9 +2,11 @@ package agentadapter
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -35,6 +37,10 @@ type RuntimeTransport struct {
 	// AuthHeader is a static Authorization header value injected into every
 	// outbound request (e.g. "Bearer <token>"). Empty means no header is set.
 	AuthHeader string
+	// CredentialHeaders resolve application credentials locally on every request.
+	// CredentialTarget pins them to one HTTPS runtime route.
+	CredentialHeaders map[string]CredentialSource
+	CredentialTarget  *url.URL
 	// Tracer is an optional OTel tracer. When non-nil, RoundTrip opens one
 	// client span per RPC labelled with the JSON-RPC method name.
 	Tracer trace.Tracer
@@ -54,6 +60,20 @@ type RuntimeTransport struct {
 //  4. Record OTel latency histogram and denial counter (if Meter is set).
 //  5. Set span outcome and end it.
 func (t *RuntimeTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if t != nil {
+		if t.AuthHeader != "" {
+			for name := range t.CredentialHeaders {
+				if strings.EqualFold(name, "Authorization") {
+					return nil, fmt.Errorf("authorization credential source conflicts with static auth-header")
+				}
+			}
+		}
+		prepared, err := t.prepareCredentialHeaders(req)
+		if err != nil {
+			return nil, err
+		}
+		req = prepared
+	}
 	method := rpcMethodFromContext(req.Context())
 
 	// 1. Start OTel span before any I/O.

@@ -1,6 +1,8 @@
 package v1alpha1
 
 import (
+	"strings"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"mcp-runtime/pkg/mcpdefaults"
@@ -204,11 +206,27 @@ type InventoryItem struct {
 	Labels      map[string]string `json:"labels,omitempty"`
 }
 
-// AuthConfig configures OAuth authentication at the gateway.
+// AuthConfig configures gateway authentication.
+// An omitted mode keeps OAuth. Mode "header" forwards configured credential
+// headers and lets the upstream MCP server authenticate them.
 // +kubebuilder:object:generate=true
 type AuthConfig struct {
-	TokenHeader string `json:"tokenHeader,omitempty"`
-	IssuerURL   string `json:"issuerURL,omitempty"`
+	// Mode selects authentication. Omit it for OAuth. "header" delegates
+	// credential authentication to the upstream MCP server.
+	// +kubebuilder:validation:Enum=header
+	Mode string `json:"mode,omitempty"`
+	// Headers are customer-configured credential header names. Credential
+	// values never belong here. Names match case-insensitively.
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=16
+	Headers []string `json:"headers,omitempty"`
+	// CredentialPresence is "any" (default: at least one configured header)
+	// or "all" (every configured header). The gateway forwards every present
+	// configured header and does not choose among them.
+	// +kubebuilder:validation:Enum=any;all
+	CredentialPresence string `json:"credentialPresence,omitempty"`
+	TokenHeader        string `json:"tokenHeader,omitempty"`
+	IssuerURL          string `json:"issuerURL,omitempty"`
 	// Scopes are the OAuth scopes this MCP resource permits clients to request.
 	// The bundled authorization server publishes and enforces them per resource.
 	Scopes []string `json:"scopes,omitempty"`
@@ -219,6 +237,15 @@ type AuthConfig struct {
 	Audience string `json:"audience,omitempty"`
 }
 
+// DelegatedToolRule allows or denies one tool when auth.mode is header.
+// These rules do not identify the caller.
+// +kubebuilder:object:generate=true
+type DelegatedToolRule struct {
+	Name string `json:"name"`
+	// +kubebuilder:validation:Enum=allow;deny
+	Decision PolicyDecision `json:"decision"`
+}
+
 // PolicyConfig configures authorization behavior at the gateway.
 // +kubebuilder:object:generate=true
 type PolicyConfig struct {
@@ -226,6 +253,18 @@ type PolicyConfig struct {
 	DefaultDecision PolicyDecision `json:"defaultDecision,omitempty"`
 	EnforceOn       string         `json:"enforceOn,omitempty"`
 	PolicyVersion   string         `json:"policyVersion,omitempty"`
+	// DelegatedToolRules apply only when auth.mode is header. An explicit
+	// deny wins over no rule; unlisted tools follow defaultDecision, which
+	// header mode requires to be deny.
+	DelegatedToolRules []DelegatedToolRule `json:"delegatedToolRules,omitempty"`
+	// MaxSideEffect caps header-mode tool calls at this class or lower.
+	// +kubebuilder:validation:Enum=read;write;destructive
+	MaxSideEffect ToolSideEffect `json:"maxSideEffect,omitempty"`
+}
+
+// AuthUsesHeaderMode reports upstream-delegated credential authentication.
+func AuthUsesHeaderMode(auth *AuthConfig) bool {
+	return auth != nil && strings.EqualFold(strings.TrimSpace(auth.Mode), mcpdefaults.AuthModeHeader)
 }
 
 // SessionConfig configures server-side agent session behavior.

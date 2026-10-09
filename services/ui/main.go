@@ -155,6 +155,10 @@ func main() {
 }
 
 func newMux(apiBase, apiUpstream, apiKey, apiKeys, adminAPIKeys string) (*http.ServeMux, error) {
+	routes := configuredPublicRoutes()
+	if err := routes.Validate(); err != nil {
+		return nil, err
+	}
 	apiBase = normalizePathPrefix(apiBase)
 	upstreamAPIKey := firstAPIKey(apiKeys)
 	if upstreamAPIKey == "" {
@@ -199,7 +203,11 @@ func newMux(apiBase, apiUpstream, apiKey, apiKeys, adminAPIKeys string) (*http.S
 	if err != nil {
 		return nil, err
 	}
-	configJS := "window.MCP_API_BASE = " + string(baseJSON) + ";\n" +
+	publicRoutesJSON, err := json.Marshal(map[string]string{"prefix": routes.PlatformPrefix(), "docs": routes.Docs, "grafana": routes.Grafana, "registry": routes.Registry})
+	if err != nil {
+		return nil, err
+	}
+	configJS := "window.MCP_PUBLIC_ROUTES = " + string(publicRoutesJSON) + ";\n" + "window.MCP_API_BASE = " + string(baseJSON) + ";\n" +
 		"window.MCP_DEFAULTS = " + string(defaultsJSON) + ";\n" +
 		"window.MCP_PLATFORM_MODE = " + string(platformModeJSON) + ";\n" +
 		"window.MCP_GOOGLE_CLIENT_ID = " + string(googleClientIDJSON) + ";"
@@ -257,12 +265,15 @@ func newMux(apiBase, apiUpstream, apiKey, apiKeys, adminAPIKeys string) (*http.S
 			w.Header().Set("cache-control", "max-age=300")
 		}
 
+		if filepath.Ext(path) == ".html" {
+			data = prefixAssetHTML(data, routes.PlatformPrefix())
+		}
 		w.WriteHeader(http.StatusOK)
 		// #nosec G705 -- assets are bundled from repository static/ at build time.
 		_, _ = w.Write(data)
 	})
 
-	return mux, nil
+	return mountPublicUI(mux, routes), nil
 }
 
 func handleLogin(apiKey, upstreamAPIKey, apiUpstream string, store *uiSessionStore) http.HandlerFunc {
@@ -1156,7 +1167,7 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
 		if isHTTPSRequest(r) {
 			h.Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
 		}
-		path := r.URL.Path
+		path := strings.TrimPrefix(r.URL.Path, configuredPublicRoutes().PlatformPrefix())
 		if strings.HasPrefix(path, "/api") || strings.HasPrefix(path, "/auth/") {
 			h.Set("Cache-Control", "no-store, no-cache, must-revalidate")
 		}

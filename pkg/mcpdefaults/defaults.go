@@ -9,6 +9,12 @@ const (
 	LogCollectorNamespace = "mcp-log-collector"
 
 	AuthTokenHeader = "Authorization"
+	// AuthModeHeader delegates credential authentication to the upstream MCP
+	// server. An omitted mode keeps the existing OAuth contract.
+	AuthModeHeader        = "header"
+	CredentialPresenceAny = "any"
+	CredentialPresenceAll = "all"
+	MaxCredentialHeaders  = 16
 
 	// Enum values. Types that mirror these enums reference the value
 	// constants below, never the defaults, so changing a default can never

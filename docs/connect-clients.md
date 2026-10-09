@@ -195,10 +195,50 @@ The CA bundle does not receive or sign the CSR itself. The platform certificate
 endpoint submits the validated request to the configured issuer and returns the
 issuer's chain as the bundle.
 
+## Optional header mode
+
+Use header mode when the MCP server authenticates the caller with its own
+credential headers and a Runtime certificate is not required. The adapter is
+optional: a direct client can send those headers itself. Header mode does not
+enroll a certificate, create a platform session, or invent a Runtime identity.
+
+```bash
+mcp-runtime adapter proxy \
+  --auth-mode header \
+  --runtime-url https://mcp.example.com/pilot/mcp \
+  --credential-header-env X-Example-Credential=EXAMPLE_TOKEN \
+  --credential-header-env Authorization=EXAMPLE_AUTHORIZATION
+```
+
+The same settings can live in a YAML file passed with `--config`. The file
+stores source references, never secret values. Environment sources are read
+from this process and change only when the adapter restarts. File sources are
+reread on each request, so a mounted secret can rotate without a restart.
+Relative file paths resolve from the config file's directory.
+
+```yaml
+authMode: header
+runtimeURL: https://mcp.example.com/pilot/mcp
+credentialHeaders:
+  X-Example-Credential:
+    env: EXAMPLE_TOKEN
+  Private-Token:
+    file: ./private-token
+```
+
+Every configured header is injected unchanged. There is no built-in list of
+header names or credential schemes. The value is pinned to that HTTPS URL.
+The adapter does not follow a redirect to another target. A client-supplied
+value that differs from the configured source is rejected. `--auth-header`
+cannot also supply `Authorization`. Verified HTTPS is required for credential
+injection, including when certificate mode injects a credential. Header mode
+does not accept a client certificate or `--tls-insecure-skip-verify`.
+
 ## Configuration
 
 | Environment variable | Purpose |
 |---|---|
+| `MCP_RUNTIME_AUTH_MODE` | `certificate` (default) or `header`. Header mode skips certificate enrollment. |
 | `MCP_RUNTIME_URL` | Absolute HTTPS Streamable HTTP MCP route. |
 | `MCP_RUNTIME_ADAPTER_SERVER` / `MCP_RUNTIME_ADAPTER_AGENT` | Server and agent for in-memory certificate enrollment. |
 | `MCP_RUNTIME_ADAPTER_NAMESPACE` | Target namespace. |
