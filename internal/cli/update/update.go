@@ -208,6 +208,8 @@ func run(ctx context.Context, out io.Writer, opts Options, d deps) error {
 
 	buildOpts := d.build
 	buildOpts.Enabled = opts.Build
+	buildOpts.Kubeconfig = opts.Kubeconfig
+	buildOpts.Context = kh.Cluster.Context
 	if opts.Build {
 		if buildOpts.Source == "" {
 			buildOpts.Source = opts.Source

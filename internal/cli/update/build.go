@@ -4,13 +4,16 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 
+	"go.uber.org/zap"
 	"mcp-runtime/internal/cli/core"
+	"mcp-runtime/internal/cli/registry"
 	"mcp-runtime/internal/cli/setup/assetpath"
 	"mcp-runtime/internal/platformrelease"
 )
@@ -59,6 +62,8 @@ type ImageBuildAction struct {
 
 // BuildOptions controls optional local image build/push during update.
 type BuildOptions struct {
+	Kubeconfig    string
+	Context       string
 	Enabled       bool
 	Source        string
 	ImagePlatform string
@@ -232,7 +237,7 @@ func buildAndPushChanged(ctx context.Context, actions []ImageBuildAction, opts B
 	pushFn := opts.PushImage
 	if pushFn == nil {
 		pushFn = func(ctx context.Context, image string) error {
-			return dockerPush(ctx, image, out)
+			return pushUpdateImage(ctx, image, opts.Kubeconfig, opts.Context, out)
 		}
 	}
 	parallel := opts.Parallelism
@@ -469,4 +474,52 @@ func runValidated(ctx context.Context, dir, name string, args []string, out io.W
 	cmd.Stdout = out
 	cmd.Stderr = out
 	return cmd.Run()
+}
+
+// updateTargetExecutor binds helper kubectl commands to the same cluster as update.
+type updateTargetExecutor struct {
+	delegate                core.Executor
+	kubeconfig, kubeContext string
+}
+
+func (e updateTargetExecutor) Command(name string, args []string, validators ...core.ExecValidator) (core.Command, error) {
+	if name == "kubectl" {
+		flags := []string{}
+		if e.kubeconfig != "" {
+			flags = append(flags, "--kubeconfig="+e.kubeconfig)
+		}
+		if e.kubeContext != "" {
+			flags = append(flags, "--context="+e.kubeContext)
+		}
+		args = append(flags, args...)
+	}
+	return e.delegate.Command(name, args, validators...)
+}
+
+func bundledRegistryTarget(image string) bool {
+	authority, _, found := strings.Cut(image, "/")
+	if !found {
+		return false
+	}
+	host := authority
+	if parsed, _, err := net.SplitHostPort(authority); err == nil {
+		host = parsed
+	}
+	return strings.EqualFold(host, "registry."+core.ComponentNamespace("registry")+".svc.cluster.local")
+}
+
+func pushUpdateImage(ctx context.Context, image, kubeconfig, kubeContext string, out io.Writer) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if !bundledRegistryTarget(image) {
+		return dockerPush(ctx, image, out)
+	}
+	targetExec := updateTargetExecutor{delegate: core.DefaultExecutor(), kubeconfig: kubeconfig, kubeContext: kubeContext}
+	kubectl, err := core.NewKubectlClient(targetExec)
+	if err != nil {
+		return err
+	}
+	manager := registry.NewRegistryManager(kubectl, targetExec, zap.NewNop())
+	return manager.PushInCluster(image, image, core.ComponentNamespace("registry"))
 }

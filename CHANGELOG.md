@@ -29,6 +29,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 - Grafana loads every bundled dashboard with stable datasource UIDs; cluster doctor detects persisted admin credential drift without revealing or resetting credentials ([#631](https://github.com/mcp-runtime/mcp-runtime/pull/631)).
 
+- `update --build` publishes bundled-registry images through an in-cluster helper using the selected kubeconfig and context, avoiding host DNS failures for Kubernetes Service addresses ([#679](https://github.com/mcp-runtime/mcp-runtime/issues/679)).
+
 ### Security
 
 - Production-shaped TLS setup enables scoped backend registry authentication and narrows registry access to authorized ingress, publication helpers, and probes. Fresh setup is required; lab/test HTTP installs retain explicit warnings about anonymous backends ([#632](https://github.com/mcp-runtime/mcp-runtime/pull/632)).
