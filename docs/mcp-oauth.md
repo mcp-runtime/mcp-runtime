@@ -235,12 +235,17 @@ with that prefix removed, because that is the path the gateway forwards to the
 server. Do not add it to `spec.envVars` or `.mcp/servers.yaml`; the operator
 replaces any value set there.
 
-For a standalone resource server (`gateway.enabled: false`), the operator also
-injects the values the server needs to publish matching metadata:
-`MCP_AUTH_RESOURCE` (the audience), `MCP_AUTH_RESOURCE_METADATA_URL`
-(`<origin>/.well-known/oauth-protected-resource<path>`), `MCP_AUTH_ISSUER`
-(`auth.issuerURL`). Remove hand-set copies of these derived values so the
-advertised resource stays in step with the ingress host. The gateway challenge
+For every OAuth server, with the gateway enabled or disabled, the operator also
+injects the values the application needs to validate the bearer and publish
+matching metadata: `MCP_AUTH_RESOURCE` (the audience),
+`MCP_AUTH_RESOURCE_METADATA_URL`
+(`<origin>/.well-known/oauth-protected-resource<path>`), and `MCP_AUTH_ISSUER`
+(`auth.issuerURL`). The gateway forwards the original validated bearer rather
+than exchanging it, so that token is valid for the same issuer and public
+audience upstream. `MCP_PATH` can differ from the audience path when the gateway
+strips a prefix; the token audience stays the public resource URL. Remove
+hand-set copies of these derived values so the advertised resource stays in
+step with the ingress host. The gateway challenge
 and ingress metadata route use the same metadata URL derived from `audience`.
 MCP clients reject metadata whose `resource` names a different origin than the
 URL they connected to.
