@@ -238,7 +238,8 @@ upgrade from 0.4.x; see the migration note under **Changed**.
 
 - Targeted platform updates through `mcp-runtime update`, including embedded CRD updates and `--build` to build/push missing component images before rollout ([#491](https://github.com/mcp-runtime/mcp-runtime/pull/491)).
 
-[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.4...HEAD
+[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.5...HEAD
+[0.6.5]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.1...v0.6.2
