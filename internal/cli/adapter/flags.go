@@ -18,6 +18,7 @@ import (
 // identityFlags binds transport and certificate flags shared by every adapter
 // subcommand. Values default to their matching environment variables.
 type identityFlags struct {
+	authMode        string
 	runtimeURL      string
 	hostHeader      string
 	protocolVersion string
@@ -145,6 +146,7 @@ func (f identityFlags) toProxyConfig(listenAddr string) (agentadapter.ProxyConfi
 		listen = agentadapter.DefaultListenAddr
 	}
 	return agentadapter.ProxyConfig{
+		AuthMode:          f.authMode,
 		RuntimeURL:        r.runtimeURL,
 		Transport:         r.transport,
 		HostHeader:        r.hostHeader,

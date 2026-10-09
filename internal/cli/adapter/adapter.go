@@ -12,9 +12,9 @@ import (
 func New(runtime *core.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "adapter",
-		Short: "Run the certificate authenticated agent adapter",
+		Short: "Run the optional MCP HTTP adapter or enroll a client certificate",
 		Long: `Adapter commands forward agent MCP traffic to a configured platform-issued
-runtime route. The adapter always presents a session-bound client certificate.
+runtime route. By default the adapter presents a session-bound client certificate.
 When the target server enables OAuth, it also forwards the bearer token and the
 gateway binds the certificate identity to the OAuth subject.
 
@@ -26,7 +26,11 @@ Available commands:
 
 The adapter enrolls a session and certificate through the platform API when
 ` + "`--server`" + ` and ` + "`--agent`" + ` are supplied. An existing certificate can be
-provided with the TLS client flags.`,
+provided with the TLS client flags.
+
+An explicitly selected header mode forwards application credentials for the
+MCP server to authenticate, without certificate enrollment or a platform login.
+Direct HTTP clients can send those credentials without an adapter.`,
 	}
 	cmd.AddCommand(newProxyCmd(runtime))
 	cmd.AddCommand(newEnrollCmd(runtime))

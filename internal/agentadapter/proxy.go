@@ -43,6 +43,9 @@ func newProxyHandlerAndTracker(cfg ProxyConfig) (http.Handler, *requestTracker, 
 	}
 	target := cloneURL(cfg.RuntimeURL)
 	transport := cfg.transportOrDefault()
+	if cfg.AuthMode == AuthModeHeader || len(cfg.CredentialHeaders) > 0 {
+		transport = transport.withCredentialHeaders(target, cfg.CredentialHeaders)
+	}
 	logLevel := cfg.LogLevel
 	logWriter := cfg.LogWriter
 	hostHeader := cfg.HostHeader
@@ -65,6 +68,13 @@ func newProxyHandlerAndTracker(cfg ProxyConfig) (http.Handler, *requestTracker, 
 			if resp.StatusCode < http.StatusBadRequest || resp.StatusCode >= http.StatusInternalServerError {
 				return nil
 			}
+			// Delegated upstream error bodies are opaque and may contain secrets.
+			// Preserve them for the client without parsing or logging their text.
+			if cfg.AuthMode == AuthModeHeader || len(cfg.CredentialHeaders) > 0 {
+				meta := rpcRequestMetadataFromContext(resp.Request.Context())
+				logRuntimeDenial(logLevel, logWriter, "adapter/proxy", resp.StatusCode, "upstream request denied", meta)
+				return nil
+			}
 			body, err := io.ReadAll(resp.Body)
 			if err != nil {
 				return err
@@ -84,7 +94,11 @@ func newProxyHandlerAndTracker(cfg ProxyConfig) (http.Handler, *requestTracker, 
 			meta := rpcRequestMetadataFromContext(r.Context())
 			w.Header().Set("content-type", "application/json")
 			w.WriteHeader(http.StatusBadGateway)
-			_, _ = w.Write(jsonRPCHTTPError(rpcIDOrNull(meta), http.StatusBadGateway, err.Error(), nil))
+			message := err.Error()
+			if cfg.AuthMode == AuthModeHeader || len(cfg.CredentialHeaders) > 0 {
+				message = "adapter could not forward request; check credential sources and client header conflicts"
+			}
+			_, _ = w.Write(jsonRPCHTTPError(rpcIDOrNull(meta), http.StatusBadGateway, message, nil))
 		},
 	}
 
