@@ -305,6 +305,34 @@ Enterprise-supplied certificate installation and renewal are documented in
 [Platform Installation](self-hosting.md#enterprise-provided-tls-certificate-files).
 These instructions also apply to other Kubernetes distributions.
 
+## Pod egress to an internal network
+
+Team namespaces start with a default-deny NetworkPolicy. DNS, the registry,
+same-namespace pods, and the ingress controller are allowed. Other
+destinations are refused, including HTTPS APIs on the company network.
+
+Flannel already rewrites pod sources to the node address. Opening those
+destinations is a cluster-admin NetworkPolicy choice, not a per-server
+address. Set both values when you run setup:
+
+```bash
+mcp-runtime setup \
+  --pod-egress-cidrs 10.0.0.0/8 \
+  --pod-egress-except-cidrs 10.42.0.0/16,10.43.0.0/16
+```
+
+`--pod-egress-cidrs` is the destination list. Prefixes must be /8 or longer
+for IPv4 and /32 or longer for IPv6, and `0.0.0.0/0` is rejected. The allow
+is TCP 443 only. `--pod-egress-except-cidrs` must include the cluster pod
+CIDR and service CIDR whenever a destination is private (`10.0.0.0/8`,
+`172.16.0.0/12`, or `192.168.0.0/16`), so pods cannot use this rule to reach
+other pods or Service IPs. Use the ranges from your Kubernetes install. The
+same values can be supplied as `MCP_POD_EGRESS_CIDRS` and
+`MCP_POD_EGRESS_EXCEPT_CIDRS`. An empty destination list installs nothing.
+
+Hostnames stay in the MCP server configuration. Do not put a destination
+address or a company range in server metadata.
+
 ## Validate
 
 Run the platform checks:

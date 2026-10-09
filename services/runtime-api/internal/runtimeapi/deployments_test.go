@@ -152,6 +152,50 @@ func TestEnsureDefaultDenyNetworkPolicyIncludesDNSEgress(t *testing.T) {
 	}
 }
 
+func TestEnsureDefaultDenyNetworkPolicyAllowsConfiguredEgressCIDR(t *testing.T) {
+	t.Setenv("MCP_POD_EGRESS_CIDRS", "10.0.0.0/8")
+	t.Setenv("MCP_POD_EGRESS_EXCEPT_CIDRS", "10.42.0.0/16,10.43.0.0/16")
+	client := kubernetesfake.NewSimpleClientset()
+	if err := ensureDefaultDenyNetworkPolicy(context.Background(), client, "mcp-team-tools"); err != nil {
+		t.Fatal(err)
+	}
+	policy, err := client.NetworkingV1().NetworkPolicies("mcp-team-tools").Get(context.Background(), "platform-default-deny", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var matched *networkingv1.IPBlock
+	for _, rule := range policy.Spec.Egress {
+		if len(rule.To) != 1 || rule.To[0].IPBlock == nil {
+			continue
+		}
+		if rule.To[0].IPBlock.CIDR != "10.0.0.0/8" {
+			continue
+		}
+		if len(rule.Ports) != 1 || rule.Ports[0].Port == nil || rule.Ports[0].Port.IntVal != 443 {
+			t.Fatalf("egress ports = %#v, want TCP 443 only", rule.Ports)
+		}
+		matched = rule.To[0].IPBlock
+	}
+	if matched == nil {
+		t.Fatal("configured destination CIDR was not added")
+	}
+	if strings.Join(matched.Except, ",") != "10.42.0.0/16,10.43.0.0/16" {
+		t.Fatalf("except = %v", matched.Except)
+	}
+}
+
+func TestEnsureDefaultDenyNetworkPolicyRejectsPrivateEgressWithoutExcept(t *testing.T) {
+	t.Setenv("MCP_POD_EGRESS_CIDRS", "10.0.0.0/8")
+	t.Setenv("MCP_POD_EGRESS_EXCEPT_CIDRS", "")
+	client := kubernetesfake.NewSimpleClientset()
+	if err := ensureDefaultDenyNetworkPolicy(context.Background(), client, "mcp-team-tools"); err == nil {
+		t.Fatal("private egress without cluster exceptions was accepted")
+	}
+	if _, err := client.NetworkingV1().NetworkPolicies("mcp-team-tools").Get(context.Background(), "platform-default-deny", metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+		t.Fatalf("policy write error = %v, want not found", err)
+	}
+}
+
 func TestEnsureDefaultDenyNetworkPolicyAllowsPlatformEgress(t *testing.T) {
 	client := kubernetesfake.NewSimpleClientset()
 	if err := ensureDefaultDenyNetworkPolicy(context.Background(), client, "user-1"); err != nil {

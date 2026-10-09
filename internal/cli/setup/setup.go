@@ -14,6 +14,7 @@ import (
 	"mcp-runtime/internal/cli/core"
 	setupplan "mcp-runtime/internal/cli/setup/plan"
 	setupplatform "mcp-runtime/internal/cli/setup/platform"
+	"mcp-runtime/pkg/egresscidrs"
 )
 
 // loadEnvFile reads KEY=VALUE pairs from path and sets any that are not already
@@ -84,6 +85,8 @@ func New(runtime *core.Runtime, clusterMgr setupplatform.ClusterManagerAPI) *cob
 	var tlsClusterIssuer string
 	var mtlsClusterIssuer string
 	var skipCertManagerInstall bool
+	var podEgressCIDRs string
+	var podEgressExceptCIDRs string
 	mgr := newManager(runtime, clusterMgr)
 
 	cmd := &cobra.Command{
@@ -173,6 +176,25 @@ will use to push and pull container images.`,
 			// Storage / platform
 			envStr("storage-mode", &storageMode, "MCP_STORAGE_MODE")
 			envStr("platform-mode", &platformMode, "MCP_SETUP_PLATFORM_MODE", "MCP_PLATFORM_MODE")
+			envStr("pod-egress-cidrs", &podEgressCIDRs, "MCP_POD_EGRESS_CIDRS")
+			envStr("pod-egress-except-cidrs", &podEgressExceptCIDRs, "MCP_POD_EGRESS_EXCEPT_CIDRS")
+			if err := os.Setenv("MCP_POD_EGRESS_CIDRS", strings.TrimSpace(podEgressCIDRs)); err != nil {
+				return err
+			}
+			if err := os.Setenv("MCP_POD_EGRESS_EXCEPT_CIDRS", strings.TrimSpace(podEgressExceptCIDRs)); err != nil {
+				return err
+			}
+			allows, err := egresscidrs.Parse(podEgressCIDRs)
+			if err != nil {
+				return err
+			}
+			except, err := egresscidrs.Parse(podEgressExceptCIDRs)
+			if err != nil {
+				return err
+			}
+			if _, err := egresscidrs.Blocks(allows, except); err != nil {
+				return err
+			}
 
 			// Ingress
 			envStr("ingress", &ingressMode, "MCP_SETUP_INGRESS")
@@ -315,6 +337,8 @@ will use to push and pull container images.`,
 	cmd.Flags().StringVar(&externalRegistryPassword, "external-registry-password", "", "External/provisioned registry password for --registry-mode external (prefer PROVISIONED_REGISTRY_PASSWORD for shells)")
 	cmd.Flags().StringVar(&storageMode, "storage-mode", "dynamic", "Storage mode for local/dev clusters (dynamic|hostpath). Use hostpath for single-node k3s/minikube/kind without a provisioner.")
 	cmd.Flags().StringVar(&platformMode, "platform-mode", "tenant", "Platform access model (tenant|org|public). public exposes the catalog without login and lets signed-in users publish to the public preview namespace.")
+	cmd.Flags().StringVar(&podEgressCIDRs, "pod-egress-cidrs", "", "Comma-separated destination CIDRs that team MCP servers may reach on TCP 443. Empty installs nothing. 0.0.0.0/0 is rejected. Private ranges also require --pod-egress-except-cidrs. Overrides env MCP_POD_EGRESS_CIDRS")
+	cmd.Flags().StringVar(&podEgressExceptCIDRs, "pod-egress-except-cidrs", "", "Cluster pod and service CIDRs to keep out of --pod-egress-cidrs. Required when a destination is private. Overrides env MCP_POD_EGRESS_EXCEPT_CIDRS")
 	cmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "Path to kubeconfig file (default: ~/.kube/config; auto-detects /etc/rancher/k3s/k3s.yaml on k3s hosts)")
 	cmd.Flags().StringVar(&kubeContext, "context", "", "Kubernetes context to use")
 	cmd.Flags().StringVar(&ingressMode, "ingress", "traefik", "Ingress controller to install automatically during setup (traefik|none)")

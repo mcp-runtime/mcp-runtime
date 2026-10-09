@@ -732,6 +732,8 @@ mcp-runtime setup --test-mode                                # local Kind dev
 | `--registry-type` | `docker` | Harbor is not available yet |
 | `--registry-storage` | `20Gi` | Bundled registry PVC size |
 | `--platform-mode` | `tenant` | `org` and `public` change the default publish namespace |
+| `--pod-egress-cidrs` | empty | Comma-separated destinations team servers may reach on TCP 443. Empty adds no rule. `0.0.0.0/0` is rejected |
+| `--pod-egress-except-cidrs` | empty | Pod and service CIDRs kept out of `--pod-egress-cidrs`. Required for a private destination |
 | `--storage-mode` | `dynamic` | Use `hostpath` for single-node k3s/minikube/kind with no provisioner |
 
 ### Production guardrails

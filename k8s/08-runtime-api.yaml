@@ -89,6 +89,10 @@ spec:
                   key: INTERNAL_AUTH_TOKEN
             - name: OTEL_SERVICE_NAME
               value: mcp-runtime-api
+            - name: MCP_POD_EGRESS_CIDRS
+              value: "" # MCP_POD_EGRESS_CIDRS
+            - name: MCP_POD_EGRESS_EXCEPT_CIDRS
+              value: "" # MCP_POD_EGRESS_EXCEPT_CIDRS
             - name: MCP_REGISTRY_PUSH_TEMP_DIR
               value: /tmp
             - name: POD_IP
