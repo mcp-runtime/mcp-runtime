@@ -7,10 +7,12 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-10-09
+
 ### Changed
 
-- Administration usage analytics shows the server, tool, and RPC method on recent policy decisions, and refreshes servers, tools, and decisions every 15 seconds ([#671](https://github.com/mcp-runtime/mcp-runtime/issues/671)).
-- Client connect snippets for header-auth servers include the configured credential header names with empty values. The console and `server connect-config` copy those names from the MCPServer spec. Credential values are not stored or returned ([#669](https://github.com/mcp-runtime/mcp-runtime/issues/669)).
+- Administration usage analytics shows the server, tool, and RPC method on recent policy decisions, and refreshes servers, tools, and decisions every 15 seconds ([#671](https://github.com/mcp-runtime/mcp-runtime/issues/671), [#672](https://github.com/mcp-runtime/mcp-runtime/pull/672)).
+- Client connect snippets for header-auth servers include the configured credential header names with empty values. The console and `server connect-config` copy those names from the MCPServer spec. Credential values are not stored or returned ([#669](https://github.com/mcp-runtime/mcp-runtime/issues/669), [#670](https://github.com/mcp-runtime/mcp-runtime/pull/670)).
 
 ## [0.6.5] - 2026-10-09
 
@@ -243,7 +245,8 @@ upgrade from 0.4.x; see the migration note under **Changed**.
 
 - Targeted platform updates through `mcp-runtime update`, including embedded CRD updates and `--build` to build/push missing component images before rollout ([#491](https://github.com/mcp-runtime/mcp-runtime/pull/491)).
 
-[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.5...HEAD
+[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.6...HEAD
+[0.6.6]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.5...v0.6.6
 [0.6.5]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.2...v0.6.3
