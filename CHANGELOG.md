@@ -11,6 +11,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 - Setup can allow team MCP servers to reach configured destination networks on TCP 443. `--pod-egress-cidrs` lists those destinations and `--pod-egress-except-cidrs` keeps the cluster pod and service ranges out of a private destination. An empty list adds nothing, and `0.0.0.0/0` is rejected. Runtime API writes the allow into each team default-deny NetworkPolicy ([#666](https://github.com/mcp-runtime/mcp-runtime/issues/666)).
 
+### Changed
+
+- Install docs cover registry PVC size, Docker buildx, an external TLS terminator in front of HTTP Traefik, password-admin seeding, the HTTPS API base URL, registry upload body size, and tenant publish membership ([#666](https://github.com/mcp-runtime/mcp-runtime/issues/666)).
+
 ## [0.6.4] - 2026-10-09
 
 ### Changed

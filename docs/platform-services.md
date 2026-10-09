@@ -44,6 +44,12 @@ controllers, the runtime operator, and log collectors that need it. For services
 that do not call Kubernetes, disable service account token automounting and
 isolate them with NetworkPolicies where the cluster supports them.
 
+When public TLS terminates on a reverse proxy and cluster Traefik stays HTTP,
+set `UI_REQUIRE_HTTPS=false` and `UI_FORCE_SECURE_COOKIE=true` on the UI.
+`auto` treats the inner hop's `X-Forwarded-Proto: http` as a reason to
+redirect to HTTPS, which loops back through the same proxy. `UI_FORCE_SECURE_COOKIE=true`
+keeps the session cookie `Secure` on that production path.
+
 ## Event path
 
 ```mermaid

@@ -104,6 +104,13 @@ In this shape:
 - Configure the proxy origin to forward all three hosts to the ingress node or
   external load balancer.
 - Preserve the original `Host` header and `X-Forwarded-Proto`.
+  When TLS terminates on this proxy and cluster Traefik is HTTP, Traefik
+  overwrites `X-Forwarded-Proto` to `http` on the inner hop. The UI default
+  `UI_REQUIRE_HTTPS=auto` then answers `308` to the same HTTPS URL and the
+  dashboard loops. Set `UI_REQUIRE_HTTPS=false` and
+  `UI_FORCE_SECURE_COOKIE=true` on `mcp-ui` for that shape. Cookies stay
+  `Secure`. This is the production external-terminator case, not only a
+  non-TLS dev install.
 - Do not cache or rewrite `/api`, `/v2`, `/<server-name>/mcp`, or
   `/.well-known/acme-challenge/*`.
 - Allow long-lived and streaming HTTP responses for MCP traffic.
@@ -403,6 +410,15 @@ of git because TLS secrets contain private keys.
 | cert-manager reports NXDOMAIN or HTTP-01 failure | `platform`, `registry`, and `mcp` DNS records must point to the ingress IP, and port 80 must reach Traefik. |
 | Setup rejects public mode because login is missing | Set `GOOGLE_CLIENT_ID` / `MCP_GOOGLE_CLIENT_ID`, or set `OIDC_ISSUER`, `OIDC_AUDIENCE`, and `OIDC_JWKS_URL`. |
 | Setup rejects production admin config | Set `MCP_PLATFORM_ADMIN_EMAIL` or `MCP_ADMIN_USERS`. Do not confuse this with `--acme-email`, which is only the certificate contact. |
+| Dashboard has no password login | Set both `MCP_PLATFORM_ADMIN_EMAIL` and `MCP_PLATFORM_ADMIN_PASSWORD` before setup. Email alone does not seed the user. |
+| Dashboard or docs return `308` to the same URL | TLS terminates outside the cluster and Traefik is HTTP. Set `UI_REQUIRE_HTTPS=false` and `UI_FORCE_SECURE_COOKIE=true` on `mcp-ui`. |
+| Registry setup fails shrinking storage | `--registry-storage` is smaller than the bound PVC. Kubernetes cannot shrink it. Rerun with a size at least as large as the claim. |
+| Setup image build says buildx is missing | Install the Docker buildx plugin, or set `DOCKER_BUILDKIT=0` and rerun setup. |
+| `server push` returns `405 method_not_allowed` | The API base URL is `http://` and the front door redirects POST to HTTPS. Use the HTTPS origin. |
+| `server push` fails on a small request body | The proxy in front of `/api/` is still at the default body limit. Allow a large body on that location. `/v2/` is a different path. |
+| Tenant `server push` says the caller has no team | The admin API key is not a team member. Create a team, add a user, and push with that user's token. `--scope org` is disabled in tenant mode. |
+| Team MCP server gets `ECONNREFUSED` to an internal HTTPS API the node can open | The team default-deny policy is refusing the pod. Set `--pod-egress-cidrs` and `--pod-egress-except-cidrs`. See [Pod egress to an internal network](#pod-egress-to-an-internal-network). |
 | Registry image pulls fail | Confirm `MCP_REGISTRY_ENDPOINT` is the exact host nodes pull, DNS resolves from every node, and the certificate chain is trusted by the node runtime. |
+| Setup dies in operator webhook wait with connection refused | The Kubernetes API was down, often right after a k3s restart to load `registries.yaml`. Rerun setup after the API answers. Confirm registry ingress auth was restored. |
 | Traefik 404 for the dashboard | Confirm `MCP_PLATFORM_DOMAIN=example.com`, `kubectl get ingress -A`, and DNS for `platform.example.com` points to the ingress node. |
 | ServiceLB lands on the wrong node | Check `kubectl get pods -A -o wide | grep svclb` and fix `svccontroller.k3s.cattle.io/enablelb` labels. |
