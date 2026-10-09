@@ -102,9 +102,36 @@ spec:
                     type: string
                 type: object
               auth:
-                description: Auth enables optional OAuth authentication at the gateway
-                  when present.
+                description: |-
+                  Auth configures gateway authentication. An omitted mode keeps OAuth.
+                  Mode header forwards configured credential headers and lets the upstream
+                  MCP server authenticate them.
                 properties:
+                  credentialPresence:
+                    description: |-
+                      CredentialPresence is "any" (default: at least one configured header)
+                      or "all" (every configured header). The gateway forwards every present
+                      configured header and does not choose among them.
+                    enum:
+                    - any
+                    - all
+                    type: string
+                  headers:
+                    description: |-
+                      Headers are customer-configured credential header names. Credential
+                      values never belong here. Names match case-insensitively.
+                    items:
+                      type: string
+                    maxItems: 16
+                    minItems: 1
+                    type: array
+                  mode:
+                    description: |-
+                      Mode selects authentication. Omit it for OAuth. "header" delegates
+                      credential authentication to the upstream MCP server.
+                    enum:
+                    - header
+                    type: string
                   audience:
                     description: |-
                       Audience is the OAuth resource identifier tokens must be issued for and
@@ -249,8 +276,38 @@ spec:
                   Policy configures gateway-side authorization behavior. When omitted, the
                   gateway runs in observe mode so metrics and analytics work without
                   grant/session enforcement. Set this field (for example allow-list + deny)
-                  to require adapter identity and grants.
+                  to require adapter identity and grants. Header authentication instead
+                  requires allow-list mode, default decision deny, and delegated tool rules.
                 properties:
+                  delegatedToolRules:
+                    description: |-
+                      DelegatedToolRules apply only when auth.mode is header. An explicit
+                      deny wins over no rule; unlisted tools follow defaultDecision, which
+                      header mode requires to be deny.
+                    items:
+                      description: |-
+                        DelegatedToolRule allows or denies one tool when auth.mode is header.
+                        These rules do not identify the caller.
+                      properties:
+                        decision:
+                          enum:
+                          - allow
+                          - deny
+                          type: string
+                        name:
+                          type: string
+                      required:
+                      - decision
+                      - name
+                      type: object
+                    type: array
+                  maxSideEffect:
+                    description: MaxSideEffect caps header-mode tool calls at this class or lower.
+                    enum:
+                    - read
+                    - write
+                    - destructive
+                    type: string
                   defaultDecision:
                     enum:
                     - allow

@@ -14,6 +14,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
+	"mcp-runtime/pkg/credentialheaders"
 	"mcp-runtime/pkg/mcpdefaults"
 )
 
@@ -99,7 +100,7 @@ func (r *MCPServer) Default() {
 // platform domain re-derives the values instead of leaving a stale copy in
 // spec. Explicit values are kept.
 func (r *MCPServer) ResolveDerivedAuth(options MCPServerDefaultOptions) {
-	if r.Spec.Auth == nil {
+	if r.Spec.Auth == nil || AuthUsesHeaderMode(r.Spec.Auth) {
 		return
 	}
 	if strings.TrimSpace(r.Spec.Auth.IssuerURL) == "" {
@@ -117,7 +118,7 @@ func (r *MCPServer) ResolveDerivedAuth(options MCPServerDefaultOptions) {
 // ResolveDerivedAuth. Admission cannot check this, because the values are
 // derived later from operator state; the operator reports it on reconcile.
 func (r *MCPServer) ValidateResolvedAuth() error {
-	if r.Spec.Auth == nil {
+	if r.Spec.Auth == nil || AuthUsesHeaderMode(r.Spec.Auth) {
 		return nil
 	}
 	specPath := field.NewPath("spec")
@@ -177,7 +178,19 @@ func (r *MCPServer) DefaultWithOptions(options MCPServerDefaultOptions) {
 	}
 
 	if r.Spec.Auth != nil {
-		if strings.TrimSpace(r.Spec.Auth.TokenHeader) == "" {
+		if AuthUsesHeaderMode(r.Spec.Auth) {
+			if strings.TrimSpace(r.Spec.Auth.CredentialPresence) == "" {
+				r.Spec.Auth.CredentialPresence = mcpdefaults.CredentialPresenceAny
+			}
+			if r.Spec.Policy == nil {
+				r.Spec.Policy = &PolicyConfig{
+					Mode:            PolicyModeAllowList,
+					DefaultDecision: PolicyDecisionDeny,
+					EnforceOn:       defaultPolicyEnforceOn,
+					PolicyVersion:   defaultPolicyVersion,
+				}
+			}
+		} else if strings.TrimSpace(r.Spec.Auth.TokenHeader) == "" {
 			r.Spec.Auth.TokenHeader = defaultAuthTokenHeader
 		}
 	}
@@ -295,6 +308,59 @@ func (mcpServerWebhook) ValidateDelete(_ context.Context, obj *MCPServer) (admis
 	return obj.ValidateDelete()
 }
 
+func validateHeaderAuth(authPath *field.Path, auth *AuthConfig, policy *PolicyConfig, session *SessionConfig, tools []ToolConfig) field.ErrorList {
+	var allErrs field.ErrorList
+	if strings.TrimSpace(auth.TokenHeader) != "" || strings.TrimSpace(auth.IssuerURL) != "" || strings.TrimSpace(auth.Audience) != "" || len(auth.Scopes) > 0 {
+		allErrs = append(allErrs, field.Forbidden(authPath, "header mode cannot set tokenHeader, issuerURL, audience, or scopes"))
+	}
+	if err := credentialheaders.NormalizeNames(auth.Headers); err != nil {
+		allErrs = append(allErrs, field.Invalid(authPath.Child("headers"), auth.Headers, err.Error()))
+	}
+	if _, err := credentialheaders.NormalizePresence(auth.CredentialPresence); err != nil {
+		allErrs = append(allErrs, field.Invalid(authPath.Child("credentialPresence"), auth.CredentialPresence, err.Error()))
+	}
+	if session != nil {
+		allErrs = append(allErrs, field.Forbidden(authPath, "header mode cannot require a Runtime session"))
+	}
+	if policy != nil {
+		if policy.Mode != "" && policy.Mode != PolicyModeAllowList {
+			allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "policy", "mode"), policy.Mode, "header mode requires allow-list enforcement"))
+		}
+		if policy.DefaultDecision != "" && policy.DefaultDecision != PolicyDecisionDeny {
+			allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "policy", "defaultDecision"), policy.DefaultDecision, "header mode requires default decision deny"))
+		}
+		seen := map[string]struct{}{}
+		known := map[string]ToolSideEffect{}
+		for _, tool := range tools {
+			known[strings.ToLower(tool.Name)] = tool.SideEffect
+		}
+		for i, rule := range policy.DelegatedToolRules {
+			rulePath := field.NewPath("spec", "policy", "delegatedToolRules").Index(i)
+			name := strings.TrimSpace(rule.Name)
+			if name == "" {
+				allErrs = append(allErrs, field.Required(rulePath.Child("name"), "tool name is required"))
+				continue
+			}
+			key := strings.ToLower(name)
+			if _, ok := seen[key]; ok {
+				allErrs = append(allErrs, field.Duplicate(rulePath.Child("name"), name))
+			}
+			seen[key] = struct{}{}
+			if rule.Decision != PolicyDecisionAllow && rule.Decision != PolicyDecisionDeny {
+				allErrs = append(allErrs, field.Invalid(rulePath.Child("decision"), rule.Decision, "decision must be allow or deny"))
+			}
+			sideEffect, ok := known[key]
+			if !ok || strings.TrimSpace(string(sideEffect)) == "" {
+				allErrs = append(allErrs, field.Invalid(rulePath.Child("name"), name, "delegated tool rule must name a tool with a declared side effect"))
+			}
+		}
+		if policy.MaxSideEffect != "" && policy.MaxSideEffect != ToolSideEffectRead && policy.MaxSideEffect != ToolSideEffectWrite && policy.MaxSideEffect != ToolSideEffectDestructive {
+			allErrs = append(allErrs, field.Invalid(field.NewPath("spec", "policy", "maxSideEffect"), policy.MaxSideEffect, "maxSideEffect must be read, write, or destructive"))
+		}
+	}
+	return allErrs
+}
+
 func (r *MCPServer) ValidateCreate() (admission.Warnings, error) {
 	return nil, r.validate()
 }
@@ -337,6 +403,9 @@ func (r *MCPServer) validate() error {
 		allErrs = append(allErrs, field.Invalid(specPath.Child("gateway", "port"), r.Spec.Gateway.Port, "gateway.port must differ from spec.port"))
 	}
 	if r.Spec.Auth != nil {
+		if AuthUsesHeaderMode(r.Spec.Auth) {
+			allErrs = append(allErrs, validateHeaderAuth(specPath.Child("auth"), r.Spec.Auth, r.Spec.Policy, r.Spec.Session, r.Spec.Tools)...)
+		}
 		seenScopes := make(map[string]bool, len(r.Spec.Auth.Scopes))
 		for i, scope := range r.Spec.Auth.Scopes {
 			if scope == "" || strings.TrimSpace(scope) != scope || strings.ContainsAny(scope, " \t\r\n\"\\") || seenScopes[scope] {
@@ -353,6 +422,9 @@ func (r *MCPServer) validate() error {
 				allErrs = append(allErrs, field.Invalid(specPath.Child("auth", "audience"), r.Spec.Auth.Audience, "auth.audience must be an absolute URI without a fragment, matching the canonical MCP server URL clients connect to"))
 			}
 		}
+	}
+	if !AuthUsesHeaderMode(r.Spec.Auth) && r.Spec.Policy != nil && (len(r.Spec.Policy.DelegatedToolRules) > 0 || r.Spec.Policy.MaxSideEffect != "") {
+		allErrs = append(allErrs, field.Forbidden(specPath.Child("policy", "delegatedToolRules"), "delegated tool rules require auth.mode header"))
 	}
 	if !gatewayEnabled(r.Spec) {
 		if r.Spec.Analytics != nil && !r.Spec.Analytics.Disabled &&

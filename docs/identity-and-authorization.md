@@ -163,6 +163,53 @@ Further reading: [MCP authorization](https://modelcontextprotocol.io/specificati
 (work in progress), [AUDIT delegation and interaction traceability proposal](https://datatracker.ietf.org/doc/bofreq-kuhlewind-audit-agent-use-of-delegation-and-interaction-traceability/),
 and [SPIFFE SVIDs](https://spiffe.io/docs/latest/deploying/svids/).
 
+## Delegated header authentication
+
+`auth.mode: header` is an explicit compatibility mode for an MCP server that
+authenticates clients with its own credential headers. Runtime does not
+validate those credentials and does not turn a header value into a human,
+agent, team, or session. The gateway checks that the configured headers are
+present, applies server and tool rules, forwards the headers only to that
+server, and records the caller as unverified.
+
+```yaml
+auth:
+  mode: header
+  credentialPresence: any
+  headers:
+    - X-Example-Credential
+    - Private-Token
+    - Authorization
+policy:
+  mode: allow-list
+  defaultDecision: deny
+  delegatedToolRules:
+    - name: list_projects
+      decision: allow
+```
+
+`credentialPresence: any` accepts one or more of the configured headers and
+forwards every present header. `all` requires every configured name. Neither
+mode selects a preferred header. Header names are arbitrary valid HTTP tokens
+except reserved transport, routing, and trusted identity headers.
+
+The configured name list is the whole credential contract. The gateway does
+not recognize auth schemes or vendors. After the required configured headers
+are present, every listed header is forwarded unchanged for the MCP server to
+authenticate. The value is opaque. Runtime does not parse it or turn it into
+an OAuth identity.
+
+`Authorization` is included only when the server lists that name. Otherwise
+the gateway still removes it. Tool rules still run before the request is
+forwarded: a denied tool never reaches the server.
+
+Header mode requires allow-list enforcement and a default deny. Unlisted tools
+and tools without a declared side effect are denied before the upstream call.
+Grants, sessions, observation mode, and OAuth settings are rejected. A failed
+OAuth server does not fall back to this mode. Direct clients send the headers
+themselves. An optional adapter can inject them from local sources; that
+adapter path is separate and does not create a Runtime principal.
+
 ## Grant: administrator-approved authority
 
 An `MCPAccessGrant` answers:

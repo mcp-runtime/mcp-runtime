@@ -101,10 +101,13 @@ func GenerateCRD(server *ServerMetadata, outputPath string) error {
 
 	if server.Auth != nil {
 		mcpServer.Spec.Auth = &mcpv1alpha1.AuthConfig{
-			TokenHeader: server.Auth.TokenHeader,
-			IssuerURL:   server.Auth.IssuerURL,
-			Audience:    server.Auth.Audience,
-			Scopes:      append([]string(nil), server.Auth.Scopes...),
+			Mode:               server.Auth.Mode,
+			Headers:            append([]string(nil), server.Auth.Headers...),
+			CredentialPresence: server.Auth.CredentialPresence,
+			TokenHeader:        server.Auth.TokenHeader,
+			IssuerURL:          server.Auth.IssuerURL,
+			Audience:           server.Auth.Audience,
+			Scopes:             append([]string(nil), server.Auth.Scopes...),
 		}
 	}
 
@@ -114,6 +117,13 @@ func GenerateCRD(server *ServerMetadata, outputPath string) error {
 			DefaultDecision: mcpv1alpha1.PolicyDecision(server.Policy.DefaultDecision),
 			EnforceOn:       server.Policy.EnforceOn,
 			PolicyVersion:   server.Policy.PolicyVersion,
+			MaxSideEffect:   mcpv1alpha1.ToolSideEffect(server.Policy.MaxSideEffect),
+		}
+		for _, rule := range server.Policy.DelegatedToolRules {
+			mcpServer.Spec.Policy.DelegatedToolRules = append(mcpServer.Spec.Policy.DelegatedToolRules, mcpv1alpha1.DelegatedToolRule{
+				Name:     rule.Name,
+				Decision: mcpv1alpha1.PolicyDecision(rule.Decision),
+			})
 		}
 	}
 

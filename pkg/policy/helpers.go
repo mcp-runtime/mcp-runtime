@@ -65,10 +65,30 @@ func PolicyVersion(policy *Document) string {
 	return policy.Policy.PolicyVersion
 }
 
+// UsesDelegatedHeaders reports upstream-owned credential authentication.
+func UsesDelegatedHeaders(policy *Document) bool {
+	return policy != nil && policy.Auth != nil && strings.EqualFold(strings.TrimSpace(policy.Auth.Mode), "header")
+}
+
+// DelegatedHeaderConfigured reports whether name is an accepted credential header.
+func DelegatedHeaderConfigured(policy *Document, name string) bool {
+	if !UsesDelegatedHeaders(policy) {
+		return false
+	}
+	for _, header := range policy.Auth.Headers {
+		if strings.EqualFold(header, name) {
+			return true
+		}
+	}
+	return false
+}
+
 // PolicyUsesOAuth returns true if the policy uses OAuth authentication.
 func PolicyUsesOAuth(policy *Document) bool {
-	return policy != nil && policy.Auth != nil &&
-		(strings.TrimSpace(policy.Auth.IssuerURL) != "" || strings.TrimSpace(policy.Auth.Audience) != "")
+	if policy == nil || policy.Auth == nil || UsesDelegatedHeaders(policy) {
+		return false
+	}
+	return strings.TrimSpace(policy.Auth.IssuerURL) != "" || strings.TrimSpace(policy.Auth.Audience) != ""
 }
 
 // ChoosePolicyVersion returns the first non-empty policy version from the provided values,

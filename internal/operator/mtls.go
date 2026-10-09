@@ -68,6 +68,9 @@ const verifiedSPIFFEHeader = "X-MCP-Verified-SPIFFE-ID"
 // implied by workload PKI being present, and it only applies to servers that
 // route through Traefik and have a gateway to validate the hop.
 func (r *MCPServerReconciler) usesAdapterCertificates(mcpServer *mcpv1alpha1.MCPServer) bool {
+	if mcpServer != nil && mcpv1alpha1.AuthUsesHeaderMode(mcpServer.Spec.Auth) {
+		return false
+	}
 	if !r.AdapterCertificatesEnabled || !gatewayEnabled(mcpServer) {
 		return false
 	}

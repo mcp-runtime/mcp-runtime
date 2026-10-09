@@ -59,7 +59,7 @@ func (r *MCPServerReconciler) reconcileBundledOAuthResources(ctx context.Context
 		if publicRouteOwner(server, defaulted) != nil {
 			continue
 		}
-		if server.Spec.Auth == nil {
+		if server.Spec.Auth == nil || mcpv1alpha1.AuthUsesHeaderMode(server.Spec.Auth) {
 			continue
 		}
 		if strings.TrimRight(strings.TrimSpace(server.Spec.Auth.IssuerURL), "/") != strings.TrimRight(strings.TrimSpace(r.OAuthIssuerURL), "/") {

@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"mcp-runtime/pkg/credentialheaders"
 )
 
 // Validate checks that a rendered gateway policy document is structurally sound
@@ -23,8 +25,11 @@ func Validate(doc *Document) error {
 	if _, ok := supportedSchemaVersions[doc.SchemaVersion]; !ok {
 		return fmt.Errorf("policy: unsupported schema version %q", doc.SchemaVersion)
 	}
-	if required := RequiredSchemaVersion(doc); required != SchemaVersion && doc.SchemaVersion == SchemaVersion {
-		return fmt.Errorf("policy: grant expiry requires schema version %q, document declares %q", required, doc.SchemaVersion)
+	if required := RequiredSchemaVersion(doc); schemaRank(doc.SchemaVersion) < schemaRank(required) {
+		if required == SchemaVersionGrantExpiry {
+			return fmt.Errorf("policy: grant expiry requires schema version %q, document declares %q", required, doc.SchemaVersion)
+		}
+		return fmt.Errorf("policy: document requires schema version %q, declares %q", required, doc.SchemaVersion)
 	}
 	if strings.TrimSpace(doc.Revision) == "" {
 		return fmt.Errorf("policy: revision is required")
@@ -52,12 +57,22 @@ func Validate(doc *Document) error {
 	if err := validateGrants(doc.Grants); err != nil {
 		return err
 	}
-	return validateBindings(doc.Sessions)
+	if err := validateBindings(doc.Sessions); err != nil {
+		return err
+	}
+	return validateDelegatedDocument(doc)
 }
 
 func validateAuth(auth *Auth) error {
 	if auth == nil {
 		return nil
+	}
+	mode := strings.ToLower(strings.TrimSpace(auth.Mode))
+	if mode == "header" {
+		return validateDelegatedAuth(auth)
+	}
+	if mode != "" {
+		return fmt.Errorf("policy: invalid auth mode %q", auth.Mode)
 	}
 	if strings.TrimSpace(auth.IssuerURL) == "" && strings.TrimSpace(auth.Audience) == "" {
 		if strings.TrimSpace(auth.TrustDomain) != "" {
@@ -81,6 +96,56 @@ func validateAuth(auth *Auth) error {
 // audience doubles as the resource the gateway advertises in protected resource
 // metadata and that clients send as the RFC 8707 resource parameter, so it has
 // to be an absolute URI without a fragment (RFC 8707 section 2).
+func validateDelegatedAuth(auth *Auth) error {
+	if err := credentialheaders.NormalizeNames(auth.Headers); err != nil {
+		return fmt.Errorf("policy: %w", err)
+	}
+	if _, err := credentialheaders.NormalizePresence(auth.CredentialPresence); err != nil {
+		return fmt.Errorf("policy: %w", err)
+	}
+	if strings.TrimSpace(auth.IssuerURL) != "" || strings.TrimSpace(auth.Audience) != "" || len(auth.Scopes) > 0 || strings.TrimSpace(auth.TokenHeader) != "" || strings.TrimSpace(auth.TrustDomain) != "" {
+		return fmt.Errorf("policy: header auth cannot set OAuth fields or an adapter trust domain")
+	}
+	return nil
+}
+
+func validateDelegatedDocument(doc *Document) error {
+	delegated := UsesDelegatedHeaders(doc)
+	if doc.Policy != nil && !delegated && (len(doc.Policy.DelegatedToolRules) > 0 || strings.TrimSpace(doc.Policy.MaxSideEffect) != "") {
+		return fmt.Errorf("policy: delegated tool rules require header auth")
+	}
+	if !delegated {
+		return nil
+	}
+	if doc.Policy == nil || !strings.EqualFold(strings.TrimSpace(doc.Policy.Mode), "allow-list") || !strings.EqualFold(strings.TrimSpace(doc.Policy.DefaultDecision), "deny") {
+		return fmt.Errorf("policy: header auth requires allow-list mode and default decision deny")
+	}
+	if doc.Session != nil || len(doc.Grants) > 0 || len(doc.Sessions) > 0 {
+		return fmt.Errorf("policy: header auth cannot use grants, sessions, or session identity")
+	}
+	if !validSideEffect(doc.Policy.MaxSideEffect, true) {
+		return fmt.Errorf("policy: invalid max_side_effect %q", doc.Policy.MaxSideEffect)
+	}
+	seen := make(map[string]struct{}, len(doc.Policy.DelegatedToolRules))
+	for i, rule := range doc.Policy.DelegatedToolRules {
+		name := strings.TrimSpace(string(rule.Name))
+		if name == "" {
+			return fmt.Errorf("policy: delegated_tool_rules[%d] name is required", i)
+		}
+		key := strings.ToLower(name)
+		if _, ok := seen[key]; ok {
+			return fmt.Errorf("policy: duplicate delegated tool rule %q", name)
+		}
+		seen[key] = struct{}{}
+		switch strings.ToLower(strings.TrimSpace(rule.Decision)) {
+		case "allow", "deny":
+		default:
+			return fmt.Errorf("policy: delegated tool rule %q has invalid decision", name)
+		}
+	}
+	return nil
+}
+
 func validateResourceURI(value string) error {
 	trimmed := strings.TrimSpace(value)
 	parsed, err := url.Parse(trimmed)

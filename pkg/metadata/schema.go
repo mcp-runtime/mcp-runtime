@@ -182,20 +182,33 @@ type InventoryItem struct {
 	Labels      map[string]string `yaml:"labels,omitempty" json:"labels,omitempty"`
 }
 
-// AuthConfig enables optional OAuth authentication at the gateway.
+// AuthConfig enables optional authentication at the gateway.
+// An omitted mode keeps OAuth. Mode "header" forwards configured credential
+// header names and lets the upstream MCP server authenticate them.
 type AuthConfig struct {
-	TokenHeader string   `yaml:"tokenHeader,omitempty" json:"tokenHeader,omitempty"`
-	IssuerURL   string   `yaml:"issuerURL,omitempty" json:"issuerURL,omitempty"`
-	Audience    string   `yaml:"audience,omitempty" json:"audience,omitempty"`
-	Scopes      []string `yaml:"scopes,omitempty" json:"scopes,omitempty"`
+	Mode               string   `yaml:"mode,omitempty" json:"mode,omitempty"`
+	Headers            []string `yaml:"headers,omitempty" json:"headers,omitempty"`
+	CredentialPresence string   `yaml:"credentialPresence,omitempty" json:"credentialPresence,omitempty"`
+	TokenHeader        string   `yaml:"tokenHeader,omitempty" json:"tokenHeader,omitempty"`
+	IssuerURL          string   `yaml:"issuerURL,omitempty" json:"issuerURL,omitempty"`
+	Audience           string   `yaml:"audience,omitempty" json:"audience,omitempty"`
+	Scopes             []string `yaml:"scopes,omitempty" json:"scopes,omitempty"`
+}
+
+// DelegatedToolRule allows or denies one tool when auth.mode is header.
+type DelegatedToolRule struct {
+	Name     string         `yaml:"name" json:"name"`
+	Decision PolicyDecision `yaml:"decision" json:"decision"`
 }
 
 // PolicyConfig configures authorization behavior at the gateway.
 type PolicyConfig struct {
-	Mode            PolicyMode     `yaml:"mode,omitempty" json:"mode,omitempty"`
-	DefaultDecision PolicyDecision `yaml:"defaultDecision,omitempty" json:"defaultDecision,omitempty"`
-	EnforceOn       string         `yaml:"enforceOn,omitempty" json:"enforceOn,omitempty"`
-	PolicyVersion   string         `yaml:"policyVersion,omitempty" json:"policyVersion,omitempty"`
+	Mode               PolicyMode          `yaml:"mode,omitempty" json:"mode,omitempty"`
+	DefaultDecision    PolicyDecision      `yaml:"defaultDecision,omitempty" json:"defaultDecision,omitempty"`
+	EnforceOn          string              `yaml:"enforceOn,omitempty" json:"enforceOn,omitempty"`
+	PolicyVersion      string              `yaml:"policyVersion,omitempty" json:"policyVersion,omitempty"`
+	DelegatedToolRules []DelegatedToolRule `yaml:"delegatedToolRules,omitempty" json:"delegatedToolRules,omitempty"`
+	MaxSideEffect      ToolSideEffect      `yaml:"maxSideEffect,omitempty" json:"maxSideEffect,omitempty"`
 }
 
 // SessionConfig configures server-side agent session behavior.
