@@ -7,7 +7,7 @@ export type AdminSection = {
   description: string;
 };
 
-// Grouped so the rail reads as the organisation first, then the platform
+// Grouped so the primary sidebar reads as the organisation first, then the platform
 // itself. Access control is deliberately not here: the backend serves
 // /runtime/grants and /runtime/sessions to any authenticated principal, so it
 // is a top-level workspace rather than an admin section.

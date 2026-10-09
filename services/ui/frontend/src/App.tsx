@@ -9,7 +9,7 @@ import { ServersWorkspace } from "./components/servers/ServersWorkspace";
 import { AdminWorkspace } from "./components/admin/AdminWorkspace";
 import { AgentsPanel } from "./components/admin/AgentsPanel";
 import { AccessWorkspace } from "./components/access/AccessWorkspace";
-import { adminSection, type AdminSectionId } from "./components/admin/adminSections";
+import { adminSection } from "./components/admin/adminSections";
 import { visibleWorkspaceTabs } from "./components/WorkspaceNavigation";
 import { useHashRoute } from "./routing/useHashRoute";
 import type { WorkspaceId } from "./routing/route";
@@ -171,7 +171,6 @@ export function App() {
         auth={auth}
         onSignIn={handleSignIn}
         section={adminSection(route.section).id}
-        onSectionChange={(section: AdminSectionId) => navigate({ workspace: "admin", section })}
       />
     );
   } else if (route.workspace === "agents") {
@@ -200,6 +199,8 @@ export function App() {
       theme={theme}
       onToggleTheme={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
       workspace={route.workspace}
+      section={route.section}
+      onSelectAdminSection={(section) => navigate({ workspace: "admin", section })}
       onSelectWorkspace={selectWorkspace}
       onSignIn={handleSignIn}
       onSignOut={handleSignOut}

@@ -509,3 +509,13 @@ Services live in `services/`, manifests in `k8s/`, and shared libraries in `pkg/
 
 - [API → Runtime Governance API](api-reference.md#runtime-governance-api): the HTTP surface the UI uses.
 - [Architecture](architecture.md): how the proxy fits into the request path.
+
+## Console navigation
+
+The console keeps workspace navigation in one left sidebar. Runtime and
+Workspace links appear alongside the admin-only Organization links (Teams and
+Operations) and Platform links (Platform health and Usage analytics). Selecting
+a page changes the main content without opening a second sidebar. Filtering
+includes individual page names and section headings; the active page is marked
+in the sidebar. On compact screens, the navigation menu contains the same
+sections and closes after a selection.

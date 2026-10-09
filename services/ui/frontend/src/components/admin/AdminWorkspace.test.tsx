@@ -156,10 +156,10 @@ function stubAdminApi(overrides: Record<string, { status?: number; body?: unknow
   return fetchMock;
 }
 
-function renderAdmin(auth: AuthStatus) {
+function renderAdmin(auth: AuthStatus, section: "teams" | "operations" | "platform" | "analytics" = "teams") {
   return render(
     <AppProviders>
-      <AdminWorkspace auth={auth} onSignIn={() => {}} />
+      <AdminWorkspace auth={auth} onSignIn={() => {}} section={section} />
     </AppProviders>
   );
 }
@@ -213,9 +213,7 @@ describe("AdminWorkspace role gating", () => {
     renderAdmin(ADMIN);
 
     expect(await screen.findByTestId("teams-table")).toBeInTheDocument();
-    for (const section of ["teams", "operations", "platform", "analytics"]) {
-      expect(screen.getByTestId(`admin-section-${section}`)).toBeInTheDocument();
-    }
+    expect(screen.queryByRole("navigation", { name: "Administration sections" })).not.toBeInTheDocument();
   });
 
   it("does not put access control behind the admin gate", () => {
@@ -245,9 +243,7 @@ describe("AdminWorkspace sections", () => {
     const user = userEvent.setup();
     stubAdminApi();
 
-    renderAdmin(ADMIN);
-    await screen.findByTestId("teams-table");
-    await user.click(screen.getByTestId("admin-section-operations"));
+    renderAdmin(ADMIN, "operations");
 
     expect(await screen.findByTestId("operations-users-table")).toHaveTextContent(
       "admin@mcpruntime.org"
@@ -265,9 +261,7 @@ describe("AdminWorkspace sections", () => {
     const user = userEvent.setup();
     const fetchMock = stubAdminApi();
 
-    renderAdmin(ADMIN);
-    await screen.findByTestId("teams-table");
-    await user.click(screen.getByTestId("admin-section-operations"));
+    renderAdmin(ADMIN, "operations");
     await screen.findByTestId("operations-users-table");
 
     await user.type(screen.getByTestId("operations-user-filter"), "alice@example.com");
@@ -283,9 +277,7 @@ describe("AdminWorkspace sections", () => {
     const user = userEvent.setup();
     stubAdminApi();
 
-    renderAdmin(ADMIN);
-    await screen.findByTestId("teams-table");
-    await user.click(screen.getByTestId("admin-section-analytics"));
+    renderAdmin(ADMIN, "analytics");
 
     const detailedActivity = await screen.findByTestId("analytics-detailed-activity");
     expect(detailedActivity).toHaveAttribute("href", "/grafana/explore");
@@ -296,9 +288,7 @@ describe("AdminWorkspace sections", () => {
     const user = userEvent.setup();
     stubAdminApi();
 
-    renderAdmin(ADMIN);
-    await screen.findByTestId("teams-table");
-    await user.click(screen.getByTestId("admin-section-platform"));
+    renderAdmin(ADMIN, "platform");
 
     const grid = await screen.findByTestId("platform-components");
     expect(within(grid).getByText("Operator")).toBeInTheDocument();
