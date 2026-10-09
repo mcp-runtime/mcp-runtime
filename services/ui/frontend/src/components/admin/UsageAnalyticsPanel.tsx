@@ -18,7 +18,7 @@ import { useAdminReload, useUsage } from "../../hooks/useAdminData";
 import { useQuery } from "@tanstack/react-query";
 import { listEvents } from "../../api/admin";
 import { ADMIN_QUERY_KEY } from "../../hooks/useAdminData";
-import type { GatewayEvent, UsageResponse } from "../../api/types";
+import { eventRpcMethod, eventToolName, type GatewayEvent, type UsageResponse } from "../../api/types";
 
 type UsageAnalyticsPanelProps = { onSignIn: () => void };
 
@@ -41,6 +41,7 @@ export function UsageAnalyticsPanel({ onSignIn }: UsageAnalyticsPanelProps) {
   const decisionsQuery = useQuery({
     queryKey: [ADMIN_QUERY_KEY, "recent-events", limit],
     queryFn: () => listEvents({ limit: String(Math.max(Number(limit) || 10, 25)) }),
+    refetchInterval: 15_000,
   });
 
   const actorColumns = useMemo(
@@ -74,8 +75,10 @@ export function UsageAnalyticsPanel({ onSignIn }: UsageAnalyticsPanelProps) {
             <span title={formatAbsolute(event.timestamp)}>{formatTimestamp(event.timestamp)}</span>
           ),
         },
+        { id: "server", header: "Server", sortValue: (event) => event.server || "", cell: (event) => event.server || "—" },
         { id: "namespace", header: "Namespace", sortValue: (event) => event.namespace || "", cell: (event) => event.namespace || "—" },
-        { id: "tool", header: "Tool", sortValue: (event) => event.tool_name || "", cell: (event) => event.tool_name || "—" },
+        { id: "tool", header: "Tool", sortValue: (event) => eventToolName(event), cell: (event) => eventToolName(event) || "—" },
+        { id: "method", header: "Method", sortValue: (event) => eventRpcMethod(event), cell: (event) => eventRpcMethod(event) || "—" },
         {
           id: "decision",
           header: "Decision",
@@ -118,7 +121,7 @@ export function UsageAnalyticsPanel({ onSignIn }: UsageAnalyticsPanelProps) {
               variant="secondary"
               icon="refresh"
               onClick={reload}
-              busy={query.isFetching && !query.isPending}
+              busy={(query.isFetching && !query.isPending) || (decisionsQuery.isFetching && !decisionsQuery.isPending)}
               data-testid="analytics-refresh"
             >
               Refresh
@@ -218,7 +221,7 @@ export function UsageAnalyticsPanel({ onSignIn }: UsageAnalyticsPanelProps) {
           <h2 className="section-title" id="analytics-events-title">
             Recent policy decisions
           </h2>
-          <p className="section-note">The most recent gateway decisions the analytics service has stored.</p>
+            <p className="section-note">The most recent gateway decisions, including tool calls. Servers, tools, and this table refresh every 15 seconds.</p>
         </div>
         {decisionsQuery.isPending ? (
           <LoadingState label="Loading recent decisions…" testId="analytics-events-loading" />
@@ -233,7 +236,7 @@ export function UsageAnalyticsPanel({ onSignIn }: UsageAnalyticsPanelProps) {
             columns={eventColumns}
             rows={decisionsQuery.data ?? []}
             rowKey={(event) =>
-              `${event.timestamp || ""}-${event.tool_name || ""}-${event.decision || ""}-${event.namespace || ""}`
+              `${event.timestamp || ""}-${event.server || ""}-${eventToolName(event)}-${eventRpcMethod(event)}-${event.decision || ""}-${event.namespace || ""}`
             }
             caption="Recent gateway decisions with namespace, tool, decision, and reason."
             regionLabel="Recent policy decisions"

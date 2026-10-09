@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Changed
+
+- Administration usage analytics shows the server, tool, and RPC method on recent policy decisions, and refreshes servers, tools, and decisions every 15 seconds ([#671](https://github.com/mcp-runtime/mcp-runtime/issues/671)).
+
 ## [0.6.5] - 2026-10-09
 
 ### Added
