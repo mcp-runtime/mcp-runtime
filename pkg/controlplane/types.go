@@ -24,7 +24,8 @@ type ServerInfo struct {
 	Age         string             `json:"age"`
 	Endpoint    string             `json:"endpoint,omitempty"`
 	// AuthMode is "header" when the server delegates credential checks to
-	// upstream headers. Empty means the OAuth path.
+	// upstream headers, or "oauth" when OAuth support is configured.
+	// Empty means authentication support is not reported.
 	AuthMode string `json:"authMode,omitempty"`
 	// AuthHeaders are credential header names for header auth. Values are
 	// never copied onto this summary.

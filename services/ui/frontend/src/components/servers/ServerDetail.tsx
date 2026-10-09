@@ -153,7 +153,7 @@ export function ServerDetail({ server, tools, onClose, onShowTools, onSelectTool
         <StatusBadge tone={ready ? "ready" : "attention"}>
           {ready ? "Ready" : server.status || "Not ready"}
         </StatusBadge>
-        <StatusBadge tone={auth.tone}>{auth.label}</StatusBadge>
+        {auth.label ? <StatusBadge tone={auth.tone}>{auth.label}</StatusBadge> : null}
       </div>
 
       {server.description ? <p className="muted">{server.description}</p> : null}
@@ -184,9 +184,6 @@ export function ServerDetail({ server, tools, onClose, onShowTools, onSelectTool
           </div>
           <p className="section-note" style={{ marginBottom: "var(--space-2)" }}>
             Paste this into {configTabs[configTab].hint}.
-            {auth.label === "OAuth"
-              ? ` The client must also satisfy ${auth.label} before calls are allowed.`
-              : ""}
           </p>
           <code className="code-block" data-testid="server-detail-config">
             {configTabs[configTab].value}

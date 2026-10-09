@@ -445,3 +445,11 @@ failures, use [Troubleshooting](troubleshooting.md) and
 For a server requiring OAuth, follow [MCP OAuth](mcp-oauth.md) for token and
 resource configuration. Return to [Server and Client Guides](usage-overview.md)
 for the complete publishing and access flow.
+
+### Server authentication badges
+
+The catalog shows **OAuth** when the server reports OAuth support, and
+**Header** when it uses caller-supplied credential headers. Servers without
+reported authentication support have no authentication badge. OAuth support
+does not itself mean every connection requires an OAuth token; use the
+server's connection instructions and adapter requirements.
