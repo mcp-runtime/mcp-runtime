@@ -744,7 +744,7 @@ func validateDockerImageBuilder() error {
 		err = cmd.Run()
 	}
 	if err != nil {
-		return fmt.Errorf("Docker BuildKit requires a working buildx plugin: install docker-buildx, or explicitly use DOCKER_BUILDKIT=0 with a Docker version that supports the legacy builder: %w", err)
+		return fmt.Errorf("docker BuildKit requires a working buildx plugin: install docker-buildx, or explicitly use DOCKER_BUILDKIT=0 with a Docker version that supports the legacy builder: %w", err)
 	}
 	return nil
 }
