@@ -23,6 +23,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Security
 
+- Production-shaped TLS setup enables scoped backend registry authentication and narrows registry access to authorized ingress, publication helpers, and probes. Fresh setup is required; lab/test HTTP installs retain explicit warnings about anonymous backends ([#632](https://github.com/mcp-runtime/mcp-runtime/pull/632)).
+
 - Platform images and modules build with Go 1.26.9 and `golang.org/x/net` v0.60.0. Those releases fix HTTP/2 CPU exhaustion from repeated window updates (CVE-2026-78669), excessive CPU from large Range headers (CVE-2026-78667), and memory exhaustion from malformed TLS ECH references (CVE-2026-97031).
 
 ### Fixed
