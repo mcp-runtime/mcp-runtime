@@ -64,7 +64,7 @@ func (t *RuntimeTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		if t.AuthHeader != "" {
 			for name := range t.CredentialHeaders {
 				if strings.EqualFold(name, "Authorization") {
-					return nil, fmt.Errorf("Authorization credential source conflicts with static auth-header")
+					return nil, fmt.Errorf("authorization credential source conflicts with static auth-header")
 				}
 			}
 		}

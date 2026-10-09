@@ -184,7 +184,7 @@ func (cfg ProxyConfig) Validate() error {
 		if cfg.Transport != nil && cfg.Transport.AuthHeader != "" {
 			for name := range cfg.CredentialHeaders {
 				if strings.EqualFold(name, "Authorization") {
-					return fmt.Errorf("Authorization credential source conflicts with static auth-header")
+					return fmt.Errorf("authorization credential source conflicts with static auth-header")
 				}
 			}
 		}

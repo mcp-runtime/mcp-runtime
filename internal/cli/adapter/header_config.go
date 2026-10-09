@@ -83,7 +83,7 @@ func resolveHeaderConfig(cmd *cobra.Command, f identityFlags, h headerConfigFlag
 
 func readProxyFileConfig(path string) (proxyFileConfig, error) {
 	var cfg proxyFileConfig
-	f, err := os.Open(path)
+	f, err := os.Open(path) // #nosec G304 -- path is the user-selected adapter config file.
 	if err != nil {
 		return cfg, fmt.Errorf("cannot open adapter config file")
 	}
