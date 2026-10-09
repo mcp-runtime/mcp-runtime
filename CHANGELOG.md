@@ -29,7 +29,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 - Grafana loads every bundled dashboard with stable datasource UIDs; cluster doctor detects persisted admin credential drift without revealing or resetting credentials ([#631](https://github.com/mcp-runtime/mcp-runtime/pull/631)).
 
-- `update --build` publishes bundled-registry images through an in-cluster helper using the selected kubeconfig and context, avoiding host DNS failures for Kubernetes Service addresses ([#679](https://github.com/mcp-runtime/mcp-runtime/issues/679)).
+- `update --build` publishes bundled-registry images through an in-cluster helper using the selected kubeconfig, context and registry-auth client, avoiding host DNS failures and ambient-cluster credential selection ([#679](https://github.com/mcp-runtime/mcp-runtime/issues/679)).
 
 ### Security
 

@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"go.uber.org/zap"
+	"k8s.io/client-go/kubernetes"
 	"mcp-runtime/internal/cli/core"
 	"mcp-runtime/internal/cli/registry"
 	"mcp-runtime/internal/cli/setup/assetpath"
@@ -62,13 +63,14 @@ type ImageBuildAction struct {
 
 // BuildOptions controls optional local image build/push during update.
 type BuildOptions struct {
-	Kubeconfig    string
-	Context       string
-	Enabled       bool
-	Source        string
-	ImagePlatform string
-	Parallelism   int
-	Retries       int // extra attempts after the first failure (default 1)
+	RegistryClient kubernetes.Interface
+	Kubeconfig     string
+	Context        string
+	Enabled        bool
+	Source         string
+	ImagePlatform  string
+	Parallelism    int
+	Retries        int // extra attempts after the first failure (default 1)
 	// SkipRegistryProbe forces every Built candidate to Action=build without
 	// contacting the registry (used for --dry-run without Docker).
 	SkipRegistryProbe bool
@@ -237,7 +239,7 @@ func buildAndPushChanged(ctx context.Context, actions []ImageBuildAction, opts B
 	pushFn := opts.PushImage
 	if pushFn == nil {
 		pushFn = func(ctx context.Context, image string) error {
-			return pushUpdateImage(ctx, image, opts.Kubeconfig, opts.Context, out)
+			return pushUpdateImage(ctx, image, opts.Kubeconfig, opts.Context, opts.RegistryClient, out)
 		}
 	}
 	parallel := opts.Parallelism
@@ -508,7 +510,7 @@ func bundledRegistryTarget(image string) bool {
 	return strings.EqualFold(host, "registry."+core.ComponentNamespace("registry")+".svc.cluster.local")
 }
 
-func pushUpdateImage(ctx context.Context, image, kubeconfig, kubeContext string, out io.Writer) error {
+func pushUpdateImage(ctx context.Context, image, kubeconfig, kubeContext string, client kubernetes.Interface, out io.Writer) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -521,5 +523,6 @@ func pushUpdateImage(ctx context.Context, image, kubeconfig, kubeContext string,
 		return err
 	}
 	manager := registry.NewRegistryManager(kubectl, targetExec, zap.NewNop())
+	manager.SetNativeAuthClient(client)
 	return manager.PushInCluster(image, image, core.ComponentNamespace("registry"))
 }
