@@ -453,6 +453,10 @@ func BuildConnectConfig(server platformapi.ServerListItem, clientName string) (m
 		serverName = "mcp-server"
 	}
 	url := strings.TrimSpace(server.Endpoint)
+	entry := map[string]any{
+		"type": "http",
+		"url":  url,
+	}
 	if access := server.AccessJSON; len(access) > 0 {
 		if servers, ok := access["mcpServers"].(map[string]any); ok && len(servers) > 0 {
 			keys := make([]string, 0, len(servers))
@@ -461,16 +465,17 @@ func BuildConnectConfig(server platformapi.ServerListItem, clientName string) (m
 			}
 			sort.Strings(keys)
 			for _, key := range keys {
-				serverName = key
-				entry, ok := servers[key].(map[string]any)
+				candidate, ok := servers[key].(map[string]any)
 				if !ok {
 					continue
 				}
-				value, ok := entry["url"].(string)
+				value, ok := candidate["url"].(string)
 				if !ok || strings.TrimSpace(value) == "" {
 					continue
 				}
+				serverName = key
 				url = strings.TrimSpace(value)
+				entry = cloneConnectEntry(candidate, url)
 				break
 			}
 		}
@@ -478,28 +483,49 @@ func BuildConnectConfig(server platformapi.ServerListItem, clientName string) (m
 	if url == "" {
 		return nil, core.NewWithBase(nil, fmt.Sprintf("server %q has no connect URL", serverName))
 	}
+	entry["url"] = url
 	switch clientName {
 	case "claude", "cursor", "json", "raw":
 		return map[string]any{
 			"mcpServers": map[string]any{
-				serverName: map[string]any{
-					"type": "http",
-					"url":  url,
-				},
+				serverName: entry,
 			},
 		}, nil
 	case "vscode", "vs-code":
 		return map[string]any{
 			"servers": map[string]any{
-				serverName: map[string]any{
-					"type": "http",
-					"url":  url,
-				},
+				serverName: entry,
 			},
 		}, nil
 	default:
 		return nil, core.NewWithBase(nil, "client must be claude, cursor, vscode, or json")
 	}
+}
+
+func cloneConnectEntry(source map[string]any, url string) map[string]any {
+	entry := map[string]any{
+		"type": "http",
+		"url":  url,
+	}
+	if kind, ok := source["type"].(string); ok && strings.TrimSpace(kind) != "" {
+		entry["type"] = strings.TrimSpace(kind)
+	}
+	headers, ok := source["headers"].(map[string]any)
+	if !ok || len(headers) == 0 {
+		return entry
+	}
+	copied := make(map[string]any, len(headers))
+	for name, value := range headers {
+		text, ok := value.(string)
+		if !ok {
+			continue
+		}
+		copied[name] = text
+	}
+	if len(copied) > 0 {
+		entry["headers"] = copied
+	}
+	return entry
 }
 
 func printConnectConfig(config map[string]any, output string) error {

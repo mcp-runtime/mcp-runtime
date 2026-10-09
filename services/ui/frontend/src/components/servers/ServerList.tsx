@@ -117,7 +117,7 @@ export function ServerList({
           const prompts = serverPromptDetails(server);
           const resources = serverResourceDetails(server);
           const tasks = serverTaskDetails(server);
-          const auth = serverAuthInfo();
+          const auth = serverAuthInfo(server);
           const hasConnectConfig = Boolean(
             server.access_json && Object.keys(server.access_json).length
           );

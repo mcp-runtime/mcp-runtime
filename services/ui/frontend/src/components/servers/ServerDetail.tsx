@@ -7,6 +7,7 @@ import { CopyButton } from "../../ui/CopyButton";
 import { DetailSheet } from "../../ui/DetailSheet";
 import { formatAbsolute, formatAge } from "../../lib/format";
 import {
+  clientConnectSnippet,
   serverAuthInfo,
   isServerReady,
   serverPromptDetails,
@@ -82,7 +83,7 @@ function InventoryGroup({ title, items, selectedInventory }: { title: string; it
 export function ServerDetail({ server, tools, onClose, onShowTools, onSelectTool, selectedInventory }: ServerDetailProps) {
   const [configTab, setConfigTab] = useState<"claude" | "cursor" | "vscode" | "raw">("claude");
   const ready = isServerReady(server);
-  const auth = serverAuthInfo();
+  const auth = serverAuthInfo(server);
   const prompts = serverPromptDetails(server);
   const resources = serverResourceDetails(server);
   const tasks = serverTaskDetails(server);
@@ -131,12 +132,10 @@ export function ServerDetail({ server, tools, onClose, onShowTools, onSelectTool
   });
 
   const configTabs = useMemo(() => {
-    const name = server.name || "mcp-server";
-    const url = server.endpoint || "";
     return {
-      claude: { label: "Claude Desktop", hint: "~/Library/Application Support/Claude/claude_desktop_config.json", value: JSON.stringify({ mcpServers: { [name]: { type: "http", url } } }, null, 2) },
-      cursor: { label: "Cursor", hint: "~/.cursor/mcp.json or .cursor/mcp.json", value: JSON.stringify({ mcpServers: { [name]: { type: "http", url } } }, null, 2) },
-      vscode: { label: "VS Code", hint: ".vscode/mcp.json", value: JSON.stringify({ servers: { [name]: { type: "http", url } } }, null, 2) },
+      claude: { label: "Claude Desktop", hint: "~/Library/Application Support/Claude/claude_desktop_config.json", value: JSON.stringify(clientConnectSnippet(server, "mcpServers"), null, 2) },
+      cursor: { label: "Cursor", hint: "~/.cursor/mcp.json or .cursor/mcp.json", value: JSON.stringify(clientConnectSnippet(server, "mcpServers"), null, 2) },
+      vscode: { label: "VS Code", hint: ".vscode/mcp.json", value: JSON.stringify(clientConnectSnippet(server, "servers"), null, 2) },
       raw: { label: "Raw JSON", hint: "The server-provided access configuration", value: JSON.stringify(server.access_json || {}, null, 2) },
     };
   }, [server]);

@@ -458,6 +458,40 @@ func TestRuntimeServerAccessJSONMapsForwardedPlatformOrigin(t *testing.T) {
 	}
 }
 
+func TestRuntimeServerAccessJSONIncludesHeaderAuthNames(t *testing.T) {
+	mcpServer := mcpv1alpha1.MCPServer{
+		ObjectMeta: metav1.ObjectMeta{Name: "gitlab", Namespace: "mcp-team-tools"},
+		Spec: mcpv1alpha1.MCPServerSpec{
+			Auth: &mcpv1alpha1.AuthConfig{
+				Mode:               "header",
+				CredentialPresence: "any",
+				Headers:            []string{"X-Example-Credential", "Private-Token", " Authorization "},
+			},
+		},
+		Status: mcpv1alpha1.MCPServerStatus{URL: "https://mcp.example.com/gitlab/mcp"},
+	}
+	request := httptest.NewRequest(http.MethodGet, "/api/runtime/servers", nil)
+	got := serverInfoFromMCPServer(mcpServer, serverDeploymentStatus{}, request)
+	if got.AuthMode != "header" || got.CredentialPresence != "any" {
+		t.Fatalf("auth summary = %q %q", got.AuthMode, got.CredentialPresence)
+	}
+	if url := accessJSONServerURL(t, got, "gitlab"); url != "https://mcp.example.com/gitlab/mcp" {
+		t.Fatalf("access_json url = %q", url)
+	}
+	rawServers := got.AccessJSON["mcpServers"].(map[string]any)
+	rawServer := rawServers["gitlab"].(map[string]any)
+	headers, ok := rawServer["headers"].(map[string]any)
+	if !ok {
+		t.Fatalf("access_json headers = %#v", rawServer["headers"])
+	}
+	if headers["X-Example-Credential"] != "" || headers["Private-Token"] != "" || headers["Authorization"] != "" {
+		t.Fatalf("headers = %#v, want empty fill-in values", headers)
+	}
+	if _, ok := rawServer["credentialPresence"]; ok {
+		t.Fatalf("client snippet must not add credentialPresence: %#v", rawServer)
+	}
+}
+
 func accessJSONServerURL(t *testing.T, info serverInfo, name string) string {
 	t.Helper()
 	rawServers, ok := info.AccessJSON["mcpServers"].(map[string]any)

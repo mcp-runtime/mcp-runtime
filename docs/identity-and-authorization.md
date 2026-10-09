@@ -210,6 +210,13 @@ OAuth server does not fall back to this mode. Direct clients send the headers
 themselves. An optional adapter can inject them from local sources; that
 adapter path is separate and does not create a Runtime principal.
 
+The server list and `mcp-runtime server connect-config` copy `auth.headers`
+into the client snippet as a `headers` object with empty values. The console
+Claude, Cursor, and VS Code tabs use that same object. Fill one value when
+`credentialPresence` is `any` and delete the other empty headers, because an
+empty header is rejected. `all` requires every listed header. The snippet
+never contains a credential value.
+
 ## Grant: administrator-approved authority
 
 An `MCPAccessGrant` answers:
