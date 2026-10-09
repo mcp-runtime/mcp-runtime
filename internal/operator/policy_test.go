@@ -387,3 +387,43 @@ func TestRenderGatewayPolicyObserveWhenPolicyOmitted(t *testing.T) {
 		t.Fatalf("policy = %#v, want observe-mode default", doc.Policy)
 	}
 }
+
+func TestRenderGatewayPolicyHeaderModeEnforcesWithoutIdentity(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = mcpv1alpha1.AddToScheme(scheme)
+	server := &mcpv1alpha1.MCPServer{
+		ObjectMeta: metav1.ObjectMeta{Name: "pilot", Namespace: "mcp-servers"},
+		Spec: mcpv1alpha1.MCPServerSpec{
+			Auth: &mcpv1alpha1.AuthConfig{Mode: "header", Headers: []string{"X-Example-Credential", "Private-Token"}},
+			Policy: &mcpv1alpha1.PolicyConfig{
+				Mode:            mcpv1alpha1.PolicyModeAllowList,
+				DefaultDecision: mcpv1alpha1.PolicyDecisionDeny,
+				DelegatedToolRules: []mcpv1alpha1.DelegatedToolRule{{
+					Name: "list_projects", Decision: mcpv1alpha1.PolicyDecisionAllow,
+				}},
+			},
+			Tools: []mcpv1alpha1.ToolConfig{{Name: "list_projects", SideEffect: mcpv1alpha1.ToolSideEffectRead}},
+		},
+	}
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(server).Build()
+	r := &MCPServerReconciler{
+		Client: client, Scheme: scheme, ClusterName: "kind",
+		AdapterCertificatesEnabled: true, AdapterTrustDomain: "example.org", MTLSClusterIssuer: "mcp-runtime-ca",
+	}
+	doc, err := r.renderGatewayPolicy(context.Background(), server)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.SchemaVersion != policy.SchemaVersionDelegatedHeaders {
+		t.Fatalf("schema = %q", doc.SchemaVersion)
+	}
+	if doc.Auth == nil || doc.Auth.TrustDomain != "" || len(doc.Auth.Headers) != 2 {
+		t.Fatalf("auth = %#v", doc.Auth)
+	}
+	if err := policy.Validate(doc); err != nil {
+		t.Fatal(err)
+	}
+	if r.usesAdapterCertificates(server) {
+		t.Fatal("header mode must not require adapter certificates")
+	}
+}

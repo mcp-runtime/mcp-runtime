@@ -13,9 +13,10 @@ func (s *gatewayServer) upstreamFilter(ex *Exchange) Result {
 	// The verified SPIFFE header is an ingress-to-gateway assertion; the MCP
 	// server must never see it, forged or not.
 	ex.R.Header.Del(s.verifiedSPIFFEHeaderName())
-	// A bearer is forwarded only after OAuth validation. On servers without
-	// OAuth, remove an arbitrary client Authorization value before proxying.
-	if !policypkg.PolicyUsesOAuth(ex.Policy) {
+	// Header mode forwards every name in auth.headers unchanged. There is no
+	// scheme or vendor list. Authorization is removed only when this server
+	// did not configure it and the request is not an OAuth-validated token.
+	if !policypkg.PolicyUsesOAuth(ex.Policy) && !policypkg.DelegatedHeaderConfigured(ex.Policy, defaultTokenHeader) {
 		ex.R.Header.Del(defaultTokenHeader)
 	}
 	if trimmedPath, ok := trimRequestPathPrefix(ex.R.URL.Path, s.stripPrefix); ok {

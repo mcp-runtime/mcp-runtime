@@ -10,6 +10,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 ### Added
 
 - Customers can configure dashboard, registry catalog entry, documentation, and admin Grafana paths alongside existing hostname overrides, allowing a single public hostname and enterprise certificate. Bundled MCP Auth ingress and discovery paths follow its configured issuer URL; setup rejects conflicting paths before cluster writes ([#658](https://github.com/mcp-runtime/mcp-runtime/issues/658)).
+- Servers can opt in to upstream-owned header authentication with `auth.mode: header` and a customer-defined list of credential header names. The gateway forwards those headers, enforces allow-list tool rules with a default deny, and audits the caller as unverified. It does not accept grants, sessions, or observation mode on this path, and it does not fall back to header mode when OAuth fails. Set `auth.credentialPresence` to `all` when every configured header must be present; the default `any` accepts one or more without choosing among them ([#660](https://github.com/mcp-runtime/mcp-runtime/issues/660)).
 
 ### Changed
 

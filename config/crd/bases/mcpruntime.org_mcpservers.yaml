@@ -112,7 +112,32 @@ spec:
                       this is unset, it defaults to the public MCP URL built from the ingress
                       host (or MCP_DEFAULT_INGRESS_HOST on the operator), TLS setting, and path.
                     type: string
+                  credentialPresence:
+                    description: |-
+                      CredentialPresence is "any" (default: at least one configured header)
+                      or "all" (every configured header). The gateway forwards every present
+                      configured header and does not choose among them.
+                    enum:
+                    - any
+                    - all
+                    type: string
+                  headers:
+                    description: |-
+                      Headers are customer-configured credential header names. Credential
+                      values never belong here. Names match case-insensitively.
+                    items:
+                      type: string
+                    maxItems: 16
+                    minItems: 1
+                    type: array
                   issuerURL:
+                    type: string
+                  mode:
+                    description: |-
+                      Mode selects authentication. Omit it for OAuth. "header" delegates
+                      credential authentication to the upstream MCP server.
+                    enum:
+                    - header
                     type: string
                   scopes:
                     description: |-
@@ -256,7 +281,46 @@ spec:
                     - allow
                     - deny
                     type: string
+                  delegatedToolRules:
+                    description: |-
+                      DelegatedToolRules apply only when auth.mode is header. An explicit
+                      deny wins over no rule; unlisted tools follow defaultDecision, which
+                      header mode requires to be deny.
+                    items:
+                      description: |-
+                        DelegatedToolRule allows or denies one tool when auth.mode is header.
+                        These rules do not identify the caller.
+                      properties:
+                        decision:
+                          allOf:
+                          - enum:
+                            - allow
+                            - deny
+                          - enum:
+                            - allow
+                            - deny
+                          type: string
+                        name:
+                          type: string
+                      required:
+                      - decision
+                      - name
+                      type: object
+                    type: array
                   enforceOn:
+                    type: string
+                  maxSideEffect:
+                    allOf:
+                    - enum:
+                      - read
+                      - write
+                      - destructive
+                    - enum:
+                      - read
+                      - write
+                      - destructive
+                    description: MaxSideEffect caps header-mode tool calls at this
+                      class or lower.
                     type: string
                   mode:
                     enum:

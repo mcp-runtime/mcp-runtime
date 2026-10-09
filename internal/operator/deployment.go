@@ -836,7 +836,7 @@ func gatewayEnabled(mcpServer *mcpv1alpha1.MCPServer) bool {
 }
 
 func serverUsesOAuth(mcpServer *mcpv1alpha1.MCPServer) bool {
-	return mcpServer != nil && mcpServer.Spec.Auth != nil
+	return mcpServer != nil && mcpServer.Spec.Auth != nil && !mcpv1alpha1.AuthUsesHeaderMode(mcpServer.Spec.Auth)
 }
 
 func (r *MCPServerReconciler) oauthInternalIssuerURL() string {

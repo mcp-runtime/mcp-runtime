@@ -72,6 +72,9 @@ func Allow(reason, policyVersion string) Decision {
 
 // Authorize evaluates a rendered gateway policy document for a single MCP RPC request.
 func Authorize(policy *Document, request Request, now time.Time) Decision {
+	if UsesDelegatedHeaders(policy) {
+		return authorizeDelegated(policy, request)
+	}
 	decision := Decision{
 		Allowed:       true,
 		Status:        http.StatusOK,

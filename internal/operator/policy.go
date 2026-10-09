@@ -175,7 +175,13 @@ func (r *MCPServerReconciler) renderGatewayPolicy(ctx context.Context, mcpServer
 		},
 	}
 
-	if mcpServer.Spec.Auth != nil || r.usesAdapterCertificates(mcpServer) {
+	if mcpv1alpha1.AuthUsesHeaderMode(mcpServer.Spec.Auth) {
+		doc.Auth = &policy.Auth{
+			Mode:               mcpdefaults.AuthModeHeader,
+			Headers:            append([]string(nil), mcpServer.Spec.Auth.Headers...),
+			CredentialPresence: mcpServer.Spec.Auth.CredentialPresence,
+		}
+	} else if mcpServer.Spec.Auth != nil || r.usesAdapterCertificates(mcpServer) {
 		doc.Auth = &policy.Auth{TrustDomain: strings.TrimSpace(r.AdapterTrustDomain)}
 		if mcpServer.Spec.Auth != nil {
 			doc.Auth.TokenHeader = mcpServer.Spec.Auth.TokenHeader
@@ -190,6 +196,20 @@ func (r *MCPServerReconciler) renderGatewayPolicy(ctx context.Context, mcpServer
 			DefaultDecision: string(mcpServer.Spec.Policy.DefaultDecision),
 			EnforceOn:       mcpServer.Spec.Policy.EnforceOn,
 			PolicyVersion:   mcpServer.Spec.Policy.PolicyVersion,
+			MaxSideEffect:   string(mcpServer.Spec.Policy.MaxSideEffect),
+		}
+		for _, rule := range mcpServer.Spec.Policy.DelegatedToolRules {
+			doc.Policy.DelegatedToolRules = append(doc.Policy.DelegatedToolRules, policy.DelegatedToolRule{
+				Name:     policy.ToolName(rule.Name),
+				Decision: string(rule.Decision),
+			})
+		}
+	} else if mcpv1alpha1.AuthUsesHeaderMode(mcpServer.Spec.Auth) {
+		doc.Policy = &policy.Config{
+			Mode:            mcpdefaults.PolicyModeAllowList,
+			DefaultDecision: mcpdefaults.PolicyDecisionDeny,
+			EnforceOn:       mcpdefaults.PolicyEnforceOn,
+			PolicyVersion:   mcpdefaults.PolicyVersion,
 		}
 	} else {
 		// Gateway without an explicit policy block stays in observe mode so
@@ -292,6 +312,9 @@ func (r *MCPServerReconciler) renderGatewayPolicy(ctx context.Context, mcpServer
 			rendered.UpstreamTokenRef = fmt.Sprintf("%s/%s", session.Spec.UpstreamTokenSecretRef.Name, session.Spec.UpstreamTokenSecretRef.Key)
 		}
 		doc.Sessions = append(doc.Sessions, rendered)
+	}
+	if mcpv1alpha1.AuthUsesHeaderMode(mcpServer.Spec.Auth) && (len(doc.Grants) > 0 || len(doc.Sessions) > 0 || doc.Session != nil) {
+		return nil, fmt.Errorf("header auth on %s/%s cannot use grants, sessions, or session identity", mcpServer.Namespace, mcpServer.Name)
 	}
 
 	// Stamp document-level metadata (schema version + deterministic revision).

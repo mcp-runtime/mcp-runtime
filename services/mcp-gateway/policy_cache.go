@@ -163,16 +163,23 @@ func (s *gatewayServer) applyPolicyDefaults(doc *policypkg.Document) {
 	if doc.Server.Cluster == "" {
 		doc.Server.Cluster = s.clusterName
 	}
-	if doc.Auth != nil {
-		if doc.Auth.TokenHeader == "" {
-			doc.Auth.TokenHeader = defaultTokenHeader
+	if doc.Auth != nil && !policypkg.UsesDelegatedHeaders(doc) && doc.Auth.TokenHeader == "" {
+		doc.Auth.TokenHeader = defaultTokenHeader
+	}
+	if policypkg.UsesDelegatedHeaders(doc) {
+		if doc.Policy.Mode == "" {
+			doc.Policy.Mode = "allow-list"
 		}
-	}
-	if doc.Policy.Mode == "" {
-		doc.Policy.Mode = s.defaultPolicyMode
-	}
-	if doc.Policy.DefaultDecision == "" {
-		doc.Policy.DefaultDecision = s.defaultPolicyDecision
+		if doc.Policy.DefaultDecision == "" {
+			doc.Policy.DefaultDecision = "deny"
+		}
+	} else {
+		if doc.Policy.Mode == "" {
+			doc.Policy.Mode = s.defaultPolicyMode
+		}
+		if doc.Policy.DefaultDecision == "" {
+			doc.Policy.DefaultDecision = s.defaultPolicyDecision
+		}
 	}
 	if doc.Policy.PolicyVersion == "" {
 		doc.Policy.PolicyVersion = s.defaultPolicyVersion
