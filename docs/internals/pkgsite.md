@@ -16,6 +16,10 @@ reuses the existing `DOCS_DEPLOY_*` secrets. The remote script stops early if
 another container already publishes the port, and restores the previous image
 if the new container does not serve the package page. The container runs as a non-root user with a
 read-only filesystem, a temporary build cache, and no added capabilities.
+The PR smoke container uses the production budget: two CPUs, 1536MiB memory,
+and 256 processes. `GOMAXPROCS=2` and `GOFLAGS=-p=1` bound Go runtime and
+build parallelism during module loading. Readiness uses HTTP from the host
+instead of spawning a container process, with up to 90 bounded HTTP probes.
 After rollout, the workflow checks public package pages over HTTPS. A missing
 Ingress, failed certificate, or broken public route fails the deployment run.
 

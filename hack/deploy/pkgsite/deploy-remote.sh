@@ -48,9 +48,9 @@ if ! start_container "$image"; then
   exit 1
 fi
 
-for attempt in {1..45}; do
-  if docker exec "$container" wget -q -O /dev/null \
-    http://127.0.0.1:8080/github.com/mcp-runtime/mcp-runtime/pkg/access; then
+for attempt in {1..90}; do
+  if curl --fail --silent --show-error --max-time 5 --output /dev/null \
+    "http://127.0.0.1:${listen_port}/github.com/mcp-runtime/mcp-runtime/pkg/access"; then
     echo "Pkgsite is serving MCP Runtime packages on localhost:${listen_port}"
     # Keep this image and one rollback image; each main build has a unique tag.
     while IFS= read -r old_image; do

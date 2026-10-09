@@ -43,12 +43,16 @@ jobs:
             -f hack/deploy/pkgsite/Dockerfile \
             -t "mcp-runtime-pkgsite:${GITHUB_SHA}" .
 
+      - name: Test deployment readiness and rollback
+        run: python3 hack/deploy/pkgsite/deploy_remote_test.py
+
       - name: Smoke test local module documentation
         run: |
           set -euo pipefail
           docker run -d --name pkgsite-smoke \
             --read-only --tmpfs /tmp:rw,nosuid,nodev,size=512m \
             --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 256 --memory 1536m --cpus 2 \
             -p 127.0.0.1:18082:8080 \
             "mcp-runtime-pkgsite:${GITHUB_SHA}" >/dev/null
           trap 'docker rm -f pkgsite-smoke >/dev/null 2>&1 || true' EXIT
