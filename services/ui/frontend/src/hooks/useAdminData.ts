@@ -120,6 +120,7 @@ export function useUsage(enabled: boolean, limit: string) {
     queryKey: [ADMIN_QUERY_KEY, "usage", limit],
     queryFn: () => listUsage(limit),
     enabled,
+    refetchInterval: 15_000,
   });
 }
 

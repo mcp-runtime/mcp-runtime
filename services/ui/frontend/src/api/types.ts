@@ -426,6 +426,7 @@ export type AdminOperations = {
 
 export type GatewayEvent = {
   timestamp?: string;
+  server?: string;
   namespace?: string;
   tool_name?: string;
   decision?: string;
@@ -433,6 +434,19 @@ export type GatewayEvent = {
   event_type?: string;
   payload?: Record<string, unknown>;
 };
+
+export function eventToolName(event: GatewayEvent): string {
+  if (event.tool_name?.trim()) {
+    return event.tool_name.trim();
+  }
+  const fromPayload = event.payload?.tool_name;
+  return typeof fromPayload === "string" ? fromPayload.trim() : "";
+}
+
+export function eventRpcMethod(event: GatewayEvent): string {
+  const method = event.payload?.rpc_method;
+  return typeof method === "string" ? method.trim() : "";
+}
 
 // The authenticated principal returned by the server is the only source of
 // truth for admin access. Anything else must fail closed.
