@@ -12,6 +12,7 @@ description: Apply and debug MCP Runtime access grants, agent sessions, gateway 
 | **UI** | Create/apply grants and sessions; toggle enable/revoke |
 | **CLI (default)** | `mcp-runtime auth login --api-url <url>` → `agent create|list|...` and `access grant init` / `access grant apply --file …` |
 | **Adapter (recommended for agents)** | `adapter proxy --server <name> --agent <id> [--auto-refresh]` → certificate-backed `MCPAgentSession`; add OAuth only when the server configures it |
+| **Optional header adapter** | `adapter proxy --auth-mode header --runtime-url https://… --credential-header-env Name=ENV` injects client-local credential headers and does not enroll a certificate. Direct clients can send the same headers without the adapter. |
 | **Explicit Kubernetes test/recovery** | `access … --use-kube` only when that path is explicitly requested; never bypass a failed CLI/UI flow |
 
 Session apply via platform API is **admin-only**. Adapters usually skip manual session apply.

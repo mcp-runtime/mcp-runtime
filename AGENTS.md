@@ -24,7 +24,7 @@ This file is the **onboarding index** for the MCP Runtime repo. It complements `
 | Area | Path | Notes |
 |------|------|--------|
 | User-facing CLI | `cmd/mcp-runtime/`, `internal/cli/root/`, `internal/cli/<command>/`, `internal/cli/core/` | Cobra routing; `setup`, `status`, `registry`, `server`, `access`, … |
-| Agent adapters | `internal/cli/adapter/`, `internal/agentadapter/`, `services/runtime-api/internal/runtimeapi/adapter*.go` | `adapter proxy` use issued sessions; `adapter enroll` submits a local-key CSR for enterprise mTLS |
+| Agent adapters | `internal/cli/adapter/`, `internal/agentadapter/`, `services/runtime-api/internal/runtimeapi/adapter*.go` | `adapter proxy` uses issued sessions by default; `--auth-mode header` injects client-local credential headers without enrollment; `adapter enroll` submits a local-key CSR for enterprise mTLS |
 | Operator | `cmd/operator/`, `internal/operator/` | `MCPServer` reconciliation, ingress (`ingressClass` default **traefik**), gateway |
 | API & CRD types | `api/v1alpha1/`, `config/crd/bases/` | Source of truth for object shapes |
 | Access and policy | `pkg/access/`, `pkg/policy/` | Grant/session helpers; gateway policy contract |
