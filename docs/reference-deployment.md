@@ -459,6 +459,21 @@ Record certificate fingerprints, issuer readiness, and renewal times. Never
 uninstall the CRDs, delete signing material, or force leaf reissuance to update
 the controller. Preserve any custom approval controller configuration.
 
+Upgrade notes between 1.16 and 1.21 that affect MCP Runtime (reviewed
+2026-10-06 against the upstream release notes for each minor):
+
+| Minor | Change | Effect on MCP Runtime |
+|-------|--------|-----------------------|
+| 1.17 | CA and SelfSigned issuers sign with SHA-384/512 for RSA keys of 3072/4096 bits or more; unstructured logs replaced by structured logs. | The bundled `mcp-runtime-ca` is ECDSA P-256, so this does not apply to it. Check this only for an operator-supplied RSA CA of 3072 bits or more. Update any log grep in alerts. |
+| 1.18 | `Certificate.spec.privateKey.rotationPolicy` defaults to `Always`; `revisionHistoryLimit` defaults to `1`; the ACME HTTP-01 solver Ingress uses `pathType: Exact`. | Leaf keys rotate on the next renewal, which is the intended behavior. `mcp-runtime-ca` is a setup-generated Secret, not a Certificate, so its key does not rotate. Old CertificateRequests are garbage-collected on upgrade. Traefik accepts `Exact`; only ingress-nginx is affected. |
+| 1.19 | The ACME client metrics drop their `path` label in favor of `action`; `CAInjectorMerging` is on by default. Skip v1.19.0, which reissues certificates unnecessarily. | Update dashboards that use the old label. |
+| 1.20 | Containers run as UID/GID 65532 instead of 1000/0; the `cert-manager-edit` ClusterRole no longer creates Challenges or Orders; `DefaultPrivateKeyRotationPolicyAlways` is GA. | MCP Runtime does not create Challenges or Orders directly. |
+| 1.21 | `CAInjectorMerging` is GA; the controller metrics port is renamed `http-metrics`; Helm drops the default `tokenrequest` RBAC and three metrics values. | The static manifest that setup applies has no Helm values. Update scrape configs that select the old port name. |
+
+None of these minors removes a CRD API version that MCP Runtime uses
+(`cert-manager.io/v1`) or a flag that setup passes. Setup applies the upstream
+static manifest unchanged.
+
 After each step on disposable Staging E2E, wait for controller, webhook, and
 cainjector readiness; verify existing issuers and Certificates remain Ready;
 issue a fresh bounded test CertificateRequest; and check renewal scheduling and

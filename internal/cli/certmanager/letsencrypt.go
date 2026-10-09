@@ -38,6 +38,12 @@ func CertManagerInstallManifestURL() string {
 	return certManagerInstallManifestURL()
 }
 
+// CertManagerRelease returns the pinned cert-manager release tag that setup
+// installs, so user-facing messages never drift from the install manifest.
+func CertManagerRelease() string {
+	return certManagerRelease
+}
+
 // ClusterIssuerNameForACME returns the ClusterIssuer resource name for Let's Encrypt.
 func ClusterIssuerNameForACME(staging bool) string {
 	if staging {

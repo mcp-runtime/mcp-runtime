@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+python3 "$(dirname "$0")/ui_assets_test.py"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 python3 "${SCRIPT_DIR}/image_architecture_test.py"
 bash "${SCRIPT_DIR}/namespace_placement_test.sh"
