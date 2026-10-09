@@ -7,7 +7,13 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Added
+
+- QA E2E captures CPU, memory, disk and Grafana/Prometheus observations across setup and test stages, preserving missing samples and failed-run status in reports ([#683](https://github.com/mcp-runtime/mcp-runtime/pull/683)).
+
 ### Changed
+
+- `setup --test-mode` deploys one replica per platform Deployment and StatefulSet, with a single Kafka controller/broker and replication factor 1, reducing local test resource requirements. Use `--test-mode --test-multi-replica` for the normal replica layout when testing redundancy or shared state. Use a fresh test cluster when changing Kafka replica modes; setup preserves existing stores by rejecting quorum changes. Contributor docs record macOS ARM64/Colima sizing and measurement conditions ([#683](https://github.com/mcp-runtime/mcp-runtime/pull/683)).
 
 - The operator manages per-server Traefik egress policies for actual serving ports and reports TraefikEgressReady conditions. Fresh setup is required for the v0.7.0 reference deployment; the static policy no longer grants fixed ports into server namespaces ([#630](https://github.com/mcp-runtime/mcp-runtime/pull/630)).
 
@@ -61,8 +67,6 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 ## [0.6.4] - 2026-10-09
 
 ### Changed
-
-- `setup --test-mode` deploys one replica per platform Deployment and StatefulSet, with a single Kafka controller/broker and replication factor 1, reducing local test resource requirements. Use `--test-mode --test-multi-replica` for the normal replica layout when testing redundancy or shared state. Use a fresh test cluster when changing Kafka replica modes; setup preserves existing stores by rejecting quorum changes. Contributor docs record macOS ARM64/Colima sizing and measurement conditions.
 
 - The platform console uses grouped sidebar navigation with page filtering, blue active states, and a charcoal dark theme. Account controls sit at the bottom of the desktop sidebar; compact screens retain a navigation menu and light mode remains available ([#648](https://github.com/mcp-runtime/mcp-runtime/pull/648)).
 
