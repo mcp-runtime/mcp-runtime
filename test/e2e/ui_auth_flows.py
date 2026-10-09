@@ -2,6 +2,7 @@ import json
 import os
 import re
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from _helpers_loader import load_e2e_helpers
@@ -41,15 +42,24 @@ def expect_json(url, status=200, *, method="GET", headers=None, body=None):
     return json.loads(expect_status(url, status, method=method, headers=headers, body=body))
 
 
+def vite_asset(paths):
+    for path in paths:
+        normalized = path[1:] if path.startswith("./") else path
+        if normalized.startswith("/assets/") or normalized.startswith("assets/"):
+            return path
+    return ""
+
+
 def check_vite_assets(base, label, index_html):
     scripts = re.findall(r'<script[^>]+src="([^"]+)"', index_html)
     styles = re.findall(r'<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"', index_html)
-    script_path = next((path for path in scripts if path.startswith("/assets/")), "")
-    style_path = next((path for path in styles if path.startswith("/assets/")), "")
+    script_path = vite_asset(scripts)
+    style_path = vite_asset(styles)
     check(script_path, f"{label} index references Vite JS asset", f"{label} index missing Vite JS asset: {index_html}")
     check(style_path, f"{label} index references Vite CSS asset", f"{label} index missing Vite CSS asset: {index_html}")
-    expect_status(f"{base}{script_path}", 200, contains="/config.js")
-    expect_status(f"{base}{style_path}", 200, contains="--canvas:")
+    root = base if base.endswith("/") else base + "/"
+    expect_status(urllib.parse.urljoin(root, script_path), 200, contains="/config.js")
+    expect_status(urllib.parse.urljoin(root, style_path), 200, contains="--canvas:")
     return script_path, style_path
 
 
