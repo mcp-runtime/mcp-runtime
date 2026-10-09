@@ -11,6 +11,11 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 - Platform images and modules build with Go 1.26.9 and `golang.org/x/net` v0.60.0. Those releases fix HTTP/2 CPU exhaustion from repeated window updates (CVE-2026-78669), excessive CPU from large Range headers (CVE-2026-78667), and memory exhaustion from malformed TLS ECH references (CVE-2026-97031).
 
+### Fixed
+
+- Setup reports the cert-manager version it actually installs, and repair guidance follows the installed release rather than a retired manifest; drift checks keep the pin, logs, and docs aligned ([#628](https://github.com/mcp-runtime/mcp-runtime/pull/628)).
+
+
 ## [0.6.6] - 2026-10-09
 
 ### Changed
