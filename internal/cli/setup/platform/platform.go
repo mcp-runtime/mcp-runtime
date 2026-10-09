@@ -438,6 +438,16 @@ func setupPlatformWithDeps(logger *zap.Logger, plan setupplan.Plan, deps SetupDe
 	}
 	initPlatformKubeconfig(plan.Kubeconfig)
 	core.Section("MCP Runtime Setup")
+	if plan.TestMultiReplica && !plan.TestMode {
+		return fmt.Errorf("--test-multi-replica requires --test-mode")
+	}
+	multiReplica := "0"
+	if plan.TestMode && plan.TestMultiReplica {
+		multiReplica = "1"
+	}
+	if err := os.Setenv("MCP_TEST_MULTI_REPLICA", multiReplica); err != nil {
+		return fmt.Errorf("set test replica mode: %w", err)
+	}
 
 	// Propagate test mode to build helpers so they can choose faster/safer build paths.
 	if plan.TestMode {
@@ -591,6 +601,7 @@ func setupCatalogNamespaceStep(logger *zap.Logger, plan setupplan.Plan, deps Set
 
 type traefikDeploymentSpec struct {
 	Spec struct {
+		Replicas *int32 `json:"replicas"`
 		Template struct {
 			Spec struct {
 				Containers []struct {

@@ -210,6 +210,9 @@ func traefikMiddlewarePatch(spec traefikDeploymentSpec, namespace string) ([]byt
 	container := spec.Spec.Template.Spec.Containers[containerIndex]
 
 	var ops []jsonPatchOperation
+	if setupSingleReplicaMode() && (spec.Spec.Replicas == nil || *spec.Spec.Replicas != 1) {
+		ops = append(ops, jsonPatchOperation{Op: "add", Path: "/spec/replicas", Value: 1})
+	}
 	if !containsString(container.Args, "--providers.file.filename=/etc/traefik/dynamic/dynamic.yml") {
 		ops = append(ops, jsonPatchOperation{Op: "add", Path: fmt.Sprintf("/spec/template/spec/containers/%d/args/-", containerIndex), Value: "--providers.file.filename=/etc/traefik/dynamic/dynamic.yml"})
 	}

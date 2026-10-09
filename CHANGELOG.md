@@ -62,6 +62,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Changed
 
+- `setup --test-mode` deploys one replica per platform Deployment and StatefulSet, with a single Kafka controller/broker and replication factor 1, reducing local test resource requirements. Use `--test-mode --test-multi-replica` for the normal replica layout when testing redundancy or shared state. Use a fresh test cluster when changing Kafka replica modes; setup preserves existing stores by rejecting quorum changes. Contributor docs record macOS ARM64/Colima sizing and measurement conditions.
+
 - The platform console uses grouped sidebar navigation with page filtering, blue active states, and a charcoal dark theme. Account controls sit at the bottom of the desktop sidebar; compact screens retain a navigation menu and light mode remains available ([#648](https://github.com/mcp-runtime/mcp-runtime/pull/648)).
 
 ### Fixed

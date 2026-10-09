@@ -51,6 +51,7 @@ type Input struct {
 	TLSEnabled              bool
 	ProvidedTLSSecrets      bool
 	TestMode                bool
+	TestMultiReplica        bool
 	ParallelBuilds          bool
 	StrictProd              bool
 	DeployAnalytics         bool
@@ -93,6 +94,7 @@ type Plan struct {
 	TLSEnabled              bool
 	ProvidedTLSSecrets      bool
 	TestMode                bool
+	TestMultiReplica        bool
 	ParallelBuilds          bool
 	StrictProd              bool
 	DeployAnalytics         bool
@@ -231,6 +233,7 @@ func Build(input Input) Plan {
 		TLSEnabled:              input.TLSEnabled,
 		ProvidedTLSSecrets:      input.ProvidedTLSSecrets,
 		TestMode:                input.TestMode,
+		TestMultiReplica:        input.TestMode && input.TestMultiReplica,
 		ParallelBuilds:          input.ParallelBuilds,
 		StrictProd:              input.StrictProd,
 		DeployAnalytics:         input.DeployAnalytics,

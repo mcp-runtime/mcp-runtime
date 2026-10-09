@@ -2121,6 +2121,9 @@ func reconcileKafkaStatefulSetForKRaftUpgradeClientGo() error {
 	if !kafkaStatefulSetNeedsKRaftRecreate(current) {
 		return nil
 	}
+	if err := checkKafkaReplicaMode(current); err != nil {
+		return err
+	}
 	core.Warn("Legacy Kafka StatefulSet layout detected; recreating it for KRaft migration (PVCs are preserved)")
 	propagation := metav1.DeletePropagationForeground
 	if err := statefulSets.Delete(context.Background(), kafkaStatefulSetName, metav1.DeleteOptions{PropagationPolicy: &propagation}); err != nil && !apierrors.IsNotFound(err) {
@@ -2150,6 +2153,9 @@ func reconcileKafkaStatefulSetForKRaftUpgradeWithKubectl(kubectl core.KubectlRun
 	if !kafkaStatefulSetNeedsKRaftRecreate(&current) {
 		return nil
 	}
+	if err := checkKafkaReplicaMode(&current); err != nil {
+		return err
+	}
 	core.Warn("Legacy Kafka StatefulSet layout detected; recreating it for KRaft migration (PVCs are preserved)")
 	if err := kubectl.RunWithOutput([]string{
 		"delete", "statefulset/" + kafkaStatefulSetName,
@@ -2172,7 +2178,7 @@ func kafkaStatefulSetNeedsKRaftRecreate(sts *appsv1.StatefulSet) bool {
 	if sts.Spec.PodManagementPolicy != appsv1.ParallelPodManagement {
 		return true
 	}
-	if sts.Spec.Replicas == nil || *sts.Spec.Replicas != kafkaKRaftReplicaCount {
+	if sts.Spec.Replicas == nil || *sts.Spec.Replicas != setupKafkaReplicas() {
 		return true
 	}
 	if sts.Annotations == nil || sts.Annotations["mcpruntime.org/kafka-mode"] != "kraft" {
