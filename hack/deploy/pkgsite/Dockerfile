@@ -1,10 +1,11 @@
-FROM golang:1.26.8-alpine AS build
+ARG GO_VERSION=1.26.9
+FROM golang:${GO_VERSION}-alpine AS build
 
 # Keep the documentation renderer on a reviewed release rather than following
 # the upstream default at each deployment.
 RUN GOBIN=/out go install golang.org/x/pkgsite/cmd/pkgsite@v0.5.0
 
-FROM golang:1.26.8-alpine
+FROM golang:${GO_VERSION}-alpine
 
 LABEL org.opencontainers.image.source="https://github.com/mcp-runtime/mcp-runtime" \
       org.opencontainers.image.title="mcp-runtime-pkgsite" \

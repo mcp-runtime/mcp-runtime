@@ -3,6 +3,7 @@ name: Go Package Docs
 on:
   pull_request:
     paths:
+      - '**/go.mod'
       - .github/workflows/deploy-go-docs.yaml
       - hack/deploy/pkgsite/**
       - docs/mkdocs.yml
@@ -34,7 +35,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Build pinned pkgsite image
-        run: docker build -f hack/deploy/pkgsite/Dockerfile -t "mcp-runtime-pkgsite:${GITHUB_SHA}" .
+        run: |
+          set -euo pipefail
+          go_version="$(awk '$1 == "go" { print $2; exit }' go.mod)"
+          [[ "$go_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          docker build --build-arg "GO_VERSION=${go_version}" \
+            -f hack/deploy/pkgsite/Dockerfile \
+            -t "mcp-runtime-pkgsite:${GITHUB_SHA}" .
 
       - name: Smoke test local module documentation
         run: |

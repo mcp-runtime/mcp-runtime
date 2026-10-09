@@ -7,7 +7,8 @@ snapshot by [Go Package Docs](https://github.com/mcp-runtime/mcp-runtime/actions
 
 ## How deployment works
 
-The workflow builds a pkgsite `v0.5.0` image, checks a real package page in a
+The workflow builds a pkgsite `v0.5.0` image using the Go version declared in
+the root `go.mod` for both build and runtime stages, checks a real package page in a
 temporary container, transfers that exact image over SSH, and starts it on
 host port `8083` on the docs host, matching the MkDocs container's host-port
 deployment. MkDocs uses `8081` and the articles container uses `8082`. It
@@ -52,6 +53,18 @@ docker ps --filter name=mcp-runtime-pkgsite
 docker logs --tail 80 mcp-runtime-pkgsite
 curl -fsSI http://127.0.0.1:8083/github.com/mcp-runtime/mcp-runtime/pkg/access
 ```
+
+For a local image build, pass the same module-derived toolchain explicitly:
+
+```bash
+go_version="$(awk '$1 == "go" { print $2; exit }' go.mod)"
+docker build --build-arg "GO_VERSION=${go_version}" \
+  -f hack/deploy/pkgsite/Dockerfile -t mcp-runtime-pkgsite:local .
+```
+
+The runtime keeps `GOTOOLCHAIN=local` and `GOPROXY=off`; it does not download a
+new toolchain at startup. Changes to module requirements also trigger the
+package-docs PR smoke test, so incompatible requirements fail before merge.
 
 ## Package paths
 
