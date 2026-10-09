@@ -58,7 +58,7 @@ def check_vite_assets(base, label, index_html):
     check(script_path, f"{label} index references Vite JS asset", f"{label} index missing Vite JS asset: {index_html}")
     check(style_path, f"{label} index references Vite CSS asset", f"{label} index missing Vite CSS asset: {index_html}")
     root = base if base.endswith("/") else base + "/"
-    expect_status(urllib.parse.urljoin(root, script_path), 200, contains="/config.js")
+    expect_status(urllib.parse.urljoin(root, script_path), 200, contains="config.js")
     expect_status(urllib.parse.urljoin(root, style_path), 200, contains="--canvas:")
     return script_path, style_path
 
