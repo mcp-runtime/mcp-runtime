@@ -21,7 +21,9 @@ RUN chmod 755 /usr/local/bin/start-pkgsite /usr/local/bin/prepare-pkgsite-source
     && /usr/local/bin/prepare-pkgsite-source /src \
     && chown -R 65532:65532 /src
 
-ENV GOCACHE=/tmp/go-build \
+ENV GOMAXPROCS=2 \
+    GOFLAGS=-p=1 \
+    GOCACHE=/tmp/go-build \
     GOPATH=/tmp/gopath \
     GOPROXY=off \
     GOTOOLCHAIN=local \
