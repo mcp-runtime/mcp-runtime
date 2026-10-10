@@ -260,6 +260,9 @@ func TestNativePublicationMountsCredentialFile(t *testing.T) {
 		if !found {
 			t.Fatal("missing publisher credential volume")
 		}
+		if pod.Labels[HelperLabelKey] != HelperLabelValue {
+			t.Fatal("helper pod must carry the registry NetworkPolicy label")
+		}
 		if !strings.Contains(strings.Join(pod.Spec.Containers[0].Command, " "), "--dest-authfile=/registry-publisher/config.json") {
 			t.Fatal("missing credential file argument")
 		}

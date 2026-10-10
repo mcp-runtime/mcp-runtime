@@ -40,7 +40,7 @@ spec:
   - host: registry.local
 `
 
-	rendered, err := mutateRegistryManifest(manifest, "registry.example.com", "registry.example.com/registry:2.8.3")
+	rendered, err := mutateRegistryManifest(manifest, "registry.example.com", "registry.example.com/registry:2.8.3", "")
 	if err != nil {
 		t.Fatalf("mutateRegistryManifest() error = %v", err)
 	}

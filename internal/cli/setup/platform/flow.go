@@ -225,6 +225,9 @@ func setupWarnings(plan setupplan.Plan, extRegistry *config.ExternalRegistryConf
 	}
 
 	var warnings []string
+	if warning := nativeRegistryAuthWarning(plan, usingExternalRegistry); warning != "" {
+		warnings = append(warnings, warning)
+	}
 	if !plan.TLSEnabled {
 		warnings = append(warnings, "Non-test setup is running without TLS. This is fine for local/internal registries but not recommended for production.")
 	}

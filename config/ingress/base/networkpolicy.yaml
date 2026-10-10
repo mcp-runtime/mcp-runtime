@@ -51,6 +51,10 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+    # Platform backends only. Egress to MCPServer backends is not listed here:
+    # the operator manages one narrow NetworkPolicy per MCPServer in this
+    # namespace (labelled mcpruntime.org/component=traefik-egress) that allows
+    # only that server's pods on the port its Service routes to.
     - to:
         - namespaceSelector:
             matchLabels:
@@ -61,18 +65,6 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: mcp-observability
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: mcp-servers
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: mcp-servers-org
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: mcp-servers-public
-        - namespaceSelector:
-            matchLabels:
-              platform.mcpruntime.org/managed: "true"
       ports:
         - protocol: TCP
           port: 80

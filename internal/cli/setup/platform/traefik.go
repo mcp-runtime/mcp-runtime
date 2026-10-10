@@ -210,6 +210,9 @@ func traefikMiddlewarePatch(spec traefikDeploymentSpec, namespace string) ([]byt
 	container := spec.Spec.Template.Spec.Containers[containerIndex]
 
 	var ops []jsonPatchOperation
+	if setupSingleReplicaMode() && (spec.Spec.Replicas == nil || *spec.Spec.Replicas != 1) {
+		ops = append(ops, jsonPatchOperation{Op: "add", Path: "/spec/replicas", Value: 1})
+	}
 	if !containsString(container.Args, "--providers.file.filename=/etc/traefik/dynamic/dynamic.yml") {
 		ops = append(ops, jsonPatchOperation{Op: "add", Path: fmt.Sprintf("/spec/template/spec/containers/%d/args/-", containerIndex), Value: "--providers.file.filename=/etc/traefik/dynamic/dynamic.yml"})
 	}
@@ -372,7 +375,16 @@ func activeTraefikNamespaceForPlatform(kubectl core.KubectlRunner) string {
 
 func activeTraefikNamespaceForPlatformClientGo() string {
 	namespaces, err := activeNamedTraefikDeploymentNamespacesClientGo()
-	if err != nil || len(namespaces) == 0 {
+	if err != nil {
+		return ""
+	}
+	return preferredTraefikNamespace(namespaces)
+}
+
+// preferredTraefikNamespace picks the live Traefik namespace: the
+// repo-managed traefik namespace first, then k3s's kube-system.
+func preferredTraefikNamespace(namespaces []string) string {
+	if len(namespaces) == 0 {
 		return ""
 	}
 	for _, preferred := range []string{"traefik", "kube-system"} {

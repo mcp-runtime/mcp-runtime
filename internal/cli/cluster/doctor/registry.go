@@ -69,7 +69,7 @@ func checkRegistryReachableFromCluster(kubectl core.KubectlRunner) DoctorCheck {
 		"-n", "registry",
 		"--restart=Never",
 		"--image=" + image,
-		"--overrides=" + restrictedRunOverrides(podName, image, "curl", curlArgs...),
+		"--overrides=" + withOverrideLabels(restrictedRunOverrides(podName, image, "curl", curlArgs...), map[string]string{"app.kubernetes.io/name": registryProbeLabelValue}),
 	}
 	cmd, err := kubectl.CommandArgs(args)
 	if err != nil {
@@ -124,6 +124,13 @@ func checkRegistryReachableFromCluster(kubectl core.KubectlRunner) DoctorCheck {
 			Remedy: "inspect pod events: `kubectl -n registry describe pod " + podName + "`",
 		}
 	}
+	if hasRegistryTokenChallenge(body) {
+		return DoctorCheck{
+			Name:   "registry reachability (in-cluster)",
+			OK:     true,
+			Detail: fmt.Sprintf("HTTP 401 token challenge from %s (native registry authentication enforced)", registryURL),
+		}
+	}
 	if !hasHTTP200Status(body) {
 		return DoctorCheck{
 			Name:   "registry reachability (in-cluster)",
@@ -137,6 +144,44 @@ func checkRegistryReachableFromCluster(kubectl core.KubectlRunner) DoctorCheck {
 		OK:     true,
 		Detail: fmt.Sprintf("HTTP 200 from %s", registryURL),
 	}
+}
+
+// registryProbeLabelValue marks the doctor reachability probe. The registry
+// NetworkPolicy admits it from the registry namespace only.
+const registryProbeLabelValue = "registry-probe"
+
+// hasRegistryTokenChallenge reports a Distribution 401 that asks for a bearer
+// token: the backend is reachable and enforces native authentication.
+func hasRegistryTokenChallenge(body string) bool {
+	status := ""
+	challenge := false
+	for _, line := range strings.Split(body, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "HTTP/") && status == "" {
+			if fields := strings.Fields(line); len(fields) >= 2 {
+				status = fields[1]
+			}
+		}
+		name, value, found := strings.Cut(line, ":")
+		if found && strings.EqualFold(strings.TrimSpace(name), "www-authenticate") && strings.HasPrefix(strings.ToLower(strings.TrimSpace(value)), "bearer ") {
+			challenge = true
+		}
+	}
+	return status == "401" && challenge
+}
+
+// withOverrideLabels adds pod labels to a kubectl run override document.
+func withOverrideLabels(overrides string, labels map[string]string) string {
+	var doc map[string]any
+	if err := json.Unmarshal([]byte(overrides), &doc); err != nil {
+		return overrides
+	}
+	doc["metadata"] = map[string]any{"labels": labels}
+	data, err := json.Marshal(doc)
+	if err != nil {
+		return overrides
+	}
+	return string(data)
 }
 
 func doctorRegistryServiceURL(kubectl core.KubectlRunner) string {

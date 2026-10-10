@@ -253,6 +253,7 @@ func buildSetupSteps(ctx *SetupContext) []SetupStep {
 		WithIf(ctx.Plan.DeployAnalytics, deployAnalyticsStep{}).
 		WithIf(ctx.Plan.DeployMCPAuthServer, mcpAuthServerStep{}).
 		With(verifyStep{}).
+		WithIf(nativeRegistryAuthRequired(ctx.Plan, ctx.UsingExternalRegistry), registryNativeAuthStep{}).
 		Build()
 }
 

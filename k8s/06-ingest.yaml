@@ -42,6 +42,17 @@ spec:
     spec:
       priorityClassName: mcp-shared-services
       automountServiceAccountToken: false
+      # KAFKA_BROKERS is kafka.mcp-observability.svc.cluster.local (4 dots). With
+      # the default ndots:5, the resolver first tries every search domain
+      # (A and AAAA each, and the Go resolver has no cache), including
+      # node-inherited domains that CoreDNS forwards upstream, before the
+      # absolute name. ndots:3 resolves cluster FQDNs directly while names
+      # with fewer dots, such as otel-collector.mcp-observability.svc, still
+      # use the search path.
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "3"
       securityContext:
         runAsNonRoot: true
         seccompProfile:
@@ -97,9 +108,9 @@ spec:
               port: 8081
             initialDelaySeconds: 5
             periodSeconds: 10
-            # /ready allows its Kafka dial 2s; the 1s default would time out
-            # before the handler can answer.
-            timeoutSeconds: 3
+            # /ready answers from a cached background Kafka check, so it does
+            # not wait on DNS or a dial; keep headroom for CPU throttling.
+            timeoutSeconds: 2
           livenessProbe:
             httpGet:
               path: /live

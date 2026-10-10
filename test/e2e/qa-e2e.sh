@@ -206,9 +206,20 @@ LOCAL_REGISTRY_RETRY_TRIES="${LOCAL_REGISTRY_RETRY_TRIES:-5}"
 LOCAL_REGISTRY_RETRY_DELAY="${LOCAL_REGISTRY_RETRY_DELAY:-5}"
 E2E_WORKLOAD_TAG="${E2E_WORKLOAD_TAG:-e2e}"
 E2E_ARTIFACT_DIR="${E2E_ARTIFACT_DIR:-}"
+E2E_CAPTURE_RESOURCES="${E2E_CAPTURE_RESOURCES:-1}"
+case "${E2E_CAPTURE_RESOURCES}" in
+  0|1) ;;
+  *) echo "E2E_CAPTURE_RESOURCES must be 0 or 1" >&2; exit 1 ;;
+esac
 E2E_SCENARIOS="${E2E_SCENARIOS-all}"
 E2E_SCENARIOS="${E2E_SCENARIOS//[[:space:]]/}"
 E2E_PLATFORM_MODE="${E2E_PLATFORM_MODE:-tenant}"
+TEST_MODE_REPLICA_ARGS=()
+case "${E2E_TEST_MULTI_REPLICA:-0}" in
+  0|false) ;;
+  1|true) TEST_MODE_REPLICA_ARGS=(--test-multi-replica) ;;
+  *) echo "E2E_TEST_MULTI_REPLICA must be 0, 1, false, or true" >&2; exit 1 ;;
+esac
 E2E_PLATFORM_MODE="${E2E_PLATFORM_MODE//[[:space:]]/}"
 E2E_DEEP_REQUEST_FLOWS="${E2E_DEEP_REQUEST_FLOWS:-0}"
 # Cap concurrently deployed MCP servers (primary + extras). 0 means unlimited
@@ -525,6 +536,12 @@ PARALLEL_STARTED_AT=()
 PARALLEL_FAILED=0
 PARALLEL_SEQ=0
 STAGE_SEQ=0
+RESOURCE_CAPTURE_PID=""
+RESOURCE_STAGE_FILE="${WORKDIR}/resource-stage.txt"
+RESOURCE_PROFILE="single-replica"
+if [[ "${#TEST_MODE_REPLICA_ARGS[@]}" -gt 0 ]]; then
+  RESOURCE_PROFILE="multi-replica"
+fi
 
 # `mcp-runtime ops port-forward` runs `kubectl port-forward` as a child
 # and does not pass SIGTERM on, so killing only the CLI left kubectl holding
@@ -539,10 +556,23 @@ stop_process_tree() {
 }
 
 cleanup() {
+  local e2e_status=$?
   # Background parallel workers inherit this EXIT trap; never tear down the
   # cluster or delete the shared kubeconfig from a subshell.
   if [[ "${BASH_SUBSHELL:-0}" -ne 0 ]]; then
     return 0
+  fi
+  if [[ -n "${RESOURCE_CAPTURE_PID}" ]]; then
+    kill -TERM "${RESOURCE_CAPTURE_PID}" >/dev/null 2>&1 || true
+    wait "${RESOURCE_CAPTURE_PID}" 2>/dev/null || true
+    python3 "${PROJECT_ROOT}/test/e2e/resource_usage.py" \
+      --output "${WORKDIR}/resource-usage" --summarize \
+      --profile "${RESOURCE_PROFILE}" --scenarios "$(describe_selected_scenarios)" \
+      --exit-status "${e2e_status}" >/dev/null 2>&1 || true
+    python3 "${PROJECT_ROOT}/test/e2e/grafana_capture.py" \
+      --kubeconfig "${KUBECONFIG_FILE}" --cluster "${CLUSTER_NAME}" \
+      --output "${WORKDIR}/resource-usage" >/dev/null 2>&1 || true
+    echo "[resources] observations: ${WORKDIR}/resource-usage/summary.md" >&2
   fi
   if [[ -n "${E2E_ARTIFACT_DIR}" ]]; then
     mkdir -p "${E2E_ARTIFACT_DIR}"
@@ -579,6 +609,16 @@ cleanup() {
   rm -f "${KUBECONFIG_BACKUP_FILE}"
 }
 trap cleanup EXIT
+
+if [[ "${E2E_CAPTURE_RESOURCES}" == "1" ]]; then
+  printf '%s\n' "preparation" > "${RESOURCE_STAGE_FILE}"
+  python3 "${PROJECT_ROOT}/test/e2e/resource_usage.py" \
+    --kubeconfig "${KUBECONFIG_FILE}" --cluster "${CLUSTER_NAME}" \
+    --output "${WORKDIR}/resource-usage" --stage-file "${RESOURCE_STAGE_FILE}" \
+    --profile "${RESOURCE_PROFILE}" --scenarios "$(describe_selected_scenarios)" \
+    >"${WORKDIR}/resource-sampler.log" 2>&1 &
+  RESOURCE_CAPTURE_PID="$!"
+fi
 
 wait_port() {
   local port="$1"
@@ -3428,6 +3468,8 @@ run_logged_stage() {
   stdout_file="${log_file%.log}.stdout.log"
   stderr_file="${log_file%.log}.stderr.log"
   started_at="$(date +%s)"
+  printf '%s\n' "${label}" > "${RESOURCE_STAGE_FILE}"
+  printf '%s\tSTART\t%s\n' "${started_at}" "${label}" >> "${WORKDIR}/resource-stages.tsv"
   log_status "START" "${label} (full log: $(relative_log_path "${log_file}"))"
 
   (
@@ -3458,8 +3500,10 @@ run_logged_stage() {
     else
       log_status_err "FAILED" "${label}: command produced no captured stdout or stderr"
     fi
+    printf '%s\tFAILED\t%s\n' "$(date +%s)" "${label}" >> "${WORKDIR}/resource-stages.tsv"
     return "${status}"
   fi
+  printf '%s\tDONE\t%s\n' "$(date +%s)" "${label}" >> "${WORKDIR}/resource-stages.tsv"
 }
 
 parallel_reset() {
@@ -3783,6 +3827,11 @@ platform_cache_ready() {
   if ! cache_mode_enabled; then
     return 1
   fi
+  local expected_kafka_replicas=1
+  if [[ "${#TEST_MODE_REPLICA_ARGS[@]}" -gt 0 ]]; then
+    expected_kafka_replicas=3
+  fi
+  [[ "$(kubectl get statefulset kafka -n mcp-observability -o jsonpath='{.spec.replicas}' 2>/dev/null)" == "${expected_kafka_replicas}" ]] || return 1
   kubectl get namespace registry mcp-runtime mcp-platform mcp-observability mcp-log-collector mcp-servers mcp-servers-org mcp-servers-public >/dev/null 2>&1 || return 1
   kubectl rollout status deploy/registry -n registry --timeout=5s >/dev/null 2>&1 || return 1
   kubectl rollout status deploy/mcp-runtime-operator-controller-manager -n mcp-runtime --timeout=5s >/dev/null 2>&1 || return 1
@@ -4012,11 +4061,25 @@ else
   prune_kind_platform_images
   run_logged_stage "setup test mode" \
     env MCP_RUNTIME_REGISTRY_IMAGE_OVERRIDE="${TEST_MODE_REGISTRY_IMAGE}" \
-    ./bin/mcp-runtime setup --test-mode --parallel-builds --platform-mode "${E2E_PLATFORM_MODE}" --ingress-manifest config/ingress/overlays/http --kubeconfig "${KUBECONFIG_FILE}"
+    ./bin/mcp-runtime setup --test-mode ${TEST_MODE_REPLICA_ARGS[@]+"${TEST_MODE_REPLICA_ARGS[@]}"} --parallel-builds --platform-mode "${E2E_PLATFORM_MODE}" --ingress-manifest config/ingress/overlays/http --kubeconfig "${KUBECONFIG_FILE}"
   restart_kind_platform_deployments
 fi
 
 wait_core_platform_rollouts
+
+# Assert the installed default profile too: a manifest that bypasses setup's
+# renderer must not silently restore extra replicas on a constrained test host.
+if [[ "${#TEST_MODE_REPLICA_ARGS[@]}" -eq 0 ]]; then
+  kubectl get deployment,statefulset -A -o json | python3 -c '
+import json, sys
+namespaces = {"mcp-runtime", "mcp-platform", "mcp-observability", "mcp-log-collector", "registry", "traefik", "cert-manager"}
+workloads = [item for item in json.load(sys.stdin)["items"] if item["metadata"]["namespace"] in namespaces]
+extra = [item["metadata"]["namespace"] + "/" + item["metadata"]["name"] for item in workloads if item["spec"].get("replicas", 1) != 1]
+if not workloads or extra:
+    raise SystemExit("single-replica test profile mismatch: " + ", ".join(extra or ["no platform workloads"]))
+print("[setup] all platform Deployments and StatefulSets use one replica")
+'
+fi
 
 # Setup can reuse an existing IngressClass and leave the previous E2E run's
 # watched team namespaces in place. Restore the base watch list before flows
@@ -6565,6 +6628,27 @@ check(
     str(prometheus_datasource.get("url", "")).rstrip("/").endswith("/prometheus"),
     "grafana Prometheus datasource includes route prefix",
     f"grafana Prometheus datasource URL is missing /prometheus route prefix: {prometheus_datasource}",
+)
+# Server-card deep links (/grafana/d/mcp-server/mcp-server?viewPanel=1..4)
+# need the provisioned dashboard and the datasource uid its panels pin (#543).
+check(
+    prometheus_uid == "prometheus",
+    "grafana Prometheus datasource uid is pinned to prometheus",
+    f"grafana Prometheus datasource uid drifted to {prometheus_uid!r}; server dashboard panels report Data source not found",
+)
+grafana_server_dashboard = wait_for_json(
+    f"{grafana_base}/api/dashboards/uid/mcp-server",
+    lambda doc: isinstance(doc, dict) and doc.get("dashboard", {}).get("uid") == "mcp-server",
+    headers=grafana_headers,
+    retries=30,
+    delay=2,
+    description="grafana mcp-server dashboard",
+)
+grafana_server_panel_ids = {panel.get("id") for panel in grafana_server_dashboard["dashboard"].get("panels", [])}
+check(
+    {1, 2, 3, 4} <= grafana_server_panel_ids,
+    "grafana mcp-server dashboard has the server-card panels",
+    f"grafana mcp-server dashboard panels {sorted(grafana_server_panel_ids)} miss server-card viewPanel ids 1-4",
 )
 
 grafana_gateway_counts = {}

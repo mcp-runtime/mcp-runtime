@@ -303,7 +303,7 @@ func ServerInfoFromMCPServer(mcpServer mcpv1alpha1.MCPServer, deploymentStatus S
 		Labels:             mcpServer.Labels,
 		Age:                mcpServer.CreationTimestamp.Format("2006-01-02T15:04:05Z"),
 		Endpoint:           PublicMCPEndpoint(mcpServer),
-		AuthMode:           headerAuthMode(mcpServer.Spec.Auth),
+		AuthMode:           serverAuthMode(mcpServer.Spec),
 		AuthHeaders:        headerAuthNames(mcpServer.Spec.Auth),
 		CredentialPresence: headerAuthPresence(mcpServer.Spec.Auth),
 		GatewayEnabled:     mcpv1alpha1.GatewayIsEnabled(mcpServer.Spec.Gateway),
@@ -316,11 +316,16 @@ func ServerInfoFromMCPServer(mcpServer mcpv1alpha1.MCPServer, deploymentStatus S
 	}
 }
 
-func headerAuthMode(auth *mcpv1alpha1.AuthConfig) string {
-	if !mcpv1alpha1.AuthUsesHeaderMode(auth) {
-		return ""
+func serverAuthMode(spec mcpv1alpha1.MCPServerSpec) string {
+	if mcpv1alpha1.AuthUsesHeaderMode(spec.Auth) {
+		return "header"
 	}
-	return "header"
+	// A declared OAuth configuration can use the operator-defaulted issuer.
+	// Gateway availability alone does not imply OAuth support.
+	if spec.Auth != nil {
+		return "oauth"
+	}
+	return ""
 }
 
 func headerAuthNames(auth *mcpv1alpha1.AuthConfig) []string {

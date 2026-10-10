@@ -234,6 +234,12 @@ kubectl port-forward -n traefik svc/traefik 18080:8000 18443:8443
 
 `setup --test-mode` builds and pushes images to the bundled registry (`registry.registry.svc.cluster.local:5000` in Kind) and provisions the local `mcp-runtime-ca` workload issuer for mTLS/SPIFFE validation. Prefer existing `kind-mcp-runtime` when healthy. Contributor runbook: `docs/contributor/README.md`.
 
+Test mode defaults to one replica per platform Deployment and StatefulSet.
+Use `--test-mode --test-multi-replica` on a fresh cluster for scenarios requiring
+the normal replica layout. Kafka quorum changes require a separate fresh store;
+see `docs/contributor/local-kind.md` for resource measurements and macOS/Colima
+host guidance. QA E2E opts in with `E2E_TEST_MULTI_REPLICA=1`.
+
 Endpoints, API keys, test logins: **`contributor-cluster`** (local-development reference).
 
 ## Debugging and production ops

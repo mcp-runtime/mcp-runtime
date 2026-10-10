@@ -115,6 +115,14 @@ func grafanaExecArgs(script string) []string {
 	}
 }
 
+// GrafanaCredentialProbeArgs returns the kubectl arguments for the read-only
+// in-pod credential probe. Its output is parsed with ParseGrafanaProbe and
+// contains only HTTP status codes, never credential values. cluster doctor
+// shares this probe so both report drift identically.
+func GrafanaCredentialProbeArgs() []string {
+	return grafanaExecArgs(grafanaProbeScript)
+}
+
 // CheckGrafanaCredentials probes Grafana read-only and reports whether the
 // persisted admin account accepts the configured credentials. It never resets
 // or modifies an account.
@@ -122,7 +130,7 @@ func (m *Manager) CheckGrafanaCredentials() (GrafanaCheckResult, error) {
 	if err := m.requireAdminClusterAccess(); err != nil {
 		return GrafanaCheckResult{}, err
 	}
-	out, err := m.kubectl.CombinedOutput(grafanaExecArgs(grafanaProbeScript))
+	out, err := m.kubectl.CombinedOutput(GrafanaCredentialProbeArgs())
 	if err != nil {
 		return GrafanaCheckResult{}, core.WrapWithBaseAndContext(nil, err, fmt.Sprintf("failed to probe Grafana in %s/%s: %v", core.ComponentNamespace("grafana"), grafanaExecTarget, err), map[string]any{
 			"namespace": core.ComponentNamespace("grafana"),

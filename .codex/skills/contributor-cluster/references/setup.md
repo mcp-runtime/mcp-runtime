@@ -41,6 +41,14 @@ fi
 
 State the mode in the report.
 
+`setup --test-mode` defaults to one replica per platform workload. Add
+`--test-multi-replica` only when a scenario requires normal replica counts;
+QA E2E uses `E2E_TEST_MULTI_REPLICA=1`. Choose a fresh cluster for the other
+Kafka profile: setup rejects changes to an existing KRaft quorum and preserves
+its data. Record the profile with the host architecture and VM allocation.
+For measured CPU/memory and macOS/Colima setup, see
+`docs/contributor/local-kind.md#host-cpu-and-memory`.
+
 - **reuse** (default if the `mcp-runtime` Kind cluster exists and `kubectl
   --kubeconfig "$TEST_KUBECONFIG" --context test-mcp-runtime get nodes` succeeds). Skip Kind creation;
   re-run `bootstrap` and `cluster doctor` only.

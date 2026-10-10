@@ -69,6 +69,7 @@ func NewWithManager(mgr *RegistryManager) *cobra.Command {
 	secureCmd.Flags().BoolVar(&nativeOpts.DryRun, "dry-run", false, "Inspect targets without changing resources or creating credentials")
 	secureCmd.Flags().BoolVar(&nativeOpts.TestMode, "test-mode", false, "Allow a local HTTP token realm for disposable tests")
 	secureCmd.Flags().StringSliceVar(&nativeOpts.Namespaces, "pull-namespace", nil, "Runtime namespaces to provision (default: all existing managed namespaces)")
+	secureCmd.Flags().BoolVar(&nativeOpts.AllowBundledBroker, "allow-bundled-broker", false, "Accept a platform-api image served by this registry (new broker pulls then need a running broker)")
 	cmd.AddCommand(statusCmd, infoCmd, provisionCmd, secureCmd)
 	return cmd
 }

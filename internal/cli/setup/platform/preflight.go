@@ -429,6 +429,11 @@ func checkStalePullSecrets(ctx context.Context, clients *k8sclient.Clients) []pr
 		if err != nil || !exists {
 			continue
 		}
+		if nativeRegistryPullSecret(ctx, clients, ns) {
+			// Native registry authentication replaced the copied service key
+			// with a scoped node credential; it never matches UI_API_KEY.
+			continue
+		}
 		storedAuth, err := k8sclient.SecretStringDataValue(ctx, clients, ns, defaultRegistrySecretName, ".dockerconfigjson")
 		if err != nil {
 			continue
