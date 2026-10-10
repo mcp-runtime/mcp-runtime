@@ -354,6 +354,7 @@ func doctorCheckSpecs(kubectl core.KubectlRunner, distro Distribution) []doctorC
 			Run:    func() DoctorCheck { return checkMCPServerReconcileSmoke(kubectl, doctorMCPServersNamespace) },
 		},
 		{Name: platformPullSecretsCheckName, Detail: "checking platform deployments that pull from the platform registry carry an image pull secret", Run: func() DoctorCheck { return checkPlatformPullSecrets(kubectl) }},
+		{Name: grafanaAdminCredentialCheckName, Detail: "probing Grafana login inside its pod to detect a persisted admin account that drifted from mcp-grafana-credentials", Run: func() DoctorCheck { return checkPlatformGrafanaAdminCredentials(kubectl) }},
 	}
 }
 

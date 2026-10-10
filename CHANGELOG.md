@@ -25,6 +25,11 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 - Platform images and modules build with Go 1.26.9 and `golang.org/x/net` v0.60.0. Those releases fix HTTP/2 CPU exhaustion from repeated window updates (CVE-2026-78669), excessive CPU from large Range headers (CVE-2026-78667), and memory exhaustion from malformed TLS ECH references (CVE-2026-97031).
 
+### Fixed
+
+- Grafana loads every bundled dashboard with stable datasource UIDs; cluster doctor detects persisted admin credential drift without revealing or resetting credentials ([#631](https://github.com/mcp-runtime/mcp-runtime/pull/631)).
+
+
 ## [0.6.6] - 2026-10-09
 
 ### Changed

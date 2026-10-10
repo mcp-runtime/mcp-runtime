@@ -131,12 +131,28 @@ and traces in one place. Grafana remains protected by the platform admin
 forward-auth route. Platform health also links to Grafana; it does not expose a
 separate Prometheus UI link.
 
+Server cards link admins to the provisioned **MCP Server** dashboard
+(`/grafana/d/mcp-server/mcp-server`, panels 1–4 for Target health, Request
+rate, Deny rate, and p95 latency). Setup applies `k8s/19-grafana-datasources.yaml`
+(datasource uids `prometheus`, `tempo`, and `loki`) and
+`k8s/21-grafana-dashboards.yaml` before `k8s/12-grafana.yaml`, which mounts the
+dashboard provider and every dashboard file. A change to either ConfigMap
+changes Grafana's pod template so it restarts and re-reads provisioning. The
+card shows the dashboard and panel links together, and only when runtime-api
+marks the Grafana link available. runtime-api does not probe Grafana, so
+`mcp-runtime cluster doctor` reports **platform Grafana
+provisioning** drift (missing dashboard, unpinned Prometheus uid, or missing
+mounts); rerun setup to repair it. `mcp-runtime update` changes images only,
+so it does not repair provisioning drift.
+
 Grafana has two independent authentication layers: the platform ingress gate
 (`platform-admin-auth`) and Grafana's own persisted admin account. Passing the
 gate does not prove the Grafana login works, and changing the bootstrap
 password in `mcp-grafana-credentials` does not update an existing persisted
 account. A browser that clears the gate but then sees `password-auth.failed`
-indicates credential drift. Diagnose it read-only with
+indicates credential drift. `mcp-runtime cluster doctor` runs the same probe
+as **platform Grafana admin credential drift** and fails when Grafana rejects
+the configured credentials; it never resets the account. Diagnose it read-only with
 `mcp-runtime ops grafana check`, which probes from inside the Grafana pod
 (so it bypasses the gate and reports only the Grafana login layer) and never
 resets anything. Recover deliberately with

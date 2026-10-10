@@ -6566,6 +6566,27 @@ check(
     "grafana Prometheus datasource includes route prefix",
     f"grafana Prometheus datasource URL is missing /prometheus route prefix: {prometheus_datasource}",
 )
+# Server-card deep links (/grafana/d/mcp-server/mcp-server?viewPanel=1..4)
+# need the provisioned dashboard and the datasource uid its panels pin (#543).
+check(
+    prometheus_uid == "prometheus",
+    "grafana Prometheus datasource uid is pinned to prometheus",
+    f"grafana Prometheus datasource uid drifted to {prometheus_uid!r}; server dashboard panels report Data source not found",
+)
+grafana_server_dashboard = wait_for_json(
+    f"{grafana_base}/api/dashboards/uid/mcp-server",
+    lambda doc: isinstance(doc, dict) and doc.get("dashboard", {}).get("uid") == "mcp-server",
+    headers=grafana_headers,
+    retries=30,
+    delay=2,
+    description="grafana mcp-server dashboard",
+)
+grafana_server_panel_ids = {panel.get("id") for panel in grafana_server_dashboard["dashboard"].get("panels", [])}
+check(
+    {1, 2, 3, 4} <= grafana_server_panel_ids,
+    "grafana mcp-server dashboard has the server-card panels",
+    f"grafana mcp-server dashboard panels {sorted(grafana_server_panel_ids)} miss server-card viewPanel ids 1-4",
+)
 
 grafana_gateway_counts = {}
 grafana_gateway_services = set()
