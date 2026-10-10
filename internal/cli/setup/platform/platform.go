@@ -1,10 +1,7 @@
 package platform
 
 import (
-	"context"
-	"errors"
 	"fmt"
-	"mcp-runtime/pkg/k8sclient"
 	"os"
 	"strings"
 	"sync"
@@ -200,8 +197,6 @@ type SetupDeps struct {
 	DeployOperatorManifests         func(logger *zap.Logger, operatorImage, gatewayProxyImage string, operatorArgs []string, imagePullSecretName string) error
 	DeployAnalyticsManifests        func(logger *zap.Logger, images AnalyticsImageSet, storageMode, platformMode string) error
 	EnsureImagePullSecret           func(namespace, name, registry, username, password string) error
-	DisableRegistryIngressAuth      func() error
-	EnableRegistryIngressAuth       func() error
 	ConfigureProvisionedRegistryEnv func(ext *config.ExternalRegistryConfig, secretName string) error
 	RestartDeployment               func(name, namespace string) error
 	CheckCRDInstalled               func(name string) error
@@ -306,12 +301,6 @@ func (d SetupDeps) withDefaults(logger *zap.Logger) SetupDeps {
 		d.EnsureImagePullSecret = func(namespace, name, registryURL, username, password string) error {
 			return ensureImagePullSecretWithKubectl(core.DefaultKubectlClient(), namespace, name, registryURL, username, password)
 		}
-	}
-	if d.DisableRegistryIngressAuth == nil {
-		d.DisableRegistryIngressAuth = disableRegistryIngressAuth
-	}
-	if d.EnableRegistryIngressAuth == nil {
-		d.EnableRegistryIngressAuth = enableRegistryIngressAuth
 	}
 	if d.EnableNativeRegistryAuth == nil {
 		d.EnableNativeRegistryAuth = enableNativeRegistryAuthClientGo
@@ -429,7 +418,7 @@ func buildOperatorArgs(metricsAddr, probeAddr string, leaderElect, leaderElectCh
 	return BuildOperatorArgs(metricsAddr, probeAddr, leaderElect, leaderElectChanged)
 }
 
-func setupPlatformWithDeps(logger *zap.Logger, plan setupplan.Plan, deps SetupDeps) (setupErr error) {
+func setupPlatformWithDeps(logger *zap.Logger, plan setupplan.Plan, deps SetupDeps) error {
 	deps = deps.withDefaults(logger)
 	if plan.DeployAnalytics {
 		if err := validatePlatformAdminEnvironment(); err != nil {
@@ -492,24 +481,6 @@ func setupPlatformWithDeps(logger *zap.Logger, plan setupplan.Plan, deps SetupDe
 		UsingExternalRegistry: usingExternalRegistry,
 		RegistrySecretName:    registrySecretName,
 	}
-	// Re-enable registry ingress auth on every exit path. The setup pipeline
-	// temporarily strips the `registry-admin-auth@file` middleware so the
-	// internal in-cluster image push helper can talk to the registry while
-	// the auth-resolver is still being wired. If we put the re-enable as a
-	// pipeline step it would be skipped whenever an earlier step fails,
-	// leaving the public registry without auth.
-	defer func() {
-		if !ctx.RegistryAuthStaged {
-			return
-		}
-		if err := k8sclient.RetryTransient(context.Background(), analyticsRolloutTimeoutDuration(), 2*time.Second, deps.EnableRegistryIngressAuth); err != nil {
-			core.Error("Failed to re-enable registry ingress auth after setup")
-			core.LogStructuredError(logger, err, "Re-enable registry ingress auth")
-			setupErr = errors.Join(setupErr, fmt.Errorf("restore registry ingress authentication: %w", err))
-			return
-		}
-		ctx.RegistryAuthStaged = false
-	}()
 	if err := runSetupSteps(logger, deps, ctx, buildSetupSteps(ctx)); err != nil {
 		return err
 	}
