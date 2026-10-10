@@ -108,7 +108,8 @@ In this shape:
   overwrites `X-Forwarded-Proto` to `http` on the inner hop. The UI default
   `UI_REQUIRE_HTTPS=auto` then answers `308` to the same HTTPS URL and the
   dashboard loops. Set `UI_REQUIRE_HTTPS=false` and
-  `UI_FORCE_SECURE_COOKIE=true` on `mcp-ui` for that shape. Cookies stay
+  `UI_FORCE_SECURE_COOKIE=true` in the file passed to `setup --env-file`.
+  Setup propagates these values to `mcp-ui` and preserves them on reruns. Cookies stay
   `Secure`. This is the production external-terminator case, not only a
   non-TLS dev install.
 - Do not cache or rewrite `/api`, `/v2`, `/<server-name>/mcp`, or
@@ -409,12 +410,12 @@ of git because TLS secrets contain private keys.
 | `exec format error` in a setup-built pod | The image architecture does not match the node. Use a homogeneous cluster and set `MCP_IMAGE_PLATFORM=linux/amd64` or `linux/arm64`. |
 | cert-manager reports NXDOMAIN or HTTP-01 failure | `platform`, `registry`, and `mcp` DNS records must point to the ingress IP, and port 80 must reach Traefik. |
 | Setup rejects public mode because login is missing | Set `GOOGLE_CLIENT_ID` / `MCP_GOOGLE_CLIENT_ID`, or set `OIDC_ISSUER`, `OIDC_AUDIENCE`, and `OIDC_JWKS_URL`. |
-| Setup rejects production admin config | Set `MCP_PLATFORM_ADMIN_EMAIL` or `MCP_ADMIN_USERS`. Do not confuse this with `--acme-email`, which is only the certificate contact. |
-| Dashboard has no password login | Set both `MCP_PLATFORM_ADMIN_EMAIL` and `MCP_PLATFORM_ADMIN_PASSWORD` before setup. Email alone does not seed the user. |
-| Dashboard or docs return `308` to the same URL | TLS terminates outside the cluster and Traefik is HTTP. Set `UI_REQUIRE_HTTPS=false` and `UI_FORCE_SECURE_COOKIE=true` on `mcp-ui`. |
+| Setup rejects production admin config | Set `MCP_ADMIN_USERS` for OIDC admins, or both password-admin variables. Do not confuse this with `--acme-email`, which is only the certificate contact. |
+| Dashboard has no password login | Set both `MCP_PLATFORM_ADMIN_EMAIL` and `MCP_PLATFORM_ADMIN_PASSWORD` before setup. An incomplete pair is rejected; reruns preserve an existing complete pair when neither is provided. |
+| Dashboard or docs return `308` to the same URL | TLS terminates outside the cluster and Traefik is HTTP. Pass `UI_REQUIRE_HTTPS=false` and `UI_FORCE_SECURE_COOKIE=true` through `setup --env-file`. |
 | Registry setup fails shrinking storage | `--registry-storage` is smaller than the bound PVC. Kubernetes cannot shrink it. Rerun with a size at least as large as the claim. |
 | Setup image build says buildx is missing | Install the Docker buildx plugin, or set `DOCKER_BUILDKIT=0` and rerun setup. |
-| `server push` returns `405 method_not_allowed` | The API base URL is `http://` and the front door redirects POST to HTTPS. Use the HTTPS origin. |
+| `server push` rejects a redirect | Set the final HTTPS origin with `auth login --api-url`. Uploads reject changes to method, scheme, or origin. |
 | `server push` fails on a small request body | The proxy in front of `/api/` is still at the default body limit. Allow a large body on that location. `/v2/` is a different path. |
 | Tenant `server push` says the caller has no team | The admin API key is not a team member. Create a team, add a user, and push with that user's token. `--scope org` is disabled in tenant mode. |
 | Team MCP server gets `ECONNREFUSED` to an internal HTTPS API the node can open | The team default-deny policy is refusing the pod. Set `--pod-egress-cidrs` and `--pod-egress-except-cidrs`. See [Pod egress to an internal network](#pod-egress-to-an-internal-network). |

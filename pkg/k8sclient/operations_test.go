@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -183,5 +184,24 @@ func TestPruneTerminatedPodsRemovesOnlyTerminalLeftovers(t *testing.T) {
 	}
 	if _, err := clientset.CoreV1().Pods("other").Get(context.Background(), "other-ns", metav1.GetOptions{}); err != nil {
 		t.Fatalf("pod in another namespace must be untouched: %v", err)
+	}
+}
+
+func TestDeploymentRolloutRecoversAfterConnectionRefused(t *testing.T) {
+	replicas := int32(1)
+	client := kubernetesfake.NewSimpleClientset(&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "operator", Namespace: "mcp-runtime", Generation: 1}, Spec: appsv1.DeploymentSpec{Replicas: &replicas}, Status: appsv1.DeploymentStatus{ObservedGeneration: 1, Replicas: 1, UpdatedReplicas: 1, AvailableReplicas: 1}})
+	attempts := 0
+	client.PrependReactor("get", "deployments", func(clienttesting.Action) (bool, runtime.Object, error) {
+		attempts++
+		if attempts == 1 {
+			return true, nil, syscall.ECONNREFUSED
+		}
+		return false, nil, nil
+	})
+	if err := WaitForDeploymentRolledOut(context.Background(), &Clients{Clientset: client}, "mcp-runtime", "operator", 6*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 2 {
+		t.Fatalf("attempts=%d", attempts)
 	}
 }

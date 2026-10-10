@@ -3,6 +3,7 @@ package platform
 import (
 	"fmt"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -1266,6 +1267,7 @@ func TestSetupPlatformWithDeps_RegistryAuthReenabledOnFailure(t *testing.T) {
 	// step runs and ctx.RegistryAuthStaged is set to true.
 	core.DefaultCLIConfig = &core.CLIConfig{RegistryIngressHost: "registry.prod.example.com"}
 
+	restoreAttempts := 0
 	rec := &callRecorder{}
 	deps := SetupDeps{
 		ResolveExternalRegistryConfig: func(*config.ExternalRegistryConfig) (*config.ExternalRegistryConfig, error) {
@@ -1298,6 +1300,10 @@ func TestSetupPlatformWithDeps_RegistryAuthReenabledOnFailure(t *testing.T) {
 		},
 		EnableRegistryIngressAuth: func() error {
 			rec.add("auth-enable")
+			restoreAttempts++
+			if restoreAttempts == 1 {
+				return fmt.Errorf("API restarting: %w", syscall.ECONNREFUSED)
+			}
 			return nil
 		},
 		RestartDeployment:    func(string, string) error { return nil },
@@ -1333,6 +1339,9 @@ func TestSetupPlatformWithDeps_RegistryAuthReenabledOnFailure(t *testing.T) {
 	}
 	if !rec.has("auth-enable") {
 		t.Fatalf("expected registry auth re-enable on failure (defer), got calls: %v", rec.calls)
+	}
+	if restoreAttempts != 2 {
+		t.Fatalf("registry auth restore attempts = %d, want 2", restoreAttempts)
 	}
 }
 

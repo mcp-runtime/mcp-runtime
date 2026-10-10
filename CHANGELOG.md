@@ -17,6 +17,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Fixed
 
+- First-install setup applies the requested registry PVC size before creation, checks Docker buildx before image builds, rejects partial password-admin credentials while preserving saved pairs, and propagates external TLS proxy UI settings. Rollout and registry-auth restoration tolerate bounded transient Kubernetes API failures; image uploads reject unsafe redirects with an HTTPS-origin diagnostic, and tenant setup prints membership steps ([#666](https://github.com/mcp-runtime/mcp-runtime/issues/666)).
+
 - The package-docs image uses the root module's Go toolchain version in its build and runtime stages, preventing startup failures after a Go requirement bump. Module requirement changes now run the package-docs PR smoke test.
 
 - Setup reports the cert-manager version it actually installs, and repair guidance follows the installed release rather than a retired manifest; drift checks keep the pin, logs, and docs aligned ([#628](https://github.com/mcp-runtime/mcp-runtime/pull/628)).

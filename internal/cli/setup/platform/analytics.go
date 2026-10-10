@@ -1038,6 +1038,8 @@ func renderAnalyticsConfigManifestWithReaders(content, platformMode string, imag
 		"PLATFORM_TEAM_TRAEFIK_WATCH",
 		"MCP_MTLS_CLUSTER_ISSUER",
 		"MCP_TRUST_DOMAIN",
+		"UI_REQUIRE_HTTPS",
+		"UI_FORCE_SECURE_COOKIE",
 	} {
 		if envValue := setupAnalyticsConfigEnvValue(key); envValue != "" {
 			manifest.Data[key] = envValue
@@ -1233,6 +1235,9 @@ func ownedCredential(key string) (namespace, name string, err error) {
 }
 
 func renderAnalyticsSecretManifestWithReader(readSecret analyticsSecretValueReader) (string, error) {
+	if err := validatePlatformAdminEnvironment(); err != nil {
+		return "", err
+	}
 	apiNamespace, apiSecret, err := ownedCredential("API_KEYS")
 	if err != nil {
 		return "", err
@@ -1360,9 +1365,11 @@ func renderAnalyticsSecretManifestWithReader(readSecret analyticsSecretValueRead
 	if envPlatformAdminPassword != "" {
 		platformAdminPassword = envPlatformAdminPassword
 	}
-	if platformAdminEmail == "" || platformAdminPassword == "" {
-		platformAdminEmail = ""
-		platformAdminPassword = ""
+	if (platformAdminEmail == "") != (platformAdminPassword == "") {
+		return "", fmt.Errorf("dashboard admin requires both MCP_PLATFORM_ADMIN_EMAIL and MCP_PLATFORM_ADMIN_PASSWORD; existing configuration is incomplete")
+	}
+	if platformAdminEmail == "" && os.Getenv("MCP_RUNTIME_TEST_MODE") != "1" {
+		core.Warn("No dashboard password admin was created. Set MCP_PLATFORM_ADMIN_EMAIL and MCP_PLATFORM_ADMIN_PASSWORD together before setup; configured external login remains available.")
 	}
 	adminUserCandidates := []string{setupSecretEnvValue("MCP_ADMIN_USERS", "ADMIN_USERS")}
 	if envPlatformAdminEmail != "" {
@@ -1442,6 +1449,10 @@ func renderAnalyticsSecretManifestWithReader(readSecret analyticsSecretValueRead
 	}
 	if sessionURL == "" {
 		sessionURL = postgresDSN
+	}
+	if platformAdminEmail == "" {
+		delete(stringData, "PLATFORM_ADMIN_EMAIL")
+		delete(stringData, "PLATFORM_ADMIN_PASSWORD")
 	}
 	stringData["UI_SESSION_ENCRYPTION_KEY"] = sessionKey
 	stringData["UI_SESSION_DATABASE_URL"] = sessionURL
@@ -2200,4 +2211,13 @@ func ensureRestrictedPlatformNamespace(namespace string) error {
 	return k8sclient.EnsureNamespace(context.Background(), clients, namespace, map[string]string{
 		"pod-security.kubernetes.io/enforce": "restricted", "pod-security.kubernetes.io/audit": "restricted", "pod-security.kubernetes.io/warn": "restricted",
 	})
+}
+
+func validatePlatformAdminEnvironment() error {
+	email := setupSecretEnvValue("MCP_PLATFORM_ADMIN_EMAIL", "PLATFORM_ADMIN_EMAIL")
+	password := setupSecretEnvValue("MCP_PLATFORM_ADMIN_PASSWORD", "PLATFORM_ADMIN_PASSWORD")
+	if (email == "") != (password == "") {
+		return fmt.Errorf("set both MCP_PLATFORM_ADMIN_EMAIL and MCP_PLATFORM_ADMIN_PASSWORD, or neither; an email alone does not create a dashboard login")
+	}
+	return nil
 }

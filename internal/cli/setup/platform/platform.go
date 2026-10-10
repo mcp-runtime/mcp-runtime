@@ -1,7 +1,10 @@
 package platform
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"mcp-runtime/pkg/k8sclient"
 	"os"
 	"strings"
 	"sync"
@@ -412,6 +415,9 @@ func publicAuthConfigValue(existingData map[string]string, key string) string {
 }
 
 func SetupPlatform(logger *zap.Logger, plan setupplan.Plan, clusterMgr ClusterManagerAPI) error {
+	if err := validateDockerImageBuilder(); err != nil {
+		return err
+	}
 	return setupPlatformWithDeps(logger, plan, SetupDeps{
 		ClusterManager:       clusterMgr,
 		StampPlatformVersion: stampPlatformVersionClientGo,
@@ -423,8 +429,13 @@ func buildOperatorArgs(metricsAddr, probeAddr string, leaderElect, leaderElectCh
 	return BuildOperatorArgs(metricsAddr, probeAddr, leaderElect, leaderElectChanged)
 }
 
-func setupPlatformWithDeps(logger *zap.Logger, plan setupplan.Plan, deps SetupDeps) error {
+func setupPlatformWithDeps(logger *zap.Logger, plan setupplan.Plan, deps SetupDeps) (setupErr error) {
 	deps = deps.withDefaults(logger)
+	if plan.DeployAnalytics {
+		if err := validatePlatformAdminEnvironment(); err != nil {
+			return err
+		}
+	}
 	initPlatformKubeconfig(plan.Kubeconfig)
 	core.Section("MCP Runtime Setup")
 
@@ -481,9 +492,10 @@ func setupPlatformWithDeps(logger *zap.Logger, plan setupplan.Plan, deps SetupDe
 		if !ctx.RegistryAuthStaged {
 			return
 		}
-		if err := deps.EnableRegistryIngressAuth(); err != nil {
+		if err := k8sclient.RetryTransient(context.Background(), analyticsRolloutTimeoutDuration(), 2*time.Second, deps.EnableRegistryIngressAuth); err != nil {
 			core.Error("Failed to re-enable registry ingress auth after setup")
 			core.LogStructuredError(logger, err, "Re-enable registry ingress auth")
+			setupErr = errors.Join(setupErr, fmt.Errorf("restore registry ingress authentication: %w", err))
 			return
 		}
 		ctx.RegistryAuthStaged = false
@@ -492,6 +504,12 @@ func setupPlatformWithDeps(logger *zap.Logger, plan setupplan.Plan, deps SetupDe
 		return err
 	}
 
+	if plan.PlatformMode == setupplan.PlatformModeTenant {
+		core.Info("Tenant publishing requires a team membership; the install admin API key alone cannot publish a tenant server.")
+		fmt.Println("Next: mcp-runtime team create first-team")
+		fmt.Println("Then: mcp-runtime team user add first-team <user-id> --role owner (existing user), or mcp-runtime team user create first-team --email <email> --password <password> --role owner (new user).")
+		fmt.Println("Sign in as that team member before running server push --scope tenant and server deploy.")
+	}
 	core.Success("Platform setup complete")
 	fmt.Println(core.Green("\nPlatform is ready. Use 'mcp-runtime status' to check everything."))
 	printPlatformEntrypoints(plan.TLSEnabled)

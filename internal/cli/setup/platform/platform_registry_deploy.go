@@ -16,6 +16,10 @@ import (
 	"mcp-runtime/internal/cli/core"
 	"mcp-runtime/pkg/k8sclient"
 
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 )
@@ -31,6 +35,9 @@ func deployRegistryClientGo(logger *zap.Logger, namespace string, port int, regi
 	}
 	clients, err := platformKubernetesClients()
 	if err != nil {
+		return err
+	}
+	if err := validateRegistryStorageSize(context.Background(), clients, namespace, registryStorageSize); err != nil {
 		return err
 	}
 	if err := k8sclient.EnsureNamespace(context.Background(), clients, namespace, nil); err != nil {
@@ -71,7 +78,7 @@ func deployRegistryClientGo(logger *zap.Logger, namespace string, port int, regi
 	if logger != nil {
 		logger.Info("Resolved registry ingress host", zap.String("host", registryHost), zap.String("source", registryHostSource))
 	}
-	manifest, err = mutateRegistryManifest(manifest, registryHost, overrideImage)
+	manifest, err = mutateRegistryManifest(manifest, registryHost, overrideImage, registryStorageSize)
 	if err != nil {
 		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrDeployRegistryFailed,
@@ -181,7 +188,7 @@ func validateRegistryType(registryType string) error {
 	}
 }
 
-func mutateRegistryManifest(manifest, host, overrideImage string) (string, error) {
+func mutateRegistryManifest(manifest, host, overrideImage, storageSize string) (string, error) {
 	host = strings.TrimSpace(host)
 	overrideImage = strings.TrimSpace(overrideImage)
 	replaceHost := host != "" && host != "registry.local"
@@ -202,6 +209,11 @@ func mutateRegistryManifest(manifest, host, overrideImage string) (string, error
 		}
 		if replaceHost {
 			obj.Object = replaceStringValues(obj.Object, "registry.local", host).(map[string]any)
+		}
+		if storageSize != "" && obj.GetKind() == "PersistentVolumeClaim" && obj.GetName() == core.RegistryPVCName {
+			if err := unstructured.SetNestedField(obj.Object, storageSize, "spec", "resources", "requests", "storage"); err != nil {
+				return "", err
+			}
 		}
 		removeRegistryClusterIssuerAnnotation(obj)
 		if overrideImage != "" && setRegistryDeploymentImage(obj, overrideImage) {
@@ -316,6 +328,32 @@ func ensureRegistryStorageSizeClientGo(logger *zap.Logger, clients *k8sclient.Cl
 		core.Error("Failed to update registry storage size")
 		core.LogStructuredError(logger, wrappedErr, "Failed to update registry storage size")
 		return wrappedErr
+	}
+	return nil
+}
+
+// Reject shrink attempts before any registry resource is applied.
+func validateRegistryStorageSize(ctx context.Context, clients *k8sclient.Clients, namespace, size string) error {
+	if strings.TrimSpace(size) == "" {
+		return nil
+	}
+	requested, err := resource.ParseQuantity(size)
+	if err != nil || requested.Sign() <= 0 {
+		return fmt.Errorf("invalid --registry-storage %q: use a positive Kubernetes storage quantity", size)
+	}
+	pvc, err := clients.Clientset.CoreV1().PersistentVolumeClaims(namespace).Get(ctx, core.RegistryPVCName, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read registry PVC before setup: %w", err)
+	}
+	current := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
+	if capacity := pvc.Status.Capacity[corev1.ResourceStorage]; capacity.Cmp(current) > 0 {
+		current = capacity
+	}
+	if requested.Cmp(current) < 0 {
+		return fmt.Errorf("--registry-storage %s cannot shrink existing PVC %s/%s (current size %s); keep that size or increase it", requested.String(), namespace, core.RegistryPVCName, current.String())
 	}
 	return nil
 }
