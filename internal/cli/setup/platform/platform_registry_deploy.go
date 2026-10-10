@@ -37,6 +37,10 @@ func deployRegistryClientGo(logger *zap.Logger, namespace string, port int, regi
 	if err != nil {
 		return err
 	}
+	nativeAuth, err := registryBackendUsesTokenAuth(context.Background(), clients, namespace)
+	if err != nil {
+		return err
+	}
 	if err := validateRegistryStorageSize(context.Background(), clients, namespace, registryStorageSize); err != nil {
 		return err
 	}
@@ -78,7 +82,7 @@ func deployRegistryClientGo(logger *zap.Logger, namespace string, port int, regi
 	if logger != nil {
 		logger.Info("Resolved registry ingress host", zap.String("host", registryHost), zap.String("source", registryHostSource))
 	}
-	manifest, err = mutateRegistryManifest(manifest, registryHost, overrideImage, registryStorageSize)
+	manifest, err = mutateRegistryManifest(manifest, registryHost, overrideImage, registryStorageSize, nativeAuth)
 	if err != nil {
 		wrappedErr := core.WrapWithBaseAndContext(
 			core.ErrDeployRegistryFailed,
@@ -188,7 +192,7 @@ func validateRegistryType(registryType string) error {
 	}
 }
 
-func mutateRegistryManifest(manifest, host, overrideImage, storageSize string) (string, error) {
+func mutateRegistryManifest(manifest, host, overrideImage, storageSize string, nativeAuth bool) (string, error) {
 	host = strings.TrimSpace(host)
 	overrideImage = strings.TrimSpace(overrideImage)
 	replaceHost := host != "" && host != "registry.local"
@@ -214,6 +218,23 @@ func mutateRegistryManifest(manifest, host, overrideImage, storageSize string) (
 			if err := unstructured.SetNestedField(obj.Object, storageSize, "spec", "resources", "requests", "storage"); err != nil {
 				return "", err
 			}
+		}
+		if nativeAuth && obj.GetKind() == "Ingress" && obj.GetName() == core.RegistryServiceName {
+			annotations := obj.GetAnnotations()
+			key := "traefik.ingress.kubernetes.io/router.middlewares"
+			var retained []string
+			for _, value := range strings.Split(annotations[key], ",") {
+				value = strings.TrimSpace(value)
+				if value != "" && value != registryAdminAuthMiddleware {
+					retained = append(retained, value)
+				}
+			}
+			if len(retained) == 0 {
+				delete(annotations, key)
+			} else {
+				annotations[key] = strings.Join(retained, ",")
+			}
+			obj.SetAnnotations(annotations)
 		}
 		removeRegistryClusterIssuerAnnotation(obj)
 		if overrideImage != "" && setRegistryDeploymentImage(obj, overrideImage) {
@@ -356,4 +377,30 @@ func validateRegistryStorageSize(ctx context.Context, clients *k8sclient.Clients
 		return fmt.Errorf("--registry-storage %s cannot shrink existing PVC %s/%s (current size %s); keep that size or increase it", requested.String(), namespace, core.RegistryPVCName, current.String())
 	}
 	return nil
+}
+
+// Read authentication before applying anything: a failed read must not replace
+// native repository authentication with the public admin-only middleware.
+func registryBackendUsesTokenAuth(ctx context.Context, clients *k8sclient.Clients, namespace string) (bool, error) {
+	deployment, err := clients.Clientset.AppsV1().Deployments(namespace).Get(ctx, core.RegistryServiceName, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read registry authentication before setup: %w", err)
+	}
+	for _, container := range deployment.Spec.Template.Spec.Containers {
+		if container.Name != "registry" {
+			continue
+		}
+		for _, value := range container.Env {
+			if value.Name == "REGISTRY_AUTH" {
+				if value.ValueFrom != nil {
+					return false, fmt.Errorf("registry authentication uses an unresolved env source; inspect it before setup")
+				}
+				return strings.TrimSpace(value.Value) == "token", nil
+			}
+		}
+	}
+	return false, nil
 }

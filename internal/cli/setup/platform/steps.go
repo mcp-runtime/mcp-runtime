@@ -19,7 +19,6 @@ type SetupContext struct {
 	Plan                  setupplan.Plan
 	ExternalRegistry      *config.ExternalRegistryConfig
 	UsingExternalRegistry bool
-	RegistryAuthStaged    bool
 	RegistrySecretName    string
 	OperatorImage         string
 	GatewayProxyImage     string
@@ -129,20 +128,6 @@ func (s operatorImageStep) Run(logger *zap.Logger, deps SetupDeps, ctx *SetupCon
 	return nil
 }
 
-type registryAuthDisableStep struct{}
-
-func (s registryAuthDisableStep) Name() string { return "registry-auth-disable" }
-func (s registryAuthDisableStep) Run(logger *zap.Logger, deps SetupDeps, ctx *SetupContext) error {
-	if !shouldStageRegistryIngressAuth(ctx.UsingExternalRegistry) {
-		return nil
-	}
-	if err := deps.DisableRegistryIngressAuth(); err != nil {
-		return err
-	}
-	ctx.RegistryAuthStaged = true
-	return nil
-}
-
 type deployOperatorStepCmd struct{}
 
 func (s deployOperatorStepCmd) Name() string { return "operator-deploy" }
@@ -231,11 +216,6 @@ func (s verifyStep) Run(logger *zap.Logger, deps SetupDeps, ctx *SetupContext) e
 	return nil
 }
 
-// Registry auth is re-enabled by a defer in setupPlatformWithDeps so it runs
-// on every exit path (success or any earlier-step failure), instead of as a
-// pipeline step that would be skipped on errors. See the defer block on
-// ctx.RegistryAuthStaged for details.
-
 func buildSetupSteps(ctx *SetupContext) []SetupStep {
 	catalogMode := setupplan.CatalogNamespaceForPlatformMode(ctx.Plan.PlatformMode) != ""
 	return NewSetupPipeline().
@@ -246,7 +226,6 @@ func buildSetupSteps(ctx *SetupContext) []SetupStep {
 		WithIf(ctx.Plan.TLSEnabled, tlsStep{}).
 		WithIf(strings.TrimSpace(ctx.Plan.MTLSClusterIssuer) != "", workloadPKIStep{}).
 		With(registryStep{}).
-		With(registryAuthDisableStep{}).
 		With(operatorImageStep{}).
 		WithIf(ctx.Plan.DeployAnalytics, analyticsImageStep{}).
 		With(deployOperatorStepCmd{}).

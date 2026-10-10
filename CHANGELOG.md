@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Security
+
+- Full setup keeps public registry ingress authentication active during image publication and on failed builds. Rerunning setup against native registry authentication retains repository-scoped access without reinstating the admin-only ingress middleware ([#690](https://github.com/mcp-runtime/mcp-runtime/issues/690)).
+
 ## [0.7.0] - 2026-10-10
 
 This release enables native registry authentication by default for production-shaped

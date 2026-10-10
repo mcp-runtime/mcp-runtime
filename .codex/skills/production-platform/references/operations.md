@@ -366,3 +366,8 @@ Gotchas seen on real runs:
   stage's `adapter-enrollment/` evidence directory first.
 - Exit 255 in the staging workflow is an SSH drop, not a test failure; the step
   uses keepalives.
+
+Public registry setup must remain fail-closed during image builds: anonymous
+`GET /v2/` must not return 200. Image helpers use the internal registry Service
+and do not require removing public ingress authentication. If setup is cancelled
+or fails, verify that public authentication is still active before retrying.

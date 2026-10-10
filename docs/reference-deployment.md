@@ -663,6 +663,11 @@ place. The resource inventory is for recovery reference, not bulk
 `kubectl apply`; its selected platform files are consumed by the existing
 setup restore path.
 
+Full setup keeps public registry ingress authentication enabled while images are
+built and published through the internal registry helper. After native token
+authentication is enabled, setup reruns preserve repository-scoped registry access
+and do not reinstate the admin-only ingress middleware.
+
 For destructive cleanup or full node recovery, create a full backup:
 
 ```bash

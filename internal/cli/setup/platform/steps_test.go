@@ -46,15 +46,15 @@ func TestBuildSetupStepsOrderWithTLS(t *testing.T) {
 		},
 	}
 	steps := buildSetupSteps(ctx)
-	if len(steps) != 8 {
-		t.Fatalf("expected 8 steps, got %d", len(steps))
-	}
 
 	got := make([]string, len(steps))
 	for i, s := range steps {
 		got[i] = s.Name()
 	}
-	want := []string{"preflight", "cluster", "tls", "registry", "registry-auth-disable", "operator-image", "operator-deploy", "verify"}
+	want := []string{"preflight", "cluster", "tls", "registry", "operator-image", "operator-deploy", "verify"}
+	if len(got) != len(want) {
+		t.Fatalf("steps = %v, want %v", got, want)
+	}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("step %d: expected %q, got %q", i, want[i], got[i])
@@ -69,15 +69,15 @@ func TestBuildSetupStepsOrderWithoutTLS(t *testing.T) {
 		},
 	}
 	steps := buildSetupSteps(ctx)
-	if len(steps) != 7 {
-		t.Fatalf("expected 7 steps, got %d", len(steps))
-	}
 
 	got := make([]string, len(steps))
 	for i, s := range steps {
 		got[i] = s.Name()
 	}
-	want := []string{"preflight", "cluster", "registry", "registry-auth-disable", "operator-image", "operator-deploy", "verify"}
+	want := []string{"preflight", "cluster", "registry", "operator-image", "operator-deploy", "verify"}
+	if len(got) != len(want) {
+		t.Fatalf("steps = %v, want %v", got, want)
+	}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("step %d: expected %q, got %q", i, want[i], got[i])
@@ -97,7 +97,10 @@ func TestBuildSetupStepsOrderWithWorkloadPKI(t *testing.T) {
 	for i, s := range steps {
 		got[i] = s.Name()
 	}
-	want := []string{"preflight", "cluster", "workload-pki", "registry", "registry-auth-disable", "operator-image", "operator-deploy", "verify"}
+	want := []string{"preflight", "cluster", "workload-pki", "registry", "operator-image", "operator-deploy", "verify"}
+	if len(got) != len(want) {
+		t.Fatalf("steps = %v, want %v", got, want)
+	}
 	if len(got) != len(want) {
 		t.Fatalf("expected %d steps, got %d: %v", len(want), len(got), got)
 	}
@@ -132,15 +135,15 @@ func TestBuildSetupStepsOrderWithAnalytics(t *testing.T) {
 		},
 	}
 	steps := buildSetupSteps(ctx)
-	if len(steps) != 9 {
-		t.Fatalf("expected 9 steps, got %d", len(steps))
-	}
 
 	got := make([]string, len(steps))
 	for i, s := range steps {
 		got[i] = s.Name()
 	}
-	want := []string{"preflight", "cluster", "registry", "registry-auth-disable", "operator-image", "analytics-images", "operator-deploy", "analytics-deploy", "verify"}
+	want := []string{"preflight", "cluster", "registry", "operator-image", "analytics-images", "operator-deploy", "analytics-deploy", "verify"}
+	if len(got) != len(want) {
+		t.Fatalf("steps = %v, want %v", got, want)
+	}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("step %d: expected %q, got %q", i, want[i], got[i])

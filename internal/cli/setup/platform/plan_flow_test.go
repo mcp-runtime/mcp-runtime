@@ -1,9 +1,12 @@
 package platform
 
 import (
+	"context"
 	"fmt"
+	networkingv1 "k8s.io/api/networking/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -1256,18 +1259,21 @@ func TestSetupPlatformWithDeps_InternalRegistryPushFailure(t *testing.T) {
 	}
 }
 
-// TestSetupPlatformWithDeps_RegistryAuthReenabledOnFailure verifies the
-// deferred cleanup re-enables the registry ingress auth middleware when a
-// pipeline step after the disable step fails. Without the defer, a failure
-// here would leave the public registry without `registry-admin-auth@file`.
-func TestSetupPlatformWithDeps_RegistryAuthReenabledOnFailure(t *testing.T) {
+func TestSetupPlatformWithDeps_RegistryIngressProtectedDuringPublishFailure(t *testing.T) {
 	origCfg := core.DefaultCLIConfig
 	t.Cleanup(func() { core.DefaultCLIConfig = origCfg })
-	// Non-dev host triggers shouldStageRegistryIngressAuth, so the disable
-	// step runs and ctx.RegistryAuthStaged is set to true.
 	core.DefaultCLIConfig = &core.CLIConfig{RegistryIngressHost: "registry.prod.example.com"}
-
-	restoreAttempts := 0
+	const middleware = "traefik.ingress.kubernetes.io/router.middlewares"
+	ingress := &networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{Name: "registry", Namespace: "registry", Annotations: map[string]string{middleware: registryAdminAuthMiddleware}}}
+	clients := newPlatformKubernetesTestClients([]runtime.Object{ingress}, nil)
+	swapKubernetesClientsForTest(t, clients)
+	assertProtected := func() {
+		t.Helper()
+		live, err := clients.Clientset.NetworkingV1().Ingresses("registry").Get(context.Background(), "registry", metav1.GetOptions{})
+		if err != nil || live.Annotations[middleware] != registryAdminAuthMiddleware {
+			t.Fatalf("public registry lost ingress authentication: %v, %v", live, err)
+		}
+	}
 	rec := &callRecorder{}
 	deps := SetupDeps{
 		ResolveExternalRegistryConfig: func(*config.ExternalRegistryConfig) (*config.ExternalRegistryConfig, error) {
@@ -1287,29 +1293,18 @@ func TestSetupPlatformWithDeps_RegistryAuthReenabledOnFailure(t *testing.T) {
 		EnsureNamespace:            func(string) error { return nil },
 		ResolvePlatformRegistryURL: func(*zap.Logger) string { return "registry.prod.example.com" },
 		PushOperatorImageToInternal: func(*zap.Logger, string, string, string) error {
-			// Fail after disable runs to exercise the defer cleanup path.
+			// Observe protection at publication, including the failure path.
+			assertProtected()
 			rec.add("push-internal")
 			return fmt.Errorf("push failed")
 		},
 		PushGatewayProxyImageToInternal: func(*zap.Logger, string, string, string) error { return nil },
 		DeployOperatorManifests:         func(*zap.Logger, string, string, []string, string) error { return nil },
 		ConfigureProvisionedRegistryEnv: func(*config.ExternalRegistryConfig, string) error { return nil },
-		DisableRegistryIngressAuth: func() error {
-			rec.add("auth-disable")
-			return nil
-		},
-		EnableRegistryIngressAuth: func() error {
-			rec.add("auth-enable")
-			restoreAttempts++
-			if restoreAttempts == 1 {
-				return fmt.Errorf("API restarting: %w", syscall.ECONNREFUSED)
-			}
-			return nil
-		},
-		RestartDeployment:    func(string, string) error { return nil },
-		CheckCRDInstalled:    func(string) error { return nil },
-		GetDeploymentTimeout: func() time.Duration { return time.Second },
-		GetRegistryPort:      func() int { return 5000 },
+		RestartDeployment:               func(string, string) error { return nil },
+		CheckCRDInstalled:               func(string) error { return nil },
+		GetDeploymentTimeout:            func() time.Duration { return time.Second },
+		GetRegistryPort:                 func() int { return 5000 },
 		OperatorImageFor: func(*config.ExternalRegistryConfig) string {
 			return "registry.prod.example.com/mcp-runtime-operator:latest"
 		},
@@ -1334,15 +1329,7 @@ func TestSetupPlatformWithDeps_RegistryAuthReenabledOnFailure(t *testing.T) {
 	if err := setupPlatformWithDeps(zap.NewNop(), plan, deps); err == nil {
 		t.Fatalf("expected error from internal registry push failure")
 	}
-	if !rec.has("auth-disable") {
-		t.Fatalf("expected registry auth disable to run, got calls: %v", rec.calls)
-	}
-	if !rec.has("auth-enable") {
-		t.Fatalf("expected registry auth re-enable on failure (defer), got calls: %v", rec.calls)
-	}
-	if restoreAttempts != 2 {
-		t.Fatalf("registry auth restore attempts = %d, want 2", restoreAttempts)
-	}
+	assertProtected()
 }
 
 // TestSetupPlatformWithDeps_CatalogNamespace verifies setup pre-creates the
