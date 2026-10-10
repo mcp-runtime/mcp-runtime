@@ -16,6 +16,7 @@ import (
 
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 
 	"mcp-runtime/internal/cli/cluster/registrycompat"
 	"mcp-runtime/internal/cli/core"
@@ -39,9 +40,26 @@ const registryClientGoProbeTimeout = 3 * time.Second
 
 // RegistryManager handles registry operations with injected dependencies.
 type RegistryManager struct {
-	kubectl *core.KubectlClient
-	exec    core.Executor
-	logger  *zap.Logger
+	kubectl          *core.KubectlClient
+	exec             core.Executor
+	logger           *zap.Logger
+	nativeAuthClient kubernetes.Interface
+}
+
+// SetNativeAuthClient binds publication auth discovery to an explicitly selected
+// cluster. Callers that do not select a client retain the registry CLI default.
+func (m *RegistryManager) SetNativeAuthClient(client kubernetes.Interface) {
+	m.nativeAuthClient = client
+}
+
+func (m *RegistryManager) nativeAuthActive() bool {
+	if m.nativeAuthClient == nil {
+		return registryNativeAuthActive()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), registryClientGoProbeTimeout)
+	defer cancel()
+	active, err := NativeAuthActive(ctx, m.nativeAuthClient)
+	return err == nil && active
 }
 
 // NewRegistryManager creates a RegistryManager with the given dependencies.
@@ -1086,7 +1104,7 @@ func (m *RegistryManager) PushInCluster(source, target, helperNS string) error {
 	}
 
 	publisherSecret := ""
-	if registryNativeAuthActive() {
+	if m.nativeAuthActive() {
 		if helperNS != core.NamespaceRegistry {
 			return core.NewWithBase(core.ErrStartHelperPodFailed, fmt.Sprintf("native registry publication helpers must run in the %s namespace", core.NamespaceRegistry))
 		}

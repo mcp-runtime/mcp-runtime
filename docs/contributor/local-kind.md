@@ -267,3 +267,9 @@ The standalone SDK fixtures verify tokens against the in-cluster JWKS endpoint
 not reachable from inside a pod and the authorization server sits behind an
 ingress that strips its path prefix. Issuer and audience are still validated in
 full.
+
+UI-only updates can use `update --build --only ui` with a local release manifest
+and clean source checkout. Pass the Kind kubeconfig and context explicitly. The
+bundled registry is reachable through the in-cluster publisher; Docker on the
+host cannot resolve its Kubernetes Service address. Use `--image-platform
+linux/arm64` on ARM64 Kind nodes.

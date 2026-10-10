@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -212,5 +213,38 @@ func TestPushInClusterStaysAnonymousWithoutNativeAuth(t *testing.T) {
 		if strings.HasPrefix(arg, "--dest-authfile") {
 			t.Fatalf("test-mode push must not require publisher credentials: %v", execArgs)
 		}
+	}
+}
+
+func TestPushInClusterUsesSelectedClusterAuth(t *testing.T) {
+	for _, selectedActive := range []bool{false, true} {
+		t.Run(fmt.Sprintf("selected_native_auth_%t", selectedActive), func(t *testing.T) {
+			// The ambient context intentionally has the opposite auth mode.
+			withRegistryNativeAuthActive(t, !selectedActive)
+			deployment := registryDeploymentWithEnv()
+			if selectedActive {
+				deployment = registryDeploymentWithEnv(corev1.EnvVar{Name: "REGISTRY_AUTH", Value: "token"})
+			}
+			var mounted, authenticated bool
+			mock := &core.MockExecutor{CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
+				if spec.Name == "kubectl" && contains(spec.Args, "run") {
+					mounted = strings.Contains(strings.Join(spec.Args, " "), registryPublisherSecret)
+				}
+				if spec.Name == "kubectl" && contains(spec.Args, "exec") {
+					authenticated = contains(spec.Args, "--dest-authfile="+registryPublisherAuthFile)
+				}
+				return &core.MockCommand{Args: spec.Args}
+			}}
+			manager := NewRegistryManager(core.NewTestKubectlClient(mock), mock, zap.NewNop())
+			manager.SetNativeAuthClient(fake.NewSimpleClientset(deployment))
+			var output bytes.Buffer
+			setDefaultPrinterWriter(t, &output)
+			if err := manager.PushInCluster("source:tag", "target:tag", core.NamespaceRegistry); err != nil {
+				t.Fatal(err)
+			}
+			if mounted != selectedActive || authenticated != selectedActive {
+				t.Fatalf("selected auth=%t, mounted=%t, authenticated=%t", selectedActive, mounted, authenticated)
+			}
+		})
 	}
 }
