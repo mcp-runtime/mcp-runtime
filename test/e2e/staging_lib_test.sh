@@ -62,6 +62,30 @@ expect_eq "registry probe uses bearer auth" "$(cat "${TMP}/bearer-config")" 'hea
 expect_fail "registry probe refuses denied token exchange" registry_token_case denied
 expect_fail "registry probe refuses malformed bearer token" registry_token_case malformed
 
+adapter_pull_scope_case() (
+  local calls="${TMP}/adapter-pull-calls"
+  : >"${calls}"
+  PLATFORM_URL=https://platform.e2e.mcpruntime.org
+  BIN=fake_registry_cli
+  fake_registry_cli() {
+    [[ "${MCP_PLATFORM_API_PROFILE}" == e2e && "$*" == 'registry enable-auth --realm https://platform.e2e.mcpruntime.org/api/v1/registry/token --pull-namespace mcp-servers --allow-bundled-broker' ]] || return 1
+    printf 'rotate\n' >>"${calls}"
+  }
+  kubectl() {
+    case "$*" in
+      '-n mcp-servers get deploy fixture'|'-n mcp-servers get deploy other') return 0 ;;
+      '-n mcp-servers get secret mcp-runtime-registry-pull -o json')
+        [[ "$(cat "${calls}")" == rotate ]] || return 1
+        printf '{"apiVersion":"v1","kind":"Secret","type":"kubernetes.io/dockerconfigjson","data":{}}'
+        ;;
+      'apply -f -') jq -e '.metadata.namespace == "mcp-servers" and .metadata.name == "fixture-pull"' >/dev/null ;;
+      *) return 1 ;;
+    esac
+  }
+  staging_adapter_provision_pull mcp-servers fixture-pull fixture other
+)
+expect_ok "adapter fixture rotates and copies its own namespace credential" adapter_pull_scope_case
+
 # --- flags and URL parsing --------------------------------------------------
 installer_download_case() (
   local scenario="$1" calls=0

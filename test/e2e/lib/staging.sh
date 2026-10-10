@@ -1481,6 +1481,26 @@ ${auth_yaml}
 EOF
 }
 
+# Fixture deployments must exist before the CLI derives their exact image scopes.
+# Never copy another namespace's node credential into the adapter namespace.
+staging_adapter_provision_pull() {
+  local ns="$1" pull="$2" name deadline
+  shift 2
+  for name in "$@"; do
+    deadline=$((SECONDS + 120))
+    until kubectl -n "${ns}" get deploy "${name}" >/dev/null 2>&1; do
+      ((SECONDS < deadline)) || { staging_err "adapter deployment ${ns}/${name} not created"; return 1; }
+      sleep 3
+    done
+  done
+  MCP_PLATFORM_API_PROFILE=e2e "${BIN}" registry enable-auth \
+    --realm "${PLATFORM_URL%/}/api/v1/registry/token" --pull-namespace "${ns}" --allow-bundled-broker || return 1
+  kubectl -n "${ns}" get secret mcp-runtime-registry-pull -o json |
+    jq --arg name "${pull}" --arg ns "${ns}" \
+      '{apiVersion, kind, type, data, metadata: {name: $name, namespace: $ns, labels: {"app.kubernetes.io/managed-by": "staging-e2e"}}}' |
+    kubectl apply -f - >/dev/null
+}
+
 staging_adapter_apply_grant() {
   local grant="$1" server="$2" ns="$3" team_id="$4" agent="$5" expires_at="$6"
   kubectl apply -f - <<EOF
@@ -1817,14 +1837,10 @@ staging_check_adapter_enrollment() {
   # shellcheck disable=SC2064 # expand the names now; the trap runs after they go out of scope
   trap "staging_adapter_cleanup \$? '${ns}' '${tls_ns}' '${grant}' '${pull}' '${certs}' '${session_file}' '${server}' '${wrong}' '${oauth_server}' '${oauth_wrong}'" EXIT
 
-  kubectl -n mcp-platform get secret mcp-runtime-registry-pull -o json |
-    jq --arg name "${pull}" --arg ns "${ns}" \
-      '{apiVersion, kind, type, data, metadata: {name: $name, namespace: $ns, labels: {"app.kubernetes.io/managed-by": "staging-e2e"}}}' |
-    kubectl apply -f - >/dev/null
-
   # Cert-only pair (omit spec.auth): HTTPS client-certificate matrix without a bearer.
   staging_adapter_apply_server "${server}" "${image_repo}" "${image_tag}" "${pull}" "${ns}" ""
   staging_adapter_apply_server "${wrong}" "${image_repo}" "${image_tag}" "${pull}" "${ns}" ""
+  staging_adapter_provision_pull "${ns}" "${pull}" "${server}" "${wrong}" || return 1
   staging_adapter_apply_grant "${grant}" "${server}" "${ns}" "${team_id}" "${agent}" "${grant_expires_at}"
 
   local name

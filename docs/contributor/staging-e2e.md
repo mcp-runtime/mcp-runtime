@@ -16,6 +16,11 @@ runs next to k3s. The assertions, the target guard, and the stage runner live
 in `test/e2e/lib/staging.sh`. The workflow holds one concurrency group so only
 one run drives the VM at a time.
 
+Adapter fixtures rotate their own server namespace pull credential using
+`registry enable-auth --pull-namespace` after the fixture deployments exist,
+so the broker grants their exact repositories. They never reuse another
+namespace's node credential; registry denial checks remain enabled.
+
 The runner authenticates to GHCR with the workflow's short-lived
 package-read token and reuses content-hash platform images when available.
 The workflow passes that token over SSH stdin after the disposable-target
