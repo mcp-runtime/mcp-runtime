@@ -727,6 +727,7 @@ mcp-runtime setup \
 mcp-runtime setup --with-tls --acme-email ops@example.com   # Let's Encrypt
 mcp-runtime setup --without-platform-stack                         # skip analytics
 mcp-runtime setup --test-mode                                # local Kind dev
+mcp-runtime setup --test-mode --test-multi-replica             # normal replica layout for tests that need it
 ```
 
 ### Defaults worth knowing

@@ -5,6 +5,138 @@ Traefik, platform services, and real MCP ingress routes.
 
 ## Prerequisites
 
+### Test replica modes
+
+`setup --test-mode` builds and publishes native platform images and deploys
+one replica per platform Deployment and StatefulSet. Kafka uses one controller
+and broker, replication factor 1, and minimum in-sync replicas 1. DaemonSets
+still run once per node. This is a functional test profile without redundancy.
+
+Use `setup --test-mode --test-multi-replica` for tests that require concurrent
+replicas, such as shared UI sessions or failover. The flag uses normal manifest
+counts: two UI/operator/Traefik/gateway replicas and three Kafka/ingest/processor
+replicas. Naturally single-instance databases retain their normal count.
+The flag requires `--test-mode`; normal setup defaults are unchanged.
+
+Choose the mode when creating the test cluster. Switching a populated Kafka
+store between one and three replicas changes both its controller quorum and
+topic replication. Setup rejects that transition and preserves the store;
+create a separate fresh Kind cluster for the other profile. Do not reuse the
+old volumes as an automatic migration.
+
+For QA E2E, `E2E_TEST_MULTI_REPLICA=1` passes the same flag to setup. Use it on
+a fresh test cluster when the scenario requires the normal replica layout.
+
+### Host CPU and memory
+
+Plan for the **full platform**, including Kafka, ClickHouse,
+Postgres, and the observability services. A bare Kind cluster uses much less
+memory than this installation.
+
+| Use | Docker/Kind CPU allocation | Docker/Kind memory allocation | Host guidance |
+|---|---|---|---|
+| Run the full stack and light functional tests | 4 CPUs | 6GiB lower planning bound; 8GiB preferred | 16GB RAM recommended on macOS/Windows to leave room for the OS, editor, and browser |
+| Build from source while the stack runs | 4 or more CPUs | 8GiB preferred | 16GB RAM recommended; use sequential builds initially |
+
+These are planning recommendations from one ARM64 development installation,
+not certified minimums or load-test capacity. On native Linux, reserve memory
+for the host as well as the containers; on macOS/Windows, configure the Docker
+VM allocation explicitly. See [Docker Desktop resource settings](https://docs.docker.com/desktop/settings-and-maintenance/settings/#advanced).
+
+An 8GB Mac with a 4-CPU, 6GiB Docker VM ran the full stack, but first-time
+parallel source builds caused substantial host memory pressure and slow
+startup. It is a constrained testing option, rather than the recommended
+development host. `setup` builds sequentially by default: leave
+`--parallel-builds` off on small hosts. For QA E2E, start with
+`E2E_IMAGE_BUILD_PARALLELISM=1` and `E2E_IMAGE_MIRROR_PARALLELISM=1`.
+
+Measured on 2026-10-08 with Kind 0.33.0 / Kubernetes 1.37.0, one ARM64
+node, native service images from `15dc3f18`, and no MCP test traffic. Neither
+baseline included Metrics Server:
+
+| Quantity | Default single replica | `--test-multi-replica` |
+|---|---|---|
+| Active pod CPU requests, including Kubernetes | 2.25 cores | 3.30 cores |
+| Active pod memory requests | 2.53GiB | 4.35GiB |
+| Kind node memory working set | 3.07GiB | 3.95GiB |
+| Kind node CPU usage, one sample | 0.54 core | 0.59 core |
+| Active pods | 31 | 41 |
+
+The multi-replica profile reserves an additional **1.05 CPU cores and 1.81GiB
+RAM** before adding MCP servers. Actual usage depends on traffic; the idle CPU
+samples do not establish load capacity. Metrics Server adds requests of 100m
+CPU and 200Mi RAM; its observed usage was 9m CPU and 17Mi RAM.
+
+The working set includes Kubernetes overhead. BuildKit runs outside the Kind
+node and needs additional VM/host headroom. On this 8GiB Mac, one later idle
+sample had 6.79GiB host swap and 3.56GiB compressed memory while the node used
+3.27GiB. This is why 16GB host RAM is recommended for source development.
+Resource limits can exceed node capacity because services do not all reach
+their limits together; re-measure under your workload.
+
+The tested Colima disk allocation was **60GiB**, with about **32.65GiB used**
+on its shared filesystem after builds and both test profiles. This includes
+image/build caches and a retained stopped cluster, so it is a tested disk
+budget, not a clean-install minimum. The single-replica platform declared
+85GiB of PVC capacities across seven volumes; thin local-path storage did not
+consume that capacity immediately. Do not add PVC capacities to filesystem
+usage or add overlapping Docker image/cache categories. Data retention and
+additional server images increase actual consumption.
+
+With the isolated test kubeconfig below, inspect your installation using:
+
+```bash
+docker stats --no-stream mcp-runtime-control-plane
+kubectl describe node mcp-runtime-control-plane
+kubectl get --raw /api/v1/nodes/mcp-runtime-control-plane/proxy/stats/summary |
+  jq '.node | {cpu, memory}'
+```
+
+The node summary reads kubelet statistics and does not require metrics-server.
+The commands require permission to inspect the contributor cluster.
+
+A later resource-instrumented local E2E attempt on 2026-10-10 collected
+134 valid Kubernetes samples out of 213 before failing during setup because
+an image-push helper could not be scheduled while the node was unhealthy.
+Its sampled node peaks were 3.54 CPU cores and 3.39GiB working memory;
+pod requests peaked at 2.45 cores and 2.85GiB, and shared node filesystem
+usage reached 42.02GiB. These are partial startup observations from a failed
+run, not a completed functional or traffic benchmark. They do not establish
+minimum hardware requirements; retain headroom and repeat the suite on a
+healthy host before sizing for a workload.
+
+### macOS with Colima
+
+The measurement host was macOS 15.5 on ARM64 (Apple Silicon), with 8GB physical
+RAM and 8 logical CPUs. Colima 0.10.3 used the Virtualization.framework (`vz`)
+backend and `virtiofs`, with 4 virtual CPUs, 6GiB memory, and a 60GiB disk.
+The Kind node reported about 5.77GiB allocatable memory after VM overhead.
+The Docker engine inside the VM was Linux ARM64, version 29.5.2. Kind 0.33.0
+created one Kubernetes 1.37.0 control-plane node. Service manifests and their
+ELF executables were checked as ARM64; these numbers do not describe an
+AMD64-under-emulation deployment or a production load test.
+
+Install the local tools, then start the VM before creating Kind:
+
+```bash
+brew install colima docker docker-buildx kind
+# Configure the Homebrew buildx CLI plugin as shown by:
+brew info docker-buildx
+colima start --cpu 4 --memory 6 --disk 60 --vm-type vz \
+  --mount-type virtiofs --downloader curl
+docker context use colima
+docker version
+docker buildx version
+kind version
+```
+
+Use the isolated kubeconfig and registry-mirror Kind configuration in the next
+section, then run `setup --test-mode` for the smaller profile. `kubectl`, Go,
+and the other tools below are still required. `--downloader curl` was used
+after Colima's default VM-image downloader timed out on this host. For a
+16GB host, allocate 8GiB to Colima for more build headroom rather than copying
+the constrained 6GiB measurement configuration as a universal recommendation.
+
 From a source checkout at the repository root, install Docker, Kind, `kubectl`,
 Go `1.26+`, Make, `curl`, `jq`, and Python 3. Then build the
 CLI:
@@ -44,9 +176,7 @@ EOF
 kind create cluster --name mcp-runtime --config "$KIND_CONFIG" \
   --kubeconfig "$TEST_KUBECONFIG" --wait 120s
 chmod 600 "$TEST_KUBECONFIG"
-kubectl --kubeconfig "$TEST_KUBECONFIG" config rename-context \
-  kind-mcp-runtime test-mcp-runtime
-kubectl --kubeconfig "$TEST_KUBECONFIG" config use-context test-mcp-runtime
+kubectl --kubeconfig "$TEST_KUBECONFIG" config use-context kind-mcp-runtime
 export KUBECONFIG="$TEST_KUBECONFIG"
 kubectl config current-context
 kubectl get nodes
@@ -60,12 +190,54 @@ using it:
 TEST_KUBECONFIG="$HOME/.kube/test-mcp-runtime-config"
 kind export kubeconfig --name mcp-runtime --kubeconfig "$TEST_KUBECONFIG"
 chmod 600 "$TEST_KUBECONFIG"
-kubectl --kubeconfig "$TEST_KUBECONFIG" config rename-context \
-  kind-mcp-runtime test-mcp-runtime
-kubectl --kubeconfig "$TEST_KUBECONFIG" config use-context test-mcp-runtime
+kubectl --kubeconfig "$TEST_KUBECONFIG" config use-context kind-mcp-runtime
 export KUBECONFIG="$TEST_KUBECONFIG"
 kubectl get nodes
 ```
+
+## Capture resources during E2E
+
+QA E2E captures resource samples by default (`E2E_CAPTURE_RESOURCES=1`). It
+starts before cluster/setup work and continues through the selected tests.
+Use an explicit Kind kubeconfig and preserve the reports:
+
+```bash
+KUBECONFIG="$TEST_KUBECONFIG" CLUSTER_NAME=mcp-runtime \
+  E2E_CACHE_MODE=1 E2E_KEEP_CLUSTER=1 \
+  E2E_IMAGE_BUILD_PARALLELISM=1 E2E_IMAGE_MIRROR_PARALLELISM=1 \
+  E2E_ARTIFACT_DIR="$PWD/.local/e2e-resource-report" \
+  E2E_SCENARIOS=smoke-auth,cli-platform,governance,trust,oauth,observability \
+  bash test/e2e/qa-e2e.sh
+```
+
+For a fresh multi-replica cluster, add `E2E_TEST_MULTI_REPLICA=1` and use a
+different cluster name/kubeconfig. Keep the context named `kind-<cluster-name>`;
+the sampler refuses other contexts and never uses an ambient target.
+
+The artifact directory contains `resource-usage/samples.jsonl`, `samples.csv`,
+`summary.json`, and `summary.md`, plus stage timings. Measurements include
+kubelet node/pod CPU and memory, pod requests, Metrics Server when installed,
+Docker node statistics, host CPU/swap/disk, Colima VM memory, and actual local
+volume/containerd disk usage. Disk collection runs about once per minute;
+other samples target 15 seconds, with collection duration recorded. Missing
+samples and partial disk coverage are reported, not counted as zero.
+
+`grafana.json` and `grafana.md` capture Prometheus time series through Grafana
+for the same test window: scrape health, application CPU/RSS/goroutines,
+gateway requests/latency, and container/network/volume metrics where collected.
+The bundled scrape configuration currently exposes application metrics, but
+container, kube-state, and volume queries can have no series. Capture records
+those gaps explicitly; Metrics Server does not populate Prometheus history.
+Grafana credentials are read privately from the local Secret and are never
+written to the reports.
+
+A sampled peak can miss a short burst. Functional E2E exercises deployments
+and MCP traffic, but does not establish capacity at a fixed requests-per-second
+rate. Stage labels identify the last stage started; parallel stages overlap.
+Report the profile, revision, node/host architecture, VM allocation, cache
+state, scenario set, test result, and collection gaps alongside any sizing
+recommendation. Include Kubernetes and build overhead plus headroom; do not
+publish an idle sample as a production minimum.
 
 ## Install MCP Runtime
 
@@ -78,8 +250,30 @@ Run preflight checks, then install with the HTTP ingress overlay:
 
 MCP_SETUP_WAIT_TIMEOUT=900 \
   ./bin/mcp-runtime setup --test-mode \
+  --kubeconfig "$TEST_KUBECONFIG" \
   --ingress-manifest config/ingress/overlays/http
 ```
+
+First-time image downloads can take longer than the defaults on a constrained
+host or slow connection. Check pod events and logs before treating a timeout
+as a failed service. If the pods are progressing, rerun the same supported
+setup with `MCP_SETUP_WAIT_TIMEOUT=1800` and
+`MCP_DEPLOYMENT_TIMEOUT=30m`; completed builds and persistent data are reused.
+The setup timeout uses seconds; the deployment timeout uses a duration such
+as `30m`. Longer waits do not repair crash loops, failed image pulls, or
+insufficient CPU/memory.
+
+For a fresh cluster that needs the normal multi-replica profile, use:
+
+```bash
+MCP_SETUP_WAIT_TIMEOUT=1800 MCP_DEPLOYMENT_TIMEOUT=30m \
+  ./bin/mcp-runtime setup --test-mode --test-multi-replica \
+  --kubeconfig "$TEST_KUBECONFIG" \
+  --ingress-manifest config/ingress/overlays/http
+```
+
+The setup flag `--kubeconfig` makes the target explicit; do not rely on the
+ambient current context when installing either profile.
 
 Check the platform:
 
@@ -273,3 +467,8 @@ and clean source checkout. Pass the Kind kubeconfig and context explicitly. The
 bundled registry is reachable through the in-cluster publisher; Docker on the
 host cannot resolve its Kubernetes Service address. Use `--image-platform
 linux/arm64` on ARM64 Kind nodes.
+
+Prometheus currently lacks some container, node filesystem and volume history
+series in the bundled stack; [#680](https://github.com/mcp-runtime/mcp-runtime/issues/680)
+tracks collection coverage. The E2E report distinguishes missing Grafana series
+from zero usage and retains kubelet/host samples as separate observations.

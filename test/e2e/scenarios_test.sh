@@ -5,6 +5,7 @@ python3 "$(dirname "$0")/ui_assets_test.py"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 python3 "${SCRIPT_DIR}/image_architecture_test.py"
+python3 "${SCRIPT_DIR}/resource_usage_test.py"
 bash "${SCRIPT_DIR}/namespace_placement_test.sh"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 QA_E2E_SCRIPT="${PROJECT_ROOT}/test/e2e/qa-e2e.sh"
@@ -150,6 +151,7 @@ selector_expect "ui-with-guides" "smoke-auth,ui-auth" "services/ui/main.go" "art
 selector_expect "api" "smoke-auth,api-platform" "services/platform-api/auth/login.go"
 selector_expect "runtime-tools-api" "smoke-auth,api-platform,cli-platform" "services/runtime-api/internal/runtimeapi/tools.go"
 selector_expect "catalog-cli" "smoke-auth,cli-platform" "internal/cli/catalog/catalog.go"
+selector_expect "test-replica-profile" "smoke-auth,cli-platform,governance,trust,oauth,observability" "internal/cli/setup/platform/test_mode_manifest.go"
 selector_expect "adapter" "smoke-auth,adapter-proxy" "internal/cli/adapter/proxy.go"
 selector_expect "mtls-operator" "smoke-auth,adapter-certificates" "internal/operator/mtls.go"
 selector_expect "gateway" "smoke-auth,governance,trust,oauth,adapter-certificates" "services/mcp-gateway/main.go"
@@ -265,7 +267,7 @@ for prefix in (
     "--providers.kubernetescrd.namespaces=",
 ):
     assert prefix in kind, f"Traefik E2E cleanup must reset {prefix}"
-setup_ready = kind.index("wait_core_platform_rollouts\n\n# Setup can reuse an existing IngressClass")
+setup_ready = kind.index("\nwait_core_platform_rollouts\n")
 user_flows = kind.index('echo "[cli] checking cluster status commands"', setup_ready)
 assert "reset_traefik_namespace_watches" in kind[setup_ready:user_flows], (
     "Traefik watch reset must run after setup for cache and fresh-install paths"

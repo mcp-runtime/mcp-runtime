@@ -14,6 +14,8 @@ on the day-to-day loop for contributors.
 Start with [Local Cluster Setup](local-kind.md), then use
 [Service Iteration](service-iteration.md) to rebuild the part you are changing.
 [Contributor Troubleshooting](troubleshooting.md) covers failures in that loop.
+Check [host CPU and memory](local-kind.md#host-cpu-and-memory) before choosing
+a machine or allocating the Docker VM for the full Kind stack.
 
 For verification, [MCP Runtime Tests](runtime-mcp-testing.md) covers real request
 and governance flows, [Staging End-to-End Tests](staging-e2e.md) exercises a

@@ -399,6 +399,7 @@ mcp-runtime setup --with-tls            # cert-manager TLS for the registry
 mcp-runtime setup --platform-mode public # public preview catalog namespace
 mcp-runtime setup --without-platform-stack    # skip the request-path stack
 mcp-runtime setup --test-mode           # local Kind/dev build+push path
+mcp-runtime setup --test-mode --test-multi-replica # opt in to the normal replica layout
 mcp-runtime setup --storage-mode hostpath # single-node cluster with no dynamic provisioner
 mcp-runtime setup --parallel-builds     # build and publish setup images in parallel
 ```
