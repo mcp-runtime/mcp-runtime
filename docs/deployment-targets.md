@@ -162,8 +162,9 @@ image pull before applying the registry overlay. An upgrade removes that
 NodePort; existing running containers remain running, but stale mirrors would
 prevent subsequent pulls. Back up the containerd configuration and preserve
 registry storage and certificates. Do not expose another backend port as a
-workaround. This closes the node exposure; repository-scoped authentication on
-the internal endpoint is still tracked in #531.
+workaround. Production-shaped setups (`--with-tls`, a public platform host,
+the bundled registry) also require repository-scoped token authentication on
+the internal endpoint; see [registry authentication](internals/registry-auth.md).
 
 ### k3s lab example
 

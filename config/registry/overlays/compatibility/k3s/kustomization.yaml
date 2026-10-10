@@ -2,3 +2,4 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - networkpolicy-k3s-compat.yaml
+  - networkpolicy-k3s-helper-egress.yaml

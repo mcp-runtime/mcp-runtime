@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"mcp-runtime/pkg/registryauth"
@@ -16,6 +18,26 @@ type RegistryPullCredential struct {
 	Username  string    `json:"username"`
 	Password  string    `json:"password"`
 	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// NewPlatformClientWithAPIKey returns a client for setup-time administration
+// that authenticates with a cluster-held service key instead of a CLI login.
+// The base URL must be an HTTPS origin without credentials, query, or fragment.
+func NewPlatformClientWithAPIKey(baseURL, apiKey string) (*PlatformClient, error) {
+	base := NormalizeBaseURL(strings.TrimSpace(baseURL))
+	parsed, err := url.Parse(base)
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return nil, fmt.Errorf("platform API base URL must be an HTTPS origin")
+	}
+	if strings.TrimSpace(apiKey) == "" {
+		return nil, fmt.Errorf("platform API key is required")
+	}
+	return &PlatformClient{
+		baseURL:   base,
+		token:     strings.TrimSpace(apiKey),
+		http:      &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
+		apiPrefix: "/api/v1",
+	}, nil
 }
 
 func (c *PlatformClient) CheckRegistryAdmin(ctx context.Context) error {

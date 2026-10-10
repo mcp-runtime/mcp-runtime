@@ -33,6 +33,83 @@ type nativeAuthOptions struct {
 	Realm            string
 	DryRun, TestMode bool
 	Namespaces       []string
+	// AllowBundledBroker accepts a platform-api image served by the registry
+	// it protects. Pulls of that image then depend on a running broker; see
+	// docs/internals/registry-auth.md for the cold-start recovery procedure.
+	AllowBundledBroker bool
+}
+
+// SetupNativeAuthOptions configures activation performed by setup.
+type SetupNativeAuthOptions struct {
+	// Realm is the public HTTPS token URL ending /api/v1/registry/token.
+	Realm string
+	// APIBaseURL is the public platform API origin used for credential issuance.
+	APIBaseURL string
+	// APIKey is a platform administrator service key read from the cluster.
+	APIKey string
+}
+
+// NativeAuthActive reports whether the bundled registry already enforces
+// Distribution token authentication.
+func NativeAuthActive(ctx context.Context, cs kubernetes.Interface) (bool, error) {
+	deployment, err := cs.AppsV1().Deployments(core.NamespaceRegistry).Get(ctx, core.RegistryDeploymentName, metav1.GetOptions{})
+	if err != nil {
+		return false, err
+	}
+	return registryDeploymentUsesTokenAuth(deployment.Spec.Template.Spec), nil
+}
+
+func registryDeploymentUsesTokenAuth(spec corev1.PodSpec) bool {
+	for _, container := range spec.Containers {
+		for _, env := range container.Env {
+			if env.Name == "REGISTRY_AUTH" && env.Value == "token" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// EnableNativeAuthForSetup activates native registry authentication as the
+// final setup step. It uses a cluster-held administrator key instead of a CLI
+// login and accepts a bundled broker image, because setup always publishes
+// platform-api to the bundled registry. An already active registry is left
+// unchanged; rotate node credentials with registry enable-auth.
+func EnableNativeAuthForSetup(ctx context.Context, opts SetupNativeAuthOptions) error {
+	if strings.TrimSpace(opts.APIKey) == "" {
+		return fmt.Errorf("native registry authentication requires a platform administrator service key")
+	}
+	clients, err := newRegistryKubernetesClients()
+	if err != nil {
+		return err
+	}
+	active, err := NativeAuthActive(ctx, clients.Clientset)
+	if err != nil {
+		return err
+	}
+	if active {
+		core.Info("Native registry authentication is already enabled")
+		return nil
+	}
+	if err := validateNativeRealm(opts.Realm, false); err != nil {
+		return err
+	}
+	api, err := platformapi.NewPlatformClientWithAPIKey(opts.APIBaseURL, opts.APIKey)
+	if err != nil {
+		return err
+	}
+	if err := api.CheckRegistryAdmin(ctx); err != nil {
+		return err
+	}
+	return configureNativeAuth(ctx, clients, api, nativeAuthOptions{Realm: opts.Realm, AllowBundledBroker: true})
+}
+
+func validateNativeRealm(raw string, testMode bool) error {
+	realm, err := url.Parse(raw)
+	if err != nil || realm.Host == "" || realm.User != nil || realm.RawQuery != "" || realm.Fragment != "" || realm.Path != "/api/v1/registry/token" || (realm.Scheme != "https" && !(testMode && realm.Scheme == "http")) {
+		return fmt.Errorf("realm must be an HTTPS URL ending /api/v1/registry/token (HTTP requires --test-mode)")
+	}
+	return nil
 }
 
 type registryCredentialCreator interface {
@@ -41,9 +118,8 @@ type registryCredentialCreator interface {
 }
 
 func (m *RegistryManager) enableNativeAuth(ctx context.Context, opts nativeAuthOptions) error {
-	realm, err := url.Parse(opts.Realm)
-	if err != nil || realm.Host == "" || realm.User != nil || realm.RawQuery != "" || realm.Fragment != "" || realm.Path != "/api/v1/registry/token" || (realm.Scheme != "https" && !(opts.TestMode && realm.Scheme == "http")) {
-		return fmt.Errorf("realm must be an HTTPS URL ending /api/v1/registry/token (HTTP requires --test-mode)")
+	if err := validateNativeRealm(opts.Realm, opts.TestMode); err != nil {
+		return err
 	}
 	clients, err := newRegistryKubernetesClients()
 	if err != nil {
@@ -86,14 +162,13 @@ func configureNativeAuth(ctx context.Context, clients *k8sclient.Clients, api re
 			hosts = append(hosts, rule.Host)
 		}
 	}
-	// Reject a broker that depends on the registry it authenticates.
-	for _, container := range apiDeploy.Spec.Template.Spec.Containers {
-		host, _, _ := strings.Cut(container.Image, "/")
-		for _, registryHost := range hosts {
-			if host == registryHost {
-				return fmt.Errorf("platform-api must use an external/public bootstrap image before enabling registry authentication")
-			}
+	// A broker served by the registry it authenticates can only be re-pulled
+	// while a broker replica is running. Require an explicit acknowledgement.
+	if bundledBrokerImage(apiDeploy.Spec.Template.Spec, hosts) {
+		if !opts.AllowBundledBroker {
+			return fmt.Errorf("platform-api must use an external/public bootstrap image before enabling registry authentication; pass --allow-bundled-broker to accept a broker image served by this registry")
 		}
+		core.Warn("platform-api is served by the registry it authenticates; new platform-api pulls require a running broker replica (see registry authentication recovery docs)")
 	}
 	namespaces, err := cs.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -114,14 +189,7 @@ func configureNativeAuth(ctx context.Context, clients *k8sclient.Clients, api re
 	if len(selected) > 0 {
 		return fmt.Errorf("requested pull namespace does not exist or is not Runtime-managed")
 	}
-	active := false
-	for _, container := range registryDeploy.Spec.Template.Spec.Containers {
-		for _, env := range container.Env {
-			if env.Name == "REGISTRY_AUTH" && env.Value == "token" {
-				active = true
-			}
-		}
-	}
+	active := registryDeploymentUsesTokenAuth(registryDeploy.Spec.Template.Spec)
 	if !active && len(opts.Namespaces) != 0 {
 		return fmt.Errorf("initial activation must provision all managed namespaces; --pull-namespace is for rotation after activation")
 	}
@@ -238,6 +306,18 @@ func configureNativeAuth(ctx context.Context, clients *k8sclient.Clients, api re
 	}
 	core.Info("Native registry authentication enabled; namespace pull credentials expire after 90 days. Rotate them with registry enable-auth before expiry.")
 	return nil
+}
+
+func bundledBrokerImage(spec corev1.PodSpec, hosts []string) bool {
+	for _, container := range spec.Containers {
+		host, _, _ := strings.Cut(container.Image, "/")
+		for _, registryHost := range hosts {
+			if host == registryHost {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func setNativeEnv(container *corev1.Container, name, value string) {
