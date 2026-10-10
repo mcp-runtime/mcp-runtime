@@ -345,6 +345,7 @@ func doctorCheckSpecs(kubectl core.KubectlRunner, distro Distribution) []doctorC
 		{Name: "node kubelet/runtime health", Detail: "checking node Ready conditions, pressure conditions, kubelet versions, and reported container runtimes", Run: func() DoctorCheck { return checkNodeRuntimeHealth(kubectl) }},
 		{Name: "node architecture compatibility", Detail: "discovering node architectures and detecting mixed-architecture clusters", Run: func() DoctorCheck { return checkNodeArchitectureCompatibility(kubectl) }},
 		{Name: "runtime class compatibility", Detail: "checking MCPServer RuntimeClass references against installed RuntimeClass objects", Run: func() DoctorCheck { return checkRuntimeClassCompatibility(kubectl) }},
+		{Name: traefikEgressCheckName, Detail: "checking MCPServer TraefikEgressReady conditions reported by the operator", Run: func() DoctorCheck { return checkMCPServerTraefikEgress(kubectl) }},
 		{Name: "storage readiness", Detail: "checking StorageClasses and Pending PVCs before persistent components fail", Run: func() DoctorCheck { return checkStorageReadiness(kubectl) }},
 		{Name: "pending pods", Detail: "listing Pending pods across all namespaces", Run: func() DoctorCheck { return checkPendingPodsByNamespace(kubectl) }},
 		{

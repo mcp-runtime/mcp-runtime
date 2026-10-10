@@ -15,10 +15,10 @@ import (
 )
 
 // ingressControllerIdentity is where the ingress controller actually runs.
-// The operator uses it for the mtls gateway NetworkPolicy peer and the pinned
-// ingress SPIFFE ID; without it the operator assumes the repo-managed
-// traefik/traefik Deployment, which on k3s (Traefik in kube-system with Helm
-// labels) makes every mtls gateway reject its own ingress.
+// The operator uses it for the per-server Traefik egress NetworkPolicy, the
+// mtls gateway NetworkPolicy peer, and the pinned ingress SPIFFE ID; without
+// it the operator assumes the repo-managed traefik/traefik Deployment, which on
+// k3s (Traefik in kube-system with Helm labels) is the wrong namespace.
 type ingressControllerIdentity struct {
 	Namespace      string
 	ServiceAccount string

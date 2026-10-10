@@ -19,6 +19,11 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 - Platform images and modules build with Go 1.26.9 and `golang.org/x/net` v0.60.0. Those releases fix HTTP/2 CPU exhaustion from repeated window updates (CVE-2026-78669), excessive CPU from large Range headers (CVE-2026-78667), and memory exhaustion from malformed TLS ECH references (CVE-2026-97031).
 
+### Changed
+
+- The operator manages per-server Traefik egress policies for actual serving ports and reports TraefikEgressReady conditions. Fresh setup is required for the v0.7.0 reference deployment; the static policy no longer grants fixed ports into server namespaces ([#630](https://github.com/mcp-runtime/mcp-runtime/pull/630)).
+
+
 ## [0.6.6] - 2026-10-09
 
 ### Changed

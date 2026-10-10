@@ -372,7 +372,16 @@ func activeTraefikNamespaceForPlatform(kubectl core.KubectlRunner) string {
 
 func activeTraefikNamespaceForPlatformClientGo() string {
 	namespaces, err := activeNamedTraefikDeploymentNamespacesClientGo()
-	if err != nil || len(namespaces) == 0 {
+	if err != nil {
+		return ""
+	}
+	return preferredTraefikNamespace(namespaces)
+}
+
+// preferredTraefikNamespace picks the live Traefik namespace: the
+// repo-managed traefik namespace first, then k3s's kube-system.
+func preferredTraefikNamespace(namespaces []string) string {
+	if len(namespaces) == 0 {
 		return ""
 	}
 	for _, preferred := range []string{"traefik", "kube-system"} {
