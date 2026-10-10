@@ -35,6 +35,10 @@ func platformKubernetesClients() (*k8sclient.Clients, error) {
 }
 
 func applyManifestYAML(manifest string, namespace string, stdout io.Writer) error {
+	manifest, err := renderTestModeManifest(manifest)
+	if err != nil {
+		return err
+	}
 	clients, err := platformKubernetesClients()
 	if err != nil {
 		return err

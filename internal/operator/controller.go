@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -103,6 +104,10 @@ type MCPServerReconciler struct {
 	IngressControllerNamespace      string
 	IngressControllerServiceAccount string
 	IngressControllerPodLabels      map[string]string
+
+	// Recorder emits Warning events (for example when Traefik egress cannot
+	// be managed). Nil disables events.
+	Recorder events.EventRecorder
 }
 
 // Use constants from constants.go
@@ -163,7 +168,9 @@ func (r *MCPServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 	if !found {
-		return ctrl.Result{}, nil
+		// The Traefik egress policy lives outside the server namespace and
+		// cannot be garbage-collected through an owner reference.
+		return ctrl.Result{}, r.deleteTraefikEgressPolicy(ctx, req.NamespacedName)
 	}
 
 	logger.Info("Reconciling MCPServer", "name", mcpServer.Name, "namespace", mcpServer.Namespace)
@@ -337,6 +344,13 @@ func (r *MCPServerReconciler) reconcileResources(ctx context.Context, mcpServer 
 		r.updateStatus(ctx, mcpServer, "Error", fmt.Sprintf("Failed to reconcile Service: %v", err), resourceReadiness{})
 		return wrappedErr
 	}
+	if err := r.reconcileTraefikEgress(ctx, mcpServer); err != nil {
+		contextMap["resource"] = "traefik-egress-networkpolicy"
+		wrappedErr := wrapOperatorError(err, "Failed to reconcile Traefik egress NetworkPolicy", contextMap)
+		logOperatorError(logger, wrappedErr, "Failed to reconcile Traefik egress NetworkPolicy")
+		r.updateStatus(ctx, mcpServer, "Error", fmt.Sprintf("Failed to reconcile Traefik egress NetworkPolicy: %v", err), resourceReadiness{})
+		return wrappedErr
+	}
 	// Trust bundle must exist before Traefik ServersTransport/IngressRoute so
 	// Traefik never loads a transport that references a missing CA secret.
 	if err := r.reconcileMTLSTrustBundle(ctx, mcpServer); err != nil {
@@ -437,6 +451,9 @@ func (r *MCPServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if err := r.setupBundledOAuthResourcesController(mgr); err != nil {
 		return err
 	}
+	if err := mgr.Add(r.traefikEgressSweeper()); err != nil {
+		return err
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&mcpv1alpha1.MCPServer{}).
 		Owns(&appsv1.Deployment{}).
@@ -445,6 +462,7 @@ func (r *MCPServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&networkingv1.Ingress{}).
 		Watches(&mcpv1alpha1.MCPAccessGrant{}, handler.EnqueueRequestsFromMapFunc(r.requestsForReferencedServer)).
 		Watches(&mcpv1alpha1.MCPAgentSession{}, handler.EnqueueRequestsFromMapFunc(r.requestsForReferencedServer)).
+		Watches(&networkingv1.NetworkPolicy{}, handler.EnqueueRequestsFromMapFunc(r.requestsForTraefikEgressPolicy)).
 		Complete(r)
 }
 

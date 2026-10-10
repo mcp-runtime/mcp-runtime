@@ -351,7 +351,7 @@ back/forward work. Drive coverage from these URLs rather than clicking through:
 | `#/servers?tool=<ns>/<server>/<tool>` | Tool inspector open |
 | `#/activity` | Tenant activity |
 | `#/keys` | Personal API keys |
-| `#/admin/access` `#/admin/teams` `#/admin/operations` `#/admin/platform` `#/admin/analytics` | Administration sections |
+| `#/access` `#/admin/teams` `#/admin/operations` `#/admin/platform` `#/admin/analytics` | Administration sections |
 | `#/signin` | Sign-in |
 
 Things that changed and will break an older script:
@@ -364,8 +364,10 @@ Things that changed and will break an older script:
 - `window.confirm` is gone. Destructive actions open a shared dialog:
   `access-confirm` / `teams-confirm` / `platform-confirm` / `revoke-confirm`,
   each with `-yes` and `-cancel` buttons. Escape cancels.
-- Administration is a grouped rail (`admin-section-<id>`) plus
-  `admin-section-select` below 900px.
+- Organization and Platform links live directly in the primary sidebar
+  (`admin-section-<id>`). There is no second administration rail or section
+  selector. Compact navigation uses `mobile-admin-section-<id>` and closes
+  after selecting a section. Check active state, filtering, and role visibility.
 - Operations is tabbed: `operations-tab-users|audit|images`. Only the active
   tab's table is in the DOM.
 - Platform health is a card grid (`platform-components`, `platform-component`),

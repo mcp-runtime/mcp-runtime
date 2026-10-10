@@ -95,7 +95,7 @@ func PushDockerArchive(ctx context.Context, client kubernetes.Interface, restCon
 	pushTarget := RewritePushTarget(target, cfg.Hosts)
 
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: helperName, Namespace: helperNS},
+		ObjectMeta: metav1.ObjectMeta{Name: helperName, Namespace: helperNS, Labels: map[string]string{HelperLabelKey: HelperLabelValue}},
 		Spec: corev1.PodSpec{
 			RestartPolicy:                corev1.RestartPolicyNever,
 			AutomountServiceAccountToken: boolPtr(false),
@@ -164,6 +164,14 @@ func PushDockerArchive(ctx context.Context, client kubernetes.Interface, restCon
 	}
 	return nil
 }
+
+// HelperLabelKey and HelperLabelValue mark trusted publication helper pods.
+// The registry NetworkPolicy admits only labeled pods to the backend port and
+// grants them the egress needed for image transfer and token exchange.
+const (
+	HelperLabelKey   = "app.kubernetes.io/name"
+	HelperLabelValue = "registry-push-helper"
+)
 
 func helperCommand(cfg Config, pushTarget string) []string {
 	if url := strings.TrimSpace(cfg.TarFetchURL); url != "" {

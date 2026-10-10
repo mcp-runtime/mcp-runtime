@@ -116,9 +116,32 @@ func TestRegistryNetworkPolicyAllowsHelperPushOnlyToRegistry(t *testing.T) {
 	if !hasSameNamespaceIngressToPort(ingress, 5000) {
 		t.Fatal("registry ingress policy must allow same-namespace helper pods to reach registry:5000")
 	}
-	for _, ns := range []string{"traefik", "mcp-platform", "mcp-runtime"} {
-		if !hasNamespaceIngressToPort(ingress, ns, 5000) {
-			t.Fatalf("registry ingress policy must allow platform namespace %s to reach registry:5000", ns)
+	if !hasNamespaceIngressToPort(ingress, "traefik", 5000) {
+		t.Fatal("registry ingress policy must allow Traefik to reach registry:5000")
+	}
+	if !hasNamespaceIngressToPort(ingress, "mcp-platform", 5000) {
+		t.Fatal("registry ingress policy must allow runtime-api publication helpers to reach registry:5000")
+	}
+	if hasNamespaceIngressToPort(ingress, "mcp-runtime", 5000) {
+		t.Fatal("registry ingress policy must not admit the operator namespace; it never calls the registry API")
+	}
+	// Only labeled publication helpers may reach the backend from the registry
+	// and mcp-platform namespaces; ordinary platform service pods may not.
+	for _, rule := range ingress.Spec.Ingress {
+		for _, peer := range rule.From {
+			ns := ""
+			if peer.NamespaceSelector != nil {
+				ns = peer.NamespaceSelector.MatchLabels["kubernetes.io/metadata.name"]
+			}
+			if ns == "traefik" {
+				continue
+			}
+			if ns == "" && peer.PodSelector != nil && peer.PodSelector.MatchLabels["app.kubernetes.io/name"] == "registry-probe" {
+				continue // cluster doctor reachability probe, registry namespace only
+			}
+			if peer.PodSelector == nil || peer.PodSelector.MatchLabels["app.kubernetes.io/name"] != "registry-push-helper" {
+				t.Fatalf("registry ingress peer must select only registry-push-helper pods: %+v", peer)
+			}
 		}
 	}
 
@@ -134,9 +157,10 @@ func TestRegistryNetworkPolicyAllowsHelperPushOnlyToRegistry(t *testing.T) {
 	}
 }
 
-// TestRegistryNetworkPolicyDeniesTenantNamespaces guards #531: the internal
-// registry endpoint has no registry-native authentication, so tenant workload
-// namespaces must not be allowed to reach it directly.
+// TestRegistryNetworkPolicyDeniesTenantNamespaces guards #531: tenant workload
+// namespaces must not reach the internal registry endpoint directly. Lab and
+// test-mode installs have no backend authentication, so this is their only
+// barrier; production-shaped installs add Distribution token authentication.
 func TestRegistryNetworkPolicyDeniesTenantNamespaces(t *testing.T) {
 	ingress, ok := loadRegistryNetworkPolicies(t)["registry-allow-ingress"]
 	if !ok {
@@ -156,6 +180,44 @@ func TestRegistryNetworkPolicyDeniesTenantNamespaces(t *testing.T) {
 				t.Fatal("registry ingress policy must not select all namespaces")
 			}
 		}
+	}
+}
+
+// TestRegistryPushHelperEgressIsScoped keeps native-auth publication helpers
+// able to fetch archives and exchange tokens without opening egress for other
+// registry-namespace pods.
+func TestRegistryPushHelperEgressIsScoped(t *testing.T) {
+	policy, ok := loadRegistryNetworkPolicies(t)["registry-push-helper-egress"]
+	if !ok {
+		t.Fatal("registry-push-helper-egress policy not found")
+	}
+	if len(policy.Spec.PodSelector.MatchLabels) != 1 || policy.Spec.PodSelector.MatchLabels["app.kubernetes.io/name"] != "registry-push-helper" {
+		t.Fatalf("helper egress must select only registry-push-helper pods: %+v", policy.Spec.PodSelector)
+	}
+	if len(policy.Spec.Ingress) != 0 {
+		t.Fatal("helper egress policy must not add ingress rules")
+	}
+	runtimeAPI := false
+	for _, rule := range policy.Spec.Egress {
+		for _, port := range rule.Ports {
+			if port.Protocol != "TCP" || (port.Port != 443 && port.Port != 8443 && port.Port != 8084) {
+				t.Fatalf("helper egress allows unexpected port %+v", port)
+			}
+		}
+		for _, peer := range rule.To {
+			if peer.NamespaceSelector != nil && peer.NamespaceSelector.MatchLabels["kubernetes.io/metadata.name"] == "mcp-platform" {
+				if peer.PodSelector == nil || peer.PodSelector.MatchLabels["app"] != "mcp-runtime-api" {
+					t.Fatal("helper egress to mcp-platform must target runtime-api only")
+				}
+				runtimeAPI = networkPolicyPortsInclude(rule.Ports, "TCP", 8084)
+			}
+			if peer.IPBlock != nil && !(len(rule.Ports) == 1 && networkPolicyPortsInclude(rule.Ports, "TCP", 443)) {
+				t.Fatal("helper ipBlock egress must be limited to HTTPS")
+			}
+		}
+	}
+	if !runtimeAPI {
+		t.Fatal("helper egress must reach runtime-api archive transfer on TCP 8084")
 	}
 }
 

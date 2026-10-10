@@ -34,7 +34,7 @@ use HTTP, Kafka, ClickHouse, Postgres, or local files.
 | **analytics-api** | ClickHouse-only; `automountServiceAccountToken: false`. | Events, stats, usage queries; resolves display names via platform-api `/internal/*`. | No Kubernetes RBAC. NetworkPolicy egress to platform-api:8080. |
 | **gateway** | Kubernetes-aware Traefik ingress controller. | Watches Ingress, Service, Endpoint, Secret, and IngressClass resources for the namespaces it serves. The shared ingress overlays watch `registry`, `mcp-platform`, `mcp-observability`, `mcp-log-collector`, `mcp-servers`, `mcp-servers-org`, and `mcp-servers-public`. | Keep watched namespaces explicit, avoid cluster-wide ingress watches unless required, keep Grafana admin-gated, do not expose Prometheus directly on public hosts, and keep redaction middleware limited to routes that need it. |
 | **mcp-gateway** | Kubernetes-integrated but Kubernetes API-agnostic. It is injected into MCP server pods and reads operator-rendered policy from mounted files and env vars. | Does not need a Kubernetes client or service account token. It forwards MCP traffic to the local server container and emits audit events to ingest. | Keep `automountServiceAccountToken: false`, read-only policy mounts, `readOnlyRootFilesystem`, dropped capabilities, and non-root execution. Treat `ANALYTICS_API_KEY` as ingest-scoped, not an admin API key. |
-| **ui** | Kubernetes API-agnostic. | Serves the browser UI and proxies allowlisted read-only `GET /api/ui/v1/*` dashboard paths to runtime-api (`RUNTIME_UPSTREAM`) or analytics-api (`ANALYTICS_UPSTREAM`) using the server-held UI session credential. Login still uses `API_UPSTREAM` against platform-api. All other `/api/v1/*` traffic stays on Traefik split-API ingress. | Keep it behind TLS for public hosts, retain the security headers in `services/ui`, set `UI_REQUIRE_HTTPS=false` only for deliberate non-TLS dev ingress, set `UI_FORCE_SECURE_COOKIE=true` when a TLS-terminating proxy does not send `X-Forwarded-Proto: https`, and do not grant it Kubernetes RBAC. The shipped Deployment runs two replicas with `UI_SESSION_STORE=postgres`. Session rows live in the shared `ui_sessions` table, encrypted with `UI_SESSION_ENCRYPTION_KEY` from `mcp-ui-credentials`. Rotating that key forces re-login. The gateway does not hold the cookie, so it can scale with the UI. |
+| **ui** | Kubernetes API-agnostic. | Serves the browser UI and proxies allowlisted read-only `GET /api/ui/v1/*` dashboard paths to runtime-api (`RUNTIME_UPSTREAM`) or analytics-api (`ANALYTICS_UPSTREAM`) using the server-held UI session credential. Login still uses `API_UPSTREAM` against platform-api. All other `/api/v1/*` traffic stays on Traefik split-API ingress. | Keep it behind TLS for public hosts, retain the security headers in `services/ui`, set `UI_REQUIRE_HTTPS=false` for deliberate local HTTP or a secured external TLS terminator, set `UI_FORCE_SECURE_COOKIE=true` when a TLS-terminating proxy does not send `X-Forwarded-Proto: https`, and do not grant it Kubernetes RBAC. The shipped Deployment runs two replicas with `UI_SESSION_STORE=postgres`. Session rows live in the shared `ui_sessions` table, encrypted with `UI_SESSION_ENCRYPTION_KEY` from `mcp-ui-credentials`. Rotating that key forces re-login. The gateway does not hold the cookie, so it can scale with the UI. |
 | **ingest** | Kubernetes API-agnostic. | Authenticates `/events`, validates request size and event shape, and writes to Kafka. | Require `INGEST_API_KEYS` or OIDC for real deployments, use ingest-only keys, restrict network access to proxy/gateway callers, and keep the public `/ingest` route off production hosts unless intentionally exposed. |
 | **processor** | Kubernetes API-agnostic. | Consumes Kafka and writes ClickHouse. It only exposes health and metrics. | Do not expose it through ingress. Restrict network access to Kafka, ClickHouse, metrics scraping, and tracing endpoints. |
 | **storage and observability** | Mixed. ClickHouse, Kafka, Postgres, Grafana, Prometheus, Tempo, Loki, and the OTel collector are Kubernetes API-agnostic in the bundled manifests; Promtail is Kubernetes-aware so it can discover pod logs. | Data stores and dashboards back audit, identity, metrics, traces, and logs. Promtail has pod read/watch RBAC. | Review persistence, retention, backups, and dashboard auth before production use. The generated platform-host observability route uses `platform-admin-auth@file`; provide equivalent auth if you replace repo-managed Traefik, and review Promtail's cluster log visibility before enabling it on multi-tenant clusters. |
@@ -45,7 +45,8 @@ that do not call Kubernetes, disable service account token automounting and
 isolate them with NetworkPolicies where the cluster supports them.
 
 When public TLS terminates on a reverse proxy and cluster Traefik stays HTTP,
-set `UI_REQUIRE_HTTPS=false` and `UI_FORCE_SECURE_COOKIE=true` on the UI.
+pass `UI_REQUIRE_HTTPS=false` and `UI_FORCE_SECURE_COOKIE=true` through
+`setup --env-file`; setup propagates and preserves these UI settings.
 `auto` treats the inner hop's `X-Forwarded-Proto: http` as a reason to
 redirect to HTTPS, which loops back through the same proxy. `UI_FORCE_SECURE_COOKIE=true`
 keeps the session cookie `Secure` on that production path.
@@ -131,12 +132,28 @@ and traces in one place. Grafana remains protected by the platform admin
 forward-auth route. Platform health also links to Grafana; it does not expose a
 separate Prometheus UI link.
 
+Server cards link admins to the provisioned **MCP Server** dashboard
+(`/grafana/d/mcp-server/mcp-server`, panels 1–4 for Target health, Request
+rate, Deny rate, and p95 latency). Setup applies `k8s/19-grafana-datasources.yaml`
+(datasource uids `prometheus`, `tempo`, and `loki`) and
+`k8s/21-grafana-dashboards.yaml` before `k8s/12-grafana.yaml`, which mounts the
+dashboard provider and every dashboard file. A change to either ConfigMap
+changes Grafana's pod template so it restarts and re-reads provisioning. The
+card shows the dashboard and panel links together, and only when runtime-api
+marks the Grafana link available. runtime-api does not probe Grafana, so
+`mcp-runtime cluster doctor` reports **platform Grafana
+provisioning** drift (missing dashboard, unpinned Prometheus uid, or missing
+mounts); rerun setup to repair it. `mcp-runtime update` changes images only,
+so it does not repair provisioning drift.
+
 Grafana has two independent authentication layers: the platform ingress gate
 (`platform-admin-auth`) and Grafana's own persisted admin account. Passing the
 gate does not prove the Grafana login works, and changing the bootstrap
 password in `mcp-grafana-credentials` does not update an existing persisted
 account. A browser that clears the gate but then sees `password-auth.failed`
-indicates credential drift. Diagnose it read-only with
+indicates credential drift. `mcp-runtime cluster doctor` runs the same probe
+as **platform Grafana admin credential drift** and fails when Grafana rejects
+the configured credentials; it never resets the account. Diagnose it read-only with
 `mcp-runtime ops grafana check`, which probes from inside the Grafana pod
 (so it bypasses the gate and reports only the Grafana login layer) and never
 resets anything. Recover deliberately with
@@ -493,3 +510,13 @@ Services live in `services/`, manifests in `k8s/`, and shared libraries in `pkg/
 
 - [API → Runtime Governance API](api-reference.md#runtime-governance-api): the HTTP surface the UI uses.
 - [Architecture](architecture.md): how the proxy fits into the request path.
+
+## Console navigation
+
+The console keeps workspace navigation in one left sidebar. Runtime and
+Workspace links appear alongside the admin-only Organization links (Teams and
+Operations) and Platform links (Platform health and Usage analytics). Selecting
+a page changes the main content without opening a second sidebar. Filtering
+includes individual page names and section headings; the active page is marked
+in the sidebar. On compact screens, the navigation menu contains the same
+sections and closes after a selection.

@@ -7,9 +7,38 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-10
+
+This release enables native registry authentication by default for production-shaped
+TLS installs and replaces static MCP-server ingress egress rules with policies
+managed per server. These changes require a backed-up fresh setup of the hosted
+reference platform; an image-only update does not apply the installation changes.
+Preserve registry storage, required platform data, TLS/workload-issuer keys and the
+external identity provider, then restore and verify using
+[Reference Deployment](docs/reference-deployment.md). Reissue registry pull
+credentials rather than restoring old credentials. Verify authenticated pushes,
+fresh platform and tenant image pulls, denied anonymous registry requests, server
+routing and governed adapter calls before returning the platform to service.
+
+### Added
+
+- QA E2E captures CPU, memory, disk and Grafana/Prometheus observations across setup and test stages, preserving missing samples and failed-run status in reports ([#683](https://github.com/mcp-runtime/mcp-runtime/pull/683)).
+
+### Changed
+
+- `setup --test-mode` deploys one replica per platform Deployment and StatefulSet, with a single Kafka controller/broker and replication factor 1, reducing local test resource requirements. Use `--test-mode --test-multi-replica` for the normal replica layout when testing redundancy or shared state. Use a fresh test cluster when changing Kafka replica modes; setup preserves existing stores by rejecting quorum changes. Contributor docs record macOS ARM64/Colima sizing and measurement conditions ([#683](https://github.com/mcp-runtime/mcp-runtime/pull/683)).
+
+- **Breaking:** The operator manages per-server Traefik egress policies for actual serving ports and reports TraefikEgressReady conditions. Fresh setup is required for the v0.7.0 reference deployment; the static policy no longer grants fixed ports into server namespaces ([#630](https://github.com/mcp-runtime/mcp-runtime/pull/630)).
+
+- Server cards show an OAuth badge only when the server reports OAuth support, and omit the badge when authentication support is unknown. Header credential labels remain available.
+
+- Organization and Platform pages appear directly in the main console sidebar and compact navigation, eliminating the second administration sidebar. Navigation filtering and active states include each section.
+
 ### Fixed
 
 - Package-docs startup bounds Go parallelism within the deployed process budget. CI tests under the same CPU, memory and process limits, and remote readiness probes use host HTTP rather than spawning another process in the container.
+
+- First-install setup applies the requested registry PVC size before creation, checks Docker buildx before image builds, rejects partial password-admin credentials while preserving saved pairs, and propagates external TLS proxy UI settings. Rollout and registry-auth restoration tolerate bounded transient Kubernetes API failures; image uploads reject unsafe redirects with an HTTPS-origin diagnostic, and tenant setup prints membership steps ([#666](https://github.com/mcp-runtime/mcp-runtime/issues/666)).
 
 - The package-docs image uses the root module's Go toolchain version in its build and runtime stages, preventing startup failures after a Go requirement bump. Module requirement changes now run the package-docs PR smoke test.
 
@@ -17,7 +46,15 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 - Promtail uses the Kubernetes node name for pod discovery and streams labeled logs across platform and tenant namespaces instead of relying on a static-path fallback ([#629](https://github.com/mcp-runtime/mcp-runtime/pull/629)).
 
+- Ingest readiness serves a bounded, cached Kafka check with DNS/connect timing and failure metrics, and resolves cluster FQDNs directly using ndots:3 ([#626](https://github.com/mcp-runtime/mcp-runtime/pull/626)).
+
+- Grafana loads every bundled dashboard with stable datasource UIDs; cluster doctor detects persisted admin credential drift without revealing or resetting credentials ([#631](https://github.com/mcp-runtime/mcp-runtime/pull/631)).
+
+- `update --build` publishes bundled-registry images through an in-cluster helper using the selected kubeconfig, context and registry-auth client, avoiding host DNS failures and ambient-cluster credential selection ([#679](https://github.com/mcp-runtime/mcp-runtime/issues/679)).
+
 ### Security
+
+- **Breaking:** Production-shaped TLS setup enables scoped backend registry authentication and narrows registry access to authorized ingress, publication helpers, and probes. Anonymous backend reads and writes are refused, leaked service keys are rotated and setup fails if activation fails. Lab/test HTTP installs retain explicit warnings about anonymous backends ([#632](https://github.com/mcp-runtime/mcp-runtime/pull/632)).
 
 - Platform images and modules build with Go 1.26.9 and `golang.org/x/net` v0.60.0. Those releases fix HTTP/2 CPU exhaustion from repeated window updates (CVE-2026-78669), excessive CPU from large Range headers (CVE-2026-78667), and memory exhaustion from malformed TLS ECH references (CVE-2026-97031).
 
@@ -259,7 +296,8 @@ upgrade from 0.4.x; see the migration note under **Changed**.
 
 - Targeted platform updates through `mcp-runtime update`, including embedded CRD updates and `--build` to build/push missing component images before rollout ([#491](https://github.com/mcp-runtime/mcp-runtime/pull/491)).
 
-[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.6...HEAD
+[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.6...v0.7.0
 [0.6.6]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.5...v0.6.6
 [0.6.5]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.3...v0.6.4

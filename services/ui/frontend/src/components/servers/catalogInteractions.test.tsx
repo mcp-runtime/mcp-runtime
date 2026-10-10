@@ -20,6 +20,7 @@ const SERVERS = {
   servers: [
     {
       name: "workspace-assistant",
+      authMode: "oauth",
       namespace: "mcp-servers",
       ready: "1/1",
       status: "Ready",
@@ -282,10 +283,10 @@ describe("server inspector", () => {
 
     const cards = screen.getAllByTestId("server-card");
     const oauthCard = cards.find((card) => card.dataset.serverKey === "mcp-servers/workspace-assistant");
-    expect(within(oauthCard as HTMLElement).getByText("OAuth optional")).toBeInTheDocument();
+    expect(within(oauthCard as HTMLElement).getByText("OAuth")).toBeInTheDocument();
 
     const unknownCard = cards.find((card) => card.dataset.serverKey === "mcp-servers/billing-bridge");
-    expect(within(unknownCard as HTMLElement).getByText("OAuth optional")).toBeInTheDocument();
+    expect(within(unknownCard as HTMLElement).queryByText(/OAuth/)).not.toBeInTheDocument();
 
     await user.click(within(oauthCard as HTMLElement).getByTestId("server-card-details"));
     expect(await screen.findByTestId("server-detail-auth")).toHaveTextContent("session-bound certificate");

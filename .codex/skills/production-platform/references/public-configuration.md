@@ -75,3 +75,23 @@ Use `.codex/skills/production-platform/SKILL.md`, `docs/reference-deployment.md`
 ## Troubleshooting cross-links
 
 General failures (ImagePullBackOff, UI 404, cert-manager pods missing): `.codex/skills/cluster-ops/reference.md`.
+
+## First-install checks
+
+Use `setup --env-file` to propagate `UI_REQUIRE_HTTPS=false` and
+`UI_FORCE_SECURE_COOKIE=true` when TLS terminates on an external proxy and
+Traefik remains HTTP. Restrict the origin to the proxy and use the final HTTPS
+API origin for CLI login; image uploads reject redirects that change method,
+scheme, or origin. Allow large bodies and upload timeouts on both the platform
+registry-push API and `/v2/`.
+
+Password-admin seeding requires both email and password; partial input is a
+setup error. Neither supplied preserves a saved complete pair. Use
+`MCP_ADMIN_USERS` for an OIDC-only admin allowlist. Fresh registry PVCs use the
+requested size before creation; existing claims cannot shrink. Docker buildx
+is checked before image builds unless `DOCKER_BUILDKIT=0` is explicit.
+
+Tenant publishing requires a human account with team membership, even when the
+install admin key can create teams. Use `team user add` for an existing account
+or `team user create` for an atomic account and membership, then sign in as that
+member before publishing. See `docs/self-hosting.md`.

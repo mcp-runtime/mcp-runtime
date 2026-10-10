@@ -177,10 +177,10 @@ func TestBuildOperatorImagePassesDockerPlatform(t *testing.T) {
 	if err := buildOperatorImage("registry.example.com/mcp-runtime-operator:test"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(mockExec.Commands) != 1 {
-		t.Fatalf("expected one command, got %#v", mockExec.Commands)
+	if len(mockExec.Commands) != 2 {
+		t.Fatalf("expected buildx check and make command, got %#v", mockExec.Commands)
 	}
-	cmd := mockExec.Commands[0]
+	cmd := mockExec.Commands[1]
 	if cmd.Name != "make" || !contains(cmd.Args, "DOCKER_PLATFORM=linux/amd64") {
 		t.Fatalf("expected make command with DOCKER_PLATFORM, got %s %#v", cmd.Name, cmd.Args)
 	}
@@ -1349,54 +1349,57 @@ func TestRenderAnalyticsSecretManifestUsesAdminEnv(t *testing.T) {
 	}
 }
 
-func TestRenderAnalyticsSecretManifestDoesNotSeedPartialAdminPasswordUser(t *testing.T) {
-	t.Setenv("MCP_PLATFORM_ADMIN_EMAIL", "admin@example.com")
-	kubectl := core.NewTestKubectlClient(&core.MockExecutor{})
+func TestRenderAnalyticsSecretManifestRejectsPartialAdminBeforeReadingSecrets(t *testing.T) {
+	for _, field := range []string{"MCP_PLATFORM_ADMIN_EMAIL", "MCP_PLATFORM_ADMIN_PASSWORD"} {
+		t.Run(field, func(t *testing.T) {
+			for _, key := range []string{"MCP_PLATFORM_ADMIN_EMAIL", "MCP_PLATFORM_ADMIN_PASSWORD", "PLATFORM_ADMIN_EMAIL", "PLATFORM_ADMIN_PASSWORD"} {
+				t.Setenv(key, "")
+			}
+			t.Setenv(field, "test-value")
+			reads := 0
+			_, err := renderAnalyticsSecretManifestWithReader(func(string, string, string) (string, error) { reads++; return "", nil })
+			if err == nil || !strings.Contains(err.Error(), "both") || reads != 0 {
+				t.Fatalf("partial admin accepted or secrets read: err=%v reads=%d", err, reads)
+			}
+		})
+	}
+}
 
-	manifest, err := renderAnalyticsSecretManifest(kubectl)
+func TestRenderAnalyticsSecretManifestOmitsUnsetAdminPair(t *testing.T) {
+	for _, key := range []string{"MCP_PLATFORM_ADMIN_EMAIL", "MCP_PLATFORM_ADMIN_PASSWORD", "PLATFORM_ADMIN_EMAIL", "PLATFORM_ADMIN_PASSWORD"} {
+		t.Setenv(key, "")
+	}
+	manifest, err := renderAnalyticsSecretManifestWithReader(func(string, string, string) (string, error) { return "", nil })
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatal(err)
 	}
 	data := secretStringDataFromManifest(t, manifest)
-	if data["PLATFORM_ADMIN_EMAIL"] != "" || data["PLATFORM_ADMIN_PASSWORD"] != "" {
-		t.Fatalf("expected partial admin bootstrap fields to be omitted, got email=%q password=%q", data["PLATFORM_ADMIN_EMAIL"], data["PLATFORM_ADMIN_PASSWORD"])
-	}
-	if !csvHasValue(data["ADMIN_USERS"], "admin@example.com") {
-		t.Fatalf("expected admin email to remain in ADMIN_USERS, got %q", data["ADMIN_USERS"])
-	}
-	for _, part := range strings.Split(data["ADMIN_USERS"], ",") {
-		if strings.TrimSpace(part) == "" {
-			t.Fatalf("expected ADMIN_USERS to avoid empty entries, got %q", data["ADMIN_USERS"])
+	for _, key := range []string{"PLATFORM_ADMIN_EMAIL", "PLATFORM_ADMIN_PASSWORD"} {
+		if _, exists := data[key]; exists {
+			t.Fatalf("unset admin key %s was rendered", key)
 		}
 	}
 }
 
-func TestRenderAnalyticsSecretManifestAllowsPartialAdminOverrideWithExistingPair(t *testing.T) {
-	t.Setenv("MCP_PLATFORM_ADMIN_EMAIL", "new-admin@mcpruntime.org")
-	existingPassword := base64.StdEncoding.EncodeToString([]byte("existing-password"))
-	mock := &core.MockExecutor{
-		CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
-			if contains(spec.Args, "jsonpath={.data.PLATFORM_ADMIN_PASSWORD}") {
-				return &core.MockCommand{Args: spec.Args, OutputData: []byte(existingPassword)}
-			}
-			return &core.MockCommand{Args: spec.Args}
-		},
+func TestRenderAnalyticsSecretManifestPreservesExistingAdminPairOnRerun(t *testing.T) {
+	for _, key := range []string{"MCP_PLATFORM_ADMIN_EMAIL", "MCP_PLATFORM_ADMIN_PASSWORD", "PLATFORM_ADMIN_EMAIL", "PLATFORM_ADMIN_PASSWORD"} {
+		t.Setenv(key, "")
 	}
-	kubectl := core.NewTestKubectlClient(mock)
-
-	manifest, err := renderAnalyticsSecretManifest(kubectl)
+	manifest, err := renderAnalyticsSecretManifestWithReader(func(_, _, key string) (string, error) {
+		switch key {
+		case "PLATFORM_ADMIN_EMAIL":
+			return "admin@example.com", nil
+		case "PLATFORM_ADMIN_PASSWORD":
+			return "existing-password", nil
+		}
+		return "", nil
+	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatal(err)
 	}
 	data := secretStringDataFromManifest(t, manifest)
-	if data["PLATFORM_ADMIN_EMAIL"] != "new-admin@mcpruntime.org" {
-		t.Fatalf("expected admin email override, got %q", data["PLATFORM_ADMIN_EMAIL"])
-	}
-	if data["PLATFORM_ADMIN_PASSWORD"] != "existing-password" {
-		t.Fatalf("expected existing password to be retained, got %q", data["PLATFORM_ADMIN_PASSWORD"])
-	}
-	if !csvHasValue(data["ADMIN_USERS"], "new-admin@mcpruntime.org") {
-		t.Fatalf("expected ADMIN_USERS to include override email, got %q", data["ADMIN_USERS"])
+	if data["PLATFORM_ADMIN_EMAIL"] != "admin@example.com" || data["PLATFORM_ADMIN_PASSWORD"] != "existing-password" {
+		t.Fatal("existing bootstrap pair was not retained")
 	}
 }
 

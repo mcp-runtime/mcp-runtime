@@ -1148,9 +1148,12 @@ func operatorEnvOverrides(gatewayProxyImage, existingGatewayOTLPEndpoint string)
 	if clusterName != "" {
 		envVars = append(envVars, operatorEnvVar{Name: "MCP_CLUSTER_NAME", Value: clusterName})
 	}
-	if adapterCertificatesEnabled() {
-		envVars = append(envVars, ingressControllerOperatorEnv(detectIngressControllerIdentity())...)
-	}
+	// The operator always needs the live Traefik identity: it writes the
+	// per-server Traefik egress NetworkPolicy into that namespace, and the
+	// optional adapter-certificate path pins the same identity. Resolution
+	// matches PLATFORM_TRAEFIK_NAMESPACE (explicit env, then the active
+	// Traefik Deployment: traefik before kube-system).
+	envVars = append(envVars, ingressControllerOperatorEnv(detectIngressControllerIdentity())...)
 	return envVars
 }
 

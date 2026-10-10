@@ -93,6 +93,11 @@ classify_path() {
       add_scenario "api-platform"
       return
       ;;
+    internal/cli/setup/platform/test_mode_manifest*.go)
+      add_scenario "cli-platform"
+      add_observability
+      return
+      ;;
     k8s/03-clickhouse*.yaml|k8s/04-clickhouse-init.yaml|k8s/05-kafka*.yaml|k8s/06-ingest.yaml|k8s/07-processor.yaml|k8s/11-prometheus.yaml|k8s/12-grafana.yaml|k8s/15-otel-collector.yaml|k8s/16-tempo.yaml|k8s/17-loki.yaml|k8s/18-promtail.yaml|k8s/19-grafana-datasources.yaml|k8s/21-grafana-dashboards.yaml)
       add_observability
       return

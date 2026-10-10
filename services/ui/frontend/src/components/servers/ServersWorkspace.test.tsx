@@ -773,6 +773,22 @@ describe("ServersWorkspace connect config, protocol inventory, and observability
     expect(within(richCard).queryByTestId("server-card-observability")).not.toBeInTheDocument();
     expect(within(richCard).queryByRole("link", { name: /grafana|target health|request rate|deny rate|p95 latency/i })).not.toBeInTheDocument();
   });
+
+  it("drops panel deep links when the Grafana dashboard target is unavailable", async () => {
+    const server = RICH_SERVERS.servers[0];
+    stubCatalog({ servers: { servers: [{
+      ...server,
+      observability: {
+        ...server.observability,
+        grafana: { available: false, direct_admin_only: true, reason: "dashboard not provisioned" },
+      },
+    }, RICH_SERVERS.servers[1]] } });
+
+    renderWorkspace({ authenticated: true, auth: { authenticated: true, principal: { role: "admin" } } });
+    const [richCard] = await screen.findAllByTestId("server-card");
+    expect(within(richCard).queryByTestId("server-card-observability")).not.toBeInTheDocument();
+    expect(within(richCard).queryByRole("link", { name: /grafana|target health|request rate|deny rate|p95 latency/i })).not.toBeInTheDocument();
+  });
 });
 
 describe("ServersWorkspace public-mode anonymous browsing", () => {

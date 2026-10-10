@@ -202,11 +202,18 @@ export function serverAuthInfo(server?: Pick<ServerSummary, "authMode" | "authHe
         : `This server expects caller credential headers. Presence is ${presence}. ${fill}`,
     };
   }
+  if (server?.authMode === "oauth") {
+    return {
+      label: "OAuth",
+      tone: "info",
+      detail:
+        "OAuth is supported for direct clients. Adapters present a session-bound certificate and add OAuth when the server requires it.",
+    };
+  }
   return {
-    label: "OAuth optional",
-    tone: "info",
-    detail:
-      "Direct clients use OAuth when configured. Adapters always present a session-bound certificate and add OAuth only when the server requires it.",
+    label: "",
+    tone: "neutral",
+    detail: "Authentication details are not reported for this server. Check its connection requirements.",
   };
 }
 

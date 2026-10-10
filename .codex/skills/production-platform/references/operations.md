@@ -173,6 +173,13 @@ KUBECONFIG="$HOME/.kube/prod-mcp-runtime-config" ./bin/mcp-runtime cluster docto
   `registry.<domain>` need an image pull secret; setup should create and attach
   `mcp-runtime-registry-pull` for platform namespaces before registry auth is
   re-enabled. Unauthenticated pulls may fail with `no basic auth credentials`.
+- Production-shaped setup ends with Step 7, which enables Distribution token
+  authentication on the registry backend itself (`docs/internals/registry-auth.md`).
+  Afterwards anonymous port-forward pushes fail: use
+  `MCP_REGISTRY_PUSH_MODE=public`. Pulls get `401` with a `Bearer realm=`
+  challenge until the client exchanges its pull Secret at
+  `https://platform.<domain>/api/v1/registry/token`; a realm x509 or DNS failure
+  on the node shows up as `ImagePullBackOff`.
 
 ## Public k3s Setup Validation
 

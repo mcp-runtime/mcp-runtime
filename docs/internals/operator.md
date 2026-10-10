@@ -36,13 +36,46 @@ Keep this package focused on process wiring. Reconciliation behavior belongs in
 3. Validate routing prerequisites.
 4. Reconcile the Deployment.
 5. Reconcile the Service.
-6. Reconcile the Ingress.
-7. Compute readiness.
-8. Update status.
-9. Requeue when resources are not ready.
+6. Reconcile the Traefik egress NetworkPolicy.
+7. Reconcile the Ingress.
+8. Compute readiness.
+9. Update status.
+10. Requeue when resources are not ready.
 
 The operator owns generated Kubernetes resources through owner references so
-normal garbage collection cleans them up with the `MCPServer`.
+normal garbage collection cleans them up with the `MCPServer`. The exception is
+the Traefik egress NetworkPolicy, which lives in the ingress controller
+namespace and cannot carry a cross-namespace owner reference.
+
+## Traefik Egress
+
+The bundled Traefik runs under a default-deny NetworkPolicy, and its static
+`traefik-allow-egress` policy reaches platform namespaces only. For each
+`MCPServer` the operator manages a NetworkPolicy named
+`mcp-egress-<namespace>-<name>-<hash>` in the ingress controller namespace
+(`MCP_INGRESS_CONTROLLER_NAMESPACE`, default `traefik`). It selects the Traefik
+pods (`MCP_INGRESS_CONTROLLER_POD_LABELS`, default `app=traefik`) and allows TCP
+egress only to `app=<name>` pods in the server namespace, on the desired
+serving port plus the port the Service currently targets. During a port
+transition both ports stay open until the Service is promoted.
+
+The policy carries `mcpruntime.org/component=traefik-egress`,
+`mcpruntime.org/server`, and `mcpruntime.org/server-namespace` labels. The
+reconciler deletes it when the server is gone or uses another ingress class,
+and a leader-only startup sweep removes policies orphaned while the operator
+was down. The operator creates the policy only when another NetworkPolicy
+already restricts Traefik egress; adding an egress policy to an unrestricted
+Traefik (such as k3s Traefik in `kube-system`) would isolate it.
+
+Setup always passes the live Traefik identity (`MCP_INGRESS_CONTROLLER_*`) to
+the operator, resolved the same way as `PLATFORM_TRAEFIK_NAMESPACE`: the
+explicit env value, otherwise the active `traefik` Deployment (`traefik`
+before `kube-system`). Each server reports a `TraefikEgressReady` condition
+with reason `PolicyApplied`, `EgressUnrestricted`, or `NotTraefikIngress`.
+When no pod matching the Traefik labels exists in the configured namespace,
+the condition is `False` with reason `TraefikPodsNotFound`, the operator emits
+a Warning event, and `mcp-runtime cluster doctor` fails the
+`MCPServer Traefik egress` check.
 
 ## Defaults
 

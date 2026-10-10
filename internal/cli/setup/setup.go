@@ -68,6 +68,7 @@ func New(runtime *core.Runtime, clusterMgr setupplatform.ClusterManagerAPI) *cob
 	var tlsEnabled bool
 	var providedTLSSecrets bool
 	var testMode bool
+	var testMultiReplica bool
 	var parallelBuilds bool
 	var strictProd bool
 	var withoutPlatformStack bool
@@ -220,6 +221,10 @@ will use to push and pull container images.`,
 
 			// Deployment behaviour
 			envBool("test-mode", &testMode, "MCP_SETUP_TEST_MODE")
+			envBool("test-multi-replica", &testMultiReplica, "MCP_SETUP_TEST_MULTI_REPLICA")
+			if testMultiReplica && !testMode {
+				return fmt.Errorf("--test-multi-replica requires --test-mode")
+			}
 			envBool("parallel-builds", &parallelBuilds, "MCP_PARALLEL_BUILDS")
 			envBool("strict-prod", &strictProd, "MCP_STRICT_PROD")
 			envBool("without-platform-stack", &withoutPlatformStack, "MCP_WITHOUT_PLATFORM_STACK")
@@ -332,6 +337,7 @@ will use to push and pull container images.`,
 				TLSEnabled:              tlsEnabled,
 				ProvidedTLSSecrets:      providedTLSSecrets,
 				TestMode:                testMode,
+				TestMultiReplica:        testMultiReplica,
 				ParallelBuilds:          parallelBuilds,
 				StrictProd:              strictProd,
 				DeployAnalytics:         !withoutPlatformStack,
@@ -384,6 +390,7 @@ will use to push and pull container images.`,
 	cmd.Flags().BoolVar(&acmeStaging, "acme-staging", false, "Use Let's Encrypt staging CA (also set MCP_ACME_STAGING=1)")
 	cmd.Flags().BoolVar(&skipCertManagerInstall, "skip-cert-manager-install", false, "Do not install cert-manager; require CRDs to already exist")
 	cmd.Flags().BoolVar(&testMode, "test-mode", false, "Test mode for local Kind/dev installs; builds and pushes latest-tag runtime images, provisions a local workload mTLS issuer, and relaxes production guardrails")
+	cmd.Flags().BoolVar(&testMultiReplica, "test-multi-replica", false, "Use normal platform replica counts with --test-mode for features that need multiple replicas (default test mode uses one replica)")
 	cmd.Flags().BoolVar(&parallelBuilds, "parallel-builds", false, "Build and publish setup images in parallel; keeps cluster, registry, TLS, and rollout sequencing unchanged")
 	cmd.Flags().BoolVar(&strictProd, "strict-prod", false, "Require production-style registry and TLS validation for non-test setup")
 	cmd.Flags().BoolVar(&withoutPlatformStack, "without-platform-stack", false, "Skip deploying the bundled platform stack")

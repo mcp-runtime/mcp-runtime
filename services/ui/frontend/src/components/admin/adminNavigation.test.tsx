@@ -61,34 +61,67 @@ afterEach(() => {
 });
 
 describe("admin workspace navigation", () => {
-  it("offers the Administration tab to an admin and opens it", async () => {
+  it("offers administration pages directly in the primary sidebar", async () => {
     const user = userEvent.setup();
     stub("admin");
 
     renderApp();
-    const tab = await screen.findByTestId("workspace-tab-admin");
+    const tab = await screen.findByTestId("admin-section-teams");
 
     await user.click(tab);
-    expect(await screen.findByTestId("admin-section-teams")).toBeInTheDocument();
+    expect(await screen.findByTestId("teams-table")).toBeInTheDocument();
+    const primary = screen.getByRole("navigation", { name: "Primary", exact: true });
+    for (const section of ["teams", "operations", "platform", "analytics"]) {
+      expect(primary).toContainElement(screen.getByTestId(`admin-section-${section}`));
+    }
+    expect(screen.queryByRole("navigation", { name: "Administration sections" })).not.toBeInTheDocument();
   });
 
-  it("hides the Administration tab from a tenant user", async () => {
+  it("filters admin pages and navigates between sections without another sidebar", async () => {
+    const user = userEvent.setup();
+    stub("admin");
+    renderApp();
+    await screen.findByTestId("admin-section-teams");
+    await user.type(screen.getByRole("searchbox", { name: "Filter navigation" }), "health");
+    expect(screen.queryByTestId("admin-section-teams")).not.toBeInTheDocument();
+    await user.click(screen.getByTestId("admin-section-platform"));
+    expect(window.location.hash).toBe("#/admin/platform");
+    expect(screen.getByTestId("admin-section-platform")).toHaveAttribute("aria-current", "page");
+    expect(await screen.findByTestId("platform-empty")).toBeInTheDocument();
+    await user.clear(screen.getByRole("searchbox", { name: "Filter navigation" }));
+    await user.click(screen.getByTestId("admin-section-operations"));
+    expect(window.location.hash).toBe("#/admin/operations");
+    expect(screen.queryByRole("navigation", { name: "Administration sections" })).not.toBeInTheDocument();
+  });
+
+  it("offers the same section links in compact navigation and closes it on selection", async () => {
+    const user = userEvent.setup();
+    stub("admin");
+    renderApp();
+    await screen.findByTestId("admin-section-teams");
+    await user.click(screen.getByTestId("nav-toggle"));
+    await user.click(screen.getByTestId("mobile-admin-section-platform"));
+    expect(window.location.hash).toBe("#/admin/platform");
+    expect(screen.getByTestId("nav-toggle")).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("hides administration pages from a tenant user", async () => {
     stub("user");
 
     renderApp();
     await screen.findByTestId("workspace-tab-servers");
 
-    expect(screen.queryByTestId("workspace-tab-admin")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("admin-section-teams")).not.toBeInTheDocument();
     expect(screen.getByTestId("workspace-tab-servers")).toBeInTheDocument();
   });
 
-  it("hides the Administration tab from a signed-out visitor", async () => {
+  it("hides administration pages from a signed-out visitor", async () => {
     stub(undefined, false);
 
     renderApp();
     await screen.findByTestId("workspace-tab-servers");
 
-    expect(screen.queryByTestId("workspace-tab-admin")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("admin-section-teams")).not.toBeInTheDocument();
   });
 
   it("drops out of the admin workspace when the session signs out", async () => {
@@ -96,7 +129,7 @@ describe("admin workspace navigation", () => {
     const fetchMock = stub("admin");
 
     renderApp();
-    await user.click(await screen.findByTestId("workspace-tab-admin"));
+    await user.click(await screen.findByTestId("admin-section-teams"));
     await screen.findByTestId("admin-section-teams");
 
     fetchMock.mockResolvedValue({
@@ -110,7 +143,7 @@ describe("admin workspace navigation", () => {
     await waitFor(() =>
       expect(screen.queryByTestId("admin-section-teams")).not.toBeInTheDocument()
     );
-    expect(screen.queryByTestId("workspace-tab-admin")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("admin-section-teams")).not.toBeInTheDocument();
   });
 
   it("refuses a deep link into administration for a tenant user", async () => {
@@ -130,7 +163,7 @@ describe("admin workspace navigation", () => {
     stub("admin");
 
     renderApp();
-    await user.click(await screen.findByTestId("workspace-tab-admin"));
+    await user.click(await screen.findByTestId("admin-section-teams"));
     await user.click(await screen.findByTestId("admin-section-teams"));
 
     expect(window.location.hash).toBe("#/admin/teams");
