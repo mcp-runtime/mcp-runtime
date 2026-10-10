@@ -6680,6 +6680,38 @@ grafana_loki = wait_for_json(
 )
 grafana_streams = grafana_loki.get("data", {}).get("result", [])
 
+# MCP server logs must come from Kubernetes discovery with workload labels
+# (issue #496: discovery silently matched no pods and only path-based
+# fallback streams reached Loki).
+server_params = urllib.parse.urlencode(
+    {
+        "query": f'{{namespace="mcp-servers", app="{server_name}"}}',
+        "limit": "20",
+        "start": str(start_ns),
+        "end": str(end_ns),
+    }
+)
+server_logs = wait_for_json(
+    f"{loki_base}/loki/api/v1/query_range?{server_params}",
+    lambda doc: bool(doc.get("data", {}).get("result", [])),
+    retries=60,
+    delay=2,
+    description="loki mcp-servers log streams with workload labels",
+)
+for stream in server_logs.get("data", {}).get("result", []):
+    stream_labels = stream.get("stream", {})
+    missing = [key for key in ("namespace", "pod", "container", "node", "app") if not stream_labels.get(key)]
+    if missing:
+        fail(f"loki mcp-servers stream missing labels {missing}: {stream_labels}")
+    # Promtail labels every file target with its path; it must be the CRI log
+    # file of the pod and container the Kubernetes labels name.
+    filename = stream_labels.get("filename", "")
+    expected_prefix = f"/var/log/pods/{stream_labels['namespace']}_{stream_labels['pod']}_"
+    expected_container = f"/{stream_labels['container']}/"
+    if filename and (not filename.startswith(expected_prefix) or expected_container not in filename):
+        fail(f"loki mcp-servers stream labels do not match its log file: {stream_labels}")
+ok("loki mcp-servers streams carry namespace/pod/container/node/app labels")
+
 rows = [
     ("audit.events_total", str(stats.get("events_total", "n/a"))),
     ("audit.server_events", str(len(all_server_events))),

@@ -43,16 +43,21 @@ data:
       - url: http://loki.mcp-observability.svc:3100/loki/api/v1/push
     # -config.expand-env is on: write literal dollar signs as $$.
     scrape_configs:
-      # Primary job: Kubernetes metadata for every namespace (mcp-servers and
-      # dynamic team namespaces included). Discovery is limited to pods on this
-      # node (NODE_NAME, expanded via -config.expand-env) because only local
-      # pods have files under /var/log/pods.
+      # Kubernetes metadata for every namespace (mcp-servers and dynamic team
+      # namespaces included). Promtail only tails files on its own node, so
+      # discovery is limited to local pods.
+      #
+      # HOSTNAME must be the node name (set from spec.nodeName in the
+      # DaemonSet): Promtail compares the __host__ label against HOSTNAME and
+      # derives its own pod-role spec.nodeName selector from it. Left at its
+      # default (the Promtail pod name), that selector matches no pods and
+      # discovery silently produces no streams.
       - job_name: kubernetes-pods
         kubernetes_sd_configs:
           - role: pod
             selectors:
               - role: pod
-                field: spec.nodeName=${NODE_NAME}
+                field: spec.nodeName=${HOSTNAME}
         pipeline_stages:
           # Parse the CRI envelope so the event timestamp is the container's
           # and the JSON body stays intact for structured queries.
@@ -94,41 +99,15 @@ data:
             target_label: container
           - source_labels: [__meta_kubernetes_pod_node_name]
             target_label: node
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: __host__
+          # CRI log layout (containerd, k3s, Kind):
+          # /var/log/pods/<namespace>_<pod>_<uid>/<container>/<restart>.log
           - action: replace
             source_labels: [__meta_kubernetes_pod_uid, __meta_kubernetes_pod_container_name]
             separator: /
             target_label: __path__
             replacement: /var/log/pods/*$$1/*.log
-      # Fallback for platform namespaces that does not depend on API
-      # discovery. Labels come from the CRI file path so coverage gaps in
-      # discovery remain distinguishable (job=static-pods).
-      - job_name: static-pods
-        static_configs:
-          - targets: ["localhost"]
-            labels:
-              job: static-pods
-              __path__: /var/log/pods/mcp-platform_*/*/*.log
-          - targets: ["localhost"]
-            labels:
-              job: static-pods
-              __path__: /var/log/pods/mcp-observability_*/*/*.log
-          - targets: ["localhost"]
-            labels:
-              job: static-pods
-              __path__: /var/log/pods/mcp-runtime_*/*/*.log
-          - targets: ["localhost"]
-            labels:
-              job: static-pods
-              __path__: /var/log/pods/mcp-servers_*/*/*.log
-        pipeline_stages:
-          - cri: {}
-          - regex:
-              source: filename
-              expression: '/var/log/pods/(?P<namespace>[^_]+)_(?P<pod>[^_]+)_[^/]+/(?P<container>[^/]+)/'
-          - labels:
-              namespace:
-              pod:
-              container:
 ---
 apiVersion: apps/v1
 kind: DaemonSet
@@ -153,7 +132,7 @@ spec:
           image: grafana/promtail:2.9.4
           args: ["-config.file=/etc/promtail/promtail.yaml", "-config.expand-env=true"]
           env:
-            - name: NODE_NAME
+            - name: HOSTNAME
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
@@ -169,9 +148,6 @@ spec:
               readOnly: true
             - name: positions
               mountPath: /run/promtail
-            - name: varlog
-              mountPath: /var/log
-              readOnly: true
             - name: podlogs
               mountPath: /var/log/pods
               readOnly: true
@@ -181,9 +157,8 @@ spec:
             name: promtail-config
         - name: positions
           emptyDir: {}
-        - name: varlog
-          hostPath:
-            path: /var/log
+        # Only pod logs are mounted; host system logs stay out of the collector.
         - name: podlogs
           hostPath:
             path: /var/log/pods
+            type: Directory
