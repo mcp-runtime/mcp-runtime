@@ -2,6 +2,7 @@ package registrypush
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -9,9 +10,11 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
+	ktesting "k8s.io/client-go/testing"
 )
 
 func TestPushDockerArchiveCreatesHelperAndRewritesTarget(t *testing.T) {
@@ -275,5 +278,31 @@ func TestNativePublicationMountsCredentialFile(t *testing.T) {
 	cfg.HelperNamespace = "mcp-team-acme"
 	if err := PushDockerArchive(context.Background(), client, &rest.Config{}, "fixture.tar", "registry.registry.svc:5000/acme/app:test", cfg); err == nil {
 		t.Fatal("publisher allowed outside trusted namespace")
+	}
+}
+
+func TestResolveHelperNamespaceUsesLiveRegistryAuthentication(t *testing.T) {
+	for _, tc := range []struct{ name, auth, preferred, want string }{
+		{"native overrides platform", "token", "mcp-platform", "registry"},
+		{"native overrides configured namespace", "token", "other", "registry"},
+		{"anonymous keeps platform", "", "mcp-platform", "mcp-platform"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client := fake.NewSimpleClientset(&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "registry", Namespace: "registry"}, Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "registry", Env: []corev1.EnvVar{{Name: "REGISTRY_AUTH", Value: tc.auth}}}}}}}})
+			got, err := ResolveHelperNamespace(context.Background(), client, tc.preferred)
+			if err != nil || got != tc.want {
+				t.Fatalf("namespace = %q, %v; want %q", got, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestResolveHelperNamespaceFailsClosedOnRegistryReadError(t *testing.T) {
+	client := fake.NewSimpleClientset()
+	client.PrependReactor("get", "deployments", func(ktesting.Action) (bool, runtime.Object, error) {
+		return true, nil, errors.New("registry read denied")
+	})
+	if namespace, err := ResolveHelperNamespace(context.Background(), client, "mcp-platform"); err == nil || namespace != "" {
+		t.Fatalf("read failure must not select an unauthenticated helper namespace: %q, %v", namespace, err)
 	}
 }

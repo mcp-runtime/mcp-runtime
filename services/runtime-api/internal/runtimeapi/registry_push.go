@@ -160,6 +160,12 @@ func (s *RegistryPushService) HandleRuntimeRegistryPush(w http.ResponseWriter, r
 	if helperNS == "" {
 		helperNS = platformstack.PlatformNamespace
 	}
+	helperNS, err = registrypush.ResolveHelperNamespace(ctx, clients.Clientset, helperNS)
+	if err != nil {
+		log.Printf("registry helper namespace resolution failed: %v", err)
+		writeAPIError(w, http.StatusServiceUnavailable, "registry authentication configuration unavailable")
+		return
+	}
 	if err := registrypush.EnsureHelperNamespace(ctx, clients.Clientset, helperNS); err != nil {
 		writeAPIError(w, http.StatusBadRequest, err.Error())
 		return

@@ -365,6 +365,28 @@ func newRemoteExecutor(restConfig *rest.Config, targetURL *url.URL) (remotecomma
 	return nil, fmt.Errorf("create exec transport: websocket: %w; spdy: %v", wsErr, spdyErr)
 }
 
+// ResolveHelperNamespace keeps native-auth helpers with their publisher Secret.
+// The live registry configuration is authoritative, including after activation.
+func ResolveHelperNamespace(ctx context.Context, client kubernetes.Interface, preferred string) (string, error) {
+	deployment, err := client.AppsV1().Deployments("registry").Get(ctx, "registry", metav1.GetOptions{})
+	if err != nil && !apierrors.IsNotFound(err) {
+		return "", fmt.Errorf("read registry authentication configuration: %w", err)
+	}
+	if err == nil {
+		for _, container := range deployment.Spec.Template.Spec.Containers {
+			for _, env := range container.Env {
+				if env.Name == "REGISTRY_AUTH" && env.Value == "token" {
+					return "registry", nil
+				}
+			}
+		}
+	}
+	if preferred = strings.TrimSpace(preferred); preferred == "" {
+		preferred = "registry"
+	}
+	return preferred, nil
+}
+
 // EnsureHelperNamespace verifies the helper namespace exists.
 func EnsureHelperNamespace(ctx context.Context, client kubernetes.Interface, namespace string) error {
 	namespace = strings.TrimSpace(namespace)
