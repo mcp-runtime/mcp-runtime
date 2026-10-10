@@ -149,9 +149,11 @@ export function ServerList({
                       {ready ? "Ready" : server.status || "Not ready"}
                     </StatusBadge>
                     {/* What a client must present to reach this server. */}
-                    <StatusBadge tone={auth.tone} label={auth.detail}>
-                      {auth.label}
-                    </StatusBadge>
+                    {auth.label ? (
+                      <StatusBadge tone={auth.tone} label={auth.detail}>
+                        {auth.label}
+                      </StatusBadge>
+                    ) : null}
                   </div>
                 </div>
 

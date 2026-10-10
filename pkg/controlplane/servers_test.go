@@ -348,3 +348,24 @@ func TestServerInfoStatusWaitsForOperatorPhaseWhenGatewayEnabled(t *testing.T) {
 		})
 	}
 }
+
+func TestServerInfoAuthSupport(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		spec mcpv1alpha1.MCPServerSpec
+		want string
+	}{
+		{name: "gateway without OAuth configuration"},
+		{name: "operator-defaulted OAuth issuer", spec: mcpv1alpha1.MCPServerSpec{Auth: &mcpv1alpha1.AuthConfig{}}, want: "oauth"},
+		{name: "direct without declared auth", spec: mcpv1alpha1.MCPServerSpec{Gateway: &mcpv1alpha1.GatewayConfig{Enabled: mcpv1alpha1.BoolPtr(false)}}},
+		{name: "direct OAuth", spec: mcpv1alpha1.MCPServerSpec{Gateway: &mcpv1alpha1.GatewayConfig{Enabled: mcpv1alpha1.BoolPtr(false)}, Auth: &mcpv1alpha1.AuthConfig{IssuerURL: "https://issuer.example"}}, want: "oauth"},
+		{name: "delegated headers", spec: mcpv1alpha1.MCPServerSpec{Auth: &mcpv1alpha1.AuthConfig{Mode: "header", Headers: []string{"X-Token"}}}, want: "header"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ServerInfoFromMCPServer(mcpv1alpha1.MCPServer{Spec: tt.spec}, ServerDeploymentStatus{})
+			if got.AuthMode != tt.want {
+				t.Fatalf("AuthMode = %q, want %q", got.AuthMode, tt.want)
+			}
+		})
+	}
+}

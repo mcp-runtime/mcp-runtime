@@ -47,6 +47,7 @@ describe("header auth connect config", () => {
   });
 
   it("keeps OAuth servers free of a header requirement", () => {
-    expect(serverAuthInfo().label).toBe("OAuth optional");
+    expect(serverAuthInfo({ authMode: "oauth" }).label).toBe("OAuth");
+    expect(serverAuthInfo().label).toBe("");
   });
 });
