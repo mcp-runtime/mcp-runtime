@@ -1078,6 +1078,24 @@ staging_check_registry_route() {
   fi
 }
 
+# Exchange credentials only at the configured HTTPS platform token endpoint.
+# Both configs and responses stay in WORK_DIR, outside published artifacts.
+staging_registry_bearer_config() {
+  local basic_cfg="$1" bearer_cfg="$2" scope="$3" response code token
+  umask 077
+  response="${WORK_DIR}/registry-token-response.json"
+  code="$(curl --silent --show-error --max-time 15 -K "${basic_cfg}" --get \
+    --data-urlencode 'service=mcp-runtime-registry' --data-urlencode "scope=${scope}" \
+    -o "${response}" --write-out '%{http_code}' "${PLATFORM_URL%/}/api/v1/registry/token")" || return 1
+  if [[ "${code}" != 200 ]]; then
+    staging_err "registry token exchange returned HTTP ${code}"
+    return 1
+  fi
+  token="$(jq -er '.token // .access_token | select(type == "string" and test("^[A-Za-z0-9_.-]+$"))' "${response}")" || return 1
+  printf 'header = "Authorization: Bearer %s"\n' "${token}" >"${bearer_cfg}"
+  chmod 600 "${bearer_cfg}"
+}
+
 staging_check_registry_auth() {
   local reg="https://${REGISTRY_HOST}" failed=0 image repo tag probe accept
   accept='application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.index.v1+json'
@@ -1101,9 +1119,10 @@ staging_check_registry_auth() {
 
   # Basic auth with any username and an API key as the password is the
   # credential docker/skopeo present. -K keeps the key off the command line.
-  local auth_cfg="${WORK_DIR}/registry-auth.curlrc"
-  printf 'user = "staging-e2e:%s"\n' "${E2E_PLATFORM_API_TOKEN}" >"${auth_cfg}"
-  chmod 600 "${auth_cfg}"
+  local basic_cfg="${WORK_DIR}/registry-basic.curlrc" auth_cfg="${WORK_DIR}/registry-auth.curlrc"
+  printf 'user = "staging-e2e:%s"\n' "${E2E_PLATFORM_API_TOKEN}" >"${basic_cfg}"
+  chmod 600 "${basic_cfg}"
+  staging_registry_bearer_config "${basic_cfg}" "${auth_cfg}" "repository:${repo}:pull repository:${probe}:pull,push" || return 1
   staging_expect_code "authenticated GET /v2/" "200" -K "${auth_cfg}" "${reg}/v2/" || failed=1
   staging_expect_code "authenticated manifest HEAD ${repo}:${tag}" "200" -K "${auth_cfg}" -I \
     -H "accept: ${accept}" "${reg}/v2/${repo}/manifests/${tag}" || failed=1
@@ -1159,7 +1178,7 @@ staging_check_image_pulls() {
     done
   done
 
-  image="$(kubectl -n mcp-runtime get deploy mcp-runtime-operator-controller-manager \
+  image="$(kubectl -n mcp-platform get deploy mcp-runtime-api \
     -o jsonpath='{.spec.template.spec.containers[0].image}')"
   local sa=staging-e2e-pull-probe pod_ok=staging-e2e-pull-authorized pod_denied=staging-e2e-pull-anonymous
   # shellcheck disable=SC2064

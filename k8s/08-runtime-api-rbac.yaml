@@ -177,3 +177,33 @@ subjects:
   - kind: ServiceAccount
     name: mcp-runtime-api
     namespace: mcp-platform
+
+---
+# Native-auth helpers mount the publisher Secret in the trusted registry namespace.
+# Image archives remain in mcp-platform and are fetched over the one-shot transfer route.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mcp-runtime-api-registry-push
+  namespace: registry
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mcp-runtime-api-registry-push
+  namespace: registry
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: mcp-runtime-api-registry-push
+subjects:
+  - kind: ServiceAccount
+    name: mcp-runtime-api
+    namespace: mcp-platform

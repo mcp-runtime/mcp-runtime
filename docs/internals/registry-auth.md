@@ -72,6 +72,8 @@ Publication helpers run only in the trusted `registry` namespace and mount
 runtime-api publication (`server push`) and to the in-cluster helper used by
 `setup`, `update`, and `admin registry push`. The service publication
 credential is never copied into team pull Secrets or placed in helper commands.
+Runtime API publication selects this namespace from the live registry configuration. Its namespace-scoped Role permits helper pods and logs without Secret reads or pod exec; archive-transfer Secrets remain in `mcp-platform`.
+
 Helpers carry the `app.kubernetes.io/name: registry-push-helper` label, which
 the registry NetworkPolicy uses to admit them and to grant their egress.
 

@@ -43,6 +43,7 @@ func TestRegistryPushRBACIsNamespaceScoped(t *testing.T) {
 	var foundPushRole bool
 	var foundPushRoleBinding bool
 	var foundRegistryPodsExec bool
+	var foundNativeRole, foundNativeBinding bool
 	for {
 		var doc rbacDoc
 		if err := dec.Decode(&doc); err != nil {
@@ -77,12 +78,27 @@ func TestRegistryPushRBACIsNamespaceScoped(t *testing.T) {
 				}
 			}
 		case doc.Kind == "Role" && doc.Metadata.Name == "mcp-runtime-api-registry-push" && doc.Metadata.Namespace == "registry":
+			foundNativeRole = true
 			for _, rule := range doc.Rules {
 				if containsAll(rule.Resources, "pods/exec") {
 					foundRegistryPodsExec = true
 				}
+				if containsAny(rule.Resources, "secrets", "*") {
+					t.Fatal("native helper role must not expose registry Secrets")
+				}
+			}
+		case doc.Kind == "RoleBinding" && doc.Metadata.Name == "mcp-runtime-api-registry-push" && doc.Metadata.Namespace == "registry":
+			if doc.RoleRef.Kind == "Role" && doc.RoleRef.Name == "mcp-runtime-api-registry-push" {
+				for _, subject := range doc.Subjects {
+					if subject.Kind == "ServiceAccount" && subject.Name == "mcp-runtime-api" && subject.Namespace == "mcp-platform" {
+						foundNativeBinding = true
+					}
+				}
 			}
 		}
+	}
+	if !foundNativeRole || !foundNativeBinding {
+		t.Fatal("native publishing requires a registry-scoped helper Role and binding")
 	}
 	if foundClusterPodsExec {
 		t.Fatal("cluster role mcp-runtime-api must not grant pods/exec cluster-wide")

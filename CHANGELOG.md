@@ -36,6 +36,8 @@ routing and governed adapter calls before returning the platform to service.
 
 ### Fixed
 
+- Tenant image publishing selects the trusted registry helper namespace when native authentication is active, with namespace-scoped pod permissions. Staging probes negotiate scoped bearer tokens and verify image pulls with the owning namespace credential ([#685](https://github.com/mcp-runtime/mcp-runtime/issues/685)).
+
 - Package-docs startup bounds Go parallelism within the deployed process budget. CI tests under the same CPU, memory and process limits, and remote readiness probes use host HTTP rather than spawning another process in the container.
 
 - First-install setup applies the requested registry PVC size before creation, checks Docker buildx before image builds, rejects partial password-admin credentials while preserving saved pairs, and propagates external TLS proxy UI settings. Rollout and registry-auth restoration tolerate bounded transient Kubernetes API failures; image uploads reject unsafe redirects with an HTTPS-origin diagnostic, and tenant setup prints membership steps ([#666](https://github.com/mcp-runtime/mcp-runtime/issues/666)).

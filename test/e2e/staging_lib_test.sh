@@ -42,6 +42,26 @@ expect_eq() {
   if [[ "$2" == "$3" ]]; then pass "$1"; else failed "$1: got '$2', want '$3'"; fi
 }
 
+registry_token_case() (
+  WORK_DIR="${TMP}"
+  PLATFORM_URL=https://platform.e2e.mcpruntime.org
+  local scenario="$1"
+  curl() {
+    local args="$*"
+    [[ "${args}" == *'--data-urlencode service=mcp-runtime-registry'* && "${args}" == *'scope=repository:demo:pull'* && "${args}" == *'https://platform.e2e.mcpruntime.org/api/v1/registry/token'* ]] || return 1
+    case "${scenario}" in
+      success) printf '{"token":"signed.test.token"}' >"${WORK_DIR}/registry-token-response.json"; printf 200 ;;
+      denied) printf '{"error":"forbidden"}' >"${WORK_DIR}/registry-token-response.json"; printf 403 ;;
+      malformed) printf '{"token":"unsafe token"}' >"${WORK_DIR}/registry-token-response.json"; printf 200 ;;
+    esac
+  }
+  staging_registry_bearer_config "${TMP}/basic-config" "${TMP}/bearer-config" repository:demo:pull
+)
+expect_ok "registry probe exchanges scoped bearer token" registry_token_case success
+expect_eq "registry probe uses bearer auth" "$(cat "${TMP}/bearer-config")" 'header = "Authorization: Bearer signed.test.token"'
+expect_fail "registry probe refuses denied token exchange" registry_token_case denied
+expect_fail "registry probe refuses malformed bearer token" registry_token_case malformed
+
 # --- flags and URL parsing --------------------------------------------------
 installer_download_case() (
   local scenario="$1" calls=0
