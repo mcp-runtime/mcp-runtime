@@ -13,6 +13,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 - Server cards show an OAuth badge only when the server reports OAuth support, and omit the badge when authentication support is unknown. Header credential labels remain available.
 
+- Organization and Platform pages appear directly in the main console sidebar and compact navigation, eliminating the second administration sidebar. Navigation filtering and active states include each section.
+
 ### Fixed
 
 - The package-docs image uses the root module's Go toolchain version in its build and runtime stages, preventing startup failures after a Go requirement bump. Module requirement changes now run the package-docs PR smoke test.

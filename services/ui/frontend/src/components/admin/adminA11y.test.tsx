@@ -92,10 +92,10 @@ function stub() {
   );
 }
 
-function renderAdmin(auth: AuthStatus) {
+function renderAdmin(auth: AuthStatus, section: "teams" | "operations" | "platform" | "analytics" = "teams") {
   return render(
     <AppProviders>
-      <AdminWorkspace auth={auth} onSignIn={() => {}} />
+      <AdminWorkspace auth={auth} onSignIn={() => {}} section={section} />
     </AppProviders>
   );
 }
@@ -121,9 +121,7 @@ describe("admin accessibility", () => {
   it("has no detectable violations on operations", async () => {
     const user = userEvent.setup();
     stub();
-    const { container } = renderAdmin(ADMIN);
-    await screen.findByTestId("teams-table");
-    await user.click(screen.getByTestId("admin-section-operations"));
+    const { container } = renderAdmin(ADMIN, "operations");
     await screen.findByTestId("operations-users-table");
 
     expect(await axe(container, AXE_OPTIONS)).toHaveNoViolations();
@@ -132,9 +130,7 @@ describe("admin accessibility", () => {
   it("has no detectable violations on platform health", async () => {
     const user = userEvent.setup();
     stub();
-    const { container } = renderAdmin(ADMIN);
-    await screen.findByTestId("teams-table");
-    await user.click(screen.getByTestId("admin-section-platform"));
+    const { container } = renderAdmin(ADMIN, "platform");
     await screen.findByTestId("platform-components");
 
     expect(await axe(container, AXE_OPTIONS)).toHaveNoViolations();

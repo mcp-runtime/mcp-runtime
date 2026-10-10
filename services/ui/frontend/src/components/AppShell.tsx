@@ -4,6 +4,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { visibleWorkspaceTabs, type WorkspaceId } from "./WorkspaceNavigation";
 import { AccountMenu } from "./AccountMenu";
 import { Icon } from "../ui/Icon";
+import { ADMIN_GROUPS, ADMIN_SECTIONS, adminSection, type AdminSectionId } from "./admin/adminSections";
+import { isAdmin } from "../api/types";
 import type { AuthStatus } from "../api/types";
 
 type AppShellProps = {
@@ -13,6 +15,8 @@ type AppShellProps = {
   onToggleTheme: () => void;
   workspace: WorkspaceId;
   onSelectWorkspace: (id: WorkspaceId) => void;
+  section: string;
+  onSelectAdminSection: (section: AdminSectionId) => void;
   onSignIn: () => void;
   onSignOut: () => void;
   children: ReactNode;
@@ -25,6 +29,8 @@ export function AppShell({
   onToggleTheme,
   workspace,
   onSelectWorkspace,
+  section,
+  onSelectAdminSection,
   onSignIn,
   onSignOut,
   children,
@@ -33,18 +39,31 @@ export function AppShell({
   const [navFilter, setNavFilter] = useState("");
   const menuToggleRef = useRef<HTMLButtonElement>(null);
   const tabs = visibleWorkspaceTabs(auth);
-  const currentLabel = tabs.find((tab) => tab.id === workspace)?.label || "Sign in";
-  const groups = [
+  const currentLabel = workspace === "admin" ? adminSection(section).label :
+    tabs.find((tab) => tab.id === workspace)?.label || "Sign in";
+  type NavItem = { id: string; label: string; icon: Parameters<typeof Icon>[0]["name"];
+    description: string; active: boolean; select: () => void };
+  const groups: { label: string; items: NavItem[] }[] = [
     { label: "Runtime", ids: ["servers", "agents", "access"] },
     { label: "Workspace", ids: ["activity", "keys"] },
-    { label: "Platform", ids: ["admin"] },
-  ];
+  ].map((group) => ({ label: group.label, items: tabs.filter((tab) => group.ids.includes(tab.id))
+    .map((tab) => ({ ...tab, active: tab.id === workspace, select: () => onSelectWorkspace(tab.id) })) }));
+  if (isAdmin(auth)) {
+    const icons = { teams: "users", operations: "activity", platform: "gauge", analytics: "chart" } as const;
+    groups.push(...ADMIN_GROUPS.map((label) => ({ label, items: ADMIN_SECTIONS
+      .filter((item) => item.group === label).map((item) => ({ ...item, id: `admin-${item.id}`,
+        icon: icons[item.id], active: workspace === "admin" && adminSection(section).id === item.id,
+        select: () => onSelectAdminSection(item.id) })) })));
+  }
+  const query = navFilter.trim().toLowerCase();
+  const filteredGroups = groups.map((group) => ({ ...group, items: group.items.filter((item) =>
+    `${group.label} ${item.label}`.toLowerCase().includes(query)) })).filter((group) => group.items.length);
   const nextTheme = theme === "dark" ? "light" : "dark";
   // The compact menu is a navigation affordance, not state worth keeping: any
   // route change closes it.
   useEffect(() => {
     setMenuOpen(false);
-  }, [workspace]);
+  }, [workspace, section]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -58,23 +77,15 @@ export function AppShell({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [menuOpen]);
 
-  function navItem(id: WorkspaceId, label: string, icon: Parameters<typeof Icon>[0]["name"], title: string) {
-    const active = id === workspace;
-    return (
-      <li key={id}>
-        <button
-          type="button"
-          className="nav-item"
-          aria-current={active ? "page" : undefined}
-          title={title}
-          data-testid={`workspace-tab-${id}`}
-          onClick={() => { setMenuOpen(false); onSelectWorkspace(id); }}
-        >
-          <Icon name={icon} size={15} />
-          {label}
-        </button>
-      </li>
-    );
+  function navItem(item: NavItem, compact = false) {
+    const testId = item.id.startsWith("admin-") ? `admin-section-${item.id.slice(6)}` : `workspace-tab-${item.id}`;
+    return <li key={item.id}>
+      <button type="button" className="nav-item" aria-current={item.active ? "page" : undefined}
+        title={item.description} data-testid={compact ? (item.id.startsWith("admin-") ? `mobile-${testId}` : `mobile-tab-${item.id}`) : testId}
+        onClick={() => { setMenuOpen(false); item.select(); }}>
+        <Icon name={item.icon} size={15} />{item.label}
+      </button>
+    </li>;
   }
 
   return (
@@ -100,19 +111,12 @@ export function AppShell({
             value={navFilter} onChange={(event) => setNavFilter(event.target.value)} />
         </label>
         <nav className="primary-nav" aria-label="Primary">
-          {groups.map((group) => {
-            const items = tabs.filter((tab) => group.ids.includes(tab.id) &&
-              tab.label.toLowerCase().includes(navFilter.trim().toLowerCase()));
-            if (!items.length) return null;
-            return <div className="sidebar-group" key={group.label}>
-              <h2>{group.label}</h2>
-              <ul className="primary-nav-list">
-                {items.map((tab) => navItem(tab.id, tab.label, tab.icon, tab.description))}
-              </ul>
-            </div>;
-          })}
-          {!tabs.some((tab) => tab.label.toLowerCase().includes(navFilter.trim().toLowerCase())) ?
-            <p className="sidebar-empty" role="status">No matching pages.</p> : null}
+          {filteredGroups.map((group) => <div className="sidebar-group" key={group.label}>
+            <h2>{group.label}</h2>
+            <ul className="primary-nav-list">{group.items.map((item) => navItem(item))}</ul>
+          </div>)}
+          {!filteredGroups.length ? <p className="sidebar-empty" role="status">No matching pages.</p> : null}
+
         </nav>
         <div className="sidebar-footer">
           <a className="sidebar-docs" href={docsPath()} target="_blank"
@@ -187,22 +191,10 @@ export function AppShell({
         aria-label="Primary (compact)"
         hidden={!menuOpen}
       >
-        <ul className="mobile-nav-list">
-          {tabs.map((tab) => (
-            <li key={tab.id}>
-              <button
-                type="button"
-                className="nav-item"
-                aria-current={tab.id === workspace ? "page" : undefined}
-                data-testid={`mobile-tab-${tab.id}`}
-                onClick={() => { setMenuOpen(false); onSelectWorkspace(tab.id); }}
-              >
-                <Icon name={tab.icon} size={15} />
-                {tab.label}
-              </button>
-            </li>
-          ))}
-        </ul>
+        {groups.map((group) => <div className="sidebar-group" key={group.label}>
+          <h2>{group.label}</h2>
+          <ul className="mobile-nav-list">{group.items.map((item) => navItem(item, true))}</ul>
+        </div>)}
         <a className="sidebar-docs" href={docsPath()} target="_blank" rel="noreferrer">
           <Icon name="book" size={15} /> Documentation <Icon name="external" size={12} />
           <span className="visually-hidden"> (opens in a new tab)</span>

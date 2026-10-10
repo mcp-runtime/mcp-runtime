@@ -476,73 +476,7 @@
 
 /* Administration ----------------------------------------------------------- */
 
-.admin-layout {
-  display: grid;
-  grid-template-columns: 208px minmax(0, 1fr);
-  gap: var(--space-5);
-  align-items: start;
-}
 
-.admin-rail {
-  position: sticky;
-  top: calc(var(--topbar-h) + var(--space-5));
-}
-
-.admin-rail-group {
-  margin-bottom: var(--space-4);
-}
-
-.admin-rail-group h2 {
-  padding: 0 10px;
-  margin-bottom: 6px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-tertiary);
-}
-
-.admin-rail-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.admin-rail-item {
-  appearance: none;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  width: 100%;
-  min-height: 32px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: var(--fs-body);
-  font-weight: 500;
-  text-align: left;
-  cursor: pointer;
-  transition: background var(--transition), color var(--transition);
-}
-
-.admin-rail-item:hover {
-  background: var(--surface-hover);
-  color: var(--text);
-}
-
-.admin-rail-item[aria-current="page"] {
-  background: var(--surface-selected);
-  color: var(--text);
-  font-weight: 600;
-  box-shadow: inset 2px 0 0 var(--accent);
-}
-
-.admin-section-select {
-  display: none;
-}
 
 /* Sign in ------------------------------------------------------------------ */
 
@@ -894,6 +828,8 @@
 
   .mobile-nav.is-open {
     display: block;
+    max-height: calc(100dvh - var(--topbar-h));
+    overflow-y: auto;
   }
 
   .account-trigger { max-width: min(210px, 42vw); }
@@ -914,18 +850,7 @@
     padding: var(--space-4) var(--space-4) var(--space-6);
   }
 
-  .admin-layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
 
-  .admin-rail {
-    display: none;
-  }
-
-  .admin-section-select {
-    display: block;
-    margin-bottom: var(--space-4);
-  }
 
   .split-layout {
     grid-template-columns: minmax(0, 1fr);
