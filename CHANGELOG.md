@@ -36,6 +36,8 @@ routing and governed adapter calls before returning the platform to service.
 
 ### Fixed
 
+- Disposable staging adapter fixtures rotate pull credentials for their own server namespace instead of copying another namespace credential. HTTPS enrollment tests retain repository isolation ([#687](https://github.com/mcp-runtime/mcp-runtime/issues/687)).
+
 - Tenant image publishing selects the trusted registry helper namespace when native authentication is active, with namespace-scoped pod permissions. Staging probes negotiate scoped bearer tokens and verify image pulls with the owning namespace credential ([#685](https://github.com/mcp-runtime/mcp-runtime/issues/685)).
 
 - Package-docs startup bounds Go parallelism within the deployed process budget. CI tests under the same CPU, memory and process limits, and remote readiness probes use host HTTP rather than spawning another process in the container.
