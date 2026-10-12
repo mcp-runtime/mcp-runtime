@@ -38,7 +38,7 @@ IFS=',' read -r -a NS_LIST <<<"$NAMESPACES"
 
 for ns in "${NS_LIST[@]}"; do
   if ! kubectl get ns "$ns" >/dev/null 2>&1; then
-    note "namespace ${ns} missing (skip)"
+    bad "requested namespace ${ns} missing"
     continue
   fi
   log "=== inventory ${ns} ==="
@@ -56,26 +56,28 @@ for ns in "${NS_LIST[@]}"; do
       ;;
   esac
 
-  # Pod security / container hygiene on Deployments
+  workloads="$(kubectl -n "$ns" get deploy,sts,ds -o name)"
+  # Pod security / container hygiene on controllers
   while IFS= read -r dep; do
     [[ -z "$dep" ]] && continue
-    json="$(kubectl -n "$ns" get deploy "$dep" -o json)"
+    json="$(kubectl -n "$ns" get "$dep" -o json)"
     # privileged
     if echo "$json" | jq -e '
-      .spec.template.spec.containers[]? | select(.securityContext.privileged == true)
+      (.spec.template.spec.containers + (.spec.template.spec.initContainers // []))[] | select(.securityContext.privileged == true)
     ' >/dev/null 2>&1; then
       bad "${ns}/deploy/${dep} has privileged=true container"
     else
       ok "${ns}/deploy/${dep} no privileged=true"
     fi
-    # runAsNonRoot when set should not be false
+    # Every regular/init container must inherit or explicitly set non-root.
     if echo "$json" | jq -e '
-      (.spec.template.spec.securityContext.runAsNonRoot == false)
-      or (.spec.template.spec.containers[]?.securityContext.runAsNonRoot == false)
+      .spec.template.spec as $pod |
+      ($pod.containers + ($pod.initContainers // []))[] |
+      select((if .securityContext.runAsNonRoot == null then $pod.securityContext.runAsNonRoot else .securityContext.runAsNonRoot end) != true)
     ' >/dev/null 2>&1; then
-      bad "${ns}/deploy/${dep} runAsNonRoot=false"
+      bad "${ns}/deploy/${dep} non-root enforcement missing"
     else
-      ok "${ns}/deploy/${dep} runAsNonRoot not false"
+      ok "${ns}/deploy/${dep} non-root enforcement set"
     fi
     # hostNetwork / hostPID
     if echo "$json" | jq -e '.spec.template.spec.hostNetwork == true or .spec.template.spec.hostPID == true' >/dev/null 2>&1; then
@@ -83,7 +85,7 @@ for ns in "${NS_LIST[@]}"; do
     else
       ok "${ns}/deploy/${dep} no hostNetwork/hostPID"
     fi
-  done < <(kubectl -n "$ns" get deploy -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
+  done <<<"$workloads"
 done
 
 # ClusterRoleBindings that look overly broad for mcp names
@@ -97,7 +99,7 @@ broad="$(kubectl get clusterrolebinding -o json \
         | .name == "system:authenticated" or .name == "system:unauthenticated"
       )
     | .metadata.name
-  ' 2>/dev/null || true)"
+  ')"
 if [[ -z "$broad" ]]; then
   ok "no mcp ClusterRoleBinding to system:authenticated/unauthenticated"
 else

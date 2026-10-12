@@ -25,7 +25,7 @@ repos:
         pass_filenames: false
       - id: go-unit-tests
         name: go unit tests
-        entry: bash -c 'go test -race -count=1 $(go list ./... | grep -v "^mcp-runtime/test")'
+        entry: bash -c 'hack/ci/go-test.sh . -race -count=1 $(go list ./... | grep -v "^mcp-runtime/test")'
         language: system
         pass_filenames: false
         files: ^(api/|cmd/|internal/|pkg/|services/|go\.mod|go\.sum)

@@ -1,31 +1,45 @@
-# mcpruntime.org k3s deployment scripts
+# Reference platform operations
 
-Env file: `config/deployments/mcpruntime-org.env` (see `.example`).
+Kubernetes distribution is a deployment choice. These scripts compose Runtime
+CLI workflows for the public reference platform and retain a narrowly scoped
+k3s host backup path.
 
-| Script | Purpose |
-|--------|---------|
-| `setup.sh` | Build CLI, run `mcp-runtime setup`, auto-restore platform backup when present |
-| `backup.sh` | Save a setup-focused object/Secret snapshot (`--setup`) or a full online K3s/local-path bundle (`--full --online-copy`) |
-| `clean.sh --yes` | Backup TLS/OIDC/bootstrap secrets, delete MCP Runtime namespaces |
-| `restore.sh` | Re-apply platform-runtime backup (TLS, certs, config) |
-| `rollout.sh` | Build/push platform API+UI images; optionally update mcp-auth from published Docker Hub or selected local source; roll deployments |
-| `multitenancy-test.sh` | End-to-end multi-tenant demo via platform API only |
+Copy `config/deployments/mcpruntime-org.env.example` to an untracked private
+profile. Set `MCP_DEPLOY_REF`, `MCP_KUBE_CONTEXT`, `MCP_SETUP_KUBECONFIG`, and
+`MCP_EXPECTED_CLUSTER_UID`. Obtain the UID read-only with:
 
-Shared helpers live in `lib/`:
+```bash
+kubectl --kubeconfig /path/to/prod-config --context prod-mcp-runtime   get namespace kube-system -o jsonpath='{.metadata.uid}'
+```
 
-| Library | Responsibility |
-|---------|----------------|
-| `lib/env.sh` | Load deployment env, kubeconfig, registry host |
-| `lib/backup.sh` | Snapshot and restore platform state; export the full Kubernetes resource inventory |
-| `lib/clean.sh` | Namespace selection and cluster-scoped CR cleanup |
-| `lib/registry.sh` | Registry pull secret and internal skopeo push via port-forward |
+Never make production the default kube context. Profiles are trusted shell
+files: review them, protect their permissions, and never commit credentials.
 
-Runbook: `docs/reference-deployment.md`
+| Operation | Command | Scope |
+|---|---|---|
+| Release plan | `rollout.sh --dry-run` | Clean checkout at the selected stable release; CLI component plan |
+| Release rollout | `rollout.sh --yes` | All Runtime release components via `update --build`; preserves MCP Auth and scoped pull credentials |
+| Existing-platform full reconciliation | `setup.sh --yes` | Strict production setup; existing TLS Secrets; explicit current MCP Auth profile; no automatic restore |
+| Configuration/object snapshot | `backup.sh --setup` | Private resource/Secret inventory, not volume data |
+| Host/volume recovery bundle | `backup.sh --full --online-copy` | Also verifies SSH host cluster UID; online PVC copy needs database-native recovery validation |
+| Reset preview | `clean.sh --dry-run` | Prints selected Runtime namespaces/resources only |
+| Deliberate reset | `clean.sh --yes --confirm-cluster UID --recovery-snapshot PATH` | Requires same-cluster completed full backup and checksums; deletes tenant data |
+| Configuration recovery preview | `restore.sh --snapshot PATH --dry-run` | Explicit verified snapshot, never automatic `latest` |
+| Configuration recovery | `restore.sh --snapshot PATH --yes` | Selected TLS/config/credentials and API restarts; no force-conflicts; not database/PVC restore |
+| Multi-team demo | `multitenancy-test.sh` | Loopback or disposable `.e2e.mcpruntime.org` only; uniquely named demo resources |
 
-Run production builds with the workstation's selected Docker daemon and set
-`MCP_IMAGE_PLATFORM=linux/amd64` for the current k3s nodes. Set
-`MCP_REGISTRY_PUSH_MODE=public` to push unique tags directly to
-`registry.mcpruntime.org/`. The optional mcp-auth update pulls the published
-Docker Hub image by default; building source requires an explicitly selected
-clean ref and `MCP_AUTH_IMAGE_SOURCE=local`. Follow the runbook for the full
-release and user-verification flow.
+`lib/` contains sourced helpers, not independent commands. `verify-snapshot.py`
+checks completion, file coverage/digests and cluster identity. Recovery scripts
+are explicit administrative operations using Kubernetes resource restoration;
+they do not count as customer CLI validation. Image updates and normal resource
+management use the CLI instead.
+
+Registry publishing uses existing Docker credentials. Authenticate through your
+approved credential source (`docker login --password-stdin`); credentials are
+never read and copied into workload pull Secrets by these helpers. Updating MCP
+Auth is a separate selected `mcp-runtime update --only mcp-auth` operation.
+
+For first installation, use `mcp-runtime setup` with the reviewed issuance
+profile. The wrapper intentionally requires existing TLS Secrets for reruns.
+See [the full runbook](../../../docs/reference-deployment.md) for backup scope,
+external identity-provider backup, fresh setup, restoration and verification.

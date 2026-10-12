@@ -48,7 +48,7 @@ if ! start_container "$image"; then
   exit 1
 fi
 
-for attempt in {1..90}; do
+for _attempt in {1..90}; do
   if curl --fail --silent --show-error --max-time 5 --output /dev/null \
     "http://127.0.0.1:${listen_port}/github.com/mcp-runtime/mcp-runtime/pkg/access"; then
     echo "Pkgsite is serving MCP Runtime packages on localhost:${listen_port}"

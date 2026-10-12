@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Namespace selection and MCP Runtime wipe helpers for mcpruntime.org k3s clean.
 
-# shellcheck source=env.sh
+# shellcheck source=hack/deploy/mcpruntime-org/lib/env.sh
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 
 MCP_RUNTIME_PRESERVED_NAMESPACES=(
@@ -68,27 +68,30 @@ mcpruntime_org_should_delete_namespace() {
 }
 
 mcpruntime_org_list_namespaces_to_delete() {
-  local ns
+  local ns inventory
+  inventory="$(mcpruntime_org_kubectl get ns --no-headers)"
   while IFS= read -r ns; do
     [[ -z "$ns" ]] && continue
     if mcpruntime_org_should_delete_namespace "$ns"; then
       printf '%s\n' "$ns"
     fi
-  done < <(mcpruntime_org_kubectl get ns --no-headers 2>/dev/null | awk '{print $1}')
+  done <<<"$(printf '%s\n' "$inventory" | awk '{print $1}')"
 }
 
 mcpruntime_org_clean_cluster_scoped_mcp() {
   local dry_run="${1:-0}"
   echo "Deleting cluster-scoped MCP access objects (tenant/user workload metadata)..."
   if [[ "$dry_run" == "1" ]]; then
-    echo "[dry-run] would delete mcpserver,mcpaccessgrant,mcpagentsession --all -A"
+    echo "[dry-run] would delete MCP custom resources only in selected Runtime namespaces"
     echo "[dry-run] would delete clusterrole,clusterrolebinding -l app.kubernetes.io/managed-by=mcp-runtime"
     return 0
   fi
-  if ! mcpruntime_org_kubectl delete mcpserver,mcpaccessgrant,mcpagentsession --all -A --ignore-not-found --wait=false; then
-    echo "error: failed to delete MCP access CRs" >&2
-    exit 1
-  fi
+  local namespaces ns
+  namespaces="$(mcpruntime_org_list_namespaces_to_delete)"
+  while IFS= read -r ns; do
+    [[ -n "$ns" ]] || continue
+    mcpruntime_org_kubectl delete mcpserver,mcpaccessgrant,mcpagentsession --all -n "$ns" --ignore-not-found --wait=false
+  done <<<"$namespaces"
   if ! mcpruntime_org_kubectl delete clusterrole,clusterrolebinding \
     -l app.kubernetes.io/managed-by=mcp-runtime --ignore-not-found; then
     echo "error: failed to delete MCP Runtime cluster RBAC" >&2
@@ -100,11 +103,12 @@ mcpruntime_org_clean_app_namespaces() {
   local dry_run="${1:-0}"
   local wait_ns="${2:-0}"
   local to_delete=()
-  local ns
+  local ns inventory
+  inventory="$(mcpruntime_org_list_namespaces_to_delete)"
   while IFS= read -r ns; do
     [[ -z "$ns" ]] && continue
     to_delete+=("$ns")
-  done < <(mcpruntime_org_list_namespaces_to_delete)
+  done <<<"$inventory"
 
   if [[ ${#to_delete[@]} -eq 0 ]]; then
     echo "no MCP Runtime namespaces to delete"

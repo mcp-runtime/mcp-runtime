@@ -32,6 +32,7 @@ jobs:
       name: production
       url: https://platform.mcpruntime.org
     env:
+      MCP_EXPECTED_CLUSTER_UID: 7ae464e3-72ea-479f-ad40-85572cf687aa
       RELEASE_TAG: ${{ inputs.tag }}
       VERIFY_ONLY: ${{ inputs.verify_only || false }}
       MCP_AUTH_VERSION: ${{ inputs.mcp_auth_version || '' }}
@@ -180,6 +181,9 @@ jobs:
           test "$auth_metadata_ready" = true
           gh api "repos/$GITHUB_REPOSITORY/contents/hack/deploy/hosted-platform/post-deploy-check.sh?ref=main" \
             --jq .content | base64 -d > "$RUNNER_TEMP/post-deploy-check.sh"
+          mkdir -p hack/deploy/hosted-platform
+          gh api "repos/$GITHUB_REPOSITORY/contents/hack/deploy/hosted-platform/check-calls.py?ref=main" \
+            --jq .content | base64 -d > hack/deploy/hosted-platform/check-calls.py
           bash "$RUNNER_TEMP/post-deploy-check.sh"
 
   publish-live-version:

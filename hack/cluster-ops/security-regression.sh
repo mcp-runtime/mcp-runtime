@@ -14,11 +14,14 @@
 # Suites:
 #   A  backend auth enforcement
 #   E  UI security headers
-#   F  login + lockout (best-effort; lockout may need cool-down)
+#   F  login + lockout (fresh test account; selected check must pass)
 #   G  UI session proxy vs direct API
 #   I  live-log secret scan (always recommended)
-#   matrix  also run hack/validate-authz-matrix.sh (uses gateway port-forward)
+#   matrix  explicit loopback service URLs and non-admin credentials
 set -euo pipefail
+umask 077
+scratch="$(mktemp -d)"
+trap 'rm -rf "$scratch"' EXIT
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
@@ -27,6 +30,10 @@ TEST_KUBECONFIG="${TEST_KUBECONFIG:-${KUBECONFIG:-$HOME/.kube/test-mcp-runtime-c
 export KUBECONFIG="$TEST_KUBECONFIG"
 BASE_URL="${BASE_URL:-http://localhost:18080}"
 SUITES="${SUITES:-A,E,F,G,I}"
+IFS=',' read -r -a selected_suites <<<"$SUITES"
+for suite in "${selected_suites[@]}"; do
+  case "$suite" in A|E|F|G|I|matrix) ;; *) echo "Unknown suite: $suite" >&2; exit 2 ;; esac
+done
 NS_PLATFORM="${NS_PLATFORM:-mcp-platform}"
 NS_OBSERVABILITY="${NS_OBSERVABILITY:-mcp-observability}"
 
@@ -46,12 +53,11 @@ need_cmd curl
 need_cmd jq
 need_cmd base64
 
-ctx="$(kubectl config current-context 2>/dev/null || true)"
-if [[ "$ctx" != "test-mcp-runtime" ]]; then
-  log "FAIL expected kube context test-mcp-runtime, got: ${ctx:-none}"
-  log "hint: export KUBECONFIG=\$HOME/.kube/test-mcp-runtime-config after contributor-cluster"
-  exit 1
-fi
+# shellcheck source=hack/lib/test-cluster.sh
+source "$ROOT/hack/lib/test-cluster.sh"
+require_test_cluster
+require_test_url "$BASE_URL"
+
 
 if ! curl -fsS -o /dev/null --connect-timeout 2 "${BASE_URL}/" 2>/dev/null; then
   log "FAIL ${BASE_URL} is not reachable"
@@ -83,32 +89,32 @@ suite_enabled() {
 if suite_enabled A; then
   log "=== suite A: backend auth ==="
   c="$(code GET "${BASE_URL}/api/v1/dashboard/summary")"
-  [[ "$c" == "401" ]] && ok "anon dashboard=$c" || bad "anon dashboard want 401 got $c"
+  if [[ "$c" == "401" ]]; then ok "anon dashboard=$c"; else bad "anon dashboard want 401 got $c"; fi
 
   c="$(code GET "${BASE_URL}/api/v1/analytics/usage")"
-  [[ "$c" == "401" ]] && ok "anon analytics=$c" || bad "anon analytics want 401 got $c"
+  if [[ "$c" == "401" ]]; then ok "anon analytics=$c"; else bad "anon analytics want 401 got $c"; fi
 
   c="$(code GET "${BASE_URL}/api/v1/dashboard/summary" -H "x-api-key: NOPE")"
-  [[ "$c" == "401" ]] && ok "bad-key dashboard=$c" || bad "bad-key dashboard want 401 got $c"
+  if [[ "$c" == "401" ]]; then ok "bad-key dashboard=$c"; else bad "bad-key dashboard want 401 got $c"; fi
 
   c="$(code GET "${BASE_URL}/api/v1/dashboard/summary" -H "x-api-key: ${INGEST_KEY}")"
-  [[ "$c" == "401" || "$c" == "403" ]] && ok "ingest-only dashboard=$c" || bad "ingest-only dashboard want 401/403 got $c"
+  if [[ "$c" == "401" || "$c" == "403" ]]; then ok "ingest-only dashboard=$c"; else bad "ingest-only dashboard want 401/403 got $c"; fi
 
   c="$(code GET "${BASE_URL}/api/v1/dashboard/summary" -H "x-api-key: ${ADMIN_KEY}")"
-  [[ "$c" == "200" ]] && ok "admin dashboard=$c" || bad "admin dashboard want 200 got $c"
+  if [[ "$c" == "200" ]]; then ok "admin dashboard=$c"; else bad "admin dashboard want 200 got $c"; fi
 
   c="$(code POST "${BASE_URL}/api/v1/runtime/grants" \
     -H "x-api-key: ${INGEST_KEY}" -H "content-type: application/json" -d '{}')"
-  [[ "$c" == "401" || "$c" == "403" ]] && ok "ingest-write grants=$c" || bad "ingest-write grants want 401/403 got $c"
+  if [[ "$c" == "401" || "$c" == "403" ]]; then ok "ingest-write grants=$c"; else bad "ingest-write grants want 401/403 got $c"; fi
 fi
 
 # --- E: UI security headers ---
 if suite_enabled E; then
   log "=== suite E: UI security headers ==="
-  hdr="$(mktemp)"
+  hdr="$scratch/headers"
   curl -sSI "${BASE_URL}/" | tr -d '\r' >"$hdr"
-  grep -q '^X-Content-Type-Options: nosniff$' "$hdr" && ok "nosniff" || bad "missing X-Content-Type-Options: nosniff"
-  grep -qi "Content-Security-Policy:.*frame-ancestors 'none'" "$hdr" && ok "csp frame-ancestors" || bad "missing CSP frame-ancestors none"
+  if grep -q '^X-Content-Type-Options: nosniff$' "$hdr"; then ok "nosniff"; else bad "missing X-Content-Type-Options: nosniff"; fi
+  if grep -qi "Content-Security-Policy:.*frame-ancestors 'none'" "$hdr"; then ok "csp frame-ancestors"; else bad "missing CSP frame-ancestors none"; fi
   if grep -qi "script-src.*unsafe-inline" "$hdr"; then
     bad "CSP allows unsafe-inline"
   else
@@ -120,43 +126,10 @@ if suite_enabled E; then
     ok "no HSTS on plain HTTP"
   fi
   curl -sSI -H "X-Forwarded-Proto: https" "${BASE_URL}/" | tr -d '\r' >"$hdr"
-  grep -qi '^Strict-Transport-Security: max-age=' "$hdr" && ok "HSTS on forwarded HTTPS" || bad "missing HSTS on X-Forwarded-Proto https"
+  if grep -qi '^Strict-Transport-Security: max-age=' "$hdr"; then ok "HSTS on forwarded HTTPS"; else bad "missing HSTS on X-Forwarded-Proto https"; fi
   curl -sSI -H "x-api-key: ${ADMIN_KEY}" "${BASE_URL}/api/v1/dashboard/summary" | tr -d '\r' >"$hdr"
-  grep -qi '^Cache-Control:.*no-store' "$hdr" && ok "api Cache-Control no-store" || bad "missing Cache-Control no-store on /api/v1"
+  if grep -qi '^Cache-Control:.*no-store' "$hdr"; then ok "api Cache-Control no-store"; else bad "missing Cache-Control no-store on /api/v1"; fi
   rm -f "$hdr"
-fi
-
-# --- F: login + lockout ---
-if suite_enabled F; then
-  log "=== suite F: login + lockout ==="
-  jar="$(mktemp)"
-  resp="$(mktemp)"
-  code_line="$(curl -sS -i -c "$jar" -H "content-type: application/json" \
-    -d '{"email":"test@mcpruntime.org","password":"test@123"}' \
-    "${BASE_URL}/auth/login" | tee "$resp" | head -1 | tr -d '\r')"
-  if grep -q 'mcp_ui_session' "$jar"; then
-    ok "login sets mcp_ui_session (${code_line})"
-  else
-    bad "login did not set mcp_ui_session (${code_line})"
-  fi
-  saw_lock=0
-  saw_5xx=0
-  for i in 1 2 3 4 5 6; do
-    c="$(code POST "${BASE_URL}/auth/login" -H "content-type: application/json" \
-      -d '{"email":"test@mcpruntime.org","password":"WRONG"}')"
-    case "$c" in
-      429|403) saw_lock=1 ;;
-      5*) saw_5xx=1 ;;
-    esac
-  done
-  [[ "$saw_5xx" -eq 0 ]] && ok "wrong-password loop no 5xx" || bad "wrong-password loop returned 5xx"
-  # Lockout is best-effort across shared Kind clusters; warn but do not fail the suite alone.
-  if [[ "$saw_lock" -eq 1 ]]; then
-    ok "saw lockout status on wrong password"
-  else
-    log "WARN lockout status not observed (cluster may already be locked or threshold differs)"
-  fi
-  rm -f "$jar" "$resp"
 fi
 
 # --- G: UI proxy vs direct API ---
@@ -167,21 +140,60 @@ if suite_enabled G; then
   else
     ok "no apiKey in /config.js"
   fi
-  jar="$(mktemp)"
+  jar="$scratch/cookies"
   curl -sS -c "$jar" -H "content-type: application/json" \
     -d '{"email":"test@mcpruntime.org","password":"test@123"}' \
-    "${BASE_URL}/auth/login" >/dev/null || true
+    "${BASE_URL}/auth/login" >/dev/null
+  if grep -q 'mcp_ui_session' "$jar"; then ok "session proxy test logged in"; else bad "session proxy login failed"; fi
+  c="$(code GET "${BASE_URL}/api/ui/v1/runtime/servers" -b "$jar")"
+  if [[ "$c" == 200 ]]; then ok "cookie-backed UI proxy=$c"; else bad "cookie-backed UI proxy want 200 got $c"; fi
+  c="$(code POST "${BASE_URL}/api/ui/v1/runtime/grants" -b "$jar" -H 'content-type: application/json' -d '{}')"
+  if [[ "$c" == 403 ]]; then ok "UI proxy rejects write without CSRF"; else bad "UI proxy missing CSRF guard, got $c"; fi
   c="$(code GET "${BASE_URL}/api/v1/dashboard/summary" -b "$jar")"
-  [[ "$c" == "401" ]] && ok "cookie alone on direct api=$c" || bad "cookie alone on direct api want 401 got $c"
+  if [[ "$c" == "401" ]]; then ok "cookie alone on direct api=$c"; else bad "cookie alone on direct api want 401 got $c"; fi
   c="$(code GET "${BASE_URL}/api/v1/dashboard/summary" -H "x-api-key: ${ADMIN_KEY}")"
-  [[ "$c" == "200" ]] && ok "direct admin key=$c" || bad "direct admin key want 200 got $c"
+  if [[ "$c" == "200" ]]; then ok "direct admin key=$c"; else bad "direct admin key want 200 got $c"; fi
   rm -f "$jar"
+fi
+
+# --- F: login + lockout ---
+if suite_enabled F; then
+  log "=== suite F: login + lockout ==="
+  jar="$scratch/cookies"
+  resp="$scratch/response"
+  code_line="$(curl -sS -i -c "$jar" -H "content-type: application/json" \
+    -d '{"email":"test@mcpruntime.org","password":"test@123"}' \
+    "${BASE_URL}/auth/login" | tee "$resp" | head -1 | tr -d '\r')"
+  if grep -q 'mcp_ui_session' "$jar"; then
+    ok "login sets mcp_ui_session (${code_line})"
+  else
+    bad "login did not set mcp_ui_session (${code_line})"
+  fi
+  saw_lock=0
+  saw_5xx=0
+  for _attempt in 1 2 3 4 5 6; do
+    c="$(code POST "${BASE_URL}/auth/login" -H "content-type: application/json" \
+      -d '{"email":"test@mcpruntime.org","password":"WRONG"}')"
+    case "$c" in
+      429|403) saw_lock=1 ;;
+      5*) saw_5xx=1 ;;
+    esac
+  done
+  if [[ "$saw_5xx" -eq 0 ]]; then ok "wrong-password loop no 5xx"; else bad "wrong-password loop returned 5xx"; fi
+  # A selected lockout check must enforce the expected behavior.
+  if [[ "$saw_lock" -eq 1 ]]; then
+    ok "saw lockout status on wrong password"
+  else
+    bad "lockout status not observed; use a fresh disposable account/cluster"
+  fi
+  rm -f "$jar" "$resp"
 fi
 
 # --- I: live-log secret scan ---
 if suite_enabled I; then
   log "=== suite I: live-log secret scan ==="
   hits=0
+  scanned=0
   pattern='Bearer [A-Za-z0-9._-]{20,}|sk-[A-Za-z0-9]{16,}|eyJ[A-Za-z0-9._-]{20,}|x-api-key:[[:space:]]*[A-Za-z0-9_-]{12,}'
   for ns in mcp-runtime mcp-platform mcp-observability mcp-log-collector mcp-servers traefik registry; do
     if ! kubectl get ns "$ns" >/dev/null 2>&1; then
@@ -189,19 +201,24 @@ if suite_enabled I; then
     fi
     while IFS= read -r pod; do
       [[ -z "$pod" ]] && continue
-      if kubectl logs -n "$ns" "$pod" --all-containers --since=10m 2>/dev/null | grep -aE "$pattern" >/dev/null; then
+      if ! kubectl logs -n "$ns" "$pod" --all-containers --since=10m >"$scratch/pod.log"; then
+        bad "could not read logs ns=$ns pod=$pod"; continue
+      fi
+      scanned=$((scanned + 1))
+      if grep -aE "$pattern" "$scratch/pod.log" >/dev/null; then
         bad "secret-like pattern in logs ns=${ns} pod=${pod} (value redacted)"
         hits=$((hits + 1))
       fi
     done < <(kubectl get pods -n "$ns" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
   done
-  [[ "$hits" -eq 0 ]] && ok "no secret-like patterns in recent logs"
+  [[ "$scanned" -gt 0 ]] || bad "no pod logs were inspected"
+  if [[ "$hits" -eq 0 && "$scanned" -gt 0 ]]; then ok "no secret-like patterns in $scanned inspected pod logs"; fi
 fi
 
 # --- optional authz matrix ---
 if suite_enabled matrix; then
   log "=== suite matrix: authz-matrix ==="
-  if bash "${ROOT}/hack/validate-authz-matrix.sh" "${AUTHZ_BASE:-http://127.0.0.1:18083}"; then
+  if bash "${ROOT}/hack/validate-authz-matrix.sh"; then
     ok "validate-authz-matrix"
   else
     bad "validate-authz-matrix"

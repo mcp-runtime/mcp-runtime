@@ -184,3 +184,17 @@ incidents:
       follow_up: "https://github.com/mcp-runtime/mcp-runtime/issues/546"
       expires: "2026-12-31"
       blocker: Existing coverage has not been inventoried.
+
+  - id: "696"
+    title: Guard reference automation and require real acceptance coverage
+    protected_behavior: >-
+      Wrong-cluster and unverified resets never mutate resources; rollouts delegate
+      all Runtime components without admin pull-secret rewriting; tests isolate
+      kubeconfig and never accept failed allowed calls or crashes as policy denial.
+    status: covered
+    checks:
+      - kind: script
+        path: hack/tests/automation_test.py
+        name: test_rollout_wrong_cluster_stops_before_build_or_update
+        command: hack/ci/check-scripts.sh
+        ci_job: ci.yaml#automation

@@ -1,47 +1,27 @@
 #!/usr/bin/env bash
-# Re-apply platform-runtime backups (TLS, certs, OIDC config) after setup.
-#
-# Typical use: called automatically by hack/deploy/mcpruntime-org/setup.sh when a
-# backup snapshot exists. Can also be run manually after setup.
+# Explicit configuration recovery, not database/PVC restoration.
 set -euo pipefail
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib/backup.sh
+# shellcheck source=hack/deploy/mcpruntime-org/lib/backup.sh
 source "$SCRIPT_DIR/lib/backup.sh"
-
-DRY_RUN=0
-
-usage() {
-  cat <<'EOF'
-Usage: hack/deploy/mcpruntime-org/restore.sh [--dry-run]
-
-  --dry-run   Print restore actions without applying resources.
-
-Environment (via config/deployments/mcpruntime-org.env):
-  KUBECONFIG            cluster kubeconfig path (required)
-  MCP_TLS_BACKUP_DIR    backup root (default: ~/.mcpruntime/backups/mcpruntime-org)
-EOF
-}
-
+dry_run=0; yes=0; snapshot=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --dry-run)
-      DRY_RUN=1
-      shift
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
-    *)
-      echo "unknown argument: $1" >&2
-      usage >&2
-      exit 1
-      ;;
+    --dry-run) dry_run=1; shift ;;
+    --yes) yes=1; shift ;;
+    --snapshot) snapshot="${2:?Expected snapshot path}"; shift 2 ;;
+    --help|-h)
+      echo 'Usage: restore.sh --snapshot PATH --dry-run | --snapshot PATH --yes'
+      echo 'Restores selected TLS/config/credentials and restarts APIs; does not restore databases or volume contents.'
+      exit 0 ;;
+    *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
 done
-
-mcpruntime_org_load_env 1
-MCP_TLS_DRY_RUN="$DRY_RUN"
+[[ -n "$snapshot" && ( "$yes" == 1 || "$dry_run" == 1 ) ]] || { echo 'Select --snapshot and --dry-run or --yes' >&2; exit 2; }
+mcpruntime_org_load_env
 mcpruntime_org_require_cluster
+MCP_TLS_SNAPSHOT_DIR="$(python3 "$SCRIPT_DIR/lib/verify-snapshot.py" "$snapshot" "$MCP_EXPECTED_CLUSTER_UID")"
+# Resolve exactly the reviewed snapshot; never follow the automatic latest pointer.
+MCP_TLS_BACKUP_ROOT="$MCP_TLS_SNAPSHOT_DIR"
+MCP_TLS_DRY_RUN="$dry_run"
 mcpruntime_org_restore_platform_runtime

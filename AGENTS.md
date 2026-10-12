@@ -99,6 +99,18 @@ unless their workflow has been adapted into `.codex/skills/`.
   `docs/contributor/staging-e2e.md` and `production-platform`).
   Then load the focused skill for the diff. No release-orchestrator skill.
 
+## Repository automation
+
+`hack/README.md` lists maintained automation and its execution boundaries.
+Reference deployment helpers require explicit source ref, kube context and
+expected cluster UID. Normal releases use CLI component-aware updates; setup
+never restores automatically. Reset/recovery require an explicit verified
+snapshot and confirmation. Live traffic/performance/matrix probes require actual
+Kind node identity; posture inventory is read-only. Run the offline automation
+regressions with `python3 -m unittest discover -s hack/tests -p '*_test.py'`.
+Hosted acceptance must test both allowed and denied calls through a real
+agent/grant/certificate session before updating the live-version badge.
+
 ## Build, test, and quality (before you push)
 
 Go version from `go.mod`. From repo root:

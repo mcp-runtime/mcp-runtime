@@ -79,9 +79,10 @@ the registry NetworkPolicy uses to admit them and to grant their egress.
 
 Anonymous pushes are rejected once backend authentication is active, including
 pushes through a `kubectl port-forward` to the registry Service. The reference
-deployment's `hack/deploy/mcpruntime-org/rollout.sh` must therefore use
-`MCP_REGISTRY_PUSH_MODE=public`, which logs in to the public registry host with
-the platform service key.
+deployment's `hack/deploy/mcpruntime-org/rollout.sh` delegates builds and
+publication to `mcp-runtime update --build` with existing approved Docker
+credentials. It never replaces repository-scoped workload pull Secrets with
+the install admin credential.
 
 ## Network policy
 

@@ -3,7 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib/backup.sh
+# shellcheck source=hack/deploy/mcpruntime-org/lib/backup.sh
 source "$SCRIPT_DIR/lib/backup.sh"
 
 ALLOW_ONLINE_COPY=0
@@ -82,11 +82,7 @@ if [[ "$SETUP_BACKUP" == "1" && "$ALLOW_ONLINE_COPY" == "1" ]]; then
   exit 1
 fi
 
-mcpruntime_org_load_env 1
-if [[ "${MCP_KUBE_CONTEXT:-}" != "prod-mcp-runtime" ]]; then
-  echo "error: full public backup requires MCP_KUBE_CONTEXT=prod-mcp-runtime" >&2
-  exit 1
-fi
+mcpruntime_org_load_env
 mcpruntime_org_require_cluster
 
 if [[ "$FULL_BACKUP" == "1" && -z "${MCP_PRODUCTION_SSH_HOST:-}" ]]; then
@@ -150,19 +146,22 @@ PY
 fi
 
 LOCAL_DB="$MCP_TLS_SNAPSHOT_DIR/k3s-state.db"
-REMOTE_DB="/tmp/mcp-runtime-state-${USER:-operator}-$(date -u +%Y%m%dT%H%M%SZ)-$$.db"
+REMOTE_DB="/tmp/mcp-runtime-state-$(date -u +%Y%m%dT%H%M%SZ)-$$.db"
+[[ "$MCP_PRODUCTION_SSH_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]] || { echo 'Invalid SSH hostname' >&2; exit 1; }
 REMOTE="root@${MCP_PRODUCTION_SSH_HOST}"
+remote_uid="$(ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$REMOTE" "kubectl get namespace kube-system -o jsonpath='{.metadata.uid}'")"
+[[ "$remote_uid" == "$MCP_EXPECTED_CLUSTER_UID" ]] || { echo 'SSH host does not match the selected Kubernetes cluster' >&2; exit 1; }
 cleanup_remote_db() {
-  ssh "$REMOTE" "rm -f '$REMOTE_DB'" >/dev/null 2>&1 || true
+  ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$REMOTE" "rm -f '$REMOTE_DB'" >/dev/null 2>&1 || true
 }
 trap cleanup_remote_db EXIT
 REMOTE_DB_CMD="test -s /var/lib/rancher/k3s/server/db/state.db && python3 -c 'import sqlite3; source=sqlite3.connect(\"/var/lib/rancher/k3s/server/db/state.db\"); target=sqlite3.connect(\"${REMOTE_DB}\"); source.backup(target); target.close(); source.close()'"
-if ! ssh "$REMOTE" "$REMOTE_DB_CMD"; then
+if ! ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$REMOTE" "$REMOTE_DB_CMD"; then
   echo "error: could not create online SQLite state snapshot on the k3s node" >&2
   exit 1
 fi
-if ! scp "$REMOTE:$REMOTE_DB" "$LOCAL_DB"; then
-  ssh "$REMOTE" "rm -f '$REMOTE_DB'" >/dev/null 2>&1 || true
+if ! scp -o BatchMode=yes -o StrictHostKeyChecking=yes "$REMOTE:$REMOTE_DB" "$LOCAL_DB"; then
+  ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$REMOTE" "rm -f '$REMOTE_DB'" >/dev/null 2>&1 || true
   echo "error: could not copy the SQLite state snapshot from the k3s node" >&2
   exit 1
 fi
@@ -182,7 +181,7 @@ HOST_ARCHIVE_TMP="${HOST_ARCHIVE}.tmp"
 HOST_ARCHIVE_LOG="$MCP_TLS_SNAPSHOT_DIR/k3s-host-and-pv-data.tar.log"
 REMOTE_TAR_CMD="cd / && tar --numeric-owner --acls --xattrs --exclude='var/lib/rancher/k3s/server/db/state.db*' -czf - etc/rancher/k3s var/lib/rancher/k3s/server var/lib/rancher/k3s/storage"
 TAR_STATUS=0
-if ssh "$REMOTE" "$REMOTE_TAR_CMD" >"$HOST_ARCHIVE_TMP" 2>"$HOST_ARCHIVE_LOG"; then
+if ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$REMOTE" "$REMOTE_TAR_CMD" >"$HOST_ARCHIVE_TMP" 2>"$HOST_ARCHIVE_LOG"; then
   :
 else
   TAR_STATUS=$?

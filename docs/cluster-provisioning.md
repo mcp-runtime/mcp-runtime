@@ -396,7 +396,7 @@ your enterprise issuer, or pre-created TLS secrets.
 Let's Encrypt limits duplicate certificates to five per domain set per seven days.
 Use [Reference Deployment - Step 0](reference-deployment.md#step-0-back-up-platform-runtime-state-before-any-wipe)
 or `hack/deploy/mcpruntime-org/clean.sh --yes` to back up platform-runtime TLS
-before delete, then `hack/deploy/mcpruntime-org/setup.sh` to restore after setup.
+before delete. Review an explicit recovery snapshot, then run `restore.sh --snapshot PATH --yes` separately; setup never restores automatically.
 
 Back up cert-manager `Certificate`, `Issuer` or `ClusterIssuer`, and TLS
 `Secret` objects when migrating an existing public install that already

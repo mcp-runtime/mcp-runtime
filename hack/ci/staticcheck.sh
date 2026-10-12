@@ -6,7 +6,7 @@ bin="${gopath}/bin/staticcheck"
 
 if [[ ! -x "${bin}" ]]; then
   echo "staticcheck not found at ${bin}. Install with:" >&2
-  echo "  GOTOOLCHAIN=go1.24.11 go install honnef.co/go/tools/cmd/staticcheck@latest" >&2
+  echo "  go install honnef.co/go/tools/cmd/staticcheck@v0.7.0" >&2
   exit 1
 fi
 

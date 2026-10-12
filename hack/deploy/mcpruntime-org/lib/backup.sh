@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Platform-runtime backup and restore for mcpruntime.org k3s deployments.
 
-# shellcheck source=env.sh
+# shellcheck source=hack/deploy/mcpruntime-org/lib/env.sh
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 
 MCP_TLS_BACKUP_ROOT="${MCP_TLS_BACKUP_DIR:-$HOME/.mcpruntime/backups/mcpruntime-org}"
@@ -19,6 +19,7 @@ mcpruntime_org_backup_ensure_root() {
 }
 
 mcpruntime_org_backup_init_snapshot() {
+  MCP_TLS_BACKUP_ROOT="${MCP_TLS_BACKUP_DIR:-$HOME/.mcpruntime/backups/mcpruntime-org}"
   mcpruntime_org_backup_ensure_root
   if [[ "$MCP_TLS_DRY_RUN" == "1" ]]; then
     echo "[dry-run] snapshot directory: $MCP_TLS_SNAPSHOT_DIR"
@@ -32,6 +33,10 @@ mcpruntime_org_backup_init_snapshot() {
   MCP_TLS_SNAPSHOT_DIR="$MCP_TLS_BACKUP_ROOT/$stamp"
   mkdir -p "$MCP_TLS_SNAPSHOT_DIR"
   chmod 0700 "$MCP_TLS_SNAPSHOT_DIR"
+  python3 - "$MCP_EXPECTED_CLUSTER_UID" "$MCP_KUBE_CONTEXT" >"$MCP_TLS_SNAPSHOT_DIR/cluster-identity.json" <<'IDENTITY'
+import json, sys
+print(json.dumps({"clusterUID": sys.argv[1], "context": sys.argv[2]}))
+IDENTITY
   echo "backup snapshot staging: $MCP_TLS_SNAPSHOT_DIR"
 }
 
@@ -56,18 +61,6 @@ mcpruntime_org_backup_publish_latest() {
   stamp="$(basename "$MCP_TLS_SNAPSHOT_DIR")"
   ln -sfn "$stamp" "$MCP_TLS_BACKUP_ROOT/latest"
   echo "complete $backup_kind backup snapshot: $MCP_TLS_SNAPSHOT_DIR"
-}
-
-mcpruntime_org_backup_resolve_dir() {
-  if [[ -L "$MCP_TLS_BACKUP_ROOT/latest" && -d "$MCP_TLS_BACKUP_ROOT/latest" ]]; then
-    MCP_TLS_SNAPSHOT_DIR="$(cd "$MCP_TLS_BACKUP_ROOT/latest" && pwd)"
-    return 0
-  fi
-  if [[ -f "$MCP_TLS_BACKUP_ROOT/registry-tls.yaml" ]]; then
-    MCP_TLS_SNAPSHOT_DIR="$MCP_TLS_BACKUP_ROOT"
-    return 0
-  fi
-  return 1
 }
 
 mcpruntime_org_backup_is_not_found() {
@@ -241,7 +234,7 @@ mcpruntime_org_backup_strip_and_apply() {
         .metadata.annotations["kubectl.kubernetes.io/last-applied-configuration"],
         .status
       )' \
-    | mcpruntime_org_kubectl apply --server-side --force-conflicts -f -
+    | mcpruntime_org_kubectl apply --server-side -f -
   echo "restored $label"
 }
 
@@ -275,9 +268,9 @@ mcpruntime_org_backup_warn_certificates() {
 }
 
 mcpruntime_org_restore_platform_runtime() {
-  if ! mcpruntime_org_backup_resolve_dir; then
+  if [[ -z "$MCP_TLS_SNAPSHOT_DIR" || ! -d "$MCP_TLS_SNAPSHOT_DIR" ]]; then
     echo "error: no platform backup found under $MCP_TLS_BACKUP_ROOT" >&2
-    echo "       expected $MCP_TLS_BACKUP_ROOT/latest or flat registry-tls.yaml" >&2
+    echo "       pass a checksum-verified explicit snapshot" >&2
     exit 1
   fi
   echo "Restoring platform-runtime backups from $MCP_TLS_SNAPSHOT_DIR"

@@ -69,3 +69,5 @@ Cluster-level checks must use guarded Kind or disposable staging targets; see
 
 These are tracked gaps, not claims of coverage. The release gate and the
 reporting of passed/failed/skipped/quarantined coverage remain open work on #546.
+
+Automation safety ([#696](https://github.com/mcp-runtime/mcp-runtime/issues/696)) is covered by fake-tool regressions in `hack/tests/automation_test.py`, executed by the CI Automation Regression job. They prove boundary decisions; live deployment acceptance remains a separate hosted workflow.

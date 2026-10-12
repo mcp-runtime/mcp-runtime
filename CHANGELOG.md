@@ -7,6 +7,11 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Changed
+
+- Reference deployment helpers now require explicit source/cluster identity and use component-aware CLI release updates without replacing scoped registry pull credentials. Setup and configuration recovery are separate explicit operations; resets require a verified same-cluster full backup. Existing helper invocations/profiles must adopt the flags and identity fields documented in `hack/README.md`. ([#696](https://github.com/mcp-runtime/mcp-runtime/issues/696))
+- Repository automation now enforces real test coverage, isolated test kubeconfigs, Kind-only live probes, per-service authorization credentials, scoped demo-session cleanup and grant/session tool-call acceptance. Removed historical API-split milestone scripts and the Minikube installer; use maintained service tests and Kind E2E instead.
+
 ## [0.7.1] - 2026-10-11
 
 ### Security

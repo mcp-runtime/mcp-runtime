@@ -138,14 +138,10 @@ default. Override the path with `MCP_DEPLOY_ENV=/path/to/other.env`. See
 | `MCP_REGISTRY_HOST` | do not set | — | Public ingress hostname; derived from `MCP_PLATFORM_DOMAIN`. Do not use as the internal pull URL. |
 | `MCP_REGISTRY_INTERNAL` | optional | rollout | Override registry ClusterIP:port for **build/push** inside rollout script only. Pull path still uses `MCP_REGISTRY_ENDPOINT` in configmap. |
 | `MCP_REGISTRY_PUSH_MODE` | `internal` | rollout | `public` pushes directly to `registry.<domain>` using the workstation's selected Docker daemon. |
-| `MCP_UPDATE_MCP_AUTH` | `0` | rollout | Set to `1` only when updating the bundled authorization server. |
-| `MCP_AUTH_IMAGE_SOURCE` | `published` | rollout | `published` pulls the configured Docker Hub image (default `0.4.4`); choose `local` only when intentionally testing a selected mcp-auth source ref. |
-| `MCP_AUTH_DOCKERHUB_IMAGE` | `docker.io/princekrroshan01/mcp-auth-server:0.4.4` | rollout | Published image source, copied to the Runtime registry under a unique candidate tag. |
-| `MCP_AUTH_SOURCE` | sibling `mcp-auth` checkout | rollout | Source checkout, used only with `MCP_AUTH_IMAGE_SOURCE=local`. |
-| `MCP_AUTH_BUILD_REF` | required for local source | rollout | Selected branch, tag, or commit; rollout requires a clean checkout at this ref. |
-| `MCP_AUTH_IMAGE_TAG` | `<MCP_ROLLOUT_TAG>-auth` | rollout | Unique tag for the candidate mcp-auth image. |
-| `MCP_AUTH_CLIENT_ID_METADATA_ENABLED` | `true` (mcp-auth default) | rollout | Optional mcp-auth setting; set to `false` to disable CIMD. Verify authorization-server metadata advertises the feature after rollout. |
-| `MCP_AUTH_CLIENT_ID_METADATA_HOSTS` | unset | rollout | Optional comma-separated CIMD metadata host allowlist; an empty list allows public hosts and still applies mcp-auth's SSRF checks. |
+
+MCP Auth updates use a separately reviewed release manifest and
+`mcp-runtime update --only mcp-auth`. The Runtime rollout wrapper does not build,
+copy or change MCP Auth images.
 
 #### Setup behavior (read by `hack/deploy/mcpruntime-org/setup.sh`)
 
@@ -215,13 +211,15 @@ gateway fails closed with 401 when a token's `aud` does not match.
 
 #### Rollout-only (`hack/deploy/mcpruntime-org/rollout.sh`)
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `MCP_ROLLOUT_TAG` | `verify-MMDDHHMM` | Image tag for API/UI build and push. |
+Set `MCP_DEPLOY_REF` to the selected stable release, `MCP_KUBE_CONTEXT` to the
+explicit target context, and `MCP_EXPECTED_CLUSTER_UID` to that cluster's
+`kube-system` namespace UID. The wrapper requires a clean source checkout at
+the release commit and delegates all component rollouts to `mcp-runtime update`.
+It does not rewrite pull Secrets or tenant NetworkPolicies.
 
 #### Multitenancy test (`hack/deploy/mcpruntime-org/multitenancy-test.sh`)
 
-These are **not** in the deployment profile. Export them when you run the test against production URLs:
+These are **not** in the deployment profile. Export them only for loopback or disposable `.e2e.mcpruntime.org` URLs; this provisioning demo refuses production hosts.
 
 | Variable | Example | Purpose |
 |----------|---------|---------|
@@ -288,159 +286,51 @@ MCP_SETUP_WAIT_TIMEOUT=900 MCP_CERT_TIMEOUT=15m \
 
 ### Reruns / upgrades (reuse existing certs to avoid LE rate limits)
 
-When cert-manager already issued `registry-cert` and
-`mcp-platform-tls`, **do not** pass `--acme-email` again. Use the saved
-profile and helper script:
+Use an explicit private deployment profile and a clean checkout at the selected
+published release. Record the cluster UID read-only; do not select production as
+the ambient kube context. Configure these helper inputs in the profile:
 
 ```bash
-hack/deploy/mcpruntime-org/setup.sh
+export MCP_SETUP_KUBECONFIG=/path/to/prod-kubeconfig
+export MCP_KUBE_CONTEXT=prod-mcp-runtime
+export MCP_EXPECTED_CLUSTER_UID=<kube-system-namespace-uid>
+export MCP_DEPLOY_REF=<selected-stable-release>
 ```
 
-For code-only changes (registry push, team create, API fixes) without a full
-platform rebuild, use the targeted platform rollout:
+For ordinary release image updates:
 
 ```bash
-hack/deploy/mcpruntime-org/rollout.sh
+hack/deploy/mcpruntime-org/rollout.sh --dry-run
+hack/deploy/mcpruntime-org/rollout.sh --yes
 ```
 
-That rebuilds/pushes the three split API images (`mcp-platform-api`,
-`mcp-runtime-api`, `mcp-analytics-api`), `mcp-ui`, and the doctor
-smoke image, patches the production registry/Traefik settings and pull secret,
-then waits for rollouts. It does not run setup or request certificates.
+The wrapper uses `mcp-runtime update --build` and the published component
+manifest. All changed Runtime components roll sequentially with the CLI's
+rollback behavior. Existing registry-scoped pull Secrets, certificates,
+configuration and MCP Auth remain unchanged. Supply existing Docker registry
+credentials through an approved login workflow; the wrapper never copies an
+admin key into Kubernetes pull Secrets.
 
-Build and push from the workstation's selected Docker daemon. Target the k3s
-node architecture explicitly; the example cluster currently runs amd64 nodes.
-The rollout script uses `MCP_IMAGE_PLATFORM` for every build and pushes tagged
-images directly to the public bundled registry. Kubernetes commands use the
-shared `prod-mcp-runtime` kubeconfig context.
+Full setup is separate and must be deliberate:
 
 ```bash
-source config/deployments/mcpruntime-org.env
-PROD_KUBECONFIG="$HOME/.kube/prod-mcp-runtime-config"
-docker info --format '{{.Name}} {{.OSType}}/{{.Architecture}}'
-RUNTIME_COMMIT="$(git rev-parse --short HEAD)"
-ROLLOUT_TAG="prod-$(date -u +%Y%m%dT%H%M%S)-${RUNTIME_COMMIT}"
-
-make build
-KUBECONFIG="$PROD_KUBECONFIG" ./bin/mcp-runtime cluster doctor
-KUBECONFIG="$PROD_KUBECONFIG" MCP_SETUP_KUBECONFIG="$PROD_KUBECONFIG" \
-MCP_KUBE_CONTEXT=prod-mcp-runtime MCP_IMAGE_PLATFORM=linux/amd64 \
-MCP_REGISTRY_PUSH_MODE=public \
-MCP_ROLLOUT_TAG="$ROLLOUT_TAG" \
-bash hack/deploy/mcpruntime-org/rollout.sh
+hack/deploy/mcpruntime-org/backup.sh --setup
+hack/deploy/mcpruntime-org/setup.sh --yes
 ```
 
-The script uses a temporary Docker credential directory and removes it when it
-exits. It reads the registry credential from the existing Kubernetes Secret;
-the key is not printed or stored in the deployment profile. Record the previous
-image tags before rollout so they remain available for rollback.
+The setup wrapper requires existing registry/platform TLS Secrets, uses
+`--strict-prod --provided-tls-secrets --skip-cert-manager-install`, and passes
+the explicit kubeconfig/context and reviewed env file. An existing MCP Auth
+Deployment requires its current image and complete auth profile to be selected.
+It does not automatically restore backups. First installations that require
+certificate issuance use `mcp-runtime setup` with the reviewed issuance flags.
+MCP Auth image updates are a separate release track using an explicit component
+manifest and `mcp-runtime update --only mcp-auth`; do not rebuild a sibling repo
+as a side effect of a Runtime release.
 
-By default, rollout leaves the mcp-auth Deployment on its current release. To
-deploy the published Docker Hub image, opt in to copying `0.4.4` into the
-Runtime registry under a unique tag:
-
-```bash
-MCP_UPDATE_MCP_AUTH=1 \
-MCP_AUTH_IMAGE_SOURCE=published \
-MCP_AUTH_IMAGE_TAG="prod-$(date -u +%Y%m%dT%H%M%S)-auth" \
-MCP_REGISTRY_PUSH_MODE=public \
-MCP_ROLLOUT_TAG="$ROLLOUT_TAG" \
-bash hack/deploy/mcpruntime-org/rollout.sh
-```
-
-To test mcp-auth source changes, set the source checkout path and selected
-ref in the rollout environment. The workstation's
-Docker daemon receives the local build context and builds for the target
-platform. First confirm the selected ref is checked out and the worktree is
-clean:
-
-```bash
-MCP_AUTH_SOURCE=/path/to/mcp-auth
-MCP_AUTH_BUILD_REF=issue-13-cimd # replace with the selected branch, tag, or commit
-MCP_AUTH_COMMIT="$(git -C "$MCP_AUTH_SOURCE" rev-parse --short "$MCP_AUTH_BUILD_REF")"
-MCP_UPDATE_MCP_AUTH=1 \
-MCP_AUTH_IMAGE_SOURCE=local \
-MCP_IMAGE_PLATFORM=linux/amd64 \
-MCP_AUTH_CLIENT_ID_METADATA_ENABLED=true \
-MCP_AUTH_SOURCE="$MCP_AUTH_SOURCE" \
-MCP_AUTH_BUILD_REF="$MCP_AUTH_BUILD_REF" \
-MCP_AUTH_IMAGE_TAG="prod-$(date -u +%Y%m%dT%H%M%S)-auth-${MCP_AUTH_COMMIT}" \
-MCP_REGISTRY_PUSH_MODE=public \
-MCP_ROLLOUT_TAG="$ROLLOUT_TAG" \
-bash hack/deploy/mcpruntime-org/rollout.sh
-```
-
-Local mode builds, while published mode pulls the configured Docker Hub image; both copy
-the candidate to `registry.mcpruntime.org/mcp-auth-server:<tag>` and deploy
-that immutable candidate ref while
-preserving the existing mcp-auth configuration, SQLite PVC, signing key, and
-TLS Secret. Do not rerun `setup --with-tls` for an image-only release.
-
-The setup helper sources `config/deployments/mcpruntime-org.env` (or the `.example` template)
-and runs setup with `--tls-cluster-issuer letsencrypt-prod` and
-`--skip-cert-manager-install`. Existing certificates stay on the same revision
-when SANs are unchanged.
-
-Equivalent manual command:
-
-```bash
-set -a && source config/deployments/mcpruntime-org.env && set +a
-MCP_SETUP_WAIT_TIMEOUT=900 ./bin/mcp-runtime setup \
-  --kubeconfig "$PROD_KUBECONFIG" \
-  --with-tls \
-  --tls-cluster-issuer letsencrypt-prod \
-  --skip-cert-manager-install \
-  --ingress none \
-  --registry-mode bundled-https \
-  --platform-mode tenant
-```
-
-**Why no `--test-mode`:** production installs must retain their configured
-registry, DNS, TLS, credentials, and workload issuer policy. Test mode is the
-local Kind/CI installation shape. CI’s content-hash image cache is separate
-from release publication; setup can reuse cached images when configured.
-Without `--test-mode`, setup requires `MCP_PLATFORM_ADMIN_EMAIL` and is
-otherwise identical. At run time, `--test-mode` only sets
-`MCP_RUNTIME_TEST_MODE=1` inside deployed pods. For a production deployment
-without that flag, set the admin email env var above.
-
-**Flag notes:**
-- `MCP_PLATFORM_DOMAIN=mcpruntime.org`: derives `registry.`, `mcp.`, and
-  `platform.` hostnames. Do not also export a registry ClusterIP as
-  `MCP_REGISTRY_ENDPOINT`.
-- `MCP_PLATFORM_ADMIN_EMAIL`: required by non-test-mode setup validation;
-  seeds the platform admin account in `mcp-platform-api-credentials`.
-- `--ingress none`: k3s already runs Traefik in `kube-system`, so setup skips
-  the second ingress stack. Setup sets `PLATFORM_TRAEFIK_NAMESPACE=kube-system`
-  and `PLATFORM_TEAM_TRAEFIK_WATCH=disabled` so `team create` does not patch
-  k3s Traefik (it watches ingresses cluster-wide).
-- `--registry-mode bundled-https`: bundled registry with TLS ingress at
-  `registry.mcpruntime.org`.
-- `--tls-cluster-issuer letsencrypt-prod` (reruns): reuses the existing
-  ClusterIssuer; cert-manager keeps current certs when specs are unchanged.
-- `--acme-email` (first install only): creates/applies the Let's Encrypt
-  ClusterIssuer. Omit it on reruns to avoid duplicate ACME orders.
-- `MCP_CERT_TIMEOUT=15m`: extends the default 5-minute certificate-issuance
-  wait on a fresh cluster.
-- `--kubeconfig`: pass it explicitly when multiple kubeconfig files exist on
-  the workstation. TLS and cert-manager operations use a package-level client
-  that requires the explicit path, so the `KUBECONFIG` env var alone is not
-  enough (see `internal/cli/setup/platform/kube_client.go`).
-
-If setup reports "cert-manager already installed" but TLS issuance times out,
-check two things: (1) Traefik serves port 80; (2) cert-manager pods are
-Running. The "already installed" check tests only for the CRDs. After a k3s
-restart the CRDs survive, but the pods may be gone. For an existing installation, diagnose the Deployments before reinstalling.
-Fresh installs use v1.21.2 (Kubernetes 1.33–1.36). Do not apply this version
-directly over a 1.16 installation: follow the staged upgrade below.
-For a fresh installation:
-```bash
-kubectl get pods -n cert-manager
-# If not running:
-curl -sL https://github.com/cert-manager/cert-manager/releases/download/v1.21.2/cert-manager.yaml \
-  | kubectl apply -f -
-kubectl wait pod -n cert-manager --all --for=condition=Ready --timeout=120s
-```
+Before a breaking release reset, follow the backup, fresh-install and recovery
+procedure below, including disposable rehearsal and database-native recovery.
+No wrapper authorizes data reset as part of an ordinary update.
 
 ### Upgrading an existing cert-manager installation
 
@@ -729,7 +619,7 @@ TLS/config/bootstrap material, not the full node or PVC data.
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `MCP_TLS_BACKUP_DIR` | `~/.mcpruntime/backups/mcpruntime-org` | Root directory for timestamped setup or full snapshots. |
-| `MCP_RESTORE_TLS_AFTER_SETUP` | `1` | When `1`, `hack/deploy/mcpruntime-org/setup.sh` runs `hack/deploy/mcpruntime-org/restore.sh` after setup. |
+| `MCP_EXPECTED_CLUSTER_UID` | required | Actual `kube-system` namespace UID; all reference helpers verify it. |
 | `MCP_DEPLOY_ENV` | `config/deployments/mcpruntime-org.env` | Env file path for all hack scripts. |
 
 The `clean.sh` snapshot covers TLS, cert-manager, OIDC, and bootstrap secrets.
@@ -738,57 +628,46 @@ the Kubernetes object and persistent volume recovery bundle described above.
 
 ### Step 0: Back up platform-runtime state before any wipe
 
-Let's Encrypt enforces a **5 duplicate-certificate / 7 days per domain** rate
-limit. Use the helper script to back up platform-runtime material (TLS,
-cert-manager ownership, OIDC, bootstrap secrets) before wiping app namespaces:
+A reset needs a completed full backup from this cluster, checked file digests,
+and rehearsed application/database recovery. A TLS/setup snapshot does not
+preserve volume contents and cannot authorize a reset. Keep protected off-host
+copies and separately back up the external identity provider.
 
 ```bash
-hack/deploy/mcpruntime-org/clean.sh --yes --wait
+hack/deploy/mcpruntime-org/backup.sh --full --online-copy
 ```
 
-The backup covers platform-runtime state only. Tenant/user data (teams,
-Postgres identity store, MCP CRs, registry images) is **not** preserved. See
-[Deployment Targets - bundled HTTPS reference](deployment-targets.md#option-a-bundled-https-registry-on-prem-reference).
+The full helper captures K3s SQLite state consistently, but copies live PVC
+files. It does not replace database-native exports or prove they can be restored.
+Record a reviewed recovery snapshot path; do not rely on a changing `latest` link.
 
-Manual TLS-only backup (legacy):
+Configuration recovery is explicit and separate from setup:
 
 ```bash
-kubectl get secret registry-tls -n registry -o yaml \
-  > /tmp/registry-tls-backup.yaml 2>/dev/null || true
-kubectl get secret mcp-platform-tls -n mcp-platform -o yaml \
-  > /tmp/platform-tls-backup.yaml 2>/dev/null || true
+hack/deploy/mcpruntime-org/restore.sh --snapshot /protected/recovery/snapshot --dry-run
+hack/deploy/mcpruntime-org/restore.sh --snapshot /protected/recovery/snapshot --yes
 ```
 
-Restore after setup (prefer automatic restore via `hack/deploy/mcpruntime-org/setup.sh`):
-
-```bash
-hack/deploy/mcpruntime-org/restore.sh
-# or from clean.sh:
-hack/deploy/mcpruntime-org/clean.sh --restore-platform
-```
+This restores selected TLS/config/credentials and restarts APIs, not databases
+or PVC contents. Resource conflicts fail for review instead of force-overwriting
+another manager's state. Complete database recovery before accepting traffic.
 
 ### Safe cluster wipe (app workloads only)
 
-Delete only app namespaces. Deleting kube-system resources breaks k3s's
-reconciliation loop: CoreDNS, Traefik, svclb-traefik, and
-local-path-provisioner cannot recover without an SSH restart.
+Only an intentionally authorized reset should use:
 
 ```bash
-# 1. Back up TLS secrets (see Step 0)
-
-# 2. Delete only app namespaces, and leave kube-system untouched
-kubectl get ns --no-headers \
-  | awk '{print $1}' \
-  | grep -Ev '^(kube-system|kube-public|kube-node-lease|default)$' \
-  | xargs -r kubectl delete ns --grace-period=0
-
-# 3. Delete cluster-scoped MCP resources
-kubectl delete mcpserver,mcpaccessgrant,mcpagentsession \
-  --all -A --ignore-not-found 2>/dev/null || true
-kubectl delete clusterrole,clusterrolebinding \
-  -l app.kubernetes.io/managed-by=mcp-runtime \
-  --ignore-not-found 2>/dev/null || true
+hack/deploy/mcpruntime-org/clean.sh --dry-run
+hack/deploy/mcpruntime-org/clean.sh --yes \
+  --confirm-cluster "$MCP_EXPECTED_CLUSTER_UID" \
+  --recovery-snapshot /protected/recovery/full-snapshot
 ```
+
+The helper checks context, cluster identity, snapshot identity, completion and
+checksums before deleting selected Runtime namespaces and their MCP resources.
+It preserves system/unrelated namespaces, waits for namespace deletion, and
+retains a current credential snapshot without replacing the full recovery bundle.
+Then follow the rehearsed fresh-setup and restoration steps explicitly.
 
 #### If you accidentally wiped kube-system
 

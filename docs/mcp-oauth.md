@@ -440,7 +440,7 @@ export MCP_PLATFORM_ADMIN_EMAIL=admin@example.com
 export MCP_PLATFORM_ADMIN_PASSWORD='<from-password-manager>'
 export KEYCLOAK_CLIENT_SECRET='<from-password-manager>'
 MCP_DEPLOY_ENV=/secure/mcpruntime-org.env \
-  hack/deploy/mcpruntime-org/setup.sh
+  hack/deploy/mcpruntime-org/setup.sh --yes
 ```
 
 Before cleaning, run `clean.sh --dry-run` and confirm its namespace list. For a
