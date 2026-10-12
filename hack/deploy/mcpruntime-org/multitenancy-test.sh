@@ -28,7 +28,7 @@ umask 077
 #
 # Useful options:
 #   RESET=1 hack/deploy/mcpruntime-org/multitenancy-test.sh       # delete demo resources via platform API
-#   SKIP_SETUP=1 requires the existing private profile and explicit demo passwords.
+#   SKIP_SETUP=1 requires the existing private profile and saved/explicit demo passwords.
 # This demo deliberately leaves run-named accounts/teams for inspection on disposable infrastructure.
 # It never targets production. Cleanup deletes only the run's server/agent sessions.
 
@@ -84,6 +84,7 @@ CREDS="${MCP_RUNTIME_CONFIG_DIR}/config.json"
 TMP_ROOT="${TMPDIR:-/tmp}"
 TMP_ROOT="${TMP_ROOT%/}"
 RUN_ID="${RUN_ID:-mt$(date +%m%d%H%M%S)-$((RANDOM % 9000 + 1000))}"
+[[ "$RUN_ID" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo 'RUN_ID must be a lowercase resource-name suffix' >&2; exit 2; }
 WORK_DIR="${WORK_DIR:-$TMP_ROOT/mcp-runtime-multitenancy-${RUN_ID}}"
 TAG="${TAG:-v0.1.0}"
 ADAPTER_LISTEN="${ADAPTER_LISTEN:-127.0.0.1:8299}"
@@ -97,6 +98,13 @@ ADMIN_EMAIL="${ADMIN_EMAIL:-admin@mcpruntime.org}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
 [[ -n "${ADMIN_TOKEN_INPUT:-}" ]] || : "${ADMIN_PASSWORD:?Supply the disposable test admin password}"
 ADMIN_TOKEN_INPUT="${ADMIN_TOKEN_INPUT:-}"
+# Keep generated demo credentials private and reusable with the same run/profile.
+credential_file="$MCP_RUNTIME_CONFIG_DIR/demo-credentials-$RUN_ID.json"
+if [[ -f "$credential_file" ]]; then
+  ACME_PASSWORD="${ACME_PASSWORD:-$(jq -er .acme "$credential_file")}"
+  GLOBEX_PASSWORD="${GLOBEX_PASSWORD:-$(jq -er .globex "$credential_file")}"
+  TECHCORP_PASSWORD="${TECHCORP_PASSWORD:-$(jq -er .techcorp "$credential_file")}"
+fi
 ACME_EMAIL="${ACME_EMAIL:-acme-owner-${RUN_ID}@example.com}"
 if [[ "${SKIP_SETUP:-0}" == 1 ]]; then
   : "${ACME_PASSWORD:?Supply the existing demo account password}"
@@ -108,6 +116,16 @@ GLOBEX_EMAIL="${GLOBEX_EMAIL:-globex-user-${RUN_ID}@example.com}"
 GLOBEX_PASSWORD="${GLOBEX_PASSWORD:-$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')}"
 TECHCORP_EMAIL="${TECHCORP_EMAIL:-techcorp-dev-${RUN_ID}@example.com}"
 TECHCORP_PASSWORD="${TECHCORP_PASSWORD:-$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')}"
+mkdir -p "$MCP_RUNTIME_CONFIG_DIR"
+chmod 700 "$MCP_RUNTIME_CONFIG_DIR"
+ACME_PASSWORD="$ACME_PASSWORD" GLOBEX_PASSWORD="$GLOBEX_PASSWORD" TECHCORP_PASSWORD="$TECHCORP_PASSWORD" \
+  python3 - "$credential_file" <<'CREDENTIALS'
+import json, os, sys
+with open(sys.argv[1], "w") as output:
+    json.dump({name: os.environ[name.upper() + "_PASSWORD"] for name in ("acme", "globex", "techcorp")}, output)
+os.chmod(sys.argv[1], 0o600)
+CREDENTIALS
+
 
 ADMIN_PROFILE="${ADMIN_PROFILE:-admin}"
 ACME_PROFILE="${ACME_PROFILE:-acme-owner-${RUN_ID}}"
@@ -126,7 +144,6 @@ TECHCORP_SERVER="${TECHCORP_SERVER:-techcorp-tools-${RUN_ID}}"
 GLOBEX_AGENT_ID="${GLOBEX_AGENT_ID:-}"
 TECHCORP_AGENT_ID="${TECHCORP_AGENT_ID:-}"
 GLOBEX_DENIED_AGENT_ID="${GLOBEX_DENIED_AGENT_ID:-}"
-[[ "$RUN_ID" =~ ^[a-zA-Z0-9-]+$ ]] || { echo 'RUN_ID must contain only letters, digits and hyphens' >&2; exit 2; }
 for owned in "$ACME_SLUG" "$GLOBEX_SLUG" "$TECHCORP_SLUG" "$ACME_SERVER" "$GLOBEX_SERVER" "$TECHCORP_SERVER" "$ACME_NS" "$GLOBEX_NS" "$TECHCORP_NS"; do
   [[ "$owned" == *"-$RUN_ID" ]] || { echo "Demo resource must end in -$RUN_ID: $owned" >&2; exit 2; }
 done
@@ -992,7 +1009,7 @@ print_cursor_config() {
   cat <<JSON
 
 HTTP adapter config:
-MCP_PLATFORM_API_PROFILE=${GLOBEX_PROFILE} ${BIN} adapter proxy \\
+MCP_RUNTIME_CONFIG_DIR=${MCP_RUNTIME_CONFIG_DIR} MCP_PLATFORM_API_PROFILE=${GLOBEX_PROFILE} ${BIN} adapter proxy \\
   --platform-url ${PLATFORM_URL} \\
   --runtime-url ${MCP_URL}/${ACME_SERVER}/mcp \\
   --server ${ACME_SERVER} \\

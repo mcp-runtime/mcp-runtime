@@ -179,9 +179,27 @@ assert 'explicit-kubeconfig' not in str(p)
 
     def test_multitenancy_refuses_production_before_commands(self):
         self.env.update(PLATFORM_URL='https://platform.mcpruntime.org', MCP_URL='https://mcp.mcpruntime.org',
-                        REGISTRY_HOST='registry.mcpruntime.org')
-        self.assertNotEqual(self.run_script('hack/deploy/mcpruntime-org/multitenancy-test.sh').returncode, 0)
+                        REGISTRY_HOST='registry.mcpruntime.org', MCPRUNTIME_ORG_ROOT=str(ROOT))
+        result = self.run_script('hack/deploy/mcpruntime-org/multitenancy-test.sh')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('restricted to loopback/disposable', result.stderr)
         self.assertEqual(self.commands(), [])
+
+    def test_demo_random_credentials_are_private_and_reusable(self):
+        self.env.update(PLATFORM_URL='http://localhost:18080', MCP_URL='http://localhost:18080',
+                        REGISTRY_HOST='localhost:5000', MCPRUNTIME_ORG_ROOT=str(ROOT), ADMIN_PASSWORD='disposable',
+                        RUN_ID='test-run', MCP_RUNTIME_CONFIG_DIR=str(self.path / 'profile'),
+                        WORK_DIR=str(self.path / 'demo'), BIN=str(self.path / 'missing-cli'))
+        result = self.run_script('hack/deploy/mcpruntime-org/multitenancy-test.sh')
+        self.assertIn('missing binary', result.stderr)
+        file = self.path / 'profile/demo-credentials-test-run.json'
+        original = file.read_bytes()
+        passwords = json.loads(original)
+        self.assertTrue(all(len(value) >= 24 for value in passwords.values()))
+        self.assertEqual(file.stat().st_mode & 0o777, 0o600)
+        self.run_script('hack/deploy/mcpruntime-org/multitenancy-test.sh')
+        self.assertEqual(file.read_bytes(), original)
+
 
     def test_openapi_identical_base_fails(self):
         self.assertNotEqual(self.run_script('hack/oasdiff-openapi.sh', 'HEAD').returncode, 0)

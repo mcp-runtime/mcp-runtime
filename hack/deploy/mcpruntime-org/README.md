@@ -43,3 +43,5 @@ For first installation, use `mcp-runtime setup` with the reviewed issuance
 profile. The wrapper intentionally requires existing TLS Secrets for reruns.
 See [the full runbook](../../../docs/reference-deployment.md) for backup scope,
 external identity-provider backup, fresh setup, restoration and verification.
+
+Demo passwords are generated randomly and stored with mode 0600 in the private profile directory as `demo-credentials-<run-id>.json`. Reusing the same run/profile retains them; treat this directory as credential material and exclude it from shared artifacts. Demo accounts/teams remain on disposable infrastructure for inspection.
