@@ -69,7 +69,7 @@ mcpruntime_org_should_delete_namespace() {
 
 mcpruntime_org_list_namespaces_to_delete() {
   local ns inventory
-  inventory="$(mcpruntime_org_kubectl get ns --no-headers)"
+  inventory="$(mcpruntime_org_kubectl get ns --no-headers)" || return 1
   while IFS= read -r ns; do
     [[ -z "$ns" ]] && continue
     if mcpruntime_org_should_delete_namespace "$ns"; then

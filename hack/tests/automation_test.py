@@ -53,7 +53,9 @@ with open(os.environ['COMMAND_LOG'],'a') as f:f.write(json.dumps(args)+'\\n')
 if 'current-context' in args: print(os.environ.get('FAKE_CONTEXT','kind-test'))
 elif 'nodes' in args: print(json.dumps({'items':[{'spec':{'providerID':os.environ.get('FAKE_PROVIDER','kind://docker/node')}}]}))
 elif 'kube-system' in args: print(os.environ['FAKE_CLUSTER_UID'])
-elif 'mcp-auth-server' in args: sys.exit(1)
+elif 'mcp-auth-server' in args:
+ if os.environ.get('FAKE_AUTH_READ_ERROR'): sys.exit(2)
+ if os.environ.get('FAKE_AUTH_IMAGE'): print(json.dumps({'spec':{'template':{'spec':{'containers':[{'image':os.environ['FAKE_AUTH_IMAGE']}]}}}}))
 elif 'secret' in args: print(json.dumps({'type':'kubernetes.io/tls','data':{'tls.crt':'cert','tls.key':'key'}}))
 elif 'ns' in args: print('kube-system Active\\nmcp-platform Active\\nunrelated Active')
 ''')
@@ -140,6 +142,20 @@ cli.chmod(0o755)
         self.assertIn('--acme-email=', command)
         self.assertNotIn('apply', [c[0] for c in self.commands()])
 
+    def test_setup_auth_read_error_stops_before_build(self):
+        self.env['FAKE_AUTH_READ_ERROR'] = '1'
+        self.assertNotEqual(self.run_script('hack/deploy/mcpruntime-org/setup.sh', '--yes').returncode, 0)
+        self.assertFalse((self.path / 'bin').exists())
+
+    def test_setup_preserves_existing_auth_choice(self):
+        self.env['FAKE_AUTH_IMAGE'] = 'example.com/mcp-auth:current'
+        self.assertNotEqual(self.run_script('hack/deploy/mcpruntime-org/setup.sh', '--yes').returncode, 0)
+        self.assertFalse((self.path / 'bin').exists())
+        self.env.update(MCP_SETUP_WITH_MCP_AUTH_SERVER='1', MCP_SETUP_MCP_AUTH_SERVER_IMAGE='example.com/mcp-auth:other')
+        self.assertNotEqual(self.run_script('hack/deploy/mcpruntime-org/setup.sh', '--yes').returncode, 0)
+        self.assertFalse((self.path / 'bin').exists())
+
+
     def test_live_guard_rejects_renamed_production(self):
         self.env['FAKE_CONTEXT'] = 'kind-fake-prod'
         self.env['FAKE_PROVIDER'] = 'k3s://prod'
@@ -148,7 +164,9 @@ cli.chmod(0o755)
         self.assertNotEqual(result.returncode, 0)
 
     def test_go_test_replaces_inherited_kubeconfig(self):
-        self.tool('go', '''import os,pathlib
+        self.tool('go', '''import os,pathlib,sys
+if 'env' in sys.argv:
+ print(pathlib.Path(os.environ['MCPRUNTIME_ORG_ROOT'])/sys.argv[-1]);sys.exit(0)
 p=pathlib.Path(os.environ['KUBECONFIG']);assert p.exists() and p.read_bytes()==b''
 assert 'explicit-kubeconfig' not in str(p)
 ''')
@@ -268,7 +286,7 @@ class SnapshotTests(unittest.TestCase):
 class MatrixTests(unittest.TestCase):
     def test_authenticated_handler_error_is_not_auth_failure(self):
         self.assertTrue(authz.expected({'expect_authenticated': True}, 400))
-        for status in (401, 403, 500): self.assertFalse(authz.expected({'expect_authenticated': True}, status))
+        for status in (301, 401, 403, 404, 405, 500): self.assertFalse(authz.expected({'expect_authenticated': True}, status))
 
     def test_exact_status_required(self):
         self.assertTrue(authz.expected({'expect': 403}, 403))
@@ -281,7 +299,7 @@ class MatrixTests(unittest.TestCase):
 
 
 @contextlib.contextmanager
-def rpc_server(allowed_code=200, denied_code=403, public_code=401):
+def rpc_server(allowed_code=200, denied_code=403, public_code=401, denied_reason='tool_not_granted'):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_): pass
         def do_POST(self):
@@ -295,6 +313,7 @@ def rpc_server(allowed_code=200, denied_code=403, public_code=401):
                     payload['result'] = {'content': [{'type': 'text', 'text': 'pong'}]}
                 else:
                     code = denied_code
+                    payload = {'error': denied_reason}
                     if code == 200: payload = {'error': {'code': -32601, 'message': 'method not found'}}
             self.send_response(code)
             self.send_header('Content-Type', 'application/json')
@@ -316,6 +335,10 @@ class HostedAcceptance(unittest.TestCase):
 
     def test_enrollment_alone_cannot_pass_when_tool_identity_fails(self):
         with rpc_server(allowed_code=403) as urls, self.assertRaises(ValueError):
+            calls.check(*urls, attempts=1, delay=0)
+
+    def test_expired_identity_is_not_an_ungranted_tool_denial(self):
+        with rpc_server(denied_reason='session_expired') as urls, self.assertRaises(ValueError):
             calls.check(*urls, attempts=1, delay=0)
 
     def test_server_crash_is_not_policy_denial(self):

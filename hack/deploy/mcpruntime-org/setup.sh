@@ -15,11 +15,12 @@ mcpruntime_org_load_env
 mcpruntime_org_require_cluster
 [[ "${MCP_SETUP_TEST_MODE:-0}" != 1 ]] || { echo 'Use the contributor workflow for test mode' >&2; exit 1; }
 # Existing auth must be selected explicitly so setup cannot drop its operator configuration.
-if mcpruntime_org_kubectl get deployment mcp-auth-server -n mcp-platform >/dev/null 2>&1; then
+auth_deployment="$(mcpruntime_org_kubectl get deployment mcp-auth-server -n mcp-platform --ignore-not-found -o json)"
+if [[ -n "$auth_deployment" ]]; then
   [[ "${MCP_SETUP_WITH_MCP_AUTH_SERVER:-0}" == 1 ]] || {
     echo 'Existing MCP Auth requires MCP_SETUP_WITH_MCP_AUTH_SERVER=1 and its current profile' >&2; exit 1;
   }
-  live_image="$(mcpruntime_org_kubectl get deployment mcp-auth-server -n mcp-platform -o jsonpath='{.spec.template.spec.containers[0].image}')"
+  live_image="$(printf '%s' "$auth_deployment" | jq -er '.spec.template.spec.containers[0].image')"
   [[ "${MCP_SETUP_MCP_AUTH_SERVER_IMAGE:-}" == "$live_image" ]] || {
     echo 'Setup must retain the existing MCP Auth image; update it separately' >&2; exit 1;
   }

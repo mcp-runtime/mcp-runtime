@@ -118,7 +118,7 @@ Go version from `go.mod`. From repo root:
 ```bash
 gofmt -s -l .   # empty = OK; else gofmt -s -w .
 go build -o bin/mcp-runtime ./cmd/mcp-runtime
-go test ./... -count=1 -race
+hack/ci/go-test.sh . -count=1 -race ./...
 go vet ./...
 ```
 
@@ -265,6 +265,7 @@ Do not inline the full failure checklist here. Use **`cluster-ops`** mode
 Tests and scripts that fall back to the current kube context have written to a production cluster: a pre-commit `go test ./...` run re-applied setup manifests and broke the public registry route and the operator image. Treat every command as able to reach whatever cluster `kubectl` currently points at.
 
 - **Never leave a production context as the current context.** Keep `kubectl config current-context` on a Kind context (e.g. `kind-mcp-runtime`). Reach production only through an explicit, per-command `KUBECONFIG=<prod file>`. Don't merge prod credentials into `~/.kube/config` as the default.
+- **Never run unit tests on a production k3s host.** Core kubeconfig discovery can fall back to `/etc/rancher/k3s/k3s.yaml` even with an empty environment kubeconfig. Use an isolated container/CI runner without system credentials; `hack/ci/go-test.sh` refuses that host shape.
 - **Isolate unit tests and commits.** Before `go test`, `pre-commit`, or `git commit` (the hooks run the Go test suite), run `export KUBECONFIG=$(mktemp)` in that shell so no test can reach a real cluster. Unit tests must use fakes; a test that needs a live cluster is an integration/E2E test and belongs under `test/`.
 - **QA E2E runs only against `kind-*` contexts.** Pass the Kind kubeconfig explicitly; never let `test/e2e/qa-e2e.sh` or any script default to the ambient context.
 - **Staging E2E never targets production.** The disposable-VM suites (`test/e2e/staging-*.sh`) must pass their target guard; never set the `E2E_GUARD_ALLOW_*` escape hatches.

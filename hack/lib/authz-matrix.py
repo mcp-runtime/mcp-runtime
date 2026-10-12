@@ -15,7 +15,7 @@ class NoRedirect(HTTPRedirectHandler):
 
 def expected(row, status):
     if row.get("expect_authenticated"):
-        return 200 <= status < 500 and status not in (401, 403)
+        return 200 <= status < 300 or status in (400, 422)
     return status == row["expect"]
 
 

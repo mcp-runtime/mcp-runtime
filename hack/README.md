@@ -25,6 +25,8 @@ those workflows rather than duplicating cluster management.
 
 ## Contributor checks
 
+The automation gate requires Python 3.9+ and ShellCheck (`apt-get install shellcheck` or `brew install shellcheck`). Go builds/tests require the version in `go.mod` and cached/downloadable dependencies.
+
 ```bash
 hack/dev/deps.sh check
 hack/dev/dev-setup.sh generate

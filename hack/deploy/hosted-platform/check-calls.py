@@ -25,10 +25,12 @@ def call(url, method, params=None, session="", notify=False):
         if "text/event-stream" in response.headers.get("Content-Type", ""):
             events = [line[5:].strip() for line in raw.splitlines() if line.startswith("data:")]
             raw = events[-1] if events else "{}"
-        if response.status in (401, 403):
-            payload = {}
-        else:
+        try:
             payload = json.loads(raw or "{}")
+        except ValueError:
+            if response.status not in (401, 403):
+                raise
+            payload = {}
         return response.status, payload, response.headers.get("Mcp-Session-Id", session)
 
 
@@ -58,8 +60,8 @@ def check(adapter, public, attempts=36, delay=5):
                 raise
             time.sleep(delay)
     status, payload, _ = call(adapter, "tools/call", {"name": "add", "arguments": {"a": 1, "b": 2}}, session)
-    if not denied(status, payload):
-        raise ValueError("ungranted tool did not produce an authorization denial")
+    if status != 403 or payload.get("error") not in {"tool_not_granted", "tool_denied", "tool_not_allowed"}:
+        raise ValueError("ungranted tool did not produce a tool policy denial")
     status, payload, _ = call(public, "tools/call", {"name": "aaa-ping", "arguments": {}})
     if not denied(status, payload):
         raise ValueError("anonymous tool request did not produce an authorization denial")

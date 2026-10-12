@@ -99,7 +99,7 @@ def post(payload, sess=None):
             events = [line[5:].strip() for line in raw.splitlines() if line.startswith('data:')]
             raw = events[-1] if events else '{}'
         payload = json.loads(raw or '{}')
-        if payload.get('error') or payload.get('result', {}).get('isError'):
+        if payload.get('error') or payload.get('result', {}).get('isError') or (r.status != 202 and 'result' not in payload):
             raise ValueError('MCP request returned an application error')
         return r.status, r.headers.get("Mcp-Session-Id", sess), body
 

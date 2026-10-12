@@ -20,8 +20,8 @@ export KUBECONFIG="$test_kubeconfig"
 module_dir="$1"
 shift
 
-: "${GOCACHE:=/tmp/go-build}"
-: "${GOMODCACHE:=/tmp/go-mod}"
+: "${GOCACHE:=$(go env GOCACHE)}"
+: "${GOMODCACHE:=$(go env GOMODCACHE)}"
 mkdir -p "$GOCACHE" "$GOMODCACHE"
 export GOCACHE GOMODCACHE
 
