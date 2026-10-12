@@ -23,7 +23,7 @@ files: review them, protect their permissions, and never commit credentials.
 | Configuration/object snapshot | `backup.sh --setup` | Private resource/Secret inventory, not volume data |
 | Host/volume recovery bundle | `backup.sh --full --online-copy` | Also verifies SSH host cluster UID; online PVC copy needs database-native recovery validation |
 | Reset preview | `clean.sh --dry-run` | Prints selected Runtime namespaces/resources only |
-| Deliberate reset | `clean.sh --yes --confirm-cluster UID --recovery-snapshot PATH` | Requires same-cluster completed full backup and checksums; deletes tenant data |
+| Deliberate reset | `clean.sh --yes --confirm-cluster UID --recovery-snapshot PATH` | Requires same-cluster completed full backup and checksums; deletes tenant data; preserves system and ingress-controller namespaces |
 | Configuration recovery preview | `restore.sh --snapshot PATH --dry-run` | Explicit verified snapshot, never automatic `latest` |
 | Configuration recovery | `restore.sh --snapshot PATH --yes` | Selected TLS/config/credentials and API restarts; no force-conflicts; not database/PVC restore |
 | Multi-team demo | `multitenancy-test.sh` | Loopback or disposable `.e2e.mcpruntime.org` only; uniquely named demo resources |

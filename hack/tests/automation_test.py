@@ -58,7 +58,7 @@ elif 'mcp-auth-server' in args:
  if os.environ.get('FAKE_AUTH_READ_ERROR'): sys.exit(2)
  if os.environ.get('FAKE_AUTH_IMAGE'): print(json.dumps({'spec':{'template':{'spec':{'containers':[{'image':os.environ['FAKE_AUTH_IMAGE']}]}}}}))
 elif 'secret' in args: print(json.dumps({'type':'kubernetes.io/tls','data':{'tls.crt':'cert','tls.key':'key'}}))
-elif 'ns' in args: print('kube-system Active\\nmcp-platform Active\\nunrelated Active')
+elif 'ns' in args: print(os.environ.get('FAKE_NAMESPACE_INVENTORY','kube-system Active\\nmcp-platform Active\\nunrelated Active'))
 ''')
         self.tool('git', '''import os,sys
 if 'status' in sys.argv: print(os.environ.get('FAKE_DIRTY',''),end='')
@@ -128,6 +128,24 @@ cli.chmod(0o755)
                                  '--recovery-snapshot', str(self.path))
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(any('delete' in c for c in self.commands()))
+
+    def test_reset_preserves_named_and_profile_ingress_namespaces(self):
+        self.env['PLATFORM_TRAEFIK_NAMESPACE'] = 'custom-ingress'
+        self.env['FAKE_NAMESPACE_INVENTORY'] = 'traefik Active\ncustom-ingress Active\nmcp-platform Active'
+        result = self.run_script('hack/deploy/mcpruntime-org/clean.sh', '--dry-run')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('  mcp-platform', result.stdout)
+        self.assertNotIn('  traefik', result.stdout)
+        self.assertNotIn('  custom-ingress', result.stdout)
+        # Protection must take precedence even when the ingress namespace is labelled managed.
+        for namespace in ('traefik', 'custom-ingress'):
+            result = subprocess.run(['bash', '-c',
+                f'source "{ROOT}/hack/deploy/mcpruntime-org/lib/clean.sh"; '
+                'mcpruntime_org_namespace_has_mcp_runtime_label() { return 0; }; '
+                f'if mcpruntime_org_should_delete_namespace {namespace}; then exit 1; fi'],
+                env=self.env, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
 
     def test_reset_preview_has_no_mutations(self):
         self.assertEqual(self.run_script('hack/deploy/mcpruntime-org/clean.sh', '--dry-run').returncode, 0)

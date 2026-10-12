@@ -10,6 +10,7 @@ MCP_RUNTIME_PRESERVED_NAMESPACES=(
   kube-node-lease
   default
   cert-manager
+  traefik
 )
 
 MCP_RUNTIME_PLATFORM_NAMESPACES=(
@@ -18,11 +19,14 @@ MCP_RUNTIME_PLATFORM_NAMESPACES=(
   mcp-observability
   mcp-log-collector
   registry
-  traefik
 )
 
 mcpruntime_org_is_preserved_namespace() {
   local ns="$1"
+  # Ingress remains available throughout Runtime namespace reset/recovery.
+  if [[ "$ns" == "${PLATFORM_TRAEFIK_NAMESPACE:-kube-system}" ]]; then
+    return 0
+  fi
   local preserved
   for preserved in "${MCP_RUNTIME_PRESERVED_NAMESPACES[@]}"; do
     if [[ "$ns" == "$preserved" ]]; then

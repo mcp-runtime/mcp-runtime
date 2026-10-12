@@ -665,7 +665,7 @@ hack/deploy/mcpruntime-org/clean.sh --yes \
 
 The helper checks context, cluster identity, snapshot identity, completion and
 checksums before deleting selected Runtime namespaces and their MCP resources.
-It preserves system/unrelated namespaces, waits for namespace deletion, and
+It preserves system/unrelated namespaces, `traefik`, and the profile-selected ingress namespace, waits for namespace deletion, and
 retains a current credential snapshot without replacing the full recovery bundle.
 Then follow the rehearsed fresh-setup and restoration steps explicitly.
 
