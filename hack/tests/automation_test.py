@@ -23,9 +23,9 @@ def module(path, name):
     return result
 
 
-snapshot = module('hack/deploy/mcpruntime-org/lib/verify-snapshot.py', 'snapshot')
+snapshot = module('hack/deploy/reference/lib/verify-snapshot.py', 'snapshot')
 authz = module('hack/lib/authz-matrix.py', 'authz')
-calls = module('hack/deploy/hosted-platform/check-calls.py', 'calls')
+calls = module('hack/deploy/acceptance/check-calls.py', 'calls')
 
 
 class Commands(unittest.TestCase):
@@ -84,7 +84,7 @@ cli.chmod(0o755)
         return [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []
 
     def test_rollout_delegates_full_release_and_context(self):
-        result = self.run_script('hack/deploy/mcpruntime-org/rollout.sh', '--dry-run')
+        result = self.run_script('hack/deploy/reference/rollout.sh', '--dry-run')
         self.assertEqual(result.returncode, 0, result.stderr)
         command = next(c for c in self.commands() if c[0] == 'update')
         self.assertIn('--build', command)
@@ -97,34 +97,34 @@ cli.chmod(0o755)
 
     def test_rollout_wrong_cluster_stops_before_build_or_update(self):
         self.env['FAKE_CLUSTER_UID'] = 'wrong-cluster'
-        result = self.run_script('hack/deploy/mcpruntime-org/rollout.sh', '--yes')
+        result = self.run_script('hack/deploy/reference/rollout.sh', '--yes')
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse((self.path / 'bin').exists())
         self.assertFalse(any(c[0] == 'update' for c in self.commands()))
 
     def test_rollout_dirty_checkout_stops(self):
         self.env['FAKE_DIRTY'] = ' M source.go'
-        self.assertNotEqual(self.run_script('hack/deploy/mcpruntime-org/rollout.sh', '--yes').returncode, 0)
+        self.assertNotEqual(self.run_script('hack/deploy/reference/rollout.sh', '--yes').returncode, 0)
         self.assertFalse((self.path / 'bin').exists())
 
     def test_missing_profile_does_not_use_example(self):
         self.env['MCP_DEPLOY_ENV'] = str(self.path / 'missing.env')
-        self.assertNotEqual(self.run_script('hack/deploy/mcpruntime-org/rollout.sh', '--yes').returncode, 0)
+        self.assertNotEqual(self.run_script('hack/deploy/reference/rollout.sh', '--yes').returncode, 0)
         self.assertEqual(self.commands(), [])
 
     def test_reset_yes_alone_never_deletes(self):
-        result = self.run_script('hack/deploy/mcpruntime-org/clean.sh', '--yes')
+        result = self.run_script('hack/deploy/reference/reset.sh', '--yes')
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(any('delete' in c for c in self.commands()))
 
     def test_reset_wrong_confirmation_never_deletes(self):
-        result = self.run_script('hack/deploy/mcpruntime-org/clean.sh', '--yes', '--confirm-cluster', 'other',
+        result = self.run_script('hack/deploy/reference/reset.sh', '--yes', '--confirm-cluster', 'other',
                                  '--recovery-snapshot', str(self.path))
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(any('delete' in c for c in self.commands()))
 
     def test_reset_incomplete_snapshot_never_deletes(self):
-        result = self.run_script('hack/deploy/mcpruntime-org/clean.sh', '--yes', '--confirm-cluster', 'cluster-a',
+        result = self.run_script('hack/deploy/reference/reset.sh', '--yes', '--confirm-cluster', 'cluster-a',
                                  '--recovery-snapshot', str(self.path))
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(any('delete' in c for c in self.commands()))
@@ -132,7 +132,7 @@ cli.chmod(0o755)
     def test_reset_preserves_named_and_profile_ingress_namespaces(self):
         self.env['PLATFORM_TRAEFIK_NAMESPACE'] = 'custom-ingress'
         self.env['FAKE_NAMESPACE_INVENTORY'] = 'traefik Active\ncustom-ingress Active\nmcp-platform Active'
-        result = self.run_script('hack/deploy/mcpruntime-org/clean.sh', '--dry-run')
+        result = self.run_script('hack/deploy/reference/reset.sh', '--dry-run')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('  mcp-platform', result.stdout)
         self.assertNotIn('  traefik', result.stdout)
@@ -140,7 +140,7 @@ cli.chmod(0o755)
         # Protection must take precedence even when the ingress namespace is labelled managed.
         for namespace in ('traefik', 'custom-ingress'):
             result = subprocess.run(['bash', '-c',
-                f'source "{ROOT}/hack/deploy/mcpruntime-org/lib/clean.sh"; '
+                f'source "{ROOT}/hack/deploy/reference/lib/reset.sh"; '
                 'mcpruntime_org_namespace_has_mcp_runtime_label() { return 0; }; '
                 f'if mcpruntime_org_should_delete_namespace {namespace}; then exit 1; fi'],
                 env=self.env, capture_output=True)
@@ -148,11 +148,11 @@ cli.chmod(0o755)
 
 
     def test_reset_preview_has_no_mutations(self):
-        self.assertEqual(self.run_script('hack/deploy/mcpruntime-org/clean.sh', '--dry-run').returncode, 0)
+        self.assertEqual(self.run_script('hack/deploy/reference/reset.sh', '--dry-run').returncode, 0)
         self.assertFalse(any(set(c) & {'delete', 'apply', 'patch', 'create'} for c in self.commands()))
 
     def test_setup_uses_strict_existing_tls_and_no_restore(self):
-        result = self.run_script('hack/deploy/mcpruntime-org/setup.sh', '--yes')
+        result = self.run_script('hack/deploy/reference/setup.sh', '--yes')
         self.assertEqual(result.returncode, 0, result.stderr)
         command = next(c for c in self.commands() if c[0] == 'setup')
         self.assertIn('--strict-prod', command)
@@ -163,15 +163,15 @@ cli.chmod(0o755)
 
     def test_setup_auth_read_error_stops_before_build(self):
         self.env['FAKE_AUTH_READ_ERROR'] = '1'
-        self.assertNotEqual(self.run_script('hack/deploy/mcpruntime-org/setup.sh', '--yes').returncode, 0)
+        self.assertNotEqual(self.run_script('hack/deploy/reference/setup.sh', '--yes').returncode, 0)
         self.assertFalse((self.path / 'bin').exists())
 
     def test_setup_preserves_existing_auth_choice(self):
         self.env['FAKE_AUTH_IMAGE'] = 'example.com/mcp-auth:current'
-        self.assertNotEqual(self.run_script('hack/deploy/mcpruntime-org/setup.sh', '--yes').returncode, 0)
+        self.assertNotEqual(self.run_script('hack/deploy/reference/setup.sh', '--yes').returncode, 0)
         self.assertFalse((self.path / 'bin').exists())
         self.env.update(MCP_SETUP_WITH_MCP_AUTH_SERVER='1', MCP_SETUP_MCP_AUTH_SERVER_IMAGE='example.com/mcp-auth:other')
-        self.assertNotEqual(self.run_script('hack/deploy/mcpruntime-org/setup.sh', '--yes').returncode, 0)
+        self.assertNotEqual(self.run_script('hack/deploy/reference/setup.sh', '--yes').returncode, 0)
         self.assertFalse((self.path / 'bin').exists())
 
 
@@ -199,7 +199,7 @@ assert 'explicit-kubeconfig' not in str(p)
     def test_multitenancy_refuses_production_before_commands(self):
         self.env.update(PLATFORM_URL='https://platform.mcpruntime.org', MCP_URL='https://mcp.mcpruntime.org',
                         REGISTRY_HOST='registry.mcpruntime.org', MCPRUNTIME_ORG_ROOT=str(ROOT))
-        result = self.run_script('hack/deploy/mcpruntime-org/multitenancy-test.sh')
+        result = self.run_script('hack/qa/multitenancy-test.sh')
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('restricted to loopback/disposable', result.stderr)
         self.assertEqual(self.commands(), [])
@@ -209,19 +209,19 @@ assert 'explicit-kubeconfig' not in str(p)
                         REGISTRY_HOST='localhost:5000', MCPRUNTIME_ORG_ROOT=str(ROOT), ADMIN_PASSWORD='disposable',
                         RUN_ID='test-run', MCP_RUNTIME_CONFIG_DIR=str(self.path / 'profile'),
                         WORK_DIR=str(self.path / 'demo'), BIN=str(self.path / 'missing-cli'))
-        result = self.run_script('hack/deploy/mcpruntime-org/multitenancy-test.sh')
+        result = self.run_script('hack/qa/multitenancy-test.sh')
         self.assertIn('missing binary', result.stderr)
         file = self.path / 'profile/demo-credentials-test-run.json'
         original = file.read_bytes()
         passwords = json.loads(original)
         self.assertTrue(all(len(value) >= 24 for value in passwords.values()))
         self.assertEqual(file.stat().st_mode & 0o777, 0o600)
-        self.run_script('hack/deploy/mcpruntime-org/multitenancy-test.sh')
+        self.run_script('hack/qa/multitenancy-test.sh')
         self.assertEqual(file.read_bytes(), original)
 
 
     def test_openapi_identical_base_fails(self):
-        self.assertNotEqual(self.run_script('hack/oasdiff-openapi.sh', 'HEAD').returncode, 0)
+        self.assertNotEqual(self.run_script('hack/ci/oasdiff-openapi.sh', 'HEAD').returncode, 0)
 
     def test_reset_valid_backup_deletes_only_selected_namespaces(self):
         bundle = self.path / 'bundle'
@@ -233,7 +233,7 @@ assert 'explicit-kubeconfig' not in str(p)
         (bundle / 'FULL_BACKUP_COMPLETE').touch()
         (bundle / 'SHA256SUMS').write_text(''.join(f'{hashlib.sha256(data.encode()).hexdigest()}  {name}\n' for name, data in files.items()))
         self.env['MCP_TLS_BACKUP_DIR'] = str(self.path / 'protected-backups')
-        result = self.run_script('hack/deploy/mcpruntime-org/clean.sh', '--yes', '--confirm-cluster', 'cluster-a',
+        result = self.run_script('hack/deploy/reference/reset.sh', '--yes', '--confirm-cluster', 'cluster-a',
                                  '--recovery-snapshot', str(bundle))
         self.assertEqual(result.returncode, 0, result.stderr)
         commands = [c for c in self.commands() if 'delete' in c]
@@ -252,7 +252,7 @@ assert 'explicit-kubeconfig' not in str(p)
             {'name': 'other-agent', 'serverRef': {'name': 'demo-run'}, 'subject': {'agentID': 'real-agent'}},
             {'name': 'other-server', 'serverRef': {'name': 'real-server'}, 'subject': {'agentID': 'agent-a'}},
             {'name': 'anonymous', 'serverRef': {'name': 'demo-run'}, 'subject': {}}]}
-        result = subprocess.run(['bash', '-c', f'source "{ROOT}/hack/deploy/mcpruntime-org/lib/demo-sessions.sh"; mcpruntime_demo_session_names demo-run agent-a agent-b'],
+        result = subprocess.run(['bash', '-c', f'source "{ROOT}/hack/lib/demo-sessions.sh"; mcpruntime_demo_session_names demo-run agent-a agent-b'],
                                 input=json.dumps(rows), env=self.env, text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), 'ours')
@@ -260,20 +260,20 @@ assert 'explicit-kubeconfig' not in str(p)
     def test_missing_selected_perf_endpoint_fails(self):
         self.env.update(SCENARIOS='S3', BASE_URL='http://127.0.0.1:1', PERF_OUT_DIR=str(self.path / 'perf'),
                         PERF_BASELINE_DIR=str(self.path / 'baseline'))
-        result = self.run_script('hack/cluster-ops/perf-regression.sh')
+        result = self.run_script('hack/qa/perf-regression.sh')
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse((self.path / 'baseline/S3.json').exists())
 
     def test_unknown_perf_scenario_fails(self):
         self.env.update(SCENARIOS='S4', PERF_OUT_DIR=str(self.path / 'perf'), PERF_BASELINE_DIR=str(self.path / 'baseline'))
-        self.assertNotEqual(self.run_script('hack/cluster-ops/perf-regression.sh').returncode, 0)
+        self.assertNotEqual(self.run_script('hack/qa/perf-regression.sh').returncode, 0)
 
 
     def test_adapter_port_check_preserves_existing_listener(self):
         with socket.socket() as listener:
             listener.bind(('127.0.0.1', 0)); listener.listen(1)
             port = listener.getsockname()[1]
-            result = subprocess.run(['bash', '-c', f'source "{ROOT}/hack/deploy/mcpruntime-org/lib/adapter-readiness.sh"; mcpruntime_adapter_require_free_port 127.0.0.1:{port}'],
+            result = subprocess.run(['bash', '-c', f'source "{ROOT}/hack/lib/adapter-readiness.sh"; mcpruntime_adapter_require_free_port 127.0.0.1:{port}'],
                                     env=self.env, capture_output=True)
             self.assertNotEqual(result.returncode, 0)
             with socket.create_connection(('127.0.0.1', port), timeout=1): pass
@@ -287,7 +287,7 @@ assert 'explicit-kubeconfig' not in str(p)
                 connection, _ = listener.accept()
                 connection.close()
                 client.recv(1)
-        result = subprocess.run(['bash', '-c', f'source "{ROOT}/hack/deploy/mcpruntime-org/lib/adapter-readiness.sh"; mcpruntime_adapter_require_free_port 127.0.0.1:{port}'],
+        result = subprocess.run(['bash', '-c', f'source "{ROOT}/hack/lib/adapter-readiness.sh"; mcpruntime_adapter_require_free_port 127.0.0.1:{port}'],
                                 env=self.env, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 

@@ -419,7 +419,7 @@ dedicated test user before production rollout.
 
 ## Clean setup and credential preservation
 
-`hack/deploy/mcpruntime-org/clean.sh --yes --wait` destructively resets MCP
+`hack/deploy/reference/reset.sh --yes --wait` destructively resets MCP
 Runtime namespaces and workload data. Use it for a clean reinstall, not normal
 upgrades. By default it writes a `0700` backup directory under
 `~/.mcpruntime/backups/mcpruntime-org` and backup files are `0600`.
@@ -440,10 +440,10 @@ export MCP_PLATFORM_ADMIN_EMAIL=admin@example.com
 export MCP_PLATFORM_ADMIN_PASSWORD='<from-password-manager>'
 export KEYCLOAK_CLIENT_SECRET='<from-password-manager>'
 MCP_DEPLOY_ENV=/secure/mcpruntime-org.env \
-  hack/deploy/mcpruntime-org/setup.sh --yes
+  hack/deploy/reference/setup.sh --yes
 ```
 
-Before cleaning, run `clean.sh --dry-run` and confirm its namespace list. For a
+Before cleaning, run `reset.sh --dry-run` and confirm its namespace list. For a
 fresh provider-backed install, prepare the env file, TLS Secret, signing-key
 Secret, connector file, selected connector, and provider secret first. Never
 use `--no-backup` on production unless the loss is intentional.

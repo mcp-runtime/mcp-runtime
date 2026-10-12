@@ -27,7 +27,7 @@ umask 077
 #   ADMIN_EMAIL=admin@mcpruntime.org ADMIN_PASSWORD=admin@123
 #
 # Useful options:
-#   RESET=1 hack/deploy/mcpruntime-org/multitenancy-test.sh       # delete demo resources via platform API
+#   RESET=1 hack/qa/multitenancy-test.sh       # delete demo resources via platform API
 #   SKIP_SETUP=1 requires the existing private profile and saved/explicit demo passwords.
 # This demo deliberately leaves run-named accounts/teams for inspection on disposable infrastructure.
 # It never targets production. Cleanup deletes only the run's server/agent sessions.
@@ -35,19 +35,19 @@ umask 077
 # The Staging E2E VM receives the repo as a tarball packaged with
 # `tar --exclude=.git`, so git metadata is absent there and `rev-parse` exits
 # 128. Prefer an explicitly supplied root, then git, then this script's own
-# location, which is always <root>/hack/deploy/mcpruntime-org.
+# location, which is always <root>/hack/qa.
 ROOT_DIR="${MCPRUNTIME_ORG_ROOT:-}"
 if [[ -z "$ROOT_DIR" ]]; then
   ROOT_DIR="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel 2>/dev/null || true)"
 fi
 if [[ -z "$ROOT_DIR" ]]; then
-  ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+  ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 fi
 BIN="${BIN:-$ROOT_DIR/bin/mcp-runtime}"
-# shellcheck source=hack/deploy/mcpruntime-org/lib/adapter-readiness.sh
-source "$ROOT_DIR/hack/deploy/mcpruntime-org/lib/adapter-readiness.sh"
-# shellcheck source=hack/deploy/mcpruntime-org/lib/demo-sessions.sh
-source "$ROOT_DIR/hack/deploy/mcpruntime-org/lib/demo-sessions.sh"
+# shellcheck source=hack/lib/adapter-readiness.sh
+source "$ROOT_DIR/hack/lib/adapter-readiness.sh"
+# shellcheck source=hack/lib/demo-sessions.sh
+source "$ROOT_DIR/hack/lib/demo-sessions.sh"
 
 
 require_env() {

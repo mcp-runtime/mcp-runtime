@@ -133,7 +133,7 @@ load_platform_backup_helpers() {
   # TLS, platform credentials, auth-server secrets, and OIDC configuration.
   # Do not load the deployment dotenv here: the E2E runner owns its environment.
   # shellcheck disable=SC1091
-  source "${ROOT_DIR}/hack/deploy/mcpruntime-org/lib/backup.sh"
+  source "${ROOT_DIR}/hack/deploy/reference/lib/backup.sh"
   PLATFORM_BACKUP_HELPERS_LOADED=1
 }
 

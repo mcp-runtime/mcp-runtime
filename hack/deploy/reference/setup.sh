@@ -2,7 +2,7 @@
 # Deliberate full setup; ordinary release updates use rollout.sh.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=hack/deploy/mcpruntime-org/lib/env.sh
+# shellcheck source=hack/deploy/reference/lib/env.sh
 source "$SCRIPT_DIR/lib/env.sh"
 if [[ "${1:-}" == --help ]]; then
   echo 'Usage: setup.sh --yes'

@@ -179,11 +179,11 @@ jobs:
             sleep 5
           done
           test "$auth_metadata_ready" = true
-          gh api "repos/$GITHUB_REPOSITORY/contents/hack/deploy/hosted-platform/post-deploy-check.sh?ref=main" \
+          gh api "repos/$GITHUB_REPOSITORY/contents/hack/deploy/acceptance/post-deploy-check.sh?ref=main" \
             --jq .content | base64 -d > "$RUNNER_TEMP/post-deploy-check.sh"
-          mkdir -p hack/deploy/hosted-platform
-          gh api "repos/$GITHUB_REPOSITORY/contents/hack/deploy/hosted-platform/check-calls.py?ref=main" \
-            --jq .content | base64 -d > hack/deploy/hosted-platform/check-calls.py
+          mkdir -p hack/deploy/acceptance
+          gh api "repos/$GITHUB_REPOSITORY/contents/hack/deploy/acceptance/check-calls.py?ref=main" \
+            --jq .content | base64 -d > hack/deploy/acceptance/check-calls.py
           bash "$RUNNER_TEMP/post-deploy-check.sh"
 
   publish-live-version:

@@ -2,10 +2,10 @@
 # Deliberate destructive reset. Never use for normal releases.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=hack/deploy/mcpruntime-org/lib/backup.sh
+# shellcheck source=hack/deploy/reference/lib/backup.sh
 source "$SCRIPT_DIR/lib/backup.sh"
-# shellcheck source=hack/deploy/mcpruntime-org/lib/clean.sh
-source "$SCRIPT_DIR/lib/clean.sh"
+# shellcheck source=hack/deploy/reference/lib/reset.sh
+source "$SCRIPT_DIR/lib/reset.sh"
 dry_run=0; yes=0; confirm=""; recovery=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -14,7 +14,7 @@ while [[ $# -gt 0 ]]; do
     --confirm-cluster) confirm="${2:?Expected cluster UID}"; shift 2 ;;
     --recovery-snapshot) recovery="${2:?Expected snapshot path}"; shift 2 ;;
     --help|-h)
-      echo 'Usage: clean.sh --dry-run | --yes --confirm-cluster UID --recovery-snapshot PATH'
+      echo 'Usage: reset.sh --dry-run | --yes --confirm-cluster UID --recovery-snapshot PATH'
       echo 'Reset deletes Runtime namespaces and their data. Requires a checksum-verified full backup from this cluster.'
       echo 'Rehearse database/application recovery first; live PVC copies are not consistent database exports.'
       exit 0 ;;

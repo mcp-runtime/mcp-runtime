@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Explicit Kind-only authz matrix probe; no implicit port-forwards or admin-key stand-ins.
 set -euo pipefail
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=hack/lib/test-cluster.sh
 source "$ROOT/hack/lib/test-cluster.sh"
 require_test_cluster

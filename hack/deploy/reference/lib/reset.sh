@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Namespace selection and MCP Runtime wipe helpers for mcpruntime.org k3s clean.
 
-# shellcheck source=hack/deploy/mcpruntime-org/lib/env.sh
+# shellcheck source=hack/deploy/reference/lib/env.sh
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 
 MCP_RUNTIME_PRESERVED_NAMESPACES=(

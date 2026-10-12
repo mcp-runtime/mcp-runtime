@@ -10,8 +10,8 @@ bash "${SCRIPT_DIR}/namespace_placement_test.sh"
 source "${SCRIPT_DIR}/lib/staging.sh"
 # shellcheck source=test/e2e/lib/k3s-installer.sh
 source "${SCRIPT_DIR}/lib/k3s-installer.sh"
-# shellcheck source=hack/deploy/mcpruntime-org/lib/adapter-readiness.sh
-source "${SCRIPT_DIR}/../../hack/deploy/mcpruntime-org/lib/adapter-readiness.sh"
+# shellcheck source=hack/lib/adapter-readiness.sh
+source "${SCRIPT_DIR}/../../hack/lib/adapter-readiness.sh"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "${TMP}"' EXIT

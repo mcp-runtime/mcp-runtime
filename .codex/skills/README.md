@@ -64,9 +64,9 @@ deterministic CI / Staging E2E / `test/e2e` over replaying long playbooks.
 | Unit / vet / staticcheck / golden / envtest | GitHub CI |
 | Path-selected Kind QA E2E | CI + `test/e2e/qa-e2e.sh` |
 | Strict-prod install path | Staging E2E |
-| Live security suites A/E/F/G/I | `hack/cluster-ops/security-regression.sh` |
-| Live perf baseline compare | `hack/cluster-ops/perf-regression.sh` |
-| K8s posture inventory / hygiene | `hack/cluster-ops/k8s-hardening-check.sh` |
+| Live security suites A/E/F/G/I | `hack/qa/security-regression.sh` |
+| Live perf baseline compare | `hack/qa/perf-regression.sh` |
+| K8s posture inventory / hygiene | `hack/qa/k8s-hardening-check.sh` |
 | Supply-chain scanners | `pre-release-regression.yaml` |
 | Live Kind judgment / debug | `cluster-ops` |
 | Browser UI | `dashboard-browser-qa` |

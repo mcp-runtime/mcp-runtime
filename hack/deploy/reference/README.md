@@ -22,11 +22,10 @@ files: review them, protect their permissions, and never commit credentials.
 | Existing-platform full reconciliation | `setup.sh --yes` | Strict production setup; existing TLS Secrets; explicit current MCP Auth profile; no automatic restore |
 | Configuration/object snapshot | `backup.sh --setup` | Private resource/Secret inventory, not volume data |
 | Host/volume recovery bundle | `backup.sh --full --online-copy` | Also verifies SSH host cluster UID; online PVC copy needs database-native recovery validation |
-| Reset preview | `clean.sh --dry-run` | Prints selected Runtime namespaces/resources only |
-| Deliberate reset | `clean.sh --yes --confirm-cluster UID --recovery-snapshot PATH` | Requires same-cluster completed full backup and checksums; deletes tenant data; preserves system and ingress-controller namespaces |
+| Reset preview | `reset.sh --dry-run` | Prints selected Runtime namespaces/resources only |
+| Deliberate reset | `reset.sh --yes --confirm-cluster UID --recovery-snapshot PATH` | Requires same-cluster completed full backup and checksums; deletes tenant data; preserves system and ingress-controller namespaces |
 | Configuration recovery preview | `restore.sh --snapshot PATH --dry-run` | Explicit verified snapshot, never automatic `latest` |
 | Configuration recovery | `restore.sh --snapshot PATH --yes` | Selected TLS/config/credentials and API restarts; no force-conflicts; not database/PVC restore |
-| Multi-team demo | `multitenancy-test.sh` | Loopback or disposable `.e2e.mcpruntime.org` only; uniquely named demo resources |
 
 `lib/` contains sourced helpers, not independent commands. `verify-snapshot.py`
 checks completion, file coverage/digests and cluster identity. Recovery scripts
@@ -44,4 +43,4 @@ profile. The wrapper intentionally requires existing TLS Secrets for reruns.
 See [the full runbook](../../../docs/reference-deployment.md) for backup scope,
 external identity-provider backup, fresh setup, restoration and verification.
 
-Demo passwords are generated randomly and stored with mode 0600 in the private profile directory as `demo-credentials-<run-id>.json`. Reusing the same run/profile retains them; treat this directory as credential material and exclude it from shared artifacts. Demo accounts/teams remain on disposable infrastructure for inspection.
+For the disposable multi-team demo, see [QA automation](../../qa/README.md).

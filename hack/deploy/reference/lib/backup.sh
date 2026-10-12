@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Platform-runtime backup and restore for mcpruntime.org k3s deployments.
 
-# shellcheck source=hack/deploy/mcpruntime-org/lib/env.sh
+# shellcheck source=hack/deploy/reference/lib/env.sh
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 
 MCP_TLS_BACKUP_ROOT="${MCP_TLS_BACKUP_DIR:-$HOME/.mcpruntime/backups/mcpruntime-org}"

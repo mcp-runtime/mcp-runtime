@@ -2,7 +2,7 @@
 # Release deployment through the supported component-aware CLI.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=hack/deploy/mcpruntime-org/lib/env.sh
+# shellcheck source=hack/deploy/reference/lib/env.sh
 source "$SCRIPT_DIR/lib/env.sh"
 if [[ "${1:-}" == --help ]]; then
   echo 'Usage: rollout.sh --dry-run | --yes'

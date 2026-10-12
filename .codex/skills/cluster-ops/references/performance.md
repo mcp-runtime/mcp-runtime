@@ -5,9 +5,9 @@ the harness checks both context and actual node provider IDs.
 
 ```bash
 export KUBECONFIG=/path/to/contributor-kubeconfig
-SCENARIOS=S3 bash hack/cluster-ops/perf-regression.sh
+SCENARIOS=S3 bash hack/qa/perf-regression.sh
 # Adapter path, with a running session-bound adapter:
-SCENARIOS=S1,S2,S3 bash hack/cluster-ops/perf-regression.sh
+SCENARIOS=S1,S2,S3 bash hack/qa/perf-regression.sh
 ```
 
 S1 measures sequential tool latency, S2 concurrent tool traffic, and S3 analytics

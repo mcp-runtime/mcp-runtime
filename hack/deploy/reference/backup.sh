@@ -3,7 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=hack/deploy/mcpruntime-org/lib/backup.sh
+# shellcheck source=hack/deploy/reference/lib/backup.sh
 source "$SCRIPT_DIR/lib/backup.sh"
 
 ALLOW_ONLINE_COPY=0
@@ -13,7 +13,7 @@ DRY_RUN=0
 
 usage() {
   cat <<'EOF'
-Usage: hack/deploy/mcpruntime-org/backup.sh (--setup | --full --online-copy) [--dry-run]
+Usage: hack/deploy/reference/backup.sh (--setup | --full --online-copy) [--dry-run]
 
   --setup         Capture Kubernetes resources, PVC/PV definitions, and platform
                   Secrets/config needed to recover a setup redeployment.

@@ -100,5 +100,5 @@ for _attempt in {1..90}; do
   sleep 2
 done
 grep -q 'proxy listening' "$RUNNER_TEMP/qa-adapter.log"
-python3 hack/deploy/hosted-platform/check-calls.py "http://127.0.0.1:$port" "https://mcp.mcpruntime.org/$qa_name/mcp"
+python3 hack/deploy/acceptance/check-calls.py "http://127.0.0.1:$port" "https://mcp.mcpruntime.org/$qa_name/mcp"
 echo 'Hosted acceptance passed: publish, deploy, managed agent, grant, certificate session, allowed/denied calls and anonymous denial'

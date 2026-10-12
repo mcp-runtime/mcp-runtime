@@ -8,9 +8,9 @@
 #   - For S1/S2: adapter proxy at ADAPTER_URL (default http://127.0.0.1:8099/mcp)
 #
 # Usage:
-#   KUBECONFIG=$HOME/.kube/test-mcp-runtime-config bash hack/cluster-ops/perf-regression.sh
-#   SCENARIOS=S3 bash hack/cluster-ops/perf-regression.sh
-#   PERF_SAMPLES=50 PERF_REGRESSION_PCT=25 bash hack/cluster-ops/perf-regression.sh
+#   KUBECONFIG=$HOME/.kube/test-mcp-runtime-config bash hack/qa/perf-regression.sh
+#   SCENARIOS=S3 bash hack/qa/perf-regression.sh
+#   PERF_SAMPLES=50 PERF_REGRESSION_PCT=25 bash hack/qa/perf-regression.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

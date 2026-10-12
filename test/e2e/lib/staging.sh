@@ -1925,7 +1925,7 @@ staging_check_multitenancy() {
     ADMIN_TOKEN_INPUT="${E2E_PLATFORM_API_TOKEN}" RUN_ID="${STAGING_MT_RUN_ID}" \
     MCP_RUNTIME_CONFIG_DIR="${STAGING_MT_CONFIG_DIR}" VERIFY_DEPLOY_PULL_SECRET=1 \
     BIN="${BIN}" WORK_DIR="${WORK_DIR}/multitenancy" \
-    bash "${ROOT_DIR}/hack/deploy/mcpruntime-org/multitenancy-test.sh" | tee "${STAGING_ARTIFACT_DIR}/multitenancy.log"
+    bash "${ROOT_DIR}/hack/qa/multitenancy-test.sh" | tee "${STAGING_ARTIFACT_DIR}/multitenancy.log"
   # Evidence that the tenant server went through build -> push -> deploy and is
   # pulled in-cluster from the public registry.
   staging_mt_names

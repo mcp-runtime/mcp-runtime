@@ -9,6 +9,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Changed
 
+- Repository automation is grouped under `hack/dev`, `hack/ci`, `hack/qa`, `hack/deploy` and `hack/release`. Reference helpers move to `hack/deploy/reference`, hosted acceptance to `hack/deploy/acceptance`, and destructive `clean.sh` becomes `reset.sh`. Update local invocations to the paths in `hack/README.md`; old-path wrappers are not provided. Agent guidance now routes tasks to the catalogue and focused runbooks.
+
 - Reference deployment helpers now require explicit source/cluster identity and use component-aware CLI release updates without replacing scoped registry pull credentials. Setup and configuration recovery are separate explicit operations; resets require a verified same-cluster full backup and preserve the ingress-controller namespace. Existing helper invocations/profiles must adopt the flags and identity fields documented in `hack/README.md`. ([#696](https://github.com/mcp-runtime/mcp-runtime/issues/696))
 - Repository automation now enforces real test coverage, isolated test kubeconfigs, Kind-only live probes, per-service authorization credentials, scoped demo-session cleanup and grant/session tool-call acceptance. Removed historical API-split milestone scripts and the Minikube installer; use maintained service tests and Kind E2E instead.
 

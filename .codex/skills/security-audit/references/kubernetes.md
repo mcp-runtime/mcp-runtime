@@ -5,7 +5,7 @@ Prefer the deterministic inventory/hygiene script first:
 
 ```bash
 export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/test-mcp-runtime-config}"
-bash hack/cluster-ops/k8s-hardening-check.sh
+bash hack/qa/k8s-hardening-check.sh
 ```
 
 Use this reference for RBAC graph judgment (rakkess), CIS depth, and admission

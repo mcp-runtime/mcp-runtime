@@ -3,12 +3,12 @@
 # Mirrors .github/workflows/security-trivy.yaml image job flags.
 #
 # Usage:
-#   bash hack/trivy-platform-images.sh              # all platform images
-#   bash hack/trivy-platform-images.sh platform-api analytics-api
-#   bash hack/trivy-platform-images.sh --scan-only platform-api
+#   bash hack/ci/trivy-platform-images.sh              # all platform images
+#   bash hack/ci/trivy-platform-images.sh platform-api analytics-api
+#   bash hack/ci/trivy-platform-images.sh --scan-only platform-api
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
 TRIVY_ACTION_REF="aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25" # 0.36.0

@@ -112,7 +112,7 @@ cp config/deployments/mcpruntime-org.env.example config/deployments/mcpruntime-o
 `config/deployments/mcpruntime-org.env` is gitignored. The `.example` file is the
 team-shared template; your local `.env` holds workstation-specific paths.
 
-The hack scripts under `hack/deploy/mcpruntime-org/` source this file by
+The hack scripts under `hack/deploy/reference/` source this file by
 default. Override the path with `MCP_DEPLOY_ENV=/path/to/other.env`. See
 `hack/README.md` for the full layout.
 
@@ -124,7 +124,7 @@ default. Override the path with `MCP_DEPLOY_ENV=/path/to/other.env`. See
 |----------|----------|---------|---------|
 | `KUBECONFIG` | yes | all hack scripts, manual `kubectl` | Path to the selected cluster kubeconfig. Must match the cluster you target. |
 | `MCP_KUBE_CONTEXT` | optional | CLI setup and public hack scripts | Context within the kubeconfig; use when the file has multiple clusters. |
-| `MCP_SETUP_KUBECONFIG` | yes (setup) | `hack/deploy/mcpruntime-org/setup.sh` | Same as `KUBECONFIG`; passed to `mcp-runtime setup --kubeconfig`. |
+| `MCP_SETUP_KUBECONFIG` | yes (setup) | `hack/deploy/reference/setup.sh` | Same as `KUBECONFIG`; passed to `mcp-runtime setup --kubeconfig`. |
 | `MCP_PLATFORM_DOMAIN` | yes | setup | Apex domain only (no `https://`). Derives `registry.`, `mcp.`, and `platform.` hostnames. |
 | `MCP_PLATFORM_ADMIN_EMAIL` | yes (non-test setup) | setup | Seeds the platform admin account during bootstrap. |
 
@@ -143,7 +143,9 @@ MCP Auth updates use a separately reviewed release manifest and
 `mcp-runtime update --only mcp-auth`. The Runtime rollout wrapper does not build,
 copy or change MCP Auth images.
 
-#### Setup behavior (read by `hack/deploy/mcpruntime-org/setup.sh`)
+<a id="setup-behavior-read-by-hackdeploymcpruntime-orgsetupsh"></a>
+
+#### Setup behavior (read by `hack/deploy/reference/setup.sh`)
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
@@ -209,7 +211,9 @@ A ready-to-adapt protected server definition is in `examples/oauth-example-go-20
 server's canonical resource URI (`https://mcp.<domain>/<prefix>/mcp`). The
 gateway fails closed with 401 when a token's `aud` does not match.
 
-#### Rollout-only (`hack/deploy/mcpruntime-org/rollout.sh`)
+<a id="rollout-only-hackdeploymcpruntime-orgrolloutsh"></a>
+
+#### Rollout-only (`hack/deploy/reference/rollout.sh`)
 
 Set `MCP_DEPLOY_REF` to the selected stable release, `MCP_KUBE_CONTEXT` to the
 explicit target context, and `MCP_EXPECTED_CLUSTER_UID` to that cluster's
@@ -217,15 +221,17 @@ explicit target context, and `MCP_EXPECTED_CLUSTER_UID` to that cluster's
 the release commit and delegates all component rollouts to `mcp-runtime update`.
 It does not rewrite pull Secrets or tenant NetworkPolicies.
 
-#### Multitenancy test (`hack/deploy/mcpruntime-org/multitenancy-test.sh`)
+<a id="multitenancy-test-hackdeploymcpruntime-orgmultitenancy-testsh"></a>
+
+#### Multitenancy test (`hack/qa/multitenancy-test.sh`) {#multitenancy-test}
 
 These are **not** in the deployment profile. Export them only for loopback or disposable `.e2e.mcpruntime.org` URLs; this provisioning demo refuses production hosts.
 
 | Variable | Example | Purpose |
 |----------|---------|---------|
-| `PLATFORM_URL` | `https://platform.mcpruntime.org` | Platform API base (no trailing slash). |
-| `MCP_URL` | `https://mcp.mcpruntime.org` | Public MCP ingress base. |
-| `REGISTRY_HOST` | `registry.mcpruntime.org` | Registry hostname for tenant image build/push. |
+| `PLATFORM_URL` | `http://127.0.0.1:18080` | Platform API base (no trailing slash); loopback or disposable staging only. |
+| `MCP_URL` | `http://127.0.0.1:18080` | MCP ingress base on the same disposable target. |
+| `REGISTRY_HOST` | `localhost:5000` | Registry hostname for disposable tenant image build/push. |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | test admin creds | Platform admin login when not using token. |
 | `ADMIN_TOKEN` | optional | Admin API token instead of password login. |
 | `VERIFY_DEPLOY_PULL_SECRET` | `0` | When `1`, retain the supplied kubeconfig for read-only checks that `server deploy` created the namespace-local image pull Secret and attached it to `mcp-workload`. |
@@ -300,8 +306,8 @@ export MCP_DEPLOY_REF=<selected-stable-release>
 For ordinary release image updates:
 
 ```bash
-hack/deploy/mcpruntime-org/rollout.sh --dry-run
-hack/deploy/mcpruntime-org/rollout.sh --yes
+hack/deploy/reference/rollout.sh --dry-run
+hack/deploy/reference/rollout.sh --yes
 ```
 
 The wrapper uses `mcp-runtime update --build` and the published component
@@ -314,8 +320,8 @@ admin key into Kubernetes pull Secrets.
 Full setup is separate and must be deliberate:
 
 ```bash
-hack/deploy/mcpruntime-org/backup.sh --setup
-hack/deploy/mcpruntime-org/setup.sh --yes
+hack/deploy/reference/backup.sh --setup
+hack/deploy/reference/setup.sh --yes
 ```
 
 The setup wrapper requires existing registry/platform TLS Secrets, uses
@@ -539,7 +545,7 @@ that setup may reapply. The snapshot includes PVC/PV definitions, but does not
 copy live volume contents because setup does not delete claims or their data:
 
 ```bash
-hack/deploy/mcpruntime-org/backup.sh --setup
+hack/deploy/reference/backup.sh --setup
 ```
 
 The command requires the isolated `prod-mcp-runtime` context. It creates a
@@ -570,7 +576,7 @@ while retaining public ingress authentication, backend token settings, the token
 For destructive cleanup or full node recovery, create a full backup:
 
 ```bash
-hack/deploy/mcpruntime-org/backup.sh --full --online-copy
+hack/deploy/reference/backup.sh --full --online-copy
 ```
 
 The full snapshot also requires the configured SSH host and captures K3s
@@ -612,7 +618,7 @@ bundle first with `cd ~/.mcpruntime/backups/mcpruntime-org/latest && shasum -a
 traffic. This does not restore an external identity provider or data stored
 outside the cluster.
 
-`hack/deploy/mcpruntime-org/clean.sh` still takes a smaller **platform-runtime
+`hack/deploy/reference/reset.sh` still takes a smaller **platform-runtime
 restore snapshot** before its intentional namespace wipe. It covers platform
 TLS/config/bootstrap material, not the full node or PVC data.
 
@@ -622,7 +628,7 @@ TLS/config/bootstrap material, not the full node or PVC data.
 | `MCP_EXPECTED_CLUSTER_UID` | required | Actual `kube-system` namespace UID; all reference helpers verify it. |
 | `MCP_DEPLOY_ENV` | `config/deployments/mcpruntime-org.env` | Env file path for all hack scripts. |
 
-The `clean.sh` snapshot covers TLS, cert-manager, OIDC, and bootstrap secrets.
+The `reset.sh` snapshot covers TLS, cert-manager, OIDC, and bootstrap secrets.
 Use `backup.sh --setup` before setup, or `backup.sh --full --online-copy` for
 the Kubernetes object and persistent volume recovery bundle described above.
 
@@ -634,7 +640,7 @@ preserve volume contents and cannot authorize a reset. Keep protected off-host
 copies and separately back up the external identity provider.
 
 ```bash
-hack/deploy/mcpruntime-org/backup.sh --full --online-copy
+hack/deploy/reference/backup.sh --full --online-copy
 ```
 
 The full helper captures K3s SQLite state consistently, but copies live PVC
@@ -644,8 +650,8 @@ Record a reviewed recovery snapshot path; do not rely on a changing `latest` lin
 Configuration recovery is explicit and separate from setup:
 
 ```bash
-hack/deploy/mcpruntime-org/restore.sh --snapshot /protected/recovery/snapshot --dry-run
-hack/deploy/mcpruntime-org/restore.sh --snapshot /protected/recovery/snapshot --yes
+hack/deploy/reference/restore.sh --snapshot /protected/recovery/snapshot --dry-run
+hack/deploy/reference/restore.sh --snapshot /protected/recovery/snapshot --yes
 ```
 
 This restores selected TLS/config/credentials and restarts APIs, not databases
@@ -657,8 +663,8 @@ another manager's state. Complete database recovery before accepting traffic.
 Only an intentionally authorized reset should use:
 
 ```bash
-hack/deploy/mcpruntime-org/clean.sh --dry-run
-hack/deploy/mcpruntime-org/clean.sh --yes \
+hack/deploy/reference/reset.sh --dry-run
+hack/deploy/reference/reset.sh --yes \
   --confirm-cluster "$MCP_EXPECTED_CLUSTER_UID" \
   --recovery-snapshot /protected/recovery/full-snapshot
 ```
@@ -803,7 +809,7 @@ If `team create` returns `500 failed to provision team namespace`, confirm
 ### Multi-tenancy end-to-end test
 
 ```bash
-hack/deploy/mcpruntime-org/multitenancy-test.sh
+hack/qa/multitenancy-test.sh
 ```
 
 Default assumptions:
@@ -818,7 +824,7 @@ Default assumptions:
 To skip the build/deploy and only verify an existing setup:
 
 ```bash
-SKIP_SETUP=1 hack/deploy/mcpruntime-org/multitenancy-test.sh
+SKIP_SETUP=1 hack/qa/multitenancy-test.sh
 ```
 
 ## Production observability and debugging
@@ -937,7 +943,7 @@ the base manifest sets `web`.
 ### Setup fails "bundled registry platform setup requires MCP_REGISTRY_ENDPOINT"
 
 You omitted `--test-mode` and used `--registry-mode auto`. For this k3s cluster
-use `--registry-mode bundled-https` (included in `hack/deploy/mcpruntime-org/setup.sh`).
+use `--registry-mode bundled-https` (included in `hack/deploy/reference/setup.sh`).
 Do not export a ClusterIP as `MCP_REGISTRY_ENDPOINT` on the public TLS deployment.
 
 ### Setup fails "MCP_IMAGE_PLATFORM does not match Kubernetes node architecture"

@@ -148,7 +148,7 @@ review, the JSON is canonical for the harness.
 ## Open follow-ups
 
 - Expand `docs/security/authz-matrix.json` toward full parity with the markdown
-  table; run `bash hack/validate-authz-matrix.sh` against Kind for drift. Set an
+  table; run `bash hack/qa/validate-authz-matrix.sh` against Kind for drift. Set an
   explicit `KUBECONFIG`, loopback `AUTHZ_PLATFORM_URL`, `AUTHZ_RUNTIME_URL`,
   `AUTHZ_ANALYTICS_URL`, and a real non-admin `AUTHZ_USER_KEY`. Start/stop your
   own service port-forwards; the harness never creates or kills them. Rows with

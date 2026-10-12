@@ -14,7 +14,7 @@ user-facing commands and scripts over private shortcuts.
 - Example profile: `config/deployments/mcpruntime-org.env.example`
 - Runbook: `docs/reference-deployment.md`
 - Readiness/debug guide: `docs/cluster-readiness.md`
-- Scripts (canonical): `hack/deploy/mcpruntime-org/{backup,setup,clean,restore,rollout,multitenancy-test}.sh`
+- Scripts (canonical): `hack/deploy/reference/{backup,setup,reset,restore,rollout}.sh`; disposable demo: `hack/qa/multitenancy-test.sh`
 - Script index: `hack/README.md`
 - User path: `docs/hosted-quickstart.md` (published CLI install, hosted platform login,
   server publish, grant, adapter, and analytics UI)
@@ -72,10 +72,10 @@ KUBECONFIG="$PROD_KUBECONFIG" ./bin/mcp-runtime cluster doctor
   direct Kubernetes mutations require an explicitly requested Kubernetes path
   or a test of that path and never count as CLI/UI acceptance.
 - Before a production setup redeployment, run
-  `hack/deploy/mcpruntime-org/backup.sh --setup`. It captures Kubernetes
+  `hack/deploy/reference/backup.sh --setup`. It captures Kubernetes
   resource definitions (including PVC/PV specs), Secrets, and platform restore
   inputs without copying live PVC contents. Before destructive cleanup or full
-  node recovery, use `hack/deploy/mcpruntime-org/backup.sh --full
+  node recovery, use `hack/deploy/reference/backup.sh --full
   --online-copy` to also capture the K3s database and local-path files. Live
   volume copies are not application-consistent and may need database WAL
   recovery. Bundles are not encrypted; store them on encrypted storage and
@@ -178,8 +178,8 @@ KUBECONFIG="$HOME/.kube/prod-mcp-runtime-config" ./bin/mcp-runtime cluster docto
 Run the actual script path:
 
 ```bash
-bash -n hack/deploy/mcpruntime-org/setup.sh
-bash hack/deploy/mcpruntime-org/setup.sh --yes
+bash -n hack/deploy/reference/setup.sh
+bash hack/deploy/reference/setup.sh --yes
 KUBECONFIG="$HOME/.kube/prod-mcp-runtime-config" ./bin/mcp-runtime cluster doctor
 kubectl --kubeconfig "$HOME/.kube/prod-mcp-runtime-config" --context prod-mcp-runtime get pods -A
 ```
@@ -195,16 +195,16 @@ Healthy setup signs:
 
 ## Clean / Restore Validation
 
-`hack/deploy/mcpruntime-org/restore.sh --snapshot PATH --yes` performs explicit reviewed configuration recovery.
+`hack/deploy/reference/restore.sh --snapshot PATH --yes` performs explicit reviewed configuration recovery.
 It restores TLS and cert-manager runtime material only; it must not restore
 tenant/user data.
 
 Validate:
 
 ```bash
-bash -n hack/deploy/mcpruntime-org/clean.sh
+bash -n hack/deploy/reference/reset.sh
 MCP_DEPLOY_ENV=config/deployments/mcpruntime-org.env \
-  hack/deploy/mcpruntime-org/restore.sh --snapshot /protected/recovery/snapshot --yes
+  hack/deploy/reference/restore.sh --snapshot /protected/recovery/snapshot --yes
 ```
 
 If restore hits Kubernetes metadata conflicts, sanitize backup manifests before
@@ -213,7 +213,7 @@ apply. Do not apply stale `resourceVersion`, `uid`, `managedFields`, or
 
 ## Rollout Validation
 
-`hack/deploy/mcpruntime-org/rollout.sh` delegates to `mcp-runtime update --build`
+`hack/deploy/reference/rollout.sh` delegates to `mcp-runtime update --build`
 with the selected stable release manifest. Set `MCP_DEPLOY_REF`, an explicit
 kubeconfig/context, and `MCP_EXPECTED_CLUSTER_UID` in the private profile. A clean
 checkout at that source commit is required. Run `--dry-run` before `--yes`.
@@ -230,7 +230,7 @@ Hosted acceptance requires a managed agent, bounded grant, certificate session,
 allowed tool call, ungranted tool denial and anonymous denial. Never mark a
 release accepted if enrollment succeeds but tool identity/policy fails. The
 workflow updates the live badge only after acceptance and successful cleanup.
-See `hack/README.md` and `hack/deploy/mcpruntime-org/README.md` for helper scope.
+See `hack/README.md` and `hack/deploy/reference/README.md` for helper scope.
 
 ## Registry Debug Shortcuts
 
@@ -258,7 +258,7 @@ Expected:
 
 ## Multitenancy Script
 
-`hack/deploy/mcpruntime-org/multitenancy-test.sh` is intentionally platform-API-only. It unsets
+`hack/qa/multitenancy-test.sh` is intentionally platform-API-only. It unsets
 `KUBECONFIG`. Validate it with public endpoints:
 
 This production QA must exercise `server build image`, `server push`, and
@@ -273,7 +273,7 @@ MCP_URL=https://mcp.mcpruntime.org \
 REGISTRY_HOST=registry.mcpruntime.org \
 ADMIN_EMAIL=admin@mcpruntime.org \
 ADMIN_PASSWORD='...' \
-hack/deploy/mcpruntime-org/multitenancy-test.sh
+hack/qa/multitenancy-test.sh
 ```
 
 Use `SKIP_SETUP=1` only after the generated teams, users, servers, grants, and

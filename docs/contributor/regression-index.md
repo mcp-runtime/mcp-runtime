@@ -48,7 +48,7 @@ deterministic and offline: it never contacts a cluster.
 3. Mention the incident (`#NNN`) in the bug-fix PR and in this index.
 
 Cluster-level checks must use guarded Kind or disposable staging targets; see
-[Staging E2E](staging-e2e.md) and `hack/cluster-ops/README.md`.
+[Staging E2E](staging-e2e.md) and `hack/qa/README.md`.
 
 ## Current coverage (initial backlog from #546)
 

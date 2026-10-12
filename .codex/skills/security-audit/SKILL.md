@@ -33,9 +33,9 @@ When the review includes API/CRD/CLI design choices, also read
 | Go SAST | gosec in pre-release |
 | FS/image vulns + misconfig | Trivy in pre-release |
 | Repository SBOM | CI `sbom` / pre-release SBOM jobs |
-| Live auth deny / headers / log scan | `bash hack/cluster-ops/security-regression.sh` |
-| Authz matrix rows | `bash hack/validate-authz-matrix.sh` |
-| K8s inventory / privileged / NP | `bash hack/cluster-ops/k8s-hardening-check.sh` |
+| Live auth deny / headers / log scan | `bash hack/qa/security-regression.sh` |
+| Authz matrix rows | `bash hack/qa/validate-authz-matrix.sh` |
+| K8s inventory / privileged / NP | `bash hack/qa/k8s-hardening-check.sh` |
 | Live auth deny / headers (judgment) | `cluster-ops` mode `security` references |
 
 If CI or the scripts already passed on this commit, cite the run and focus the

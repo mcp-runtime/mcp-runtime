@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Compare committed OpenAPI specs against merge-base for breaking changes (M3.3).
-# Requires oasdiff and an explicit base. Usage: bash hack/oasdiff-openapi.sh <base-ref>
+# Requires oasdiff and an explicit base. Usage: bash hack/ci/oasdiff-openapi.sh <base-ref>
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
 [[ $# == 1 ]] || { echo 'Usage: oasdiff-openapi.sh <base-ref> (use the previous release for intentional breaking-change review)' >&2; exit 2; }

@@ -5,7 +5,7 @@ Prefer the deterministic script first:
 
 ```bash
 export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/test-mcp-runtime-config}"
-bash hack/cluster-ops/security-regression.sh
+bash hack/qa/security-regression.sh
 # optional: SUITES=A,E,I  or  SUITES=A,E,F,G,I,matrix
 ```
 

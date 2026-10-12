@@ -7,9 +7,9 @@
 #   - Traefik port-forward: kubectl -n traefik port-forward svc/traefik 18080:8000
 #
 # Usage:
-#   KUBECONFIG=$HOME/.kube/test-mcp-runtime-config bash hack/cluster-ops/security-regression.sh
-#   SUITES=A,E,I bash hack/cluster-ops/security-regression.sh
-#   BASE_URL=http://localhost:18080 bash hack/cluster-ops/security-regression.sh
+#   KUBECONFIG=$HOME/.kube/test-mcp-runtime-config bash hack/qa/security-regression.sh
+#   SUITES=A,E,I bash hack/qa/security-regression.sh
+#   BASE_URL=http://localhost:18080 bash hack/qa/security-regression.sh
 #
 # Suites:
 #   A  backend auth enforcement
@@ -218,7 +218,7 @@ fi
 # --- optional authz matrix ---
 if suite_enabled matrix; then
   log "=== suite matrix: authz-matrix ==="
-  if bash "${ROOT}/hack/validate-authz-matrix.sh"; then
+  if bash "${ROOT}/hack/qa/validate-authz-matrix.sh"; then
     ok "validate-authz-matrix"
   else
     bad "validate-authz-matrix"

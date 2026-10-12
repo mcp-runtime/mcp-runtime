@@ -4,8 +4,8 @@
 # review remains in security-audit mode k8s.
 #
 # Usage:
-#   KUBECONFIG=$HOME/.kube/test-mcp-runtime-config bash hack/cluster-ops/k8s-hardening-check.sh
-#   NAMESPACES="mcp-runtime,mcp-platform,mcp-observability" bash hack/cluster-ops/k8s-hardening-check.sh
+#   KUBECONFIG=$HOME/.kube/test-mcp-runtime-config bash hack/qa/k8s-hardening-check.sh
+#   NAMESPACES="mcp-runtime,mcp-platform,mcp-observability" bash hack/qa/k8s-hardening-check.sh
 set -euo pipefail
 
 TEST_KUBECONFIG="${TEST_KUBECONFIG:-${KUBECONFIG:-$HOME/.kube/test-mcp-runtime-config}}"

@@ -2,7 +2,7 @@
 # Explicit configuration recovery, not database/PVC restoration.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=hack/deploy/mcpruntime-org/lib/backup.sh
+# shellcheck source=hack/deploy/reference/lib/backup.sh
 source "$SCRIPT_DIR/lib/backup.sh"
 dry_run=0; yes=0; snapshot=""
 while [[ $# -gt 0 ]]; do

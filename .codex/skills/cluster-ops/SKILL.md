@@ -43,10 +43,10 @@ for Kubernetes workload health and server inventories.
 | Ship / strict-prod install | Staging E2E workflows |
 | PR path-selected Kind smoke | `test/e2e/qa-e2e.sh` + CI QA E2E |
 | Auth/governance traffic | QA E2E `smoke-auth,governance` scenarios |
-| Live security suites A/E/F/G/I | `bash hack/cluster-ops/security-regression.sh` |
-| Live perf S1–S3 + baseline | `bash hack/cluster-ops/perf-regression.sh` |
-| K8s posture inventory / hygiene | `bash hack/cluster-ops/k8s-hardening-check.sh` |
-| Authz matrix probe | `bash hack/validate-authz-matrix.sh` |
+| Live security suites A/E/F/G/I | `bash hack/qa/security-regression.sh` |
+| Live perf S1–S3 + baseline | `bash hack/qa/perf-regression.sh` |
+| K8s posture inventory / hygiene | `bash hack/qa/k8s-hardening-check.sh` |
+| Authz matrix probe | `bash hack/qa/validate-authz-matrix.sh` |
 | Supply-chain scanners | `pre-release-regression.yaml` / CI |
 
 Run the scripts first for modes `security`, `perf`, and k8s hygiene. Load the

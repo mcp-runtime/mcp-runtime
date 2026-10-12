@@ -85,7 +85,7 @@ one example.
 | registry | Bundled HTTP/HTTPS or external registry; node-level pull trust/auth and push credentials. For managed clouds, prefer the provider registry and workload/node identity where supported. |
 | public API access | Kubernetes API endpoint used by nodes and operators; the runtime API NetworkPolicy port must match the cluster API port. |
 
-The `hack/deploy/mcpruntime-org/` scripts encode this repository's public k3s
+The `hack/deploy/reference/` scripts encode this repository's public k3s
 layout (`mcp-platform`, `mcp-observability`, bundled registry, Traefik integration, and
 mcpruntime.org hostnames). For other distributions, use the generic CLI setup
 and the cluster's own image publication/GitOps process unless a separate
@@ -253,7 +253,7 @@ causes `ImagePullBackOff` with `x509: ... doesn't contain any IP SANs`.
 
 Copy `config/deployments/mcpruntime-org.env.example` to
 `mcpruntime-org.env`, then follow **[Public Reference Deployment](reference-deployment.md)**
-for first install (`--acme-email`), reruns (`hack/deploy/mcpruntime-org/setup.sh --yes`
+for first install (`--acme-email`), reruns (`hack/deploy/reference/setup.sh --yes`
 intentionally omits `--acme-email` and uses `--tls-cluster-issuer` instead),
 safe clean+restore, rollout-only updates, the full environment variable reference,
 and multitenancy validation.

@@ -4007,7 +4007,7 @@ fi
 # Compare each component to the single local :latest image (or the GHCR hash
 # tag, when that cache is on). A warm cluster must not skip this: the previous
 # tag can belong to another checkout.
-go build -o "${PLATFORM_ROOT}/bin/e2e-image-cache" ./hack/e2e-image-cache
+go build -o "${PLATFORM_ROOT}/bin/e2e-image-cache" ./hack/qa/image-cache
 mirror_upstream_images_parallel \
   "registry:2.8.3" \
   "traefik:v2.10" \
