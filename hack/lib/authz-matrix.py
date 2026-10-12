@@ -32,7 +32,8 @@ def run(matrix):
         raise ValueError("required matrix credentials are empty")
     if keys["user-key"] == keys["admin-key"]:
         raise ValueError("user and admin credentials must differ")
-    rows = json.loads(open(matrix).read())
+    with open(matrix, encoding="utf-8") as source:
+        rows = json.load(source)
     if not rows:
         raise ValueError("matrix has no checks")
     failures = 0
