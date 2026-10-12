@@ -183,17 +183,6 @@ need() {
   }
 }
 
-require_free_listen_port() {
-  local listen="$1" port="${1##*:}"
-  python3 - "$port" <<'PORT'
-import socket, sys
-with socket.socket() as listener:
-    try:
-        listener.bind(("127.0.0.1", int(sys.argv[1])))
-    except OSError:
-        raise SystemExit("Adapter port is occupied; choose a free port. Existing processes are never killed.")
-PORT
-}
 
 wait_for_adapter_proxy() {
   local listen="$1"
@@ -822,7 +811,7 @@ adapter_call_add_for() {
   local adapter_url="http://${listen}"
   proxy_pid=""
 
-  require_free_listen_port "$listen"
+  mcpruntime_adapter_require_free_port "$listen"
   : >"$log_file"
   MCP_PLATFORM_API_PROFILE="$profile" KUBECONFIG="" "$BIN" adapter proxy \
     --platform-url "$PLATFORM_URL" \
@@ -859,7 +848,7 @@ adapter_call_add_for() {
       kill "$proxy_pid" >/dev/null 2>&1 || true
       wait "$proxy_pid" 2>/dev/null || true
       proxy_pid=""
-      require_free_listen_port "$listen"
+      mcpruntime_adapter_require_free_port "$listen"
       return 1
     fi
     if [[ $(date +%s) -gt $init_deadline ]]; then
@@ -868,7 +857,7 @@ adapter_call_add_for() {
       kill "$proxy_pid" >/dev/null 2>&1 || true
       wait "$proxy_pid" 2>/dev/null || true
       proxy_pid=""
-      require_free_listen_port "$listen"
+      mcpruntime_adapter_require_free_port "$listen"
       return 1
     fi
     echo "waiting for adapter route/session policy (HTTP ${init_status}) for profile ${profile}"
@@ -883,7 +872,7 @@ adapter_call_add_for() {
     kill "$proxy_pid" >/dev/null 2>&1 || true
     wait "$proxy_pid" 2>/dev/null || true
     proxy_pid=""
-    require_free_listen_port "$listen"
+    mcpruntime_adapter_require_free_port "$listen"
     return 1
   fi
 
@@ -905,7 +894,7 @@ adapter_call_add_for() {
     kill "$proxy_pid" >/dev/null 2>&1 || true
     wait "$proxy_pid" 2>/dev/null || true
     proxy_pid=""
-    require_free_listen_port "$listen"
+    mcpruntime_adapter_require_free_port "$listen"
     return 1
   fi
 
@@ -937,7 +926,7 @@ adapter_call_add_for() {
         kill "$proxy_pid" >/dev/null 2>&1 || true
         wait "$proxy_pid" 2>/dev/null || true
         proxy_pid=""
-        require_free_listen_port "$listen"
+        mcpruntime_adapter_require_free_port "$listen"
         return 1
       fi
       sleep 3
@@ -948,7 +937,7 @@ adapter_call_add_for() {
     kill "$proxy_pid" >/dev/null 2>&1 || true
     wait "$proxy_pid" 2>/dev/null || true
     proxy_pid=""
-    require_free_listen_port "$listen"
+    mcpruntime_adapter_require_free_port "$listen"
     return 1
   done
 
@@ -960,14 +949,14 @@ adapter_call_add_for() {
     kill "$proxy_pid" >/dev/null 2>&1 || true
     wait "$proxy_pid" 2>/dev/null || true
     proxy_pid=""
-    require_free_listen_port "$listen"
+    mcpruntime_adapter_require_free_port "$listen"
     return 1
   fi
 
   kill "$proxy_pid" >/dev/null 2>&1 || true
   wait "$proxy_pid" 2>/dev/null || true
   proxy_pid=""
-  require_free_listen_port "$listen"
+  mcpruntime_adapter_require_free_port "$listen"
 }
 
 adapter_call_add() {
@@ -1046,8 +1035,8 @@ cleanup_proxy() {
   if [[ -n "$proxy_pid" ]]; then kill "$proxy_pid" 2>/dev/null || true; wait "$proxy_pid" 2>/dev/null || true; fi
 }
 trap cleanup_proxy EXIT
-require_free_listen_port "$ADAPTER_LISTEN"
-require_free_listen_port "${TECHCORP_ADAPTER_LISTEN:-127.0.0.1:8300}"
+mcpruntime_adapter_require_free_port "$ADAPTER_LISTEN"
+mcpruntime_adapter_require_free_port "${TECHCORP_ADAPTER_LISTEN:-127.0.0.1:8300}"
 
 if [[ "${SKIP_SETUP:-0}" != "1" ]]; then
   setup_demo

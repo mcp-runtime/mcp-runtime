@@ -10,3 +10,17 @@ mcpruntime_adapter_initialize_pending() {
     *) return 1 ;;
   esac
 }
+
+# Reject an existing listener without mistaking closed HTTP connections for one.
+mcpruntime_adapter_require_free_port() {
+  python3 - "${1##*:}" <<'PORT'
+import socket, sys
+with socket.socket() as listener:
+    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        listener.bind(("127.0.0.1", int(sys.argv[1])))
+        listener.listen(1)
+    except OSError:
+        raise SystemExit("Adapter port is occupied; choose a free port. Existing processes are never killed.")
+PORT
+}

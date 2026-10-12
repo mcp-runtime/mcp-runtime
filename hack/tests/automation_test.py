@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import socket
 from pathlib import Path
 import subprocess
 import tempfile
@@ -248,6 +249,29 @@ assert 'explicit-kubeconfig' not in str(p)
     def test_unknown_perf_scenario_fails(self):
         self.env.update(SCENARIOS='S4', PERF_OUT_DIR=str(self.path / 'perf'), PERF_BASELINE_DIR=str(self.path / 'baseline'))
         self.assertNotEqual(self.run_script('hack/cluster-ops/perf-regression.sh').returncode, 0)
+
+
+    def test_adapter_port_check_preserves_existing_listener(self):
+        with socket.socket() as listener:
+            listener.bind(('127.0.0.1', 0)); listener.listen(1)
+            port = listener.getsockname()[1]
+            result = subprocess.run(['bash', '-c', f'source "{ROOT}/hack/deploy/mcpruntime-org/lib/adapter-readiness.sh"; mcpruntime_adapter_require_free_port 127.0.0.1:{port}'],
+                                    env=self.env, capture_output=True)
+            self.assertNotEqual(result.returncode, 0)
+            with socket.create_connection(('127.0.0.1', port), timeout=1): pass
+
+    def test_adapter_port_check_accepts_time_wait_after_own_proxy_stops(self):
+        with socket.socket() as listener:
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            listener.bind(('127.0.0.1', 0)); listener.listen(1)
+            port = listener.getsockname()[1]
+            with socket.create_connection(('127.0.0.1', port), timeout=1) as client:
+                connection, _ = listener.accept()
+                connection.close()
+                client.recv(1)
+        result = subprocess.run(['bash', '-c', f'source "{ROOT}/hack/deploy/mcpruntime-org/lib/adapter-readiness.sh"; mcpruntime_adapter_require_free_port 127.0.0.1:{port}'],
+                                env=self.env, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 
