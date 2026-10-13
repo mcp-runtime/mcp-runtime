@@ -61,6 +61,8 @@ behavior, service maintenance, and incident diagnosis.
   and credential ownership.
 - [Services and Observability](platform-services.md): platform services,
   gateway enforcement, audit events, metrics, logs, and traces.
+- [Follow a Request](request-debugging.md): correlate a client response's
+  `X-Trace-ID` with traces, logs and metrics.
 - [Troubleshooting](troubleshooting.md): diagnosis of installation, access,
   registry, analytics, and cluster failures.
 

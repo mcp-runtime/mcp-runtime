@@ -140,6 +140,19 @@ exemplars can link a measurement to Tempo when OpenMetrics scraping and
 Prometheus exemplar storage are enabled. Scrape and log ingestion take time;
 refresh after the next scrape rather than assuming zero means a lost request.
 
+## Retention and sampling limits
+
+The bundled stack keeps data for a limited time: Tempo compacts blocks after
+24 hours (`k8s/16-tempo.yaml`) and Loki retains logs for 168 hours
+(`k8s/17-loki.yaml`); Prometheus retention is set by its own flags. A trace ID
+copied after those windows will not resolve, although it may still be present
+in a client capture. The Traefik ingress tracer samples every request
+(`--tracing.sampleRate=1`); other services follow their OpenTelemetry SDK
+configuration, and an unsampled request has a trace ID and log lines but no
+retained trace or histogram exemplar. Grafana's Tempo-to-Loki link searches
+from 5 seconds before the span start to 5 seconds after its end, and its
+Tempo-to-Prometheus links use a two-minute window around the span.
+
 ## Confirm Kubernetes state without changing it
 
 Use an explicit kubeconfig for the intended cluster. Set `DEMO_KUBECONFIG` to

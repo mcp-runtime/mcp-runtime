@@ -1896,6 +1896,15 @@ def parse_session_id(headers):
     return session_id
 
 
+def parse_trace_id(headers):
+    trace_id = ""
+    for line in headers.splitlines():
+        key, sep, value = line.partition(":")
+        if sep and key.lower() == "x-trace-id":
+            trace_id = value.strip()
+    return trace_id
+
+
 def json_candidates(body):
     candidates = []
     try:
@@ -2005,6 +2014,7 @@ def curl_post(step_name, payload, session_id="", allowed_statuses=(200,), requir
         ok = False
 
     step = {"name": step_name, "ok": ok, "status": status, "body": body}
+    step["trace_id"] = parse_trace_id(headers)
     if proc.returncode != 0:
         step["error"] = proc.stderr.strip() or f"curl exited {proc.returncode}"
     elif status not in allowed_statuses:
@@ -2157,11 +2167,20 @@ check(
     f"{name}: expected ok={expected_ok}, got {doc.get('ok')}: {json.dumps(doc, indent=2)}",
 )
 
+def is_trace_id(value):
+    return len(value) == 32 and all(char in "0123456789abcdef" for char in value)
+
+
 if expected_ok:
     check(
         curl_exit_code == 0,
         f"{name}: exit code 0",
         f"{name}: expected exit code 0, got {curl_exit_code}",
+    )
+    check(
+        is_trace_id(steps["tools/call"].get("trace_id", "")),
+        f"{name}: allowed tools/call response exposes X-Trace-ID",
+        f"{name}: allowed tools/call response has no valid X-Trace-ID: {steps['tools/call'].get('trace_id')!r}",
     )
     for step_name in ("tools/call", "prompts/get", "resources/read"):
         step = steps[step_name]
@@ -2197,6 +2216,12 @@ else:
             bool(matching_steps),
             f"{name}: failed step contains {expected_tool_error!r}",
             f"{name}: expected a failed step error to contain {expected_tool_error!r}, got {rendered}",
+        )
+        # The gateway's own denial must stay correlatable by trace ID.
+        check(
+            all(is_trace_id(step.get("trace_id", "")) for step in matching_steps.values()),
+            f"{name}: denied response exposes X-Trace-ID",
+            f"{name}: denied response has no valid X-Trace-ID: {rendered}",
         )
     for step_name in ("tools/call", "prompts/get", "resources/read"):
         step = steps[step_name]
