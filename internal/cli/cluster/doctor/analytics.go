@@ -7,84 +7,249 @@ import (
 	"strings"
 
 	"mcp-runtime/internal/cli/core"
+	"mcp-runtime/pkg/kubeworkload"
+	"mcp-runtime/pkg/mcpdefaults"
 )
 
+// checkGatewayAnalyticsCredentials verifies every analytics-enabled gateway
+// sidecar can authenticate to ingest: a projected ServiceAccount token for the
+// ingest audience running as the mcp-workload ServiceAccount, or an explicit
+// ANALYTICS_API_KEY override that resolves to a populated Secret.
 func checkGatewayAnalyticsCredentials(kubectl core.KubectlRunner) DoctorCheck {
-	out, err := readKubectlOutput(kubectl, []string{"get", "deploy", "-A", "-o", "json"})
-	if err != nil {
-		return DoctorCheck{
-			Name:   "gateway analytics credentials",
-			OK:     false,
-			Detail: fmt.Sprintf("failed listing deployments: %v", err),
-			Remedy: "check Kubernetes API access and RBAC for listing Deployments",
-		}
+	const checkName = "gateway analytics credentials"
+	deployments, check := listGatewayAnalyticsDeployments(kubectl, checkName)
+	if check != nil {
+		return *check
 	}
 
-	var deployments doctorDeploymentList
-	if err := json.Unmarshal([]byte(out), &deployments); err != nil {
-		return DoctorCheck{
-			Name:   "gateway analytics credentials",
-			OK:     false,
-			Detail: fmt.Sprintf("failed parsing deployments JSON: %v", err),
-			Remedy: "rerun cluster doctor; if this persists, inspect `kubectl get deploy -A -o json`",
-		}
-	}
-
-	checked := 0
 	failures := make([]string, 0)
-	for _, deployment := range deployments.Items {
-		for _, container := range deployment.Spec.Template.Spec.Containers {
-			if container.Name != "mcp-gateway" {
-				continue
+	for _, deployment := range deployments {
+		id := deployment.Metadata.Namespace + "/" + deployment.Metadata.Name
+		container, _ := deployment.gatewayContainer()
+		if _, hasKey := envByName(container.Env, "ANALYTICS_API_KEY"); hasKey {
+			if msg := analyticsAPIKeyProblem(kubectl, deployment, container); msg != "" {
+				failures = append(failures, id+" "+msg)
 			}
-			if envValue(container.Env, "ANALYTICS_INGEST_URL") == "" {
-				continue
-			}
-			checked++
-			apiKeyEnv, ok := envByName(container.Env, "ANALYTICS_API_KEY")
-			if !ok {
-				failures = append(failures, fmt.Sprintf("%s/%s missing ANALYTICS_API_KEY", deployment.Metadata.Namespace, deployment.Metadata.Name))
-				continue
-			}
-			if strings.TrimSpace(apiKeyEnv.Value) != "" {
-				continue
-			}
-			if apiKeyEnv.ValueFrom == nil || apiKeyEnv.ValueFrom.SecretKeyRef == nil {
-				failures = append(failures, fmt.Sprintf("%s/%s ANALYTICS_API_KEY has no value or secretKeyRef", deployment.Metadata.Namespace, deployment.Metadata.Name))
-				continue
-			}
-			ref := apiKeyEnv.ValueFrom.SecretKeyRef
-			if strings.TrimSpace(ref.Name) == "" || strings.TrimSpace(ref.Key) == "" {
-				failures = append(failures, fmt.Sprintf("%s/%s ANALYTICS_API_KEY secretKeyRef is incomplete", deployment.Metadata.Namespace, deployment.Metadata.Name))
-				continue
-			}
-			if err := checkSecretKeyPopulated(kubectl, deployment.Metadata.Namespace, ref.Name, ref.Key); err != nil {
-				failures = append(failures, fmt.Sprintf("%s/%s references unusable Secret %s/%s: %v", deployment.Metadata.Namespace, deployment.Metadata.Name, ref.Name, ref.Key, err))
-			}
+			continue
+		}
+		if msg := analyticsTokenProblem(deployment, container); msg != "" {
+			failures = append(failures, id+" "+msg)
 		}
 	}
 
 	if len(failures) > 0 {
 		return DoctorCheck{
-			Name:   "gateway analytics credentials",
+			Name:   checkName,
 			OK:     false,
 			Detail: strings.Join(limitStrings(failures, 4), "; "),
-			Remedy: "create a namespace-local ingest-key Secret and set spec.analytics.apiKeySecretRef on affected MCPServers, or redeploy with `mcp-runtime server deploy --metadata-dir .mcp`",
+			Remedy: "update the operator and let it reconcile the MCPServer (or redeploy with `mcp-runtime server deploy`) so the gateway gets a projected token for audience " + mcpdefaults.AnalyticsTokenAudience + " under the " + kubeworkload.DefaultServiceAccountName + " ServiceAccount",
 		}
 	}
-	if checked == 0 {
+	if len(deployments) == 0 {
 		return DoctorCheck{
-			Name:   "gateway analytics credentials",
+			Name:   checkName,
 			OK:     true,
 			Detail: "no gateway sidecars with analytics ingest URLs found",
 		}
 	}
 	return DoctorCheck{
-		Name:   "gateway analytics credentials",
+		Name:   checkName,
 		OK:     true,
-		Detail: fmt.Sprintf("%d gateway sidecar(s) have usable analytics credentials", checked),
+		Detail: fmt.Sprintf("%d gateway sidecar(s) can authenticate to ingest", len(deployments)),
 	}
 }
+
+// listGatewayAnalyticsDeployments returns Deployments whose mcp-gateway
+// container emits analytics. A non-nil check is a terminal result.
+func listGatewayAnalyticsDeployments(kubectl core.KubectlRunner, checkName string) ([]doctorDeployment, *DoctorCheck) {
+	out, err := readKubectlOutput(kubectl, []string{"get", "deploy", "-A", "-o", "json"})
+	if err != nil {
+		return nil, &DoctorCheck{
+			Name:   checkName,
+			OK:     false,
+			Detail: fmt.Sprintf("failed listing deployments: %v", err),
+			Remedy: "check Kubernetes API access and RBAC for listing Deployments",
+		}
+	}
+	var list doctorDeploymentList
+	if err := json.Unmarshal([]byte(out), &list); err != nil {
+		return nil, &DoctorCheck{
+			Name:   checkName,
+			OK:     false,
+			Detail: fmt.Sprintf("failed parsing deployments JSON: %v", err),
+			Remedy: "rerun cluster doctor; if this persists, inspect `kubectl get deploy -A -o json`",
+		}
+	}
+	var out2 []doctorDeployment
+	for _, deployment := range list.Items {
+		if container, ok := deployment.gatewayContainer(); ok && envValue(container.Env, "ANALYTICS_INGEST_URL") != "" {
+			out2 = append(out2, deployment)
+		}
+	}
+	return out2, nil
+}
+
+func analyticsAPIKeyProblem(kubectl core.KubectlRunner, deployment doctorDeployment, container doctorContainer) string {
+	apiKeyEnv, _ := envByName(container.Env, "ANALYTICS_API_KEY")
+	if strings.TrimSpace(apiKeyEnv.Value) != "" {
+		return ""
+	}
+	if apiKeyEnv.ValueFrom == nil || apiKeyEnv.ValueFrom.SecretKeyRef == nil {
+		return "ANALYTICS_API_KEY has no value or secretKeyRef"
+	}
+	ref := apiKeyEnv.ValueFrom.SecretKeyRef
+	if strings.TrimSpace(ref.Name) == "" || strings.TrimSpace(ref.Key) == "" {
+		return "ANALYTICS_API_KEY secretKeyRef is incomplete"
+	}
+	if err := checkSecretKeyPopulated(kubectl, deployment.Metadata.Namespace, ref.Name, ref.Key); err != nil {
+		return fmt.Sprintf("references unusable Secret %s/%s: %v", ref.Name, ref.Key, err)
+	}
+	return ""
+}
+
+// analyticsTokenProblem explains why a gateway's projected-token wiring would
+// make ingest reject it, or returns "" when the wiring is sound.
+func analyticsTokenProblem(deployment doctorDeployment, container doctorContainer) string {
+	tokenFile := envValue(container.Env, "ANALYTICS_TOKEN_FILE")
+	if tokenFile == "" {
+		return "has neither ANALYTICS_TOKEN_FILE nor ANALYTICS_API_KEY, so ingest will answer 401"
+	}
+	var volumeName string
+	for _, mount := range container.VolumeMounts {
+		if mount.MountPath != "" && strings.HasPrefix(tokenFile, strings.TrimRight(mount.MountPath, "/")+"/") {
+			volumeName = mount.Name
+		}
+	}
+	if volumeName == "" {
+		return fmt.Sprintf("ANALYTICS_TOKEN_FILE %s is not under a volume mount", tokenFile)
+	}
+	audience := ""
+	for _, volume := range deployment.Spec.Template.Spec.Volumes {
+		if volume.Name != volumeName || volume.Projected == nil {
+			continue
+		}
+		for _, source := range volume.Projected.Sources {
+			if source.ServiceAccountToken != nil {
+				audience = source.ServiceAccountToken.Audience
+			}
+		}
+	}
+	if audience == "" {
+		return fmt.Sprintf("volume %s is not a projected service account token", volumeName)
+	}
+	if audience != mcpdefaults.AnalyticsTokenAudience {
+		return fmt.Sprintf("token audience is %q, ingest requires %q", audience, mcpdefaults.AnalyticsTokenAudience)
+	}
+	if sa := deployment.Spec.Template.Spec.ServiceAccountName; sa != kubeworkload.DefaultServiceAccountName {
+		return fmt.Sprintf("runs as ServiceAccount %q, ingest only accepts %q", sa, kubeworkload.DefaultServiceAccountName)
+	}
+	return ""
+}
+
+// checkGatewayAnalyticsDelivery looks for the symptom that hid the 401 outage:
+// sidecars logging rejected or failed analytics emissions. It reads a short
+// log tail per analytics-enabled gateway.
+func checkGatewayAnalyticsDelivery(kubectl core.KubectlRunner) DoctorCheck {
+	const checkName = "gateway analytics delivery"
+	const maxGateways = 25
+	deployments, check := listGatewayAnalyticsDeployments(kubectl, checkName)
+	if check != nil {
+		return *check
+	}
+	if len(deployments) == 0 {
+		return DoctorCheck{Name: checkName, OK: true, Detail: "no gateway sidecars with analytics ingest URLs found"}
+	}
+	scanned := deployments
+	if len(scanned) > maxGateways {
+		scanned = scanned[:maxGateways]
+	}
+	failures := make([]string, 0)
+	for _, deployment := range scanned {
+		logs, err := readKubectlOutput(kubectl, []string{"logs", "deploy/" + deployment.Metadata.Name, "-n", deployment.Metadata.Namespace, "-c", "mcp-gateway", "--tail=200"})
+		if err != nil {
+			continue // pod may be starting; readiness checks cover that
+		}
+		unauthorized, other := 0, 0
+		for _, line := range strings.Split(logs, "\n") {
+			switch {
+			case strings.Contains(line, "gateway analytics emission failed with status 401"), strings.Contains(line, "gateway analytics emission failed with status 403"):
+				unauthorized++
+			case strings.Contains(line, "gateway analytics emission failed"), strings.Contains(line, "failed to emit gateway analytics event"):
+				other++
+			}
+		}
+		id := deployment.Metadata.Namespace + "/" + deployment.Metadata.Name
+		if unauthorized > 0 {
+			failures = append(failures, fmt.Sprintf("%s ingest rejected %d recent event(s) as unauthorized", id, unauthorized))
+		} else if other > 0 {
+			failures = append(failures, fmt.Sprintf("%s failed to deliver %d recent event(s)", id, other))
+		}
+	}
+	if len(failures) > 0 {
+		return DoctorCheck{
+			Name:   checkName,
+			OK:     false,
+			Detail: strings.Join(limitStrings(failures, 4), "; "),
+			Remedy: "usage analytics are missing events for these servers; run the gateway analytics credentials and ingest service account checks, then inspect the sidecar and mcp-ingest logs",
+		}
+	}
+	return DoctorCheck{
+		Name:   checkName,
+		OK:     true,
+		Detail: fmt.Sprintf("no recent emission failures in %d gateway sidecar log(s)", len(scanned)),
+	}
+}
+
+// checkIngestServiceAccountAuth verifies the pieces ingest needs to validate
+// gateway tokens: the audience setting, its own ServiceAccount with a mounted
+// token, and permission to create TokenReviews.
+func checkIngestServiceAccountAuth(kubectl core.KubectlRunner) DoctorCheck {
+	const checkName = "ingest service account auth"
+	namespace := componentNamespace("ingest")
+	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", namespace, "-o", "jsonpath={.metadata.name}"}); err != nil {
+		return DoctorCheck{Name: checkName, OK: true, Detail: fmt.Sprintf("namespace %s not installed; skipping ingest auth check", namespace)}
+	}
+	raw, err := readKubectlOutput(kubectl, []string{"get", "deployment", "mcp-ingest", "-n", namespace, "-o", "json"})
+	if err != nil || strings.TrimSpace(raw) == "" {
+		return DoctorCheck{Name: checkName, OK: false, Detail: fmt.Sprintf("deployment mcp-ingest not found in %s", namespace), Remedy: "rerun setup to install analytics ingest"}
+	}
+	var deployment doctorDeployment
+	if err := json.Unmarshal([]byte(raw), &deployment); err != nil {
+		return DoctorCheck{Name: checkName, OK: false, Detail: fmt.Sprintf("failed parsing mcp-ingest deployment: %v", err), Remedy: "rerun cluster doctor and inspect `kubectl -n " + namespace + " get deploy mcp-ingest -o yaml`"}
+	}
+	podSpec := deployment.Spec.Template.Spec
+	remedy := "apply the release's k8s/06-ingest.yaml (rerun setup) so ingest has its ServiceAccount, TokenReview RBAC and INGEST_SA_TOKEN_AUDIENCE"
+
+	var ingest doctorContainer
+	for _, container := range podSpec.Containers {
+		if container.Name == "ingest" {
+			ingest = container
+		}
+	}
+	if got := envValue(ingest.Env, "INGEST_SA_TOKEN_AUDIENCE"); got != mcpdefaults.AnalyticsTokenAudience {
+		return DoctorCheck{Name: checkName, OK: false, Detail: fmt.Sprintf("mcp-ingest INGEST_SA_TOKEN_AUDIENCE is %q, gateways present %q: every gateway event will be rejected", got, mcpdefaults.AnalyticsTokenAudience), Remedy: remedy}
+	}
+	if podSpec.ServiceAccountName != ingestServiceAccountName {
+		return DoctorCheck{Name: checkName, OK: false, Detail: fmt.Sprintf("mcp-ingest runs as ServiceAccount %q, expected %q", podSpec.ServiceAccountName, ingestServiceAccountName), Remedy: remedy}
+	}
+	if podSpec.AutomountServiceAccountToken != nil && !*podSpec.AutomountServiceAccountToken {
+		return DoctorCheck{Name: checkName, OK: false, Detail: "mcp-ingest has automountServiceAccountToken=false, so it cannot call the TokenReview API", Remedy: remedy}
+	}
+	if _, err := readKubectlOutput(kubectl, []string{"get", "serviceaccount", ingestServiceAccountName, "-n", namespace, "-o", "jsonpath={.metadata.name}"}); err != nil {
+		return DoctorCheck{Name: checkName, OK: false, Detail: fmt.Sprintf("ServiceAccount %s/%s not found", namespace, ingestServiceAccountName), Remedy: remedy}
+	}
+	answer, err := readKubectlOutput(kubectl, []string{"auth", "can-i", "create", "tokenreviews.authentication.k8s.io", "--as=system:serviceaccount:" + namespace + ":" + ingestServiceAccountName})
+	if strings.TrimSpace(answer) != "yes" {
+		detail := fmt.Sprintf("ServiceAccount %s/%s cannot create tokenreviews.authentication.k8s.io; ingest cannot validate gateway tokens", namespace, ingestServiceAccountName)
+		if err != nil && strings.TrimSpace(answer) == "" {
+			detail = fmt.Sprintf("could not verify %s/%s may create tokenreviews: %v", namespace, ingestServiceAccountName, err)
+		}
+		return DoctorCheck{Name: checkName, OK: false, Detail: detail, Remedy: remedy + " (ClusterRoleBinding mcp-ingest-tokenreview)"}
+	}
+	return DoctorCheck{Name: checkName, OK: true, Detail: fmt.Sprintf("mcp-ingest validates gateway tokens for audience %q as ServiceAccount %s/%s", mcpdefaults.AnalyticsTokenAudience, namespace, ingestServiceAccountName)}
+}
+
+const ingestServiceAccountName = "mcp-ingest"
 
 func checkPlatformWorkloadHealth(kubectl core.KubectlRunner) DoctorCheck {
 	if _, err := readKubectlOutput(kubectl, []string{"get", "namespace", componentNamespace("platform-api"), "-o", "jsonpath={.metadata.name}"}); err != nil {
@@ -271,15 +436,44 @@ type doctorDeployment struct {
 	Spec struct {
 		Template struct {
 			Spec struct {
-				Containers []doctorContainer `json:"containers"`
+				ServiceAccountName           string            `json:"serviceAccountName"`
+				AutomountServiceAccountToken *bool             `json:"automountServiceAccountToken"`
+				Containers                   []doctorContainer `json:"containers"`
+				Volumes                      []doctorVolume    `json:"volumes"`
 			} `json:"spec"`
 		} `json:"template"`
 	} `json:"spec"`
 }
 
+func (d doctorDeployment) gatewayContainer() (doctorContainer, bool) {
+	for _, container := range d.Spec.Template.Spec.Containers {
+		if container.Name == "mcp-gateway" {
+			return container, true
+		}
+	}
+	return doctorContainer{}, false
+}
+
+type doctorVolume struct {
+	Name      string `json:"name"`
+	Projected *struct {
+		Sources []struct {
+			ServiceAccountToken *struct {
+				Audience string `json:"audience"`
+			} `json:"serviceAccountToken"`
+		} `json:"sources"`
+	} `json:"projected"`
+}
+
+type doctorVolumeMount struct {
+	Name      string `json:"name"`
+	MountPath string `json:"mountPath"`
+}
+
 type doctorContainer struct {
-	Name string         `json:"name"`
-	Env  []doctorEnvVar `json:"env"`
+	Name         string              `json:"name"`
+	Env          []doctorEnvVar      `json:"env"`
+	VolumeMounts []doctorVolumeMount `json:"volumeMounts"`
 }
 
 type doctorEnvVar struct {

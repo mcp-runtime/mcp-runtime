@@ -8,6 +8,12 @@ const (
 	MCPServersNamespace   = "mcp-servers"
 	LogCollectorNamespace = "mcp-log-collector"
 
+	// AnalyticsTokenAudience is the audience of the projected ServiceAccount
+	// token gateway sidecars present to mcp-ingest. The operator mints it and
+	// cluster doctor verifies it; it must match INGEST_SA_TOKEN_AUDIENCE in
+	// k8s/06-ingest.yaml.
+	AnalyticsTokenAudience = "mcp-ingest"
+
 	AuthTokenHeader = "Authorization"
 	// AuthModeHeader delegates credential authentication to the upstream MCP
 	// server. An omitted mode keeps the existing OAuth contract.

@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Added
+
+- `cluster doctor` verifies the gateway analytics path end to end: `ingest service account auth` (audience setting, ingest ServiceAccount and token mount, TokenReview RBAC), `gateway analytics credentials` (projected token audience and `mcp-workload` ServiceAccount, replacing the ingest-key Secret check) and `gateway analytics delivery` (recent sidecar logs for rejected or failed emissions) ([#719](https://github.com/mcp-runtime/mcp-runtime/issues/719)).
+
 ### Fixed
 
 - Gateway sidecars authenticate to `mcp-ingest` with a projected ServiceAccount token (audience `mcp-ingest`, validated by TokenReview) instead of a copied ingest API key. Servers whose key was missing or stale after a setup rerun were rejected with 401, which left the usage analytics dashboard empty. Ingest gains a `mcp-ingest` ServiceAccount with `tokenreviews` create; it needs the updated `k8s/06-ingest.yaml`, so apply it with the release setup. Gateways now count undelivered events in `mcp_gateway_analytics_emit_failures_total`, and the new `MCPGatewayAnalyticsEmitFailures` Prometheus alert (visible in Grafana alerting) fires on sustained failures.

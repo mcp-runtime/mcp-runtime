@@ -286,7 +286,7 @@ func TestCheckOperatorWebhookCertExpiry(t *testing.T) {
 }
 
 func TestCheckGatewayAnalyticsCredentials(t *testing.T) {
-	t.Run("fails when gateway has ingest URL without api key", func(t *testing.T) {
+	t.Run("fails when gateway has ingest URL without token or api key", func(t *testing.T) {
 		mock := &core.MockExecutor{
 			CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
 				return &core.MockCommand{OutputData: []byte(`{
@@ -305,8 +305,8 @@ func TestCheckGatewayAnalyticsCredentials(t *testing.T) {
 		if check.OK {
 			t.Fatal("expected missing analytics key to fail")
 		}
-		if !strings.Contains(check.Detail, "missing ANALYTICS_API_KEY") {
-			t.Fatalf("detail = %q, want missing key message", check.Detail)
+		if !strings.Contains(check.Detail, "neither ANALYTICS_TOKEN_FILE nor ANALYTICS_API_KEY") {
+			t.Fatalf("detail = %q, want missing credential message", check.Detail)
 		}
 	})
 
