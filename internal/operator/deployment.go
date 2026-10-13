@@ -242,6 +242,23 @@ func (r *MCPServerReconciler) buildDeploymentContainers(mcpServer *mcpv1alpha1.M
 				},
 			},
 		})
+		if r.analyticsEnabled(mcpServer) {
+			expiry := analyticsTokenExpirySeconds
+			volumes = append(volumes, corev1.Volume{
+				Name: analyticsTokenVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					Projected: &corev1.ProjectedVolumeSource{
+						Sources: []corev1.VolumeProjection{{
+							ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
+								Audience:          analyticsTokenAudience,
+								ExpirationSeconds: &expiry,
+								Path:              "token",
+							},
+						}},
+					},
+				},
+			})
+		}
 		if r.usesAdapterCertificates(mcpServer) {
 			volumes = append(volumes, corev1.Volume{
 				Name: gatewayTLSVolumeName,
@@ -563,6 +580,7 @@ func (r *MCPServerReconciler) buildGatewayContainer(mcpServer *mcpv1alpha1.MCPSe
 			corev1.EnvVar{Name: "ANALYTICS_INGEST_URL", Value: ingestURL},
 			corev1.EnvVar{Name: "ANALYTICS_SOURCE", Value: source},
 			corev1.EnvVar{Name: "ANALYTICS_EVENT_TYPE", Value: eventType},
+			corev1.EnvVar{Name: "ANALYTICS_TOKEN_FILE", Value: analyticsTokenMountDir + "/token"},
 		)
 		if apiKeyRef != nil {
 			envVars = append(envVars, corev1.EnvVar{
@@ -619,6 +637,13 @@ func (r *MCPServerReconciler) buildGatewayContainer(mcpServer *mcpv1alpha1.MCPSe
 			InitialDelaySeconds: 3,
 			PeriodSeconds:       5,
 		},
+	}
+	if r.analyticsEnabled(mcpServer) {
+		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+			Name:      analyticsTokenVolumeName,
+			MountPath: analyticsTokenMountDir,
+			ReadOnly:  true,
+		})
 	}
 	if r.usesAdapterCertificates(mcpServer) {
 		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{

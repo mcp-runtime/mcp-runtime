@@ -72,4 +72,15 @@ const (
 	// defaultAnalyticsSourceSuffix is appended to the MCPServer name to derive
 	// the analytics Source label when Spec.Analytics.Source is empty.
 	defaultAnalyticsSourceSuffix = "-gateway"
+	// analyticsTokenAudience is the audience of the projected service account
+	// token a gateway sidecar presents to mcp-ingest. Ingest validates it with
+	// TokenReview, so no Secret has to cross from mcp-observability into the
+	// server namespace. It must match INGEST_SA_TOKEN_AUDIENCE in k8s/06-ingest.yaml.
+	analyticsTokenAudience = "mcp-ingest"
+	// analyticsTokenVolumeName and analyticsTokenMountDir locate the projected token.
+	analyticsTokenVolumeName = "analytics-token"
+	analyticsTokenMountDir   = "/var/run/mcp-analytics"
+	// analyticsTokenExpirySeconds is the requested token lifetime; the kubelet
+	// refreshes the file well before it expires.
+	analyticsTokenExpirySeconds int64 = 3600
 )

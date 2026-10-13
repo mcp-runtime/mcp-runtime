@@ -555,6 +555,30 @@ func TestReconcileDeploymentAddsGatewaySidecar(t *testing.T) {
 	}
 	assertEqual(t, "analyticsAPIKeySecretName", envByName["ANALYTICS_API_KEY"].ValueFrom.SecretKeyRef.Name, "analytics-creds")
 	assertEqual(t, "analyticsAPIKeySecretKey", envByName["ANALYTICS_API_KEY"].ValueFrom.SecretKeyRef.Key, "api-key")
+
+	// The gateway authenticates to ingest with a projected service account
+	// token scoped to the ingest audience.
+	assertEqual(t, "analyticsTokenFileEnv", envByName["ANALYTICS_TOKEN_FILE"].Value, "/var/run/mcp-analytics/token")
+	var tokenMount *corev1.VolumeMount
+	for i := range gateway.VolumeMounts {
+		if gateway.VolumeMounts[i].Name == analyticsTokenVolumeName {
+			tokenMount = &gateway.VolumeMounts[i]
+		}
+	}
+	if tokenMount == nil || !tokenMount.ReadOnly || tokenMount.MountPath != analyticsTokenMountDir {
+		t.Fatalf("expected read-only analytics token mount at %s, got %+v", analyticsTokenMountDir, tokenMount)
+	}
+	var tokenProjection *corev1.ServiceAccountTokenProjection
+	for _, volume := range deployment.Spec.Template.Spec.Volumes {
+		if volume.Name == analyticsTokenVolumeName && volume.Projected != nil && len(volume.Projected.Sources) == 1 {
+			tokenProjection = volume.Projected.Sources[0].ServiceAccountToken
+		}
+	}
+	if tokenProjection == nil {
+		t.Fatal("expected projected service account token volume for analytics")
+	}
+	assertEqual(t, "analyticsTokenAudience", tokenProjection.Audience, "mcp-ingest")
+	assertEqual(t, "analyticsTokenPath", tokenProjection.Path, "token")
 }
 
 func TestReconcileServiceUsesGatewayPortWhenEnabled(t *testing.T) {

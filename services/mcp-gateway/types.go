@@ -79,6 +79,7 @@ type gatewayServer struct {
 	metrics                *gatewayMetrics
 	analyticsURL           string
 	apiKey                 string
+	analyticsToken         *tokenFileSource
 	source                 string
 	eventType              string
 	analyticsQueue         chan analyticsEvent

@@ -142,15 +142,26 @@ func (s *gatewayServer) emit(ctx context.Context, event events.Envelope) {
 	if s.apiKey != "" {
 		req.Header.Set("x-api-key", s.apiKey)
 	}
+	if token, err := s.analyticsToken.Token(); err != nil {
+		log.Printf("gateway analytics service account token unavailable: %v", err)
+	} else if token != "" {
+		req.Header.Set("authorization", "Bearer "+token)
+	}
 	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
+		s.metrics.recordAnalyticsEmitFailure("transport")
 		log.Printf("failed to emit gateway analytics event to %s: %v", s.analyticsURL, err)
 		return
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		reason := "rejected"
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			reason = "unauthorized"
+		}
+		s.metrics.recordAnalyticsEmitFailure(reason)
 		log.Printf("gateway analytics emission failed with status %d to %s", resp.StatusCode, s.analyticsURL)
 		_, _ = io.Copy(io.Discard, resp.Body)
 		return

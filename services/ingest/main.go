@@ -38,6 +38,7 @@ type ingestServer struct {
 	jwks         *keyfunc.JWKS
 	oidcIssuer   string
 	oidcAudience string
+	saAuth       *serviceAccountAuthenticator
 }
 
 // main initializes and starts the MCP Runtime Ingest service.
@@ -85,6 +86,17 @@ func main() {
 		}
 	}
 
+	// Gateway sidecars authenticate with a projected service account token,
+	// validated via TokenReview, so no shared secret has to cross namespaces.
+	var saAuth *serviceAccountAuthenticator
+	if audience := strings.TrimSpace(os.Getenv("INGEST_SA_TOKEN_AUDIENCE")); audience != "" {
+		var err error
+		saAuth, err = newInClusterServiceAccountAuthenticator(audience, serviceutil.EnvOr("INGEST_SA_NAME", "mcp-workload"))
+		if err != nil {
+			log.Fatalf("service account token authentication is configured but unavailable: %v", err)
+		}
+	}
+
 	writer := newKafkaWriter(brokers, topic)
 	readiness := newKafkaReadiness(brokers, newKafkaReadinessMetrics(prometheus.DefaultRegisterer))
 	go readiness.Run(ctx)
@@ -97,9 +109,10 @@ func main() {
 		jwks:         jwks,
 		oidcIssuer:   oidcIssuer,
 		oidcAudience: oidcAudience,
+		saAuth:       saAuth,
 	}
 
-	if len(apiKeys) == 0 && jwks == nil {
+	if len(apiKeys) == 0 && jwks == nil && saAuth == nil {
 		log.Printf("WARNING: ingest authentication is DISABLED — no INGEST_API_KEYS and no OIDC_JWKS_URL configured; /events will accept unauthenticated requests")
 	}
 
@@ -241,11 +254,12 @@ func (s *ingestServer) handleEvents(w http.ResponseWriter, r *http.Request) {
 }
 
 // auth is middleware that enforces API key authentication.
-// It checks for x-api-key from INGEST_API_KEYS (or legacy API_KEYS) or supports optional OIDC JWT validation.
+// It checks for x-api-key from INGEST_API_KEYS (or legacy API_KEYS), a projected
+// Kubernetes service account token (TokenReview), or optional OIDC JWT validation.
 // If no API keys are configured, authentication is bypassed.
 func (s *ingestServer) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if len(s.apiKeys) == 0 && s.jwks == nil {
+		if len(s.apiKeys) == 0 && s.jwks == nil && s.saAuth == nil {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -261,6 +275,10 @@ func (s *ingestServer) auth(next http.Handler) http.Handler {
 		}
 
 		token := serviceutil.ExtractBearer(r.Header.Get("authorization"))
+		if token != "" && s.saAuth != nil && s.saAuth.Authenticate(r.Context(), token) {
+			next.ServeHTTP(w, r)
+			return
+		}
 		if token != "" && s.jwks != nil {
 			parser := jwt.NewParser(jwt.WithValidMethods([]string{"RS256", "RS384", "RS512", "ES256", "ES384", "ES512"}))
 			parsed, err := parser.Parse(token, s.jwks.Keyfunc)

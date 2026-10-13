@@ -25,6 +25,37 @@ spec:
     matchLabels:
       app: mcp-ingest
 ---
+# Ingest validates gateway sidecars' projected service account tokens with
+# TokenReview, so it needs its own identity and that one narrow permission.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mcp-ingest
+  namespace: mcp-observability
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: mcp-ingest-tokenreview
+rules:
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: mcp-ingest-tokenreview
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: mcp-ingest-tokenreview
+subjects:
+  - kind: ServiceAccount
+    name: mcp-ingest
+    namespace: mcp-observability
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -41,7 +72,8 @@ spec:
         app: mcp-ingest
     spec:
       priorityClassName: mcp-shared-services
-      automountServiceAccountToken: false
+      serviceAccountName: mcp-ingest
+      automountServiceAccountToken: true
       # KAFKA_BROKERS is kafka.mcp-observability.svc.cluster.local (4 dots). With
       # the default ndots:5, the resolver first tries every search domain
       # (A and AAAA each, and the Go resolver has no cache), including
@@ -86,6 +118,11 @@ spec:
                 secretKeyRef:
                   name: mcp-ingest-credentials
                   key: INGEST_API_KEYS
+            # Accept projected service account tokens minted for this audience
+            # from the mcp-workload ServiceAccount; must match the operator's
+            # analyticsTokenAudience.
+            - name: INGEST_SA_TOKEN_AUDIENCE
+              value: mcp-ingest
             - name: OTEL_SERVICE_NAME
               value: mcp-ingest
           resources:

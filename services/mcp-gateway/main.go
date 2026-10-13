@@ -31,6 +31,7 @@ func main() {
 	upstream := serviceutil.EnvOr("UPSTREAM_URL", "http://127.0.0.1:8090")
 	analyticsURL := strings.TrimSpace(os.Getenv("ANALYTICS_INGEST_URL"))
 	apiKey := strings.TrimSpace(os.Getenv("ANALYTICS_API_KEY"))
+	analyticsTokenFile := strings.TrimSpace(os.Getenv("ANALYTICS_TOKEN_FILE"))
 	source := serviceutil.EnvOr("ANALYTICS_SOURCE", "mcp-gateway")
 	eventType := serviceutil.EnvOr("ANALYTICS_EVENT_TYPE", "mcp.request")
 	stripPrefix := strings.TrimSpace(os.Getenv("STRIP_PREFIX"))
@@ -63,6 +64,7 @@ func main() {
 		metrics:                newGatewayMetrics(prometheus.DefaultRegisterer),
 		analyticsURL:           analyticsURL,
 		apiKey:                 apiKey,
+		analyticsToken:         newTokenFileSource(analyticsTokenFile),
 		source:                 source,
 		eventType:              eventType,
 		stripPrefix:            stripPrefix,

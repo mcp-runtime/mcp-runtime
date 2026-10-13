@@ -58,6 +58,7 @@ type gatewayMetrics struct {
 	requestsTotal          *prometheus.CounterVec
 	policyDecisionsTotal   *prometheus.CounterVec
 	analyticsDropsTotal    prometheus.Counter
+	analyticsEmitFailures  *prometheus.CounterVec
 	oauthOutcomesTotal     *prometheus.CounterVec
 	requestDurationSeconds *prometheus.HistogramVec
 	inflightRequests       *prometheus.GaugeVec
@@ -89,6 +90,10 @@ func newGatewayMetrics(registerer prometheus.Registerer) *gatewayMetrics {
 			Name: "mcp_gateway_analytics_drop_total",
 			Help: "Total analytics events dropped by MCP gateway sidecars.",
 		}),
+		analyticsEmitFailures: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "mcp_gateway_analytics_emit_failures_total",
+			Help: "Analytics events the gateway sidecar failed to deliver to ingest. The reason label is a bounded enum: unauthorized, rejected, transport.",
+		}, []string{"reason"}),
 		oauthOutcomesTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "mcp_gateway_oauth_outcomes_total",
 			Help: "OAuth bearer-token authentication outcomes at MCP gateway sidecars. The outcome label is a bounded enum.",
@@ -125,6 +130,7 @@ func newGatewayMetrics(registerer prometheus.Registerer) *gatewayMetrics {
 			m.requestsTotal,
 			m.policyDecisionsTotal,
 			m.analyticsDropsTotal,
+			m.analyticsEmitFailures,
 			m.oauthOutcomesTotal,
 			m.requestDurationSeconds,
 			m.inflightRequests,
@@ -142,6 +148,15 @@ func (m *gatewayMetrics) recordAnalyticsDrop() {
 		return
 	}
 	m.analyticsDropsTotal.Inc()
+}
+
+// recordAnalyticsEmitFailure counts an undelivered analytics event. reason must
+// be one of the bounded values documented on the metric.
+func (m *gatewayMetrics) recordAnalyticsEmitFailure(reason string) {
+	if m == nil {
+		return
+	}
+	m.analyticsEmitFailures.WithLabelValues(reason).Inc()
 }
 
 // oauthOutcomes is the closed set of values for the outcome label. Anything

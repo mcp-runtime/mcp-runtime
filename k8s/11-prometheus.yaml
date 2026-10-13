@@ -217,6 +217,18 @@ data:
               severity: warning
             annotations:
               summary: "Gateway sidecar is dropping analytics events"
+          # Fires when gateway sidecars cannot deliver usage events to mcp-ingest,
+          # which leaves the usage analytics dashboard silently empty. A sustained
+          # "unauthorized" reason means the sidecar's service account token is
+          # missing or rejected by ingest.
+          - alert: MCPGatewayAnalyticsEmitFailures
+            expr: sum by (namespace, reason) (increase(mcp_gateway_analytics_emit_failures_total[10m])) > 0
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Gateway sidecars in {{ $labels.namespace }} cannot deliver analytics events to ingest ({{ $labels.reason }})"
+              description: "Usage analytics will be missing events for these servers. Check the sidecar logs for 'analytics emission failed' and the mcp-ingest logs."
           - alert: MCPTelemetryExportFailures
             expr: |
               sum by (job) (rate({__name__=~"otelcol_exporter_send_failed_(spans|metric_points|log_records)(_total)?"}[5m])) > 0

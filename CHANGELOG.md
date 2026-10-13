@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Fixed
+
+- Gateway sidecars authenticate to `mcp-ingest` with a projected ServiceAccount token (audience `mcp-ingest`, validated by TokenReview) instead of a copied ingest API key. Servers whose key was missing or stale after a setup rerun were rejected with 401, which left the usage analytics dashboard empty. Ingest gains a `mcp-ingest` ServiceAccount with `tokenreviews` create; it needs the updated `k8s/06-ingest.yaml`, so apply it with the release setup. Gateways now count undelivered events in `mcp_gateway_analytics_emit_failures_total`, and the new `MCPGatewayAnalyticsEmitFailures` Prometheus alert (visible in Grafana alerting) fires on sustained failures.
+
 ### Changed
 
 - Repository automation is grouped under `hack/dev`, `hack/ci`, `hack/qa`, `hack/deploy` and `hack/release`. Reference helpers move to `hack/deploy/reference`, hosted acceptance to `hack/deploy/acceptance`, and destructive `clean.sh` becomes `reset.sh`. Update local invocations to the paths in `hack/README.md`; old-path wrappers are not provided. Agent guidance now routes tasks to the catalogue and focused runbooks.

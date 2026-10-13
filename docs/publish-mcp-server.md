@@ -407,10 +407,11 @@ Check:
 Request analytics only exist for traffic that flows through `mcp-gateway`.
 The gateway is on by default; the adapter is optional for analytics and is
 required only when you enforce grants/sessions via `spec.policy`. If you apply
-raw YAML with `kubectl apply` or `server apply --use-kube`, create a
-namespace-local ingest-key Secret and set `spec.analytics.apiKeySecretRef`
-(platform `server deploy` does this for you); otherwise ingest may reject
-events with 401. Opt out of emission with:
+raw YAML with `kubectl apply` or `server apply --use-kube`, nothing extra is
+needed: the operator mounts a projected ServiceAccount token (audience
+`mcp-ingest`) into the gateway sidecar and ingest validates it with a
+Kubernetes TokenReview, so no ingest key has to be copied into your namespace.
+Opt out of emission with:
 
 ```yaml
 analytics:
@@ -478,9 +479,9 @@ but hand-written YAML must state them explicitly.
   `MCP_SENTINEL_INGEST_URL` key as a fallback for installs awaiting setup
   migration. The operator also accepts its own ingest URL setting.
   Set `spec.analytics.disabled: true`
-  to opt out. Platform API deploys create a namespace-local ingest-key Secret
-  and set `spec.analytics.apiKeySecretRef` automatically when analytics is not
-  disabled.
+  to opt out. The gateway sidecar authenticates to ingest with a projected
+  ServiceAccount token the operator mounts automatically; `apiKeySecretRef` is
+  an optional override.
 
 `mcp-runtime server deploy` and the platform API (`POST /api/v1/runtime/servers`)
 default the gateway on. Hand-written YAML can omit `gateway` or use
