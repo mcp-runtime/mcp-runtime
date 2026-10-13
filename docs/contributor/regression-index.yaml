@@ -218,3 +218,17 @@ incidents:
         name: TestPlatformGatewayUsesConfiguredTraefikImage
         command: go test ./internal/cli/setup/platform -run TestPlatformGatewayUsesConfiguredTraefikImage -count=1
         ci_job: ci.yaml#test
+
+  - id: "706"
+    title: Resolve internal service names without external search-domain detours
+    protected_behavior: >-
+      Platform API, Runtime API, Analytics API, UI and ingest Deployments lower
+      the resolver ndots so four-dot cluster service names are tried directly
+      instead of expanding through node-inherited search domains.
+    status: covered
+    checks:
+      - kind: go-test
+        path: test/regression/internal_dns_test.go
+        name: TestInternalServiceDeploymentsLowerNdots
+        command: go test ./test/regression -run TestInternalServiceDeploymentsLowerNdots -count=1
+        ci_job: ci.yaml#test

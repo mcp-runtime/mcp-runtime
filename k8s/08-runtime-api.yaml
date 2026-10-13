@@ -32,6 +32,15 @@ spec:
       priorityClassName: mcp-shared-services
       serviceAccountName: mcp-runtime-api
       automountServiceAccountToken: true
+      # Peer services are addressed by four-dot *.svc.cluster.local names. With the
+      # default ndots:5 the resolver first walks every search domain, including
+      # node-inherited ones CoreDNS forwards upstream, which delayed cold
+      # authenticated requests by seconds. ndots:3 resolves cluster FQDNs
+      # directly; names with fewer dots still use the search path.
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "3"
       securityContext:
         runAsNonRoot: true
         seccompProfile:

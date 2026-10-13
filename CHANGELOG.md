@@ -20,6 +20,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 - Gateway metrics now distinguish configured tools, policy outcomes and HTTP status, with slow-tool latency buckets and sampled trace exemplars. Tool labels are bounded; unknown names share one bucket. Prometheus/Grafana can link a latency observation to Tempo. ([#300](https://github.com/mcp-runtime/mcp-runtime/issues/300))
 
+### Fixed
+
+- Platform API, Runtime API, Analytics API and UI Deployments set resolver `ndots: "3"` (as ingest already did) so four-dot cluster service names resolve directly instead of expanding through node-inherited search domains that delayed cold authenticated requests by seconds. The change is in the setup manifests: it reaches an existing cluster on the next setup, not an image-only update ([#706](https://github.com/mcp-runtime/mcp-runtime/issues/706)).
+
 ## [0.7.2] - 2026-10-14
 
 This patch restores usage analytics for MCP servers whose gateway sidecars were

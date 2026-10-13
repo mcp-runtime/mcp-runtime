@@ -73,3 +73,5 @@ reporting of passed/failed/skipped/quarantined coverage remain open work on #546
 Automation safety ([#696](https://github.com/mcp-runtime/mcp-runtime/issues/696)) is covered by fake-tool regressions in `hack/tests/automation_test.py`, executed by the CI Automation Regression job. They prove boundary decisions; live deployment acceptance remains a separate hosted workflow.
 
 Managed Traefik v3 discovery dependencies ([#700](https://github.com/mcp-runtime/mcp-runtime/issues/700)) are covered by manifest/CRD discovery and configured-image regression tests. The tests require EndpointSlice/ConfigMap/pod/Node permissions and ServersTransportTCP before shipping the controller; live API/MCP routing acceptance runs in Kind QA E2E.
+
+Internal DNS resolution ([#706](https://github.com/mcp-runtime/mcp-runtime/issues/706)) is covered by a manifest test requiring `ndots: "3"` on the Platform API, Runtime API, Analytics API, UI and ingest Deployments. Cold-connection latency on a node with an extra slow search suffix is verified on Kind or disposable staging, not by this test.
