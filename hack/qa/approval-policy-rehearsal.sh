@@ -33,7 +33,7 @@ WORK="$(mktemp -d)"
 export KUBECONFIG="$WORK/kubeconfig"
 FAILED=0
 
-# shellcheck disable=SC2329  # invoked by the EXIT trap
+# shellcheck disable=SC2317,SC2329  # invoked by the EXIT trap
 cleanup() {
   if [[ "${KEEP_CLUSTER:-0}" == 1 ]]; then
     echo "keeping cluster $CLUSTER_NAME; KUBECONFIG=$KUBECONFIG"
