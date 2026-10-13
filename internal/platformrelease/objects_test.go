@@ -81,13 +81,13 @@ func TestManifestRejectsUnsafePlatformObjects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := m.ApplyReleaseExtras(strings.Replace(goodRole, "[create]", `["*"]`, 1), nil); err == nil {
+	if err := m.ApplyReleaseExtras(ReleaseExtras{PlatformObjects: strings.Replace(goodRole, "[create]", `["*"]`, 1)}); err == nil {
 		t.Fatal("manifest with a wildcard role must not validate")
 	}
-	if err := m.ApplyReleaseExtras("", map[string]*ComponentWiring{"not-a-component": {ServiceAccountName: "x"}}); err == nil {
+	if err := m.ApplyReleaseExtras(ReleaseExtras{Wiring: map[string]*ComponentWiring{"not-a-component": {ServiceAccountName: "x"}}}); err == nil {
 		t.Fatal("wiring for an unknown component must be rejected")
 	}
-	if err := m.ApplyReleaseExtras("", map[string]*ComponentWiring{"ingest": {Env: map[string]string{"lower": "x"}}}); err == nil {
+	if err := m.ApplyReleaseExtras(ReleaseExtras{Wiring: map[string]*ComponentWiring{"ingest": {Env: map[string]string{"lower": "x"}}}}); err == nil {
 		t.Fatal("invalid env name must be rejected")
 	}
 }
@@ -109,6 +109,19 @@ func TestReleaseWiringMatchesK8sManifests(t *testing.T) {
 	if _, err := BundlePlatformObjects("../../k8s", wiring.PlatformObjects); err != nil {
 		t.Fatalf("declared platform objects must exist in k8s/: %v", err)
 	}
+	if _, err := BundleConfigMaps("../../k8s", wiring.ConfigMaps); err != nil {
+		t.Fatalf("declared ConfigMaps must exist in k8s/: %v", err)
+	}
+	for _, name := range wiring.ThirdPartyImages {
+		if _, _, err := K8sDeploymentImage("../../k8s", name); err != nil {
+			t.Fatalf("third-party image %s must come from k8s/: %v", name, err)
+		}
+	}
+	for _, name := range wiring.ConfigOnly {
+		if _, ok := Lookup(name); !ok {
+			t.Fatalf("configOnly component %q is not in the catalog", name)
+		}
+	}
 	for name, want := range wiring.Components {
 		c, ok := Lookup(name)
 		if !ok {
@@ -122,6 +135,22 @@ func TestReleaseWiringMatchesK8sManifests(t *testing.T) {
 		if want.AutomountServiceAccountToken != nil {
 			if got, ok := spec["automountServiceAccountToken"].(bool); !ok || got != *want.AutomountServiceAccountToken {
 				t.Errorf("%s: k8s automountServiceAccountToken %v != wiring %v", name, spec["automountServiceAccountToken"], *want.AutomountServiceAccountToken)
+			}
+		}
+		if len(want.DNSOptions) > 0 {
+			dns, _ := spec["dnsConfig"].(map[string]any)
+			opts, _ := dns["options"].([]any)
+			have := map[string]string{}
+			for _, oi := range opts {
+				o, _ := oi.(map[string]any)
+				n, _ := o["name"].(string)
+				v, _ := o["value"].(string)
+				have[n] = v
+			}
+			for _, w := range want.DNSOptions {
+				if got, ok := have[w.Name]; !ok || got != w.Value {
+					t.Errorf("%s: wiring dns option %s=%q is not in the k8s/ dnsConfig (%v)", name, w.Name, w.Value, have)
+				}
 			}
 		}
 		containers, _ := spec["containers"].([]any)
@@ -141,6 +170,24 @@ func TestReleaseWiringMatchesK8sManifests(t *testing.T) {
 			for k, v := range want.Env {
 				if env[k] != v {
 					t.Errorf("%s: k8s env %s=%q != wiring %q", name, k, env[k], v)
+				}
+			}
+			var args []string
+			list2, _ := container["args"].([]any)
+			for _, a := range list2 {
+				if str, ok := a.(string); ok {
+					args = append(args, str)
+				}
+			}
+			for _, arg := range want.Args {
+				found := false
+				for _, a := range args {
+					if a == arg {
+						found = true
+					}
+				}
+				if !found {
+					t.Errorf("%s: wiring arg %q is not in the k8s/ container args %v", name, arg, args)
 				}
 			}
 		}
@@ -180,4 +227,51 @@ func findK8sDeployment(t *testing.T, dir, namespace, name string) map[string]any
 	}
 	t.Fatalf("Deployment %s/%s not found in %s", namespace, name, dir)
 	return nil
+}
+
+func TestK8sDeploymentImageReadsThePlatformGatewayPin(t *testing.T) {
+	repository, tag, err := K8sDeploymentImage("../../k8s", "gateway")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repository != "traefik" || !strings.HasPrefix(tag, "v3.") {
+		t.Fatalf("gateway image = %s:%s, want traefik:v3.x", repository, tag)
+	}
+	if _, _, err := K8sDeploymentImage("../../k8s", "doctor-smoke"); err == nil {
+		t.Fatal("a component without a workload must be rejected")
+	}
+}
+
+func TestBundleConfigMapsReadsDeclaredKeys(t *testing.T) {
+	cms, err := BundleConfigMaps("../../k8s", []ConfigMapSpec{{Key: "mcp-observability/prometheus-config", Restart: []string{"prometheus"}}})
+	if err != nil || len(cms) != 1 {
+		t.Fatalf("cms=%d err=%v", len(cms), err)
+	}
+	if cms[0].Data["prometheus.yml"] == "" || cms[0].Data["rules.yml"] == "" || cms[0].Restart[0] != "prometheus" {
+		t.Fatalf("unexpected ConfigMap: keys=%v restart=%v", len(cms[0].Data), cms[0].Restart)
+	}
+	if _, err := BundleConfigMaps("../../k8s", []ConfigMapSpec{{Key: "mcp-observability/not-a-configmap"}}); err == nil {
+		t.Fatal("an unknown ConfigMap must fail")
+	}
+	if _, err := BundleConfigMaps("../../k8s", []ConfigMapSpec{{Key: "mcp-observability/prometheus-config", Restart: []string{"nope"}}}); err == nil {
+		t.Fatal("an unknown restart component must fail")
+	}
+}
+
+func TestConfigOnlyComponentsNeedNoImage(t *testing.T) {
+	m, err := GenerateManifest("v0.8.0", false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.ApplyReleaseExtras(ReleaseExtras{ConfigOnly: []string{"prometheus"}}); err != nil {
+		t.Fatal(err)
+	}
+	entry, ok := m.Component("prometheus")
+	if !ok || !entry.ConfigOnly || entry.Tag != "" {
+		t.Fatalf("prometheus entry = %+v", entry)
+	}
+	m.Components[len(m.Components)-1].Tag = "v1"
+	if err := m.Validate(); err == nil {
+		t.Fatal("a configOnly component with a tag must be rejected")
+	}
 }

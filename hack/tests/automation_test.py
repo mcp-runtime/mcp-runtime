@@ -83,33 +83,9 @@ cli.chmod(0o755)
     def commands(self):
         return [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []
 
-    def test_rollout_delegates_full_release_and_context(self):
-        result = self.run_script('hack/deploy/reference/rollout.sh', '--dry-run')
-        self.assertEqual(result.returncode, 0, result.stderr)
-        command = next(c for c in self.commands() if c[0] == 'update')
-        self.assertIn('--build', command)
-        self.assertIn('--dry-run', command)
-        self.assertEqual(command[command.index('--to') + 1], 'v1.2.3')
-        self.assertEqual(command[command.index('--context') + 1], 'prod-mcp-runtime')
-        self.assertNotIn('--only', command)
-        self.assertNotIn('--include-auth', command)
-        self.assertFalse(any('patch' in c or 'apply' in c or 'docker-registry' in c for c in self.commands()))
-
-    def test_rollout_wrong_cluster_stops_before_build_or_update(self):
-        self.env['FAKE_CLUSTER_UID'] = 'wrong-cluster'
-        result = self.run_script('hack/deploy/reference/rollout.sh', '--yes')
-        self.assertNotEqual(result.returncode, 0)
-        self.assertFalse((self.path / 'bin').exists())
-        self.assertFalse(any(c[0] == 'update' for c in self.commands()))
-
-    def test_rollout_dirty_checkout_stops(self):
-        self.env['FAKE_DIRTY'] = ' M source.go'
-        self.assertNotEqual(self.run_script('hack/deploy/reference/rollout.sh', '--yes').returncode, 0)
-        self.assertFalse((self.path / 'bin').exists())
-
     def test_missing_profile_does_not_use_example(self):
         self.env['MCP_DEPLOY_ENV'] = str(self.path / 'missing.env')
-        self.assertNotEqual(self.run_script('hack/deploy/reference/rollout.sh', '--yes').returncode, 0)
+        self.assertNotEqual(self.run_script('hack/deploy/reference/reset.sh', '--dry-run').returncode, 0)
         self.assertEqual(self.commands(), [])
 
     def test_reset_yes_alone_never_deletes(self):
@@ -150,30 +126,6 @@ cli.chmod(0o755)
     def test_reset_preview_has_no_mutations(self):
         self.assertEqual(self.run_script('hack/deploy/reference/reset.sh', '--dry-run').returncode, 0)
         self.assertFalse(any(set(c) & {'delete', 'apply', 'patch', 'create'} for c in self.commands()))
-
-    def test_setup_uses_strict_existing_tls_and_no_restore(self):
-        result = self.run_script('hack/deploy/reference/setup.sh', '--yes')
-        self.assertEqual(result.returncode, 0, result.stderr)
-        command = next(c for c in self.commands() if c[0] == 'setup')
-        self.assertIn('--strict-prod', command)
-        self.assertIn('--provided-tls-secrets', command)
-        self.assertIn('--context', command)
-        self.assertIn('--acme-email=', command)
-        self.assertNotIn('apply', [c[0] for c in self.commands()])
-
-    def test_setup_auth_read_error_stops_before_build(self):
-        self.env['FAKE_AUTH_READ_ERROR'] = '1'
-        self.assertNotEqual(self.run_script('hack/deploy/reference/setup.sh', '--yes').returncode, 0)
-        self.assertFalse((self.path / 'bin').exists())
-
-    def test_setup_preserves_existing_auth_choice(self):
-        self.env['FAKE_AUTH_IMAGE'] = 'example.com/mcp-auth:current'
-        self.assertNotEqual(self.run_script('hack/deploy/reference/setup.sh', '--yes').returncode, 0)
-        self.assertFalse((self.path / 'bin').exists())
-        self.env.update(MCP_SETUP_WITH_MCP_AUTH_SERVER='1', MCP_SETUP_MCP_AUTH_SERVER_IMAGE='example.com/mcp-auth:other')
-        self.assertNotEqual(self.run_script('hack/deploy/reference/setup.sh', '--yes').returncode, 0)
-        self.assertFalse((self.path / 'bin').exists())
-
 
     def test_live_guard_rejects_renamed_production(self):
         self.env['FAKE_CONTEXT'] = 'kind-fake-prod'

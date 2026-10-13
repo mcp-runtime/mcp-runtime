@@ -62,6 +62,15 @@ func writePlanText(out io.Writer, plan *Plan) {
 		}
 		_ = tw.Flush()
 	}
+	if len(plan.ConfigMaps) > 0 {
+		fmt.Fprintln(out, "\nConfigMaps:")
+		tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(tw, "CONFIGMAP\tACTION")
+		for _, o := range plan.ConfigMaps {
+			fmt.Fprintf(tw, "%s\t%s\n", o.Key, dash(o.Action))
+		}
+		_ = tw.Flush()
+	}
 	if len(plan.CRDPreview) > 0 {
 		fmt.Fprintln(out, "\nCustomResourceDefinitions:")
 		tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
@@ -92,6 +101,9 @@ func writeConfirmSummary(out io.Writer, plan *Plan, build bool) {
 	if len(plan.objects) > 0 {
 		fmt.Fprintf(out, "This update will create or correct %d platform ServiceAccount/RBAC object(s) before rolling images.\n", len(plan.objects))
 	}
+	if len(plan.configToWrite) > 0 {
+		fmt.Fprintf(out, "This update will write %d ConfigMap(s) and restart the workloads that read them.\n", len(plan.configToWrite))
+	}
 	if build && len(plan.ImageBuilds) > 0 {
 		var builds, reuses int
 		for _, a := range plan.ImageBuilds {
@@ -117,6 +129,15 @@ func writeResultText(out io.Writer, res *Result) {
 		tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 		fmt.Fprintln(tw, "OBJECT\tACTION\tDETAIL")
 		for _, o := range res.PlatformObjects {
+			fmt.Fprintf(tw, "%s\t%s\t%s\n", o.Key, dash(o.Action), dash(o.Error))
+		}
+		_ = tw.Flush()
+		fmt.Fprintln(out)
+	}
+	if len(res.ConfigMaps) > 0 {
+		tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(tw, "CONFIGMAP\tACTION\tDETAIL")
+		for _, o := range res.ConfigMaps {
 			fmt.Fprintf(tw, "%s\t%s\t%s\n", o.Key, dash(o.Action), dash(o.Error))
 		}
 		_ = tw.Flush()

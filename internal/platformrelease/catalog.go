@@ -91,6 +91,11 @@ var catalog = withInventoryPlacement([]Component{
 	{Name: "ingest", Container: "ingest", Repository: "mcp-ingest", Built: true},
 	{Name: "processor", Container: "processor", Repository: "mcp-processor", Built: true},
 	{Name: "ui", Container: "ui", Repository: "mcp-ui", Built: true},
+	// Third-party workloads: the release owns their wiring, config and (for the
+	// gateway) image pin, but MCP Runtime does not build them.
+	{Name: "gateway", Container: "traefik"},
+	{Name: "prometheus", Container: "prometheus"},
+	{Name: "grafana", Container: "grafana"},
 	{Name: "doctor-smoke", Repository: "mcp-runtime-doctor-smoke", Built: true},
 	{Name: "mcp-auth", Container: "auth-server", OptIn: OptInAuth},
 })

@@ -253,7 +253,7 @@ causes `ImagePullBackOff` with `x509: ... doesn't contain any IP SANs`.
 
 Copy `config/deployments/mcpruntime-org.env.example` to
 `mcpruntime-org.env`, then follow **[Public Reference Deployment](reference-deployment.md)**
-for first install (`--acme-email`), reruns (`hack/deploy/reference/setup.sh --yes`
+for first install (`--acme-email`), reruns (`mcp-runtime setup --env-file <profile> --expect-cluster-id <uid> ...` (see the reference deployment guide)
 intentionally omits `--acme-email` and uses `--tls-cluster-issuer` instead),
 safe clean+restore, rollout-only updates, the full environment variable reference,
 and multitenancy validation.

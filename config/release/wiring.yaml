@@ -1,15 +1,56 @@
-# Non-image Deployment configuration a release requires, embedded in
-# platform-manifest.json so `mcp-runtime update` can apply it without a full
-# setup. It must match the corresponding Deployment in k8s/ (a test enforces
-# this). platformObjects lists the k8s/ ServiceAccount/RBAC objects update
-# manages; releases opt objects in explicitly. update adds or corrects exactly these fields; other env is untouched.
+# Non-image Deployment configuration, ServiceAccounts/RBAC and ConfigMaps a
+# release requires, embedded in platform-manifest.json so `mcp-runtime update`
+# can apply them without a full setup. Everything here must match the
+# corresponding object in k8s/; tests enforce that.
+#
+# update adds or corrects exactly the declared objects, keys and fields; other
+# env, flags and ConfigMap keys are untouched. Releases opt objects in
+# explicitly: list one here when the release changes it.
+
+# ServiceAccount/RBAC objects, as "<Kind>/<namespace>/<name>" (namespaced) or
+# "<Kind>/<name>" (cluster-scoped). Validated: no wildcard or escalating rules.
 platformObjects:
   - ServiceAccount/mcp-observability/mcp-ingest
   - ClusterRole/mcp-ingest-tokenreview
   - ClusterRoleBinding/mcp-ingest-tokenreview
+  - ClusterRole/mcp-runtime-api-team-secrets
+  - ClusterRole/mcp-platform-gateway-ingressclass
+  - Role/mcp-platform/mcp-platform-gateway
+  - Role/mcp-observability/mcp-platform-gateway
+
+# ConfigMaps whose data the release owns. restart lists the components that
+# read the ConfigMap only at start; they are rolled when it changes.
+configMaps:
+  - key: mcp-observability/prometheus-config
+    restart: [prometheus]
+  - key: mcp-observability/grafana-datasources
+    restart: [grafana]
+  - key: mcp-observability/grafana-dashboards
+    restart: [grafana]
+
+# Third-party workloads whose image pin is taken from their k8s/ Deployment.
+thirdPartyImages:
+  - gateway
+
+# Third-party workloads whose image the release leaves alone but whose wiring
+# or ConfigMap-driven restarts update applies.
+configOnly:
+  - prometheus
+  - grafana
+
 components:
   ingest:
     serviceAccountName: mcp-ingest
     automountServiceAccountToken: true
     env:
       INGEST_SA_TOKEN_AUDIENCE: mcp-ingest
+  gateway:
+    args:
+      - --tracing.serviceName=traefik-platform
+      - --tracing.sampleRate=1
+      - --tracing.otlp.http.endpoint=http://otel-collector.mcp-observability.svc.cluster.local:4318/v1/traces
+      - --accesslog.format=json
+      - --accesslog.fields.headers.defaultmode=drop
+  prometheus:
+    args:
+      - --enable-feature=exemplar-storage

@@ -124,7 +124,7 @@ default. Override the path with `MCP_DEPLOY_ENV=/path/to/other.env`. See
 |----------|----------|---------|---------|
 | `KUBECONFIG` | yes | all hack scripts, manual `kubectl` | Path to the selected cluster kubeconfig. Must match the cluster you target. |
 | `MCP_KUBE_CONTEXT` | optional | CLI setup and public hack scripts | Context within the kubeconfig; use when the file has multiple clusters. |
-| `MCP_SETUP_KUBECONFIG` | yes (setup) | `hack/deploy/reference/setup.sh` | Same as `KUBECONFIG`; passed to `mcp-runtime setup --kubeconfig`. |
+| `MCP_SETUP_KUBECONFIG` | yes (setup) | `mcp-runtime setup --kubeconfig` | Same as `KUBECONFIG`; passed to `mcp-runtime setup --kubeconfig`. |
 | `MCP_PLATFORM_DOMAIN` | yes | setup | Apex domain only (no `https://`). Derives `registry.`, `mcp.`, and `platform.` hostnames. |
 | `MCP_PLATFORM_ADMIN_EMAIL` | yes (non-test setup) | setup | Seeds the platform admin account during bootstrap. |
 
@@ -145,7 +145,7 @@ copy or change MCP Auth images.
 
 <a id="setup-behavior-read-by-hackdeploymcpruntime-orgsetupsh"></a>
 
-#### Setup behavior (read by `hack/deploy/reference/setup.sh`)
+#### Setup behavior (read by `mcp-runtime setup --env-file`)
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
@@ -213,7 +213,7 @@ gateway fails closed with 401 when a token's `aud` does not match.
 
 <a id="rollout-only-hackdeploymcpruntime-orgrolloutsh"></a>
 
-#### Rollout-only (`hack/deploy/reference/rollout.sh`)
+#### Rollout-only (`mcp-runtime update`)
 
 Set `MCP_DEPLOY_REF` to the selected stable release, `MCP_KUBE_CONTEXT` to the
 explicit target context, and `MCP_EXPECTED_CLUSTER_UID` to that cluster's
@@ -303,37 +303,48 @@ export MCP_EXPECTED_CLUSTER_UID=<kube-system-namespace-uid>
 export MCP_DEPLOY_REF=<selected-stable-release>
 ```
 
-For ordinary release updates:
+For ordinary release updates, from a clean checkout of the release tag with the
+production kubeconfig passed explicitly (this is what the hosted release pipeline
+runs):
 
 ```bash
-hack/deploy/reference/rollout.sh --dry-run
-hack/deploy/reference/rollout.sh --yes
+make build VERSION=<tag> COMMIT=<tag-commit>
+./bin/mcp-runtime update --to <tag> --build --source . --image-platform linux/amd64 \
+  --kubeconfig "$MCP_SETUP_KUBECONFIG" --context "$MCP_KUBE_CONTEXT" \
+  --expect-cluster-id "$MCP_EXPECTED_CLUSTER_UID" --dry-run
+# review the plan, then repeat with --yes
 ```
 
-Besides images, `update` applies the ServiceAccounts, RBAC and Deployment
-wiring the release declares (see `mcp-runtime update --help`), so a release
-that only adds those, such as v0.7.2, does not need full setup. The dry-run
-plan lists every object and wiring change; review it before `--yes`.
+Besides images, `update` applies the ServiceAccounts, RBAC, ConfigMaps and
+Deployment wiring (ServiceAccount, token mount, env, container flags, DNS
+options) the release declares in `config/release/wiring.yaml`, and restarts the
+workloads that read a changed ConfigMap, so such a release needs no full setup.
+`--expect-cluster-id` refuses a renamed or wrong context before anything is
+read or written. The dry-run plan lists every object, ConfigMap and wiring
+change; review it before `--yes`.
 
-The wrapper uses `mcp-runtime update --build` and the published component
-manifest. All changed Runtime components roll sequentially with the CLI's
+`update` uses the published component manifest. All changed Runtime components roll sequentially with the CLI's
 rollback behavior. Existing registry-scoped pull Secrets, certificates,
 configuration and MCP Auth remain unchanged. Supply existing Docker registry
-credentials through an approved login workflow; the wrapper never copies an
+credentials through an approved login workflow; `update` never copies an
 admin key into Kubernetes pull Secrets.
 
 Full setup is separate and must be deliberate:
 
 ```bash
 hack/deploy/reference/backup.sh --setup
-hack/deploy/reference/setup.sh --yes
+./bin/mcp-runtime setup --env-file "$MCP_DEPLOY_ENV" \
+  --kubeconfig "$MCP_SETUP_KUBECONFIG" --context "$MCP_KUBE_CONTEXT" \
+  --expect-cluster-id "$MCP_EXPECTED_CLUSTER_UID" \
+  --strict-prod --with-tls --provided-tls-secrets --skip-cert-manager-install \
+  --registry-mode bundled-https --platform-mode tenant --ingress none
 ```
 
-The setup wrapper requires existing registry/platform TLS Secrets, uses
-`--strict-prod --provided-tls-secrets --skip-cert-manager-install`, and passes
-the explicit kubeconfig/context and reviewed env file. An existing MCP Auth
-Deployment requires its current image and complete auth profile to be selected.
-It does not automatically restore backups. First installations that require
+Setup requires existing registry/platform TLS Secrets with these flags. Its
+preflight refuses a cluster whose ID differs from `--expect-cluster-id` and
+refuses to drop or swap an installed MCP Auth server: select it with
+`--with-mcp-auth-server` and its current image. Setup does not automatically
+restore backups. First installations that require
 certificate issuance use `mcp-runtime setup` with the reviewed issuance flags.
 MCP Auth image updates are a separate release track using an explicit component
 manifest and `mcp-runtime update --only mcp-auth`; do not rebuild a sibling repo
@@ -948,7 +959,7 @@ the base manifest sets `web`.
 ### Setup fails "bundled registry platform setup requires MCP_REGISTRY_ENDPOINT"
 
 You omitted `--test-mode` and used `--registry-mode auto`. For this k3s cluster
-use `--registry-mode bundled-https` (included in `hack/deploy/reference/setup.sh`).
+use `--registry-mode bundled-https` (used by the production `mcp-runtime setup` flags above).
 Do not export a ClusterIP as `MCP_REGISTRY_ENDPOINT` on the public TLS deployment.
 
 ### Setup fails "MCP_IMAGE_PLATFORM does not match Kubernetes node architecture"

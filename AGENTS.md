@@ -31,7 +31,7 @@ Tests and scripts that fall back to the current kube context have written to a p
 | Grants / sessions / MCP calls | `access-governance` skill | `docs/teams-and-access.md` |
 | Browser / platform UI QA | `dashboard-browser-qa` skill | Role gating, browser errors and real user workflows |
 | Cluster failure diagnosis | `cluster-ops` skill, mode `troubleshoot` | Structured diagnosis before ad-hoc commands |
-| Reference setup / update / recovery | `hack/deploy/reference/` | `production-platform` skill, `docs/reference-deployment.md` |
+| Reference update / setup / recovery | `mcp-runtime update` / `setup`; recovery scripts in `hack/deploy/reference/` | `production-platform` skill, `docs/reference-deployment.md` |
 | Hosted acceptance | `hack/deploy/acceptance/` | Real agent/grant/certificate session; allowed and denied calls |
 | Go documentation hosting | `hack/deploy/pkgsite/` | Deployment workflow and offline rollback tests |
 | Protocol spec changes | `mcp-protocol-compliance` skill | Full conformance audit only for protocol work |
@@ -148,9 +148,11 @@ deployment and this section is updated.
   do not add legacy compatibility layers, dual-version APIs or schemas,
   backfill frameworks, or in-place upgrade paths just to support earlier
   releases of our own platform.
-- The release deployment model is **backup → fresh setup → restore required
-  data → verify** on the reference platform. Document that procedure instead
-  of designing a general customer migration system.
+- Ordinary releases are delivered with `mcp-runtime update` (images, CRDs and the
+  ServiceAccounts, RBAC, ConfigMaps and Deployment wiring a release declares in
+  `config/release/wiring.yaml`). A breaking reset follows **backup → fresh setup
+  → restore required data → verify** on the reference platform. Document that
+  procedure instead of designing a general customer migration system.
 - Release instructions must identify the exact revision, install configuration,
   backup contents and location, clean setup steps, restore steps, and recovery
   procedure. Include platform databases, registry images, required Secrets and

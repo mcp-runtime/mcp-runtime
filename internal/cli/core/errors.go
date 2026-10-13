@@ -225,6 +225,7 @@ var (
 	ErrUpdateInventoryFailed     = newBaseError("read installed platform inventory", errx.CodeSetup, errx.DescSetup)
 	ErrUpdateCRDChange           = newBaseError("release changes CRDs", errx.CodeSetup, errx.DescSetup)
 	ErrUpdateBlocked             = newBaseError("update plan has blocked components", errx.CodeSetup, errx.DescSetup)
+	ErrUpdateClusterMismatch     = newBaseError("cluster identity does not match --expect-cluster-id", errx.CodeSetup, errx.DescSetup)
 	ErrUpdateConfirmationMissing = newBaseError("update confirmation required", errx.CodeSetup, errx.DescSetup)
 	ErrUpdateAborted             = newBaseError("update aborted", errx.CodeSetup, errx.DescSetup)
 	ErrUpdateRolloutFailed       = newBaseError("platform update rollout failed", errx.CodeSetup, errx.DescSetup)

@@ -48,25 +48,26 @@ Examples:
   mcp-runtime update --to v0.3.1 --release-manifest ./platform-manifest.json --build --source . --yes
 
 Flags:
-      --allow-downgrade           Allow a target version lower than the installed version
-      --build                     Build and push Built-component images from --source before rolling Deployments; release commit images are always rebuilt
-      --build-parallelism int     Max concurrent image builds with --build (default 1; raise carefully) (default 1)
-      --context string            Kubernetes context to use (default: current context)
-      --crds string               CRD multi-document YAML path or https URL when the manifest omits embedded crds (optional; --to also tries platform-crds.yaml)
-      --dry-run                   Print the update plan and exit without changing the cluster
-  -h, --help                      help for update
-      --image-platform string     Docker --platform for --build (default: MCP_IMAGE_PLATFORM or linux/amd64)
-      --include-auth              Include the mcp-auth authorization server
-      --include-cert-manager      Include cert-manager images (patch releases only; CRDs are not upgraded)
-      --kubeconfig string         Path to kubeconfig file (default: KUBECONFIG or ~/.kube/config)
-      --only strings              Comma-separated components to consider (default: all non-opt-in components)
-      --output string             Output format: text or json (default "text")
-      --release-manifest string   Release component manifest path or https URL; its version must match --to when both are set
-      --rollback-on-failure       Restore previous images of workloads changed in this run if a rollout fails (default true)
-      --source string             Repository root used with --build (must contain go.mod, services/, k8s/) (default ".")
-      --timeout duration          Rollout wait timeout per workload (default 5m0s)
-      --to string                 Target release version (for example v0.5.0); fetches that release's platform-manifest.json unless --release-manifest is set
-      --yes                       Apply without the interactive confirmation prompt
+      --allow-downgrade            Allow a target version lower than the installed version
+      --build                      Build and push Built-component images from --source before rolling Deployments; release commit images are always rebuilt
+      --build-parallelism int      Max concurrent image builds with --build (default 1; raise carefully) (default 1)
+      --context string             Kubernetes context to use (default: current context)
+      --crds string                CRD multi-document YAML path or https URL when the manifest omits embedded crds (optional; --to also tries platform-crds.yaml)
+      --dry-run                    Print the update plan and exit without changing the cluster
+      --expect-cluster-id string   Refuse to run unless the target cluster's ID (kube-system namespace UID, shown in the plan) matches; guards against a renamed or wrong context
+  -h, --help                       help for update
+      --image-platform string      Docker --platform for --build (default: MCP_IMAGE_PLATFORM or linux/amd64)
+      --include-auth               Include the mcp-auth authorization server
+      --include-cert-manager       Include cert-manager images (patch releases only; CRDs are not upgraded)
+      --kubeconfig string          Path to kubeconfig file (default: KUBECONFIG or ~/.kube/config)
+      --only strings               Comma-separated components to consider (default: all non-opt-in components)
+      --output string              Output format: text or json (default "text")
+      --release-manifest string    Release component manifest path or https URL; its version must match --to when both are set
+      --rollback-on-failure        Restore previous images of workloads changed in this run if a rollout fails (default true)
+      --source string              Repository root used with --build (must contain go.mod, services/, k8s/) (default ".")
+      --timeout duration           Rollout wait timeout per workload (default 5m0s)
+      --to string                  Target release version (for example v0.5.0); fetches that release's platform-manifest.json unless --release-manifest is set
+      --yes                        Apply without the interactive confirmation prompt
 
 Global Flags:
       --debug   Enable debug mode with structured error logging

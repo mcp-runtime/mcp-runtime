@@ -17,6 +17,7 @@ Flags:
       --docs-path string                     Public path that redirects to the configured documentation URL (default "/docs")
       --docs-url string                      HTTPS documentation destination used by the docs route and dashboard links (default "https://mcpruntime.org/docs/")
       --env-file string                      Path to an env file to source before setup (e.g. config/deployments/mcpruntime-org.env); variables already in the environment are not overridden
+      --expect-cluster-id string             Refuse to run unless the target cluster's ID (kube-system namespace UID) matches; guards against a renamed or wrong context (also MCP_SETUP_EXPECT_CLUSTER_ID)
       --external-registry-password string    External/provisioned registry password for --registry-mode external (prefer PROVISIONED_REGISTRY_PASSWORD for shells)
       --external-registry-url string         External/provisioned registry URL for --registry-mode external (overrides PROVISIONED_REGISTRY_URL and registry provision config)
       --external-registry-username string    External/provisioned registry username for --registry-mode external

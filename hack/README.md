@@ -77,9 +77,12 @@ successful S1–S3 measurements and an existing baseline; deliberately create on
 
 See [the reference helper guide](deploy/reference/README.md) and
 [the deployment runbook](../docs/reference-deployment.md). Normal updates use
-`mcp-runtime update` through `rollout.sh`; they never rewrite registry pull
-credentials, TLS, tenant policies or configuration. Full setup and recovery are
-separate deliberate operations. No script automatically restores `latest`.
+`mcp-runtime update --to <tag> --build --expect-cluster-id <uid>` (what the hosted
+release pipeline runs); they never rewrite registry pull credentials, TLS or
+tenant policies. A release may declare the ServiceAccounts, RBAC, ConfigMaps and
+Deployment wiring `update` applies. Full setup is `mcp-runtime setup`, which
+refuses a wrong cluster ID and an existing mcp-auth it would drop. The remaining
+scripts here are recovery tools only. No script automatically restores `latest`.
 
 `reset.sh` is a destructive reset, never a release prerequisite. It requires
 an explicit cluster confirmation and a checksum-verified full backup. A live

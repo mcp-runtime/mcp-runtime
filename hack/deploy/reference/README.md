@@ -1,11 +1,13 @@
 # Reference platform operations
 
-Kubernetes distribution is a deployment choice. These scripts compose Runtime
-CLI workflows for the public reference platform and retain a narrowly scoped
-k3s host backup path.
+Kubernetes distribution is a deployment choice. Releases are delivered by
+`mcp-runtime update` (the hosted release pipeline) and installs by
+`mcp-runtime setup`; these scripts are the **recovery** tools that have no CLI
+equivalent: configuration snapshots, the narrowly scoped k3s host backup, a
+verified restore and a deliberate reset.
 
 Copy `config/deployments/mcpruntime-org.env.example` to an untracked private
-profile. Set `MCP_DEPLOY_REF`, `MCP_KUBE_CONTEXT`, `MCP_SETUP_KUBECONFIG`, and
+profile. Set `MCP_KUBE_CONTEXT`, `MCP_SETUP_KUBECONFIG`, and
 `MCP_EXPECTED_CLUSTER_UID`. Obtain the UID read-only with:
 
 ```bash
@@ -17,9 +19,8 @@ files: review them, protect their permissions, and never commit credentials.
 
 | Operation | Command | Scope |
 |---|---|---|
-| Release plan | `rollout.sh --dry-run` | Clean checkout at the selected stable release; CLI component plan |
-| Release rollout | `rollout.sh --yes` | All Runtime release components via `update --build`; preserves MCP Auth and scoped pull credentials |
-| Existing-platform full reconciliation | `setup.sh --yes` | Strict production setup; existing TLS Secrets; explicit current MCP Auth profile; no automatic restore |
+| Release plan / rollout | `mcp-runtime update --to vX.Y.Z --build --expect-cluster-id UID --dry-run` then `--yes` | Replaces `rollout.sh`; run from a clean checkout of the tag with the explicit prod kubeconfig/context |
+| Full setup of an existing platform | `mcp-runtime setup --strict-prod --with-tls --provided-tls-secrets --skip-cert-manager-install --expect-cluster-id UID ...` | Replaces `setup.sh`; refuses a wrong cluster and an installed mcp-auth it would drop |
 | Configuration/object snapshot | `backup.sh --setup` | Private resource/Secret inventory, not volume data |
 | Host/volume recovery bundle | `backup.sh --full --online-copy` | Also verifies SSH host cluster UID; online PVC copy needs database-native recovery validation |
 | Reset preview | `reset.sh --dry-run` | Prints selected Runtime namespaces/resources only |

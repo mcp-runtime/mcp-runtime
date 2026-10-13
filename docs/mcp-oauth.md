@@ -440,7 +440,7 @@ export MCP_PLATFORM_ADMIN_EMAIL=admin@example.com
 export MCP_PLATFORM_ADMIN_PASSWORD='<from-password-manager>'
 export KEYCLOAK_CLIENT_SECRET='<from-password-manager>'
 MCP_DEPLOY_ENV=/secure/mcpruntime-org.env \
-  hack/deploy/reference/setup.sh --yes
+  mcp-runtime setup --env-file <profile> --expect-cluster-id <uid> --with-mcp-auth-server ...
 ```
 
 Before cleaning, run `reset.sh --dry-run` and confirm its namespace list. For a

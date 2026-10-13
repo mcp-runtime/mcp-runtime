@@ -36,7 +36,7 @@ func wiredManifest(t *testing.T, version string) *platformrelease.Manifest {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := m.ApplyReleaseExtras(bundle, wiring.Components); err != nil {
+	if err := m.ApplyReleaseExtras(platformrelease.ReleaseExtras{PlatformObjects: bundle, Wiring: map[string]*platformrelease.ComponentWiring{"ingest": wiring.Components["ingest"]}}); err != nil {
 		t.Fatal(err)
 	}
 	return m

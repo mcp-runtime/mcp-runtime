@@ -59,7 +59,26 @@ func main() {
 		fmt.Fprintf(os.Stderr, "platformmanifest: %v\n", err)
 		os.Exit(1)
 	}
-	if err := m.ApplyReleaseExtras(platformObjects, release.Components); err != nil {
+	configMaps, err := platformrelease.BundleConfigMaps(strings.TrimSpace(*k8sDir), release.ConfigMaps)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "platformmanifest: %v\n", err)
+		os.Exit(1)
+	}
+	// Third-party image pins come from the same k8s/ Deployment setup renders.
+	for _, name := range release.ThirdPartyImages {
+		repository, tag, err := platformrelease.K8sDeploymentImage(strings.TrimSpace(*k8sDir), name)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "platformmanifest: %v\n", err)
+			os.Exit(1)
+		}
+		m.Components = append(m.Components, platformrelease.ManifestComponent{Name: name, Repository: repository, Tag: tag})
+	}
+	if err := m.ApplyReleaseExtras(platformrelease.ReleaseExtras{
+		PlatformObjects: platformObjects,
+		ConfigMaps:      configMaps,
+		Wiring:          release.Components,
+		ConfigOnly:      release.ConfigOnly,
+	}); err != nil {
 		fmt.Fprintf(os.Stderr, "platformmanifest: %v\n", err)
 		os.Exit(1)
 	}

@@ -29,6 +29,7 @@ type Options struct {
 	To                 string
 	ReleaseManifest    string
 	CRDs               string
+	ExpectClusterID    string
 	DryRun             bool
 	Yes                bool
 	Only               []string
@@ -148,6 +149,7 @@ Relative repositories resolve against the registry of the running image.`,
 	f.StringVar(&opts.Output, "output", "text", "Output format: text or json")
 	f.StringVar(&opts.Kubeconfig, "kubeconfig", "", "Path to kubeconfig file (default: KUBECONFIG or ~/.kube/config)")
 	f.StringVar(&opts.Context, "context", "", "Kubernetes context to use (default: current context)")
+	f.StringVar(&opts.ExpectClusterID, "expect-cluster-id", "", "Refuse to run unless the target cluster's ID (kube-system namespace UID, shown in the plan) matches; guards against a renamed or wrong context")
 	f.BoolVar(&opts.Build, "build", false, "Build and push Built-component images from --source before rolling Deployments; release commit images are always rebuilt")
 	f.StringVar(&opts.Source, "source", ".", "Repository root used with --build (must contain go.mod, services/, k8s/)")
 	f.StringVar(&opts.ImagePlatform, "image-platform", "", "Docker --platform for --build (default: MCP_IMAGE_PLATFORM or linux/amd64)")
@@ -169,6 +171,9 @@ func run(ctx context.Context, out io.Writer, opts Options, d deps) error {
 	kh, err := d.kube(opts.Kubeconfig, opts.Context)
 	if err != nil {
 		return core.WrapWithBase(core.ErrUpdateKubeClientFailed, err, fmt.Sprintf("connect to Kubernetes: %v (pass --kubeconfig/--context)", err))
+	}
+	if want := strings.TrimSpace(opts.ExpectClusterID); want != "" && kh.Cluster.ClusterID != want {
+		return core.NewWithBase(core.ErrUpdateClusterMismatch, fmt.Sprintf("context %q is cluster %s, not the expected %s; no changes were made", kh.Cluster.Context, dash(kh.Cluster.ClusterID), want))
 	}
 	plan, err := BuildPlan(ctx, kh.Clientset, manifest, Selection{
 		Only:               opts.Only,
@@ -193,6 +198,11 @@ func run(ctx context.Context, out io.Writer, opts Options, d deps) error {
 	if len(plan.allObjects) > 0 || hasWiring(plan) {
 		if err := refineObjectPlan(ctx, kh.Clientset, plan); err != nil {
 			return core.WrapWithBase(core.ErrUpdateInventoryFailed, err, fmt.Sprintf("compare platform objects: %v", err))
+		}
+	}
+	if len(plan.configMaps) > 0 {
+		if err := refineConfigMapPlan(ctx, kh.Clientset, plan); err != nil {
+			return core.WrapWithBase(core.ErrUpdateInventoryFailed, err, fmt.Sprintf("compare ConfigMaps: %v", err))
 		}
 	}
 
@@ -268,6 +278,9 @@ func run(ctx context.Context, out io.Writer, opts Options, d deps) error {
 				}
 				if len(plan.objects) > 0 {
 					extra += fmt.Sprintf(" and %d platform ServiceAccount/RBAC object(s)", len(plan.objects))
+				}
+				if len(plan.configToWrite) > 0 {
+					extra += fmt.Sprintf(" and %d ConfigMap(s)", len(plan.configToWrite))
 				}
 				buildNote := ""
 				if opts.Build {

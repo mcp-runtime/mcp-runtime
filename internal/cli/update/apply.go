@@ -59,6 +59,7 @@ type CRDResult struct {
 type Result struct {
 	CRDs            []CRDResult      `json:"crds,omitempty"`
 	PlatformObjects []ObjectResult   `json:"platformObjects,omitempty"`
+	ConfigMaps      []ObjectResult   `json:"configMaps,omitempty"`
 	Workloads       []WorkloadResult `json:"workloads"`
 	Failed          bool             `json:"failed"`
 }
@@ -141,6 +142,20 @@ func Apply(ctx context.Context, cs kubernetes.Interface, plan *Plan, opts ApplyO
 		}
 	}
 
+	var configSnapshots []configSnapshot
+	if len(plan.configToWrite) > 0 {
+		cmResults, snaps, err := applyConfigMaps(ctx, cs, plan, progress)
+		res.ConfigMaps = cmResults
+		configSnapshots = snaps
+		if err != nil {
+			res.Failed = true
+			if opts.RollbackOnFailure {
+				restoreConfigMaps(ctx, cs, configSnapshots, progress)
+			}
+			return res
+		}
+	}
+
 	var touched []*WorkloadResult
 
 	for _, w := range workloads {
@@ -188,6 +203,9 @@ func Apply(ctx context.Context, cs kubernetes.Interface, plan *Plan, opts ApplyO
 			w.Status = StatusRolledBack
 		}
 	}
+	if res.Failed && opts.RollbackOnFailure && len(configSnapshots) > 0 {
+		restoreConfigMaps(ctx, cs, configSnapshots, progress)
+	}
 	for _, w := range workloads {
 		res.Workloads = append(res.Workloads, *w)
 	}
@@ -218,7 +236,8 @@ func buildPatch(w *WorkloadResult, version string, rollback bool) ([]byte, error
 	annotations := map[string]string{}
 	labels := map[string]string{}
 	containers := map[string]map[string]any{}
-	podSpec := map[string]any{}
+	parts := &patchParts{podSpec: map[string]any{}, annotations: map[string]any{}}
+	podSpec := parts.podSpec
 	var order []string
 	for _, ch := range w.changes {
 		c := ch.component
@@ -234,9 +253,13 @@ func buildPatch(w *WorkloadResult, version string, rollback bool) ([]byte, error
 			containers[c.Container] = entry
 			order = append(order, c.Container)
 		}
-		if envs := ch.wiring.podSpecPatch(podSpec, rollback); len(envs) > 0 {
+		envs, args, setArgs := ch.wiring.apply(parts, rollback)
+		if len(envs) > 0 {
 			list, _ := entry["env"].([]map[string]any)
 			entry["env"] = append(list, envs...)
+		}
+		if setArgs {
+			entry["args"] = args
 		}
 		if c.EnvVar != "" {
 			env, _ := entry["env"].([]map[string]any)
@@ -268,8 +291,12 @@ func buildPatch(w *WorkloadResult, version string, rollback bool) ([]byte, error
 		metadata["labels"] = labels
 	}
 	podSpec["containers"] = list
+	template := map[string]any{"spec": podSpec}
+	if len(parts.annotations) > 0 {
+		template["metadata"] = map[string]any{"annotations": parts.annotations}
+	}
 	patch := map[string]any{
-		"spec": map[string]any{"template": map[string]any{"spec": podSpec}},
+		"spec": map[string]any{"template": template},
 	}
 	if len(metadata) > 0 {
 		patch["metadata"] = metadata

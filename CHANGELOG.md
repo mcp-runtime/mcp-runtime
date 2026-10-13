@@ -11,6 +11,9 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 - `config/cert-manager/approval-policies.yaml` and `hack/qa/approval-policy-rehearsal.sh`: a tested cert-manager approver-policy set for the workload issuer (only the runtime API may obtain a session-bound SPIFFE identity certificate; platform and public certificates still issue and renew) plus a Kind rehearsal that asserts approval, denial and renewal. `docs/connect-clients.md` documents the production order and rollback. Required before `MCP_ADAPTER_CERTIFICATES=true` on a production install.
 
+- `mcp-runtime update` applies more of what a release declares in `config/release/wiring.yaml`: platform ConfigMaps (only the declared keys, restoring the previous values if a rollout fails), container flags and pod DNS options as Deployment wiring, config-only third-party components (Prometheus, Grafana) and the platform gateway's third-party image pin. A changed ConfigMap rolls the workloads that read it. Releases that change these no longer need a full setup ([#730](https://github.com/mcp-runtime/mcp-runtime/issues/730)).
+- `update --expect-cluster-id` and `setup --expect-cluster-id` refuse to run unless the cluster ID (kube-system namespace UID, shown in the update plan) matches. `setup` also refuses a run that would drop or swap an installed MCP Auth server; update that separately with `update --only mcp-auth`.
+
 
 ### Changed
 
@@ -24,6 +27,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 - Service HTTP latency histograms attach sampled trace exemplars to connect platform API metrics to the same request trace, without trace IDs as metric labels ([#728](https://github.com/mcp-runtime/mcp-runtime/issues/728)).
 
 - Gateway metrics now distinguish configured tools, policy outcomes and HTTP status, with slow-tool latency buckets and sampled trace exemplars. Tool labels are bounded; unknown names share one bucket. Prometheus/Grafana can link a latency observation to Tempo. ([#300](https://github.com/mcp-runtime/mcp-runtime/issues/300))
+
+### Removed
+
+- `hack/deploy/reference/rollout.sh` and `setup.sh`: use `mcp-runtime update --to <tag> --build --expect-cluster-id <uid>` and `mcp-runtime setup --expect-cluster-id <uid> ...` directly (see `docs/reference-deployment.md`). `backup.sh`, `restore.sh` and `reset.sh` remain as recovery tools.
 
 ### Fixed
 

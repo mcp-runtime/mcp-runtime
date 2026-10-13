@@ -50,6 +50,7 @@ type Input struct {
 	ForceIngressInstall     bool
 	TLSEnabled              bool
 	ProvidedTLSSecrets      bool
+	ExpectClusterID         string
 	TestMode                bool
 	TestMultiReplica        bool
 	ParallelBuilds          bool
@@ -93,6 +94,7 @@ type Plan struct {
 	RegistryManifest        string
 	TLSEnabled              bool
 	ProvidedTLSSecrets      bool
+	ExpectClusterID         string
 	TestMode                bool
 	TestMultiReplica        bool
 	ParallelBuilds          bool
@@ -232,6 +234,7 @@ func Build(input Input) Plan {
 		RegistryManifest:        registryManifest,
 		TLSEnabled:              input.TLSEnabled,
 		ProvidedTLSSecrets:      input.ProvidedTLSSecrets,
+		ExpectClusterID:         strings.TrimSpace(input.ExpectClusterID),
 		TestMode:                input.TestMode,
 		TestMultiReplica:        input.TestMode && input.TestMultiReplica,
 		ParallelBuilds:          input.ParallelBuilds,

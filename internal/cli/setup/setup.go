@@ -67,6 +67,7 @@ func New(runtime *core.Runtime, clusterMgr setupplatform.ClusterManagerAPI) *cob
 	var forceIngressInstall bool
 	var tlsEnabled bool
 	var providedTLSSecrets bool
+	var expectClusterID string
 	var testMode bool
 	var testMultiReplica bool
 	var parallelBuilds bool
@@ -213,6 +214,7 @@ will use to push and pull container images.`,
 			// TLS
 			envBool("with-tls", &tlsEnabled, "MCP_SETUP_WITH_TLS")
 			envBool("provided-tls-secrets", &providedTLSSecrets, "MCP_SETUP_PROVIDED_TLS_SECRETS")
+			envStr("expect-cluster-id", &expectClusterID, "MCP_SETUP_EXPECT_CLUSTER_ID")
 			envStr("acme-email", &acmeEmail, "MCP_ACME_EMAIL")
 			envBool("acme-staging", &acmeStaging, "MCP_ACME_STAGING")
 			envStr("tls-cluster-issuer", &tlsClusterIssuer, "MCP_SETUP_TLS_CLUSTER_ISSUER", "MCP_TLS_CLUSTER_ISSUER")
@@ -336,6 +338,7 @@ will use to push and pull container images.`,
 				ForceIngressInstall:     forceIngressInstall,
 				TLSEnabled:              tlsEnabled,
 				ProvidedTLSSecrets:      providedTLSSecrets,
+				ExpectClusterID:         expectClusterID,
 				TestMode:                testMode,
 				TestMultiReplica:        testMultiReplica,
 				ParallelBuilds:          parallelBuilds,
@@ -383,6 +386,7 @@ will use to push and pull container images.`,
 	cmd.Flags().StringVar(&ingressManifest, "ingress-manifest", "config/ingress/overlays/http", "Manifest to apply when installing the ingress controller")
 	cmd.Flags().BoolVar(&forceIngressInstall, "force-ingress-install", false, "Force repo-managed ingress install when only an IngressClass exists; refuses active external Traefik")
 	cmd.Flags().BoolVar(&tlsEnabled, "with-tls", false, "Enable TLS overlays (ingress/registry). Use --acme-email for public Let's Encrypt, --tls-cluster-issuer for an org ClusterIssuer, or the bundled mcp-runtime-ca private CA (no ACME) when neither is set")
+	cmd.Flags().StringVar(&expectClusterID, "expect-cluster-id", "", "Refuse to run unless the target cluster's ID (kube-system namespace UID) matches; guards against a renamed or wrong context (also MCP_SETUP_EXPECT_CLUSTER_ID)")
 	cmd.Flags().BoolVar(&providedTLSSecrets, "provided-tls-secrets", false, "Use operator-created Kubernetes TLS Secrets instead of issuing certificates. Requires --with-tls; do not combine with --acme-email or --tls-cluster-issuer")
 	cmd.Flags().StringVar(&acmeEmail, "acme-email", "", "Contact email for Let's Encrypt (HTTP-01 via cert-manager). Mutually exclusive with --tls-cluster-issuer. Overrides env MCP_ACME_EMAIL")
 	cmd.Flags().StringVar(&tlsClusterIssuer, "tls-cluster-issuer", "", "Use an existing cert-manager ClusterIssuer (e.g. internal CA; setup does not create it). Mutually exclusive with --acme-email. Overrides env MCP_SETUP_TLS_CLUSTER_ISSUER")

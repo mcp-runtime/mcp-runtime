@@ -57,8 +57,11 @@ type Manifest struct {
 	// and bindings the release's workloads need (see ParsePlatformObjects for
 	// what a release may contain). update creates or corrects only the
 	// objects whose live spec differs.
-	PlatformObjects string              `json:"platformObjects,omitempty"`
-	Components      []ManifestComponent `json:"components"`
+	PlatformObjects string `json:"platformObjects,omitempty"`
+	// ConfigMaps are platform ConfigMap keys the release owns. update writes
+	// only the declared keys and restarts the listed dependents when they change.
+	ConfigMaps []ManifestConfigMap `json:"configMaps,omitempty"`
+	Components []ManifestComponent `json:"components"`
 }
 
 // ManifestComponent pins one component image.
@@ -69,7 +72,23 @@ type ManifestComponent struct {
 	Digest     string `json:"digest,omitempty"`
 	// Wiring is the non-image Deployment configuration the release requires.
 	Wiring *ComponentWiring `json:"wiring,omitempty"`
+	// ConfigOnly components keep their running image: update applies only
+	// wiring and config-driven restarts. Repository and tag are not required.
+	ConfigOnly bool `json:"configOnly,omitempty"`
 }
+
+// ManifestConfigMap declares ConfigMap data a release owns.
+type ManifestConfigMap struct {
+	Namespace string            `json:"namespace"`
+	Name      string            `json:"name"`
+	Data      map[string]string `json:"data"`
+	// Restart lists components whose Deployments read this ConfigMap only at
+	// start, so a change must roll them.
+	Restart []string `json:"restart,omitempty"`
+}
+
+// Key identifies the ConfigMap in plans and logs.
+func (c ManifestConfigMap) Key() string { return c.Namespace + "/" + c.Name }
 
 // Component returns the manifest entry for name.
 func (m *Manifest) Component(name string) (ManifestComponent, bool) {
@@ -114,6 +133,7 @@ func (m *Manifest) Validate() error {
 	if _, err := ParsePlatformObjects(m.PlatformObjects); err != nil {
 		errs = append(errs, fmt.Errorf("platformObjects: %w", err))
 	}
+	errs = append(errs, validateConfigMaps(m.ConfigMaps)...)
 	seen := map[string]bool{}
 	for i, c := range m.Components {
 		where := fmt.Sprintf("components[%d] (%s)", i, c.Name)
@@ -125,6 +145,12 @@ func (m *Manifest) Validate() error {
 			errs = append(errs, fmt.Errorf("%s: duplicate component", where))
 		}
 		seen[c.Name] = true
+		if c.ConfigOnly {
+			if c.Repository != "" || c.Tag != "" || c.Digest != "" {
+				errs = append(errs, fmt.Errorf("%s: configOnly components must not set repository, tag or digest", where))
+			}
+			continue
+		}
 		if !ValidTag(c.Tag) {
 			errs = append(errs, fmt.Errorf("%s: tag %q is invalid", where, c.Tag))
 		}

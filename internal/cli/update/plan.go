@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -87,6 +88,12 @@ type Plan struct {
 	// still need a create or update after comparing with the cluster.
 	allObjects []platformrelease.PlatformObject
 	objects    []platformrelease.PlatformObject
+	// ConfigMaps previews the declared ConfigMap keys the release owns.
+	ConfigMaps []ObjectResult `json:"configMaps,omitempty"`
+	// configMaps are the declared ConfigMaps; configToWrite are those whose
+	// live data differs.
+	configMaps    []platformrelease.ManifestConfigMap
+	configToWrite []platformrelease.ManifestConfigMap
 	// crdsYAML is the multi-document YAML applied when ApplyCRDs is true.
 	// It is omitted from JSON output (large); use CRDNames in plans.
 	crdsYAML  string
@@ -108,7 +115,7 @@ func (p *Plan) Changed() []Row {
 
 // NeedsApply reports whether the plan would mutate the cluster (CRDs and/or images).
 func (p *Plan) NeedsApply() bool {
-	return p != nil && (p.ApplyCRDs || len(p.objects) > 0 || len(p.Changed()) > 0)
+	return p != nil && (p.ApplyCRDs || len(p.objects) > 0 || len(p.configToWrite) > 0 || len(p.Changed()) > 0)
 }
 
 // Blocked returns rows blocked by a safety rule.
@@ -225,6 +232,13 @@ func BuildPlan(ctx context.Context, cs kubernetes.Interface, m *platformrelease.
 			plan.allObjects = objs
 		}
 	}
+	if len(m.ConfigMaps) > 0 {
+		if len(sel.Only) > 0 {
+			plan.Warnings = append(plan.Warnings, fmt.Sprintf("release %s declares ConfigMaps, but --only is set so they are skipped; re-run without --only to apply them", m.Version))
+		} else {
+			plan.configMaps = m.ConfigMaps
+		}
+	}
 	only := sel.onlySet()
 	installedVersions := map[string]bool{}
 
@@ -242,6 +256,9 @@ func BuildPlan(ctx context.Context, cs kubernetes.Interface, m *platformrelease.
 			continue
 		}
 		row.TargetVersion = entry.Tag
+		if entry.ConfigOnly {
+			row.TargetVersion = ""
+		}
 		if c.Built {
 			row.TargetVersion = platformrelease.ReleaseVersionFromImageTag(entry.Tag)
 		}
@@ -250,7 +267,7 @@ func BuildPlan(ctx context.Context, cs kubernetes.Interface, m *platformrelease.
 			plan.Rows = append(plan.Rows, row)
 			continue
 		}
-		if err := planComponent(ctx, cs, m, entry, &row); err != nil {
+		if err := planComponent(ctx, cs, m, entry, plan.configMaps, &row); err != nil {
 			return nil, err
 		}
 		if c.Built && row.CurrentVersion != "" && row.Action != ActionSkip {
@@ -288,7 +305,7 @@ func selectionSkipReason(c platformrelease.Component, only map[string]bool, sel 
 	return "", true
 }
 
-func planComponent(ctx context.Context, cs kubernetes.Interface, m *platformrelease.Manifest, entry platformrelease.ManifestComponent, row *Row) error {
+func planComponent(ctx context.Context, cs kubernetes.Interface, m *platformrelease.Manifest, entry platformrelease.ManifestComponent, cms []platformrelease.ManifestConfigMap, row *Row) error {
 	c := row.component
 	deploy, err := cs.AppsV1().Deployments(c.Namespace).Get(ctx, c.Deployment, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
@@ -301,6 +318,12 @@ func planComponent(ctx context.Context, cs kubernetes.Interface, m *platformrele
 	container := findContainer(deploy.Spec.Template.Spec.Containers, c.Container)
 	if container == nil {
 		row.Action, row.Reason = ActionSkip, fmt.Sprintf("container %q not found in deployment", c.Container)
+		return nil
+	}
+	if entry.ConfigOnly {
+		row.CurrentImage, row.TargetImage = container.Image, container.Image
+		row.Action, row.Reason = ActionUnchanged, "config-only component; image is not managed by the release"
+		applyWiring(deploy, container, entry, cms, row)
 		return nil
 	}
 	current := container.Image
@@ -359,19 +382,27 @@ func planComponent(ctx context.Context, cs kubernetes.Interface, m *platformrele
 	default:
 		row.Action = ActionUpdate
 	}
-	if change, drift := planWiring(deploy, container, entry.Wiring); change != nil {
-		row.wiring = change
-		row.Wiring = drift
-		if row.Action == ActionUnchanged {
-			row.Action = ActionUpdate
-			row.Reason = "image matches release; Deployment wiring differs"
-			row.TargetImage = row.CurrentImage
-		}
-	}
-	if row.Action == ActionUnchanged {
+	applyWiring(deploy, container, entry, cms, row)
+	if row.Action == ActionUnchanged && len(row.Wiring) == 0 {
 		row.Reason = "image matches release"
 	}
 	return nil
+}
+
+// applyWiring records the wiring and config-hash drift of a component on its
+// row. An otherwise unchanged component becomes an update so the drift is applied.
+func applyWiring(deploy *appsv1.Deployment, container *corev1.Container, entry platformrelease.ManifestComponent, cms []platformrelease.ManifestConfigMap, row *Row) {
+	change, drift := planWiring(deploy, container, entry.Wiring, configHashes(row.Component, cms))
+	if change == nil {
+		return
+	}
+	row.wiring = change
+	row.Wiring = drift
+	if row.Action == ActionUnchanged {
+		row.Action = ActionUpdate
+		row.Reason = "image matches release; Deployment wiring or config differs"
+		row.TargetImage = row.CurrentImage
+	}
 }
 
 func applyVersionGuards(row *Row, sel Selection) {

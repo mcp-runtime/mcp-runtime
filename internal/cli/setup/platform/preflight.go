@@ -38,6 +38,10 @@ func (s preflightStep) Name() string { return "preflight" }
 func (s preflightStep) Run(logger *zap.Logger, _ SetupDeps, ctx *SetupContext) error {
 	clients, err := platformKubernetesClients()
 	if err != nil {
+		if ctx.Plan.ExpectClusterID != "" {
+			// Never proceed on an unverified cluster when an identity was requested.
+			return fmt.Errorf("cannot verify --expect-cluster-id: %w", err)
+		}
 		// Cluster unreachable — the cluster step will surface a clearer error;
 		// skip preflight so we don't double-report a connection failure.
 		core.Warn("Pre-flight: cannot connect to cluster, skipping pre-flight checks")
@@ -46,6 +50,12 @@ func (s preflightStep) Run(logger *zap.Logger, _ SetupDeps, ctx *SetupContext) e
 
 	var issues []preflightIssue
 	bg := context.Background()
+
+	// Identity and retention guards come first: they protect production.
+	issues = append(issues, checkClusterIdentity(bg, clients, ctx.Plan.ExpectClusterID)...)
+	if !ctx.Plan.TestMode {
+		issues = append(issues, checkExistingMCPAuthRetained(bg, clients, ctx.Plan.DeployMCPAuthServer, ctx.Plan.MCPAuthServerImage)...)
+	}
 
 	// Cluster-wide structural checks (run regardless of plan options).
 	issues = append(issues, checkTerminatingNamespaces(bg, clients, ctx.Plan.DeployAnalytics)...)
@@ -701,4 +711,46 @@ func countFatal(issues []preflightIssue) int {
 		}
 	}
 	return n
+}
+
+// checkClusterIdentity refuses to run against a cluster whose ID (the
+// kube-system namespace UID) differs from --expect-cluster-id. An empty
+// expectation disables the check.
+func checkClusterIdentity(ctx context.Context, clients *k8sclient.Clients, want string) []preflightIssue {
+	want = strings.TrimSpace(want)
+	if want == "" {
+		return nil
+	}
+	ns, err := clients.Clientset.CoreV1().Namespaces().Get(ctx, "kube-system", metav1.GetOptions{})
+	if err != nil {
+		return []preflightIssue{{fatal: true, message: fmt.Sprintf("cannot read the kube-system namespace to verify --expect-cluster-id: %v", err)}}
+	}
+	if got := string(ns.UID); got != want {
+		return []preflightIssue{{fatal: true, message: fmt.Sprintf("the target cluster ID is %s but --expect-cluster-id is %s; wrong or renamed context, nothing was changed", got, want)}}
+	}
+	return nil
+}
+
+// checkExistingMCPAuthRetained stops a setup run that would drop or swap an
+// existing bundled mcp-auth server: its operator configuration and image are
+// updated separately (`update --only mcp-auth`), never as a side effect.
+func checkExistingMCPAuthRetained(ctx context.Context, clients *k8sclient.Clients, deploying bool, image string) []preflightIssue {
+	component, ok := platforminventory.Lookup("mcp-auth")
+	if !ok {
+		return nil
+	}
+	deploy, err := k8sclient.GetDeployment(ctx, clients, component.Namespace, component.Resource)
+	if err != nil || deploy == nil || len(deploy.Spec.Template.Spec.Containers) == 0 {
+		return nil
+	}
+	live := deploy.Spec.Template.Spec.Containers[0].Image
+	if !deploying {
+		return []preflightIssue{{fatal: true,
+			message: fmt.Sprintf("an MCP Auth server (%s) is installed but this setup run does not select it; rerun with --with-mcp-auth-server and its current profile so its operator configuration is kept", live)}}
+	}
+	if strings.TrimSpace(image) != live {
+		return []preflightIssue{{fatal: true,
+			message: fmt.Sprintf("setup must retain the installed MCP Auth image %s (got --mcp-auth-server-image %s); update it separately with `mcp-runtime update --only mcp-auth`", live, image)}}
+	}
+	return nil
 }
