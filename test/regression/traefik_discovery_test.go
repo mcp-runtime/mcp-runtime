@@ -114,3 +114,52 @@ func TestManagedTraefikDiscoveryRBACAndCRDs(t *testing.T) {
 		t.Fatal("managed v3 CRD provider requires ServersTransportTCP")
 	}
 }
+
+func TestTraefikDiscoveryDelegationIsNamespaceScoped(t *testing.T) {
+	file, err := os.Open(filepath.Join(repoRoot(t), "k8s/08-runtime-api-rbac.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	decoder := yaml.NewDecoder(file)
+	required := map[string]bool{"configmaps": false, "endpointslices": false}
+	for {
+		var doc struct {
+			discoveryManifest `yaml:",inline"`
+			RoleRef           struct {
+				Name string `yaml:"name"`
+			} `yaml:"roleRef"`
+		}
+		err := decoder.Decode(&doc)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if doc.Kind == "ClusterRoleBinding" && doc.RoleRef.Name == "mcp-runtime-api-team-secrets" {
+			t.Fatal("managed-namespace discovery delegate was bound cluster-wide")
+		}
+		if doc.Kind != "ClusterRole" || doc.Metadata.Name != "mcp-runtime-api-team-secrets" {
+			continue
+		}
+		for _, rule := range doc.Rules {
+			for resource := range required {
+				if !slices.Contains(rule.Resources, resource) {
+					continue
+				}
+				for _, verb := range rule.Verbs {
+					if verb != "get" && verb != "list" && verb != "watch" {
+						t.Fatalf("discovery delegate grants mutation: %v", rule)
+					}
+				}
+				required[resource] = slices.Contains(rule.Verbs, "get") && slices.Contains(rule.Verbs, "list") && slices.Contains(rule.Verbs, "watch")
+			}
+		}
+	}
+	for resource, found := range required {
+		if !found {
+			t.Errorf("missing namespace-delegated %s read permission", resource)
+		}
+	}
+}
