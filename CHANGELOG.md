@@ -11,15 +11,17 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 - Request tracing adds gateway stage spans, internal HTTP connection-phase events, asynchronous analytics classification and instrumented MCP-server execution in the shipped Go example. Managed ingress uses Traefik 3.7.14 with OTLP tracing and credential-free JSON access logs; distribution-managed Traefik 2 requires an explicit upgrade. Explicit workload OTEL settings are preserved. Normal telemetry continues to exclude tool bodies and credentials. ([#700](https://github.com/mcp-runtime/mcp-runtime/issues/700))
 
-## [0.7.2] - 2026-10-13
+## [0.7.2] - 2026-10-14
 
 This patch restores usage analytics for MCP servers whose gateway sidecars were
-rejected by `mcp-ingest`. It changes `k8s/06-ingest.yaml` (new `mcp-ingest`
-ServiceAccount, `tokenreviews` ClusterRole and binding, `INGEST_SA_TOKEN_AUDIENCE`),
-so an image-only update does not apply it: use the v0.7.2 CLI for full setup,
-preserving existing data, Secrets and certificates as the reference deployment
-runbook describes. Running gateways pick up the token volume when the operator
-reconciles. There are no CRD changes.
+rejected by `mcp-ingest`. It also teaches `mcp-runtime update` to apply the
+ServiceAccounts, RBAC and Deployment wiring a release declares, so this release
+is delivered with `update` (for example `hack/deploy/reference/rollout.sh`) and
+needs no full setup. Use the v0.7.2 CLI: older CLIs reject the new manifest
+fields. Running gateways pick up the token volume when the operator reconciles.
+The `MCPGatewayAnalyticsEmitFailures` alert is a Prometheus ConfigMap change that
+`update` does not apply; it reaches an existing cluster on the next setup. There
+are no CRD changes.
 
 ### Added
 
@@ -27,9 +29,11 @@ reconciles. There are no CRD changes.
 
 ### Fixed
 
-- Gateway sidecars authenticate to `mcp-ingest` with a projected ServiceAccount token (audience `mcp-ingest`, validated by TokenReview) instead of a copied ingest API key. Servers whose key was missing or stale after a setup rerun were rejected with 401, which left the usage analytics dashboard empty. Ingest gains a `mcp-ingest` ServiceAccount with `tokenreviews` create; it needs the updated `k8s/06-ingest.yaml`, so apply it with the release setup. Gateways now count undelivered events in `mcp_gateway_analytics_emit_failures_total`, and the new `MCPGatewayAnalyticsEmitFailures` Prometheus alert (visible in Grafana alerting) fires on sustained failures.
+- Gateway sidecars authenticate to `mcp-ingest` with a projected ServiceAccount token (audience `mcp-ingest`, validated by TokenReview) instead of a copied ingest API key. Servers whose key was missing or stale after a setup rerun were rejected with 401, which left the usage analytics dashboard empty. Ingest gains a `mcp-ingest` ServiceAccount with `tokenreviews` create; `mcp-runtime update` creates it and the RBAC for existing installs, and `k8s/06-ingest.yaml` carries them for fresh setup. Gateways now count undelivered events in `mcp_gateway_analytics_emit_failures_total`, and the new `MCPGatewayAnalyticsEmitFailures` Prometheus alert (visible in Grafana alerting) fires on sustained failures.
 
 ### Changed
+
+- `mcp-runtime update` now applies the ServiceAccounts, Roles/ClusterRoles, bindings and per-component Deployment wiring (ServiceAccount, token mount, required env) that a release declares in `platform-manifest.json` (`platformObjects`, component `wiring`), in addition to images and CRDs. Declared RBAC is validated (no wildcard or `escalate`/`bind`/`impersonate` rules, platform namespaces only, bindings only to roles in the bundle), only differing objects are written, previous wiring is restored if a rollout fails, and `--only` skips objects and blocks workloads that need a missing ServiceAccount. Releases that only add such objects no longer need full setup. Use the matching CLI release: older CLIs reject the new manifest fields. Declared objects live in `config/release/wiring.yaml` and are checked against `k8s/` by a test.
 
 - Go dependencies are updated across the root module and every service module (ClickHouse client, Prometheus client, OpenTelemetry, `golang.org/x/crypto`, `pterm` and others); service modules are tidied against the root.
 

@@ -57,15 +57,17 @@ type CRDResult struct {
 
 // Result is the outcome of applying a plan.
 type Result struct {
-	CRDs      []CRDResult      `json:"crds,omitempty"`
-	Workloads []WorkloadResult `json:"workloads"`
-	Failed    bool             `json:"failed"`
+	CRDs            []CRDResult      `json:"crds,omitempty"`
+	PlatformObjects []ObjectResult   `json:"platformObjects,omitempty"`
+	Workloads       []WorkloadResult `json:"workloads"`
+	Failed          bool             `json:"failed"`
 }
 
 type imageChange struct {
 	component platformrelease.Component
 	previous  string
 	target    string
+	wiring    *wiringChange
 }
 
 // ApplyOptions controls rollout behaviour.
@@ -92,7 +94,7 @@ func groupByWorkload(rows []Row) []*WorkloadResult {
 			out = append(out, w)
 		}
 		w.Components = append(w.Components, r.Component)
-		w.changes = append(w.changes, imageChange{component: r.component, previous: r.CurrentImage, target: r.TargetImage})
+		w.changes = append(w.changes, imageChange{component: r.component, previous: r.CurrentImage, target: r.TargetImage, wiring: r.wiring})
 	}
 	for _, w := range out {
 		w.Recovery = recoveryCommands(w)
@@ -124,6 +126,15 @@ func Apply(ctx context.Context, cs kubernetes.Interface, plan *Plan, opts ApplyO
 		}
 		crdResults, err := applyReleaseCRDs(ctx, opts.Clients, plan, crdTimeout, progress)
 		res.CRDs = crdResults
+		if err != nil {
+			res.Failed = true
+			return res
+		}
+	}
+
+	if len(plan.objects) > 0 {
+		objResults, err := applyPlatformObjects(ctx, cs, plan, progress)
+		res.PlatformObjects = objResults
 		if err != nil {
 			res.Failed = true
 			return res
@@ -207,6 +218,7 @@ func buildPatch(w *WorkloadResult, version string, rollback bool) ([]byte, error
 	annotations := map[string]string{}
 	labels := map[string]string{}
 	containers := map[string]map[string]any{}
+	podSpec := map[string]any{}
 	var order []string
 	for _, ch := range w.changes {
 		c := ch.component
@@ -222,9 +234,13 @@ func buildPatch(w *WorkloadResult, version string, rollback bool) ([]byte, error
 			containers[c.Container] = entry
 			order = append(order, c.Container)
 		}
+		if envs := ch.wiring.podSpecPatch(podSpec, rollback); len(envs) > 0 {
+			list, _ := entry["env"].([]map[string]any)
+			entry["env"] = append(list, envs...)
+		}
 		if c.EnvVar != "" {
-			env, _ := entry["env"].([]map[string]string)
-			entry["env"] = append(env, map[string]string{"name": c.EnvVar, "value": image})
+			env, _ := entry["env"].([]map[string]any)
+			entry["env"] = append(env, map[string]any{"name": c.EnvVar, "value": image})
 		} else {
 			entry["image"] = image
 			meta := platformrelease.MetadataPatch(c, version)
@@ -251,8 +267,9 @@ func buildPatch(w *WorkloadResult, version string, rollback bool) ([]byte, error
 	if len(labels) > 0 {
 		metadata["labels"] = labels
 	}
+	podSpec["containers"] = list
 	patch := map[string]any{
-		"spec": map[string]any{"template": map[string]any{"spec": map[string]any{"containers": list}}},
+		"spec": map[string]any{"template": map[string]any{"spec": podSpec}},
 	}
 	if len(metadata) > 0 {
 		patch["metadata"] = metadata
@@ -280,6 +297,9 @@ func workloadAlreadyCurrent(ctx context.Context, cs kubernetes.Interface, w *Wor
 		c := ch.component
 		container := findContainer(deploy.Spec.Template.Spec.Containers, c.Container)
 		if container == nil {
+			return false, nil
+		}
+		if !wiringSatisfied(deploy, container, ch.wiring) {
 			return false, nil
 		}
 		if c.EnvVar != "" {

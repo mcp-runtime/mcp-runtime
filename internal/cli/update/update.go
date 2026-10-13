@@ -99,11 +99,18 @@ When the release sets crdChange, the manifest embeds CustomResourceDefinition
 YAML (field "crds") so update applies only those CRD objects whose live spec
 differs, waits until each written CRD is Established, then rolls images. Pass
 --crds or use the release's platform-crds.yaml when the JSON omits the bundle.
-With --only, CRD apply is skipped so scoped image updates cannot mutate
-cluster schemas. update never modifies Secrets, PVCs, ConfigMaps, cert-manager
-Issuers/Certificates, Services, or Ingresses, and never deletes or recreates
-workloads. mcp-auth and cert-manager are skipped unless selected with
---include-auth, --include-cert-manager, or --only.
+A release can also declare the ServiceAccounts and RBAC its workloads need
+(platformObjects) and per-component Deployment wiring (ServiceAccount, token
+mount, required env). update creates or corrects only those declared objects
+and fields, validates that they grant no wildcard or escalating access, applies
+them before rolling images, and restores previous wiring if a rollout fails
+(objects are additive and are not rolled back). Wiring also applies on its own
+when an image is unchanged.
+With --only, CRD and platform object apply are skipped so scoped image updates
+cannot mutate cluster schemas or RBAC. update never modifies Secrets, PVCs,
+ConfigMaps, cert-manager Issuers/Certificates, Services, or Ingresses, and never
+deletes or recreates workloads. mcp-auth and cert-manager are skipped unless
+selected with --include-auth, --include-cert-manager, or --only.
 
 With --build, update builds and pushes Built-component images from the release
 that are missing from the registry (sequential by default; use
@@ -183,6 +190,12 @@ func run(ctx context.Context, out io.Writer, opts Options, d deps) error {
 		plan.CRDPreview = preview
 	}
 
+	if len(plan.allObjects) > 0 || hasWiring(plan) {
+		if err := refineObjectPlan(ctx, kh.Clientset, plan); err != nil {
+			return core.WrapWithBase(core.ErrUpdateInventoryFailed, err, fmt.Sprintf("compare platform objects: %v", err))
+		}
+	}
+
 	jsonOut := opts.Output == "json"
 	report := func(res *Result) error {
 		if jsonOut {
@@ -252,6 +265,9 @@ func run(ctx context.Context, out io.Writer, opts Options, d deps) error {
 				extra := ""
 				if plan.ApplyCRDs {
 					extra = fmt.Sprintf(" and %d CustomResourceDefinition(s)", len(plan.CRDNames))
+				}
+				if len(plan.objects) > 0 {
+					extra += fmt.Sprintf(" and %d platform ServiceAccount/RBAC object(s)", len(plan.objects))
 				}
 				buildNote := ""
 				if opts.Build {

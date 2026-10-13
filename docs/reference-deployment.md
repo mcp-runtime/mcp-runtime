@@ -303,12 +303,17 @@ export MCP_EXPECTED_CLUSTER_UID=<kube-system-namespace-uid>
 export MCP_DEPLOY_REF=<selected-stable-release>
 ```
 
-For ordinary release image updates:
+For ordinary release updates:
 
 ```bash
 hack/deploy/reference/rollout.sh --dry-run
 hack/deploy/reference/rollout.sh --yes
 ```
+
+Besides images, `update` applies the ServiceAccounts, RBAC and Deployment
+wiring the release declares (see `mcp-runtime update --help`), so a release
+that only adds those, such as v0.7.2, does not need full setup. The dry-run
+plan lists every object and wiring change; review it before `--yes`.
 
 The wrapper uses `mcp-runtime update --build` and the published component
 manifest. All changed Runtime components roll sequentially with the CLI's

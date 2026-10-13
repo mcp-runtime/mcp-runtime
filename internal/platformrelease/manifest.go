@@ -52,8 +52,13 @@ type Manifest struct {
 	// CRDs is a multi-document YAML of CustomResourceDefinitions embedded in
 	// the release manifest so `mcp-runtime update --to` can apply schema
 	// changes without a separate setup run.
-	CRDs       string              `json:"crds,omitempty"`
-	Components []ManifestComponent `json:"components"`
+	CRDs string `json:"crds,omitempty"`
+	// PlatformObjects is a multi-document YAML of the ServiceAccounts, Roles
+	// and bindings the release's workloads need (see ParsePlatformObjects for
+	// what a release may contain). update creates or corrects only the
+	// objects whose live spec differs.
+	PlatformObjects string              `json:"platformObjects,omitempty"`
+	Components      []ManifestComponent `json:"components"`
 }
 
 // ManifestComponent pins one component image.
@@ -62,6 +67,8 @@ type ManifestComponent struct {
 	Repository string `json:"repository"`
 	Tag        string `json:"tag"`
 	Digest     string `json:"digest,omitempty"`
+	// Wiring is the non-image Deployment configuration the release requires.
+	Wiring *ComponentWiring `json:"wiring,omitempty"`
 }
 
 // Component returns the manifest entry for name.
@@ -104,12 +111,16 @@ func (m *Manifest) Validate() error {
 	if len(m.Components) == 0 {
 		errs = append(errs, errors.New("components must not be empty"))
 	}
+	if _, err := ParsePlatformObjects(m.PlatformObjects); err != nil {
+		errs = append(errs, fmt.Errorf("platformObjects: %w", err))
+	}
 	seen := map[string]bool{}
 	for i, c := range m.Components {
 		where := fmt.Sprintf("components[%d] (%s)", i, c.Name)
 		if _, ok := Lookup(c.Name); !ok {
 			errs = append(errs, fmt.Errorf("%s: unknown component; known components: %s", where, strings.Join(ComponentNames(), ", ")))
 		}
+		errs = append(errs, c.Wiring.validate(where)...)
 		if seen[c.Name] {
 			errs = append(errs, fmt.Errorf("%s: duplicate component", where))
 		}
