@@ -121,7 +121,7 @@ EOF
 
 # cr <name> <as-sa> <issuer> <usages-json> <uri> <dns> [isCA]; prints the outcome.
 cr() {
-  local name="$1" as="$2" issuer="$3" usages="$4" uri="$5" dns="$6" isca="${7:-false}" req state i
+  local name="$1" as="$2" issuer="$3" usages="$4" uri="$5" dns="$6" isca="${7:-false}" req state
   req="$(cd "$ROOT" && go run ./hack/qa/approvalpolicy/csrgen --uri "$uri" --dns "$dns")" || { echo "csr-failed"; return; }
   if ! kubectl --as="$as" apply -f - >/dev/null 2>"$WORK/cr-err.txt" <<EOF
 apiVersion: cert-manager.io/v1
@@ -138,7 +138,7 @@ EOF
     echo "submit-failed: $(tr '\n' ' ' <"$WORK/cr-err.txt" | cut -c1-140)"
     return
   fi
-  for i in $(seq 1 25); do
+  for _ in $(seq 1 25); do
     state="$(kubectl -n default get certificaterequest "$name" -o json | jq -r '(.status.conditions//[])|map(select(.status=="True")|.type)|join(",")')"
     [[ "$state" == *Denied* || "$state" == *Ready* || "$state" == *Failed* ]] && break
     sleep 2
@@ -150,7 +150,7 @@ EOF
 
 # cert <name> <issuer> <dns-csv> <uri> <usages-yaml>; prints Ready or NotReady.
 cert() {
-  local dns_line="" uri_line="" i st
+  local dns_line="" uri_line="" st
   [[ -n "$3" ]] && dns_line="dnsNames: [$3]"
   [[ -n "$4" ]] && uri_line="uris: [$4]"
   kubectl apply -f - >/dev/null <<EOF
@@ -166,7 +166,7 @@ spec:
   $dns_line
   $uri_line
 EOF
-  for i in $(seq 1 30); do
+  for _ in $(seq 1 30); do
     st="$(kubectl -n default get certificate "$1" -o json | jq -r '(.status.conditions//[])|map(select(.type=="Ready")|.status)|first // ""')"
     [[ "$st" == True ]] && { echo Ready; return; }
     sleep 2
