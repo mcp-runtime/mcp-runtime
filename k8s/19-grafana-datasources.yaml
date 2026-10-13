@@ -13,6 +13,10 @@ data:
         url: http://prometheus:9090/prometheus
         access: proxy
         isDefault: true
+        jsonData:
+          exemplarTraceIdDestinations:
+            - name: trace_id
+              datasourceUid: tempo
       - name: Tempo
         type: tempo
         uid: tempo

@@ -93,6 +93,10 @@ func (s *gatewayServer) handleGateway(w http.ResponseWriter, r *http.Request) {
 			metricScope, ex.R, ex.Inspection.Method, ex.Decision,
 			ex.W.status, time.Since(ex.StartTime), ex.R.ContentLength, ex.W.bytes,
 		)
+		if ex.Inspection.ToolCall && ex.Inspection.ToolName != "" {
+			s.metrics.recordToolCall(ex.R.Context(), metricScope, ex.Policy,
+				ex.Inspection.ToolName, ex.Decision, ex.W.status, time.Since(ex.StartTime))
+		}
 		if policyDecisionObserved {
 			s.metrics.recordPolicyDecision(metricScope, ex.Inspection.Method, ex.Decision)
 		}

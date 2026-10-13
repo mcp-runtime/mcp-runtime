@@ -119,3 +119,13 @@ func TestStatusRecorderUnwrapsToUnderlyingWriter(t *testing.T) {
 		t.Fatalf("Unwrap() = %T, want the wrapped writer", got)
 	}
 }
+
+func TestMetricsHandlerNegotiatesOpenMetrics(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	request.Header.Set("Accept", "application/openmetrics-text; version=1.0.0; charset=utf-8")
+	response := httptest.NewRecorder()
+	metricsHandler().ServeHTTP(response, request)
+	if !strings.Contains(response.Header().Get("Content-Type"), "application/openmetrics-text") {
+		t.Fatalf("exemplars require OpenMetrics, got %s", response.Header().Get("Content-Type"))
+	}
+}

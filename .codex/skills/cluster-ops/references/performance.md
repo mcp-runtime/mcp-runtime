@@ -33,3 +33,5 @@ Inspect gateway CPU/memory, analytics query load, response errors and pod
 restarts before attributing a slowdown to code. Do not automatically revert or
 replace a baseline to make a result green. Missing cluster/baseline access is
 blocked coverage unless baseline creation was the requested task.
+
+Gateway per-tool metrics distinguish allowed/denied calls and HTTP status. Use `mcp_gateway_tool_call_duration_seconds` for tool latency; configured names are bounded to 128 and unknown/overflow names use `__other__`. A sampled observation can link to Tempo via an exemplar. HTTP 200 does not prove a successful MCP tool result; inspect the server execution span for `isError` failures.

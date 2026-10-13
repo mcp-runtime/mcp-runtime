@@ -68,6 +68,24 @@ data:
           "targets": [{"expr": "histogram_quantile(0.95, sum(rate(mcp_gateway_request_duration_seconds_bucket{namespace=\"$namespace\",server=\"$server\"}[5m])) by (le))", "legendFormat": "p95", "refId": "A"}],
           "title": "p95 latency",
           "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+          "id": 5,
+          "targets": [{"expr": "sum by (tool, decision) (rate(mcp_gateway_tool_call_total{namespace=\"$namespace\",server=\"$server\"}[5m]))", "legendFormat": "{{tool}} {{decision}}", "refId": "A"}],
+          "title": "Tool call rate and policy decisions",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+          "id": 6,
+          "targets": [{"expr": "histogram_quantile(0.95, sum by (le, tool) (rate(mcp_gateway_tool_call_duration_seconds_bucket{namespace=\"$namespace\",server=\"$server\",decision=\"allow\"}[5m])))", "legendFormat": "{{tool}}", "exemplar": true, "refId": "A"}],
+          "title": "Tool p95 latency (allowed calls)",
+          "type": "timeseries"
         }
       ],
       "refresh": "30s",

@@ -56,6 +56,8 @@ func recordPolicyReloadFailure() {
 
 type gatewayMetrics struct {
 	requestsTotal          *prometheus.CounterVec
+	toolCallsTotal         *prometheus.CounterVec
+	toolDurationSeconds    *prometheus.HistogramVec
 	policyDecisionsTotal   *prometheus.CounterVec
 	analyticsDropsTotal    prometheus.Counter
 	analyticsEmitFailures  *prometheus.CounterVec
@@ -78,6 +80,13 @@ type gatewayMetricScope struct {
 
 func newGatewayMetrics(registerer prometheus.Registerer) *gatewayMetrics {
 	m := &gatewayMetrics{
+		toolCallsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "mcp_gateway_tool_call_total", Help: "Tool calls by configured tool, policy decision and HTTP status. Unknown names share one bounded bucket.",
+		}, []string{"namespace", "server", "tool", "decision", "reason", "status"}),
+		toolDurationSeconds: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name: "mcp_gateway_tool_call_duration_seconds", Help: "End-to-end tool call duration including upstream execution; HTTP failures and policy denies are retained.",
+			Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 20, 30, 60},
+		}, []string{"namespace", "server", "tool", "decision"}),
 		requestsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "mcp_gateway_requests_total",
 			Help: "Total HTTP requests handled by MCP gateway sidecars.",
@@ -128,6 +137,8 @@ func newGatewayMetrics(registerer prometheus.Registerer) *gatewayMetrics {
 	if registerer != nil {
 		registerer.MustRegister(
 			m.requestsTotal,
+			m.toolCallsTotal,
+			m.toolDurationSeconds,
 			m.policyDecisionsTotal,
 			m.analyticsDropsTotal,
 			m.analyticsEmitFailures,

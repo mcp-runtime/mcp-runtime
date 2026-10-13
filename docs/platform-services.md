@@ -575,3 +575,22 @@ and cluster-scoped read-only Node/IngressClass discovery. Dynamic team namespace
 receive the same scoped watch permissions. Upgrade the image, CRDs and RBAC
 together; a ready controller can still return 404 when a provider's cache cannot
 synchronize. See [Traefik's migration requirements](https://doc.traefik.io/traefik/migrate/v3/).
+
+### Per-tool golden metrics
+
+Gateway `mcp_gateway_tool_call_total{namespace,server,tool,decision,reason,status}`
+counts actual `tools/call` requests; initialize, list and ping do not create tool
+series. `mcp_gateway_tool_call_duration_seconds{namespace,server,tool,decision}`
+measures the whole gateway exchange with buckets from 5 ms through 60 seconds.
+Allowed, denied and HTTP-failed calls remain visible. HTTP success does not prove
+an MCP result was successful: a server can return `isError=true` with HTTP 200.
+Use the instrumented server's method error span for that distinction.
+
+Tool labels are limited to the first 128 names in the active policy inventory
+(with names at most 128 bytes). Unknown and overflow names share `__other__`;
+an arbitrary caller cannot create a new time series for every supplied name.
+The server dashboard shows per-tool rate and allowed-call p95. With sampled
+traces, latency observations carry a `trace_id` exemplar rather than a trace-ID
+series label. OpenMetrics negotiation, Prometheus exemplar storage and the
+Grafana-to-Tempo destination are configured together. No credentials or arguments
+are metric labels. Metrics cover gateway time, not network/edge time before it.
