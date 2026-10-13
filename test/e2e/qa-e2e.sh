@@ -6622,6 +6622,56 @@ grafana_datasources = wait_for_json(
 tempo_uid = datasource_uid(grafana_datasources, "tempo")
 prometheus_uid = datasource_uid(grafana_datasources, "prometheus")
 loki_uid = datasource_uid(grafana_datasources, "loki")
+tempo_datasource = datasource_by_type(grafana_datasources, "tempo")
+trace_logs = tempo_datasource.get("jsonData", {}).get("tracesToLogsV2", {})
+trace_metrics = tempo_datasource.get("jsonData", {}).get("tracesToMetrics", {})
+check(
+    trace_logs.get("datasourceUid") == loki_uid
+    and "${__trace.traceId}" in trace_logs.get("query", ""),
+    "Grafana trace-to-log link targets Loki and preserves trace interpolation",
+    "Grafana trace-to-log correlation provisioning is missing or interpolation was expanded",
+)
+check(
+    trace_metrics.get("datasourceUid") == prometheus_uid
+    and len(trace_metrics.get("queries", [])) >= 2,
+    "Grafana trace-to-metric links target Prometheus",
+    "Grafana trace-to-metric correlation provisioning is missing",
+)
+
+# Verify a real, read-only platform API response can be followed by ID through
+# both authenticated Grafana proxies. Never emit the API key or response body.
+correlation_request = urllib.request.Request(f"{api_base}/runtime/servers", headers=headers)
+with urllib.request.urlopen(correlation_request, timeout=10) as response:
+    correlation_trace_id = response.headers.get("X-Trace-ID", "")
+    response.read()
+check(
+    len(correlation_trace_id) == 32
+    and all(char in "0123456789abcdef" for char in correlation_trace_id),
+    "platform response exposes a valid trace ID",
+    "platform response has no valid X-Trace-ID",
+)
+wait_for_json(
+    f"{grafana_base}/api/datasources/proxy/uid/{tempo_uid}/api/traces/{correlation_trace_id}",
+    lambda doc: "mcp-runtime-api" in trace_service_names(doc),
+    headers=grafana_headers,
+    retries=60,
+    delay=2,
+    description="response trace ID resolves to Runtime API spans through Grafana",
+)
+correlation_params = urllib.parse.urlencode({
+    "query": '{namespace=~".+"} |= "trace_id=' + correlation_trace_id + '" |= "event=http.request"',
+    "limit": "20",
+    "start": str(int((time.time() - 120) * 1e9)),
+    "end": str(int((time.time() + 5) * 1e9)),
+})
+wait_for_json(
+    f"{grafana_base}/api/datasources/proxy/uid/{loki_uid}/loki/api/v1/query_range?{correlation_params}",
+    lambda doc: bool(doc.get("data", {}).get("result", [])),
+    headers=grafana_headers,
+    retries=60,
+    delay=2,
+    description="response trace ID resolves to structured completion logs through Grafana",
+)
 prometheus_datasource = datasource_by_type(grafana_datasources, "prometheus")
 check(
     str(prometheus_datasource.get("url", "")).rstrip("/").endswith("/prometheus"),
