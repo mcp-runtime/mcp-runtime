@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 
 	"mcp-runtime/pkg/events"
@@ -38,7 +39,10 @@ func (s *gatewayServer) startAnalyticsDispatcher() {
 				for event := range queue {
 					parentCtx := serviceutil.ContextWithTraceContext(context.Background(), event.TraceContext)
 					ctx, cancel := context.WithTimeout(parentCtx, time.Duration(analyticsEmitTimeout)*time.Second)
+					ctx, span := otel.Tracer("mcp-runtime/gateway").Start(ctx, "gateway.analytics.dispatch")
+					span.SetAttributes(attribute.Bool("mcp.async", true))
 					s.emit(ctx, event.Envelope)
+					span.End()
 					cancel()
 				}
 			}()

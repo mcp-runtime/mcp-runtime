@@ -590,6 +590,7 @@ type traefikDeploymentSpec struct {
 			Spec struct {
 				Containers []struct {
 					Name         string   `json:"name"`
+					Image        string   `json:"image"`
 					Args         []string `json:"args"`
 					VolumeMounts []struct {
 						Name      string `json:"name"`

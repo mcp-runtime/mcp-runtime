@@ -219,6 +219,21 @@ func traefikMiddlewarePatch(spec traefikDeploymentSpec, namespace string) ([]byt
 	if !containsString(container.Args, "--providers.file.watch=true") {
 		ops = append(ops, jsonPatchOperation{Op: "add", Path: fmt.Sprintf("/spec/template/spec/containers/%d/args/-", containerIndex), Value: "--providers.file.watch=true"})
 	}
+	// OTLP is a Traefik 3 feature. Do not inject unsupported flags into an
+	// externally managed v2 controller or override an operator's exporter.
+	for _, arg := range traefikTraceArgs(container.Image) {
+		key, _, _ := strings.Cut(arg, "=")
+		configured := false
+		for _, existing := range container.Args {
+			if strings.HasPrefix(strings.ToLower(existing), strings.ToLower(key)+"=") {
+				configured = true
+				break
+			}
+		}
+		if !configured {
+			ops = append(ops, jsonPatchOperation{Op: "add", Path: fmt.Sprintf("/spec/template/spec/containers/%d/args/-", containerIndex), Value: arg})
+		}
+	}
 	for _, plugin := range localTraefikPlugins {
 		if !containsPluginArg(container.Args, plugin.name) {
 			ops = append(ops, jsonPatchOperation{Op: "add", Path: fmt.Sprintf("/spec/template/spec/containers/%d/args/-", containerIndex), Value: plugin.arg()})
@@ -393,4 +408,22 @@ func preferredTraefikNamespace(namespaces []string) string {
 		}
 	}
 	return namespaces[0]
+}
+
+func traefikTraceArgs(image string) []string {
+	image, _, _ = strings.Cut(image, "@")
+	index := strings.LastIndex(image, ":")
+	if index < 0 {
+		return nil
+	}
+	tag := image[index+1:]
+	if !strings.HasPrefix(tag, "v3.") && !strings.HasPrefix(tag, "3.") {
+		return nil
+	}
+	endpoint := strings.TrimSpace(os.Getenv("MCP_TRAEFIK_OTLP_ENDPOINT"))
+	if endpoint == "" {
+		endpoint = "http://otel-collector." + core.ComponentNamespace("otel-collector") + ".svc.cluster.local:4318/v1/traces"
+	}
+	return []string{"--tracing.serviceName=traefik-ingress", "--tracing.sampleRate=1", "--tracing.otlp.http.endpoint=" + endpoint,
+		"--accesslog=true", "--accesslog.format=json", "--accesslog.fields.headers.defaultmode=drop"}
 }

@@ -13,7 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"mcp-runtime/pkg/events"
 	policypkg "mcp-runtime/pkg/policy"
@@ -21,6 +24,8 @@ import (
 )
 
 const upstreamResponseHeaderTimeout = 30 * time.Second
+
+var gatewayStageNames = [...]string{"inspect", "policy", "auth", "authz", "upstream"}
 
 func newUpstreamReverseProxy(target *url.URL) *httputil.ReverseProxy {
 	return newUpstreamReverseProxyWithTimeout(target, upstreamResponseHeaderTimeout)
@@ -41,7 +46,7 @@ func newUpstreamReverseProxyWithTimeout(target *url.URL, responseHeaderTimeout t
 func newUpstreamTransport(responseHeaderTimeout time.Duration) http.RoundTripper {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.ResponseHeaderTimeout = responseHeaderTimeout
-	return otelhttp.NewTransport(transport)
+	return serviceutil.TracedTransport(transport)
 }
 
 func handleUpstreamError(w http.ResponseWriter, r *http.Request, err error) {
@@ -93,8 +98,21 @@ func (s *gatewayServer) handleGateway(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	for _, f := range s.buildPipeline() {
-		if f.Handle(ex) != Continue {
+	for i, f := range s.buildPipeline() {
+		parent := ex.R.Context()
+		ctx, span := otel.Tracer("mcp-runtime/gateway").Start(parent,
+			"gateway."+gatewayStageNames[i], trace.WithSpanKind(trace.SpanKindInternal))
+		ex.R = ex.R.WithContext(ctx)
+		result := f.Handle(ex)
+		span.SetAttributes(attribute.String("mcp.method.name", metricRPCMethod(ex.Inspection.Method)),
+			attribute.String("gateway.stage", gatewayStageNames[i]),
+			attribute.String("gateway.decision.reason", ex.Decision.Reason))
+		if result != Continue && ex.W.status >= http.StatusBadRequest {
+			span.SetStatus(codes.Error, "gateway request rejected")
+		}
+		span.End()
+		ex.R = ex.R.WithContext(parent)
+		if result != Continue {
 			break
 		}
 	}
@@ -104,6 +122,15 @@ func (s *gatewayServer) handleGateway(w http.ResponseWriter, r *http.Request) {
 	policyDecisionObserved = ex.Inspection.ToolCall || ex.Inspection.Indeterminate
 	if !policyDecisionObserved && !ex.Decision.Allowed && !ex.SkipAudit {
 		policyDecisionObserved = true
+	}
+	trace.SpanFromContext(ex.R.Context()).SetAttributes(
+		attribute.String("mcp.method.name", metricRPCMethod(ex.Inspection.Method)),
+		attribute.Bool("mcp.async", false),
+		attribute.String("mcp.server.name", s.metricScope(ex.Policy).Server),
+		attribute.String("service.namespace", s.metricScope(ex.Policy).Namespace),
+	)
+	if len(ex.Inspection.ToolName) > 0 && len(ex.Inspection.ToolName) <= 128 {
+		trace.SpanFromContext(ex.R.Context()).SetAttributes(attribute.String("gen_ai.tool.name", ex.Inspection.ToolName))
 	}
 	s.recordGatewayOutcome(ex)
 	s.emitAuditFromExchange(ex)

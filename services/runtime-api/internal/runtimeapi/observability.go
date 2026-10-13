@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mcp-runtime/pkg/serviceutil"
 	"net/http"
 	"net/url"
 	"strings"
@@ -122,7 +123,7 @@ func (s *RuntimeServer) HandleRuntimeObservabilityPrometheusQuery(w http.Respons
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "query_build_failed"})
 		return
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := serviceutil.DoHTTP(nil, req)
 	if err != nil {
 		log.Printf("observability prometheus query failed namespace=%q server=%q query_id=%q err=%v", target.Namespace, target.Name, query.ID, err)
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "prometheus_unavailable"})

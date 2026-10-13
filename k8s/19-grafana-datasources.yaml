@@ -23,3 +23,10 @@ data:
         uid: loki
         url: http://loki:3100
         access: proxy
+        jsonData:
+          derivedFields:
+            - name: TraceID
+              matcherRegex: 'trace_id=([0-9a-f]{32})'
+              datasourceUid: tempo
+              url: '$${__value.raw}'
+              urlDisplayLabel: 'Open request trace'

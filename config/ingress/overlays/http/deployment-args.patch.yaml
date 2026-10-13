@@ -16,6 +16,12 @@
     - --entrypoints.websecure.forwardedHeaders.insecure=false
     - --entrypoints.websecure.http.tls=true
     - --entrypoints.traefik.address=:8080
+    - --tracing.serviceName=traefik-ingress
+    - --tracing.sampleRate=1
+    - --tracing.otlp.http.endpoint=http://otel-collector.mcp-observability.svc.cluster.local:4318/v1/traces
+    - --accesslog=true
+    - --accesslog.format=json
+    - --accesslog.fields.headers.defaultmode=drop
     - --ping=true
     - --ping.entryPoint=traefik
     - --providers.file.filename=/etc/traefik/dynamic/dynamic.yml

@@ -160,6 +160,7 @@ func InitTracer(serviceName string) (func(context.Context) error, error) {
 	}
 
 	res, err := resource.New(context.Background(),
+		resource.WithFromEnv(),
 		resource.WithAttributes(semconv.ServiceName(serviceName)),
 	)
 	if err != nil {

@@ -97,6 +97,21 @@ func (s *server) whoamiTool(ctx context.Context, request *mcp.CallToolRequest, _
 var nonSlugChars = regexp.MustCompile(`[^a-z0-9]+`)
 
 func main() {
+	if err := runServer(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func runServer() error {
+	shutdown, err := initExampleTracing()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = shutdown(ctx)
+	}()
 	port := envOr("PORT", "8088")
 	mcpPath := normalizeMCPPath(envOr("MCP_PATH", "/mcp"))
 	issuer := strings.TrimRight(strings.TrimSpace(os.Getenv("MCP_AUTH_ISSUER")), "/")
@@ -142,7 +157,7 @@ func main() {
 
 	httpServer := &http.Server{
 		Addr:              ":" + port,
-		Handler:           mux,
+		Handler:           tracedExampleHTTP(mux),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,
@@ -150,7 +165,7 @@ func main() {
 	}
 
 	log.Printf("oauth-example-go-2025-11-25 listening on :%s", port)
-	log.Fatal(httpServer.ListenAndServe())
+	return httpServer.ListenAndServe()
 }
 
 func resolveJWKS(issuer string) (string, error) {
@@ -223,6 +238,8 @@ func newMCPServer() *mcp.Server {
 	}, &mcp.ServerOptions{
 		Instructions: "Workspace assistant MCP server for task planning, release notes, text cleanup, prompts, and reference resources.",
 	})
+
+	mcpServer.AddReceivingMiddleware(traceMCPMethods)
 
 	mcp.AddTool(mcpServer, &mcp.Tool{
 		Name:        "aaa-ping",

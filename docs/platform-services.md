@@ -95,6 +95,53 @@ event trace and a `clickhouse.insert_batch` span for the batch operation. Batch
 spans include Kafka topic, partition, first/last offset, and per-partition
 offset ranges.
 
+### Follow one MCP request
+
+The synchronous path is **Traefik → MCP gateway → MCP server → external API**.
+The console path is separate: Traefik → UI / Platform API / Runtime API. Do not
+add control-plane services to a tool-call trace when that request never calls them.
+
+| Hop | Instrumentation | Evidence |
+|---|---|---|
+| Bundled Traefik 3 | OTLP HTTP exporter and JSON access logs | Routing duration and status; headers are dropped from access logs |
+| Gateway | Incoming HTTP span; `gateway.inspect`, `gateway.policy`, `gateway.auth`, `gateway.authz`, `gateway.upstream` | Time spent at each executed stage; denials stop before upstream |
+| Outgoing HTTP | W3C `traceparent`; DNS/connect/TLS/first-byte events | Connection reuse and cold-connection delays without recording credentials |
+| Instrumented MCP server | Incoming HTTP plus MCP method/tool spans | Execution inside the server rather than only the gateway's localhost wait |
+| Analytics | `gateway.analytics.dispatch` with `mcp.async=true`, then ingest/Kafka/processor | Audit delivery after the client response; not client latency |
+
+Use the gateway incoming HTTP span for gateway-observed client latency. A whole
+trace can continue through asynchronous analytics after that span ends. The
+client's own latency also includes the network and any edge hop before the gateway.
+
+The operator supplies standard OTEL endpoint/service defaults to MCP workloads
+when a gateway collector is configured, preserving explicit workload values.
+This does **not** instrument arbitrary images: an SDK must accept trace context
+and export spans. The shipped Go OAuth example demonstrates HTTP, method/tool
+and failure spans, with trace/span IDs in completion logs. Third-party servers
+need equivalent SDK instrumentation, including their outbound API clients.
+Separate OAuth authorization providers require their own instrumentation and
+release; a token refresh does not pass through the MCP server's tool handler.
+
+Setup adds OTLP flags to explicitly versioned Traefik 3 deployments and preserves
+existing flag values. `MCP_TRAEFIK_OTLP_ENDPOINT` selects a reviewed external
+collector; otherwise it uses the managed collector. Externally managed Traefik 2
+controllers need an operator-managed upgrade before OTLP configuration; setup
+never silently upgrades a distribution's controller. The repository-managed
+controller is pinned to Traefik 3.7.14 (upstream release reviewed 2026-10-13).
+
+An external Nginx is optional. Forward `traceparent` and `tracestate` to Traefik
+and enable the Nginx OpenTelemetry module if that edge should appear as a span.
+Without instrumentation it remains an unmeasured hop; forwarding a header alone
+does not create an Nginx span. Log correlation must omit authorization/cookies
+and query strings. Trace IDs identify diagnostic context, never authorization.
+
+In Grafana, open the request's trace ID in Tempo and use the same ID to locate
+related Loki logs and audit records. Verify collector/scrape coverage before
+interpreting missing data as zero activity. Normal traces/logs contain method,
+status, reason and duration, **not** MCP arguments, results or bearer tokens.
+Raw payload snapshots are a separate explicit debugging feature, not something
+that can be reconstructed from a trace ID alone.
+
 ## Service HTTP reference
 
 In local test mode, Traefik usually exposes these HTTP services through

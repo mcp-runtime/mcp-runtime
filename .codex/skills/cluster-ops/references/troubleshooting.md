@@ -106,3 +106,5 @@ production workloads, CRDs, and user data. Use a symptom-specific repair from
 [reference.md](reference.md). If a fresh contributor cluster is required,
 follow `contributor-cluster`; any cluster deletion must target the explicit Kind
 cluster and isolated test kubeconfig, and requires the user's approval.
+
+For request tracing, distinguish synchronous gateway/server spans from `mcp.async=true` analytics dispatch. Use the incoming gateway HTTP span for gateway-observed latency, not the duration of the whole trace. Verify Traefik version/exporter and actual server SDK instrumentation before claiming full-hop coverage; see `docs/platform-services.md#follow-one-mcp-request`.

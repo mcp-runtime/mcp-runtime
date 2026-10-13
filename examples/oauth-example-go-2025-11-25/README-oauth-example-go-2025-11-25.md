@@ -49,3 +49,19 @@ The samples grant `example-agent` / `example-human` access to `aaa-ping` and
 identity and session when connecting through an adapter; see the
 [adapter guide](../../docs/connect-clients.md). Change the grant and session to
 exercise allow/deny policy on the same server, without another server fixture.
+
+## Request tracing
+
+Set `OTEL_EXPORTER_OTLP_ENDPOINT` to the collector's HTTP base URL (for example
+`http://otel-collector.mcp-observability.svc.cluster.local:4318`) and optionally
+`OTEL_SERVICE_NAME` / `OTEL_RESOURCE_ATTRIBUTES`. The server accepts W3C
+`traceparent`, emits HTTP and MCP method/tool execution spans and marks both
+protocol errors and `CallToolResult.IsError` as failures. Completion logs carry
+trace/span IDs. Health probes are excluded. Arguments, results, bearer tokens
+and identity claims are not captured. Without an exporter the server still
+accepts propagation; it does not export recorded spans.
+
+Third-party servers can use the same pattern: instrument the HTTP handler,
+inherit its context in SDK method middleware, instrument external API calls,
+and export to the configured collector. Keep the external API work inside the
+method span and the asynchronous analytics tail separate from client latency.

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mcp-runtime/pkg/serviceutil"
 	"net/http"
 	"net/url"
 	"strings"
@@ -60,7 +61,7 @@ func (c *Client) requestJSON(ctx context.Context, method, path string, body any,
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	resp, err := c.httpClient().Do(req)
+	resp, err := serviceutil.DoHTTP(c.httpClient(), req)
 	if err != nil {
 		return 0, err
 	}

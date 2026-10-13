@@ -523,6 +523,7 @@ func (r *MCPServerReconciler) buildGatewayContainer(mcpServer *mcpv1alpha1.MCPSe
 	if endpoint := strings.TrimSpace(r.GatewayOTLPEndpoint); endpoint != "" {
 		envVars = append(envVars,
 			corev1.EnvVar{Name: "OTEL_SERVICE_NAME", Value: mcpServer.Name + "-gateway"},
+			corev1.EnvVar{Name: "OTEL_RESOURCE_ATTRIBUTES", Value: "service.namespace=" + mcpServer.Namespace},
 			corev1.EnvVar{Name: "OTEL_EXPORTER_OTLP_ENDPOINT", Value: endpoint},
 		)
 	}
@@ -775,6 +776,27 @@ func (r *MCPServerReconciler) buildImagePullSecrets(mcpServer *mcpv1alpha1.MCPSe
 // when the gateway strips a routing prefix.
 func (r *MCPServerReconciler) buildServerEnvVars(mcpServer *mcpv1alpha1.MCPServer) []corev1.EnvVar {
 	result := r.buildEnvVars(mcpServer.Spec.EnvVars, mcpServer.Spec.SecretEnvVars)
+	// Instrumented servers use the same collector as their gateway. Preserve
+	// explicit workload choices (including ValueFrom); uninstrumented images
+	// simply ignore these standard OpenTelemetry variables.
+	if endpoint := strings.TrimSpace(r.GatewayOTLPEndpoint); endpoint != "" {
+		for _, derived := range []corev1.EnvVar{
+			{Name: "OTEL_SERVICE_NAME", Value: mcpServer.Name + "-server"},
+			{Name: "OTEL_EXPORTER_OTLP_ENDPOINT", Value: endpoint},
+			{Name: "OTEL_RESOURCE_ATTRIBUTES", Value: "service.namespace=" + mcpServer.Namespace},
+		} {
+			found := false
+			for _, current := range result {
+				if current.Name == derived.Name {
+					found = true
+					break
+				}
+			}
+			if !found {
+				result = append(result, derived)
+			}
+		}
+	}
 	// MCP_PATH is the path the server receives requests on and belongs to
 	// reconciliation, so CLI and API clients cannot persist a stale copy in
 	// spec.envVars.
