@@ -188,16 +188,28 @@ incidents:
   - id: "696"
     title: Guard reference automation and require real acceptance coverage
     protected_behavior: >-
-      Wrong-cluster and unverified resets never mutate resources; rollouts delegate
-      all Runtime components without admin pull-secret rewriting; tests isolate
-      kubeconfig and never accept failed allowed calls or crashes as policy denial.
+      Wrong-cluster and unverified resets never mutate resources; `update` and
+      `setup` refuse a cluster whose ID differs from --expect-cluster-id before
+      reading or writing anything, and setup refuses to drop or swap an installed
+      MCP Auth; tests isolate kubeconfig and never accept failed allowed calls or
+      crashes as policy denial.
     status: covered
     checks:
       - kind: script
         path: hack/tests/automation_test.py
-        name: test_rollout_wrong_cluster_stops_before_build_or_update
+        name: test_reset_wrong_confirmation_never_deletes
         command: hack/ci/check-scripts.sh
         ci_job: ci.yaml#automation
+      - kind: go-test
+        path: internal/cli/update/release_config_test.go
+        name: TestExpectClusterIDGuard
+        command: go test ./internal/cli/update -run TestExpectClusterIDGuard -count=1
+        ci_job: ci.yaml#test
+      - kind: go-test
+        path: internal/cli/setup/platform/preflight_guards_test.go
+        name: TestCheckClusterIdentity
+        command: go test ./internal/cli/setup/platform -run 'TestCheckClusterIdentity|TestCheckExistingMCPAuthRetained' -count=1
+        ci_job: ci.yaml#test
 
   - id: "700"
     title: Ship managed Traefik v3 discovery dependencies with its image
