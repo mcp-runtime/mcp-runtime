@@ -54,3 +54,19 @@ components:
   prometheus:
     args:
       - --enable-feature=exemplar-storage
+  platform-api:
+    dnsOptions:
+      - name: ndots
+        value: "3"
+  runtime-api:
+    dnsOptions:
+      - name: ndots
+        value: "3"
+  analytics-api:
+    dnsOptions:
+      - name: ndots
+        value: "3"
+  ui:
+    dnsOptions:
+      - name: ndots
+        value: "3"
