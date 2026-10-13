@@ -178,7 +178,8 @@ and the server's SDK support before claiming full end-to-end coverage.
 Enrollment is a platform operation before the MCP call. Follow its response
 `X-Trace-ID` through `mcp_request_total` / `mcp_request_duration_seconds` and
 `event=http.request` records for the registered API route. Shared bootstrap
-services use the same service identifier in logs and HTTP metrics. Internal
+services use the same service identifier in logs and HTTP metrics, including
+an explicit `OTEL_SERVICE_NAME` override. Queries must use the configured name. Internal
 HTTP client spans connect downstream services when W3C propagation is supported.
 An enrollment trace and a later tool-call trace normally have different IDs;
 the grant/agent-session relationship explains why the tool call is authorized,

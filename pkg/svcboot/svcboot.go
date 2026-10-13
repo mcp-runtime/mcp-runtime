@@ -54,6 +54,7 @@ func NewHTTPServer(addr string, handler http.Handler) *http.Server {
 // middleware. The wrapped writers unwrap to the connection's writer, so
 // handlers can still use http.ResponseController to extend deadlines.
 func WrapHandler(serviceName string, requestMetrics *serviceutil.RequestMetrics, next http.Handler) http.Handler {
+	serviceName = serviceutil.EnvOr("OTEL_SERVICE_NAME", serviceName)
 	return otelhttp.NewHandler(serviceutil.LogRequestsForService(serviceName, requestMetrics.Middleware(serviceName, next)), "http.server", otelhttp.WithFilter(serviceutil.TraceableRequest))
 }
 
@@ -75,6 +76,7 @@ func Run(cfg Config) error {
 		serviceName = "mcp-service"
 	}
 
+	serviceName = serviceutil.EnvOr("OTEL_SERVICE_NAME", serviceName)
 	shutdown, err := serviceutil.InitTracer(serviceName)
 	if err != nil {
 		log.Printf("otel init failed: %v", err)

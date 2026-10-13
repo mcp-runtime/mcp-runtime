@@ -1,10 +1,13 @@
 package svcboot
 
 import (
+	"bytes"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -57,5 +60,44 @@ func TestWrapHandlerAllowsExtendingReadDeadline(t *testing.T) {
 	got, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK || string(got) != strconv.Itoa(chunks*len("chunk")) {
 		t.Fatalf("slow upload: status %d body %q", resp.StatusCode, got)
+	}
+}
+
+func TestWrapHandlerAlignsConfiguredServiceAcrossLogsAndMetrics(t *testing.T) {
+	t.Setenv("OTEL_SERVICE_NAME", "custom-runtime-api")
+	var logs bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(previous) })
+	registry := prometheus.NewRegistry()
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /demo", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	handler := WrapHandler("mcp-runtime-api", serviceutil.NewRequestMetrics(registry), mux)
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/demo", nil))
+	if !strings.Contains(logs.String(), `service="custom-runtime-api"`) {
+		t.Fatalf("log identity differs from configured tracing service: %s", logs.String())
+	}
+	families, err := registry.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, family := range families {
+		if family.GetName() != "mcp_request_total" {
+			continue
+		}
+		for _, metric := range family.Metric {
+			for _, label := range metric.Label {
+				if label.GetName() == "service" {
+					found = true
+					if label.GetValue() != "custom-runtime-api" {
+						t.Fatalf("metric identity = %q", label.GetValue())
+					}
+				}
+			}
+		}
+	}
+	if !found {
+		t.Fatal("missing service request counter")
 	}
 }
