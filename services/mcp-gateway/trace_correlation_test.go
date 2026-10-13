@@ -138,3 +138,17 @@ func TestProxyCannotOverrideResponseTraceID(t *testing.T) {
 		t.Fatalf("response trace IDs = %v", values)
 	}
 }
+
+func TestGatewayRejectedUnknownMethodIsNotLoggedRaw(t *testing.T) {
+	ctx, _, logs, end := startTestSpan(t)
+	defer end()
+	ex := &Exchange{R: httptest.NewRequest(http.MethodPost, "/mcp", nil).WithContext(ctx), W: &statusRecorder{ResponseWriter: httptest.NewRecorder(), status: http.StatusBadRequest}, StartTime: time.Now()}
+	ex.Inspection.Method = "private-method-value"
+	(&gatewayServer{}).recordGatewayOutcome(ex)
+	if strings.Contains(logs.String(), "private-method-value") {
+		t.Fatal("raw unknown method leaked into rejection log")
+	}
+	if !strings.Contains(logs.String(), `method="other"`) {
+		t.Fatalf("normalized method missing from %s", logs.String())
+	}
+}

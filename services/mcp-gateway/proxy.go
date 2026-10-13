@@ -185,10 +185,7 @@ func (s *gatewayServer) recordGatewayOutcome(ex *Exchange) {
 	if reason == "" {
 		reason = http.StatusText(status)
 	}
-	method := ex.Inspection.Method
-	if method == "" {
-		method = ex.R.Method
-	}
+	method := metricRPCMethod(ex.Inspection.Method)
 	ctx := ex.R.Context()
 	serviceutil.RecordSpanFailure(ctx, "gateway.request", reason, status, nil)
 	serviceutil.LogfCtx(ctx, "gateway request rejected method=%q status=%d reason=%q duration=%s",
