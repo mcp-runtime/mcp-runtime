@@ -111,9 +111,14 @@ func (r *statusRecorder) Flush() {
 // LogRequests emits correlated logfmt completion records using route templates.
 // Raw URLs, headers and bodies are deliberately excluded; healthy probes are quiet.
 func LogRequests(next http.Handler) http.Handler {
+	return LogRequestsForService(EnvOr("OTEL_SERVICE_NAME", "mcp-service"), next)
+}
+
+// LogRequestsForService keeps bootstrap service identity aligned with metrics.
+func LogRequestsForService(service string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		recorder := &statusRecorder{ResponseWriter: CorrelateResponse(w, r.Context()), status: http.StatusOK}
 		next.ServeHTTP(recorder, r)
 		probe := IsProbePath(r)
 		if probe && recorder.status < http.StatusBadRequest {
@@ -131,7 +136,7 @@ func LogRequests(next http.Handler) http.Handler {
 		}
 		// #nosec G706 -- quoted fields escape control characters; no raw URL or body.
 		log.Printf("event=http.request service=%q operation=%q method=%q status=%d duration_ms=%.3f%s",
-			EnvOr("OTEL_SERVICE_NAME", "mcp-service"), operation, r.Method, recorder.status,
+			service, operation, r.Method, recorder.status,
 			float64(time.Since(start))/float64(time.Millisecond), TraceLogSuffix(r.Context()))
 	})
 }

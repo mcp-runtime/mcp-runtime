@@ -50,6 +50,7 @@ func newUpstreamTransport(responseHeaderTimeout time.Duration) http.RoundTripper
 }
 
 func handleUpstreamError(w http.ResponseWriter, r *http.Request, err error) {
+	w = serviceutil.CorrelateResponse(w, r.Context())
 	logMessage := "gateway upstream error"
 	status := http.StatusBadGateway
 	errorCode := "upstream_error"
@@ -60,8 +61,9 @@ func handleUpstreamError(w http.ResponseWriter, r *http.Request, err error) {
 		errorCode = "upstream_timeout"
 		message = "upstream response timeout"
 	}
-	serviceutil.RecordSpanFailure(r.Context(), "gateway.upstream", errorCode, status, err)
-	serviceutil.LogfCtx(r.Context(), "%s: %v", logMessage, err)
+	serviceutil.RecordSpanFailure(r.Context(), "gateway.upstream", errorCode, status, nil)
+	serviceutil.LogfCtx(r.Context(), "event=gateway.upstream service=%q message=%q status=%d reason=%q",
+		serviceutil.EnvOr("OTEL_SERVICE_NAME", "mcp-gateway"), logMessage, status, errorCode)
 
 	w.Header().Set("content-type", "application/json")
 	w.WriteHeader(status)
@@ -80,7 +82,7 @@ func isUpstreamTimeout(err error) bool {
 // It runs the five ordered filters (inspect → policy → auth → authz → upstream)
 // and then unconditionally runs stage 6 (audit/analytics finalization).
 func (s *gatewayServer) handleGateway(w http.ResponseWriter, r *http.Request) {
-	ex := newExchange(w, r, s.defaultPolicyVersion)
+	ex := newExchange(serviceutil.CorrelateResponse(w, r.Context()), r, s.defaultPolicyVersion)
 
 	policy, _ := s.currentPolicy()
 	scope := s.metricScope(policy)
@@ -155,8 +157,21 @@ func (s *gatewayServer) recordGatewayOutcome(ex *Exchange) {
 		if ex.SkipAudit {
 			decision = "skip"
 		}
-		serviceutil.LogfCtx(ex.R.Context(), "event=gateway.request service=%q method=%q status=%d decision=%q reason=%q duration_ms=%.3f",
-			serviceutil.EnvOr("OTEL_SERVICE_NAME", "mcp-gateway"), metricRPCMethod(ex.Inspection.Method), status,
+		scope := s.metricScope(ex.Policy)
+		tool := "none"
+		if ex.Inspection.ToolCall {
+			tool = "__other__"
+			if ex.Policy != nil && len(ex.Inspection.ToolName) <= 128 {
+				for _, configured := range ex.Policy.Tools {
+					if string(configured.Name) == ex.Inspection.ToolName {
+						tool = ex.Inspection.ToolName
+						break
+					}
+				}
+			}
+		}
+		serviceutil.LogfCtx(ex.R.Context(), "event=gateway.request service=%q namespace=%q server=%q tool=%q policy_version=%q method=%q status=%d decision=%q reason=%q duration_ms=%.3f",
+			serviceutil.EnvOr("OTEL_SERVICE_NAME", "mcp-gateway"), scope.Namespace, scope.Server, tool, ex.Decision.PolicyVersion, metricRPCMethod(ex.Inspection.Method), status,
 			decision, ex.Decision.Reason, float64(time.Since(ex.StartTime))/float64(time.Millisecond))
 	}
 	denied := !ex.Decision.Allowed && !ex.SkipAudit

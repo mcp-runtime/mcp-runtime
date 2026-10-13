@@ -54,7 +54,7 @@ func NewHTTPServer(addr string, handler http.Handler) *http.Server {
 // middleware. The wrapped writers unwrap to the connection's writer, so
 // handlers can still use http.ResponseController to extend deadlines.
 func WrapHandler(serviceName string, requestMetrics *serviceutil.RequestMetrics, next http.Handler) http.Handler {
-	return otelhttp.NewHandler(serviceutil.LogRequests(requestMetrics.Middleware(serviceName, next)), "http.server", otelhttp.WithFilter(serviceutil.TraceableRequest))
+	return otelhttp.NewHandler(serviceutil.LogRequestsForService(serviceName, requestMetrics.Middleware(serviceName, next)), "http.server", otelhttp.WithFilter(serviceutil.TraceableRequest))
 }
 
 // Run starts metrics, OTEL-instrumented HTTP, and blocks until shutdown.

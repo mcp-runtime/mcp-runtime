@@ -72,8 +72,12 @@ explicit request on its initialized connection. See the hosted acceptance
 workflow for reproducible governed call tests.
 
 Observe the JSON-RPC frame and HTTP status in MCPSnoop. Find the corresponding
-gateway completion log by the narrow timestamp window and method. Copy its
-`trace_id` into Grafana Explore's Tempo trace-ID search. A request with propagated
+gateway response's `X-Trace-ID` header in the HTTP exchange. Runtime derives
+this header from its active span; an upstream correlation header cannot replace
+it. Copy that ID into Grafana Explore's Tempo trace-ID search, or match it to the
+completion log's `trace_id`. When no valid span context exists, the header is
+absent. An ID alone does not guarantee a retained trace: unsampled requests still
+have an ID, and export failures or retention expiry can make Tempo lookup empty. A request with propagated
 W3C context shares the ingress trace; without incoming context, an instrumented
 hop creates a new root. Do not assume a MCPSnoop-exported span automatically
 shares the same trace until its propagation is verified.
@@ -87,7 +91,11 @@ providers and optional Nginx likewise need their own instrumentation. Inspect
 [Services and Observability](platform-services.md) for deployment prerequisites.
 
 The gateway completion record contains `event=gateway.request`, `service`,
-`method`, `status`, `decision`, `reason`, `duration_ms`, `trace_id` and `span_id`.
+`namespace`, `server`, `tool`, `policy_version`, `method`, `status`, `decision`,
+`reason`, `duration_ms`, `trace_id` and `span_id`. Tool names come from the
+configured inventory and are length-bounded; unrecognized names use `__other__`.
+The `policy_version` is the decision's configured version, not a hash proving
+identical ConfigMap contents.
 HTTP services emit `event=http.request` with a registered route template in
 `operation`; unmatched routes do not log their raw URL. Healthy probes are
 quiet; failed probes remain visible. A gateway HTTP success can still contain
@@ -106,7 +114,13 @@ namespace and container, then filter by the trace ID:
 
 Completion records can be parsed using `| logfmt` (the standard Go logger's
 leading timestamp is not an application field). The TraceID derived-field link
-opens Tempo. Inspect the server container in the same namespace for its SDK
+opens Tempo. From Tempo, **Logs for this span** searches collected namespaces
+by the same trace ID within a short time window. The service metrics links
+open request-rate and latency queries; the gateway tool-outcomes link applies
+to gateway root spans with namespace/server attributes. The linked metrics are
+aggregate observations around the request, not a per-request metric lookup.
+Platform service HTTP histograms also attach sampled trace exemplars.
+Inspect the server container in the same namespace for its SDK
 completion record; its span ID differs while the trace ID matches.
 
 In Prometheus Explore, use:
@@ -158,3 +172,17 @@ Events describe pod lifecycle and scheduling, not individual MCP requests.
 No event archive is introduced here. If a span is missing, verify the deployed
 images, Traefik v3 tracing configuration, OTLP collector reachability, sampling
 and the server's SDK support before claiming full end-to-end coverage.
+
+## Explain the platform API path separately
+
+Enrollment is a platform operation before the MCP call. Follow its response
+`X-Trace-ID` through `mcp_request_total` / `mcp_request_duration_seconds` and
+`event=http.request` records for the registered API route. Shared bootstrap
+services use the same service identifier in logs and HTTP metrics. Internal
+HTTP client spans connect downstream services when W3C propagation is supported.
+An enrollment trace and a later tool-call trace normally have different IDs;
+the grant/agent-session relationship explains why the tool call is authorized,
+not why the two independent HTTP operations share a trace.
+
+Correlation provisioning follows [Grafana's Tempo provisioning documentation](https://grafana.com/docs/grafana/latest/datasources/tempo/configure-tempo-data-source/provision/).
+The Grafana data sources remain behind the existing administrative access boundary.

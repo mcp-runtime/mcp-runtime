@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -36,15 +37,21 @@ func TestHandleUpstreamErrorRecordsErrorSpanAndTraceLog(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "http://proxy.example.com/mcp", nil).WithContext(ctx)
 	recorder := httptest.NewRecorder()
-	handleUpstreamError(recorder, req, errors.New("dial tcp: connection refused"))
+	handleUpstreamError(recorder, req, errors.New("dial tcp: connection refused; private-url-token"))
 	end()
 
 	if recorder.Code != http.StatusBadGateway {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadGateway)
 	}
+	if got := recorder.Result().Header.Get(serviceutil.TraceResponseHeader); got != serviceutil.TraceIDFromContext(ctx) {
+		t.Fatalf("response trace ID = %q", got)
+	}
 	ended := spans.Ended()
 	if len(ended) != 1 || ended[0].Status().Code != codes.Error {
 		t.Fatalf("spans = %#v, want one error span", ended)
+	}
+	if strings.Contains(logs.String(), "private-url-token") {
+		t.Fatal("upstream error detail leaked")
 	}
 	if !strings.Contains(logs.String(), "trace_id="+serviceutil.TraceIDFromContext(ctx)) {
 		t.Fatalf("log %q missing trace_id", logs.String())
@@ -66,6 +73,9 @@ func TestGatewayRejectedRequestRecordsErrorSpanAndTraceLog(t *testing.T) {
 	server.handleGateway(recorder, req)
 	end()
 
+	if got := recorder.Result().Header.Get(serviceutil.TraceResponseHeader); got != serviceutil.TraceIDFromContext(ctx) {
+		t.Fatalf("denial trace ID = %q", got)
+	}
 	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusUnauthorized, recorder.Body.String())
 	}
@@ -102,5 +112,29 @@ func TestGatewaySuccessfulCompletionHasCorrelatedBoundedLog(t *testing.T) {
 		if strings.Contains(line, secret) {
 			t.Errorf("log leaked %q", secret)
 		}
+	}
+}
+
+func TestProxyCannotOverrideResponseTraceID(t *testing.T) {
+	ctx, _, _, end := startTestSpan(t)
+	defer end()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(serviceutil.TraceResponseHeader, "upstream-private-id")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer upstream.Close()
+	target, err := url.Parse(upstream.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := httptest.NewRecorder()
+	newUpstreamReverseProxy(target).ServeHTTP(serviceutil.CorrelateResponse(recorder, ctx), httptest.NewRequest(http.MethodGet, "/mcp", nil).WithContext(ctx))
+	if recorder.Code != http.StatusOK || recorder.Body.String() != "ok" {
+		t.Fatalf("response changed: %d %s", recorder.Code, recorder.Body.String())
+	}
+	values := recorder.Result().Header.Values(serviceutil.TraceResponseHeader)
+	if len(values) != 1 || values[0] != serviceutil.TraceIDFromContext(ctx) {
+		t.Fatalf("response trace IDs = %v", values)
 	}
 }

@@ -22,6 +22,37 @@ data:
         uid: tempo
         url: http://tempo:3200
         access: proxy
+        jsonData:
+          tracesToLogsV2:
+            datasourceUid: loki
+            spanStartTimeShift: '-5s'
+            spanEndTimeShift: '5s'
+            tags:
+              # service.name exists on API and gateway resources; custom query
+              # filters by trace ID across namespaces rather than a service label.
+              - key: service.name
+                value: service
+            filterByTraceID: false
+            filterBySpanID: false
+            customQuery: true
+            # Search all collected namespaces for this trace, including API hops.
+            # $$ keeps Grafana interpolation intact during env expansion.
+            query: '{namespace=~".+"} |= "trace_id=$${__trace.traceId}"'
+          tracesToMetrics:
+            datasourceUid: prometheus
+            spanStartTimeShift: '-2m'
+            spanEndTimeShift: '2m'
+            tags:
+              - key: service.name
+                value: service
+            queries:
+              - name: Service request rate
+                query: 'sum by (operation,status) (rate(mcp_request_total{$$__tags}[5m]))'
+              - name: Service request p95
+                query: 'histogram_quantile(0.95, sum by (le,operation) (rate(mcp_request_duration_seconds_bucket{$$__tags}[5m])))'
+              - name: Gateway tool outcomes
+                query: 'sum by (tool,decision) (rate(mcp_gateway_tool_call_total{namespace="$${__span.tags.service.namespace}",server="$${__span.tags.server.name}"}[5m]))'
+
       - name: Loki
         type: loki
         uid: loki
