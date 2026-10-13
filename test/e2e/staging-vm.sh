@@ -33,6 +33,8 @@ source "${ROOT_DIR}/test/e2e/lib/staging.sh"
 source "${ROOT_DIR}/test/e2e/lib/cluster-wait.sh"
 # shellcheck source=test/e2e/lib/k3s-installer.sh
 source "${ROOT_DIR}/test/e2e/lib/k3s-installer.sh"
+# shellcheck source=test/e2e/lib/platform-snapshot.sh
+source "${ROOT_DIR}/test/e2e/lib/platform-snapshot.sh"
 
 log() { staging_log "$@"; }
 fail() {
@@ -149,6 +151,7 @@ backup_platform_runtime() {
     staging_skip "public certificates are not issued yet; keeping the previous snapshot"
   fi
   load_platform_backup_helpers
+  staging_snapshot_identity
   log "capturing platform runtime backup before cluster cleanup"
   mcpruntime_org_backup_platform_runtime
 }
@@ -363,6 +366,7 @@ stage_restore_snapshot() {
     kubectl create namespace "${namespace}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
   done
   load_platform_backup_helpers
+  staging_snapshot_select_latest "${BACKUP_DIR}/platform-runtime"
   log "restoring platform runtime snapshot $(readlink "${BACKUP_DIR}/platform-runtime/latest")"
   # Certificates and ClusterIssuers fail to apply before setup installs the
   # cert-manager CRDs; the Secrets, which are what avoids a new ACME order, do

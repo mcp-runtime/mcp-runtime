@@ -284,6 +284,44 @@ printf '\033[30;42m SUCCESS \033[0m ok check — fine\n\033[30;101m  ERROR  \033
 expect_eq "failed checks parsed" "$(staging_failed_checks "${TMP}/diag.log" | paste -sd'|' -)" \
   "MCPServer reconcile smoke|platform OIDC configuration"
 
+# --- platform snapshot glue ----------------------------------------------------
+# shellcheck source=test/e2e/lib/platform-snapshot.sh
+source "${SCRIPT_DIR}/lib/platform-snapshot.sh"
+snapshot_roundtrip_case() (
+  local root="${TMP}/snap" backup_root
+  backup_root="${root}/platform-runtime"
+  mkdir -p "${root}"
+  export KUBECONFIG="${root}/kubeconfig" MCP_TLS_BACKUP_DIR="${backup_root}" MCPRUNTIME_ORG_ROOT="${SCRIPT_DIR}/../.."
+  : >"${KUBECONFIG}"
+  kubectl() {
+    case "$*" in
+      *"get namespace kube-system"*) printf 'uid-1234' ;;
+      *"config current-context"*) printf 'staging-ctx' ;;
+    esac
+  }
+  # shellcheck source=hack/deploy/reference/lib/backup.sh
+  source "${SCRIPT_DIR}/../../hack/deploy/reference/lib/backup.sh"
+  unset MCP_EXPECTED_CLUSTER_UID MCP_KUBE_CONTEXT
+  staging_snapshot_identity || return 1
+  mcpruntime_org_backup_init_snapshot >/dev/null || return 1
+  mcpruntime_org_backup_publish_latest platform >/dev/null || return 1
+  grep -q '"clusterUID": "uid-1234"' "${MCP_TLS_SNAPSHOT_DIR}/cluster-identity.json" || return 1
+  # A later run selects that snapshot for restore without the identity check.
+  MCP_TLS_SNAPSHOT_DIR=""
+  staging_snapshot_select_latest "${backup_root}" || return 1
+  [[ -d "${MCP_TLS_SNAPSHOT_DIR}" && -f "${MCP_TLS_SNAPSHOT_DIR}/cluster-identity.json" && "${MCP_TLS_DRY_RUN}" == "0" ]]
+)
+expect_ok "staging snapshot records the VM cluster identity and restore selects latest" snapshot_roundtrip_case
+snapshot_no_cluster_case() (
+  kubectl() { return 1; }
+  staging_snapshot_identity
+)
+expect_fail "staging snapshot refuses to run without a readable cluster identity" snapshot_no_cluster_case
+snapshot_none_case() (
+  staging_snapshot_select_latest "${TMP}/does-not-exist"
+)
+expect_fail "staging restore reports when no snapshot exists" snapshot_none_case
+
 if [[ "${FAILURES}" -ne 0 ]]; then
   echo "${FAILURES} staging lib test(s) failed" >&2
   exit 1
