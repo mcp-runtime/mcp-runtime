@@ -11,6 +11,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 - Request tracing adds gateway stage spans, internal HTTP connection-phase events, asynchronous analytics classification and instrumented MCP-server execution in the shipped Go example. Managed ingress uses Traefik 3.7.14 with OTLP tracing and credential-free JSON access logs; distribution-managed Traefik 2 requires an explicit upgrade. Traefik v3 CRDs and read-only EndpointSlice/ConfigMap/Node discovery permissions ship together, including dynamic team namespaces, to preserve API and MCP routes. Explicit workload OTEL settings are preserved. Normal telemetry continues to exclude tool bodies and credentials. ([#700](https://github.com/mcp-runtime/mcp-runtime/issues/700))
 
+- Service HTTP latency histograms attach sampled trace exemplars to connect platform API metrics to the same request trace, without trace IDs as metric labels ([#728](https://github.com/mcp-runtime/mcp-runtime/issues/728)).
+
+- Gateway metrics now distinguish configured tools, policy outcomes and HTTP status, with slow-tool latency buckets and sampled trace exemplars. Tool labels are bounded; unknown names share one bucket. Prometheus/Grafana can link a latency observation to Tempo. ([#300](https://github.com/mcp-runtime/mcp-runtime/issues/300))
+
 ## [0.7.2] - 2026-10-14
 
 This patch restores usage analytics for MCP servers whose gateway sidecars were

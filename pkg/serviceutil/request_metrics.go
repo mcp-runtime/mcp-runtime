@@ -1,11 +1,13 @@
 package serviceutil
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // RequestMetrics records request throughput, errors, and latency for service
@@ -54,11 +56,15 @@ func (m *RequestMetrics) Middleware(service string, next http.Handler) http.Hand
 		if operation == "" {
 			operation = "unmatched"
 		}
-		m.Record(service, operation, recorder.status, "none", time.Since(start))
+		m.record(r.Context(), service, operation, recorder.status, "none", time.Since(start))
 	})
 }
 
 func (m *RequestMetrics) Record(service, operation string, status int, server string, duration time.Duration) {
+	m.record(context.Background(), service, operation, status, server, duration)
+}
+
+func (m *RequestMetrics) record(ctx context.Context, service, operation string, status int, server string, duration time.Duration) {
 	if m == nil {
 		return
 	}
@@ -79,5 +85,11 @@ func (m *RequestMetrics) Record(service, operation string, status int, server st
 	if status >= http.StatusInternalServerError {
 		m.errors.WithLabelValues(labels...).Inc()
 	}
-	m.duration.WithLabelValues(labels...).Observe(duration.Seconds())
+	observer := m.duration.WithLabelValues(labels...)
+	sc := trace.SpanContextFromContext(ctx)
+	if sc.IsValid() && sc.IsSampled() {
+		observer.(prometheus.ExemplarObserver).ObserveWithExemplar(duration.Seconds(), prometheus.Labels{"trace_id": sc.TraceID().String()})
+		return
+	}
+	observer.Observe(duration.Seconds())
 }
