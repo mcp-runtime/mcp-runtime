@@ -79,8 +79,8 @@ const (
 	analyticsTokenAudience = "mcp-ingest"
 	// analyticsTokenVolumeName and analyticsTokenMountDir locate the projected token.
 	// #nosec G101 -- volume name and mount path only; no secret value is embedded.
-	analyticsTokenVolumeName = "analytics-token"
-	analyticsTokenMountDir   = "/var/run/mcp-analytics"
+	analyticsTokenVolumeName = "analytics-token"        // #nosec G101 -- volume name, not a credential
+	analyticsTokenMountDir   = "/var/run/mcp-analytics" // #nosec G101 -- mount path, not a credential
 	// analyticsTokenExpirySeconds is the requested token lifetime; the kubelet
 	// refreshes the file well before it expires.
 	analyticsTokenExpirySeconds int64 = 3600
