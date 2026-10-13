@@ -406,7 +406,8 @@ func applyWiring(deploy *appsv1.Deployment, container *corev1.Container, entry p
 }
 
 func applyVersionGuards(row *Row, sel Selection) {
-	if row.Action != ActionUpdate {
+	if row.Action != ActionUpdate || row.TargetVersion == "" {
+		// Config-only components carry no version to compare.
 		return
 	}
 	cmp, ok := platformrelease.CompareVersionStrings(row.TargetVersion, row.CurrentVersion)

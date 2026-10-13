@@ -8,7 +8,12 @@
 #   2. update refuses to apply without --yes when stdin is not a terminal;
 #   3. pinning one service (ui) to its running digest rolls out only that
 #      Deployment;
-#   4. an immediate rerun of the same manifest is a no-op.
+#   4. an immediate rerun of the same manifest is a no-op;
+#   5. a release that declares a ServiceAccount, a ConfigMap and Deployment
+#      wiring (env + resolver option) applies all of it in one pass, rolls only
+#      the workloads that changed (a ConfigMap rolls its dependent), is a no-op
+#      on rerun, and a later ConfigMap change rolls only that dependent;
+#   6. --expect-cluster-id refuses a different cluster and accepts the real one.
 
 PLATFORM_UPDATE_DEPLOYMENTS=(
   "mcp-runtime/mcp-runtime-operator-controller-manager"
@@ -78,13 +83,20 @@ platform_update_cli() {
   ./bin/mcp-runtime update --kubeconfig "${KUBECONFIG_FILE}" "$@"
 }
 
+# platform_update_assert_generations <before> [allowed-change...]: every
+# Deployment's generation must be unchanged, except the allowed ones, which must
+# have changed. Allowed changes are space-separated in the second argument.
 platform_update_assert_generations() {
-  local before="$1" allowed_change="${2:-}"
-  local after line item
+  local before="$1" allowed_changes="${2:-}"
+  local after line item allowed is_allowed
   after="$(platform_update_generations)"
   while IFS= read -r line; do
     item="${line%%=*}"
-    if [[ "${item}" == "${allowed_change}" ]]; then
+    is_allowed=0
+    for allowed in ${allowed_changes}; do
+      [[ "${item}" == "${allowed}" ]] && is_allowed=1
+    done
+    if [[ "${is_allowed}" == 1 ]]; then
       if grep -Fxq -- "${line}" <<<"${after}"; then
         echo "[platform-update] expected ${item} generation to change" >&2
         return 1
@@ -156,6 +168,62 @@ run_e2e_platform_update_scenario() {
   platform_update_cli --release-manifest "${dir}/pinned.json" --yes | tee "${dir}/apply-rerun.txt"
   grep -Fq "Platform is up to date" "${dir}/apply-rerun.txt"
   platform_update_assert_generations "${after_pin}"
+
+  echo "[platform-update] --expect-cluster-id refuses another cluster and accepts the real one"
+  local cluster_id
+  cluster_id="$(jq -r '.plan.cluster.clusterID' "${dir}/plan-current.json")"
+  if platform_update_cli --release-manifest "${dir}/current.json" --dry-run --expect-cluster-id "not-this-cluster" >"${dir}/wrong-cluster.txt" 2>&1; then
+    echo "[platform-update] expected a mismatched --expect-cluster-id to be refused" >&2
+    cat "${dir}/wrong-cluster.txt" >&2
+    return 1
+  fi
+  grep -Fq "${cluster_id}" "${dir}/wrong-cluster.txt"
+  platform_update_cli --release-manifest "${dir}/current.json" --dry-run --expect-cluster-id "${cluster_id}" >/dev/null
+  platform_update_assert_generations "${before}"
+
+  echo "[platform-update] declared ServiceAccount, ConfigMap and wiring are applied and roll only what changed"
+  local config_before
+  config_before="$(platform_update_generations)"
+  jq '
+    .platformObjects = "apiVersion: v1\nkind: ServiceAccount\nmetadata:\n  name: mcp-update-e2e\n  namespace: mcp-observability\n"
+    | .configMaps = [{namespace: "mcp-observability", name: "mcp-update-e2e", data: {"probe.txt": "v1"}, restart: ["processor"]}]
+    | (.components[] | select(.name == "ui") | .wiring) = {env: {MCP_UPDATE_E2E: "1"}, dnsOptions: [{name: "attempts", value: "2"}]}
+  ' "${dir}/current.json" >"${dir}/declared.json"
+  platform_update_cli --release-manifest "${dir}/declared.json" --dry-run --output json >"${dir}/plan-declared.json"
+  jq -e '[.plan.platformObjects[] | select(.action == "create")] | length == 1' "${dir}/plan-declared.json" >/dev/null
+  jq -e '[.plan.configMaps[] | select(.action == "create")] | length == 1' "${dir}/plan-declared.json" >/dev/null
+  jq -e '[.plan.components[] | select(.component == "ui" and .action == "update")] | length == 1' "${dir}/plan-declared.json" >/dev/null
+  jq -e '[.plan.components[] | select(.component == "processor" and .action == "update")] | length == 1' "${dir}/plan-declared.json" >/dev/null
+  platform_update_assert_generations "${config_before}"
+  platform_update_cli --release-manifest "${dir}/declared.json" --yes --timeout 300s | tee "${dir}/apply-declared.txt"
+  kubectl get serviceaccount mcp-update-e2e -n mcp-observability >/dev/null
+  [[ "$(kubectl get configmap mcp-update-e2e -n mcp-observability -o jsonpath='{.data.probe\.txt}')" == "v1" ]]
+  [[ "$(kubectl get deployment mcp-ui -n mcp-platform -o jsonpath='{.spec.template.spec.containers[?(@.name=="ui")].env[?(@.name=="MCP_UPDATE_E2E")].value}')" == "1" ]]
+  [[ "$(kubectl get deployment mcp-ui -n mcp-platform -o jsonpath='{.spec.template.spec.dnsConfig.options[?(@.name=="attempts")].value}')" == "2" ]]
+  [[ -n "$(kubectl get deployment mcp-processor -n mcp-observability -o jsonpath='{.spec.template.metadata.annotations.mcpruntime\.org/config-hash\.mcp-update-e2e}')" ]]
+  platform_update_assert_generations "${config_before}" "mcp-platform/mcp-ui mcp-observability/mcp-processor"
+
+  echo "[platform-update] rerun of the declared release is a no-op"
+  local config_after
+  config_after="$(platform_update_generations)"
+  platform_update_cli --release-manifest "${dir}/declared.json" --yes | tee "${dir}/apply-declared-rerun.txt"
+  grep -Fq "Platform is up to date" "${dir}/apply-declared-rerun.txt"
+  platform_update_assert_generations "${config_after}"
+
+  echo "[platform-update] a ConfigMap change rolls only the workload that reads it"
+  jq '(.configMaps[0].data["probe.txt"]) = "v2"' "${dir}/declared.json" >"${dir}/declared-v2.json"
+  platform_update_cli --release-manifest "${dir}/declared-v2.json" --yes --timeout 300s | tee "${dir}/apply-declared-v2.txt"
+  [[ "$(kubectl get configmap mcp-update-e2e -n mcp-observability -o jsonpath='{.data.probe\.txt}')" == "v2" ]]
+  platform_update_assert_generations "${config_after}" "mcp-observability/mcp-processor"
+
+  echo "[platform-update] removing the declared objects and wiring"
+  kubectl delete configmap mcp-update-e2e -n mcp-observability >/dev/null
+  kubectl delete serviceaccount mcp-update-e2e -n mcp-observability >/dev/null
+  kubectl set env deployment/mcp-ui -n mcp-platform -c ui MCP_UPDATE_E2E- >/dev/null
+  kubectl patch deployment mcp-ui -n mcp-platform --type=json -p '[{"op":"remove","path":"/spec/template/spec/dnsConfig"}]' >/dev/null 2>&1 || true
+  kubectl patch deployment mcp-processor -n mcp-observability --type=json \
+    -p '[{"op":"remove","path":"/spec/template/metadata/annotations/mcpruntime.org~1config-hash.mcp-update-e2e"}]' >/dev/null 2>&1 || true
+  rollout_status_with_logs mcp-observability deploy mcp-processor 300s
 
   echo "[platform-update] restoring original ui image"
   kubectl set image deployment/mcp-ui -n mcp-platform "ui=${original_ui_image}" >/dev/null
