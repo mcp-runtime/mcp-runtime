@@ -78,6 +78,7 @@ const (
 	// server namespace. It must match INGEST_SA_TOKEN_AUDIENCE in k8s/06-ingest.yaml.
 	analyticsTokenAudience = "mcp-ingest"
 	// analyticsTokenVolumeName and analyticsTokenMountDir locate the projected token.
+	// #nosec G101 -- volume name and mount path only; no secret value is embedded.
 	analyticsTokenVolumeName = "analytics-token"
 	analyticsTokenMountDir   = "/var/run/mcp-analytics"
 	// analyticsTokenExpirySeconds is the requested token lifetime; the kubelet
