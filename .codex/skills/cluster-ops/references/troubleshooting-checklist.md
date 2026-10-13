@@ -213,3 +213,10 @@ that their Kubernetes version is supported. The reviewed table recognizes
 image tags or mismatched controller/webhook/cainjector patches are reported.
 Follow `docs/reference-deployment.md#upgrading-an-existing-cert-manager-installation` for staged minor upgrades and encrypted
 Secret backups. Setup's fresh-install pin does not upgrade an existing install.
+
+- **Managed Traefik v3 is ready but API/MCP routes return 404:** verify matching
+  v3 CRDs (including ServersTransportTCP), namespace-scoped EndpointSlice and
+  ConfigMap watches, and read-only Nodes discovery. Inspect controller reflector
+  errors before changing routing. Updating only the image leaves informer caches
+  blocked by missing permissions. Dynamic team namespaces need the Runtime API's
+  updated scoped `traefik-watch` Role too.

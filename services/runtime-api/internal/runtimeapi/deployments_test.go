@@ -934,8 +934,8 @@ func TestEnsureTraefikWatchRBACUsesNamespaceRole(t *testing.T) {
 	if err != nil {
 		t.Fatalf("traefik watch role missing: %v", err)
 	}
-	if len(role.Rules) != 2 {
-		t.Fatalf("traefik watch role rules = %#v, want 2 rules", role.Rules)
+	if len(role.Rules) != 4 {
+		t.Fatalf("traefik watch role rules = %#v, want 4 rules", role.Rules)
 	}
 	hasSecrets := false
 	for _, resource := range role.Rules[0].Resources {
@@ -946,6 +946,24 @@ func TestEnsureTraefikWatchRBACUsesNamespaceRole(t *testing.T) {
 	}
 	if !hasSecrets {
 		t.Fatalf("traefik watch role rules = %#v, want secrets watch in namespace role", role.Rules)
+	}
+	for _, resource := range []string{"endpointslices", "configmaps", "pods"} {
+		found := false
+		for _, rule := range role.Rules {
+			for _, name := range rule.Resources {
+				if name == resource {
+					found = true
+				}
+			}
+			for _, verb := range rule.Verbs {
+				if verb != "get" && verb != "list" && verb != "watch" {
+					t.Fatalf("watch role grants mutation: %v", rule)
+				}
+			}
+		}
+		if !found {
+			t.Errorf("Traefik v3 required resource %s missing in namespace role", resource)
+		}
 	}
 }
 

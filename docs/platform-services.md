@@ -568,3 +568,10 @@ a page changes the main content without opening a second sidebar. Filtering
 includes individual page names and section headings; the active page is marked
 in the sidebar. On compact screens, the navigation menu contains the same
 sections and closes after a selection.
+
+Managed Traefik v3 installation includes its matching CRDs and discovery RBAC:
+namespace-scoped EndpointSlice/ConfigMap watches, pod GET for OTel metadata,
+and cluster-scoped read-only Node/IngressClass discovery. Dynamic team namespaces
+receive the same scoped watch permissions. Upgrade the image, CRDs and RBAC
+together; a ready controller can still return 404 when a provider's cache cannot
+synchronize. See [Traefik's migration requirements](https://doc.traefik.io/traefik/migrate/v3/).

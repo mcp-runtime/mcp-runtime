@@ -4010,8 +4010,7 @@ fi
 go build -o "${PLATFORM_ROOT}/bin/e2e-image-cache" ./hack/qa/image-cache
 mirror_upstream_images_parallel \
   "registry:2.8.3" \
-  "traefik:v2.10" \
-  "traefik:v3.0" \
+  "traefik:v3.7.14" \
   "clickhouse/clickhouse-server:23.8" \
   "confluentinc/cp-kafka:7.5.1" \
   "prom/prometheus:v2.49.1" \

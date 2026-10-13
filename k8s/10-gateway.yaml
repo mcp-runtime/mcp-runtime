@@ -405,8 +405,14 @@ metadata:
   namespace: mcp-platform
 rules:
   - apiGroups: [""]
-    resources: ["services", "endpoints", "secrets"]
+    resources: ["services", "endpoints", "secrets", "configmaps"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get"]
   - apiGroups: ["networking.k8s.io"]
     resources: ["ingresses"]
     verbs: ["get", "list", "watch"]
@@ -432,8 +438,14 @@ metadata:
   namespace: mcp-observability
 rules:
   - apiGroups: [""]
-    resources: ["services", "endpoints", "secrets"]
+    resources: ["services", "endpoints", "secrets", "configmaps"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get"]
   - apiGroups: ["networking.k8s.io"]
     resources: ["ingresses"]
     verbs: ["get", "list", "watch"]
@@ -457,6 +469,9 @@ kind: ClusterRole
 metadata:
   name: mcp-platform-gateway-ingressclass
 rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: ["networking.k8s.io"]
     resources: ["ingressclasses"]
     verbs: ["get", "list", "watch"]

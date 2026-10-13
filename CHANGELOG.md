@@ -9,7 +9,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Changed
 
-- Request tracing adds gateway stage spans, internal HTTP connection-phase events, asynchronous analytics classification and instrumented MCP-server execution in the shipped Go example. Managed ingress uses Traefik 3.7.14 with OTLP tracing and credential-free JSON access logs; distribution-managed Traefik 2 requires an explicit upgrade. Explicit workload OTEL settings are preserved. Normal telemetry continues to exclude tool bodies and credentials. ([#700](https://github.com/mcp-runtime/mcp-runtime/issues/700))
+- Request tracing adds gateway stage spans, internal HTTP connection-phase events, asynchronous analytics classification and instrumented MCP-server execution in the shipped Go example. Managed ingress uses Traefik 3.7.14 with OTLP tracing and credential-free JSON access logs; distribution-managed Traefik 2 requires an explicit upgrade. Traefik v3 CRDs and read-only EndpointSlice/ConfigMap/Node discovery permissions ship together, including dynamic team namespaces, to preserve API and MCP routes. Explicit workload OTEL settings are preserved. Normal telemetry continues to exclude tool bodies and credentials. ([#700](https://github.com/mcp-runtime/mcp-runtime/issues/700))
 
 ## [0.7.2] - 2026-10-14
 

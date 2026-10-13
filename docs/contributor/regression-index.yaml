@@ -198,3 +198,23 @@ incidents:
         name: test_rollout_wrong_cluster_stops_before_build_or_update
         command: hack/ci/check-scripts.sh
         ci_job: ci.yaml#automation
+
+  - id: "700"
+    title: Ship managed Traefik v3 discovery dependencies with its image
+    protected_behavior: >-
+      Managed ingress and platform-gateway manifests include scoped EndpointSlice,
+      ConfigMap and pod discovery plus Node reads and the ServersTransportTCP CRD;
+      dynamic namespace watches provision those dependencies and image overrides
+      replace the actual managed controller image.
+    status: covered
+    checks:
+      - kind: go-test
+        path: test/regression/traefik_discovery_test.go
+        name: TestManagedTraefikDiscoveryRBACAndCRDs
+        command: go test ./test/regression -run TestManagedTraefikDiscoveryRBACAndCRDs -count=1
+        ci_job: ci.yaml#test
+      - kind: go-test
+        path: internal/cli/setup/platform/traefik_image_test.go
+        name: TestPlatformGatewayUsesConfiguredTraefikImage
+        command: go test ./internal/cli/setup/platform -run TestPlatformGatewayUsesConfiguredTraefikImage -count=1
+        ci_job: ci.yaml#test

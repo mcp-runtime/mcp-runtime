@@ -8,7 +8,7 @@ metadata:
     pod-security.kubernetes.io/warn: restricted
 ---
 # Traefik CRDs (IngressRoute, IngressRouteTCP, Middleware, TLSOption,
-# ServersTransport, ...) are vendored from the official v2.10 bundle in
+# ServersTransport, ...) are vendored from the official v3.7.14 bundle in
 # traefik-crds.yaml so optional adapter-certificate routes have the kinds the
 # operator generates.
 ---
@@ -62,14 +62,15 @@ kind: ClusterRole
 metadata:
   name: traefik-ingressclass
 rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: ["networking.k8s.io"]
     resources: ["ingressclasses"]
     verbs: ["get", "list", "watch"]
-  # Traefik v2.10 starts informers for every CRD kind in BOTH the traefik.io and
-  # legacy traefik.containo.us groups when those CRDs are installed. A forbidden
-  # list/watch on any one of them stalls the CRD provider so no IngressRoute is
-  # loaded and optional certificate routes 404. Grant the full kind set in both groups.
-  - apiGroups: ["traefik.io", "traefik.containo.us"]
+  # v3 watches every installed traefik.io CRD, including ServersTransportTCP.
+  # Missing list/watch rights prevent the provider cache from synchronizing.
+  - apiGroups: ["traefik.io"]
     resources:
       [
         "ingressroutes",
@@ -80,6 +81,7 @@ rules:
         "tlsoptions",
         "tlsstores",
         "serverstransports",
+        "serverstransporttcps",
         "traefikservices",
       ]
     verbs: ["get", "list", "watch"]
@@ -104,8 +106,14 @@ metadata:
   namespace: registry
 rules:
   - apiGroups: [""]
-    resources: ["services", "endpoints", "secrets"]
+    resources: ["services", "endpoints", "secrets", "configmaps"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get"]
   - apiGroups: ["networking.k8s.io"]
     resources: ["ingresses"]
     verbs: ["get", "list", "watch"]
@@ -131,8 +139,14 @@ metadata:
   namespace: mcp-platform
 rules:
   - apiGroups: [""]
-    resources: ["services", "endpoints", "secrets"]
+    resources: ["services", "endpoints", "secrets", "configmaps"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get"]
   - apiGroups: ["networking.k8s.io"]
     resources: ["ingresses"]
     verbs: ["get", "list", "watch"]
@@ -158,8 +172,14 @@ metadata:
   namespace: mcp-observability
 rules:
   - apiGroups: [""]
-    resources: ["services", "endpoints", "secrets"]
+    resources: ["services", "endpoints", "secrets", "configmaps"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get"]
   - apiGroups: ["networking.k8s.io"]
     resources: ["ingresses"]
     verbs: ["get", "list", "watch"]
@@ -185,8 +205,14 @@ metadata:
   namespace: mcp-servers
 rules:
   - apiGroups: [""]
-    resources: ["services", "endpoints", "secrets"]
+    resources: ["services", "endpoints", "secrets", "configmaps"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get"]
   - apiGroups: ["networking.k8s.io"]
     resources: ["ingresses"]
     verbs: ["get", "list", "watch"]
@@ -212,8 +238,14 @@ metadata:
   namespace: mcp-servers-org
 rules:
   - apiGroups: [""]
-    resources: ["services", "endpoints", "secrets"]
+    resources: ["services", "endpoints", "secrets", "configmaps"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get"]
   - apiGroups: ["networking.k8s.io"]
     resources: ["ingresses"]
     verbs: ["get", "list", "watch"]
@@ -239,8 +271,14 @@ metadata:
   namespace: mcp-servers-public
 rules:
   - apiGroups: [""]
-    resources: ["services", "endpoints", "secrets"]
+    resources: ["services", "endpoints", "secrets", "configmaps"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get"]
   - apiGroups: ["networking.k8s.io"]
     resources: ["ingresses"]
     verbs: ["get", "list", "watch"]

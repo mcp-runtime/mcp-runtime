@@ -890,7 +890,7 @@ func renderAnalyticsManifest(content string, images AnalyticsImageSet, imagePull
 		replacements["image: mcp-ui:latest"] = "image: " + images.UI
 	}
 	if strings.TrimSpace(images.Traefik) != "" {
-		replacements["image: traefik:v3.0"] = "image: " + images.Traefik
+		replacements["image: traefik:v3.7.14"] = "image: " + images.Traefik
 	}
 	if strings.TrimSpace(images.ClickHouse) != "" {
 		replacements["image: clickhouse/clickhouse-server:23.8"] = "image: " + images.ClickHouse
