@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Fixed
+
+- Namespace node pull credentials now include the doctor smoke image (`mcp-runtime-doctor-smoke`) next to the gateway image. On installs with scoped registry authentication, `cluster diagnostics` failed its `mcp-servers image pull smoke` and `MCPServer reconcile smoke` checks because the registry broker returned 403 for that repository. New namespaces get the corrected scope; rotate existing ones once with `mcp-runtime registry enable-auth --pull-namespace <namespace> --realm ...`.
+
 ### Changed
 
 - Request tracing adds gateway stage spans, internal HTTP connection-phase events, asynchronous analytics classification and instrumented MCP-server execution in the shipped Go example. Managed ingress uses Traefik 3.7.14 with OTLP tracing and credential-free JSON access logs; distribution-managed Traefik 2 requires an explicit upgrade. Traefik v3 CRDs and read-only EndpointSlice/ConfigMap/Node discovery permissions ship together, including dynamic team namespaces, to preserve API and MCP routes. Explicit workload OTEL settings are preserved. Normal telemetry continues to exclude tool bodies and credentials. ([#700](https://github.com/mcp-runtime/mcp-runtime/issues/700))

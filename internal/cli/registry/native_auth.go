@@ -256,7 +256,7 @@ func configureNativeAuth(ctx context.Context, clients *k8sclient.Clients, api re
 		if err != nil {
 			return err
 		}
-		credential, err := api.CreateRegistryPullCredential(ctx, registryauth.PullScope{Namespace: namespace, Repositories: append(repos, "mcp-gateway")})
+		credential, err := api.CreateRegistryPullCredential(ctx, registryauth.PullScope{Namespace: namespace, Repositories: append(repos, registryauth.SharedPullRepositories()...)})
 		if err != nil {
 			return err
 		}

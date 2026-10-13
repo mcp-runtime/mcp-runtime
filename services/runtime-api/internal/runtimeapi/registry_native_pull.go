@@ -61,7 +61,7 @@ func (s *DeploymentService) ensureNativeRegistryPullSecret(ctx context.Context, 
 		if key == "" {
 			return fmt.Errorf("native registry credential provisioning requires a platform service key")
 		}
-		body, _ := json.Marshal(registryauth.PullScope{Namespace: namespace, Repositories: []string{"mcp-gateway"}})
+		body, _ := json.Marshal(registryauth.PullScope{Namespace: namespace, Repositories: registryauth.SharedPullRepositories()})
 		callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		request, err := http.NewRequestWithContext(callCtx, http.MethodPost, u.String(), bytes.NewReader(body))

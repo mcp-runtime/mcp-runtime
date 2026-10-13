@@ -50,7 +50,11 @@ also understands these tokens. The registry Service becomes ClusterIP.
 Node credentials have the `mcpp_` prefix, are bound to their namespace username,
 and expire after 90 days. Their database records contain a hash and explicit
 repository/prefix scope; they can mint only five-minute pull tokens. Shared
-gateway images and images already used by the namespace are included explicitly.
+platform images (the gateway sidecar and the doctor smoke image) and images already
+used by the namespace are included explicitly. A credential issued by an earlier
+release lacks the doctor smoke image, so `cluster doctor` and `cluster diagnostics`
+smoke checks fail with a 403 from the broker until you rotate it with
+`registry enable-auth --pull-namespace <namespace> --realm ...`.
 Run `registry enable-auth --pull-namespace mcp-team-example --realm ...` before
 expiry to replace a namespace's pull Secret. Old credentials remain valid until
 expiry or administrative revocation with

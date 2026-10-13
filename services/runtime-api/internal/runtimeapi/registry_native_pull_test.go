@@ -58,3 +58,29 @@ func TestNativePullCredentialDoesNotCopyServiceKey(t *testing.T) {
 		})
 	}
 }
+
+// The broker request must ask for the shared platform repositories so the
+// namespace can pull the gateway sidecar and the doctor smoke image.
+func TestNativePullCredentialRequestsSharedRepositories(t *testing.T) {
+	var scope struct {
+		Namespace    string   `json:"namespace"`
+		Repositories []string `json:"repositories"`
+	}
+	broker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&scope)
+		w.WriteHeader(201)
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": "rp_test", "username": "mcp-pull-mcp-team-acme", "password": "mcpp_test-value", "expires_at": time.Now().Add(90 * 24 * time.Hour)})
+	}))
+	defer broker.Close()
+	t.Setenv("MCP_REGISTRY_NATIVE_AUTH", "true")
+	t.Setenv("PLATFORM_API_URL", broker.URL)
+	t.Setenv("ADMIN_API_KEYS", "admin-test-value")
+	cs := fake.NewSimpleClientset(&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: kubeworkload.DefaultServiceAccountName, Namespace: "mcp-team-acme"}})
+	if err := (&DeploymentService{}).ensureNamespaceRegistryPullSecret(context.Background(), cs, "mcp-team-acme"); err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Join(scope.Repositories, ",")
+	if scope.Namespace != "mcp-team-acme" || !strings.Contains(got, "mcp-gateway") || !strings.Contains(got, "mcp-runtime-doctor-smoke") {
+		t.Fatalf("scope = %+v, want namespace and both shared repositories", scope)
+	}
+}
