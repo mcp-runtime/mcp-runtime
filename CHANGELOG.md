@@ -7,6 +7,16 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-10-13
+
+This patch restores usage analytics for MCP servers whose gateway sidecars were
+rejected by `mcp-ingest`. It changes `k8s/06-ingest.yaml` (new `mcp-ingest`
+ServiceAccount, `tokenreviews` ClusterRole and binding, `INGEST_SA_TOKEN_AUDIENCE`),
+so an image-only update does not apply it: use the v0.7.2 CLI for full setup,
+preserving existing data, Secrets and certificates as the reference deployment
+runbook describes. Running gateways pick up the token volume when the operator
+reconciles. There are no CRD changes.
+
 ### Added
 
 - `cluster doctor` verifies the gateway analytics path end to end: `ingest service account auth` (audience setting, ingest ServiceAccount and token mount, TokenReview RBAC), `gateway analytics credentials` (projected token audience and `mcp-workload` ServiceAccount, replacing the ingest-key Secret check) and `gateway analytics delivery` (recent sidecar logs for rejected or failed emissions) ([#719](https://github.com/mcp-runtime/mcp-runtime/issues/719)).
@@ -16,6 +26,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 - Gateway sidecars authenticate to `mcp-ingest` with a projected ServiceAccount token (audience `mcp-ingest`, validated by TokenReview) instead of a copied ingest API key. Servers whose key was missing or stale after a setup rerun were rejected with 401, which left the usage analytics dashboard empty. Ingest gains a `mcp-ingest` ServiceAccount with `tokenreviews` create; it needs the updated `k8s/06-ingest.yaml`, so apply it with the release setup. Gateways now count undelivered events in `mcp_gateway_analytics_emit_failures_total`, and the new `MCPGatewayAnalyticsEmitFailures` Prometheus alert (visible in Grafana alerting) fires on sustained failures.
 
 ### Changed
+
+- Go dependencies are updated across the root module and every service module (ClickHouse client, Prometheus client, OpenTelemetry, `golang.org/x/crypto`, `pterm` and others); service modules are tidied against the root.
 
 - Repository automation is grouped under `hack/dev`, `hack/ci`, `hack/qa`, `hack/deploy` and `hack/release`. Reference helpers move to `hack/deploy/reference`, hosted acceptance to `hack/deploy/acceptance`, and destructive `clean.sh` becomes `reset.sh`. Update local invocations to the paths in `hack/README.md`; old-path wrappers are not provided. Agent guidance now routes tasks to the catalogue and focused runbooks.
 
@@ -323,7 +335,8 @@ upgrade from 0.4.x; see the migration note under **Changed**.
 
 - Targeted platform updates through `mcp-runtime update`, including embedded CRD updates and `--build` to build/push missing component images before rollout ([#491](https://github.com/mcp-runtime/mcp-runtime/pull/491)).
 
-[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.6...v0.7.0
 [0.6.6]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.5...v0.6.6
