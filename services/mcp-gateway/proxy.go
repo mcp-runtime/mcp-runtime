@@ -147,6 +147,18 @@ func (s *gatewayServer) handleGateway(w http.ResponseWriter, r *http.Request) {
 // handleUpstreamError.
 func (s *gatewayServer) recordGatewayOutcome(ex *Exchange) {
 	status := ex.W.status
+	if !serviceutil.IsProbePath(ex.R) || status >= http.StatusBadRequest {
+		decision := "allow"
+		if !ex.Decision.Allowed && !ex.SkipAudit {
+			decision = "deny"
+		}
+		if ex.SkipAudit {
+			decision = "skip"
+		}
+		serviceutil.LogfCtx(ex.R.Context(), "event=gateway.request service=%q method=%q status=%d decision=%q reason=%q duration_ms=%.3f",
+			serviceutil.EnvOr("OTEL_SERVICE_NAME", "mcp-gateway"), metricRPCMethod(ex.Inspection.Method), status,
+			decision, ex.Decision.Reason, float64(time.Since(ex.StartTime))/float64(time.Millisecond))
+	}
 	denied := !ex.Decision.Allowed && !ex.SkipAudit
 	if !denied && status < http.StatusBadRequest {
 		return

@@ -63,3 +63,6 @@ behavior, service maintenance, and incident diagnosis.
   gateway enforcement, audit events, metrics, logs, and traces.
 - [Troubleshooting](troubleshooting.md): diagnosis of installation, access,
   registry, analytics, and cluster failures.
+
+Use [Follow a Request](request-debugging.md) to correlate client payloads,
+gateway decisions, traces, metrics, logs and read-only Kubernetes diagnostics.

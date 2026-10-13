@@ -39,6 +39,7 @@
 
 - Runtime operations: https://docs.mcpruntime.org/runtime-operations/ — CRDs, reconciliation, image resolution, ingress, and rollouts.
 - Namespaces: https://docs.mcpruntime.org/namespaces/ — Component placement, team boundaries, service DNS, and credential ownership.
+- Follow a request: https://docs.mcpruntime.org/request-debugging/ — Correlate an MCP exchange with traces, metrics, logs and read-only Kubernetes diagnostics.
 - Services and observability: https://docs.mcpruntime.org/platform-services/ — Gateway policy, audit events, analytics, and observability.
 - Troubleshooting: https://docs.mcpruntime.org/troubleshooting/ — Diagnose deployment, access, registry, analytics, and cluster issues.
 

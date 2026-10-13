@@ -138,3 +138,39 @@ func TestIsProbePath(t *testing.T) {
 		t.Error("IsProbePath(nil) = true")
 	}
 }
+
+func TestLogRequestsUsesRouteTemplateAndOmitsPrivateRequest(t *testing.T) {
+	t.Setenv("OTEL_SERVICE_NAME", "runtime-api")
+	buf := captureLog(t)
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /sessions/{id}", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	req := httptest.NewRequest(http.MethodGet, "/sessions/private-id?token=private-token", nil)
+	req.Header.Set("Authorization", "Bearer private-bearer")
+	LogRequests(mux).ServeHTTP(httptest.NewRecorder(), req)
+	line := buf.String()
+	for _, want := range []string{"event=http.request", `service="runtime-api"`, `operation="GET /sessions/{id}"`, "status=200", "duration_ms="} {
+		if !strings.Contains(line, want) {
+			t.Errorf("log %q missing %q", line, want)
+		}
+	}
+	for _, secret := range []string{"private-id", "private-token", "private-bearer"} {
+		if strings.Contains(line, secret) {
+			t.Errorf("log leaked %q", secret)
+		}
+	}
+}
+
+func TestLogRequestsQuietHealthyProbesAndVisibleFailures(t *testing.T) {
+	buf := captureLog(t)
+	for _, status := range []int{http.StatusOK, http.StatusServiceUnavailable} {
+		buf.Reset()
+		handler := LogRequests(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(status) }))
+		handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/readyz", nil))
+		if status == http.StatusOK && buf.Len() != 0 {
+			t.Fatalf("healthy probe logged: %q", buf.String())
+		}
+		if status == http.StatusServiceUnavailable && !strings.Contains(buf.String(), `operation="probe"`) {
+			t.Fatalf("failed probe missing: %q", buf.String())
+		}
+	}
+}

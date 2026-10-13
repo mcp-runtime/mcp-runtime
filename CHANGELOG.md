@@ -41,6 +41,7 @@ are no CRD changes.
 
 - Go dependencies are updated across the root module and every service module (ClickHouse client, Prometheus client, OpenTelemetry, `golang.org/x/crypto`, `pterm` and others); service modules are tidied against the root.
 
+- HTTP service completion logs use quoted logfmt fields with service identity, route templates, status, duration and trace/span IDs. Raw request URLs are omitted and healthy probes are quiet; failed probes remain visible. Gateway completion logs now expose allowed, denied and skipped request outcomes. The request debugging guide connects MCPSnoop, Tempo, metrics, logs and read-only Kubernetes diagnostics ([#498](https://github.com/mcp-runtime/mcp-runtime/issues/498)).
 
 - Repository automation is grouped under `hack/dev`, `hack/ci`, `hack/qa`, `hack/deploy` and `hack/release`. Reference helpers move to `hack/deploy/reference`, hosted acceptance to `hack/deploy/acceptance`, and destructive `clean.sh` becomes `reset.sh`. Update local invocations to the paths in `hack/README.md`; old-path wrappers are not provided. Agent guidance now routes tasks to the catalogue and focused runbooks.
 

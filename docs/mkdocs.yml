@@ -84,6 +84,7 @@ nav:
           - Runtime Operations: runtime-operations.md
           - Namespaces: namespaces.md
           - Services and Observability: platform-services.md
+          - Follow a Request: request-debugging.md
           - Troubleshooting: troubleshooting.md
   - Concepts and Architecture:
       - Overview: concepts-overview.md

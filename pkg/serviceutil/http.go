@@ -108,16 +108,30 @@ func (r *statusRecorder) Flush() {
 	}
 }
 
-// LogRequests logs HTTP method, path, status, and duration for each request.
+// LogRequests emits correlated logfmt completion records using route templates.
+// Raw URLs, headers and bodies are deliberately excluded; healthy probes are quiet.
 func LogRequests(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(recorder, r)
-		if failureStatus(recorder.status) {
-			RecordSpanFailure(r.Context(), r.Method+" "+r.URL.Path, http.StatusText(recorder.status), recorder.status, nil)
+		probe := IsProbePath(r)
+		if probe && recorder.status < http.StatusBadRequest {
+			return
 		}
-		// #nosec G706 -- request method/path are operational logs.
-		log.Printf("%s %s %d %s%s", r.Method, r.URL.Path, recorder.status, time.Since(start), TraceLogSuffix(r.Context()))
+		operation := r.Pattern
+		if operation == "" {
+			operation = "unmatched"
+		}
+		if probe {
+			operation = "probe"
+		}
+		if failureStatus(recorder.status) {
+			RecordSpanFailure(r.Context(), operation, http.StatusText(recorder.status), recorder.status, nil)
+		}
+		// #nosec G706 -- quoted fields escape control characters; no raw URL or body.
+		log.Printf("event=http.request service=%q operation=%q method=%q status=%d duration_ms=%.3f%s",
+			EnvOr("OTEL_SERVICE_NAME", "mcp-service"), operation, r.Method, recorder.status,
+			float64(time.Since(start))/float64(time.Millisecond), TraceLogSuffix(r.Context()))
 	})
 }

@@ -7,6 +7,9 @@
 - Operator, gateway, registry, or platform symptoms (not unit-test failures)
 - Before re-running full `setup`, scan the checklist for a targeted fix
 
+For a governed MCP call, use `docs/request-debugging.md` to correlate MCPSnoop,
+Tempo, gateway metrics and trace IDs in logs before changing cluster state.
+
 ## First steps
 
 Use the CLI and platform UI for supported management operations. A failure is

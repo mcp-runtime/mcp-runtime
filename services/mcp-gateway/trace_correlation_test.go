@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -80,5 +81,26 @@ func TestGatewayRejectedRequestRecordsErrorSpanAndTraceLog(t *testing.T) {
 	}
 	if strings.Contains(line, "s3cr3t") {
 		t.Fatalf("log %q leaked tool arguments", line)
+	}
+}
+
+func TestGatewaySuccessfulCompletionHasCorrelatedBoundedLog(t *testing.T) {
+	ctx, _, logs, end := startTestSpan(t)
+	defer end()
+	server := &gatewayServer{}
+	request := httptest.NewRequest(http.MethodPost, "/mcp?token=private-url", nil).WithContext(ctx)
+	ex := &Exchange{R: request, W: &statusRecorder{ResponseWriter: httptest.NewRecorder(), status: http.StatusOK}, StartTime: time.Now(), SkipAudit: true}
+	ex.Inspection.Method = "arbitrary-private-method"
+	server.recordGatewayOutcome(ex)
+	line := logs.String()
+	for _, want := range []string{"event=gateway.request", "status=200", `decision="skip"`, "trace_id=" + serviceutil.TraceIDFromContext(ctx)} {
+		if !strings.Contains(line, want) {
+			t.Errorf("log %q missing %q", line, want)
+		}
+	}
+	for _, secret := range []string{"private-url", "arbitrary-private-method"} {
+		if strings.Contains(line, secret) {
+			t.Errorf("log leaked %q", secret)
+		}
 	}
 }
