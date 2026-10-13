@@ -29,7 +29,11 @@ staging_snapshot_select_latest() {
   local backup_root="$1" latest
   [[ -L "${backup_root}/latest" && -d "${backup_root}/latest" ]] || return 1
   latest="$(cd "${backup_root}/latest" && pwd -P)"
+  # These are read by the sourced reference backup helper.
+  # shellcheck disable=SC2034
   MCP_TLS_BACKUP_ROOT="${backup_root}"
+  # shellcheck disable=SC2034
   MCP_TLS_SNAPSHOT_DIR="${latest}"
+  # shellcheck disable=SC2034
   MCP_TLS_DRY_RUN=0
 }
