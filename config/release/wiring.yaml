@@ -1,0 +1,15 @@
+# Non-image Deployment configuration a release requires, embedded in
+# platform-manifest.json so `mcp-runtime update` can apply it without a full
+# setup. It must match the corresponding Deployment in k8s/ (a test enforces
+# this). platformObjects lists the k8s/ ServiceAccount/RBAC objects update
+# manages; releases opt objects in explicitly. update adds or corrects exactly these fields; other env is untouched.
+platformObjects:
+  - ServiceAccount/mcp-observability/mcp-ingest
+  - ClusterRole/mcp-ingest-tokenreview
+  - ClusterRoleBinding/mcp-ingest-tokenreview
+components:
+  ingest:
+    serviceAccountName: mcp-ingest
+    automountServiceAccountToken: true
+    env:
+      INGEST_SA_TOKEN_AUDIENCE: mcp-ingest

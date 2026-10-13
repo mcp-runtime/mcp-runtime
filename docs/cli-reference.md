@@ -868,11 +868,28 @@ from the release, waits until each written CRD is Established, then rolls
 images. Pass `--crds` only when a local manifest omits the embedded bundle.
 With `--only`, CRD apply is skipped so a scoped image update cannot mutate
 cluster schemas; re-run without `--only` to apply schema changes. `--dry-run`
-prints the plan only and does not apply CRDs or roll images. update never
-modifies Secrets, PVCs, ConfigMaps, cert-manager Issuers/Certificates,
-Services, or Ingresses, and never deletes or recreates workloads. mcp-auth and
-cert-manager are skipped unless selected with `--include-auth`,
-`--include-cert-manager`, or `--only`.
+prints the plan only and does not apply CRDs or roll images.
+
+A release can also declare the ServiceAccounts and RBAC its workloads need
+(`platformObjects`) and per-component Deployment wiring (ServiceAccount, token
+mount and required env). update creates or corrects only those declared objects
+and fields before rolling images, so a release such as v0.7.2 (gateway-to-ingest
+ServiceAccount token auth) needs no full setup. Declared RBAC is validated: no
+wildcard or `escalate`/`bind`/`impersonate` rules, platform-owned names and
+namespaces, and bindings only to roles in the same bundle for platform
+ServiceAccounts. Wiring adds or corrects only the declared fields and keeps
+other env; it applies on its own when an image is unchanged, and previous
+wiring is restored if a rollout fails. Objects are additive and are not rolled
+back. With `--only`, platform objects are skipped, and a workload whose wiring
+needs a ServiceAccount that does not exist is blocked until you re-run without
+`--only`. The plan lists each object (`create`, `update` or `skipped`) and the
+wiring change per component.
+
+update never modifies Secrets, PVCs, ConfigMaps, cert-manager
+Issuers/Certificates, Services, or Ingresses, other RBAC, or other Deployment
+settings, and never deletes or recreates workloads. mcp-auth and cert-manager
+are skipped unless selected with `--include-auth`, `--include-cert-manager`, or
+`--only`.
 
 With `--build`, update builds and pushes Built-component images from the release
 plan that are missing from the registry (from `--source`, default `.`), then

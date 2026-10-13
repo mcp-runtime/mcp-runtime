@@ -31,8 +31,8 @@ var preservedResources = []string{
 	"ConfigMaps (mcp-shared-config, operator and gateway config)",
 	"cert-manager Issuers, ClusterIssuers, and Certificates",
 	"Existing MCP Runtime custom resources (MCPServer, grants, sessions)",
-	"Services, Ingresses, IngressRoutes, NetworkPolicies, and RBAC",
-	"Deployment replicas, resources, env (except MCP_GATEWAY_PROXY_IMAGE), and probes",
+	"Services, Ingresses, IngressRoutes, NetworkPolicies, and RBAC (except the platform ServiceAccount/RBAC objects a release declares)",
+	"Deployment replicas, resources, probes, and env (except MCP_GATEWAY_PROXY_IMAGE and the ServiceAccount, token mount and env a release declares as wiring)",
 }
 
 // ClusterInfo identifies the target cluster shown before any change.
@@ -57,8 +57,12 @@ type Row struct {
 	Action         string   `json:"action"`
 	Reason         string   `json:"reason,omitempty"`
 	Notes          []string `json:"notes,omitempty"`
+	// Wiring lists the non-image Deployment settings this update corrects
+	// (ServiceAccount, token mount, required env).
+	Wiring []string `json:"wiring,omitempty"`
 
 	component platformrelease.Component
+	wiring    *wiringChange
 }
 
 // Plan is the full update plan.
@@ -76,6 +80,13 @@ type Plan struct {
 	CRDPreview []CRDResult `json:"crdPreview,omitempty"`
 	// ImageBuilds lists unique Built images to build or reuse when --build is set.
 	ImageBuilds []ImageBuildAction `json:"imageBuilds,omitempty"`
+	// PlatformObjects previews the ServiceAccount/RBAC objects the release
+	// manages: create, update, or skipped when they already match.
+	PlatformObjects []ObjectResult `json:"platformObjects,omitempty"`
+	// allObjects are the release's declared objects; objects are those that
+	// still need a create or update after comparing with the cluster.
+	allObjects []platformrelease.PlatformObject
+	objects    []platformrelease.PlatformObject
 	// crdsYAML is the multi-document YAML applied when ApplyCRDs is true.
 	// It is omitted from JSON output (large); use CRDNames in plans.
 	crdsYAML  string
@@ -97,7 +108,7 @@ func (p *Plan) Changed() []Row {
 
 // NeedsApply reports whether the plan would mutate the cluster (CRDs and/or images).
 func (p *Plan) NeedsApply() bool {
-	return p != nil && (p.ApplyCRDs || len(p.Changed()) > 0)
+	return p != nil && (p.ApplyCRDs || len(p.objects) > 0 || len(p.Changed()) > 0)
 }
 
 // Blocked returns rows blocked by a safety rule.
@@ -201,6 +212,17 @@ func BuildPlan(ctx context.Context, cs kubernetes.Interface, m *platformrelease.
 			plan.CRDNames = names
 			plan.crdsYAML = filtered
 			plan.Warnings = append(plan.Warnings, fmt.Sprintf("release %s applies CustomResourceDefinitions before image rollouts: %s", m.Version, strings.Join(names, ", ")))
+		}
+	}
+	if strings.TrimSpace(m.PlatformObjects) != "" {
+		if len(sel.Only) > 0 {
+			plan.Warnings = append(plan.Warnings, fmt.Sprintf("release %s declares platform ServiceAccount/RBAC objects, but --only is set so they are skipped; re-run without --only to apply them", m.Version))
+		} else {
+			objs, err := platformrelease.ParsePlatformObjects(m.PlatformObjects)
+			if err != nil {
+				return nil, core.WrapWithBase(core.ErrUpdateManifestInvalid, err, fmt.Sprintf("release %s platform objects: %v", m.Version, err))
+			}
+			plan.allObjects = objs
 		}
 	}
 	only := sel.onlySet()
@@ -336,6 +358,15 @@ func planComponent(ctx context.Context, cs kubernetes.Interface, m *platformrele
 		row.Notes = append(row.Notes, "running digest already matches; pinning spec to digest")
 	default:
 		row.Action = ActionUpdate
+	}
+	if change, drift := planWiring(deploy, container, entry.Wiring); change != nil {
+		row.wiring = change
+		row.Wiring = drift
+		if row.Action == ActionUnchanged {
+			row.Action = ActionUpdate
+			row.Reason = "image matches release; Deployment wiring differs"
+			row.TargetImage = row.CurrentImage
+		}
 	}
 	if row.Action == ActionUnchanged {
 		row.Reason = "image matches release"

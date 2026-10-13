@@ -143,8 +143,9 @@ card shows the dashboard and panel links together, and only when runtime-api
 marks the Grafana link available. runtime-api does not probe Grafana, so
 `mcp-runtime cluster doctor` reports **platform Grafana
 provisioning** drift (missing dashboard, unpinned Prometheus uid, or missing
-mounts); rerun setup to repair it. `mcp-runtime update` changes images only,
-so it does not repair provisioning drift.
+mounts); rerun setup to repair it. `mcp-runtime update` changes images and
+the ServiceAccounts, RBAC and Deployment wiring a release declares, so it does
+not repair Grafana provisioning drift (ConfigMaps).
 
 Grafana has two independent authentication layers: the platform ingress gate
 (`platform-admin-auth`) and Grafana's own persisted admin account. Passing the

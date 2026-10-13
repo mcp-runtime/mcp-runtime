@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Changed
+
+- `mcp-runtime update` now applies the ServiceAccounts, Roles/ClusterRoles, bindings and per-component Deployment wiring (ServiceAccount, token mount, required env) that a release declares in `platform-manifest.json` (`platformObjects`, component `wiring`), in addition to images and CRDs. Declared RBAC is validated (no wildcard or `escalate`/`bind`/`impersonate` rules, platform namespaces only, bindings only to roles in the bundle), only differing objects are written, previous wiring is restored if a rollout fails, and `--only` skips objects and blocks workloads that need a missing ServiceAccount. Releases that only add such objects no longer need full setup. Use the matching CLI release: older CLIs reject the new manifest fields. Declared objects live in `config/release/wiring.yaml` and are checked against `k8s/` by a test.
+
 ## [0.7.2] - 2026-10-13
 
 This patch restores usage analytics for MCP servers whose gateway sidecars were
