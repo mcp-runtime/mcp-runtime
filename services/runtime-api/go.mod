@@ -3,7 +3,7 @@ module mcp-runtime-api
 go 1.26.9
 
 require (
-	github.com/ClickHouse/clickhouse-go/v2 v2.48.0
+	github.com/ClickHouse/clickhouse-go/v2 v2.49.0
 	go.uber.org/automaxprocs v1.6.0
 	go.uber.org/zap v1.28.0
 	k8s.io/api v0.37.1
@@ -14,7 +14,7 @@ require (
 
 require (
 	github.com/ClickHouse/ch-go v0.74.0 // indirect
-	github.com/andybalholm/brotli v1.2.2 // indirect
+	github.com/andybalholm/brotli v1.2.6 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
