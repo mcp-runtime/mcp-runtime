@@ -1,0 +1,116 @@
+# cert-manager approver-policy policies for the MCP Runtime hosted platform.
+#
+# With cert-manager's default approver disabled, every CertificateRequest needs
+# a policy that approves it. These three policies cover everything the platform
+# requests and, crucially, only the runtime API may obtain a session-bound
+# SPIFFE identity certificate (/ns/<namespace>/session/<name>):
+#
+#   mcp-session-certificates  requester: mcp-runtime-api   issuer: mcp-runtime-ca
+#   mcp-workload-tls          requester: cert-manager      issuer: mcp-runtime-ca
+#   mcp-public-acme           requester: cert-manager      issuer: letsencrypt-prod
+#
+# The trust domain (mcpruntime.org) and Traefik identity (kube-system/traefik)
+# must match MCP_TRUST_DOMAIN and MCP_INGRESS_CONTROLLER_* on the operator.
+---
+apiVersion: policy.cert-manager.io/v1alpha1
+kind: CertificateRequestPolicy
+metadata:
+  name: mcp-session-certificates
+spec:
+  allowed:
+    isCA: false
+    usages: ["digital signature", "client auth"]
+    uris:
+      required: true
+      values: ["spiffe://mcpruntime.org/ns/*/session/*"]
+  constraints:
+    maxDuration: 24h
+  selector:
+    issuerRef:
+      group: cert-manager.io
+      kind: ClusterIssuer
+      name: mcp-runtime-ca
+---
+apiVersion: policy.cert-manager.io/v1alpha1
+kind: CertificateRequestPolicy
+metadata:
+  name: mcp-workload-tls
+spec:
+  allowed:
+    isCA: false
+    usages: ["digital signature", "key encipherment", "server auth", "client auth"]
+    # Gateway server certificates and registry-internal TLS carry DNS names.
+    dnsNames:
+      values: ["*"]
+    # The only URI cert-manager may request on its own is the Traefik proxy
+    # identity. Session URIs are deliberately not allowed here.
+    uris:
+      values: ["spiffe://mcpruntime.org/ns/kube-system/sa/traefik"]
+  selector:
+    issuerRef:
+      group: cert-manager.io
+      kind: ClusterIssuer
+      name: mcp-runtime-ca
+---
+apiVersion: policy.cert-manager.io/v1alpha1
+kind: CertificateRequestPolicy
+metadata:
+  name: mcp-public-acme
+spec:
+  allowed:
+    isCA: false
+    usages: ["digital signature", "key encipherment", "server auth"]
+    dnsNames:
+      values: ["mcpruntime.org", "*.mcpruntime.org"]
+  selector:
+    issuerRef:
+      group: cert-manager.io
+      kind: ClusterIssuer
+      name: letsencrypt-prod
+---
+# A policy applies to a requester only when that requester may "use" it.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: mcp-use-session-certificate-policy
+rules:
+  - apiGroups: ["policy.cert-manager.io"]
+    resources: ["certificaterequestpolicies"]
+    verbs: ["use"]
+    resourceNames: ["mcp-session-certificates"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: mcp-use-session-certificate-policy
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: mcp-use-session-certificate-policy
+subjects:
+  - kind: ServiceAccount
+    name: mcp-runtime-api
+    namespace: mcp-platform
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: mcp-use-certmanager-policies
+rules:
+  - apiGroups: ["policy.cert-manager.io"]
+    resources: ["certificaterequestpolicies"]
+    verbs: ["use"]
+    resourceNames: ["mcp-workload-tls", "mcp-public-acme"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: mcp-use-certmanager-policies
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: mcp-use-certmanager-policies
+subjects:
+  - kind: ServiceAccount
+    name: cert-manager
+    namespace: cert-manager

@@ -7,9 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
-### Fixed
+### Added
 
-- Namespace node pull credentials now include the doctor smoke image (`mcp-runtime-doctor-smoke`) next to the gateway image. On installs with scoped registry authentication, `cluster diagnostics` failed its `mcp-servers image pull smoke` and `MCPServer reconcile smoke` checks because the registry broker returned 403 for that repository. New namespaces get the corrected scope; rotate existing ones once with `mcp-runtime registry enable-auth --pull-namespace <namespace> --realm ...`.
+- `config/cert-manager/approval-policies.yaml` and `hack/qa/approval-policy-rehearsal.sh`: a tested cert-manager approver-policy set for the workload issuer (only the runtime API may obtain a session-bound SPIFFE identity certificate; platform and public certificates still issue and renew) plus a Kind rehearsal that asserts approval, denial and renewal. `docs/connect-clients.md` documents the production order and rollback. Required before `MCP_ADAPTER_CERTIFICATES=true` on a production install.
+
 
 ### Changed
 
@@ -25,6 +26,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 - Gateway metrics now distinguish configured tools, policy outcomes and HTTP status, with slow-tool latency buckets and sampled trace exemplars. Tool labels are bounded; unknown names share one bucket. Prometheus/Grafana can link a latency observation to Tempo. ([#300](https://github.com/mcp-runtime/mcp-runtime/issues/300))
 
 ### Fixed
+
+- Namespace node pull credentials now include the doctor smoke image (`mcp-runtime-doctor-smoke`) next to the gateway image. On installs with scoped registry authentication, `cluster diagnostics` failed its `mcp-servers image pull smoke` and `MCPServer reconcile smoke` checks because the registry broker returned 403 for that repository. New namespaces get the corrected scope; rotate existing ones once with `mcp-runtime registry enable-auth --pull-namespace <namespace> --realm ...`.
 
 - Platform API, Runtime API, Analytics API and UI Deployments set resolver `ndots: "3"` (as ingest already did) so four-dot cluster service names resolve directly instead of expanding through node-inherited search domains that delayed cold authenticated requests by seconds. The change is in the setup manifests: it reaches an existing cluster on the next setup, not an image-only update ([#706](https://github.com/mcp-runtime/mcp-runtime/issues/706)).
 

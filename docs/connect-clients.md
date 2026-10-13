@@ -311,6 +311,46 @@ back by re-enabling the default approver). The runtime API also rejects any
 issued certificate whose URI, key, usages, or lifetime differ from the submitted
 CSR, and its ClusterRole only grants `create` and `get` on `CertificateRequests`.
 
+**Approval policies for production.** `config/cert-manager/approval-policies.yaml`
+holds a tested policy set. Turning off cert-manager's default approver is
+cluster-wide, so every request the platform makes needs a policy:
+
+| Policy | Requester | Issuer | Allows |
+|---|---|---|---|
+| `mcp-session-certificates` | `mcp-platform/mcp-runtime-api` | `mcp-runtime-ca` | one `spiffe://<trust-domain>/ns/*/session/*` URI, usages `digital signature` + `client auth`, no DNS names, not a CA |
+| `mcp-workload-tls` | `cert-manager/cert-manager` | `mcp-runtime-ca` | gateway/registry server certificates and the Traefik proxy URI only; never a session URI |
+| `mcp-public-acme` | `cert-manager/cert-manager` | `letsencrypt-prod` | `mcpruntime.org` and `*.mcpruntime.org` server certificates |
+
+Adjust the trust domain and the Traefik identity in the file to match
+`MCP_TRUST_DOMAIN` and `MCP_INGRESS_CONTROLLER_*`, and the public domain to your
+own. A request that no policy applies to is never approved and never issued; it
+stays pending.
+
+Rehearse first on a throwaway Kind cluster (it creates and removes its own
+cluster and kubeconfig, and asserts approval, denial and renewal):
+
+```bash
+hack/qa/approval-policy-rehearsal.sh
+```
+
+Then, in this order, with the production kubeconfig passed explicitly:
+
+1. Install approver-policy for your cert-manager version (for cert-manager
+   v1.16: `helm install approver-policy jetstack/cert-manager-approver-policy
+   --version v0.17.0 -n cert-manager --wait`). It changes nothing yet.
+2. `kubectl apply -f config/cert-manager/approval-policies.yaml` and confirm all
+   three policies report `Ready=True`.
+3. Add `--controllers=*,-certificaterequests-approver` to the `cert-manager`
+   Deployment arguments. Keep a copy of the Deployment YAML first.
+4. Verify a gateway certificate and a session certificate still issue, and that
+   no `CertificateRequest` is left pending.
+5. Only then set `MCP_WORKLOAD_ISSUER_APPROVAL_ACK=true` for setup and enable
+   `MCP_ADAPTER_CERTIFICATES=true` on the operator.
+
+To roll back, remove that argument (or reapply the saved Deployment); the default
+approver resumes immediately. Install approver-policy and its policies before
+disabling the default approver, never after.
+
 OAuth is independent. Omit `spec.auth` for a cert-only governed route; add
 `spec.auth` only when direct clients (or adapters calling an OAuth-enabled
 target) need a bearer. Do not apply empty `auth: {}` unless you intend to turn

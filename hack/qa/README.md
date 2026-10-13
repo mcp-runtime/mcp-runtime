@@ -11,6 +11,7 @@ Deterministic live-cluster checks for the Kind contributor context
 | `multitenancy-test.sh` | CLI/API multi-team demo on loopback or disposable `.e2e.mcpruntime.org` targets |
 | `image-cache/` | Content-hash image reuse consumed by QA E2E |
 | `k8s-hardening-check.sh` | Namespace inventory, NetworkPolicy presence, privileged/hostNetwork |
+| `approval-policy-rehearsal.sh` | Creates its own Kind cluster and proves the workload-issuer approval policies (session identity only for the runtime API, platform certificates still issue and renew) |
 
 Related:
 
