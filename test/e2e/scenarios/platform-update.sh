@@ -179,7 +179,8 @@ run_e2e_platform_update_scenario() {
   fi
   grep -Fq "${cluster_id}" "${dir}/wrong-cluster.txt"
   platform_update_cli --release-manifest "${dir}/current.json" --dry-run --expect-cluster-id "${cluster_id}" >/dev/null
-  platform_update_assert_generations "${before}"
+  # ui was legitimately rolled by the digest-pin step above; nothing else may change.
+  platform_update_assert_generations "${after_pin}"
 
   echo "[platform-update] declared ServiceAccount, ConfigMap and wiring are applied and roll only what changed"
   local config_before
@@ -220,7 +221,10 @@ run_e2e_platform_update_scenario() {
   kubectl delete configmap mcp-update-e2e -n mcp-observability >/dev/null
   kubectl delete serviceaccount mcp-update-e2e -n mcp-observability >/dev/null
   kubectl set env deployment/mcp-ui -n mcp-platform -c ui MCP_UPDATE_E2E- >/dev/null
-  kubectl patch deployment mcp-ui -n mcp-platform --type=json -p '[{"op":"remove","path":"/spec/template/spec/dnsConfig"}]' >/dev/null 2>&1 || true
+  # Remove only the probe's resolver option; the platform's own ndots option stays.
+  kubectl get deployment mcp-ui -n mcp-platform -o json \
+    | jq 'del(.spec.template.spec.dnsConfig.options[]? | select(.name == "attempts")) | if ((.spec.template.spec.dnsConfig.options // []) | length) == 0 then del(.spec.template.spec.dnsConfig) else . end' \
+    | kubectl replace -f - >/dev/null
   kubectl patch deployment mcp-processor -n mcp-observability --type=json \
     -p '[{"op":"remove","path":"/spec/template/metadata/annotations/mcpruntime.org~1config-hash.mcp-update-e2e"}]' >/dev/null 2>&1 || true
   rollout_status_with_logs mcp-observability deploy mcp-processor 300s
