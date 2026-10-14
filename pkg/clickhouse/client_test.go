@@ -155,6 +155,8 @@ func TestScanEventRow(t *testing.T) {
 			"sess-1",
 			"allow",
 			"add",
+			"team-actor",
+			"team-acme",
 			`{"value":1}`,
 		},
 	}
@@ -175,6 +177,9 @@ func TestScanEventRow(t *testing.T) {
 	if row.TeamID != "team-acme" {
 		t.Fatalf("unexpected team ID: got %q want team-acme", row.TeamID)
 	}
+	if row.SubjectTeamID != "team-actor" || row.ResourceTeamID != "team-acme" {
+		t.Fatalf("actor/authority fields lost: %+v", row)
+	}
 }
 
 func TestScanEventRowWrapsInvalidJSONPayload(t *testing.T) {
@@ -186,6 +191,8 @@ func TestScanEventRowWrapsInvalidJSONPayload(t *testing.T) {
 			"",
 			"gateway",
 			"tools/call",
+			"",
+			"",
 			"",
 			"",
 			"",

@@ -28,14 +28,19 @@ spec:
             - configMapRef:
                 name: mcp-shared-config
           command: ["/bin/sh", "-c"]
+          # Run schema initialization before rolling out analytics-api queries.
+          # Legacy team_id remains resource authority; missing subject attribution
+          # stays unknown rather than being inferred from that authority.
           args:
             - >-
               clickhouse-client --host=clickhouse --query "CREATE DATABASE IF NOT EXISTS ${CLICKHOUSE_DB}";
-              clickhouse-client --host=clickhouse --query "CREATE TABLE IF NOT EXISTS ${CLICKHOUSE_DB}.events (timestamp DateTime64(3), trace_id String, source String, event_type String, payload String, server String MATERIALIZED JSONExtractString(payload, 'server'), namespace String MATERIALIZED JSONExtractString(payload, 'namespace'), team_id String MATERIALIZED JSONExtractString(payload, 'team_id'), cluster String MATERIALIZED JSONExtractString(payload, 'cluster'), human_id String MATERIALIZED JSONExtractString(payload, 'human_id'), agent_id String MATERIALIZED JSONExtractString(payload, 'agent_id'), session_id String MATERIALIZED JSONExtractString(payload, 'session_id'), decision String MATERIALIZED JSONExtractString(payload, 'decision'), tool_name String MATERIALIZED JSONExtractString(payload, 'tool_name')) ENGINE = MergeTree ORDER BY timestamp";
+              clickhouse-client --host=clickhouse --query "CREATE TABLE IF NOT EXISTS ${CLICKHOUSE_DB}.events (timestamp DateTime64(3), trace_id String, source String, event_type String, payload String, server String MATERIALIZED JSONExtractString(payload, 'server'), namespace String MATERIALIZED JSONExtractString(payload, 'namespace'), team_id String MATERIALIZED JSONExtractString(payload, 'team_id'), subject_team_id String MATERIALIZED JSONExtractString(payload, 'subject_team_id'), resource_team_id String MATERIALIZED if(JSONExtractString(payload, 'resource_team_id') != '', JSONExtractString(payload, 'resource_team_id'), JSONExtractString(payload, 'team_id')), cluster String MATERIALIZED JSONExtractString(payload, 'cluster'), human_id String MATERIALIZED JSONExtractString(payload, 'human_id'), agent_id String MATERIALIZED JSONExtractString(payload, 'agent_id'), session_id String MATERIALIZED JSONExtractString(payload, 'session_id'), decision String MATERIALIZED JSONExtractString(payload, 'decision'), tool_name String MATERIALIZED JSONExtractString(payload, 'tool_name')) ENGINE = MergeTree ORDER BY timestamp";
               clickhouse-client --host=clickhouse --query "ALTER TABLE ${CLICKHOUSE_DB}.events ADD COLUMN IF NOT EXISTS trace_id String AFTER timestamp";
               clickhouse-client --host=clickhouse --query "ALTER TABLE ${CLICKHOUSE_DB}.events ADD COLUMN IF NOT EXISTS server String MATERIALIZED JSONExtractString(payload, 'server')";
               clickhouse-client --host=clickhouse --query "ALTER TABLE ${CLICKHOUSE_DB}.events ADD COLUMN IF NOT EXISTS namespace String MATERIALIZED JSONExtractString(payload, 'namespace')";
               clickhouse-client --host=clickhouse --query "ALTER TABLE ${CLICKHOUSE_DB}.events ADD COLUMN IF NOT EXISTS team_id String MATERIALIZED JSONExtractString(payload, 'team_id')";
+              clickhouse-client --host=clickhouse --query "ALTER TABLE ${CLICKHOUSE_DB}.events ADD COLUMN IF NOT EXISTS subject_team_id String MATERIALIZED JSONExtractString(payload, 'subject_team_id')";
+              clickhouse-client --host=clickhouse --query "ALTER TABLE ${CLICKHOUSE_DB}.events ADD COLUMN IF NOT EXISTS resource_team_id String MATERIALIZED if(JSONExtractString(payload, 'resource_team_id') != '', JSONExtractString(payload, 'resource_team_id'), JSONExtractString(payload, 'team_id'))";
               clickhouse-client --host=clickhouse --query "ALTER TABLE ${CLICKHOUSE_DB}.events ADD COLUMN IF NOT EXISTS cluster String MATERIALIZED JSONExtractString(payload, 'cluster')";
               clickhouse-client --host=clickhouse --query "ALTER TABLE ${CLICKHOUSE_DB}.events ADD COLUMN IF NOT EXISTS human_id String MATERIALIZED JSONExtractString(payload, 'human_id')";
               clickhouse-client --host=clickhouse --query "ALTER TABLE ${CLICKHOUSE_DB}.events ADD COLUMN IF NOT EXISTS agent_id String MATERIALIZED JSONExtractString(payload, 'agent_id')";
@@ -45,6 +50,8 @@ spec:
               clickhouse-client --host=clickhouse --query "ALTER TABLE ${CLICKHOUSE_DB}.events MATERIALIZE COLUMN server";
               clickhouse-client --host=clickhouse --query "ALTER TABLE ${CLICKHOUSE_DB}.events MATERIALIZE COLUMN namespace";
               clickhouse-client --host=clickhouse --query "ALTER TABLE ${CLICKHOUSE_DB}.events MATERIALIZE COLUMN team_id";
+              clickhouse-client --host=clickhouse --query "ALTER TABLE ${CLICKHOUSE_DB}.events MATERIALIZE COLUMN subject_team_id";
+              clickhouse-client --host=clickhouse --query "ALTER TABLE ${CLICKHOUSE_DB}.events MATERIALIZE COLUMN resource_team_id";
               clickhouse-client --host=clickhouse --query "ALTER TABLE ${CLICKHOUSE_DB}.events MATERIALIZE COLUMN cluster";
               clickhouse-client --host=clickhouse --query "ALTER TABLE ${CLICKHOUSE_DB}.events MATERIALIZE COLUMN human_id";
               clickhouse-client --host=clickhouse --query "ALTER TABLE ${CLICKHOUSE_DB}.events MATERIALIZE COLUMN agent_id";

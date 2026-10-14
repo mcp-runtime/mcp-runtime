@@ -10,20 +10,23 @@ import (
 
 // EventRow represents a single event from ClickHouse.
 type EventRow struct {
-	Timestamp time.Time       `json:"timestamp"`
-	TraceID   string          `json:"trace_id,omitempty"`
-	Source    string          `json:"source"`
-	EventType string          `json:"event_type"`
-	Server    string          `json:"server,omitempty"`
-	Namespace string          `json:"namespace,omitempty"`
-	TeamID    string          `json:"team_id,omitempty"`
-	Cluster   string          `json:"cluster,omitempty"`
-	HumanID   string          `json:"human_id,omitempty"`
-	AgentID   string          `json:"agent_id,omitempty"`
-	SessionID string          `json:"session_id,omitempty"`
-	Decision  string          `json:"decision,omitempty"`
-	ToolName  string          `json:"tool_name,omitempty"`
-	Payload   json.RawMessage `json:"payload"`
+	Timestamp time.Time `json:"timestamp"`
+	TraceID   string    `json:"trace_id,omitempty"`
+	Source    string    `json:"source"`
+	EventType string    `json:"event_type"`
+	Server    string    `json:"server,omitempty"`
+	Namespace string    `json:"namespace,omitempty"`
+	// TeamID retains its existing resource authority meaning.
+	TeamID         string          `json:"team_id,omitempty"`
+	SubjectTeamID  string          `json:"subject_team_id,omitempty"`
+	ResourceTeamID string          `json:"resource_team_id,omitempty"`
+	Cluster        string          `json:"cluster,omitempty"`
+	HumanID        string          `json:"human_id,omitempty"`
+	AgentID        string          `json:"agent_id,omitempty"`
+	SessionID      string          `json:"session_id,omitempty"`
+	Decision       string          `json:"decision,omitempty"`
+	ToolName       string          `json:"tool_name,omitempty"`
+	Payload        json.RawMessage `json:"payload"`
 }
 
 // SourceStat represents event counts by source.
@@ -50,7 +53,7 @@ type DashboardSummary struct {
 }
 
 const (
-	eventSelectColumns = "timestamp, trace_id, source, event_type, server, namespace, team_id, cluster, human_id, agent_id, session_id, decision, tool_name, payload"
+	eventSelectColumns = "timestamp, trace_id, source, event_type, server, namespace, team_id, cluster, human_id, agent_id, session_id, decision, tool_name, subject_team_id, resource_team_id, payload"
 	maxEventOffset     = 100000
 )
 
@@ -157,6 +160,8 @@ type EventFilters struct {
 	Server                  string
 	Namespace               string
 	TeamID                  string
+	SubjectTeamID           string
+	ResourceTeamID          string
 	Cluster                 string
 	HumanID                 string
 	AgentID                 string
@@ -231,6 +236,14 @@ func buildEventFilterWhereClause(filters EventFilters) (string, []interface{}) {
 	if filters.TeamID != "" {
 		conditions = append(conditions, "team_id = ?")
 		args = append(args, filters.TeamID)
+	}
+	if filters.SubjectTeamID != "" {
+		conditions = append(conditions, "subject_team_id = ?")
+		args = append(args, filters.SubjectTeamID)
+	}
+	if filters.ResourceTeamID != "" {
+		conditions = append(conditions, "resource_team_id = ?")
+		args = append(args, filters.ResourceTeamID)
 	}
 	if filters.Cluster != "" {
 		conditions = append(conditions, "cluster = ?")
@@ -350,6 +363,8 @@ func scanEventRow(scanner RowScanner, row *EventRow) error {
 		&row.SessionID,
 		&row.Decision,
 		&row.ToolName,
+		&row.SubjectTeamID,
+		&row.ResourceTeamID,
 		&payloadStr,
 	); err != nil {
 		return err

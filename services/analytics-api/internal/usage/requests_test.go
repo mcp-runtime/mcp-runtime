@@ -25,6 +25,22 @@ func TestAdminRequestFiltersAreParameterizedAndCombined(t *testing.T) {
 	}
 }
 
+func TestTenantUsageScopeDoesNotBecomeActorTeamScope(t *testing.T) {
+	where, args := WhereClause(QueryScope{Namespaces: []string{"team-a"}, TeamIDs: []string{"resource-a"}, Since: time.Unix(100, 0), Until: time.Unix(200, 0)})
+	if !strings.Contains(where, "JSONExtractString(payload, 'team_id')") || strings.Contains(where, "subject_team_id") {
+		t.Fatalf("tenant ownership no longer uses resource authority: %s", where)
+	}
+	found := false
+	for _, arg := range args {
+		if arg == "resource-a" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("authority scope omitted: %#v", args)
+	}
+}
+
 func TestPublicScopeDoesNotIncludeOrganizationCatalog(t *testing.T) {
 	_, args := WhereClause(QueryScope{Scope: "public"})
 	found := false
