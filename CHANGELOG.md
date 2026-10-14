@@ -26,6 +26,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 - Admin server deployment now prepares public/org catalog namespace permissions, resource controls, network policy and registry pulls just like user deployment, so a newly enabled catalog can host its first MCP server ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
 - The public MCPSnoop demo enables its gateway in observe mode, retaining anonymous access while exposing trace IDs, correlated logs, tool metrics and analytics ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
+- Admin usage analytics now includes the per-server gateway events written with `<server>-gateway` source labels, instead of querying only the unused global `mcp-gateway` label ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
 
 ## [0.8.1] - 2026-10-14
 

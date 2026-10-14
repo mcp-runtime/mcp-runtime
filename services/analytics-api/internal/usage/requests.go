@@ -76,7 +76,10 @@ func catalogScopeNamespaces(scope publishscope.Scope) []string {
 
 func appendRequestFilters(scope QueryScope, conditions []string, args []any) ([]string, []any) {
 	if scope.Admin {
-		conditions = append(conditions, "source = 'mcp-gateway'")
+		// The operator uses "<server-name>-gateway" by default, while a
+		// server may configure a custom source. Gateway requests carry their
+		// RPC method in the payload, so accept either signal.
+		conditions = append(conditions, "(endsWith(source, '-gateway') OR JSONExtractString(payload, 'rpc_method') != '')")
 	}
 	for _, filter := range []struct{ expression, value string }{
 		{"JSONExtractString(payload, 'rpc_method')", scope.RPCMethod},

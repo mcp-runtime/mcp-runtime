@@ -17,7 +17,7 @@ func TestAdminRequestFiltersAreParameterizedAndCombined(t *testing.T) {
 	if !strings.Contains(where, "JSONExtractString(payload, 'rpc_method') = ?") || strings.Contains(where, scope.RPCMethod) {
 		t.Fatal("unbound method filter:", where)
 	}
-	if !strings.Contains(where, "source = 'mcp-gateway'") || !strings.Contains(where, "namespace NOT IN") || !strings.Contains(where, "timestamp < ?") {
+	if !strings.Contains(where, "endsWith(source, '-gateway') OR JSONExtractString(payload, 'rpc_method') != ''") || !strings.Contains(where, "namespace NOT IN") || !strings.Contains(where, "timestamp < ?") {
 		t.Fatal("missing event/window/scope filter:", where)
 	}
 	if len(args) < 10 {
