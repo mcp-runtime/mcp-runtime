@@ -16,6 +16,9 @@ import { PageHeader } from "../../ui/PageHeader";
 import { ErrorState, LoadingState } from "../../ui/States";
 import { GrantForm, type GrantDraft } from "./accessForms";
 import { sessionState } from "./AccessControlPanel";
+import { AgentLifecycleDialog } from "./AgentLifecycleDialog";
+import { AccessLink, AuthorizingGrant, revocationLabel } from "../access/accessLinks";
+import { MetricGrid } from "../../ui/MetricCard";
 
 type Props = { id: string; platformAdmin: boolean; onBack: () => void };
 
@@ -37,6 +40,7 @@ export function AgentDetailPanel({ id, platformAdmin, onBack }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [lifecycle, setLifecycle] = useState(false);
 
   async function act(message: string, run: () => Promise<unknown>) {
     setBusy(true); setError(""); setNotice("");
@@ -50,7 +54,7 @@ export function AgentDetailPanel({ id, platformAdmin, onBack }: Props) {
   const { agent, grants, sessions, can_manage: canManage } = query.data;
   const canManageResource = (namespace: string) => canManage && (platformAdmin || namespace === teamNamespace);
   const grantColumns = buildColumns<GrantSummary>([
-    { id: "name", header: "Grant", rowHeader: true, cell: (grant) => <>{grant.name}<span className="cell-detail">{grant.namespace}</span></> },
+    { id: "name", header: "Grant", rowHeader: true, cell: (grant) => <AccessLink kind="grant" namespace={grant.namespace} name={grant.name} agent={agent.id} /> },
     { id: "server", header: "Server", cell: (grant) => grant.serverRef?.name || "—" },
     { id: "subject", header: "Human", cell: (grant) => grant.subject?.humanID || "Any team member" },
     { id: "trust", header: "Trust", cell: (grant) => grant.maxTrust || "—" },
@@ -63,11 +67,13 @@ export function AgentDetailPanel({ id, platformAdmin, onBack }: Props) {
     </div> : null },
   ]);
   const sessionColumns = buildColumns<SessionSummary>([
-    { id: "name", header: "Session", rowHeader: true, cell: (session) => <>{session.name}<span className="cell-detail">{session.namespace}</span></> },
+    { id: "name", header: "Session", rowHeader: true, cell: (session) => <AccessLink kind="session" namespace={session.namespace} name={session.name} agent={agent.id} /> },
     { id: "server", header: "Server", cell: (session) => session.serverRef?.name || "—" },
     { id: "human", header: "Human", cell: (session) => session.subject?.humanID || "—" },
+    { id: "grant", header: "Authorizing grant", cell: (session) => <AuthorizingGrant session={session} /> },
     { id: "expires", header: "Expires", cell: (session) => session.expiresAt ? formatTimestamp(session.expiresAt) : "No expiry" },
     { id: "status", header: "Status", cell: (session) => { const state = sessionState(session); return <StatusBadge tone={state.tone}>{state.label}</StatusBadge>; } },
+    { id: "cause", header: "Revocation cause", cell: revocationLabel },
     { id: "actions", header: "Actions", cell: (session) => canManageResource(session.namespace) && !session.revoked ? <Button variant="ghost" size="sm" disabled={busy} onClick={() => setConfirm({ title: `Revoke session “${session.name}”?`, body: "Future tool calls made with this session will be denied.", confirmLabel: "Revoke session", destructive: true, onConfirm: () => act(`Session “${session.name}” revoked.`, () => setSessionRevoked(session.namespace, session.name, true)) })}>Revoke</Button> : null },
   ]);
 
@@ -78,6 +84,9 @@ export function AgentDetailPanel({ id, platformAdmin, onBack }: Props) {
       <div><dt>Owning team</dt><dd>{agent.team_slug}</dd></div>
       <div><dt>Status</dt><dd><StatusBadge tone={agent.status === "active" ? "ready" : "attention"}>{agent.status}</StatusBadge></dd></div>
     </dl>
+    <MetricGrid label="Visible session lifecycle" metrics={["Active", "Expired", "Revoked"].map((label) => ({ label: `Visible ${label.toLowerCase()} sessions`, value: sessions.filter((session) => sessionState(session).label === label).length }))} />
+    <p className="section-note">Counts and history cover sessions visible to your account.</p>
+    {canManage ? <Button variant="secondary" onClick={() => setLifecycle(true)}>{agent.status === "active" ? "Deactivate agent" : "Reactivate agent"}</Button> : null}
     {notice ? <p className="notice notice-success" role="status">{notice}</p> : null}
     {error ? <p className="notice notice-danger" role="alert">{error}</p> : null}
     {canManage && agent.status === "active" && teamsQuery.isPending ? <LoadingState label="Loading agent team…" testId="agent-team-loading" /> : null}
@@ -93,5 +102,6 @@ export function AgentDetailPanel({ id, platformAdmin, onBack }: Props) {
     <section className="section"><h2 className="section-title">Sessions</h2><DataTable columns={sessionColumns} rows={sessions} rowKey={(session) => `${session.namespace}/${session.name}`} caption="Agent sessions visible to you, including expired and revoked history." regionLabel="Agent sessions" testId="agent-sessions-table" emptyMessage="No sessions visible." /></section>
     <section className="section"><h2 className="section-title">Connect this agent</h2><ol><li>Have a team owner or platform admin create an enabled grant for this agent and the target server.</li><li>Sign in with <code>mcp-runtime auth login --api-url &lt;platform-url&gt;</code>.</li><li>Start <code>mcp-runtime adapter proxy --runtime-url &lt;https-mcp-url&gt; --server &lt;server&gt; --namespace &lt;namespace&gt; --agent {agent.id} --auto-refresh</code>. It creates an authorized session and enrolls a certificate in memory. For a saved certificate, use <code>mcp-runtime adapter enroll</code> with the same server, namespace, and agent.</li></ol><p className="section-note">The private key stays local. OAuth targets also require a bearer token from the MCP client. A grant alone does not establish a connection; direct clients follow the server’s gateway policy.</p></section>
     {confirm ? <ConfirmDialog {...confirm} busy={busy} onCancel={() => setConfirm(null)} /> : null}
+    {lifecycle ? <AgentLifecycleDialog agent={agent} onClose={() => setLifecycle(false)} onChanged={reload} /> : null}
   </div>;
 }

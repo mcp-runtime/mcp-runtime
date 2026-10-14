@@ -128,12 +128,16 @@ export function useUsage(enabled: boolean, limit: string, filters: UsageFilterPa
 export function useAccessActivity(
   enabled: boolean,
   kind: "grant" | "session",
-  name: string
+  name: string,
+  namespace: string
 ) {
   return useQuery({
-    queryKey: [ADMIN_QUERY_KEY, "events", kind, name],
-    queryFn: () =>
-      listEvents(kind === "session" ? { limit: "1000", session_id: name } : { limit: "1000" }),
+    queryKey: [ADMIN_QUERY_KEY, "events", kind, namespace, name],
+    queryFn: () => {
+      const until = new Date();
+      return listEvents({ limit: "1000", since: new Date(until.getTime() - 7 * 86400000).toISOString(), until: until.toISOString(),
+        ...(kind === "session" ? { matched_session: name, matched_session_namespace: namespace } : { matched_grant: name, matched_grant_namespace: namespace }) });
+    },
     enabled: enabled && Boolean(name),
   });
 }

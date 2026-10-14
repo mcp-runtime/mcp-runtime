@@ -14,6 +14,7 @@ export type ConfirmRequest = {
 type ConfirmDialogProps = ConfirmRequest & {
   onCancel: () => void;
   busy?: boolean;
+  confirmDisabled?: boolean;
   testId?: string;
   confirmTestId?: string;
   cancelTestId?: string;
@@ -29,6 +30,7 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
   busy,
+  confirmDisabled,
   testId = "confirm-dialog",
   confirmTestId = "confirm-dialog-confirm",
   cancelTestId = "confirm-dialog-cancel",
@@ -71,6 +73,7 @@ export function ConfirmDialog({
             variant={destructive ? "danger" : "primary"}
             onClick={() => void onConfirm()}
             busy={busy}
+            disabled={confirmDisabled}
             data-autofocus=""
             data-testid={confirmTestId}
           >

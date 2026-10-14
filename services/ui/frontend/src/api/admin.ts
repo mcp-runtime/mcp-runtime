@@ -216,6 +216,12 @@ export async function readOperations(filters: {
 export async function listEvents(params: {
   limit?: string;
   session_id?: string;
+  matched_grant?: string;
+  matched_grant_namespace?: string;
+  matched_session?: string;
+  matched_session_namespace?: string;
+  since?: string;
+  until?: string;
 }): Promise<GatewayEvent[]> {
   return asArray<GatewayEvent>(await fetchJSON(withQuery("/events", params)), "events");
 }

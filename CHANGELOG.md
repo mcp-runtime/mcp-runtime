@@ -15,6 +15,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Added
 
+- Agent session details now link exact recorded authorizing grants, show visible lifecycle counts, and preview and verify deactivation impact. Admin gateway audit links open shared namespace-qualified grant/session details with server-filtered seven-day decision activity; missing attribution and partial failures are explicit ([#549](https://github.com/mcp-runtime/mcp-runtime/issues/549), [#309](https://github.com/mcp-runtime/mcp-runtime/issues/309)).
 - Platform-api now provides Postgres session persistence and a dedicated, server-scoped gateway sync audience with revocation tombstones, bounded change retention, restore epochs, and atomic agent deactivation. Gateways authenticate with Pod-bound projected tokens without database credentials or the shared internal token; runtime/gateway migration is tracked separately in #659 ([#718](https://github.com/mcp-runtime/mcp-runtime/issues/718)).
 - An unauthenticated `test-mcpsnoop` example with read-only `echo` and `todays_info` tools and instructions for CLI publishing, deployment, and inspecting real MCP payloads with MCPSnoop ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
 - Server cards and details show a `Gateway` badge when the Runtime gateway is enabled, separately from readiness and authentication badges. The server API now reports `gatewayEnabled` explicitly ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).

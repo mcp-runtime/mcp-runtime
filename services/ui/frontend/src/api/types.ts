@@ -327,6 +327,11 @@ export type SessionSummary = {
   consentedTrust?: string;
   revoked: boolean;
   expiresAt?: string;
+  grantName?: string;
+  grantNamespace?: string;
+  revokedAt?: string;
+  revocationCause?: string;
+  policyVersion?: string;
   age?: string;
 };
 

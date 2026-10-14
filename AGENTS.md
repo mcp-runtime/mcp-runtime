@@ -106,6 +106,8 @@ Use targeted tests while iterating, then the full root suite before merge.
 Run tests inside touched service modules too. CLI help changes need golden
 updates under `test/golden/cli/testdata/`. Integration tests need envtest assets;
 pre-commit handles `KUBEBUILDER_ASSETS` for its integration hooks.
+UI changes also run the frontend unit/accessibility and Playwright browser
+workflows; see `docs/internals/testing.md#frontend-and-browser-regressions`.
 Staticcheck installation/version guidance lives in `hack/ci/staticcheck.sh`.
 Use `pre-commit install` and `pre-commit run --all-files` on an isolated runner.
 

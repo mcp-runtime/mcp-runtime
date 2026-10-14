@@ -35,6 +35,8 @@ tags
 /services/ui/frontend/dist/
 /services/ui/frontend/.vite/
 /services/ui/frontend/*.tsbuildinfo
+/services/ui/frontend/test-results/
+/services/ui/frontend/playwright-report/
 /services/ingest/mcp-ingest
 /services/processor/mcp-processor
 /services/mcp-gateway/mcp-gateway

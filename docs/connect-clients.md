@@ -21,6 +21,29 @@ session, so ask a team owner for an ID if the list is empty. Use the immutable
 `agt_...` ID returned by the directory in the grant and adapter commands below.
 A display name such as `Cursor` is not an agent ID.
 
+## Inspect authorization in the dashboard
+
+Open **Agents**, select an agent, and inspect its visible session history.
+Each session shows the authorizing human and the exact namespace/name of its
+recorded grant. Follow either the session or grant link to the shared access
+detail view. A missing link is labelled unknown; the UI does not guess a grant
+from overlapping rules. Records outside your permitted scope remain unavailable.
+
+The lifecycle summary counts visible active, expired and revoked sessions. Before
+deactivation, the confirmation lists visible sessions that will lose access.
+Afterward, it re-reads agent and session state, shows recorded revocation causes,
+and keeps partial failures visible. Counts cover your view; deactivation also
+revokes sessions outside it. Reactivation preserves the ID and history and does
+not restore revoked sessions.
+
+Administrators can open **Administration → Usage analytics → Gateway audit**
+and load the latest 100 events. Matched grant/session links include their recorded
+namespaces. The shared detail view queries the most recent 1,000 matching events
+from the last seven days and shows loaded allow/deny/would-deny counts. This is a
+bounded view of delivered events, not a complete usage total. Gateway events
+remain restricted to administrators; an unavailable analytics service is shown
+as an error rather than an empty history.
+
 ## Required grant
 
 Create an enabled `MCPAccessGrant` before starting the adapter. The grant must

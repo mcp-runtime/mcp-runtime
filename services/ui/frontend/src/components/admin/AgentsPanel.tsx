@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { createTeamAgent, listTeamAgents, renameAgent, setAgentActive } from "../../api/admin";
+import { createTeamAgent, listTeamAgents, renameAgent } from "../../api/admin";
 import { isAdmin, type AgentRecord, type AuthStatus } from "../../api/types";
 import { ADMIN_QUERY_KEY, useAdminReload, useTeamAgents, useTeams } from "../../hooks/useAdminData";
 import { AgentDetailPanel } from "./AgentDetailPanel";
 import { AsyncSection } from "./AsyncSection";
 import { StatusBadge } from "../../ui/Badge";
 import { Button } from "../../ui/Button";
-import { ConfirmDialog, type ConfirmRequest } from "../../ui/ConfirmDialog";
+import { AgentLifecycleDialog } from "./AgentLifecycleDialog";
 import { CopyButton } from "../../ui/CopyButton";
 import { DataTable, buildColumns } from "../../ui/DataTable";
 import { SelectField, TextField } from "../../ui/Field";
@@ -30,7 +30,7 @@ export function AgentsPanel({ onSignIn, auth, initialTeam, initialAgent, onTeamC
   const [allPage, setAllPage] = useState(0);
   const [createName, setCreateName] = useState("");
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
-  const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
+  const [lifecycle, setLifecycle] = useState<AgentRecord | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -90,7 +90,6 @@ export function AgentsPanel({ onSignIn, auth, initialTeam, initialAgent, onTeamC
       setError(cause instanceof Error ? cause.message : "The change could not be applied.");
     } finally {
       setBusy(false);
-      setConfirm(null);
     }
   }
 
@@ -150,16 +149,7 @@ export function AgentsPanel({ onSignIn, auth, initialTeam, initialAgent, onTeamC
             size="sm"
             disabled={busy}
             data-testid={agent.status === "active" ? "agent-deactivate" : "agent-reactivate"}
-            onClick={() => {
-              const active = agent.status === "active";
-              setConfirm({
-                title: `${active ? "Deactivate" : "Reactivate"} agent “${agent.name}”?`,
-                body: active ? "The ID and history remain. All active sessions for this agent are revoked immediately." : "The existing ID can be selected for new grants and sessions again. Previously revoked sessions stay revoked.",
-                confirmLabel: active ? "Deactivate agent" : "Reactivate agent",
-                destructive: active,
-                onConfirm: () => runAction(`Agent “${agent.name}” ${active ? "deactivated" : "reactivated"}.`, () => setAgentActive(agent.id, !active)),
-              });
-            }}
+            onClick={() => setLifecycle(agent)}
           >{agent.status === "active" ? "Deactivate" : "Reactivate"}</Button>
         </div>
       ) : null,
@@ -212,7 +202,7 @@ export function AgentsPanel({ onSignIn, auth, initialTeam, initialAgent, onTeamC
         )}
       </section>
 
-      {confirm ? <ConfirmDialog {...confirm} busy={busy} onCancel={() => setConfirm(null)} testId="agent-confirm" confirmTestId="agent-confirm-yes" cancelTestId="agent-confirm-cancel" /> : null}
+      {lifecycle ? <AgentLifecycleDialog agent={lifecycle} onClose={() => setLifecycle(null)} onChanged={reload} /> : null}
     </>
   );
 }
