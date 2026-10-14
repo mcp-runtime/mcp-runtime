@@ -5746,8 +5746,34 @@ EOF
       exit 1
     fi
 
-    kubectl delete mcpagentsession "${ADAPTER_CERT_SESSION}" -n mcp-servers --ignore-not-found --wait=true
-    kubectl delete mcpaccessgrant "${ADAPTER_CERT_GRANT}" -n mcp-servers --ignore-not-found --wait=true
+    log_line policy "retirement must invalidate a working certificate after same-name republication"
+    wait_for_adapter_certificate_initialize "${ADAPTER_CERT_URL}" 200 "" \
+      "${WORKDIR}/adapter-before-retire-headers.txt" "${WORKDIR}/adapter-before-retire.json" true
+    RETIRE_PLATFORM_ENV=(
+      MCP_PLATFORM_API_URL="http://127.0.0.1:${PLATFORM_PORT}"
+      MCP_PLATFORM_API_TOKEN="${ADAPTER_PLATFORM_TOKEN}"
+    )
+    env "${RETIRE_PLATFORM_ENV[@]}" ./bin/mcp-runtime server delete "${OAUTH_SERVER_NAME}" --namespace mcp-servers
+    # Required cleanup must complete through the platform operation, without
+    # using a Kubernetes mutation to hide a retirement regression.
+    kubectl get mcpaccessgrants,mcpagentsessions -A -o json | python3 -c '
+import json, sys
+name = sys.argv[1]
+for item in json.load(sys.stdin)["items"]:
+    ref = item.get("spec", {}).get("serverRef", {})
+    namespace = ref.get("namespace") or item["metadata"]["namespace"]
+    if namespace == "mcp-servers" and ref.get("name") == name:
+        raise SystemExit("retirement left authorization: " + item["metadata"]["name"])
+' "${OAUTH_SERVER_NAME}"
+    kubectl wait --for=delete "mcpserver/${OAUTH_SERVER_NAME}" -n mcp-servers --timeout=120s
+    kubectl wait --for=delete "deployment/${OAUTH_SERVER_NAME}" -n mcp-servers --timeout=120s
+    # Repeating the supported operation must also complete orphan recovery.
+    env "${RETIRE_PLATFORM_ENV[@]}" ./bin/mcp-runtime server delete "${OAUTH_SERVER_NAME}" --namespace mcp-servers
+    env "${RETIRE_PLATFORM_ENV[@]}" ./bin/mcp-runtime server deploy "${OAUTH_SERVER_NAME}" \
+      --namespace mcp-servers --metadata-file "${OAUTH_METADATA_FILE}"
+    wait_for_named_server_ready "${OAUTH_SERVER_NAME}"
+    wait_for_adapter_certificate_initialize "${ADAPTER_CERT_URL}" 401 session_not_found \
+      "${WORKDIR}/adapter-after-retire-headers.txt" "${WORKDIR}/adapter-after-retire.json" true
     cleanup_mcp_server_and_wait "${WRONG_SERVER_NAME}" mcp-servers 120s
   fi
   fi

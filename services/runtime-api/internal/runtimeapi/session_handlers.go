@@ -162,6 +162,10 @@ func (s *AccessService) handleRuntimeSessionApply(w http.ResponseWriter, r *http
 		return
 	}
 
+	if grantAnnotations == nil {
+		grantAnnotations = map[string]string{}
+	}
+	grantAnnotations[mcpaccess.ServerUIDAnnotation] = string(targetServer.UID)
 	session := &mcpaccess.MCPAgentSession{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        req.Name,

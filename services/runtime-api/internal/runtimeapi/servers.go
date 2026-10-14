@@ -15,8 +15,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	runtimeaccess "mcp-runtime-api/internal/runtimeapi/access"
 	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
+	mcpaccess "mcp-runtime/pkg/access"
 	"mcp-runtime/pkg/controlplane"
 	"mcp-runtime/pkg/k8sclient"
 	"mcp-runtime/pkg/metadata"
@@ -230,6 +232,10 @@ func (s *RuntimeServer) handleRuntimeServerApply(w http.ResponseWriter, r *http.
 		writeAPIError(w, http.StatusConflict, msg)
 		return
 	}
+	if current != nil && (current.Annotations[mcpaccess.ServerRetiringAnnotation] == "true" || current.DeletionTimestamp != nil) {
+		writeAPIError(w, http.StatusConflict, "server is being retired; retry retirement before publishing")
+		return
+	}
 	// This is an API-layer guard. Strict global quota enforcement under highly
 	// concurrent publishes would need a shared reservation/locking mechanism.
 	rejection, err := s.Deployments().evaluateServerPublishPolicy(ctx, p, namespace, req.Name, current, time.Now().UTC())
@@ -439,6 +445,7 @@ func (s *RuntimeServer) ensurePublishedServerAnalyticsSecret(ctx context.Context
 				Labels: map[string]string{
 					"app.kubernetes.io/managed-by": "mcp-runtime",
 				},
+				Annotations: map[string]string{"mcpruntime.org/credential-server": serverName},
 			},
 			Type: corev1.SecretTypeOpaque,
 			Data: map[string][]byte{
@@ -646,27 +653,63 @@ func (s *RuntimeServer) handleRuntimeServerDelete(w http.ResponseWriter, r *http
 	defer cancel()
 	current, err := control.GetServer(ctx, namespace, name)
 	if apierrors.IsNotFound(err) {
-		writeJSON(w, http.StatusOK, map[string]any{"success": true, "namespace": namespace, "name": name})
-		return
+		current, err = nil, nil
 	}
 	if err != nil {
 		s.writeAudit(r.Context(), serverPublishAuditEvent(r, p, "server_retire", "error", name, namespace, "", err.Error()))
 		writeAPIError(w, http.StatusInternalServerError, "failed to inspect server")
 		return
 	}
-	if p.Role != roleAdmin && !serverWritableByPrincipal(*current, p) {
+	// Without the server's ownership labels, only a platform admin can safely
+	// recover orphaned access. Namespace membership alone does not establish
+	// ownership of a previously retired, individually owned server.
+	if p.Role != roleAdmin && (current == nil || !serverWritableByPrincipal(*current, p)) {
 		msg := "server is not owned by this user"
 		s.writeAudit(r.Context(), serverPublishAuditEvent(r, p, "server_retire", "denied", name, namespace, "", msg))
 		writeAPIError(w, http.StatusForbidden, msg)
 		return
 	}
-	if err := control.DeleteServer(ctx, namespace, name); err != nil {
-		s.writeAudit(r.Context(), serverPublishAuditEvent(r, p, "server_retire", "error", name, namespace, current.Spec.Image, err.Error()))
-		code, msg := k8sclient.HTTPStatusFromK8sError(err)
-		writeAPIError(w, code, msg)
+	image := ""
+	if current != nil {
+		image = current.Spec.Image
+		patch, _ := json.Marshal(map[string]any{"metadata": map[string]any{"uid": current.UID, "resourceVersion": current.ResourceVersion, "annotations": map[string]string{mcpaccess.ServerRetiringAnnotation: "true"}}})
+		if _, err := s.k8sClients.Dynamic.Resource(controlplane.MCPServerGVR).Namespace(namespace).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{}); err != nil {
+			s.writeAudit(r.Context(), serverPublishAuditEvent(r, p, "server_retire", "error", name, namespace, image, err.Error()))
+			writeAPIError(w, http.StatusInternalServerError, "failed to mark server retirement; retry retirement")
+			return
+		}
+	}
+	manager := s.accessMgr
+	if manager == nil && s.k8sClients != nil {
+		manager = mcpaccess.NewManager(s.k8sClients.Dynamic, s.k8sClients.Clientset)
+	}
+	if manager == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "access cleanup not available")
 		return
 	}
-	s.writeAudit(r.Context(), serverPublishAuditEvent(r, p, "server_retire", "success", name, namespace, current.Spec.Image, ""))
+	if err := manager.RetireServerAccess(ctx, namespace, name); err != nil {
+		s.writeAudit(r.Context(), serverPublishAuditEvent(r, p, "server_retire", "error", name, namespace, image, err.Error()))
+		writeAPIError(w, http.StatusInternalServerError, "failed to retire server authorization; retry retirement")
+		return
+	}
+	if err := s.retireServerCredentials(ctx, namespace, name, current); err != nil {
+		s.writeAudit(r.Context(), serverPublishAuditEvent(r, p, "server_retire", "error", name, namespace, image, err.Error()))
+		writeAPIError(w, http.StatusInternalServerError, "failed to retire server credentials; retry retirement")
+		return
+	}
+	// Delete only the deployment whose authority was checked. An orphan retry
+	// must not delete a concurrently published replacement.
+	if current != nil {
+		uid := current.UID
+		err := s.k8sClients.Dynamic.Resource(controlplane.MCPServerGVR).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &uid}})
+		if err != nil && !apierrors.IsNotFound(err) {
+			s.writeAudit(r.Context(), serverPublishAuditEvent(r, p, "server_retire", "error", name, namespace, image, err.Error()))
+			code, msg := k8sclient.HTTPStatusFromK8sError(err)
+			writeAPIError(w, code, msg)
+			return
+		}
+	}
+	s.writeAudit(r.Context(), serverPublishAuditEvent(r, p, "server_retire", "success", name, namespace, image, "server authorization and exclusively managed credentials retired"))
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "namespace": namespace, "name": name})
 }
 

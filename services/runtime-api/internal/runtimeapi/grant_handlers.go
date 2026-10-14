@@ -202,8 +202,9 @@ func (s *AccessService) handleRuntimeGrantApply(w http.ResponseWriter, r *http.R
 
 	grant := &mcpaccess.MCPAccessGrant{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      req.Name,
-			Namespace: runtimeaccess.DefaultAccessNamespace(req.Namespace),
+			Name:        req.Name,
+			Namespace:   runtimeaccess.DefaultAccessNamespace(req.Namespace),
+			Annotations: map[string]string{mcpaccess.ServerUIDAnnotation: string(targetServer.UID)},
 		},
 		Spec: mcpaccess.MCPAccessGrantSpec{
 			ServerRef:          req.ServerRef,

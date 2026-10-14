@@ -102,6 +102,9 @@ func (m *Manager) GetMCPServerRef(ctx context.Context, ref ServerReference) (*mc
 	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, &server); err != nil {
 		return nil, fmt.Errorf("decode serverRef: %w", err)
 	}
+	if server.Annotations[ServerRetiringAnnotation] == "true" || server.DeletionTimestamp != nil {
+		return nil, fmt.Errorf("serverRef is being retired: %s/%s", ns, name)
+	}
 	return &server, nil
 }
 
@@ -163,6 +166,9 @@ func (m *Manager) GetGrant(ctx context.Context, name, namespace string) (*MCPAcc
 
 // ApplyGrant creates or updates an MCPAccessGrant resource.
 func (m *Manager) ApplyGrant(ctx context.Context, grant *MCPAccessGrant) (*MCPAccessGrant, error) {
+	if err := m.bindServerUID(ctx, grant, grant.Spec.ServerRef); err != nil {
+		return nil, err
+	}
 	obj, err := toUnstructured(grant, "MCPAccessGrant")
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert grant %s/%s: %w", grant.Namespace, grant.Name, err)
@@ -254,6 +260,9 @@ func (m *Manager) GetSession(ctx context.Context, name, namespace string) (*MCPA
 
 // ApplySession creates or updates an MCPAgentSession resource.
 func (m *Manager) ApplySession(ctx context.Context, session *MCPAgentSession) (*MCPAgentSession, error) {
+	if err := m.bindServerUID(ctx, session, session.Spec.ServerRef); err != nil {
+		return nil, err
+	}
 	obj, err := toUnstructured(session, "MCPAgentSession")
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert session %s/%s: %w", session.Namespace, session.Name, err)
