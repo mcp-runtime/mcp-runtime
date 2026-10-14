@@ -59,6 +59,10 @@ Scripts compose supported CLI workflows. Shared `hack/lib/` and deployment
 | Automation / release manifest | `hack/README.md`, `hack/release/platformmanifest/` |
 
 Platform namespaces come from `pkg/platforminventory`; see `docs/namespaces.md`.
+Platform modes are `org` (default) and `public`; publish scopes are `tenant`
+(a team), `org`, and `public`. Public mode accepts all three scopes, but
+anonymous catalog reads must remain limited to public namespaces. Shared mode
+and catalog-namespace rules live in `pkg/platformmode`.
 Public paths are validated by `pkg/publicroutes`; see `docs/self-hosting.md` and
 `config/deployments/single-host.env.example`. Preserve platform API, registry,
 dashboard asset/session and MCP Auth discovery routes when changing prefixes.

@@ -224,10 +224,13 @@ func TestRegistryAuthzAllowsPublicAliasInPublicMode(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/registry/authz", nil)
 	req.Header.Set("x-api-key", "mcpu_user")
-	req.Header.Set("X-Forwarded-Uri", "/v2/public/demo/manifests/latest")
-	srv.handleRegistryAuthz(rec, req)
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("status = %d body = %s, want 204", rec.Code, rec.Body.String())
+	for _, prefix := range []string{"public", "org", "mcp-servers-public", "mcp-servers-org"} {
+		rec = httptest.NewRecorder()
+		req.Header.Set("X-Forwarded-Uri", "/v2/"+prefix+"/demo/manifests/latest")
+		srv.handleRegistryAuthz(rec, req)
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("prefix=%s status=%d body=%s, want 204", prefix, rec.Code, rec.Body.String())
+		}
 	}
 }
 
@@ -255,7 +258,7 @@ func TestRegistryAuthzCachesPlatformModePerServer(t *testing.T) {
 		t.Fatalf("initial status = %d body = %s, want 204", rec.Code, rec.Body.String())
 	}
 
-	t.Setenv("PLATFORM_MODE", "tenant")
+	t.Setenv("PLATFORM_MODE", "org")
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/api/registry/authz", nil)
 	req.Header.Set("x-api-key", "mcpu_user")

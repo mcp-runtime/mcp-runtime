@@ -12,7 +12,7 @@ import (
 )
 
 func TestRegistryPushAuthContextTenantRequiresTeamScope(t *testing.T) {
-	t.Setenv("PLATFORM_MODE", "tenant")
+	t.Setenv("PLATFORM_MODE", "org")
 	p := principal{
 		Role: roleUser,
 		Teams: []principalTeam{{
@@ -28,7 +28,7 @@ func TestRegistryPushAuthContextTenantRequiresTeamScope(t *testing.T) {
 }
 
 func TestRegistryPushAuthContextTenantAllowsOwnedTeam(t *testing.T) {
-	t.Setenv("PLATFORM_MODE", "tenant")
+	t.Setenv("PLATFORM_MODE", "org")
 	p := principal{
 		Role: roleUser,
 		Teams: []principalTeam{{
@@ -47,7 +47,7 @@ func TestRegistryPushAuthContextTenantAllowsOwnedTeam(t *testing.T) {
 }
 
 func TestRegistryPushAuthContextEmptyScopeAllowsAdminUnscopedRepo(t *testing.T) {
-	t.Setenv("PLATFORM_MODE", "tenant")
+	t.Setenv("PLATFORM_MODE", "org")
 	namespace, teamSlug, err := registryPushAuthContext("registry.example.com/demo:v1", "", principal{Role: roleAdmin})
 	if err != nil {
 		t.Fatalf("registryPushAuthContext() error = %v", err)
@@ -58,17 +58,17 @@ func TestRegistryPushAuthContextEmptyScopeAllowsAdminUnscopedRepo(t *testing.T) 
 }
 
 func TestRegistryPushAuthContextTenantStillRequiresScopedRepo(t *testing.T) {
-	t.Setenv("PLATFORM_MODE", "tenant")
+	t.Setenv("PLATFORM_MODE", "org")
 	if _, _, err := registryPushAuthContext("registry.example.com/demo:v1", publishscope.Tenant, principal{Role: roleAdmin}); err == nil {
 		t.Fatal("expected tenant scope to require a team-scoped repository")
 	}
 }
 
 func TestRegistryPushAuthContextPublicRequiresCatalogWrite(t *testing.T) {
-	t.Setenv("PLATFORM_MODE", "tenant")
+	t.Setenv("PLATFORM_MODE", "org")
 	p := principal{Role: roleUser}
 	if _, _, err := registryPushAuthContext("registry.example.com/public/demo:v1", publishscope.Public, p); err == nil {
-		t.Fatal("expected public catalog write rejection in tenant mode")
+		t.Fatal("expected public catalog write rejection in org mode")
 	}
 }
 

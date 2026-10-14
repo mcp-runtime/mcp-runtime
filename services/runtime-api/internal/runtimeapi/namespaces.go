@@ -127,12 +127,12 @@ func catalogNamespaceEntry(namespace string) map[string]any {
 	isPublic := false
 	scopeName := "Shared catalog"
 	if namespace != sharedCatalogNamespace {
-		switch PlatformMode() {
-		case platformModePublic:
+		switch catalogScope, _ := catalogScopeForNamespace(namespace); catalogScope {
+		case "public":
 			scope = "public"
 			isPublic = true
 			scopeName = "Public preview"
-		case platformModeOrg:
+		case "org":
 			scope = "org"
 			scopeName = "Organization"
 		}

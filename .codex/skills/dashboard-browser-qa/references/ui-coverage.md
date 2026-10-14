@@ -80,7 +80,7 @@ Drive from the browser, then cross-check with CLI/Kubernetes.
 
 Namespace selector:
 
-- signed-out tenant mode
+- signed-out org mode
 - tenant aggregate catalog
 - user namespace
 - team namespace
@@ -322,8 +322,9 @@ Record accessibility snapshot evidence for each major tab.
 
 ## Platform Mode And Extensibility
 
-For broad UI audits, cover tenant mode against current Kind plus org/public
-mode through local UI-server config passes when practical.
+For broad UI audits, cover org mode against current Kind plus public mode
+through local UI-server config passes when practical. In public mode verify
+anonymous readers cannot reach org or team namespaces.
 
 Extensibility cases:
 

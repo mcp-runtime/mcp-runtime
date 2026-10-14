@@ -184,7 +184,7 @@ func (cfg *AuthzConfig) catalogScopeWritable(scope string) bool {
 	scope = strings.TrimSpace(scope)
 	switch cfg.mode {
 	case string(publishscope.Public):
-		if scope == publishscope.PublicRegistryAlias {
+		if scope == publishscope.PublicRegistryAlias || scope == publishscope.OrgRegistryAlias {
 			return true
 		}
 	case string(publishscope.Org):

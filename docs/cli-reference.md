@@ -721,7 +721,7 @@ mcp-runtime setup \
   --with-tls \
   --tls-cluster-issuer letsencrypt-prod \
   --registry-mode bundled-https \
-  --platform-mode tenant \
+  --platform-mode org \
   --ingress none
 
 mcp-runtime setup --with-tls --acme-email ops@example.com   # Let's Encrypt
@@ -739,7 +739,7 @@ mcp-runtime setup --test-mode --test-multi-replica             # normal replica 
 | `--registry-mode` | `auto` | Uses a provisioned registry config when present, otherwise the bundled registry |
 | `--registry-type` | `docker` | Harbor is not available yet |
 | `--registry-storage` | `20Gi` | Bundled registry PVC request, set before first creation. Must be positive. Reruns reject shrinking an existing claim before applying registry resources |
-| `--platform-mode` | `tenant` | `org` and `public` change the default publish namespace |
+| `--platform-mode` | `org` | Modes: `org` or `public`. Org supports org/team publishing; public additionally supports public publishing and anonymous public-catalog reads |
 | `--pod-egress-cidrs` | empty | Comma-separated destinations team servers may reach on TCP 443. Empty adds no rule. `0.0.0.0/0` is rejected |
 | `--pod-egress-except-cidrs` | empty | Pod and service CIDRs kept out of `--pod-egress-cidrs`. Required for a private destination |
 | `--storage-mode` | `dynamic` | Use `hostpath` for single-node k3s/minikube/kind with no provisioner |
@@ -833,7 +833,7 @@ Key env vars for `--env-file` (see `config/deployments/mcpruntime-org.env.exampl
 | `MCP_SETUP_MTLS_CLUSTER_ISSUER=company-workload-ca` | `--mtls-cluster-issuer` |
 | `MCP_ACME_EMAIL=ops@example.com` | `--acme-email` |
 | `MCP_SETUP_REGISTRY_MODE=bundled-https` | `--registry-mode` |
-| `MCP_SETUP_PLATFORM_MODE=tenant` | `--platform-mode` |
+| `MCP_SETUP_PLATFORM_MODE=org` | `--platform-mode` |
 | `MCP_SETUP_INGRESS=none` | `--ingress` |
 | `MCP_SETUP_SKIP_CERT_MANAGER_INSTALL=1` | `--skip-cert-manager-install` |
 

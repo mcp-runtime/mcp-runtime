@@ -18,6 +18,9 @@ user-facing commands and scripts over private shortcuts.
 - Script index: `hack/README.md`
 - User path: `docs/hosted-quickstart.md` (published CLI install, hosted platform login,
   server publish, grant, adapter, and analytics UI)
+- Hosted platform mode: `public`; modes are `org` and `public`, while publish
+  scopes are `tenant` (a team), `org`, and `public`. Public mode supports all
+  three scopes. Anonymous catalog reads must exclude org/team namespaces.
 - CLI release workflow: `.github/workflows/release.yaml`
 
 ## Current production VM

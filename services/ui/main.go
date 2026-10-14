@@ -26,6 +26,8 @@ import (
 	_ "go.uber.org/automaxprocs" // align GOMAXPROCS with container CPU quota
 
 	"mcp-runtime/pkg/mcpdefaults"
+	"mcp-runtime/pkg/platformmode"
+	"mcp-runtime/pkg/publishscope"
 	"mcp-runtime/pkg/serviceutil"
 )
 
@@ -944,85 +946,21 @@ func firstAPIKey(apiKeys string) string {
 }
 
 func normalizedPlatformMode() string {
-	raw := strings.TrimSpace(os.Getenv("PLATFORM_MODE"))
-	if raw == "" {
-		raw = strings.TrimSpace(os.Getenv("MCP_PLATFORM_MODE"))
-	}
-	switch strings.ToLower(raw) {
-	case "org":
-		return "org"
-	case "public":
-		return "public"
-	case "", "tenant":
-		return "tenant"
-	default:
-		return "tenant"
-	}
+	return string(platformmode.FromEnv())
 }
 
 func catalogNamespacesForMode(mode string) []string {
-	if mode == "tenant" {
-		return nil
+	normalized, _ := platformmode.Normalize(mode)
+	if normalized == platformmode.ModePublic {
+		// This list powers anonymous proxy reads, so exclude org catalogs.
+		return normalized.CatalogNamespacesForScope(publishscope.Public)
 	}
-	raw := ""
-	if mode == "public" {
-		raw = strings.TrimSpace(os.Getenv("PLATFORM_PUBLIC_NAMESPACES"))
-		if raw == "" {
-			raw = strings.TrimSpace(os.Getenv("MCP_PLATFORM_PUBLIC_NAMESPACES"))
-		}
-	}
-	if raw == "" {
-		raw = strings.TrimSpace(os.Getenv("PLATFORM_CATALOG_NAMESPACES"))
-	}
-	if raw == "" {
-		raw = strings.TrimSpace(os.Getenv("MCP_PLATFORM_CATALOG_NAMESPACES"))
-	}
-	values := make([]string, 0, 1)
-	if namespace := defaultCatalogNamespaceForMode(mode); namespace != "" {
-		values = append(values, namespace)
-	}
-	for _, namespace := range strings.Split(raw, ",") {
-		namespace = strings.TrimSpace(namespace)
-		if namespace != "" {
-			values = append(values, namespace)
-		}
-	}
-	seen := map[string]struct{}{}
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		out = append(out, value)
-	}
-	return out
+	return normalized.CatalogNamespaces()
 }
 
 func defaultCatalogNamespaceForMode(mode string) string {
-	if mode == "tenant" {
-		return ""
-	}
-	if override := strings.TrimSpace(os.Getenv("PLATFORM_CATALOG_NAMESPACE")); override != "" {
-		return override
-	}
-	if override := strings.TrimSpace(os.Getenv("MCP_PLATFORM_CATALOG_NAMESPACE")); override != "" {
-		return override
-	}
-	switch mode {
-	case "org":
-		if namespace := strings.TrimSpace(os.Getenv("PLATFORM_ORG_NAMESPACE")); namespace != "" {
-			return namespace
-		}
-		return "mcp-servers-org"
-	case "public":
-		if namespace := strings.TrimSpace(os.Getenv("PLATFORM_PUBLIC_NAMESPACE")); namespace != "" {
-			return namespace
-		}
-		return "mcp-servers-public"
-	default:
-		return ""
-	}
+	normalized, _ := platformmode.Normalize(mode)
+	return normalized.DefaultCatalogNamespace()
 }
 
 func defaultPublicCatalogNamespace() string {

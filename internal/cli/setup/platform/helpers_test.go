@@ -832,7 +832,7 @@ func TestOperatorEnvOverrides(t *testing.T) {
 }
 
 func TestConfigureProvisionedRegistryEnv(t *testing.T) {
-	t.Setenv("MCP_PLATFORM_MODE", setupplan.PlatformModeTenant)
+	t.Setenv("MCP_PLATFORM_MODE", setupplan.PlatformModeOrg)
 	t.Run("returns nil when registry not set", func(t *testing.T) {
 		mock := &core.MockExecutor{}
 		kubectl := core.NewTestKubectlClient(mock)
@@ -868,7 +868,7 @@ func TestConfigureProvisionedRegistryEnv(t *testing.T) {
 		}
 	})
 
-	t.Run("creates operator secret and sets secret env when credentials provided in tenant mode", func(t *testing.T) {
+	t.Run("creates operator secret and sets secret env when credentials provided in org mode", func(t *testing.T) {
 		var envData string
 		var applyInputs []string
 		mock := &core.MockExecutor{
@@ -908,8 +908,8 @@ func TestConfigureProvisionedRegistryEnv(t *testing.T) {
 		if err := configureProvisionedRegistryEnvWithKubectl(kubectl, ext, ""); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if len(mock.Commands) != 3 {
-			t.Fatalf("expected 3 kubectl calls, got %d", len(mock.Commands))
+		if len(mock.Commands) != 5 {
+			t.Fatalf("expected 5 kubectl calls, got %d", len(mock.Commands))
 		}
 		if !strings.Contains(envData, "PROVISIONED_REGISTRY_USERNAME=user") || !strings.Contains(envData, "PROVISIONED_REGISTRY_PASSWORD=pass") {
 			t.Fatalf("unexpected env data: %q", envData)
@@ -921,8 +921,8 @@ func TestConfigureProvisionedRegistryEnv(t *testing.T) {
 				break
 			}
 		}
-		if foundDockerConfig {
-			t.Fatalf("did not expect dockerconfigjson secret manifest in tenant mode")
+		if !foundDockerConfig {
+			t.Fatalf("expected org catalog image pull secret")
 		}
 
 		setEnv := mock.Commands[len(mock.Commands)-1]
@@ -970,8 +970,8 @@ func TestConfigureProvisionedRegistryEnv(t *testing.T) {
 		if err := configureProvisionedRegistryEnvWithKubectl(kubectl, ext, ""); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if len(mock.Commands) != 5 {
-			t.Fatalf("expected 5 kubectl calls, got %d", len(mock.Commands))
+		if len(mock.Commands) != 7 {
+			t.Fatalf("expected 7 kubectl calls, got %d", len(mock.Commands))
 		}
 		foundDockerConfig := false
 		var namespaceLabels map[string]string
@@ -1580,8 +1580,8 @@ metadata:
   namespace: mcp-platform
 data:
   MCP_MTLS_CLUSTER_ISSUER: ""
-  PLATFORM_MODE: "tenant"
-`, setupplan.PlatformModeTenant, AnalyticsImageSet{})
+  PLATFORM_MODE: "org"
+`, setupplan.PlatformModeOrg, AnalyticsImageSet{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1621,8 +1621,8 @@ data:
   OIDC_ISSUER: ""
   OIDC_AUDIENCE: ""
   OIDC_JWKS_URL: ""
-  PLATFORM_MODE: "tenant"
-`, setupplan.PlatformModeTenant, AnalyticsImageSet{})
+  PLATFORM_MODE: "org"
+`, "", AnalyticsImageSet{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1747,7 +1747,7 @@ metadata:
 data:
   PLATFORM_TRAEFIK_NAMESPACE: kube-system
   PLATFORM_TEAM_TRAEFIK_WATCH: required
-`, setupplan.PlatformModeTenant, AnalyticsImageSet{})
+`, setupplan.PlatformModeOrg, AnalyticsImageSet{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1783,7 +1783,7 @@ metadata:
   name: mcp-shared-config
   namespace: mcp-platform
 data:
-  PLATFORM_MODE: "tenant"
+  PLATFORM_MODE: "org"
 `, setupplan.PlatformModeOrg, AnalyticsImageSet{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1823,7 +1823,7 @@ metadata:
   name: mcp-shared-config
   namespace: mcp-platform
 data:
-  PLATFORM_MODE: "tenant"
+  PLATFORM_MODE: "org"
   PLATFORM_REGISTRY_URL: ""
   MCP_REGISTRY_ENDPOINT: ""
   MCP_REGISTRY_INGRESS_HOST: ""
@@ -1870,8 +1870,8 @@ metadata:
   name: mcp-shared-config
   namespace: mcp-platform
 data:
-  PLATFORM_MODE: "tenant"
-`, setupplan.PlatformModeTenant, AnalyticsImageSet{})
+  PLATFORM_MODE: "org"
+`, setupplan.PlatformModeOrg, AnalyticsImageSet{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1882,8 +1882,8 @@ data:
 	if err := yaml.Unmarshal([]byte(rendered), &payload); err != nil {
 		t.Fatalf("unmarshal rendered config: %v", err)
 	}
-	if got := payload.Data["PLATFORM_MODE"]; got != setupplan.PlatformModeTenant {
-		t.Fatalf("expected tenant mode on fresh install, got %q", got)
+	if got := payload.Data["PLATFORM_MODE"]; got != setupplan.PlatformModeOrg {
+		t.Fatalf("expected org mode on fresh install, got %q", got)
 	}
 }
 
@@ -1904,12 +1904,12 @@ kind: ConfigMap
 metadata:
   name: mcp-shared-config
 data:
-  PLATFORM_MODE: "tenant"
-`, setupplan.PlatformModeTenant, AnalyticsImageSet{})
+  PLATFORM_MODE: "org"
+`, setupplan.PlatformModeOrg, AnalyticsImageSet{})
 	if err != nil {
 		t.Fatalf("renderAnalyticsConfigManifest returned error: %v", err)
 	}
-	if !strings.Contains(rendered, `PLATFORM_MODE: tenant`) {
+	if !strings.Contains(rendered, `PLATFORM_MODE: org`) {
 		t.Fatalf("expected rendered config to preserve platform mode, got %q", rendered)
 	}
 }
@@ -2185,7 +2185,7 @@ spec:
           image: grafana/promtail:2.9.4
 `
 
-	rendered, err := renderAnalyticsManifest(content, AnalyticsImageSet{Ingest: "registry.example.com/mcp-ingest:latest"}, defaultRegistrySecretName, setupplan.PlatformModeTenant)
+	rendered, err := renderAnalyticsManifest(content, AnalyticsImageSet{Ingest: "registry.example.com/mcp-ingest:latest"}, defaultRegistrySecretName, setupplan.PlatformModeOrg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2208,7 +2208,7 @@ func TestRenderAnalyticsManifestPullsRepublishedLatestUI(t *testing.T) {
 		{"registry.registry.svc.cluster.local:5000/mcp-ui:latest", "Always"},
 		{"registry.registry.svc.cluster.local:5000/mcp-ui@sha256:abc123", "IfNotPresent"},
 	} {
-		rendered, err := renderAnalyticsManifest(content, AnalyticsImageSet{UI: tc.image}, "", setupplan.PlatformModeTenant)
+		rendered, err := renderAnalyticsManifest(content, AnalyticsImageSet{UI: tc.image}, "", setupplan.PlatformModeOrg)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2223,7 +2223,7 @@ func TestRenderAnalyticsManifestUsesConfigurableKubernetesAPIPort(t *testing.T) 
 	t.Cleanup(func() { core.DefaultCLIConfig = original })
 	core.DefaultCLIConfig = &core.CLIConfig{KubernetesAPIPort: 9443}
 	content := "egress:\n- ports:\n  - protocol: TCP\n    port: 6443 # MCP_KUBERNETES_API_PORT\n"
-	rendered, err := renderAnalyticsManifest(content, AnalyticsImageSet{}, "", setupplan.PlatformModeTenant)
+	rendered, err := renderAnalyticsManifest(content, AnalyticsImageSet{}, "", setupplan.PlatformModeOrg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2236,7 +2236,7 @@ func TestRenderAnalyticsManifestRejectsInvalidKubernetesAPIPort(t *testing.T) {
 	original := core.DefaultCLIConfig
 	t.Cleanup(func() { core.DefaultCLIConfig = original })
 	core.DefaultCLIConfig = &core.CLIConfig{KubernetesAPIPort: 70000}
-	_, err := renderAnalyticsManifest("port: 6443 # MCP_KUBERNETES_API_PORT\n", AnalyticsImageSet{}, "", setupplan.PlatformModeTenant)
+	_, err := renderAnalyticsManifest("port: 6443 # MCP_KUBERNETES_API_PORT\n", AnalyticsImageSet{}, "", setupplan.PlatformModeOrg)
 	if err == nil || !strings.Contains(err.Error(), "MCP_KUBERNETES_API_PORT") {
 		t.Fatalf("expected invalid port error, got %v", err)
 	}
@@ -2346,7 +2346,7 @@ func TestDeployAnalyticsManifestsWithKubectl_RecreatesInitializationJobs(t *test
 		AnalyticsAPI: "example.com/mcp-analytics-api:latest",
 		Processor:    "example.com/mcp-processor:latest",
 		UI:           "example.com/mcp-ui:latest",
-	}, "", setupplan.PlatformModeTenant)
+	}, "", setupplan.PlatformModeOrg)
 	if err != nil {
 		t.Fatalf("deployAnalyticsManifestsWithKubectl returned error: %v", err)
 	}
@@ -2376,7 +2376,7 @@ func TestGrafanaPrometheusDatasourceUsesRoutePrefix(t *testing.T) {
 		t.Fatalf("failed to read grafana datasource manifest: %v", err)
 	}
 
-	rendered, err := renderAnalyticsManifest(string(content), AnalyticsImageSet{}, "", setupplan.PlatformModeTenant)
+	rendered, err := renderAnalyticsManifest(string(content), AnalyticsImageSet{}, "", setupplan.PlatformModeOrg)
 	if err != nil {
 		t.Fatalf("renderAnalyticsManifest returned error: %v", err)
 	}
@@ -2651,7 +2651,7 @@ func TestDeployAnalyticsManifestsReturnsRolloutFailures(t *testing.T) {
 		AnalyticsAPI: "example.com/mcp-analytics-api:latest",
 		Processor:    "example.com/mcp-processor:latest",
 		UI:           "example.com/mcp-ui:latest",
-	}, "", setupplan.PlatformModeTenant)
+	}, "", setupplan.PlatformModeOrg)
 	if err == nil {
 		t.Fatal("expected rollout failure")
 	}
@@ -2723,7 +2723,7 @@ func TestDeployAnalyticsManifestsWithKubectl_HostpathUsesHostpathManifests(t *te
 		AnalyticsAPI: "example.com/mcp-analytics-api:latest",
 		Processor:    "example.com/mcp-processor:latest",
 		UI:           "example.com/mcp-ui:latest",
-	}, setupplan.StorageModeHostpath, setupplan.PlatformModeTenant)
+	}, setupplan.StorageModeHostpath, setupplan.PlatformModeOrg)
 	if err == nil {
 		t.Fatal("expected failure from rollout timeout")
 	}
@@ -2815,7 +2815,7 @@ func TestDeployAnalyticsManifestsWithKubectl_WaitsForPostgresStatefulSet(t *test
 		AnalyticsAPI: "example.com/mcp-analytics-api:latest",
 		Processor:    "example.com/mcp-processor:latest",
 		UI:           "example.com/mcp-ui:latest",
-	}, "", setupplan.PlatformModeTenant)
+	}, "", setupplan.PlatformModeOrg)
 	if err == nil {
 		t.Fatal("expected failure from postgres rollout timeout")
 	}
@@ -3921,7 +3921,7 @@ func TestRenderAnalyticsManifestPullsRepublishedLatestIngestAndProcessor(t *test
 			{"registry.registry.svc.cluster.local:5000/" + tc.repo + ":latest", "Always"},
 			{"registry.registry.svc.cluster.local:5000/" + tc.repo + "@sha256:abc123", "IfNotPresent"},
 		} {
-			rendered, err := renderAnalyticsManifest(string(raw), tc.set(c.image), "", setupplan.PlatformModeTenant)
+			rendered, err := renderAnalyticsManifest(string(raw), tc.set(c.image), "", setupplan.PlatformModeOrg)
 			if err != nil {
 				t.Fatal(err)
 			}

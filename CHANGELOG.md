@@ -7,6 +7,18 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Added
+
+- An unauthenticated `test-mcpsnoop` example with read-only `echo` and `todays_info` tools and instructions for CLI publishing, deployment, and inspecting real MCP payloads with MCPSnoop.
+
+### Changed
+
+- Platform modes are now `org` (default) and `public`. Publishing retains three scopes: `tenant` for a team, `org` for all signed-in organization users, and `public` for public previews or public MCP listings. Public mode accepts all three scopes, with separate org/public image prefixes and catalog namespaces; anonymous readers cannot list org or team catalogs. Existing configurations using platform mode `tenant` must explicitly select `org` or `public` before deployment. No data reset or certificate replacement is required; use the reviewed `mcp-runtime update` workflow for the hosted reference platform.
+
+### Removed
+
+- The `tenant` platform mode and `setup --platform-mode tenant`; `--scope tenant` remains the team publishing workflow. This configuration change requires a new minor release.
+
 ## [0.8.1] - 2026-10-14
 
 v0.8.0 was tagged but its release assets were never published: the release

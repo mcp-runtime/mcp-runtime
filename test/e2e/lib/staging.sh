@@ -644,7 +644,7 @@ staging_failed_checks() {
 # Findings that fail on every fresh staging install for reasons outside the
 # suite, accepted by name so every other check stays a hard gate. Override with
 # E2E_DIAGNOSTICS_ACCEPTED (a |-separated list; empty = strict).
-#   - "platform OIDC configuration": tenant mode wants Google/OIDC login, and the
+#   - "platform OIDC configuration": org mode wants Google/OIDC login, and the
 #     staging VM has no identity provider unless E2E_WITH_MCP_AUTH/OIDC is set.
 #   - "mcp-servers image pull smoke" / "MCPServer reconcile smoke": the doctor
 #     smoke pod in mcp-servers pulls from the auth-protected public registry

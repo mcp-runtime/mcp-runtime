@@ -342,12 +342,12 @@ func registryPushAuthContext(target string, scope publishscope.Scope, p principa
 		if p.Role != roleAdmin && !sharedCatalogWritableForUsers() {
 			return "", "", fmt.Errorf("public catalog writes are restricted to admins")
 		}
-		return defaultPublicCatalogNamespace, "", nil
+		return defaultCatalogNamespaceForScope(publishscope.Public), "", nil
 	case publishscope.Org:
 		if p.Role != roleAdmin && !sharedCatalogWritableForUsers() {
 			return "", "", fmt.Errorf("org catalog writes are restricted to admins")
 		}
-		return defaultOrgCatalogNamespace, "", nil
+		return defaultCatalogNamespaceForScope(publishscope.Org), "", nil
 	case "":
 		prefix, _, found := strings.Cut(repoPath, "/")
 		if !found || strings.TrimSpace(prefix) == "" {

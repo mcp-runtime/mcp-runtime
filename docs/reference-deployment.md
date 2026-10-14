@@ -151,7 +151,7 @@ copy or change MCP Auth images.
 |----------|---------|---------|
 | `MCP_SETUP_WAIT_TIMEOUT` | `900` | Seconds to wait for setup rollouts. |
 | `MCP_CERT_TIMEOUT` | `5m` (CLI default) | Certificate issuance wait on first install. Use `15m` on fresh clusters. |
-| `MCP_SETUP_PLATFORM_MODE` | `tenant` | Passed to `setup --platform-mode`. |
+| `MCP_SETUP_PLATFORM_MODE` | `public` (reference profile) | Passed to `setup --platform-mode`; the CLI default is `org`. |
 | `MCP_SETUP_REGISTRY_MODE` | `bundled-https` | Passed to `setup --registry-mode`. |
 | `MCP_SETUP_INGRESS` | `none` | `none` when k3s Traefik in `kube-system` already serves ingress. |
 | `MCP_SETUP_TLS_CLUSTER_ISSUER` | `letsencrypt-prod` | ClusterIssuer name on reruns. **Do not** pass `--acme-email` when this issuer already exists. |
@@ -287,7 +287,7 @@ MCP_SETUP_WAIT_TIMEOUT=900 MCP_CERT_TIMEOUT=15m \
   --acme-email ops@example.com \
   --ingress none \
   --registry-mode bundled-https \
-  --platform-mode tenant
+  --platform-mode public
 ```
 
 ### Reruns / upgrades (reuse existing certs to avoid LE rate limits)
@@ -337,7 +337,7 @@ hack/deploy/reference/backup.sh --setup
   --kubeconfig "$MCP_SETUP_KUBECONFIG" --context "$MCP_KUBE_CONTEXT" \
   --expect-cluster-id "$MCP_EXPECTED_CLUSTER_UID" \
   --strict-prod --with-tls --provided-tls-secrets --skip-cert-manager-install \
-  --registry-mode bundled-https --platform-mode tenant --ingress none
+  --registry-mode bundled-https --platform-mode public --ingress none
 ```
 
 Setup requires existing registry/platform TLS Secrets with these flags. Its

@@ -36,3 +36,8 @@ from the platform configuration and public MCP URL. Check the gateway example me
   --grant-file examples/oauth-example-go-2025-11-25/.mcp/grant-example-agent.yaml \
   --session-file examples/oauth-example-go-2025-11-25/.mcp/session-example-agent.yaml
 ```
+
+For a small unauthenticated traffic-inspection demo, use
+[`test-mcpsnoop`](test-mcpsnoop/README.md). It exposes only `echo` and
+`todays_info`, with commands to publish/deploy through the CLI and inspect the
+real requests and responses through MCPSnoop.

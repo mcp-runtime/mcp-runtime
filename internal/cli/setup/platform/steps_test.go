@@ -51,7 +51,7 @@ func TestBuildSetupStepsOrderWithTLS(t *testing.T) {
 	for i, s := range steps {
 		got[i] = s.Name()
 	}
-	want := []string{"preflight", "cluster", "tls", "registry", "operator-image", "operator-deploy", "verify"}
+	want := []string{"preflight", "cluster", "catalog-namespace", "tls", "registry", "operator-image", "operator-deploy", "verify"}
 	if len(got) != len(want) {
 		t.Fatalf("steps = %v, want %v", got, want)
 	}
@@ -74,7 +74,7 @@ func TestBuildSetupStepsOrderWithoutTLS(t *testing.T) {
 	for i, s := range steps {
 		got[i] = s.Name()
 	}
-	want := []string{"preflight", "cluster", "registry", "operator-image", "operator-deploy", "verify"}
+	want := []string{"preflight", "cluster", "catalog-namespace", "registry", "operator-image", "operator-deploy", "verify"}
 	if len(got) != len(want) {
 		t.Fatalf("steps = %v, want %v", got, want)
 	}
@@ -97,7 +97,7 @@ func TestBuildSetupStepsOrderWithWorkloadPKI(t *testing.T) {
 	for i, s := range steps {
 		got[i] = s.Name()
 	}
-	want := []string{"preflight", "cluster", "workload-pki", "registry", "operator-image", "operator-deploy", "verify"}
+	want := []string{"preflight", "cluster", "catalog-namespace", "workload-pki", "registry", "operator-image", "operator-deploy", "verify"}
 	if len(got) != len(want) {
 		t.Fatalf("steps = %v, want %v", got, want)
 	}
@@ -140,7 +140,7 @@ func TestBuildSetupStepsOrderWithAnalytics(t *testing.T) {
 	for i, s := range steps {
 		got[i] = s.Name()
 	}
-	want := []string{"preflight", "cluster", "registry", "operator-image", "analytics-images", "operator-deploy", "analytics-deploy", "verify"}
+	want := []string{"preflight", "cluster", "catalog-namespace", "registry", "operator-image", "analytics-images", "operator-deploy", "analytics-deploy", "verify"}
 	if len(got) != len(want) {
 		t.Fatalf("steps = %v, want %v", got, want)
 	}

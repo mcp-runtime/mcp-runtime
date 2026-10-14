@@ -377,7 +377,7 @@ will use to push and pull container images.`,
 	cmd.Flags().StringVar(&externalRegistryUsername, "external-registry-username", "", "External/provisioned registry username for --registry-mode external")
 	cmd.Flags().StringVar(&externalRegistryPassword, "external-registry-password", "", "External/provisioned registry password for --registry-mode external (prefer PROVISIONED_REGISTRY_PASSWORD for shells)")
 	cmd.Flags().StringVar(&storageMode, "storage-mode", "dynamic", "Storage mode for local/dev clusters (dynamic|hostpath). Use hostpath for single-node k3s/minikube/kind without a provisioner.")
-	cmd.Flags().StringVar(&platformMode, "platform-mode", "tenant", "Platform access model (tenant|org|public). public exposes the catalog without login and lets signed-in users publish to the public preview namespace.")
+	cmd.Flags().StringVar(&platformMode, "platform-mode", "org", "Platform access model (org|public). org supports organization and team publishing; public also supports the public preview catalog without login.")
 	cmd.Flags().StringVar(&podEgressCIDRs, "pod-egress-cidrs", "", "Comma-separated destination CIDRs that team MCP servers may reach on TCP 443. Empty installs nothing. 0.0.0.0/0 is rejected. Private ranges also require --pod-egress-except-cidrs. Overrides env MCP_POD_EGRESS_CIDRS")
 	cmd.Flags().StringVar(&podEgressExceptCIDRs, "pod-egress-except-cidrs", "", "Cluster pod and service CIDRs to keep out of --pod-egress-cidrs. Required when a destination is private. Overrides env MCP_POD_EGRESS_EXCEPT_CIDRS")
 	cmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "Path to kubeconfig file (default: ~/.kube/config; auto-detects /etc/rancher/k3s/k3s.yaml on k3s hosts)")

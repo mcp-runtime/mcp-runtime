@@ -457,17 +457,16 @@ use the runtime API for session creation when directory enforcement is
 required. Admission-time directory validation is not currently installed.
 
 For non-admin users, runtime scope depends on `PLATFORM_MODE` / setup
-`--platform-mode`. In `tenant` mode, `GET /api/v1/runtime/servers` without a
-`namespace` query returns MCPs in the caller's team namespaces. In `org` mode,
+`--platform-mode` (`org` or `public`). In the default `org` mode,
 signed-in users can use the org catalog namespace and their team namespaces.
 In `public` mode, anonymous users can list the `mcp-servers-public` catalog,
-while signed-in users can publish to the public catalog and their team
+while signed-in users can publish to the public and org catalogs and their team
 namespaces. Admin callers can inspect any
 namespace. Passing `namespace=<name>` narrows the list to an authorized
 namespace for the active mode. `POST /api/v1/runtime/servers` also accepts
 `scope: "tenant" | "org" | "public"` in the JSON body. `scope: "public"`
 requires public platform mode and resolves the active public catalog namespace;
-`scope: "org"` requires org mode and resolves the active org catalog namespace;
+`scope: "org"` works in both modes and resolves the active org catalog namespace;
 `scope: "tenant"` uses the caller's team namespace unless the request passes an
 authorized team `namespace`. If an `MCPServer` with the same name already
 exists in the target namespace, the API returns `409` unless the request body

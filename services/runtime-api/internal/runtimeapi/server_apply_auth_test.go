@@ -17,7 +17,7 @@ import (
 // (MCPServer.ResolveDerivedAuth), so later host/path/domain changes re-derive.
 // An update also clears a derived copy an older admission webhook persisted.
 func TestRuntimeServerApplyDoesNotPersistDerivedOAuthAudience(t *testing.T) {
-	t.Setenv("PLATFORM_MODE", "tenant")
+	t.Setenv("PLATFORM_MODE", "org")
 	t.Setenv("PLATFORM_TEAM_TRAEFIK_WATCH", "disabled")
 	t.Setenv("MCP_REGISTRY_INGRESS_HOST", "registry.example.com")
 

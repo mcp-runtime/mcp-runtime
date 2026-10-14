@@ -2756,7 +2756,7 @@ func TestCheckStorageClassReadinessDiscoversDefault(t *testing.T) {
 func TestCheckPlatformOIDCConfigurationSkipsTestMode(t *testing.T) {
 	mock := &core.MockExecutor{
 		CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
-			return &core.MockCommand{OutputData: []byte(`{"data":{"PLATFORM_MODE":"tenant","MCP_RUNTIME_TEST_MODE":"1"}}`)}
+			return &core.MockCommand{OutputData: []byte(`{"data":{"PLATFORM_MODE":"org","MCP_RUNTIME_TEST_MODE":"1"}}`)}
 		},
 	}
 	check := checkPlatformOIDCConfiguration(core.NewTestKubectlClient(mock))

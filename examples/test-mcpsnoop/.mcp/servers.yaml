@@ -1,0 +1,28 @@
+version: v1
+servers:
+    - name: test-mcpsnoop
+      description: Unauthenticated read-only echo and date tools for MCPSnoop inspection.
+      image: registry.mcpruntime.org/public/test-mcpsnoop
+      imageTag: latest
+      route: /test-mcpsnoop/mcp
+      publicPathPrefix: test-mcpsnoop
+      port: 8088
+      resources:
+        limits:
+            cpu: 250m
+            memory: 256Mi
+        requests:
+            cpu: 25m
+            memory: 64Mi
+      scope: public
+      tools:
+        - name: echo
+          description: Return the supplied message unchanged.
+          requiredTrust: low
+          sideEffect: read
+        - name: todays_info
+          description: Return date, weekday, timezone, and current timestamp.
+          requiredTrust: low
+          sideEffect: read
+      gateway:
+        enabled: false

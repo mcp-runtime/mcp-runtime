@@ -475,7 +475,7 @@ func TestResolveDeployImageReference(t *testing.T) {
 func TestResolveDeployImageReferenceFallsBackToInternalRegistryDNS(t *testing.T) {
 	t.Setenv("MCP_REGISTRY_ENDPOINT", "")
 	t.Setenv("PLATFORM_REGISTRY_URL", "registry.custom.example")
-	t.Setenv("PLATFORM_MODE", "tenant")
+	t.Setenv("PLATFORM_MODE", "org")
 
 	got := ResolveDeployImageReference("go-example:v0.1.0", "mcp-team-acme", "acme")
 	if want := "registry.registry.svc.cluster.local:5000/acme/go-example:v0.1.0"; got != want {
@@ -486,7 +486,7 @@ func TestResolveDeployImageReferenceFallsBackToInternalRegistryDNS(t *testing.T)
 func TestResolveDeployImageReferencePrefersInternalEndpointOverPublicRegistryURL(t *testing.T) {
 	t.Setenv("MCP_REGISTRY_ENDPOINT", "10.96.223.152:5000")
 	t.Setenv("PLATFORM_REGISTRY_URL", "registry.custom.example")
-	t.Setenv("PLATFORM_MODE", "tenant")
+	t.Setenv("PLATFORM_MODE", "org")
 
 	got := ResolveDeployImageReference("go-example:v0.1.0", "mcp-team-acme", "acme")
 	if want := "10.96.223.152:5000/acme/go-example:v0.1.0"; got != want {
@@ -497,7 +497,7 @@ func TestResolveDeployImageReferencePrefersInternalEndpointOverPublicRegistryURL
 func TestResolveDeployImageReferencePrefersPullHostOverInternalEndpoint(t *testing.T) {
 	t.Setenv("MCP_REGISTRY_ENDPOINT", "10.96.223.152:5000")
 	t.Setenv("MCP_REGISTRY_PULL_HOST", "registry.registry.svc.cluster.local:5000")
-	t.Setenv("PLATFORM_MODE", "tenant")
+	t.Setenv("PLATFORM_MODE", "org")
 
 	got := ResolveDeployImageReference("go-example:v0.1.0", "mcp-team-acme", "acme")
 	if want := "registry.registry.svc.cluster.local:5000/acme/go-example:v0.1.0"; got != want {
@@ -514,7 +514,7 @@ func TestResolveDeployImageReferenceMapsBundledRegistryHostToPullHost(t *testing
 	t.Setenv("MCP_REGISTRY_PULL_HOST", "")
 	t.Setenv("MCP_REGISTRY_ENDPOINT", "registry.mcpruntime.org")
 	t.Setenv("MCP_REGISTRY_INGRESS_HOST", "registry.mcpruntime.org")
-	t.Setenv("PLATFORM_MODE", "tenant")
+	t.Setenv("PLATFORM_MODE", "org")
 
 	for _, image := range []string{
 		"registry.registry.svc.cluster.local:5000/acme/workspace-demo:v1",
@@ -534,7 +534,7 @@ func TestResolveDeployImageReferenceKeepsBundledRegistryHostWhenItIsThePullHost(
 	t.Setenv("MCP_REGISTRY_PULL_HOST", "")
 	t.Setenv("MCP_REGISTRY_ENDPOINT", "registry.registry.svc.cluster.local:5000")
 	t.Setenv("MCP_REGISTRY_INGRESS_HOST", "registry.local")
-	t.Setenv("PLATFORM_MODE", "tenant")
+	t.Setenv("PLATFORM_MODE", "org")
 
 	image := "registry.registry.svc.cluster.local:5000/acme/workspace-demo:v1"
 	if got := ResolveDeployImageReference(image, "mcp-team-acme", "acme"); got != image {

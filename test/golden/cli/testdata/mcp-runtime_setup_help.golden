@@ -39,7 +39,7 @@ Flags:
       --operator-metrics-addr string         Operator metrics bind address (default: :8080 from manager.yaml)
       --operator-probe-addr string           Operator health probe bind address (default: :8081 from manager.yaml)
       --parallel-builds                      Build and publish setup images in parallel; keeps cluster, registry, TLS, and rollout sequencing unchanged
-      --platform-mode string                 Platform access model (tenant|org|public). public exposes the catalog without login and lets signed-in users publish to the public preview namespace. (default "tenant")
+      --platform-mode string                 Platform access model (org|public). org supports organization and team publishing; public also supports the public preview catalog without login. (default "org")
       --platform-path-prefix string          Public dashboard path prefix (e.g. /platform); session and asset routes use this prefix (default "/")
       --pod-egress-cidrs string              Comma-separated destination CIDRs that team MCP servers may reach on TCP 443. Empty installs nothing. 0.0.0.0/0 is rejected. Private ranges also require --pod-egress-except-cidrs. Overrides env MCP_POD_EGRESS_CIDRS
       --pod-egress-except-cidrs string       Cluster pod and service CIDRs to keep out of --pod-egress-cidrs. Required when a destination is private. Overrides env MCP_POD_EGRESS_EXCEPT_CIDRS

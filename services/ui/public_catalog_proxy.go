@@ -25,7 +25,7 @@ var publicCatalogPaths = map[string]string{
 
 // newPublicCatalogProxy proxies GET-only, credential-free catalog reads to
 // the runtime API. It is registered unconditionally but only serves traffic
-// when enabled is true (platform mode is "public"), so a tenant/org
+// when enabled is true (platform mode is "public"), so an org
 // deployment never exposes an unauthenticated path onto its runtime API.
 func newPublicCatalogProxy(runtimeBase *url.URL, enabled bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

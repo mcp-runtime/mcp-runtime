@@ -401,7 +401,7 @@ policy evaluation, or namespace scoping, prefer the broader scenario or let CI
 fall back to `all`.
 
 For pre-release, run Pre-release Regression: Staging E2E is its only cluster
-suite. Staging currently uses tenant platform mode and exercises the production
+suite. Staging currently uses org platform mode and exercises the production
 install and tenant journey. Use focused PR Kind scenarios for changed request
 paths. Run additional full Kind sweeps with `E2E_SCENARIOS=all` and
 `E2E_DEEP_REQUEST_FLOWS=1` when org/public modes or cache reuse need explicit

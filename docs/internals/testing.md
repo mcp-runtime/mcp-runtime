@@ -214,7 +214,7 @@ team and namespace and that their registry credentials cannot access the other
 team's repositories. Pre-release Regression uses Staging E2E as its only cluster
 suite; staging exercises the production setup, TLS, registry, tenant image
 build, push, deploy, and adapter path on the disposable VM. It currently uses
-tenant platform mode, not a tenant/org/public matrix. Full Kind sweeps and cache
+org platform mode, not a org/public matrix. Full Kind sweeps and cache
 replay remain available by running `test/e2e/qa-e2e.sh` explicitly against an
 isolated Kind target.
 

@@ -107,11 +107,11 @@ func TestBuildSetupPlan_TLSClusterIssuer(t *testing.T) {
 }
 
 func TestBuildSetupPlan_PlatformModeCatalogNamespaces(t *testing.T) {
-	if _, ok := setupplan.NormalizePlatformMode("tenent"); ok {
-		t.Fatal("NormalizePlatformMode accepted misspelled tenant mode")
+	if _, ok := setupplan.NormalizePlatformMode("tenant"); ok {
+		t.Fatal("NormalizePlatformMode accepted removed tenant platform mode")
 	}
-	if got := setupplan.CatalogNamespaceForPlatformMode(""); got != "" {
-		t.Fatalf("default tenant catalog namespace = %q, want empty", got)
+	if got := setupplan.CatalogNamespaceForPlatformMode(""); got != setupplan.DefaultOrgCatalogNamespace {
+		t.Fatalf("default org catalog namespace = %q, want mcp-servers-org", got)
 	}
 	if got := setupplan.CatalogNamespaceForPlatformMode(setupplan.PlatformModeOrg); got != setupplan.DefaultOrgCatalogNamespace {
 		t.Fatalf("org catalog namespace = %q, want %q", got, setupplan.DefaultOrgCatalogNamespace)
@@ -483,6 +483,7 @@ func TestValidateNonTestSetupRejectsAutoBundledRegistryInStrictProd(t *testing.T
 func TestResolveRegistrySetupUsesExternalRegistryFlagsInAutoMode(t *testing.T) {
 	var got *config.ExternalRegistryConfig
 	deps := SetupDeps{
+		EnsureCatalogNamespace: func(string, map[string]string) error { return nil },
 		ResolveExternalRegistryConfig: func(flagCfg *config.ExternalRegistryConfig) (*config.ExternalRegistryConfig, error) {
 			got = flagCfg
 			return flagCfg, nil
@@ -508,6 +509,7 @@ func TestResolveRegistrySetupUsesExternalRegistryFlagsInAutoMode(t *testing.T) {
 
 func TestResolveRegistrySetupRequiresExternalURLInExternalMode(t *testing.T) {
 	deps := SetupDeps{
+		EnsureCatalogNamespace: func(string, map[string]string) error { return nil },
 		ResolveExternalRegistryConfig: func(*config.ExternalRegistryConfig) (*config.ExternalRegistryConfig, error) {
 			return nil, nil
 		},
@@ -521,6 +523,7 @@ func TestResolveRegistrySetupRequiresExternalURLInExternalMode(t *testing.T) {
 
 func TestResolveRegistrySetupRejectsExternalFlagsInBundledMode(t *testing.T) {
 	deps := SetupDeps{
+		EnsureCatalogNamespace: func(string, map[string]string) error { return nil },
 		ResolveExternalRegistryConfig: func(*config.ExternalRegistryConfig) (*config.ExternalRegistryConfig, error) {
 			t.Fatal("did not expect external registry resolver in bundled mode")
 			return nil, nil
@@ -718,6 +721,7 @@ func TestSetupPlatformWithDeps_ExternalRegistry(t *testing.T) {
 
 	rec := &callRecorder{}
 	deps := SetupDeps{
+		EnsureCatalogNamespace: func(string, map[string]string) error { return nil },
 		ResolveExternalRegistryConfig: func(*config.ExternalRegistryConfig) (*config.ExternalRegistryConfig, error) {
 			return &config.ExternalRegistryConfig{
 				URL:      "registry.example.com",
@@ -806,6 +810,7 @@ func TestSetupPlatformWithDeps_ExternalRegistry(t *testing.T) {
 func TestSetupPlatformWithDeps_InternalRegistryTLS(t *testing.T) {
 	rec := &callRecorder{}
 	deps := SetupDeps{
+		EnsureCatalogNamespace: func(string, map[string]string) error { return nil },
 		ResolveExternalRegistryConfig: func(*config.ExternalRegistryConfig) (*config.ExternalRegistryConfig, error) {
 			return nil, nil
 		},
@@ -895,6 +900,7 @@ func TestSetupPlatformWithDeps_ExternalRegistryTLS(t *testing.T) {
 
 	rec := &callRecorder{}
 	deps := SetupDeps{
+		EnsureCatalogNamespace: func(string, map[string]string) error { return nil },
 		ResolveExternalRegistryConfig: func(*config.ExternalRegistryConfig) (*config.ExternalRegistryConfig, error) {
 			return &config.ExternalRegistryConfig{
 				URL:      "registry.example.com",
@@ -986,6 +992,7 @@ func TestSetupPlatformWithDeps_ExternalRegistryTLS(t *testing.T) {
 func TestSetupPlatformWithDeps_DiagnosticsOnRegistryWaitFailure(t *testing.T) {
 	rec := &callRecorder{}
 	deps := SetupDeps{
+		EnsureCatalogNamespace: func(string, map[string]string) error { return nil },
 		ResolveExternalRegistryConfig: func(*config.ExternalRegistryConfig) (*config.ExternalRegistryConfig, error) {
 			return nil, nil
 		},
@@ -1059,6 +1066,7 @@ func TestSetupPlatformWithDeps_DiagnosticsOnOperatorWaitFailure(t *testing.T) {
 
 	rec := &callRecorder{}
 	deps := SetupDeps{
+		EnsureCatalogNamespace: func(string, map[string]string) error { return nil },
 		ResolveExternalRegistryConfig: func(*config.ExternalRegistryConfig) (*config.ExternalRegistryConfig, error) {
 			return &config.ExternalRegistryConfig{URL: "registry.example.com"}, nil
 		},
@@ -1128,6 +1136,7 @@ func TestSetupPlatformWithDeps_CRDCheckFailure(t *testing.T) {
 
 	rec := &callRecorder{}
 	deps := SetupDeps{
+		EnsureCatalogNamespace: func(string, map[string]string) error { return nil },
 		ResolveExternalRegistryConfig: func(*config.ExternalRegistryConfig) (*config.ExternalRegistryConfig, error) {
 			return &config.ExternalRegistryConfig{URL: "registry.example.com"}, nil
 		},
@@ -1194,6 +1203,7 @@ func TestSetupPlatformWithDeps_CRDCheckFailure(t *testing.T) {
 func TestSetupPlatformWithDeps_InternalRegistryPushFailure(t *testing.T) {
 	rec := &callRecorder{}
 	deps := SetupDeps{
+		EnsureCatalogNamespace: func(string, map[string]string) error { return nil },
 		ResolveExternalRegistryConfig: func(*config.ExternalRegistryConfig) (*config.ExternalRegistryConfig, error) {
 			return nil, nil
 		},
@@ -1276,6 +1286,7 @@ func TestSetupPlatformWithDeps_RegistryIngressProtectedDuringPublishFailure(t *t
 	}
 	rec := &callRecorder{}
 	deps := SetupDeps{
+		EnsureCatalogNamespace: func(string, map[string]string) error { return nil },
 		ResolveExternalRegistryConfig: func(*config.ExternalRegistryConfig) (*config.ExternalRegistryConfig, error) {
 			return nil, nil
 		},
@@ -1335,8 +1346,8 @@ func TestSetupPlatformWithDeps_RegistryIngressProtectedDuringPublishFailure(t *t
 // TestSetupPlatformWithDeps_CatalogNamespace verifies setup pre-creates the
 // shared catalog namespace (mcp-servers-public / mcp-servers-org) with the
 // labels the platform API expects so non-admin users can publish without the
-// API SA needing cluster-wide namespace-create RBAC. Tenant mode has no
-// shared catalog and must not call ensure.
+// API SA needing cluster-wide namespace-create RBAC. Public mode provisions
+// both catalogs with different visibility labels.
 func TestSetupPlatformWithDeps_CatalogNamespace(t *testing.T) {
 	cases := []struct {
 		mode       string
@@ -1344,9 +1355,8 @@ func TestSetupPlatformWithDeps_CatalogNamespace(t *testing.T) {
 		wantScope  string
 		wantCalled bool
 	}{
-		{mode: setupplan.PlatformModePublic, wantNS: setupplan.DefaultPublicCatalogNamespace, wantScope: "public", wantCalled: true},
+		{mode: setupplan.PlatformModePublic, wantNS: setupplan.DefaultOrgCatalogNamespace, wantScope: "org", wantCalled: true},
 		{mode: setupplan.PlatformModeOrg, wantNS: setupplan.DefaultOrgCatalogNamespace, wantScope: "org", wantCalled: true},
-		{mode: setupplan.PlatformModeTenant, wantCalled: false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.mode, func(t *testing.T) {
@@ -1355,6 +1365,7 @@ func TestSetupPlatformWithDeps_CatalogNamespace(t *testing.T) {
 				gotLabels map[string]string
 				calls     int
 			)
+			seenCatalogs := map[string]string{}
 			deps := SetupDeps{
 				ResolveExternalRegistryConfig: func(*config.ExternalRegistryConfig) (*config.ExternalRegistryConfig, error) {
 					return nil, nil
@@ -1388,6 +1399,10 @@ func TestSetupPlatformWithDeps_CatalogNamespace(t *testing.T) {
 				},
 				EnsureCatalogNamespace: func(ns string, labels map[string]string) error {
 					calls++
+					if _, duplicate := seenCatalogs[ns]; duplicate {
+						t.Fatalf("catalog namespace %s provisioned twice", ns)
+					}
+					seenCatalogs[ns] = labels["mcpruntime.org/scope"]
 					gotNS = ns
 					gotLabels = labels
 					return nil
@@ -1412,8 +1427,15 @@ func TestSetupPlatformWithDeps_CatalogNamespace(t *testing.T) {
 			}
 
 			if tc.wantCalled {
-				if calls != 1 {
-					t.Fatalf("expected EnsureCatalogNamespace to be called exactly once, got %d", calls)
+				wantCalls := 1
+				if tc.mode == setupplan.PlatformModePublic {
+					wantCalls = 2
+					if seenCatalogs[setupplan.DefaultPublicCatalogNamespace] != "public" {
+						t.Fatalf("public catalog missing or mislabeled: %v", seenCatalogs)
+					}
+				}
+				if calls != wantCalls {
+					t.Fatalf("expected %d catalog namespaces, got %d", wantCalls, calls)
 				}
 				if gotNS != tc.wantNS {
 					t.Fatalf("namespace = %q, want %q", gotNS, tc.wantNS)
