@@ -1,6 +1,7 @@
 package platformrelease
 
 import (
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -273,5 +274,66 @@ func TestConfigOnlyComponentsNeedNoImage(t *testing.T) {
 	m.Components[len(m.Components)-1].Tag = "v1"
 	if err := m.Validate(); err == nil {
 		t.Fatal("a configOnly component with a tag must be rejected")
+	}
+}
+
+// TestGenerateReleaseManifestFromTheRepository runs the exact generation the
+// release workflow runs, on this repository's files, so a manifest the release
+// would reject fails in CI instead of at tag time.
+func TestGenerateReleaseManifestFromTheRepository(t *testing.T) {
+	const commit = "0123456789abcdef0123456789abcdef01234567"
+	m, err := GenerateReleaseManifest(ReleaseOptions{
+		Version: "v9.9.9", Commit: commit, K8sDir: "../../k8s", WiringPath: "../../config/release/wiring.yaml",
+	})
+	if err != nil {
+		t.Fatalf("the release manifest for this repository must generate and verify: %v", err)
+	}
+	gateway, ok := m.Component("gateway")
+	if !ok || gateway.Tag == "" || gateway.Tag == "v9.9.9-g"+commit {
+		t.Fatalf("gateway must carry the upstream pin, got %+v", gateway)
+	}
+	prom, ok := m.Component("prometheus")
+	if !ok || !prom.ConfigOnly {
+		t.Fatalf("prometheus must be config-only, got %+v", prom)
+	}
+	ui, ok := m.Component("ui")
+	if !ok || ui.Tag != "v9.9.9-g"+commit {
+		t.Fatalf("built components must be tagged to the commit, got %+v", ui)
+	}
+}
+
+func TestVerifyReleaseRejectsBrokenManifests(t *testing.T) {
+	const commit = "0123456789abcdef0123456789abcdef01234567"
+	good, err := GenerateReleaseManifest(ReleaseOptions{Version: "v9.9.9", Commit: commit, K8sDir: "../../k8s", WiringPath: "../../config/release/wiring.yaml"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	clone := func(mutate func(*Manifest)) *Manifest {
+		data, _ := json.Marshal(good)
+		var out Manifest
+		_ = json.Unmarshal(data, &out)
+		mutate(&out)
+		return &out
+	}
+	setTag := func(name, tag string) func(*Manifest) {
+		return func(m *Manifest) {
+			for i := range m.Components {
+				if m.Components[i].Name == name {
+					m.Components[i].Tag = tag
+				}
+			}
+		}
+	}
+	for name, mutate := range map[string]func(*Manifest){
+		"built component with a wrong tag": setTag("ui", "latest"),
+		"third-party pinned to the commit": setTag("gateway", "v9.9.9-g"+commit),
+		"third-party pinned to latest":     setTag("gateway", "latest"),
+		"config-only component with a tag": setTag("prometheus", "v1"),
+		"built component missing entirely": func(m *Manifest) { m.Components = m.Components[1:] },
+		"wrong version":                    func(m *Manifest) { m.Version = "v1.0.0" },
+	} {
+		if err := clone(mutate).VerifyRelease("v9.9.9", commit); err == nil {
+			t.Errorf("%s must be rejected", name)
+		}
 	}
 }

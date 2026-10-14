@@ -7,7 +7,20 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-14
+
+v0.8.0 was tagged but its release assets were never published: the release
+workflow's manifest check rejected the platform gateway's new third-party image
+pin and the config-only components. v0.8.1 has the same content with the check
+corrected; use v0.8.1.
+
+### Fixed
+
+- The release workflow no longer requires every manifest component to carry the commit tag. Manifest generation now verifies the real invariants (built images tagged to the commit, third-party pins with an explicit upstream tag, config-only components without image coordinates, strict-decoder round trip) in `internal/platformrelease`, and a unit test runs the exact generation on this repository, so a manifest the release would reject fails in CI instead of at tag time.
+
 ## [0.8.0] - 2026-10-14
+
+This tag's release assets were not published (see 0.8.1); use v0.8.1.
 
 This release adds correlated request debugging (gateway and ingress tracing,
 per-tool metrics with trace exemplars, an `X-Trace-ID` response header,
@@ -393,7 +406,8 @@ upgrade from 0.4.x; see the migration note under **Changed**.
 
 - Targeted platform updates through `mcp-runtime update`, including embedded CRD updates and `--build` to build/push missing component images before rollout ([#491](https://github.com/mcp-runtime/mcp-runtime/pull/491)).
 
-[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.7.2...v0.8.0
 [0.7.2]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.7.0...v0.7.1
