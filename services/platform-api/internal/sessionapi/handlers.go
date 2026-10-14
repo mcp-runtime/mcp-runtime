@@ -22,6 +22,7 @@ type Store interface {
 	ListSessions(context.Context, sessionstate.Filter) (sessionstate.Page, error)
 	SetSessionRevoked(context.Context, string, string, bool, string) error
 	DeleteSession(context.Context, string, string) error
+	DeleteSessionVersioned(context.Context, string, string, string) error
 	RevokeSessions(context.Context, sessionstate.Filter, string) (int64, error)
 	SessionSnapshot(context.Context, sessionstate.Server) (sessionstate.Snapshot, error)
 	SessionChanges(context.Context, sessionstate.Server, string, int64) (sessionstate.Changes, error)
@@ -35,7 +36,12 @@ type Handler struct {
 
 func write(w http.ResponseWriter, status int, item any) { apihttp.WriteJSON(w, status, item) }
 func fail(w http.ResponseWriter, status int, message string) {
-	apihttp.WriteEnvelope(w, status, http.StatusText(status), message)
+	codes := map[int]string{400: apihttp.CodeInvalidRequestBody, 401: apihttp.CodeUnauthorized, 403: apihttp.CodeForbidden, 404: apihttp.CodeNotFound, 409: apihttp.CodeConflict, 410: "sync_cursor_expired", 503: apihttp.CodeServiceUnavailable}
+	code := codes[status]
+	if code == "" {
+		code = apihttp.CodeInternalError
+	}
+	apihttp.WriteEnvelope(w, status, code, message)
 }
 func bearer(r *http.Request) string {
 	v := r.Header.Get("Authorization")
@@ -59,6 +65,8 @@ func decode(w http.ResponseWriter, r *http.Request, out any) bool {
 }
 func storeError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, sessionstate.ErrInvalidSession):
+		fail(w, 400, "invalid session identity, subject or expiry")
 	case errors.Is(err, sessionstate.ErrNotFound):
 		fail(w, 404, "session not found")
 	case errors.Is(err, sessionstate.ErrConflict):
@@ -98,8 +106,8 @@ func (h Handler) collection(w http.ResponseWriter, r *http.Request) {
 		if !decode(w, r, &item) {
 			return
 		}
-		if item.Namespace == "" || item.Binding.Name == "" || item.ServerNamespace == "" || item.ServerName == "" || item.ServerUID == "" || item.Binding.AgentID == "" || item.Binding.TeamID == "" {
-			fail(w, 400, "session identity, server UID, agent and team are required")
+		if item.Namespace == "" || item.Binding.Name == "" || item.ServerNamespace == "" || item.ServerName == "" || item.ServerUID == "" || (item.Binding.AgentID == "" && item.Binding.HumanID == "" && item.Binding.TeamID == "") {
+			fail(w, 400, "session identity, server UID and subject are required")
 			return
 		}
 		result, err := h.Store.PutSession(r.Context(), item)
@@ -174,7 +182,7 @@ func (h Handler) item(w http.ResponseWriter, r *http.Request) {
 		}
 		w.WriteHeader(204)
 	case http.MethodDelete:
-		if err := h.Store.DeleteSession(r.Context(), namespace, name); err != nil {
+		if err := h.Store.DeleteSessionVersioned(r.Context(), namespace, name, r.URL.Query().Get("uid")); err != nil {
 			storeError(w, err)
 			return
 		}
@@ -246,7 +254,7 @@ func (h Handler) Gateway() http.Handler {
 				storeError(w, err)
 				return
 			}
-			if !ok || item.ServerUID != server.UID || item.ServerNamespace != server.Namespace {
+			if !ok || item.ServerUID != server.UID || item.ServerNamespace != server.Namespace || item.ServerName != server.Name {
 				fail(w, 404, "session not found")
 				return
 			}

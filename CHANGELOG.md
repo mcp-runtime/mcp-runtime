@@ -11,6 +11,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Added
 
+- Platform-api now provides Postgres session persistence and a dedicated, server-scoped gateway sync audience with revocation tombstones, bounded change retention, restore epochs, and atomic agent deactivation. Gateways authenticate with Pod-bound projected tokens without database credentials or the shared internal token; runtime/gateway migration is tracked separately in #659 ([#718](https://github.com/mcp-runtime/mcp-runtime/issues/718)).
 - An unauthenticated `test-mcpsnoop` example with read-only `echo` and `todays_info` tools and instructions for CLI publishing, deployment, and inspecting real MCP payloads with MCPSnoop ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
 - Server cards and details show a `Gateway` badge when the Runtime gateway is enabled, separately from readiness and authentication badges. The server API now reports `gatewayEnabled` explicitly ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
 - Admin usage analytics combines server, MCP method and tool activity in one request table, with scope/searchable-team, time, policy and HTTP outcome filters applied in ClickHouse. A labelled time/rate chart, HTTP error and latency summaries, caller/session counts, response traffic and latest-trace links help investigate recorded gateway traffic ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).

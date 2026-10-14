@@ -22,7 +22,11 @@ func (s *apiServer) registerRoutes(mux *http.ServeMux) {
 		Token:               s.internalAuthToken,
 		AuthenticateRequest: s.authenticateRequest,
 	}.Register(mux)
-	sessionapi.Handler{Store: s.platform, Token: s.internalAuthToken}.RegisterAccess(mux)
+	var sessions sessionapi.Store
+	if s.platform != nil {
+		sessions = s.platform
+	}
+	sessionapi.Handler{Store: sessions, Token: s.internalAuthToken}.RegisterAccess(mux)
 
 	auth := s.authentic.Middleware
 	adminOnly := func(h http.Handler) http.Handler {

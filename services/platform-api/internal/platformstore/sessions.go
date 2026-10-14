@@ -56,18 +56,24 @@ func (s *Store) initializeSessions(ctx context.Context) error {
 }
 
 func validateSession(item sessionstate.Session) error {
-	if item.Namespace == "" || item.Binding.Name == "" || item.ServerNamespace == "" || item.ServerName == "" || item.ServerUID == "" || item.Binding.AgentID == "" || item.Binding.TeamID == "" {
-		return fmt.Errorf("session namespace, name, server UID, agent and subject team are required")
+	if item.Namespace == "" || item.Binding.Name == "" || item.ServerNamespace == "" || item.ServerName == "" || item.ServerUID == "" {
+		return fmt.Errorf("%w: namespace, name and server UID are required", sessionstate.ErrInvalidSession)
+	}
+	if item.Binding.HumanID == "" && item.Binding.AgentID == "" && item.Binding.TeamID == "" {
+		return fmt.Errorf("%w: subject is required", sessionstate.ErrInvalidSession)
+	}
+	if item.Binding.AgentID != "" && item.Binding.TeamID == "" {
+		return fmt.Errorf("%w: subject team is required for an agent", sessionstate.ErrInvalidSession)
 	}
 	if strings.ContainsAny(item.Namespace+string(item.Binding.Name), "/\\") {
-		return fmt.Errorf("invalid session identity")
+		return fmt.Errorf("%w: invalid session identity", sessionstate.ErrInvalidSession)
 	}
 	if item.Binding.Namespace != "" && string(item.Binding.Namespace) != item.Namespace {
-		return fmt.Errorf("session namespace mismatch")
+		return fmt.Errorf("%w: namespace mismatch", sessionstate.ErrInvalidSession)
 	}
 	if item.Binding.ExpiresAt != "" {
 		if _, err := time.Parse(time.RFC3339, item.Binding.ExpiresAt); err != nil {
-			return fmt.Errorf("invalid session expiry")
+			return fmt.Errorf("%w: invalid expiry", sessionstate.ErrInvalidSession)
 		}
 	}
 	return nil
@@ -151,13 +157,10 @@ func (s *Store) PutSession(ctx context.Context, item sessionstate.Session) (sess
 	if retired {
 		return sessionstate.Session{}, sessionstate.ErrConflict
 	}
-	var status, team string
-	err = tx.QueryRowContext(ctx, `SELECT status,team_id::text FROM agents WHERE id=$1 FOR UPDATE`, string(item.Binding.AgentID)).Scan(&status, &team)
-	if errors.Is(err, sql.ErrNoRows) || (err == nil && (status != "active" || team != string(item.Binding.TeamID))) {
-		return sessionstate.Session{}, sessionstate.ErrInactiveAgent
-	}
-	if err != nil {
-		return sessionstate.Session{}, err
+	if item.Binding.AgentID != "" {
+		if err = checkSessionAgent(ctx, tx, item); err != nil {
+			return sessionstate.Session{}, err
+		}
 	}
 	var previous []byte
 	err = tx.QueryRowContext(ctx, `SELECT data FROM sessions WHERE id=$1`, item.ID).Scan(&previous)
@@ -282,13 +285,17 @@ func (s *Store) SetSessionRevoked(ctx context.Context, namespace, name string, r
 		return err
 	}
 	if !revoked {
-		var status, team string
-		err = tx.QueryRowContext(ctx, `SELECT status,team_id::text FROM agents WHERE id=$1 FOR UPDATE`, string(item.Binding.AgentID)).Scan(&status, &team)
-		if errors.Is(err, sql.ErrNoRows) || (err == nil && (status != "active" || team != string(item.Binding.TeamID))) {
-			return sessionstate.ErrInactiveAgent
-		}
-		if err != nil {
+		var retired bool
+		if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM session_retired_servers WHERE server_uid=$1)`, item.ServerUID).Scan(&retired); err != nil {
 			return err
+		}
+		if retired {
+			return sessionstate.ErrConflict
+		}
+		if item.Binding.AgentID != "" {
+			if err = checkSessionAgent(ctx, tx, item); err != nil {
+				return err
+			}
 		}
 	}
 	item.Binding.Revoked = revoked
@@ -306,7 +313,22 @@ func (s *Store) SetSessionRevoked(ctx context.Context, namespace, name string, r
 	return tx.Commit()
 }
 
+func checkSessionAgent(ctx context.Context, tx *sql.Tx, item sessionstate.Session) error {
+	var status, team string
+	err := tx.QueryRowContext(ctx, `SELECT status,team_id::text FROM agents WHERE id=$1 FOR UPDATE`, string(item.Binding.AgentID)).Scan(&status, &team)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && (status != "active" || team != string(item.Binding.TeamID))) {
+		return sessionstate.ErrInactiveAgent
+	}
+	return err
+}
+
 func (s *Store) DeleteSession(ctx context.Context, namespace, name string) error {
+	return s.DeleteSessionVersioned(ctx, namespace, name, "")
+}
+
+// DeleteSessionVersioned protects retirement snapshots from deleting a newer
+// session that was recreated with the same namespace/name after the scan.
+func (s *Store) DeleteSessionVersioned(ctx context.Context, namespace, name, uid string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -316,7 +338,7 @@ func (s *Store) DeleteSession(ctx context.Context, namespace, name string) error
 		return err
 	}
 	var data []byte
-	err = tx.QueryRowContext(ctx, `DELETE FROM sessions WHERE namespace=$1 AND name=$2 RETURNING data`, namespace, name).Scan(&data)
+	err = tx.QueryRowContext(ctx, `SELECT data FROM sessions WHERE namespace=$1 AND name=$2`, namespace, name).Scan(&data)
 	if errors.Is(err, sql.ErrNoRows) {
 		return sessionstate.ErrNotFound
 	}
@@ -325,6 +347,12 @@ func (s *Store) DeleteSession(ctx context.Context, namespace, name string) error
 	}
 	var item sessionstate.Session
 	if err = json.Unmarshal(data, &item); err != nil {
+		return err
+	}
+	if uid != "" && item.UID != uid {
+		return sessionstate.ErrConflict
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM sessions WHERE namespace=$1 AND name=$2`, namespace, name); err != nil {
 		return err
 	}
 	if err = appendSessionChange(ctx, tx, item, true); err != nil {

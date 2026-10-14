@@ -98,10 +98,18 @@ func (c *Client) RevokeSession(ctx context.Context, namespace, name, cause strin
 	return c.SetSessionRevoked(ctx, namespace, name, true, cause)
 }
 func (c *Client) DeleteSession(ctx context.Context, namespace, name string) error {
+	return c.DeleteSessionIfUID(ctx, namespace, name, "")
+}
+
+func (c *Client) DeleteSessionIfUID(ctx context.Context, namespace, name, uid string) error {
 	if !c.Configured() {
 		return ErrNotConfigured
 	}
-	status, err := c.requestJSON(ctx, http.MethodDelete, sessionPath(namespace, name), nil, nil, true)
+	path := sessionPath(namespace, name)
+	if uid != "" {
+		path += "?" + url.Values{"uid": {uid}}.Encode()
+	}
+	status, err := c.requestJSON(ctx, http.MethodDelete, path, nil, nil, true)
 	if err != nil || status != http.StatusNoContent {
 		return sessionError(status, err)
 	}

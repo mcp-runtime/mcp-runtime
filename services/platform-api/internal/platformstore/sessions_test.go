@@ -2,6 +2,7 @@ package platformstore
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +14,59 @@ import (
 	"mcp-runtime/pkg/policy"
 	"mcp-runtime/pkg/sessionstate"
 )
+
+func TestHumanAndTeamOnlySessionsDoNotRequireAgentDirectory(t *testing.T) {
+	for _, subject := range []string{"human", "team"} {
+		t.Run(subject, func(t *testing.T) {
+			s, mock := sessionTestStore(t)
+			item := sessionFixture()
+			item.Binding.AgentID = ""
+			item.Binding.TeamID = ""
+			if subject == "human" {
+				item.Binding.HumanID = "user"
+			} else {
+				item.Binding.TeamID = "team"
+			}
+			mock.ExpectBegin()
+			expectStateLock(mock)
+			mock.ExpectQuery("SELECT EXISTS.*session_retired_servers").WithArgs(item.ServerUID).WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+			mock.ExpectQuery("SELECT data FROM sessions WHERE id=").WithArgs(item.ID).WillReturnError(sql.ErrNoRows)
+			mock.ExpectExec("INSERT INTO sessions").WillReturnResult(sqlmock.NewResult(0, 1))
+			mock.ExpectQuery("UPDATE session_sync_state SET sequence=sequence\\+1").WillReturnRows(sqlmock.NewRows([]string{"sequence"}).AddRow(11))
+			mock.ExpectExec("INSERT INTO session_changes").WillReturnResult(sqlmock.NewResult(0, 1))
+			mock.ExpectCommit()
+			out, err := s.PutSession(context.Background(), item)
+			if err != nil || out.Binding.AgentID != "" {
+				t.Fatalf("session=%+v err=%v", out, err)
+			}
+		})
+	}
+}
+
+func TestUnrevocationRejectsRetiredServerUID(t *testing.T) {
+	s, mock := sessionTestStore(t)
+	item := sessionFixture()
+	item.Binding.Revoked = true
+	data, _ := json.Marshal(item)
+	mock.ExpectBegin()
+	expectStateLock(mock)
+	mock.ExpectQuery("SELECT data FROM sessions WHERE namespace=.*AND name=").WithArgs(item.Namespace, string(item.Binding.Name)).WillReturnRows(sqlmock.NewRows([]string{"data"}).AddRow(data))
+	mock.ExpectQuery("SELECT EXISTS.*session_retired_servers").WithArgs(item.ServerUID).WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectRollback()
+	if err := s.SetSessionRevoked(context.Background(), item.Namespace, string(item.Binding.Name), false, ""); !errors.Is(err, sessionstate.ErrConflict) {
+		t.Fatalf("error=%v", err)
+	}
+}
+
+func TestValidateSessionRequiresSubjectAndRejectsBadExpiry(t *testing.T) {
+	for _, mutate := range []func(*sessionstate.Session){func(s *sessionstate.Session) { s.Binding = policy.Binding{Name: "sess"} }, func(s *sessionstate.Session) { s.Binding.TeamID = "" }, func(s *sessionstate.Session) { s.Binding.ExpiresAt = "tomorrow" }, func(s *sessionstate.Session) { s.Binding.Namespace = "other" }} {
+		item := sessionFixture()
+		mutate(&item)
+		if err := validateSession(item); !errors.Is(err, sessionstate.ErrInvalidSession) {
+			t.Fatalf("invalid session accepted: %+v err=%v", item, err)
+		}
+	}
+}
 
 func sessionFixture() sessionstate.Session {
 	return sessionstate.Session{ID: "tenant/sess", Namespace: "tenant", ServerNamespace: "tenant", ServerName: "server", ServerUID: "generation-1", UID: "session-uid", Binding: policy.Binding{Name: "sess", Namespace: "tenant", AgentID: "agent", TeamID: "team", ConsentedTrust: "low"}, CreatedAt: time.Unix(1000, 0).UTC()}
@@ -159,5 +213,19 @@ func TestGetSessionScopesNamespaceAndName(t *testing.T) {
 	out, ok, err := s.GetSession(context.Background(), "tenant", "sess")
 	if err != nil || !ok || out.ServerUID != item.ServerUID {
 		t.Fatalf("out=%+v ok=%v err=%v", out, ok, err)
+	}
+}
+
+func TestDeleteSessionChecksExpectedUID(t *testing.T) {
+	s, mock := sessionTestStore(t)
+	item := sessionFixture()
+	item.UID = "new-session-uid"
+	data, _ := json.Marshal(item)
+	mock.ExpectBegin()
+	expectStateLock(mock)
+	mock.ExpectQuery("SELECT data FROM sessions WHERE namespace=.*AND name=").WithArgs(item.Namespace, string(item.Binding.Name)).WillReturnRows(sqlmock.NewRows([]string{"data"}).AddRow(data))
+	mock.ExpectRollback()
+	if err := s.DeleteSessionVersioned(context.Background(), item.Namespace, string(item.Binding.Name), "old-session-uid"); !errors.Is(err, sessionstate.ErrConflict) {
+		t.Fatalf("stale delete error=%v", err)
 	}
 }

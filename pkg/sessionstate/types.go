@@ -20,10 +20,11 @@ const (
 )
 
 var (
-	ErrReset         = errors.New("session sync cursor expired; relist required")
-	ErrNotFound      = errors.New("session not found")
-	ErrConflict      = errors.New("session already exists with different state")
-	ErrInactiveAgent = errors.New("session agent is inactive or belongs to another team")
+	ErrReset          = errors.New("session sync cursor expired; relist required")
+	ErrNotFound       = errors.New("session not found")
+	ErrConflict       = errors.New("session already exists with different state")
+	ErrInactiveAgent  = errors.New("session agent is inactive or belongs to another team")
+	ErrInvalidSession = errors.New("invalid session")
 )
 
 // Server is derived from a verified, Pod-bound service-account identity.

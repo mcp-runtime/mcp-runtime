@@ -23,7 +23,11 @@ func (s *apiServer) startGatewaySessions() (*http.Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	server := &http.Server{Handler: sessionapi.Handler{Store: s.platform, Authenticate: identity.Authenticate}.Gateway(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10}
+	var sessions sessionapi.Store
+	if s.platform != nil {
+		sessions = s.platform
+	}
+	server := &http.Server{Handler: sessionapi.Handler{Store: sessions, Authenticate: identity.Authenticate}.Gateway(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10}
 	go func() {
 		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Printf("gateway session listener stopped: %v", err)
