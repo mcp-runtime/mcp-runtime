@@ -10,7 +10,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 ### Added
 
 - An unauthenticated `test-mcpsnoop` example with read-only `echo` and `todays_info` tools and instructions for CLI publishing, deployment, and inspecting real MCP payloads with MCPSnoop ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
-- `mcp-runtime update --platform-mode org|public` changes mode, prepares managed catalog namespaces, and restarts mode-dependent services without hand-written ConfigMap rollout entries. Namespace scopes cannot be changed and new catalogs survive rollback. `--build` checks registry access before building commit-tagged images so invalid Docker credentials fail earlier ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
+- `mcp-runtime update --platform-mode org|public` changes mode, prepares managed catalog namespaces, and restarts mode-dependent services without hand-written ConfigMap rollout entries. Namespace scopes cannot be changed and new catalogs survive rollback. `--build` checks external registry access before building commit-tagged images so invalid Docker credentials fail earlier; bundled registries retain their selected-cluster push transport ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
 
 ### Changed
 
@@ -19,6 +19,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 ### Removed
 
 - The `tenant` platform mode and `setup --platform-mode tenant`; `--scope tenant` remains the team publishing workflow. This configuration change requires a new minor release ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
+
+### Fixed
+
+- Admin server deployment now prepares public/org catalog namespace permissions, resource controls, network policy and registry pulls just like user deployment, so a newly enabled catalog can host its first MCP server ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
 
 ## [0.8.1] - 2026-10-14
 

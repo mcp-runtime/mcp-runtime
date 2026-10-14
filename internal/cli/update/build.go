@@ -193,6 +193,14 @@ func planImageBuilds(ctx context.Context, plan *Plan, opts BuildOptions) ([]Imag
 			out = append(out, action)
 			continue
 		}
+		if commitTagged && opts.RegistryHasImage == nil && bundledRegistryTarget(image) {
+			// This authority is reachable through the selected Kubernetes
+			// transport, not through workstation Docker DNS. PushInCluster
+			// checks its authentication when publishing; never probe another
+			// cluster or the workstation's default context here.
+			out = append(out, action)
+			continue
+		}
 		exists, err := probe(ctx, image)
 		if err != nil {
 			return nil, fmt.Errorf("check registry for %s before building (verify Docker registry login): %w", image, err)

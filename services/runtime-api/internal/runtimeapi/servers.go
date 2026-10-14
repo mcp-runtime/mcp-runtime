@@ -305,13 +305,13 @@ func (s *RuntimeServer) handleRuntimeServerApply(w http.ResponseWriter, r *http.
 }
 
 func (s *RuntimeServer) ensureServerApplyNamespace(ctx context.Context, p principal, namespace string, team principalTeam, isTeamNamespace bool) error {
-	if p.Role == roleAdmin {
-		return nil
-	}
 	if sharedCatalogWritableForUsers() && isModeCatalogNamespace(namespace) {
 		if err := s.Deployments().EnsureCatalogNamespace(ctx, namespace); err != nil {
 			return fmt.Errorf("catalog namespace %q: %w", namespace, err)
 		}
+		return nil
+	}
+	if p.Role == roleAdmin {
 		return nil
 	}
 	if isTeamNamespace {

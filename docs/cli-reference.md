@@ -911,9 +911,11 @@ and cancel sibling builds. Existing tags are reused except for commit-tagged
 release images: these are rebuilt from a clean checkout of the exact source
 commit even if the tag exists. Without `--build`, images must already be
 published.
-Registry probes run before builds, including commit-tagged images, so invalid
+Registry probes for external Docker targets run before builds, including commit-tagged images, so invalid
 Docker registry credentials fail before an expensive build. `--dry-run` skips
-registry access and does not require Docker.
+registry access and does not require Docker. Bundled `.svc.cluster.local`
+registries use the selected cluster's publishing transport rather than a
+workstation Docker probe.
 Published release manifests tag Runtime-built images with the full source
 commit (`vX.Y.Z-g<commit>`), so images from another release commit have a
 different registry tag. update compares their release version without treating

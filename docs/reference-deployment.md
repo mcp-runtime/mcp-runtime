@@ -387,6 +387,10 @@ ownership are rejected. Newly created catalogs remain after rollback; they
 are never deleted by update. Record `MCP_SETUP_PLATFORM_MODE=public` in the
 private installation profile so later setup uses the same reviewed mode.
 
+The first server deployment into a catalog prepares its namespace-local operator
+permissions, registry pulls, quotas and network protection for admins and users.
+Creating only a namespace is insufficient to host a server.
+
 This transition needs no fresh setup or data reset. Preserve platform databases,
 registry images, Secrets, certificates, and the separately hosted identity
 provider's data/TLS state. Retain the existing mcp-auth release. Keep the
