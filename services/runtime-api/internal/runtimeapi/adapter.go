@@ -2,6 +2,7 @@ package runtimeapi
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -195,6 +196,16 @@ func (s *AccessService) HandleAdapterSession(w http.ResponseWriter, r *http.Requ
 			TrustDomain:    strings.TrimSpace(os.Getenv("MCP_TRUST_DOMAIN")),
 		})
 		return
+	}
+	// Never renew a revoked/expired binding under the same certificate identity.
+	// Otherwise an old certificate would start working again after re-enrollment.
+	if existing != nil {
+		var suffix [8]byte
+		if _, err := rand.Read(suffix[:]); err != nil {
+			writeAPIError(w, http.StatusInternalServerError, "failed to allocate a session identity")
+			return
+		}
+		sessionName = sessionName + "-" + hex.EncodeToString(suffix[:])
 	}
 
 	session := &mcpaccess.MCPAgentSession{

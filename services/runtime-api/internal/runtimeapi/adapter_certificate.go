@@ -108,11 +108,15 @@ func (s *AccessService) HandleAdapterCertificate(w http.ResponseWriter, r *http.
 	if serverNamespace == "" {
 		serverNamespace = req.Namespace
 	}
-	_, err = s.k8sClients.Dynamic.Resource(adapterMCPServerGVR).Namespace(serverNamespace).Get(
+	targetServer, err := s.k8sClients.Dynamic.Resource(adapterMCPServerGVR).Namespace(serverNamespace).Get(
 		r.Context(), serverName, metav1.GetOptions{},
 	)
 	if err != nil {
 		writeAPIError(w, http.StatusServiceUnavailable, "read target MCPServer", err)
+		return
+	}
+	if boundUID := session.Annotations[sessionServerUIDAnnotation]; boundUID != "" && boundUID != string(targetServer.GetUID()) {
+		writeAPIError(w, http.StatusForbidden, "adapter session belongs to a retired server deployment")
 		return
 	}
 	trustDomain := strings.TrimSpace(os.Getenv("MCP_TRUST_DOMAIN"))

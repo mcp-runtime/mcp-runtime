@@ -796,6 +796,13 @@ func desiredDefaultDenyNetworkPolicy(ns string, ingressFromNamespaces ...string)
 			Ingress:     ingress,
 			Egress: []networkingv1.NetworkPolicyEgressRule{
 				{
+					To: []networkingv1.NetworkPolicyPeer{{
+						NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"kubernetes.io/metadata.name": platformstack.PlatformNamespace}},
+						PodSelector:       &metav1.LabelSelector{MatchLabels: map[string]string{"app": "mcp-platform-api"}},
+					}},
+					Ports: []networkingv1.NetworkPolicyPort{{Protocol: &tcpProtocol, Port: intstrPtr(8085)}},
+				},
+				{
 					To: []networkingv1.NetworkPolicyPeer{
 						{
 							NamespaceSelector: &metav1.LabelSelector{

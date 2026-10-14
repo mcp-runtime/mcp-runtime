@@ -40,8 +40,12 @@ func (s *gatewayServer) authFilter(ex *Exchange) Result {
 		strings.TrimSpace(ex.R.Header.Get(s.verifiedSPIFFEHeaderName())) != "" {
 		verifiedIdentity, reason := s.authenticateAdapterCertificate(ex.R, ex.Policy)
 		if reason != "" {
+			status := http.StatusUnauthorized
+			if reason == "policy_unavailable" {
+				status = http.StatusServiceUnavailable
+			}
 			ex.Decision = policypkg.Deny(
-				http.StatusUnauthorized,
+				status,
 				reason,
 				policypkg.ChoosePolicyVersion(policypkg.PolicyVersion(ex.Policy), s.defaultPolicyVersion),
 			)
@@ -144,7 +148,15 @@ func (s *gatewayServer) authenticateAdapterCertificate(r *http.Request, policy *
 		return identityContext{}, "invalid_spiffe_identity"
 	}
 
-	for _, binding := range policy.Sessions {
+	bindings := policy.Sessions
+	if policy.Session != nil && policy.Session.Store == "platform" {
+		binding, reason := s.sessionSync.binding(r.Context(), namespace, sessionID)
+		if reason != "" {
+			return identityContext{}, reason
+		}
+		bindings = []policypkg.Binding{*binding}
+	}
+	for _, binding := range bindings {
 		if string(binding.Namespace) != namespace || string(binding.Name) != sessionID {
 			continue
 		}
@@ -159,6 +171,7 @@ func (s *gatewayServer) authenticateAdapterCertificate(r *http.Request, policy *
 			AgentID:   string(binding.AgentID),
 			TeamID:    string(binding.TeamID),
 			SessionID: string(binding.Name),
+			Session:   &binding,
 		}, ""
 	}
 	return identityContext{}, "session_not_found"

@@ -132,10 +132,32 @@ func (m *AccessManager) ExplainAccess(opts explainOptions, out io.Writer) error 
 	if string(doc.Server.Name) != server || string(doc.Server.Namespace) != namespace {
 		return core.NewWithBase(nil, fmt.Sprintf("policy server is %s/%s, want %s/%s", doc.Server.Namespace, doc.Server.Name, namespace, server))
 	}
+	var binding *policy.Binding
+	if doc.Session != nil && doc.Session.Store == "platform" && identity.SessionID != "" {
+		if m.useKube {
+			return fmt.Errorf("platform sessions require the platform API; omit --use-kube")
+		}
+		client, err := platformapi.NewPlatformClient()
+		if err != nil {
+			return err
+		}
+		session, err := client.GetSession(context.Background(), namespace, string(identity.SessionID))
+		if err != nil {
+			return err
+		}
+		if string(session.ServerRef.Name) != server || (session.ServerRef.Namespace != "" && string(session.ServerRef.Namespace) != namespace) || session.ServerUID != doc.Server.UID {
+			return fmt.Errorf("session does not belong to the policy's server deployment")
+		}
+		binding = &policy.Binding{Name: policy.SessionID(session.Name), Namespace: policy.Namespace(session.Namespace), HumanID: policy.HumanID(session.Subject.HumanID), AgentID: policy.AgentID(session.Subject.AgentID), TeamID: policy.TeamID(session.Subject.TeamID), ConsentedTrust: string(session.ConsentedTrust), Revoked: session.Revoked, PolicyVersion: session.PolicyVersion}
+		if session.ExpiresAt != nil {
+			binding.ExpiresAt = session.ExpiresAt.UTC().Format(time.RFC3339)
+		}
+	}
 	decision := policy.Authorize(doc, policy.Request{
 		Identity:  identity,
 		RPCMethod: rpcMethod,
 		ToolName:  policy.ToolName(toolName),
+		Session:   binding,
 	}, time.Now())
 	result := newExplainOutput(doc, decision, server, namespace, rpcMethod, toolName, identity)
 	if err := writeExplainOutput(out, result, opts.JSON); err != nil {

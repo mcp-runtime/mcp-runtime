@@ -161,6 +161,10 @@ func renderPolicyConfigMapData(existing string, doc *policy.Document) (string, e
 	if err != nil {
 		return "", err
 	}
+	if len(data) > maxGatewayPolicyBytes {
+		gatewayPolicyOversizeTotal.Inc()
+		return "", fmt.Errorf("rendered gateway policy is %d bytes, exceeding the %d-byte size guard; reduce grants or tool rules", len(data), maxGatewayPolicyBytes)
+	}
 	return string(data), nil
 }
 
@@ -168,6 +172,7 @@ func (r *MCPServerReconciler) renderGatewayPolicy(ctx context.Context, mcpServer
 	serverTeamID := strings.TrimSpace(mcpServer.Spec.TeamID)
 	doc := &policy.Document{
 		Server: policy.Server{
+			UID:       string(mcpServer.UID),
 			Name:      policy.ServerName(mcpServer.Name),
 			Namespace: policy.Namespace(mcpServer.Namespace),
 			TeamID:    policy.TeamID(serverTeamID),
@@ -292,40 +297,14 @@ func (r *MCPServerReconciler) renderGatewayPolicy(ctx context.Context, mcpServer
 		doc.Grants = append(doc.Grants, rendered)
 	}
 
-	var sessions mcpv1alpha1.MCPAgentSessionList
-	if err := r.List(ctx, &sessions); err != nil {
-		return nil, err
+	// Runtime sessions are platform-owned and never enter the policy ConfigMap.
+	if !mcpv1alpha1.AuthUsesHeaderMode(mcpServer.Spec.Auth) && mcpServer.UID != "" {
+		if doc.Session == nil {
+			doc.Session = &policy.Session{}
+		}
+		doc.Session.Store = "platform"
 	}
-	for _, session := range sessions.Items {
-		if mcpServer.Annotations["mcpruntime.org/retiring"] == "true" {
-			continue
-		}
-		if uid := session.Annotations["mcpruntime.org/server-uid"]; uid != "" && uid != string(mcpServer.UID) {
-			continue
-		}
-		if !serverReferenceMatches(session.Namespace, session.Spec.ServerRef, mcpServer) {
-			continue
-		}
-		subjectTeamID := subjectTeamIDForServer(serverTeamID, session.Spec.Subject.TeamID)
-		rendered := policy.Binding{
-			Name:           policy.SessionID(session.Name),
-			Namespace:      policy.Namespace(session.Namespace),
-			HumanID:        policy.HumanID(session.Spec.Subject.HumanID),
-			AgentID:        policy.AgentID(session.Spec.Subject.AgentID),
-			TeamID:         policy.TeamID(subjectTeamID),
-			ConsentedTrust: string(defaultTrust(session.Spec.ConsentedTrust)),
-			Revoked:        session.Spec.Revoked,
-			PolicyVersion:  session.Spec.PolicyVersion,
-		}
-		if session.Spec.ExpiresAt != nil {
-			rendered.ExpiresAt = session.Spec.ExpiresAt.UTC().Format(time.RFC3339)
-		}
-		if session.Spec.UpstreamTokenSecretRef != nil {
-			rendered.UpstreamTokenRef = fmt.Sprintf("%s/%s", session.Spec.UpstreamTokenSecretRef.Name, session.Spec.UpstreamTokenSecretRef.Key)
-		}
-		doc.Sessions = append(doc.Sessions, rendered)
-	}
-	if mcpv1alpha1.AuthUsesHeaderMode(mcpServer.Spec.Auth) && (len(doc.Grants) > 0 || len(doc.Sessions) > 0 || doc.Session != nil) {
+	if mcpv1alpha1.AuthUsesHeaderMode(mcpServer.Spec.Auth) && (len(doc.Grants) > 0 || doc.Session != nil) {
 		return nil, fmt.Errorf("header auth on %s/%s cannot use grants, sessions, or session identity", mcpServer.Namespace, mcpServer.Name)
 	}
 

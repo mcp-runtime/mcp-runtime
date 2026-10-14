@@ -21,6 +21,7 @@ import (
 	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
 	"mcp-runtime/pkg/kubeworkload"
 	"mcp-runtime/pkg/mcpdefaults"
+	"mcp-runtime/pkg/sessionstate"
 )
 
 func (r *MCPServerReconciler) reconcileDeployment(ctx context.Context, mcpServer *mcpv1alpha1.MCPServer) error {
@@ -242,6 +243,14 @@ func (r *MCPServerReconciler) buildDeploymentContainers(mcpServer *mcpv1alpha1.M
 				},
 			},
 		})
+		if !mcpv1alpha1.AuthUsesHeaderMode(mcpServer.Spec.Auth) {
+			expiry := int64(3600)
+			volumes = append(volumes, corev1.Volume{Name: "gateway-session-token", VolumeSource: corev1.VolumeSource{
+				Projected: &corev1.ProjectedVolumeSource{Sources: []corev1.VolumeProjection{{ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
+					Audience: sessionstate.GatewayAudience, ExpirationSeconds: &expiry, Path: "token",
+				}}}},
+			}})
+		}
 		if r.analyticsEnabled(mcpServer) {
 			expiry := analyticsTokenExpirySeconds
 			volumes = append(volumes, corev1.Volume{
@@ -511,11 +520,18 @@ func (r *MCPServerReconciler) buildGatewayContainer(mcpServer *mcpv1alpha1.MCPSe
 		{Name: "POLICY_FILE", Value: gatewayPolicyFilePath},
 		{Name: "MCP_SERVER_NAME", Value: mcpServer.Name},
 		{Name: "MCP_SERVER_NAMESPACE", Value: mcpServer.Namespace},
+		{Name: "MCP_SERVER_UID", Value: string(mcpServer.UID)},
 		{Name: "MCP_CLUSTER_NAME", Value: strings.TrimSpace(r.ClusterName)},
 		// The public issuer is retained in the policy for JWT validation, while
 		// this in-cluster URL keeps gateway JWKS discovery off the workstation
 		// port-forward used by local clients.
 		{Name: "OAUTH_INTERNAL_ISSUER_URL", Value: r.oauthInternalIssuerURL()},
+	}
+	if !mcpv1alpha1.AuthUsesHeaderMode(mcpServer.Spec.Auth) {
+		envVars = append(envVars,
+			corev1.EnvVar{Name: "SESSION_SYNC_URL", Value: "http://mcp-platform-api.mcp-platform.svc.cluster.local:8085"},
+			corev1.EnvVar{Name: "SESSION_SYNC_TOKEN_FILE", Value: "/var/run/mcp-runtime/session-sync/token"},
+		)
 	}
 	if externalBaseURL := r.gatewayExternalBaseURL(mcpServer); externalBaseURL != "" {
 		envVars = append(envVars, corev1.EnvVar{Name: "EXTERNAL_BASE_URL", Value: externalBaseURL})
@@ -638,6 +654,9 @@ func (r *MCPServerReconciler) buildGatewayContainer(mcpServer *mcpv1alpha1.MCPSe
 			InitialDelaySeconds: 3,
 			PeriodSeconds:       5,
 		},
+	}
+	if !mcpv1alpha1.AuthUsesHeaderMode(mcpServer.Spec.Auth) {
+		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{Name: "gateway-session-token", MountPath: "/var/run/mcp-runtime/session-sync", ReadOnly: true})
 	}
 	if r.analyticsEnabled(mcpServer) {
 		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{

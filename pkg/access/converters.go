@@ -129,27 +129,39 @@ func ToGrantSummary(grant MCPAccessGrant) GrantSummary {
 
 // SessionSummary provides a simplified view of a session for UI display.
 type SessionSummary struct {
-	Name           string          `json:"name"`
-	Namespace      string          `json:"namespace"`
-	ServerRef      ServerReference `json:"serverRef"`
-	Subject        SubjectRef      `json:"subject"`
-	ConsentedTrust TrustLevel      `json:"consentedTrust"`
-	Revoked        bool            `json:"revoked"`
-	ExpiresAt      *metav1.Time    `json:"expiresAt,omitempty"`
-	Age            string          `json:"age"`
+	Name            string          `json:"name"`
+	Namespace       string          `json:"namespace"`
+	ServerRef       ServerReference `json:"serverRef"`
+	Subject         SubjectRef      `json:"subject"`
+	ConsentedTrust  TrustLevel      `json:"consentedTrust"`
+	Revoked         bool            `json:"revoked"`
+	ExpiresAt       *metav1.Time    `json:"expiresAt,omitempty"`
+	Age             string          `json:"age"`
+	PolicyVersion   string          `json:"policyVersion,omitempty"`
+	ServerUID       string          `json:"serverUID,omitempty"`
+	GrantName       string          `json:"grantName,omitempty"`
+	GrantNamespace  string          `json:"grantNamespace,omitempty"`
+	RevokedAt       string          `json:"revokedAt,omitempty"`
+	RevocationCause string          `json:"revocationCause,omitempty"`
 }
 
 // ToSessionSummary converts an MCPAgentSession to a SessionSummary.
 func ToSessionSummary(session MCPAgentSession) SessionSummary {
 	summary := SessionSummary{
-		Name:           session.Name,
-		Namespace:      session.Namespace,
-		ServerRef:      session.Spec.ServerRef,
-		Subject:        session.Spec.Subject,
-		ConsentedTrust: session.Spec.ConsentedTrust,
-		Revoked:        session.Spec.Revoked,
-		ExpiresAt:      session.Spec.ExpiresAt,
-		Age:            session.CreationTimestamp.Format("2006-01-02T15:04:05Z"),
+		Name:            session.Name,
+		Namespace:       session.Namespace,
+		ServerRef:       session.Spec.ServerRef,
+		Subject:         session.Spec.Subject,
+		ConsentedTrust:  session.Spec.ConsentedTrust,
+		Revoked:         session.Spec.Revoked,
+		ExpiresAt:       session.Spec.ExpiresAt,
+		Age:             session.CreationTimestamp.Format("2006-01-02T15:04:05Z"),
+		PolicyVersion:   session.Spec.PolicyVersion,
+		ServerUID:       session.Annotations["mcpruntime.org/session-server-uid"],
+		GrantName:       session.Annotations["mcpruntime.org/access-grant-name"],
+		GrantNamespace:  session.Annotations["mcpruntime.org/access-grant-namespace"],
+		RevokedAt:       session.Annotations["mcpruntime.org/session-revoked-at"],
+		RevocationCause: session.Annotations["mcpruntime.org/session-revocation-cause"],
 	}
 	return summary
 }
