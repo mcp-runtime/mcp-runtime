@@ -219,7 +219,7 @@ jobs:
         run: npm ci
       - name: Unit and accessibility tests
         working-directory: services/ui/frontend
-        run: npm test -- --maxWorkers=4
+        run: npm test -- --maxWorkers=2
       - name: Install Chromium
         working-directory: services/ui/frontend
         run: npx playwright install --with-deps chromium
