@@ -86,6 +86,34 @@ func (s *gatewayServer) authFilter(ex *Exchange) Result {
 			return Reject
 		}
 		ex.Identity = *certificateIdentity
+	} else if ex.Identity.SessionID != "" && ex.Policy.Session != nil && ex.Policy.Session.Store == "platform" && (ex.Inspection.ToolCall || ex.Inspection.Indeterminate) {
+		binding, reason := s.sessionSync.binding(ex.R.Context(), string(ex.Policy.Server.Namespace), ex.Identity.SessionID)
+		if reason == "" {
+			if binding.Revoked {
+				reason = "session_revoked"
+			} else if mtlsBindingExpired(binding.ExpiresAt) {
+				reason = "session_expired"
+			} else if (string(binding.HumanID) != "" && string(binding.HumanID) != ex.Identity.HumanID) ||
+				(string(binding.AgentID) != "" && string(binding.AgentID) != ex.Identity.AgentID) ||
+				(string(binding.TeamID) != "" && string(binding.TeamID) != ex.Identity.TeamID) {
+				reason = "session_identity_mismatch"
+			}
+		}
+		if reason != "" {
+			// Optional sessions previously ignored missing/revoked/mismatched
+			// bindings while still enforcing identity and grant policy.
+			if !ex.Policy.Session.Required && reason != "policy_unavailable" {
+				return Continue
+			}
+			status := http.StatusUnauthorized
+			if reason == "policy_unavailable" {
+				status = http.StatusServiceUnavailable
+			}
+			ex.Decision = policypkg.Deny(status, reason, policypkg.PolicyVersion(ex.Policy))
+			s.writeDeniedResponse(ex)
+			return Reject
+		}
+		ex.Identity.Session = binding
 	}
 	return Continue
 }

@@ -24,6 +24,7 @@ import (
 	"mcp-runtime/pkg/metadata"
 	"mcp-runtime/pkg/platformstack"
 	"mcp-runtime/pkg/publishscope"
+	"mcp-runtime/pkg/sessionstate"
 )
 
 var errForbiddenNamespace = errors.New("forbidden namespace")
@@ -686,6 +687,42 @@ func (s *RuntimeServer) handleRuntimeServerDelete(w http.ResponseWriter, r *http
 	if manager == nil {
 		writeAPIError(w, http.StatusServiceUnavailable, "access cleanup not available")
 		return
+	}
+	if client, ok := s.identity.(interface {
+		RevokeSessions(context.Context, sessionstate.Filter, string) (int64, error)
+	}); ok {
+		// The durable UID fence rejects issuance already in flight when this
+		// server was marked retiring. Orphan recovery fences every stored UID.
+		uids := map[string]struct{}{}
+		if current != nil {
+			uids[string(current.UID)] = struct{}{}
+		}
+		rows, err := manager.ListSessions(ctx, "")
+		if err == nil {
+			for _, row := range rows.Items {
+				refNS := string(row.Spec.ServerRef.Namespace)
+				if refNS == "" {
+					refNS = row.Namespace
+				}
+				if refNS == namespace && string(row.Spec.ServerRef.Name) == name {
+					if uid := row.Annotations[sessionServerUIDAnnotation]; uid != "" {
+						uids[uid] = struct{}{}
+					}
+				}
+			}
+			for uid := range uids {
+				if uid != "" {
+					if _, err = client.RevokeSessions(ctx, sessionstate.Filter{ServerUID: uid}, "server_retired"); err != nil {
+						break
+					}
+				}
+			}
+		}
+		if err != nil {
+			s.writeAudit(ctx, serverPublishAuditEvent(r, p, "server_retire", "error", name, namespace, image, "platform session retirement failed"))
+			writeAPIError(w, http.StatusServiceUnavailable, "failed to retire platform sessions; retry retirement")
+			return
+		}
 	}
 	if err := manager.RetireServerAccess(ctx, namespace, name); err != nil {
 		s.writeAudit(r.Context(), serverPublishAuditEvent(r, p, "server_retire", "error", name, namespace, image, err.Error()))

@@ -26,6 +26,7 @@ type accessSessionRequest struct {
 	Revoked        *bool                     `json:"revoked,omitempty"`
 	PolicyVersion  string                    `json:"policyVersion"`
 	GrantName      string                    `json:"grantName,omitempty"`
+	GrantNamespace string                    `json:"grantNamespace,omitempty"`
 }
 
 type accessSessionPatchRequest struct {

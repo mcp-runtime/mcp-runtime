@@ -568,7 +568,8 @@ staging_collect_diagnostics() {
   # Names and types only: Secret data is never collected.
   kubectl get secrets -A >"${out}/secret-names.txt" 2>&1 || true
   kubectl get mcpservers -A -o yaml >"${out}/mcpservers.yaml" 2>&1 || true
-  kubectl get mcpaccessgrants,mcpagentsessions -A >"${out}/grants-sessions.txt" 2>&1 || true
+  kubectl get mcpaccessgrants -A >"${out}/grants.txt" 2>&1 || true
+  staging_api_curl --fail "${PLATFORM_URL}/api/v1/runtime/sessions" >"${out}/sessions.json" 2>&1 || true
   kubectl get configmap mcp-shared-config -n mcp-platform -o yaml >"${out}/mcp-shared-config.yaml" 2>&1 || true
   while IFS= read -r ns; do
     kubectl get namespace "${ns}" >/dev/null 2>&1 || continue
@@ -1397,7 +1398,8 @@ staging_adapter_diagnostics() {
   local server
   mkdir -p "${out}"
   kubectl -n "${ns}" get mcpservers "$@" -o yaml >"${out}/mcpservers.yaml" 2>&1 || true
-  kubectl -n "${ns}" get mcpaccessgrants,mcpagentsessions -o yaml >"${out}/grants-sessions.yaml" 2>&1 || true
+  kubectl -n "${ns}" get mcpaccessgrants -o yaml >"${out}/grants.yaml" 2>&1 || true
+  staging_api_curl --fail "${PLATFORM_URL}/api/v1/runtime/sessions?namespace=${ns}" >"${out}/sessions.json" 2>&1 || true
   kubectl -n "${ns}" get ingressroutes.traefik.io,middlewares.traefik.io,serverstransports.traefik.io,tlsoptions.traefik.io -o yaml \
     >"${out}/traefik-crs.yaml" 2>&1 || true
   kubectl -n "${tls_ns}" get tlsoptions.traefik.io,tlsstores.traefik.io -o yaml >"${out}/traefik-default-tls.yaml" 2>&1 || true
@@ -1430,7 +1432,8 @@ staging_adapter_cleanup() {
   if [[ -s "${session_file}" ]]; then
     while read -r session; do
       [[ -n "${session}" ]] || continue
-      kubectl -n "${ns}" delete mcpagentsession "${session}" --ignore-not-found >/dev/null 2>&1
+      "${BIN}" access session delete "${session}" --namespace "${ns}" >/dev/null 2>&1 || \
+        staging_err "platform session cleanup incomplete for ${ns}/${session}; retry supported session deletion"
     done <"${session_file}"
   fi
   kubectl -n "${ns}" delete mcpaccessgrant -l app.kubernetes.io/managed-by=staging-e2e --ignore-not-found >/dev/null 2>&1
@@ -1629,21 +1632,17 @@ staging_adapter_enroll() {
     return 1
   }
   local session_ref
-  session_ref="$(kubectl -n "${ns}" get mcpagentsession "${session}" -o jsonpath='{.spec.serverRef.name}/{.spec.subject.agentID}')"
+  session_ref="$("${BIN}" access session get "${session}" --namespace "${ns}" | jq -r '.serverRef.name + "/" + .subject.agentID')" || return 1
   [[ "${session_ref}" == "${server}/${agent}" ]] || {
-    staging_err "MCPAgentSession ${ns}/${session} is for ${session_ref:-<missing>}, want ${server}/${agent}"
+    staging_err "platform session ${ns}/${session} is for ${session_ref:-<missing>}, want ${server}/${agent}"
     return 1
   }
-  local deadline=$((SECONDS + 120))
-  until kubectl -n "${ns}" get configmap "${server}-gateway-policy" -o jsonpath='{.data.policy\.json}' 2>/dev/null |
-    jq -e --arg s "${session}" '[.sessions[]?.name] | index($s) != null' >/dev/null 2>&1; do
-    ((SECONDS < deadline)) || {
-      staging_err "session ${session} never reached ${server}-gateway-policy"
+  kubectl -n "${ns}" get configmap "${server}-gateway-policy" -o jsonpath='{.data.policy\.json}' |
+    jq -e '(.sessions // []) | length == 0' >/dev/null || {
+      staging_err "session records leaked into ${server}-gateway-policy"
       return 1
     }
-    sleep 2
-  done
-  staging_log "gateway policy for ${server} binds session ${session}"
+  staging_log "platform session ${session} binds ${server}; gateway sync is verified by the HTTPS matrix"
   printf '%s' "${credential_dir}" >"${certs}/.credential_dir"
 }
 

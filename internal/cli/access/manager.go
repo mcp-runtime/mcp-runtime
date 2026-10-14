@@ -1,9 +1,11 @@
 package access
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"text/tabwriter"
@@ -12,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
+	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 
 	"mcp-runtime/internal/cli/core"
 	kubeapply "mcp-runtime/internal/cli/kube"
@@ -379,6 +382,9 @@ func initToolRules(tools, explicitRules []string, trust string) ([]map[string]st
 
 // ListAccessResources lists grants or sessions via the platform API unless --use-kube is set.
 func (m *AccessManager) ListAccessResources(resource, namespace string, allNamespaces bool) error {
+	if m.useKube && resource == SessionResource {
+		return platformSessionRequired()
+	}
 	plat, kube, err := platformapi.ResolvePlatformOrKube(m.useKube)
 	if err != nil {
 		return err
@@ -440,6 +446,9 @@ func (m *AccessManager) listAccessPlatform(ctx context.Context, plat *platformap
 
 // GetAccessResource prints one grant or session via platform API or explicit direct Kubernetes mode.
 func (m *AccessManager) GetAccessResource(resource, name, namespace string) error {
+	if m.useKube && resource == SessionResource {
+		return platformSessionRequired()
+	}
 	name, namespace, err := validateAccessResourceInput(name, namespace)
 	if err != nil {
 		return err
@@ -490,6 +499,31 @@ func (m *AccessManager) getAccessPlatform(ctx context.Context, plat *platformapi
 
 // ApplyAccessResource applies a grant or session manifest via platform API or explicit direct Kubernetes mode.
 func (m *AccessManager) ApplyAccessResource(file string) error {
+	if m.useKube {
+		path, err := kubeapply.ResolveRegularFilePath(file)
+		if err != nil {
+			return err
+		}
+		data, err := kubeapply.ReadFileAtPath(path)
+		if err != nil {
+			return err
+		}
+		decoder := k8syaml.NewYAMLOrJSONDecoder(bytes.NewReader(data), 4096)
+		for {
+			var document struct {
+				Kind string `json:"kind"`
+			}
+			if err := decoder.Decode(&document); err != nil {
+				if err == io.EOF {
+					break
+				}
+				return err
+			}
+			if document.Kind == "MCPAgentSession" {
+				return platformSessionRequired()
+			}
+		}
+	}
 	m.warnAccessManifest(file)
 	plat, kube, err := platformapi.ResolvePlatformOrKube(m.useKube)
 	if err != nil {
@@ -526,6 +560,9 @@ func (m *AccessManager) warnAccessManifest(file string) {
 
 // DeleteAccessResource deletes a grant or session via platform API or explicit direct Kubernetes mode.
 func (m *AccessManager) DeleteAccessResource(resource, name, namespace string) error {
+	if m.useKube && resource == SessionResource {
+		return platformSessionRequired()
+	}
 	name, namespace, err := validateAccessResourceInput(name, namespace)
 	if err != nil {
 		return err
@@ -571,6 +608,9 @@ func (m *AccessManager) DeleteAccessResource(resource, name, namespace string) e
 
 // ToggleAccessResource enables/disables grants or revokes/unrevokes sessions.
 func (m *AccessManager) ToggleAccessResource(resource, name, namespace string, value bool) error {
+	if m.useKube && resource == SessionResource {
+		return platformSessionRequired()
+	}
 	name, namespace, err := validateAccessResourceInput(name, namespace)
 	if err != nil {
 		return err

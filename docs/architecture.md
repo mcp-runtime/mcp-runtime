@@ -17,7 +17,7 @@ flowchart TB
         UI[UI and session BFF]
         PlatAPI[platform-api]
         RunAPI[runtime-api]
-        DB[(Postgres identity and agent directory)]
+        DB[(Postgres identity, agent directory and sessions)]
     end
     subgraph operatorns [mcp-runtime]
         Op[MCPServer operator]
@@ -31,7 +31,6 @@ flowchart TB
     end
     subgraph servers [MCP server namespace]
         Grant[MCPAccessGrant]
-        Session[MCPAgentSession]
         Server[MCPServer]
         Policy[Policy ConfigMap]
         GW[mcp-gateway sidecar]
@@ -49,15 +48,15 @@ flowchart TB
     UI --> RunAPI
     UI --> AnaAPI
     PlatAPI --> DB
-    RunAPI -->|resolve principal and directory| PlatAPI
+    RunAPI -->|identity and session management| PlatAPI
     RunAPI --> K8s
     K8s -->|watch events| Op
     Server --> Op
     Grant --> Op
-    Session --> Op
     Op -->|render| Policy
     Op -->|reconcile workload| Srv
     Policy -->|mounted snapshot| GW
+    GW -->|server-scoped session sync on port 8085| PlatAPI
     MCP --> Adapter
     Adapter -->|session and certificate enrollment| RunAPI
     Adapter -->|MCP over HTTPS| Ing
@@ -87,7 +86,7 @@ RBAC split.
 
 1. An MCP client (or agent adapter) calls `https://mcp.<domain>/<server>/mcp`.
 2. Ingress routes to the server pod; the **mcp-gateway** sidecar evaluates
-   `MCPAccessGrant` + `MCPAgentSession` policy before forwarding to the app.
+   rendered `MCPAccessGrant` policy and its locally synchronized platform sessions before forwarding to the app.
 3. Allowed and denied tool calls can emit analytics events through ingest → Kafka → processor
    → ClickHouse; Grafana surfaces usage and traces.
 
@@ -98,13 +97,17 @@ the platform API or Kubernetes.
 
 Control-plane changes (setup, `auth login`, `server deploy`, `access grant apply`,
 and admin-only `access session apply`) flow through the CLI or the split APIs
-into Kubernetes; the operator materializes Deployments, Services, Ingress, and
-policy ConfigMaps. `auth login` authenticates against platform-api, while
-server, grant, and session writes land on runtime-api. Sessions for agent
+into their owning stores; the operator materializes Deployments, Services, Ingress, and
+grant/tool policy ConfigMaps. `auth login` authenticates against platform-api, while
+server, grant, and session writes land on runtime-api. Runtime-api delegates
+session persistence to platform-api and Postgres. Sessions for agent
 traffic are usually issued through
 `POST /api/v1/runtime/adapter/sessions`; explicit session manifests are
-admin-only. Admin-only `--use-kube` or `kubectl apply`
-bypasses platform auth and requires operator RBAC.
+admin-only. `MCPAgentSession` YAML remains an input format for platform session
+apply; Kubernetes session objects no longer supply authorization state.
+Direct `--use-kube` session management is rejected. See the
+[session sync contract](contributor/gateway-session-sync.md) for authentication,
+revocation, failure behavior and release migration.
 
 See [Request Flows](internals/request-flows.md) for allow/deny sequence diagrams,
 component-level paths, and E2E scenario mapping.

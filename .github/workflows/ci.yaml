@@ -298,6 +298,9 @@ jobs:
       - name: Test staging E2E target guard and stage runner
         run: bash test/e2e/staging_lib_test.sh
 
+      - name: Test platform session E2E management helpers
+        run: python3 test/e2e/session_management_test.py
+
       - name: Install kubectl
         run: |
           curl --retry 5 --retry-delay 5 --retry-all-errors -fsSL -o kubectl "https://dl.k8s.io/release/v1.34.1/bin/linux/amd64/kubectl"

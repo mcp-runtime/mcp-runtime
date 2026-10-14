@@ -364,12 +364,12 @@ func TestAccessManager_GetAccessResource(t *testing.T) {
 	kubectl := core.NewTestKubectlClient(mock)
 	mgr := newKubeTestAccessManager(kubectl)
 
-	if err := mgr.GetAccessResource(SessionResource, "session-a", "team-a"); err != nil {
+	if err := mgr.GetAccessResource(GrantResource, "grant-a", "team-a"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	cmd := mock.LastCommand()
-	for _, want := range []string{"get", SessionResource, "session-a", "-n", "team-a", "-o", "yaml"} {
+	for _, want := range []string{"get", GrantResource, "grant-a", "-n", "team-a", "-o", "yaml"} {
 		if !contains(cmd.Args, want) {
 			t.Fatalf("expected %q in args, got %v", want, cmd.Args)
 		}
@@ -426,7 +426,6 @@ func TestAccessManager_ToggleAccessResource(t *testing.T) {
 		wantJSON string
 	}{
 		{name: "disable grant", resource: GrantResource, wantJSON: `"disabled":true`},
-		{name: "revoke session", resource: SessionResource, wantJSON: `"revoked":true`},
 	}
 
 	for _, tt := range tests {

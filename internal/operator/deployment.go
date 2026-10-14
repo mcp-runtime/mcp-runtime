@@ -528,8 +528,12 @@ func (r *MCPServerReconciler) buildGatewayContainer(mcpServer *mcpv1alpha1.MCPSe
 		{Name: "OAUTH_INTERNAL_ISSUER_URL", Value: r.oauthInternalIssuerURL()},
 	}
 	if !mcpv1alpha1.AuthUsesHeaderMode(mcpServer.Spec.Auth) {
+		syncURL := strings.TrimSpace(r.GatewaySessionSyncURL)
+		if syncURL == "" {
+			syncURL = "http://mcp-platform-api.mcp-platform.svc.cluster.local:8085"
+		}
 		envVars = append(envVars,
-			corev1.EnvVar{Name: "SESSION_SYNC_URL", Value: "http://mcp-platform-api.mcp-platform.svc.cluster.local:8085"},
+			corev1.EnvVar{Name: "SESSION_SYNC_URL", Value: syncURL},
 			corev1.EnvVar{Name: "SESSION_SYNC_TOKEN_FILE", Value: "/var/run/mcp-runtime/session-sync/token"},
 		)
 	}

@@ -59,6 +59,8 @@ type sessionAPIBody struct {
 	ExpiresAt      *metav1.Time              `json:"expiresAt,omitempty"`
 	Revoked        *bool                     `json:"revoked,omitempty"`
 	PolicyVersion  string                    `json:"policyVersion"`
+	GrantName      string                    `json:"grantName,omitempty"`
+	GrantNamespace string                    `json:"grantNamespace,omitempty"`
 }
 
 func (c *PlatformClient) ListGrants(ctx context.Context, namespace string) ([]mcpaccess.GrantSummary, error) {
@@ -347,6 +349,8 @@ func sessionFromV1(s *mcpv1alpha1.MCPAgentSession) sessionAPIBody {
 		PolicyVersion:  s.Spec.PolicyVersion,
 		Revoked:        &rev,
 		ExpiresAt:      s.Spec.ExpiresAt,
+		GrantName:      s.Annotations["mcpruntime.org/access-grant-name"],
+		GrantNamespace: s.Annotations["mcpruntime.org/access-grant-namespace"],
 	}
 }
 

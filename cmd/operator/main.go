@@ -81,6 +81,7 @@ func main() {
 		DefaultAnalyticsIngestURL:        analyticsIngestURLFromEnv(os.Getenv),
 		ClusterName:                      clusterNameFromEnv(os.Getenv),
 		OAuthInternalIssuerURL:           strings.TrimSpace(os.Getenv("OAUTH_INTERNAL_ISSUER_URL")),
+		GatewaySessionSyncURL:            strings.TrimSpace(os.Getenv("MCP_GATEWAY_SESSION_SYNC_URL")),
 		OAuthIssuerURL:                   strings.TrimSpace(os.Getenv("MCP_AUTH_ISSUER_URL")),
 		MTLSClusterIssuer:                strings.TrimSpace(os.Getenv("MCP_MTLS_CLUSTER_ISSUER")),
 		AdapterTrustDomain:               strings.TrimSpace(os.Getenv("MCP_TRUST_DOMAIN")),
