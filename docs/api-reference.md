@@ -377,11 +377,23 @@ curl/API clients, send an
 `active_grants`, `active_sessions`, `latest_source`, `last_event_type`,
 `last_event_time`.
 
-`/api/v1/analytics/usage` reads the ClickHouse event stream and returns admin
-usage rollups for the dashboard: totals, top MCP servers, top human/agent
-pairs, top tools, decision counts, recent activity, and request buckets.
-Query: `limit` (1-50, default 10), `window_days` (1-365, default 30),
-`namespace`, `team_id`, `server`, `decision`, and `tool_name`.
+`/api/v1/analytics/usage` reads gateway events from ClickHouse and returns
+admin usage rollups, caller activity, a request-rate time series, bounded
+facets, and top request groups. Each request group includes its server,
+namespace/team, MCP JSON-RPC method, tool, policy decision/version, HTTP
+failures, p95 latency, last-seen time, and latest trace ID when available.
+Query: `limit` (1-50, default 10), `window_days` (1-365, default 30), or
+`window_hours` (1-8760, which overrides days), `scope` (`public`, `org`, or
+`tenant`), `namespace`, `team_id`, `server`, `rpc_method` (for example
+`tools/call` or `tools/list`), `tool_name`, `decision`, `policy_version`, and
+`http_status` (`2xx`, `4xx`, or `5xx`). Scope, namespace and team filters are
+combined so each selected filter narrows the same result set. Public and org
+scope use the configured catalog namespaces; tenant scope includes team-owned
+namespaces and excludes those catalogs. The request table returns the top
+groups up to `limit`; totals and chart include every matching request. HTTP
+failures describe HTTP status codes and do not indicate an MCP tool result's
+`isError` value. The chart reports requests per second, with missing time
+buckets filled as zero. Only recorded gateway events are included.
 
 `/api/v1/user/analytics/usage` is available to normal platform users. It returns
 the same analytics shape, but the API enforces scope before querying

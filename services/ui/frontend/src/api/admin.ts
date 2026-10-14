@@ -13,6 +13,7 @@ import type {
   TeamRecord,
   UserActivity,
   UsageResponse,
+  UsageFilterParams,
 } from "./types";
 
 // Reads and writes go through the same-origin session proxy. The proxy owns the
@@ -219,8 +220,8 @@ export async function listEvents(params: {
   return asArray<GatewayEvent>(await fetchJSON(withQuery("/events", params)), "events");
 }
 
-export async function listUsage(limit = "10"): Promise<UsageResponse> {
-  const value = await fetchJSON(withQuery("/analytics/usage", { limit }));
+export async function listUsage(limit = "10", filters: UsageFilterParams = {}): Promise<UsageResponse> {
+  const value = await fetchJSON(withQuery("/analytics/usage", { limit, ...filters }));
   const payload = value as Partial<UsageResponse>;
   return {
     totals: payload.totals || { events: 0, allowed: 0, denied: 0, unique_servers: 0, unique_humans: 0, unique_agents: 0 },
@@ -231,5 +232,11 @@ export async function listUsage(limit = "10"): Promise<UsageResponse> {
     series: payload.series || [],
     recent: payload.recent || [],
     filters: payload.filters || {},
+    requests: payload.requests || [],
+    facets: payload.facets,
+    bucket_seconds: payload.bucket_seconds,
+    window_start: payload.window_start,
+    window_end: payload.window_end,
+    window_days: payload.window_days,
   };
 }

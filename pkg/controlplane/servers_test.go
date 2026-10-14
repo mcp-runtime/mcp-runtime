@@ -2,6 +2,7 @@ package controlplane
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -314,6 +315,17 @@ func TestServerInfoProjectsGatewayEnabled(t *testing.T) {
 			}, ServerDeploymentStatus{})
 			if got.GatewayEnabled != tt.want {
 				t.Fatalf("GatewayEnabled = %t, want %t", got.GatewayEnabled, tt.want)
+			}
+			encoded, err := json.Marshal(got)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var payload map[string]any
+			if err := json.Unmarshal(encoded, &payload); err != nil {
+				t.Fatal(err)
+			}
+			if enabled, exists := payload["gatewayEnabled"]; !exists || enabled != tt.want {
+				t.Fatalf("JSON must report gateway state, including false: %s", encoded)
 			}
 		})
 	}

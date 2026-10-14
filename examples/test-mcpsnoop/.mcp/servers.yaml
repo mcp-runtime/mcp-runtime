@@ -25,4 +25,4 @@ servers:
           requiredTrust: low
           sideEffect: read
       gateway:
-        enabled: false
+        enabled: true

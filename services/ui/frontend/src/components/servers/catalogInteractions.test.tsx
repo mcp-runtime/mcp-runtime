@@ -21,6 +21,7 @@ const SERVERS = {
     {
       name: "workspace-assistant",
       authMode: "oauth",
+      gatewayEnabled: true,
       namespace: "mcp-servers",
       ready: "1/1",
       status: "Ready",
@@ -38,6 +39,7 @@ const SERVERS = {
     },
     {
       name: "billing-bridge",
+      gatewayEnabled: false,
       namespace: "mcp-servers",
       ready: "0/1",
       status: "Pending",
@@ -111,6 +113,23 @@ afterEach(() => {
 });
 
 describe("catalog search semantics", () => {
+  it("shows gateway enablement separately from readiness and OAuth in cards and details", async () => {
+    const user = userEvent.setup();
+    stubCatalog();
+    renderWorkspace();
+    await screen.findByTestId("server-list");
+    const cards = screen.getAllByTestId("server-card");
+    expect(within(cards[0]).getByTestId("server-gateway-badge")).toHaveTextContent("Gateway");
+    expect(within(cards[0]).getByText("Ready")).toBeInTheDocument();
+    expect(within(cards[0]).getByText("OAuth")).toBeInTheDocument();
+    expect(within(cards[1]).queryByTestId("server-gateway-badge")).not.toBeInTheDocument();
+    await user.click(within(cards[0]).getByTestId("server-card-details"));
+    expect(within(screen.getByTestId("server-detail")).getByTestId("server-gateway-badge")).toHaveAccessibleName("Runtime gateway enabled");
+    await user.click(screen.getByTestId("server-detail-close"));
+    await user.click(within(cards[1]).getByTestId("server-card-details"));
+    expect(within(screen.getByTestId("server-detail")).queryByTestId("server-gateway-badge")).not.toBeInTheDocument();
+  });
+
   it("server search matches server metadata and never tool text", async () => {
     const user = userEvent.setup();
     stubCatalog();

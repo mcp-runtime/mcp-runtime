@@ -86,6 +86,7 @@ export type ServerSummary = {
   age?: string;
   endpoint?: string;
   authMode?: string;
+  gatewayEnabled?: boolean;
   authHeaders?: string[];
   credentialPresence?: string;
   // The server's declared tools, with the governance metadata the gateway
@@ -493,6 +494,40 @@ export type UsageTotals = {
   unique_humans: number;
   unique_agents: number;
   unique_sessions?: number;
+  http_failures?: number;
+  server_errors?: number;
+  average_latency_ms?: number;
+  p95_latency_ms?: number;
+  bytes_in?: number;
+  bytes_out?: number;
+};
+
+export type UsageFilterParams = {
+  window_hours?: string;
+  scope?: string;
+  team_id?: string;
+  namespace?: string;
+  server?: string;
+  rpc_method?: string;
+  tool_name?: string;
+  decision?: string;
+  policy_version?: string;
+  http_status?: string;
+};
+
+export type RequestUsage = {
+  server: string;
+  namespace: string;
+  team_id?: string;
+  rpc_method: string;
+  tool_name?: string;
+  decision: string;
+  policy_version?: string;
+  events: number;
+  http_failures: number;
+  p95_latency_ms: number;
+  last_seen: string;
+  trace_id?: string;
 };
 
 export type ServerUsage = {
@@ -527,6 +562,11 @@ export type UsageResponse = {
   decisions?: Array<{ decision: string; events: number }>;
   series?: UsageTimePoint[];
   recent?: RecentActivity[];
+  requests?: RequestUsage[];
+  facets?: { servers: string[]; methods: string[]; tools: string[]; policy_versions: string[] };
+  bucket_seconds?: number;
+  window_start?: string;
+  window_end?: string;
   filters?: {
     namespaces?: string[];
     team_ids?: string[];
@@ -541,6 +581,7 @@ export type UsageTimePoint = {
   events: number;
   allowed: number;
   denied: number;
+  requests_per_second?: number;
 };
 
 export type RecentActivity = {

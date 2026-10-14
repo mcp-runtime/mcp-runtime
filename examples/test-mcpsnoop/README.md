@@ -11,10 +11,11 @@ need your own deployment; otherwise start with the MCPSnoop commands.
 | `echo` | `message`: string | The same string, including Unicode |
 | `todays_info` | `timezone_name`: IANA timezone, default `UTC` | Date, weekday, timezone, and timestamp with UTC offset |
 
-The server is stateless and returns JSON responses. The metadata deliberately
-sets `gateway.enabled: false` and omits `auth`, policy, grants, and sessions.
-This publishes the read-only demo without Runtime gateway authentication,
-governance, or gateway analytics. Requests remain visible in MCPSnoop.
+The server is stateless and returns JSON responses. The metadata enables the
+Runtime gateway and omits `auth`, policy, grants, and sessions. The gateway's
+default observe mode keeps both tools anonymously accessible while providing
+request traces, correlated logs, tool metrics and analytics. Instrumentation
+inside the Python tool implementation would require additional application spans.
 Runtime supplies `MCP_PATH` for the deployed public route; the server honors
 that value and uses `/mcp` when running locally without it.
 
@@ -54,9 +55,8 @@ SNOOP_TAG="snoop-$(date -u +%Y%m%d%H%M%S)"
   --namespace mcp-servers-public --client json
 ```
 
-`server init` originally generated the checked-in metadata; its default enables
-the gateway, so keep the example's explicit `gateway.enabled: false` when
-regenerating it. For another platform, change the metadata image/ingress host
+`server init` originally generated the checked-in metadata; keep its default
+gateway enabled for observability. For another platform, change the metadata image/ingress host
 and use the registry and endpoint returned by that platform. To replace your
 existing demo deployment after rebuilding and pushing, add `--update` to
 `server deploy`. Delete only this demo when finished:
@@ -108,6 +108,33 @@ In MCPSnoop, select the `test-mcpsnoop` session and press Enter on a frame to
 inspect its complete payload. Press `/` and filter by `method:tools/call`,
 `tool:echo`, `tool:todays_info`, `dir:c2s` (request), or `dir:s2c` (response).
 Use `id:<request-id>` to inspect both directions of one call.
+
+## Follow a request in Grafana
+
+With the gateway enabled, each tool response includes an `X-Trace-ID` HTTP
+header. Capture it alongside the payload with `curl -i` (through the local
+MCPSnoop proxy or directly against the deployed endpoint):
+
+```bash
+curl -i -sS http://127.0.0.1:7000/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":"trace-demo","method":"tools/call","params":{"name":"echo","arguments":{"message":"trace-demo"}}}'
+```
+
+In the platform UI, a `Gateway` badge beside the readiness/authentication badges
+identifies servers configured to use the sidecar. It does not certify delivery
+of telemetry. On a platform with the collector configured, copy the response
+trace ID into Grafana → Explore → Tempo → Trace ID. For matching Loki logs:
+
+```logql
+{namespace="mcp-servers-public"} |= "trace_id=YOUR_TRACE_ID"
+```
+
+The **MCP Server** dashboard accepts namespace `mcp-servers-public` and server
+`test-mcpsnoop`; its tool latency exemplars link metrics to sampled traces.
+Grafana access follows the platform's observability permissions. MCPSnoop's
+capture/session IDs identify its own records and are not the gateway trace ID.
 
 ## Generate traffic with curl
 

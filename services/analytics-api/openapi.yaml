@@ -72,6 +72,75 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
+  /api/v1/analytics/usage:
+    get:
+      summary: Query platform-wide MCP gateway usage (admin only)
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 50, default: 10 }
+        - in: query
+          name: window_days
+          schema: { type: integer, minimum: 1, maximum: 365, default: 30 }
+        - in: query
+          name: window_hours
+          description: Overrides window_days; useful for ranges under one day.
+          schema: { type: integer, minimum: 1, maximum: 8760 }
+        - in: query
+          name: scope
+          description: Restrict to a catalog scope or team-owned namespaces.
+          schema: { type: string, enum: [public, org, tenant] }
+        - in: query
+          name: namespace
+          schema: { type: string, maxLength: 256 }
+        - in: query
+          name: team_id
+          schema: { type: string, maxLength: 256 }
+        - in: query
+          name: server
+          schema: { type: string, maxLength: 256 }
+        - in: query
+          name: rpc_method
+          description: MCP JSON-RPC method, such as tools/call or tools/list.
+          schema: { type: string, maxLength: 256 }
+        - in: query
+          name: tool_name
+          schema: { type: string, maxLength: 256 }
+        - in: query
+          name: decision
+          schema: { type: string }
+        - in: query
+          name: policy_version
+          schema: { type: string, maxLength: 256 }
+        - in: query
+          name: http_status
+          description: Filter by HTTP status class.
+          schema: { type: string, enum: [2xx, 4xx, 5xx] }
+      responses:
+        "200":
+          description: Gateway usage rollups, request groups, filters and time series.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageResponse"
+        "400":
+          description: Invalid filter value.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "401":
+          description: unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "403":
+          description: admin role required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
   /api/v1/user/analytics/usage:
     get:
       responses:
@@ -89,6 +158,44 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
 components:
   schemas:
+    UsageResponse:
+      type: object
+      properties:
+        totals:
+          type: object
+          description: Request, caller, latency, HTTP failure and byte totals for the selected filters.
+        requests:
+          type: array
+          description: Top request groups, separated by server, namespace, method, tool, decision and policy version.
+          items:
+            type: object
+            properties:
+              server: { type: string }
+              namespace: { type: string }
+              team_id: { type: string }
+              rpc_method: { type: string }
+              tool_name: { type: string }
+              decision: { type: string }
+              policy_version: { type: string }
+              events: { type: integer, format: int64 }
+              http_failures: { type: integer, format: int64 }
+              p95_latency_ms: { type: number }
+              last_seen: { type: string, format: date-time }
+              trace_id: { type: string, description: "Latest trace ID in the request group, when available." }
+        facets:
+          type: object
+          description: Distinct server, method, tool and policy version choices for the current time and scope.
+        series:
+          type: array
+          items:
+            type: object
+            properties:
+              bucket: { type: string, format: date-time }
+              events: { type: integer, format: int64 }
+              requests_per_second: { type: number }
+        bucket_seconds: { type: integer }
+        window_start: { type: string, format: date-time }
+        window_end: { type: string, format: date-time }
     ErrorEnvelope:
       type: object
       required: [error, message]

@@ -10,6 +10,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 ### Added
 
 - An unauthenticated `test-mcpsnoop` example with read-only `echo` and `todays_info` tools and instructions for CLI publishing, deployment, and inspecting real MCP payloads with MCPSnoop ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
+- Server cards and details show a `Gateway` badge when the Runtime gateway is enabled, separately from readiness and authentication badges. The server API now reports `gatewayEnabled` explicitly ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
+- Admin usage analytics combines server, MCP method and tool activity in one request table, with scope/searchable-team, time, policy and HTTP outcome filters applied in ClickHouse. A labelled time/rate chart, HTTP error and latency summaries, caller/session counts, response traffic and latest-trace links help investigate recorded gateway traffic ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
 - `mcp-runtime update --platform-mode org|public` changes mode, prepares managed catalog namespaces, and restarts mode-dependent services without hand-written ConfigMap rollout entries. Namespace scopes cannot be changed and new catalogs survive rollback. `--build` checks external registry access before building commit-tagged images so invalid Docker credentials fail earlier; bundled registries retain their selected-cluster push transport ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
 
 ### Changed
@@ -23,6 +25,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 ### Fixed
 
 - Admin server deployment now prepares public/org catalog namespace permissions, resource controls, network policy and registry pulls just like user deployment, so a newly enabled catalog can host its first MCP server ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
+- The public MCPSnoop demo enables its gateway in observe mode, retaining anonymous access while exposing trace IDs, correlated logs, tool metrics and analytics ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
 
 ## [0.8.1] - 2026-10-14
 
