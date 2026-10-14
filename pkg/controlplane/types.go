@@ -32,7 +32,7 @@ type ServerInfo struct {
 	AuthHeaders []string `json:"authHeaders,omitempty"`
 	// CredentialPresence is "any" or "all" for header auth.
 	CredentialPresence string                      `json:"credentialPresence,omitempty"`
-	GatewayEnabled     bool                        `json:"-"`
+	GatewayEnabled     bool                        `json:"gatewayEnabled"`
 	ServicePort        int32                       `json:"servicePort,omitempty"`
 	Generation         int64                       `json:"generation,omitempty"`
 	Tools              []mcpv1alpha1.ToolConfig    `json:"tools,omitempty"`

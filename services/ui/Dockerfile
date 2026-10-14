@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim AS frontend
+FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS frontend
 WORKDIR /src/services/ui/frontend
 
 COPY services/ui/frontend/package*.json ./
@@ -7,7 +7,7 @@ RUN npm ci
 COPY services/ui/frontend/ ./
 RUN npm run build
 
-FROM golang:1.26.9 AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.9 AS build
 WORKDIR /src
 
 COPY go.mod go.sum ./

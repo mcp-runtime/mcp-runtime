@@ -363,9 +363,8 @@ to `platform.mcpruntime.org`.
 
 | Mode | Default namespace behavior | Behavior |
 |---|---|---|
-| `tenant` | Principal team namespace | Default private mode. Signed-in users publish through team namespaces for teams they belong to. |
-| `org` | `mcp-servers-org` | Signed-in users publish and browse the org-wide catalog and can still work in team namespaces. |
-| `public` | `mcp-servers-public` | Anonymous users can browse the public preview catalog; signed-in users publish public preview MCP servers and can still work in team namespaces. |
+| `org` (default) | `mcp-servers-org` | Signed-in users publish and browse the org-wide catalog and their authorized team namespaces. |
+| `public` | `mcp-servers-public` | Anonymous users browse public previews or public MCP listings; signed-in users also publish to org and team scopes. |
 
 For browser Google sign-in, provide the OAuth client ID before setup. Non-test
 public TLS installs (`--platform-mode public --with-tls`) fail fast unless
@@ -406,7 +405,7 @@ mcp-runtime setup --parallel-builds     # build and publish setup images in para
 
 Defaults if you pass nothing: `--ingress traefik`, `--ingress-manifest
 config/ingress/overlays/http`, `--registry-mode auto`, `--registry-type docker`,
-`--registry-storage 20Gi`, `--platform-mode tenant`, and `--storage-mode
+`--registry-storage 20Gi`, `--platform-mode org`, and `--storage-mode
 dynamic`. `--parallel-builds` changes image build and publish only; cluster,
 registry, TLS, and rollout sequencing stay the same.
 
@@ -512,7 +511,9 @@ API sees it. Configure a suitable body limit (for example Nginx
 enough for the largest supported image. Apply the same policy to the registry
 `/v2/` routes; this does not change API authorization.
 
-On a tenant-mode platform, `--scope org` and `--scope public` are rejected.
+Org mode supports `--scope org` and `--scope tenant`; `--scope public` requires
+public mode. Public mode supports all three scopes, with separate org and
+public namespaces. `tenant` is a publish scope, not a platform mode.
 Tenant publish also needs a team membership. An admin API key can create a
 team and still be unable to push, because that key has no team. Create the
 team, add a user as a member, and push with that user's token. For example:

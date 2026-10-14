@@ -88,7 +88,7 @@ func TestValidatePublicPlatformAuthEnvSkipsNonPublicTLSModes(t *testing.T) {
 		tlsEnabled   bool
 		testMode     bool
 	}{
-		{name: "tenant tls", platformMode: setupplan.PlatformModeTenant, tlsEnabled: true},
+		{name: "tenant tls", platformMode: setupplan.PlatformModeOrg, tlsEnabled: true},
 		{name: "public without tls", platformMode: setupplan.PlatformModePublic, tlsEnabled: false},
 		{name: "public tls test mode", platformMode: setupplan.PlatformModePublic, tlsEnabled: true, testMode: true},
 	}

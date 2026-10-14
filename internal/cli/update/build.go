@@ -136,7 +136,7 @@ func rewriteBuiltTargetsToTags(plan *Plan) error {
 	}
 	for i := range plan.Rows {
 		row := &plan.Rows[i]
-		if row.Action != ActionUpdate || !row.component.Built {
+		if row.Action != ActionUpdate || !row.component.Built || row.configOnly {
 			continue
 		}
 		tagOnly, err := tagOnlyImage(row.TargetImage)
@@ -163,7 +163,7 @@ func planImageBuilds(ctx context.Context, plan *Plan, opts BuildOptions) ([]Imag
 	seen := map[string]bool{}
 	var out []ImageBuildAction
 	for _, row := range plan.Changed() {
-		if !row.component.Built {
+		if !row.component.Built || row.configOnly {
 			continue
 		}
 		if _, ok := builtImageSpecs[row.Component]; !ok {
@@ -182,21 +182,30 @@ func planImageBuilds(ctx context.Context, plan *Plan, opts BuildOptions) ([]Imag
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", row.Component, err)
 		}
-		if _, ok := platformrelease.ReleaseCommitFromImageTag(ref.Tag); ok {
+		_, commitTagged := platformrelease.ReleaseCommitFromImageTag(ref.Tag)
+		if commitTagged {
 			action.Reason = "release image requires build from its source commit"
+		}
+		if opts.SkipRegistryProbe {
+			if !commitTagged {
+				action.Reason = "registry not checked (dry-run)"
+			}
 			out = append(out, action)
 			continue
 		}
-		if opts.SkipRegistryProbe {
-			action.Reason = "registry not checked (dry-run)"
+		if commitTagged && opts.RegistryHasImage == nil && bundledRegistryTarget(image) {
+			// This authority is reachable through the selected Kubernetes
+			// transport, not through workstation Docker DNS. PushInCluster
+			// checks its authentication when publishing; never probe another
+			// cluster or the workstation's default context here.
 			out = append(out, action)
 			continue
 		}
 		exists, err := probe(ctx, image)
 		if err != nil {
-			return nil, fmt.Errorf("check registry for %s: %w", image, err)
+			return nil, fmt.Errorf("check registry for %s before building (verify Docker registry login): %w", image, err)
 		}
-		if exists {
+		if exists && !commitTagged {
 			action.Action = ImageActionReuse
 			action.Reason = "target tag already in registry"
 		}

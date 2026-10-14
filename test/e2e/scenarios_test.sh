@@ -101,7 +101,7 @@ if ! printf '%s\n' "${output}" | grep -F -q -- "E2E_DEEP_REQUEST_FLOWS=1 require
 fi
 echo "[pass] deep-request-flows-subset"
 
-for mode in tenant org public; do
+for mode in org public; do
   if ! output="$(E2E_COLOR=never E2E_VALIDATE_SCENARIOS_ONLY=1 E2E_SCENARIOS=smoke-auth E2E_PLATFORM_MODE="${mode}" bash "${QA_E2E_SCRIPT}" 2>&1)"; then
     echo "[fail] platform-mode-${mode}: expected validation success" >&2
     printf '%s\n' "${output}" >&2
@@ -126,6 +126,12 @@ if ! printf '%s\n' "${output}" | grep -F -q -- "unsupported E2E platform mode: b
   exit 1
 fi
 echo "[pass] platform-mode-invalid"
+
+if E2E_COLOR=never E2E_VALIDATE_SCENARIOS_ONLY=1 E2E_SCENARIOS=smoke-auth E2E_PLATFORM_MODE=tenant bash "${QA_E2E_SCRIPT}" >/dev/null 2>&1; then
+  echo "[fail] platform-mode-tenant: removed mode must be rejected" >&2
+  exit 1
+fi
+echo "[pass] platform-mode-tenant-rejected"
 
 selector_expect() {
   local name="$1"

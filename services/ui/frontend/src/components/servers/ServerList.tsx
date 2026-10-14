@@ -154,6 +154,11 @@ export function ServerList({
                         {auth.label}
                       </StatusBadge>
                     ) : null}
+                    {server.gatewayEnabled === true ? (
+                      <StatusBadge tone="info" label="Runtime gateway enabled" testId="server-gateway-badge">
+                        Gateway
+                      </StatusBadge>
+                    ) : null}
                   </div>
                 </div>
 

@@ -244,10 +244,10 @@ then run `server build image`, push
 the printed image ref and deploy to that team. Explicit tenant repository
 prefixes must match one of the user's teams; ambiguous unscoped tenant
 repositories are rejected before Docker runs.
-`--scope org` and `--scope public` are accepted only when the platform runs in
-the matching mode (`PLATFORM_MODE=org` or `public`); `server push` and
+`--scope org` works in both platform modes; `--scope public` requires
+`PLATFORM_MODE=public`. Public mode accepts all three scopes; `server push` and
 `server deploy` reject a disabled scope the same way and list the enabled
-scopes, so use `--scope tenant` on a tenant-mode platform. Uploads may take up
+scopes. `--scope tenant` publishes to an authorized team in either mode. Uploads may take up
 to `MCP_REGISTRY_PUSH_UPLOAD_TIMEOUT` (default `20m`) on `mcp-runtime-api`;
 archives over 512 MiB are rejected with `413`. The saved API URL must be
 `https://` when the front door redirects HTTP to HTTPS, or the upload POST
@@ -278,7 +278,7 @@ Short names like `payments:v1.0.0` are valid for `server push` when that
 exact local image tag exists. For `server deploy`, the platform API accepts
 short names such as `payments` and resolves them to the configured registry and
 scope prefix, for example `<registry>/public/payments` in public mode or
-`<registry>/<team-slug>/payments` in tenant mode.
+`<registry>/<team-slug>/payments` with tenant scope in either mode.
 `server deploy --scope public` resolves the platform public catalog namespace;
 `--scope org` resolves the org catalog namespace; `--scope tenant` uses the
 authenticated user's team namespace unless `--team` or `--namespace` selects one

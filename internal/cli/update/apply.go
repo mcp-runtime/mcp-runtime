@@ -57,11 +57,12 @@ type CRDResult struct {
 
 // Result is the outcome of applying a plan.
 type Result struct {
-	CRDs            []CRDResult      `json:"crds,omitempty"`
-	PlatformObjects []ObjectResult   `json:"platformObjects,omitempty"`
-	ConfigMaps      []ObjectResult   `json:"configMaps,omitempty"`
-	Workloads       []WorkloadResult `json:"workloads"`
-	Failed          bool             `json:"failed"`
+	CRDs              []CRDResult      `json:"crds,omitempty"`
+	PlatformObjects   []ObjectResult   `json:"platformObjects,omitempty"`
+	ConfigMaps        []ObjectResult   `json:"configMaps,omitempty"`
+	CatalogNamespaces []ObjectResult   `json:"catalogNamespaces,omitempty"`
+	Workloads         []WorkloadResult `json:"workloads"`
+	Failed            bool             `json:"failed"`
 }
 
 type imageChange struct {
@@ -136,6 +137,15 @@ func Apply(ctx context.Context, cs kubernetes.Interface, plan *Plan, opts ApplyO
 	if len(plan.objects) > 0 {
 		objResults, err := applyPlatformObjects(ctx, cs, plan, progress)
 		res.PlatformObjects = objResults
+		if err != nil {
+			res.Failed = true
+			return res
+		}
+	}
+
+	if len(plan.namespacesToWrite) > 0 {
+		results, err := applyCatalogNamespaces(ctx, cs, plan, progress)
+		res.CatalogNamespaces = results
 		if err != nil {
 			res.Failed = true
 			return res

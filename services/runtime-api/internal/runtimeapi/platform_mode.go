@@ -3,14 +3,13 @@ package runtimeapi
 import (
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 
+	"mcp-runtime/pkg/platformmode"
 	"mcp-runtime/pkg/publishscope"
 )
 
 const (
-	platformModeTenant = "tenant"
 	platformModeOrg    = "org"
 	platformModePublic = "public"
 
@@ -18,36 +17,15 @@ const (
 	defaultPublicCatalogNamespace = publishscope.DefaultPublicCatalogNamespace
 )
 
-// PlatformMode returns the configured platform tenancy mode, defaulting invalid or empty values to tenant mode.
+// PlatformMode returns org or public, defaulting invalid or empty values to org.
 func PlatformMode() string {
-	raw := strings.TrimSpace(os.Getenv("PLATFORM_MODE"))
-	if raw == "" {
-		raw = strings.TrimSpace(os.Getenv("MCP_PLATFORM_MODE"))
-	}
-	switch strings.ToLower(raw) {
-	case platformModeOrg:
-		return platformModeOrg
-	case platformModePublic:
-		return platformModePublic
-	case "", platformModeTenant:
-		return platformModeTenant
-	default:
-		return platformModeTenant
-	}
+	return string(platformmode.FromEnv())
 }
 
 // enabledPublishScopes lists the publish scopes the configured platform mode
-// accepts. Tenant scope is always available; org and public need the
-// matching platform mode.
+// accepts. Org mode supports tenant/org; public mode supports all three scopes.
 func enabledPublishScopes() []publishscope.Scope {
-	switch PlatformMode() {
-	case platformModeOrg:
-		return []publishscope.Scope{publishscope.Tenant, publishscope.Org}
-	case platformModePublic:
-		return []publishscope.Scope{publishscope.Tenant, publishscope.Public}
-	default:
-		return []publishscope.Scope{publishscope.Tenant}
-	}
+	return platformmode.FromEnv().EnabledPublishScopes()
 }
 
 // publishScopeEnabledError returns an actionable error when scope is not
@@ -84,54 +62,26 @@ func sharedCatalogWritableForUsers() bool {
 }
 
 func modeCatalogNamespaces() []string {
-	if PlatformMode() == platformModeTenant {
-		return nil
-	}
-	raw := strings.TrimSpace(os.Getenv("PLATFORM_CATALOG_NAMESPACES"))
-	if raw == "" {
-		raw = strings.TrimSpace(os.Getenv("MCP_PLATFORM_CATALOG_NAMESPACES"))
-	}
-	if raw == "" && PlatformMode() == platformModePublic {
-		raw = strings.TrimSpace(os.Getenv("PLATFORM_PUBLIC_NAMESPACES"))
-		if raw == "" {
-			raw = strings.TrimSpace(os.Getenv("MCP_PLATFORM_PUBLIC_NAMESPACES"))
-		}
-	}
-	namespaces := []string{defaultModeCatalogNamespace()}
-	for _, namespace := range strings.Split(raw, ",") {
-		namespace = strings.TrimSpace(namespace)
-		if namespace != "" {
-			namespaces = append(namespaces, namespace)
-		}
-	}
-	return dedupeNonEmptyStrings(namespaces)
+	return platformmode.FromEnv().CatalogNamespaces()
 }
 
 func defaultModeCatalogNamespace() string {
-	mode := PlatformMode()
-	if mode == platformModeTenant {
-		return ""
+	return platformmode.FromEnv().DefaultCatalogNamespace()
+}
+
+func catalogNamespacesForScope(scope publishscope.Scope) []string {
+	return platformmode.FromEnv().CatalogNamespacesForScope(scope)
+}
+
+func catalogScopeForNamespace(namespace string) (publishscope.Scope, bool) {
+	return platformmode.FromEnv().CatalogScope(namespace)
+}
+
+func defaultCatalogNamespaceForScope(scope publishscope.Scope) string {
+	if namespaces := catalogNamespacesForScope(scope); len(namespaces) > 0 {
+		return namespaces[0]
 	}
-	if override := strings.TrimSpace(os.Getenv("PLATFORM_CATALOG_NAMESPACE")); override != "" {
-		return override
-	}
-	if override := strings.TrimSpace(os.Getenv("MCP_PLATFORM_CATALOG_NAMESPACE")); override != "" {
-		return override
-	}
-	switch mode {
-	case platformModeOrg:
-		if namespace := strings.TrimSpace(os.Getenv("PLATFORM_ORG_NAMESPACE")); namespace != "" {
-			return namespace
-		}
-		return defaultOrgCatalogNamespace
-	case platformModePublic:
-		if namespace := strings.TrimSpace(os.Getenv("PLATFORM_PUBLIC_NAMESPACE")); namespace != "" {
-			return namespace
-		}
-		return defaultPublicCatalogNamespace
-	default:
-		return ""
-	}
+	return ""
 }
 
 func defaultCatalogNamespaceForMode() string {
@@ -156,6 +106,9 @@ func isModeCatalogNamespace(namespace string) bool {
 }
 
 func principalCanReadNamespace(p principal, namespace string) bool {
+	if p.AuthType == "public_catalog" {
+		return stringInSlice(strings.TrimSpace(namespace), catalogNamespacesForScope(publishscope.Public))
+	}
 	if sharedCatalogWritableForUsers() && isModeCatalogNamespace(namespace) {
 		return true
 	}
@@ -185,6 +138,9 @@ func principalOwnsNamespace(p principal, namespace string) bool {
 }
 
 func principalCanPublishNamespace(p principal, namespace string) bool {
+	if p.AuthType == "public_catalog" {
+		return false
+	}
 	namespace = strings.TrimSpace(namespace)
 	if namespace == "" {
 		return false
@@ -196,6 +152,9 @@ func principalCanPublishNamespace(p principal, namespace string) bool {
 }
 
 func publishNamespacesForPrincipal(p principal) []string {
+	if p.AuthType == "public_catalog" {
+		return catalogNamespacesForScope(publishscope.Public)
+	}
 	namespaces := make([]string, 0, len(p.AllowedNamespaces)+len(p.Teams)+3)
 	if sharedCatalogWritableForUsers() {
 		namespaces = append(namespaces, modeCatalogNamespaces()...)
@@ -219,11 +178,11 @@ func publishNamespacesForPrincipal(p principal) []string {
 
 // PublicCatalogPrincipal returns the synthetic principal used for unauthenticated public catalog reads.
 func PublicCatalogPrincipal() Principal {
-	namespaces := modeCatalogNamespaces()
+	namespaces := catalogNamespacesForScope(publishscope.Public)
 	return Principal{
 		Role:              roleUser,
 		Subject:           "public",
-		Namespace:         defaultCatalogNamespaceForMode(),
+		Namespace:         defaultCatalogNamespaceForScope(publishscope.Public),
 		AllowedNamespaces: namespaces,
 		AuthType:          "public_catalog",
 	}
@@ -241,7 +200,7 @@ func PublicCatalogFallback(r *http.Request) (Principal, bool) {
 	}
 	query := r.URL.Query()
 	if strings.TrimSpace(query.Get("namespace")) == "" {
-		query.Set("namespace", defaultCatalogNamespaceForMode())
+		query.Set("namespace", defaultCatalogNamespaceForScope(publishscope.Public))
 		r.URL.RawQuery = query.Encode()
 	}
 	return PublicCatalogPrincipal(), true

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"mcp-runtime/internal/cli/cluster"
+	"mcp-runtime/pkg/platformmode"
 )
 
 const (
@@ -13,7 +14,6 @@ const (
 )
 
 const (
-	PlatformModeTenant = "tenant"
 	PlatformModeOrg    = "org"
 	PlatformModePublic = "public"
 )
@@ -117,18 +117,11 @@ type Plan struct {
 }
 
 func NormalizePlatformMode(mode string) (string, bool) {
-	switch strings.ToLower(strings.TrimSpace(mode)) {
-	case "":
-		return PlatformModeTenant, true
-	case PlatformModeTenant:
-		return PlatformModeTenant, true
-	case PlatformModeOrg:
-		return PlatformModeOrg, true
-	case PlatformModePublic:
-		return PlatformModePublic, true
-	default:
+	normalized, ok := platformmode.Normalize(mode)
+	if !ok {
 		return "", false
 	}
+	return string(normalized), true
 }
 
 func NormalizeRegistryMode(mode string) (string, bool) {
@@ -151,16 +144,24 @@ func NormalizeRegistryMode(mode string) (string, bool) {
 func CatalogNamespaceForPlatformMode(mode string) string {
 	normalized, ok := NormalizePlatformMode(mode)
 	if !ok {
-		normalized = PlatformModeTenant
-	}
-	switch normalized {
-	case PlatformModeOrg:
-		return DefaultOrgCatalogNamespace
-	case PlatformModePublic:
-		return DefaultPublicCatalogNamespace
-	default:
 		return ""
 	}
+	if normalized == PlatformModePublic {
+		return DefaultPublicCatalogNamespace
+	}
+	return DefaultOrgCatalogNamespace
+}
+
+// CatalogNamespacesForPlatformMode lists every catalog setup must provision.
+func CatalogNamespacesForPlatformMode(mode string) []string {
+	primary := CatalogNamespaceForPlatformMode(mode)
+	if primary == "" {
+		return nil
+	}
+	if primary == DefaultPublicCatalogNamespace {
+		return []string{primary, DefaultOrgCatalogNamespace}
+	}
+	return []string{primary}
 }
 
 // Build resolves CLI inputs into a concrete setup plan.
@@ -176,7 +177,7 @@ func Build(input Input) Plan {
 	if mode, ok := NormalizePlatformMode(input.PlatformMode); ok {
 		input.PlatformMode = mode
 	} else {
-		input.PlatformMode = PlatformModeTenant
+		input.PlatformMode = PlatformModeOrg
 	}
 	// Test mode defaults to the bundled mcp-runtime-ca workload issuer so the
 	// mTLS path works out of the box on local clusters. Prod opts in explicitly

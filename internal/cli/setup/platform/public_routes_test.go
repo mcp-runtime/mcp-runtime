@@ -21,7 +21,7 @@ func TestPublicRouteSettingsReachComponents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rendered, err := renderAnalyticsConfigManifestWithReaders(string(raw), setupplan.PlatformModeTenant, AnalyticsImageSet{},
+	rendered, err := renderAnalyticsConfigManifestWithReaders(string(raw), setupplan.PlatformModeOrg, AnalyticsImageSet{},
 		func(string, string) (map[string]string, error) { return nil, nil }, func() string { return "traefik" })
 	if err != nil {
 		t.Fatal(err)
@@ -41,7 +41,7 @@ func TestPublicRouteSettingsReachComponents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rendered, err = renderAnalyticsManifest(string(raw), AnalyticsImageSet{}, "", setupplan.PlatformModeTenant)
+	rendered, err = renderAnalyticsManifest(string(raw), AnalyticsImageSet{}, "", setupplan.PlatformModeOrg)
 	if err != nil {
 		t.Fatal(err)
 	}

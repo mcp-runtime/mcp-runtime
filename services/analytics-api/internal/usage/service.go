@@ -66,10 +66,11 @@ type DecisionUsage struct {
 }
 
 type TimePoint struct {
-	Bucket  time.Time `json:"bucket"`
-	Events  uint64    `json:"events"`
-	Allowed uint64    `json:"allowed"`
-	Denied  uint64    `json:"denied"`
+	Bucket            time.Time `json:"bucket"`
+	Events            uint64    `json:"events"`
+	Allowed           uint64    `json:"allowed"`
+	Denied            uint64    `json:"denied"`
+	RequestsPerSecond float64   `json:"requests_per_second"`
 }
 
 type RecentActivity struct {
@@ -86,44 +87,65 @@ type RecentActivity struct {
 }
 
 type Totals struct {
-	Events         uint64 `json:"events"`
-	Allowed        uint64 `json:"allowed"`
-	Denied         uint64 `json:"denied"`
-	UniqueServers  uint64 `json:"unique_servers"`
-	UniqueHumans   uint64 `json:"unique_humans"`
-	UniqueAgents   uint64 `json:"unique_agents"`
-	UniqueSessions uint64 `json:"unique_sessions"`
+	Events           uint64  `json:"events"`
+	Allowed          uint64  `json:"allowed"`
+	Denied           uint64  `json:"denied"`
+	UniqueServers    uint64  `json:"unique_servers"`
+	UniqueHumans     uint64  `json:"unique_humans"`
+	UniqueAgents     uint64  `json:"unique_agents"`
+	UniqueSessions   uint64  `json:"unique_sessions"`
+	HTTPFailures     uint64  `json:"http_failures"`
+	ServerErrors     uint64  `json:"server_errors"`
+	AverageLatencyMS float64 `json:"average_latency_ms"`
+	P95LatencyMS     float64 `json:"p95_latency_ms"`
+	BytesIn          uint64  `json:"bytes_in"`
+	BytesOut         uint64  `json:"bytes_out"`
 }
 
 type UsageResponse struct {
-	Totals     Totals           `json:"totals"`
-	Servers    []ServerUsage    `json:"servers"`
-	Actors     []ActorUsage     `json:"actors"`
-	Tools      []ToolUsage      `json:"tools"`
-	Decisions  []DecisionUsage  `json:"decisions"`
-	Series     []TimePoint      `json:"series,omitempty"`
-	Recent     []RecentActivity `json:"recent,omitempty"`
-	WindowDays int              `json:"window_days"`
-	Filters    UsageFilters     `json:"filters,omitempty"`
+	Totals        Totals           `json:"totals"`
+	Servers       []ServerUsage    `json:"servers"`
+	Actors        []ActorUsage     `json:"actors"`
+	Tools         []ToolUsage      `json:"tools"`
+	Decisions     []DecisionUsage  `json:"decisions"`
+	Series        []TimePoint      `json:"series,omitempty"`
+	Recent        []RecentActivity `json:"recent,omitempty"`
+	WindowDays    int              `json:"window_days"`
+	Filters       UsageFilters     `json:"filters,omitempty"`
+	Requests      []RequestUsage   `json:"requests,omitempty"`
+	Facets        *UsageFacets     `json:"facets,omitempty"`
+	BucketSeconds int              `json:"bucket_seconds"`
+	WindowStart   time.Time        `json:"window_start"`
+	WindowEnd     time.Time        `json:"window_end"`
 }
 
 type UsageFilters struct {
-	Namespaces []string `json:"namespaces,omitempty"`
-	TeamIDs    []string `json:"team_ids,omitempty"`
-	Server     string   `json:"server,omitempty"`
-	Decision   string   `json:"decision,omitempty"`
-	ToolName   string   `json:"tool_name,omitempty"`
+	Namespaces    []string `json:"namespaces,omitempty"`
+	TeamIDs       []string `json:"team_ids,omitempty"`
+	Server        string   `json:"server,omitempty"`
+	Decision      string   `json:"decision,omitempty"`
+	ToolName      string   `json:"tool_name,omitempty"`
+	RPCMethod     string   `json:"rpc_method,omitempty"`
+	PolicyVersion string   `json:"policy_version,omitempty"`
+	Scope         string   `json:"scope,omitempty"`
+	HTTPStatus    string   `json:"http_status,omitempty"`
 }
 
 type QueryScope struct {
-	Since      time.Time
-	WindowDays int
-	Limit      int
-	Namespaces []string
-	TeamIDs    []string
-	Server     string
-	Decision   string
-	ToolName   string
+	Since         time.Time
+	WindowDays    int
+	Limit         int
+	Namespaces    []string
+	TeamIDs       []string
+	Server        string
+	Decision      string
+	ToolName      string
+	Until         time.Time
+	RPCMethod     string
+	PolicyVersion string
+	Scope         string
+	HTTPStatus    string
+	Admin         bool
 }
 
 type PrincipalScope struct {
@@ -143,17 +165,28 @@ func scopeFromRequest(r *http.Request, windowDays, limit int) QueryScope {
 	if toolName == "" {
 		toolName = strings.TrimSpace(r.URL.Query().Get("tool"))
 	}
+	now := time.Now().UTC()
+	since := now.AddDate(0, 0, -windowDays)
+	if hours := queryInt(r, "window_hours", 0); hours > 0 {
+		since = now.Add(-time.Duration(clampInt(hours, 1, maxWindowDays*24)) * time.Hour)
+	}
 	return QueryScope{
-		Since:      time.Now().AddDate(0, 0, -windowDays),
-		WindowDays: windowDays,
-		Limit:      limit,
-		Server:     strings.TrimSpace(r.URL.Query().Get("server")),
-		Decision:   decision,
-		ToolName:   toolName,
+		Since:         since,
+		Until:         now,
+		WindowDays:    windowDays,
+		Limit:         limit,
+		Server:        strings.TrimSpace(r.URL.Query().Get("server")),
+		Decision:      decision,
+		ToolName:      toolName,
+		RPCMethod:     strings.TrimSpace(r.URL.Query().Get("rpc_method")),
+		PolicyVersion: strings.TrimSpace(r.URL.Query().Get("policy_version")),
+		HTTPStatus:    strings.TrimSpace(r.URL.Query().Get("http_status")),
 	}
 }
 
 func applyAdminScopeFilters(r *http.Request, scope *QueryScope) {
+	scope.Admin = true
+	scope.Scope = strings.TrimSpace(r.URL.Query().Get("scope"))
 	namespace := strings.TrimSpace(r.URL.Query().Get("namespace"))
 	if namespace != "" {
 		scope.Namespaces = []string{namespace}
@@ -228,11 +261,15 @@ func emptyUsageResponse(scope QueryScope) UsageResponse {
 
 func (scope QueryScope) Filters() UsageFilters {
 	return UsageFilters{
-		Namespaces: dedupeStrings(scope.Namespaces),
-		TeamIDs:    dedupeStrings(scope.TeamIDs),
-		Server:     scope.Server,
-		Decision:   scope.Decision,
-		ToolName:   scope.ToolName,
+		Namespaces:    dedupeStrings(scope.Namespaces),
+		TeamIDs:       dedupeStrings(scope.TeamIDs),
+		Server:        scope.Server,
+		Decision:      scope.Decision,
+		ToolName:      scope.ToolName,
+		RPCMethod:     scope.RPCMethod,
+		PolicyVersion: scope.PolicyVersion,
+		Scope:         scope.Scope,
+		HTTPStatus:    scope.HTTPStatus,
 	}
 }
 
@@ -253,6 +290,8 @@ func (s *Service) queryUsage(parent context.Context, scope QueryScope) (UsageRes
 		errOnce     sync.Once
 		firstErr    error
 		firstErrKey string
+		requests    []RequestUsage
+		facets      *UsageFacets
 	)
 
 	recordErr := func(key string, err error) {
@@ -267,6 +306,21 @@ func (s *Service) queryUsage(parent context.Context, scope QueryScope) (UsageRes
 	}
 
 	wg.Add(7)
+	if scope.Admin {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			var err error
+			requests, err = s.queryRequestUsage(ctx, scope)
+			recordErr("requests", err)
+		}()
+		go func() {
+			defer wg.Done()
+			var err error
+			facets, err = s.queryFacets(ctx, scope)
+			recordErr("facets", err)
+		}()
+	}
 	go func() {
 		defer wg.Done()
 		var err error
@@ -314,23 +368,29 @@ func (s *Service) queryUsage(parent context.Context, scope QueryScope) (UsageRes
 	if firstErr != nil {
 		return UsageResponse{}, fmt.Errorf("%s: %w", firstErrKey, firstErr)
 	}
+	series = fillTimeSeries(series, scope)
 
 	return UsageResponse{
-		Totals:     totals,
-		Servers:    servers,
-		Actors:     actors,
-		Tools:      tools,
-		Decisions:  decisions,
-		Series:     series,
-		Recent:     recent,
-		WindowDays: scope.WindowDays,
-		Filters:    scope.Filters(),
+		Totals:        totals,
+		Servers:       servers,
+		Actors:        actors,
+		Tools:         tools,
+		Decisions:     decisions,
+		Series:        series,
+		Recent:        recent,
+		WindowDays:    scope.WindowDays,
+		Filters:       scope.Filters(),
+		Requests:      requests,
+		Facets:        facets,
+		BucketSeconds: seriesBucketSeconds(scope),
+		WindowStart:   scope.Since,
+		WindowEnd:     scope.Until,
 	}, nil
 }
 
 func (s *Service) queryTotals(ctx context.Context, scope QueryScope) (Totals, error) {
 	where, args := WhereClause(scope)
-	query := "SELECT count(), countIf(decision = 'allow'), countIf(decision = 'deny'), uniqIf(server, server != ''), uniqIf(human_id, human_id != ''), uniqIf(agent_id, agent_id != ''), uniqIf(session_id, session_id != '') FROM " + s.DBName + ".events " + where
+	query := "SELECT count(), countIf(decision = 'allow'), countIf(decision = 'deny'), uniqIf(server, server != ''), uniqIf(human_id, human_id != ''), uniqIf(agent_id, agent_id != ''), uniqIf(session_id, session_id != ''), countIf(JSONExtractInt(payload, 'status') >= 400), countIf(JSONExtractInt(payload, 'status') >= 500), if(count() = 0, 0., avg(toFloat64(JSONExtractInt(payload, 'latency_ms')))), if(count() = 0, 0., quantile(0.95)(toFloat64(JSONExtractInt(payload, 'latency_ms')))), sum(toUInt64(greatest(JSONExtractInt(payload, 'bytes_in'), 0))), sum(toUInt64(greatest(JSONExtractInt(payload, 'bytes_out'), 0))) FROM " + s.DBName + ".events " + where
 	var totals Totals
 	err := s.DB.QueryRow(ctx, query, args...).Scan(
 		&totals.Events,
@@ -340,6 +400,7 @@ func (s *Service) queryTotals(ctx context.Context, scope QueryScope) (Totals, er
 		&totals.UniqueHumans,
 		&totals.UniqueAgents,
 		&totals.UniqueSessions,
+		&totals.HTTPFailures, &totals.ServerErrors, &totals.AverageLatencyMS, &totals.P95LatencyMS, &totals.BytesIn, &totals.BytesOut,
 	)
 	return totals, err
 }
@@ -477,7 +538,7 @@ func (s *Service) queryDecisions(ctx context.Context, scope QueryScope) ([]Decis
 
 func (s *Service) querySeries(ctx context.Context, scope QueryScope) ([]TimePoint, error) {
 	where, args := WhereClause(scope)
-	query := "SELECT " + bucketExpression(scope.WindowDays) + " AS bucket, count() AS events, countIf(decision = 'allow') AS allowed, countIf(decision = 'deny') AS denied FROM " + s.DBName + ".events " + where + " GROUP BY bucket ORDER BY bucket ASC"
+	query := "SELECT toStartOfInterval(timestamp, INTERVAL " + fmt.Sprint(seriesBucketSeconds(scope)) + " SECOND) AS bucket, count() AS events, countIf(decision = 'allow') AS allowed, countIf(decision = 'deny') AS denied FROM " + s.DBName + ".events " + where + " GROUP BY bucket ORDER BY bucket ASC"
 	rows, err := s.DB.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
@@ -516,20 +577,21 @@ func (s *Service) queryRecent(ctx context.Context, scope QueryScope) ([]RecentAc
 	return out, rows.Err()
 }
 
-func bucketExpression(windowDays int) string {
-	if windowDays <= 2 {
-		return "toStartOfHour(timestamp)"
-	}
-	return "toStartOfDay(timestamp)"
-}
-
 func WhereClause(scope QueryScope, extraConditions ...string) (string, []any) {
 	conditions := []string{"timestamp >= ?"}
 	args := []any{scope.Since}
+	if !scope.Until.IsZero() {
+		conditions = append(conditions, "timestamp < ?")
+		args = append(args, scope.Until)
+	}
 
 	scopeFilters, scopeArgs := scopeConditions(scope)
 	if len(scopeFilters) > 0 {
-		conditions = append(conditions, "("+strings.Join(scopeFilters, " OR ")+")")
+		join := " OR "
+		if scope.Admin {
+			join = " AND "
+		}
+		conditions = append(conditions, "("+strings.Join(scopeFilters, join)+")")
 		args = append(args, scopeArgs...)
 	}
 	if scope.Server != "" {
@@ -544,6 +606,7 @@ func WhereClause(scope QueryScope, extraConditions ...string) (string, []any) {
 		conditions = append(conditions, "tool_name = ?")
 		args = append(args, scope.ToolName)
 	}
+	conditions, args = appendRequestFilters(scope, conditions, args)
 	for _, condition := range extraConditions {
 		if condition = strings.TrimSpace(condition); condition != "" {
 			conditions = append(conditions, condition)

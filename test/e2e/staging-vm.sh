@@ -428,7 +428,7 @@ stage_setup() {
   local args=(
     setup
     --strict-prod
-    --platform-mode "${E2E_PLATFORM_MODE:-tenant}"
+    --platform-mode "${E2E_PLATFORM_MODE:-org}"
     --ingress traefik
     --with-tls
     --acme-email "${E2E_ACME_EMAIL}"

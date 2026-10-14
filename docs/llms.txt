@@ -86,4 +86,4 @@
 - The adapter's default local listener is `127.0.0.1:8099` and does not authenticate local clients. Share it only with clients using the same Runtime agent identity.
 - The gateway evaluates declared tool metadata; it does not inspect the server implementation. Tool names and side-effect declarations must match the actual server tools.
 - Trust levels: `low`, `medium`, `high`. Side effects: `read`, `write`, `destructive`.
-- Platform modes and publish scopes: `tenant`, `org`, `public`.
+- Platform modes: `org` (default), `public`. Publish scopes: `tenant` (a team), `org`, `public`.

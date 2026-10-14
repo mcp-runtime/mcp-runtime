@@ -14,10 +14,13 @@ user-facing commands and scripts over private shortcuts.
 - Example profile: `config/deployments/mcpruntime-org.env.example`
 - Runbook: `docs/reference-deployment.md`
 - Readiness/debug guide: `docs/cluster-readiness.md`
-- Scripts (canonical): `hack/deploy/reference/{backup,setup,reset,restore,rollout}.sh`; disposable demo: `hack/qa/multitenancy-test.sh`
+- Scripts (canonical): `hack/deploy/reference/{backup,reset,restore}.sh`; ordinary install/update: `mcp-runtime setup` / `mcp-runtime update`; disposable demo: `hack/qa/multitenancy-test.sh`
 - Script index: `hack/README.md`
 - User path: `docs/hosted-quickstart.md` (published CLI install, hosted platform login,
   server publish, grant, adapter, and analytics UI)
+- Hosted platform mode: `public`; modes are `org` and `public`, while publish
+  scopes are `tenant` (a team), `org`, and `public`. Public mode supports all
+  three scopes. Anonymous catalog reads must exclude org/team namespaces.
 - CLI release workflow: `.github/workflows/release.yaml`
 
 ## Current production VM
@@ -120,8 +123,8 @@ KUBECONFIG="$PROD_KUBECONFIG" ./bin/mcp-runtime cluster doctor
   deploy platform images. Do not tag/publish the Runtime or mcp-auth release
   until the candidate has passed the user path below and the user explicitly
   asks to publish it.
-- Before running the deployment command, inspect its `--help`, the rollout
-  script, and the production env profile, then ask about deployment flags or
+- Before running the deployment command, inspect its `--help`, the reviewed
+  release manifest, and the production env profile, then ask about deployment flags or
   overrides that affect this rollout. Present only relevant choices together
   with the profile's current values and recommended defaults; do not invent
   values or silently override production settings. Wait for answers to any
@@ -178,8 +181,9 @@ KUBECONFIG="$HOME/.kube/prod-mcp-runtime-config" ./bin/mcp-runtime cluster docto
 Run the actual script path:
 
 ```bash
-bash -n hack/deploy/reference/setup.sh
-bash hack/deploy/reference/setup.sh --yes
+# Use the reviewed setup flags/profile from docs/reference-deployment.md.
+# For an existing install preserve TLS with --provided-tls-secrets.
+./bin/mcp-runtime setup --help
 KUBECONFIG="$HOME/.kube/prod-mcp-runtime-config" ./bin/mcp-runtime cluster doctor
 kubectl --kubeconfig "$HOME/.kube/prod-mcp-runtime-config" --context prod-mcp-runtime get pods -A
 ```
@@ -213,15 +217,21 @@ apply. Do not apply stale `resourceVersion`, `uid`, `managedFields`, or
 
 ## Rollout Validation
 
-`hack/deploy/reference/rollout.sh` delegates to `mcp-runtime update --build`
-with the selected stable release manifest. Set `MCP_DEPLOY_REF`, an explicit
-kubeconfig/context, and `MCP_EXPECTED_CLUSTER_UID` in the private profile. A clean
-checkout at that source commit is required. Run `--dry-run` before `--yes`.
-The wrapper retains scoped pull Secrets, configuration, TLS and MCP Auth.
-MCP Auth updates use a separate explicitly selected component manifest.
+`mcp-runtime update --build` owns ordinary release rollout. Pass the selected
+manifest or `--to`, clean `--source`, explicit `--kubeconfig` / `--context`, and
+`--expect-cluster-id`. Review `--dry-run` before `--yes`. Registry access is
+checked before builds; use existing approved Docker credentials. The CLI
+retains scoped pull Secrets, unmanaged configuration, TLS and MCP Auth.
+MCP Auth updates use a separately selected component manifest.
 
-Full setup uses `setup.sh --yes` with existing TLS Secrets and the current
-MCP Auth profile. Configuration recovery is separate: review
+For a mode change, pass `--platform-mode org|public` with the reviewed manifest.
+The CLI updates shared mode configuration, prepares required catalogs with
+scope/security labels, and restarts runtime-api, platform-api and UI. It refuses
+to relabel existing namespace scopes, retains catalogs on rollback, and rejects
+`--only`. Keep the private setup profile mode aligned after verification.
+
+Full setup uses the supported CLI with existing TLS Secrets and the reviewed
+MCP Auth configuration. Configuration recovery is separate: review
 `restore.sh --snapshot PATH --dry-run` before `--yes`; there is no automatic
 restore. Destructive cleanup needs a verified same-cluster full recovery bundle
 and explicit cluster UID confirmation. Rehearse database recovery first.

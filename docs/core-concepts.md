@@ -370,13 +370,13 @@ browse the catalog without logging in.
 
 | Mode | Who sees servers | Catalog namespace |
 |---|---|---|
-| `tenant` (default) | Only team members | Per-team namespaces |
-| `org` | All signed-in users | `mcp-servers-org` |
-| `public` | Anyone, no login | `mcp-servers-public` |
+| `org` (default) | Signed-in users browse the org catalog and their authorized teams | `mcp-servers-org` |
+| `public` | Anyone browses the public catalog; signed-in users also browse org and their authorized teams | `mcp-servers-public` and `mcp-servers-org` |
 
-In `org` and `public` modes the catalog namespace is added to what a signed-in
-user already sees, so their listings cover the shared catalog plus every team
-namespace they are authorized for.
+There are two platform modes and three publish scopes. `tenant` is a team
+publish scope, not a platform mode. Org mode accepts `tenant` and `org`;
+public mode accepts `tenant`, `org`, and `public`. Organization and team
+namespaces remain unavailable to anonymous catalog readers in public mode.
 
 Set with `--platform-mode` on `setup` or `MCP_SETUP_PLATFORM_MODE` in your env file.
 
@@ -390,6 +390,11 @@ When publishing a server image (`server push`) or deploying a server
 | `tenant` | `mcp-team-<slug>` | Members of that team |
 | `org` | `mcp-servers-org` | All signed-in users in the org |
 | `public` | `mcp-servers-public` | Anyone |
+
+These scopes control catalog visibility. Calling a tool still follows the
+server's authentication and gateway policy; public catalog visibility does not
+disable tool authentication. Public scope supports live previews and MCP
+servers a company wants to list for public use on this platform.
 
 ## What's in a `.mcp/servers.yaml`
 

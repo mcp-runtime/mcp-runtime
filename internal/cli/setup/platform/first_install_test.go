@@ -82,7 +82,7 @@ func TestExternalTLSSettingsSurviveSetupAndRerun(t *testing.T) {
 	}
 	t.Setenv("UI_REQUIRE_HTTPS", "false")
 	t.Setenv("UI_FORCE_SECURE_COOKIE", "true")
-	rendered, err := renderAnalyticsConfigManifestWithReaders(string(raw), setupplan.PlatformModeTenant, AnalyticsImageSet{}, func(string, string) (map[string]string, error) { return nil, nil }, func() string { return "traefik" })
+	rendered, err := renderAnalyticsConfigManifestWithReaders(string(raw), setupplan.PlatformModeOrg, AnalyticsImageSet{}, func(string, string) (map[string]string, error) { return nil, nil }, func() string { return "traefik" })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestExternalTLSSettingsSurviveSetupAndRerun(t *testing.T) {
 	}
 	t.Setenv("UI_REQUIRE_HTTPS", "")
 	t.Setenv("UI_FORCE_SECURE_COOKIE", "")
-	rerendered, err := renderAnalyticsConfigManifestWithReaders(string(raw), setupplan.PlatformModeTenant, AnalyticsImageSet{}, func(string, string) (map[string]string, error) { return config.Data, nil }, func() string { return "traefik" })
+	rerendered, err := renderAnalyticsConfigManifestWithReaders(string(raw), setupplan.PlatformModeOrg, AnalyticsImageSet{}, func(string, string) (map[string]string, error) { return config.Data, nil }, func() string { return "traefik" })
 	if err != nil {
 		t.Fatal(err)
 	}

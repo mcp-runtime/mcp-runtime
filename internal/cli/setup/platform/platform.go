@@ -375,7 +375,7 @@ func ValidatePlatformMode(mode string) error {
 		return nil
 	}
 	cause := core.NewWithBase(core.ErrSetupInvalidPlatformMode, fmt.Sprintf("invalid platform mode %q", mode))
-	return core.WrapWithBase(core.ErrFieldRequired, cause, "invalid --platform-mode; expected tenant, org, or public")
+	return core.WrapWithBase(core.ErrFieldRequired, cause, "invalid --platform-mode; expected org or public")
 }
 
 func ValidatePublicPlatformAuthEnv(platformMode string, tlsEnabled, testMode bool) error {
@@ -498,12 +498,10 @@ func setupPlatformWithDeps(logger *zap.Logger, plan setupplan.Plan, deps SetupDe
 		return err
 	}
 
-	if plan.PlatformMode == setupplan.PlatformModeTenant {
-		core.Info("Tenant publishing requires a team membership; the install admin API key alone cannot publish a tenant server.")
-		fmt.Println("Next: mcp-runtime team create first-team")
-		fmt.Println("Then: mcp-runtime team user add first-team <user-id> --role owner (existing user), or mcp-runtime team user create first-team --email <email> --password <password> --role owner (new user).")
-		fmt.Println("Sign in as that team member before running server push --scope tenant and server deploy.")
-	}
+	core.Info("Team publishing uses --scope tenant with a team-scoped image repository.")
+	fmt.Println("For a new team: mcp-runtime team create first-team")
+	fmt.Println("Then: mcp-runtime team user add first-team <user-id> --role owner (existing user), or mcp-runtime team user create first-team --email <email> --password <password> --role owner (new user).")
+	fmt.Println("Signed-in users can also publish with --scope org; public mode additionally allows --scope public.")
 	core.Success("Platform setup complete")
 	fmt.Println(core.Green("\nPlatform is ready. Use 'mcp-runtime status' to check everything."))
 	printPlatformEntrypoints(plan.TLSEnabled)
@@ -562,24 +560,25 @@ func catalogNamespaceLabels(platformMode string) map[string]string {
 }
 
 func setupCatalogNamespaceStep(logger *zap.Logger, plan setupplan.Plan, deps SetupDeps) error {
-	namespace := setupplan.CatalogNamespaceForPlatformMode(plan.PlatformMode)
-	if namespace == "" {
-		// tenant mode has no shared catalog namespace.
-		return nil
+	for _, namespace := range setupplan.CatalogNamespacesForPlatformMode(plan.PlatformMode) {
+		scope := setupplan.PlatformModeOrg
+		if namespace == setupplan.DefaultPublicCatalogNamespace {
+			scope = setupplan.PlatformModePublic
+		}
+		core.Step(fmt.Sprintf("Provisioning %s catalog namespace %q", scope, namespace))
+		if err := deps.EnsureCatalogNamespace(namespace, catalogNamespaceLabels(scope)); err != nil {
+			wrappedErr := core.WrapWithBaseAndContext(
+				core.ErrSetupStepFailed,
+				err,
+				fmt.Sprintf("ensure catalog namespace %q failed: %v", namespace, err),
+				map[string]any{"namespace": namespace, "platform_mode": plan.PlatformMode, "component": "setup"},
+			)
+			core.Error("Catalog namespace provisioning failed")
+			core.LogStructuredError(logger, wrappedErr, "Catalog namespace provisioning failed")
+			return wrappedErr
+		}
+		core.Success(fmt.Sprintf("Catalog namespace %q ready", namespace))
 	}
-	core.Step(fmt.Sprintf("Provisioning %s catalog namespace %q", plan.PlatformMode, namespace))
-	if err := deps.EnsureCatalogNamespace(namespace, catalogNamespaceLabels(plan.PlatformMode)); err != nil {
-		wrappedErr := core.WrapWithBaseAndContext(
-			core.ErrSetupStepFailed,
-			err,
-			fmt.Sprintf("ensure catalog namespace %q failed: %v", namespace, err),
-			map[string]any{"namespace": namespace, "platform_mode": plan.PlatformMode, "component": "setup"},
-		)
-		core.Error("Catalog namespace provisioning failed")
-		core.LogStructuredError(logger, wrappedErr, "Catalog namespace provisioning failed")
-		return wrappedErr
-	}
-	core.Success(fmt.Sprintf("Catalog namespace %q ready", namespace))
 	return nil
 }
 

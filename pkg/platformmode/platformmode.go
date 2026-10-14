@@ -1,5 +1,5 @@
 // Package platformmode is the single source of truth for the MCP Runtime
-// platform-mode selector (tenant/org/public) and the catalog namespace rules
+// platform-mode selector (org/public) and the catalog namespace rules
 // derived from it. The CLI, the API service, and the UI service all consume
 // these helpers so they agree on environment-variable precedence and on which
 // namespaces are considered the active shared catalog.
@@ -8,21 +8,20 @@ package platformmode
 import (
 	"os"
 	"strings"
+
+	"mcp-runtime/pkg/publishscope"
 )
 
 // Mode is the canonical lower-case representation of a platform mode.
 type Mode string
 
 const (
-	// ModeTenant scopes signed-in users to their own user/team namespaces.
-	// No shared catalog is exposed; anonymous browsing is disabled.
-	ModeTenant Mode = "tenant"
 	// ModeOrg exposes a shared organization catalog that signed-in users may
 	// publish into. Tenant namespaces remain reachable to their owners.
 	ModeOrg Mode = "org"
 	// ModePublic exposes a public catalog readable by anonymous clients and
-	// writable by signed-in users. Tenant namespaces remain reachable to
-	// their owners.
+	// writable by signed-in users, alongside the signed-in organization
+	// catalog. Tenant namespaces remain reachable to their owners.
 	ModePublic Mode = "public"
 )
 
@@ -35,22 +34,20 @@ const (
 
 // Normalize returns the canonical mode for raw. The second return value is
 // true when raw was empty or matched a known mode; unknown values fall back
-// to ModeTenant and return false.
+// to ModeOrg and return false. Tenant is a publish scope, not a platform mode.
 func Normalize(raw string) (Mode, bool) {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "", string(ModeTenant):
-		return ModeTenant, true
-	case string(ModeOrg):
+	case "", string(ModeOrg):
 		return ModeOrg, true
 	case string(ModePublic):
 		return ModePublic, true
 	default:
-		return ModeTenant, false
+		return ModeOrg, false
 	}
 }
 
 // FromEnv reads the current platform mode from PLATFORM_MODE, falling back
-// to MCP_PLATFORM_MODE. Unknown values resolve to ModeTenant.
+// to MCP_PLATFORM_MODE. Unknown values resolve to ModeOrg.
 func FromEnv() Mode {
 	raw := strings.TrimSpace(os.Getenv("PLATFORM_MODE"))
 	if raw == "" {
@@ -73,7 +70,7 @@ func (m Mode) PublicCatalogEnabled() bool {
 }
 
 // DefaultCatalogNamespace returns the primary catalog namespace for the
-// active mode. ModeTenant returns "" because there is no shared catalog.
+// active mode. Unknown modes return an empty namespace.
 //
 // Override precedence (first non-empty wins):
 //  1. PLATFORM_CATALOG_NAMESPACE
@@ -81,7 +78,7 @@ func (m Mode) PublicCatalogEnabled() bool {
 //  3. mode-specific override (PLATFORM_ORG_NAMESPACE / PLATFORM_PUBLIC_NAMESPACE)
 //  4. built-in default (DefaultOrgCatalogNamespace / DefaultPublicCatalogNamespace)
 func (m Mode) DefaultCatalogNamespace() string {
-	if m == ModeTenant {
+	if m != ModeOrg && m != ModePublic {
 		return ""
 	}
 	if v := strings.TrimSpace(os.Getenv("PLATFORM_CATALOG_NAMESPACE")); v != "" {
@@ -114,8 +111,8 @@ func (m Mode) DefaultCatalogNamespace() string {
 //
 // Extra-namespace precedence is the same in every caller — the CLI, API, and
 // UI all share this logic to avoid drift.
-func (m Mode) CatalogNamespaces() []string {
-	if m == ModeTenant {
+func (m Mode) primaryCatalogNamespaces() []string {
+	if m != ModeOrg && m != ModePublic {
 		return nil
 	}
 	raw := strings.TrimSpace(os.Getenv("PLATFORM_CATALOG_NAMESPACES"))
@@ -139,6 +136,70 @@ func (m Mode) CatalogNamespaces() []string {
 		}
 	}
 	return dedupe(values)
+}
+
+// EnabledPublishScopes returns the publishing boundaries enabled by the mode.
+// Public mode includes tenant, organization, and public publishing.
+func (m Mode) EnabledPublishScopes() []publishscope.Scope {
+	switch m {
+	case ModePublic:
+		return []publishscope.Scope{publishscope.Tenant, publishscope.Org, publishscope.Public}
+	case ModeOrg:
+		return []publishscope.Scope{publishscope.Tenant, publishscope.Org}
+	default:
+		return nil
+	}
+}
+
+func orgCatalogNamespace() string {
+	if v := strings.TrimSpace(os.Getenv("PLATFORM_ORG_NAMESPACE")); v != "" {
+		return v
+	}
+	return DefaultOrgCatalogNamespace
+}
+
+// CatalogNamespacesForScope keeps organization and anonymous public catalogs
+// separate even when both scopes are enabled on a public platform.
+func (m Mode) CatalogNamespacesForScope(scope publishscope.Scope) []string {
+	switch {
+	case scope == publishscope.Org && m == ModePublic:
+		return []string{orgCatalogNamespace()}
+	case scope == publishscope.Org && m == ModeOrg:
+		return m.primaryCatalogNamespaces()
+	case scope == publishscope.Public && m == ModePublic:
+		values := []string{}
+		for _, ns := range m.primaryCatalogNamespaces() {
+			// An organization namespace must never become anonymous through
+			// a catalog override or an extra-namespace entry.
+			if ns != orgCatalogNamespace() && ns != DefaultOrgCatalogNamespace {
+				values = append(values, ns)
+			}
+		}
+		return values
+	default:
+		return nil
+	}
+}
+
+// CatalogNamespaces returns catalogs visible to signed-in users. Anonymous
+// readers must use CatalogNamespacesForScope(publishscope.Public).
+func (m Mode) CatalogNamespaces() []string {
+	if m == ModePublic {
+		return dedupe(append(m.CatalogNamespacesForScope(publishscope.Public), m.CatalogNamespacesForScope(publishscope.Org)...))
+	}
+	return m.primaryCatalogNamespaces()
+}
+
+// CatalogScope reports the publishing boundary of a catalog namespace.
+func (m Mode) CatalogScope(namespace string) (publishscope.Scope, bool) {
+	for _, scope := range []publishscope.Scope{publishscope.Org, publishscope.Public} {
+		for _, candidate := range m.CatalogNamespacesForScope(scope) {
+			if strings.TrimSpace(namespace) == candidate {
+				return scope, true
+			}
+		}
+	}
+	return "", false
 }
 
 // IsCatalogNamespace reports whether namespace is one of the active mode's

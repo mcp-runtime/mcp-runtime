@@ -20,6 +20,7 @@ files: review them, protect their permissions, and never commit credentials.
 | Operation | Command | Scope |
 |---|---|---|
 | Release plan / rollout | `mcp-runtime update --to vX.Y.Z --build --expect-cluster-id UID --dry-run` then `--yes` | Replaces `rollout.sh`; run from a clean checkout of the tag with the explicit prod kubeconfig/context |
+| Mode change / catalog preparation | `mcp-runtime update --release-manifest PATH --platform-mode public --expect-cluster-id UID --dry-run` then `--yes` | Explicit prod kubeconfig/context; CLI prepares catalogs and restarts dependent services; no `--only` |
 | Full setup of an existing platform | `mcp-runtime setup --strict-prod --with-tls --provided-tls-secrets --skip-cert-manager-install --expect-cluster-id UID ...` | Replaces `setup.sh`; refuses a wrong cluster and an installed mcp-auth it would drop |
 | Configuration/object snapshot | `backup.sh --setup` | Private resource/Secret inventory, not volume data |
 | Host/volume recovery bundle | `backup.sh --full --online-copy` | Also verifies SSH host cluster UID; online PVC copy needs database-native recovery validation |
@@ -40,7 +41,7 @@ never read and copied into workload pull Secrets by these helpers. Updating MCP
 Auth is a separate selected `mcp-runtime update --only mcp-auth` operation.
 
 For first installation, use `mcp-runtime setup` with the reviewed issuance
-profile. The wrapper intentionally requires existing TLS Secrets for reruns.
+profile. For reruns, pass `--provided-tls-secrets` to preserve existing certificates.
 See [the full runbook](../../../docs/reference-deployment.md) for backup scope,
 external identity-provider backup, fresh setup, restoration and verification.
 

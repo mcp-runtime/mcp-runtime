@@ -1,9 +1,13 @@
 package update
 
 import (
+	"context"
 	"mcp-runtime/internal/cli/core"
 	"reflect"
+	"strings"
 	"testing"
+
+	"k8s.io/client-go/kubernetes/fake"
 )
 
 func TestUpdateRegistryAuthoritySelection(t *testing.T) {
@@ -21,6 +25,20 @@ func TestUpdateRegistryAuthoritySelection(t *testing.T) {
 		if got := bundledRegistryTarget(tc.image); got != tc.bundled {
 			t.Errorf("%s: bundled=%v", tc.image, got)
 		}
+	}
+}
+
+func TestCommitBuildDoesNotProbeClusterDNSWithWorkstationDocker(t *testing.T) {
+	t.Setenv("PATH", t.TempDir()) // No docker binary: bundled targets use the cluster push transport.
+	tag := "v0.9.0-g" + strings.Repeat("a", 40)
+	cs := fake.NewSimpleClientset(installed("v0.8.1")...)
+	plan, err := BuildPlan(context.Background(), cs, manifest(t, "v0.9.0", setComponent("runtime-api", "mcp-runtime-api", tag, "")), Selection{Only: []string{"runtime-api"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	actions, err := planImageBuilds(context.Background(), plan, BuildOptions{})
+	if err != nil || len(actions) != 1 || actions[0].Action != ImageActionBuild {
+		t.Fatalf("bundled registry commit build must not depend on host registry DNS: %+v %v", actions, err)
 	}
 }
 

@@ -15,7 +15,7 @@ func TestRenderPodEgressCIDRs(t *testing.T) {
 		"              value: \"\" # MCP_POD_EGRESS_CIDRS\n" +
 		"            - name: MCP_POD_EGRESS_EXCEPT_CIDRS\n" +
 		"              value: \"\" # MCP_POD_EGRESS_EXCEPT_CIDRS\n"
-	rendered, err := renderAnalyticsManifest(content, AnalyticsImageSet{}, "", setupplan.PlatformModeTenant)
+	rendered, err := renderAnalyticsManifest(content, AnalyticsImageSet{}, "", setupplan.PlatformModeOrg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +30,7 @@ func TestRenderPodEgressCIDRs(t *testing.T) {
 func TestRenderPodEgressCIDRsRejectsDefaultRoute(t *testing.T) {
 	t.Setenv("MCP_POD_EGRESS_CIDRS", "0.0.0.0/0")
 	t.Setenv("MCP_POD_EGRESS_EXCEPT_CIDRS", "")
-	_, err := renderAnalyticsManifest("value: \"\" # MCP_POD_EGRESS_CIDRS\n", AnalyticsImageSet{}, "", setupplan.PlatformModeTenant)
+	_, err := renderAnalyticsManifest("value: \"\" # MCP_POD_EGRESS_CIDRS\n", AnalyticsImageSet{}, "", setupplan.PlatformModeOrg)
 	if err == nil {
 		t.Fatal("default route was accepted")
 	}

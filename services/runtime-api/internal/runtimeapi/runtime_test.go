@@ -1527,7 +1527,7 @@ func TestRuntimeServerApplyPublicScopeExpandsShortImage(t *testing.T) {
 }
 
 func TestRuntimeServerApplyTenantScopeExpandsShortImageToTeamSlug(t *testing.T) {
-	t.Setenv("PLATFORM_MODE", "tenant")
+	t.Setenv("PLATFORM_MODE", "org")
 	t.Setenv("PLATFORM_TEAM_TRAEFIK_WATCH", "disabled")
 	t.Setenv("MCP_REGISTRY_ENDPOINT", "10.96.223.152:5000")
 	t.Setenv("MCP_REGISTRY_INGRESS_HOST", "registry.mcpruntime.org")
@@ -1661,7 +1661,7 @@ func TestRuntimeServerApplyTenantScopeUsesTeamNamespaceInOrgMode(t *testing.T) {
 }
 
 func TestRuntimeServerApplyTenantScopeRejectsUserNamespace(t *testing.T) {
-	t.Setenv("PLATFORM_MODE", "tenant")
+	t.Setenv("PLATFORM_MODE", "org")
 	scheme := runtime.NewScheme()
 	if err := mcpv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("AddToScheme: %v", err)
@@ -2104,8 +2104,8 @@ func TestScopedNamespaceForPrincipal(t *testing.T) {
 	})
 
 	got, err := server.Access().scopedNamespaceForPrincipal(userCtx, "")
-	if err != nil || got != "user-1" {
-		t.Fatalf("scoped namespace default = %q err=%v, want user-1 nil", got, err)
+	if err != nil || got != defaultOrgCatalogNamespace {
+		t.Fatalf("scoped namespace default = %q err=%v, want org catalog nil", got, err)
 	}
 	got, err = server.Access().scopedNamespaceForPrincipal(userCtx, "user-1")
 	if err != nil || got != "user-1" {

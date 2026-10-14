@@ -140,7 +140,7 @@ default. Override the path with `MCP_DEPLOY_ENV=/path/to/other.env`. See
 | `MCP_REGISTRY_PUSH_MODE` | `internal` | rollout | `public` pushes directly to `registry.<domain>` using the workstation's selected Docker daemon. |
 
 MCP Auth updates use a separately reviewed release manifest and
-`mcp-runtime update --only mcp-auth`. The Runtime rollout wrapper does not build,
+`mcp-runtime update --only mcp-auth`. Runtime updates do not build,
 copy or change MCP Auth images.
 
 <a id="setup-behavior-read-by-hackdeploymcpruntime-orgsetupsh"></a>
@@ -151,7 +151,7 @@ copy or change MCP Auth images.
 |----------|---------|---------|
 | `MCP_SETUP_WAIT_TIMEOUT` | `900` | Seconds to wait for setup rollouts. |
 | `MCP_CERT_TIMEOUT` | `5m` (CLI default) | Certificate issuance wait on first install. Use `15m` on fresh clusters. |
-| `MCP_SETUP_PLATFORM_MODE` | `tenant` | Passed to `setup --platform-mode`. |
+| `MCP_SETUP_PLATFORM_MODE` | `public` (reference profile) | Passed to `setup --platform-mode`; the CLI default is `org`. |
 | `MCP_SETUP_REGISTRY_MODE` | `bundled-https` | Passed to `setup --registry-mode`. |
 | `MCP_SETUP_INGRESS` | `none` | `none` when k3s Traefik in `kube-system` already serves ingress. |
 | `MCP_SETUP_TLS_CLUSTER_ISSUER` | `letsencrypt-prod` | ClusterIssuer name on reruns. **Do not** pass `--acme-email` when this issuer already exists. |
@@ -215,11 +215,12 @@ gateway fails closed with 401 when a token's `aud` does not match.
 
 #### Rollout-only (`mcp-runtime update`)
 
-Set `MCP_DEPLOY_REF` to the selected stable release, `MCP_KUBE_CONTEXT` to the
-explicit target context, and `MCP_EXPECTED_CLUSTER_UID` to that cluster's
-`kube-system` namespace UID. The wrapper requires a clean source checkout at
-the release commit and delegates all component rollouts to `mcp-runtime update`.
-It does not rewrite pull Secrets or tenant NetworkPolicies.
+Use `mcp-runtime update` with the selected release or reviewed candidate
+manifest, an explicit `--kubeconfig`, `--context`, and `--expect-cluster-id`.
+For `--build`, use a clean source checkout matching the image source commit.
+Review `--dry-run` before applying with `--yes`. The CLI owns build, apply,
+rollout and rollback; no rollout shell wrapper is needed. It does not rewrite
+pull Secrets or tenant NetworkPolicies.
 
 <a id="multitenancy-test-hackdeploymcpruntime-orgmultitenancy-testsh"></a>
 
@@ -287,7 +288,7 @@ MCP_SETUP_WAIT_TIMEOUT=900 MCP_CERT_TIMEOUT=15m \
   --acme-email ops@example.com \
   --ingress none \
   --registry-mode bundled-https \
-  --platform-mode tenant
+  --platform-mode public
 ```
 
 ### Reruns / upgrades (reuse existing certs to avoid LE rate limits)
@@ -325,7 +326,7 @@ change; review it before `--yes`.
 
 `update` uses the published component manifest. All changed Runtime components roll sequentially with the CLI's
 rollback behavior. Existing registry-scoped pull Secrets, certificates,
-configuration and MCP Auth remain unchanged. Supply existing Docker registry
+unmanaged configuration keys and MCP Auth remain unchanged. Supply existing Docker registry
 credentials through an approved login workflow; `update` never copies an
 admin key into Kubernetes pull Secrets.
 
@@ -337,7 +338,7 @@ hack/deploy/reference/backup.sh --setup
   --kubeconfig "$MCP_SETUP_KUBECONFIG" --context "$MCP_KUBE_CONTEXT" \
   --expect-cluster-id "$MCP_EXPECTED_CLUSTER_UID" \
   --strict-prod --with-tls --provided-tls-secrets --skip-cert-manager-install \
-  --registry-mode bundled-https --platform-mode tenant --ingress none
+  --registry-mode bundled-https --platform-mode public --ingress none
 ```
 
 Setup requires existing registry/platform TLS Secrets with these flags. Its
@@ -353,6 +354,56 @@ as a side effect of a Runtime release.
 Before a breaking release reset, follow the backup, fresh-install and recovery
 procedure below, including disposable rehearsal and database-native recovery.
 No wrapper authorizes data reset as part of an ordinary update.
+
+<span id="platform-mode-update"></span>
+
+### Changing platform mode
+
+The v0.9.0 Runtime configuration supports `org` and `public` platform modes;
+`tenant` remains a team publish scope. Before upgrading an older profile that
+uses `MCP_SETUP_PLATFORM_MODE=tenant`, explicitly choose `org` or `public`.
+The hosted reference platform uses `public`, with public previews/listings,
+signed-in organization publishing, and team publishing all available.
+
+Take the protected setup snapshot described in
+[Backups and recovery](#backups-and-recovery) and build the CLI from the exact
+reviewed revision. Use the reviewed candidate manifest with `--platform-mode`:
+
+```bash
+./bin/mcp-runtime update --release-manifest /protected/candidate.json \
+  --platform-mode public --kubeconfig "$MCP_SETUP_KUBECONFIG" \
+  --context "$MCP_KUBE_CONTEXT" --expect-cluster-id "$MCP_EXPECTED_CLUSTER_UID" \
+  --dry-run
+# Review the plan, then repeat with --yes instead of --dry-run.
+```
+
+The CLI sets only `PLATFORM_MODE` in the existing shared ConfigMaps, prepares
+the mode's catalog namespaces, and restarts runtime-api, platform-api and UI.
+The candidate manifest controls image changes; missing mode-dependent entries
+keep their current images. There is no need to write ConfigMap/restart entries
+manually. Do not pass `--only`: it skips shared configuration and conflicts
+with `--platform-mode`. Existing namespaces with another scope or no catalog
+ownership are rejected. Newly created catalogs remain after rollback; they
+are never deleted by update. Record `MCP_SETUP_PLATFORM_MODE=public` in the
+private installation profile so later setup uses the same reviewed mode.
+
+The first server deployment into a catalog prepares its namespace-local operator
+permissions, registry pulls, quotas and network protection for admins and users.
+Creating only a namespace is insufficient to host a server.
+
+This transition needs no fresh setup or data reset. Preserve platform databases,
+registry images, Secrets, certificates, and the separately hosted identity
+provider's data/TLS state. Retain the existing mcp-auth release. Keep the
+snapshot and prior exact image references outside git. If verification fails,
+recover the previous three images and prior ConfigMap mode through a reviewed
+rollback update manifest; restore only those changed fields.
+
+Verify signed-in login, CLI image publishing in all enabled scopes, server
+deployment, anonymous public-catalog visibility, and anonymous denial for org
+and team catalogs. Run hosted certificate/grant acceptance for allowed and
+denied calls as well. The
+[`test-mcpsnoop` example](https://github.com/mcp-runtime/mcp-runtime/tree/main/examples/test-mcpsnoop)
+provides a separate unauthenticated two-tool server for payload inspection.
 
 ### Upgrading an existing cert-manager installation
 

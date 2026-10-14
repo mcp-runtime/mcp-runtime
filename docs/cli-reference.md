@@ -721,7 +721,7 @@ mcp-runtime setup \
   --with-tls \
   --tls-cluster-issuer letsencrypt-prod \
   --registry-mode bundled-https \
-  --platform-mode tenant \
+  --platform-mode org \
   --ingress none
 
 mcp-runtime setup --with-tls --acme-email ops@example.com   # Let's Encrypt
@@ -739,7 +739,7 @@ mcp-runtime setup --test-mode --test-multi-replica             # normal replica 
 | `--registry-mode` | `auto` | Uses a provisioned registry config when present, otherwise the bundled registry |
 | `--registry-type` | `docker` | Harbor is not available yet |
 | `--registry-storage` | `20Gi` | Bundled registry PVC request, set before first creation. Must be positive. Reruns reject shrinking an existing claim before applying registry resources |
-| `--platform-mode` | `tenant` | `org` and `public` change the default publish namespace |
+| `--platform-mode` | `org` | Modes: `org` or `public`. Org supports org/team publishing; public additionally supports public publishing and anonymous public-catalog reads |
 | `--pod-egress-cidrs` | empty | Comma-separated destinations team servers may reach on TCP 443. Empty adds no rule. `0.0.0.0/0` is rejected |
 | `--pod-egress-except-cidrs` | empty | Pod and service CIDRs kept out of `--pod-egress-cidrs`. Required for a private destination |
 | `--storage-mode` | `dynamic` | Use `hostpath` for single-node k3s/minikube/kind with no provisioner |
@@ -833,7 +833,7 @@ Key env vars for `--env-file` (see `config/deployments/mcpruntime-org.env.exampl
 | `MCP_SETUP_MTLS_CLUSTER_ISSUER=company-workload-ca` | `--mtls-cluster-issuer` |
 | `MCP_ACME_EMAIL=ops@example.com` | `--acme-email` |
 | `MCP_SETUP_REGISTRY_MODE=bundled-https` | `--registry-mode` |
-| `MCP_SETUP_PLATFORM_MODE=tenant` | `--platform-mode` |
+| `MCP_SETUP_PLATFORM_MODE=org` | `--platform-mode` |
 | `MCP_SETUP_INGRESS=none` | `--ingress` |
 | `MCP_SETUP_SKIP_CERT_MANAGER_INSTALL=1` | `--skip-cert-manager-install` |
 
@@ -885,7 +885,19 @@ needs a ServiceAccount that does not exist is blocked until you re-run without
 `--only`. The plan lists each object (`create`, `update` or `skipped`) and the
 wiring change per component.
 
-update never modifies Secrets, PVCs, ConfigMaps, cert-manager
+Release-declared ConfigMap keys are applied while preserving unrelated keys;
+dependent workloads restart and failed rollouts restore the previous keys.
+`--platform-mode org|public` also sets `PLATFORM_MODE` in existing shared
+ConfigMaps, prepares the required catalog namespaces, and restarts runtime-api,
+platform-api and UI. Missing mode-dependent manifest entries become config-only
+entries, preserving their images. Namespace selection comes from the target
+cluster's shared configuration, never the workstation environment. Existing
+namespaces must already be managed catalogs with the requested scope; update
+refuses to expose an organization/team namespace as public. Catalog namespaces
+are additive and retained on rollback or a later mode change. `--only` skips
+ConfigMaps and catalog preparation and cannot be combined with `--platform-mode`.
+
+update never modifies Secrets, PVCs, cert-manager
 Issuers/Certificates, Services, or Ingresses, other RBAC, or other Deployment
 settings, and never deletes or recreates workloads. mcp-auth and cert-manager
 are skipped unless selected with `--include-auth`, `--include-cert-manager`, or
@@ -899,6 +911,11 @@ and cancel sibling builds. Existing tags are reused except for commit-tagged
 release images: these are rebuilt from a clean checkout of the exact source
 commit even if the tag exists. Without `--build`, images must already be
 published.
+Registry probes for external Docker targets run before builds, including commit-tagged images, so invalid
+Docker registry credentials fail before an expensive build. `--dry-run` skips
+registry access and does not require Docker. Bundled `.svc.cluster.local`
+registries use the selected cluster's publishing transport rather than a
+workstation Docker probe.
 Published release manifests tag Runtime-built images with the full source
 commit (`vX.Y.Z-g<commit>`), so images from another release commit have a
 different registry tag. update compares their release version without treating
@@ -928,6 +945,7 @@ Relative repositories resolve against the registry of the running image.
 | `--source` | `.` | Repository root used with `--build` |
 | `--image-platform` | `MCP_IMAGE_PLATFORM` or `linux/amd64` | Docker `--platform` for `--build` |
 | `--build-parallelism` | `1` | Max concurrent image builds with `--build` |
+| `--platform-mode` | unchanged | `org` or `public`; prepares catalogs and restarts mode-dependent services; incompatible with `--only` |
 | `--kubeconfig`, `--context` | current kubeconfig context | Target cluster |
 
 Components: `operator`, `gateway-proxy`, `platform-api`, `runtime-api`,

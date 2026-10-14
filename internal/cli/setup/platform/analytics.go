@@ -694,12 +694,17 @@ func initializeKafkaTopicsWithKubectl(kubectl core.KubectlRunner, images Analyti
 }
 
 func applyCatalogNamespaceForMode(platformMode string) error {
-	namespace := setupplan.CatalogNamespaceForPlatformMode(platformMode)
-	if strings.TrimSpace(namespace) == "" {
-		return nil
+	for _, namespace := range setupplan.CatalogNamespacesForPlatformMode(platformMode) {
+		scope := setupplan.PlatformModeOrg
+		if namespace == setupplan.DefaultPublicCatalogNamespace {
+			scope = setupplan.PlatformModePublic
+		}
+		core.Info(fmt.Sprintf("Applying platform catalog namespace %s", namespace))
+		if err := ensureNamespaceWithLabels(namespace, catalogNamespaceLabels(scope)); err != nil {
+			return err
+		}
 	}
-	core.Info(fmt.Sprintf("Applying platform catalog namespace %s", namespace))
-	return ensureNamespaceWithLabels(namespace, catalogNamespaceLabels(platformMode))
+	return nil
 }
 
 func trimDiagnosticsString(s string) string {
@@ -869,7 +874,7 @@ func renderAnalyticsManifest(content string, images AnalyticsImageSet, imagePull
 		replacements["port: 6443 # MCP_KUBERNETES_API_PORT"] = fmt.Sprintf("port: %d # MCP_KUBERNETES_API_PORT", port)
 	}
 	if mode, ok := setupplan.NormalizePlatformMode(platformMode); ok && mode != "" {
-		replacements[`PLATFORM_MODE: "tenant"`] = fmt.Sprintf(`PLATFORM_MODE: "%s"`, mode)
+		replacements[`PLATFORM_MODE: "org"`] = fmt.Sprintf(`PLATFORM_MODE: "%s"`, mode)
 	}
 	if strings.TrimSpace(images.Ingest) != "" {
 		replacements["image: mcp-ingest:latest"] = "image: " + images.Ingest
@@ -1113,7 +1118,7 @@ func renderAnalyticsConfigManifestWithReaders(content, platformMode string, imag
 		switch {
 		case !requestedOK:
 			manifest.Data["PLATFORM_MODE"] = existingMode
-		case requestedMode == setupplan.PlatformModeTenant && existingMode != setupplan.PlatformModeTenant:
+		case strings.TrimSpace(platformMode) == "":
 			manifest.Data["PLATFORM_MODE"] = existingMode
 		default:
 			manifest.Data["PLATFORM_MODE"] = requestedMode

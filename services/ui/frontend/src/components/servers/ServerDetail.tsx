@@ -154,6 +154,9 @@ export function ServerDetail({ server, tools, onClose, onShowTools, onSelectTool
           {ready ? "Ready" : server.status || "Not ready"}
         </StatusBadge>
         {auth.label ? <StatusBadge tone={auth.tone}>{auth.label}</StatusBadge> : null}
+        {server.gatewayEnabled === true ? (
+          <StatusBadge tone="info" label="Runtime gateway enabled" testId="server-gateway-badge">Gateway</StatusBadge>
+        ) : null}
       </div>
 
       {server.description ? <p className="muted">{server.description}</p> : null}

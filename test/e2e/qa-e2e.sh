@@ -213,7 +213,7 @@ case "${E2E_CAPTURE_RESOURCES}" in
 esac
 E2E_SCENARIOS="${E2E_SCENARIOS-all}"
 E2E_SCENARIOS="${E2E_SCENARIOS//[[:space:]]/}"
-E2E_PLATFORM_MODE="${E2E_PLATFORM_MODE:-tenant}"
+E2E_PLATFORM_MODE="${E2E_PLATFORM_MODE:-org}"
 TEST_MODE_REPLICA_ARGS=()
 case "${E2E_TEST_MULTI_REPLICA:-0}" in
   0|false) ;;
@@ -414,11 +414,11 @@ deep_request_flows_enabled() {
 
 validate_scenarios() {
   case "${E2E_PLATFORM_MODE}" in
-    tenant|org|public)
+    org|public)
       ;;
     *)
       echo "unsupported E2E platform mode: ${E2E_PLATFORM_MODE}" >&2
-      echo "supported values: tenant, org, public" >&2
+      echo "supported values: org, public" >&2
       exit 1
       ;;
   esac

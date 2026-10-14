@@ -15,7 +15,7 @@ export function readRuntimeConfig(): RuntimeConfig {
       namespace: window.MCP_DEFAULTS?.namespace || "",
       policyVersion: window.MCP_DEFAULTS?.policyVersion || "v1",
     },
-    platformMode: window.MCP_PLATFORM_MODE || "tenant",
+    platformMode: window.MCP_PLATFORM_MODE || "org",
     googleClientId: window.MCP_GOOGLE_CLIENT_ID || "",
   };
 }

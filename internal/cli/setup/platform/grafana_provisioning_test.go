@@ -41,7 +41,7 @@ func renderGrafanaForSetup(t *testing.T, datasources, dashboards corev1.ConfigMa
 	if err != nil {
 		t.Fatalf("read 12-grafana.yaml: %v", err)
 	}
-	rendered, err := renderAnalyticsManifest(string(raw), AnalyticsImageSet{}, "", setupplan.PlatformModeTenant)
+	rendered, err := renderAnalyticsManifest(string(raw), AnalyticsImageSet{}, "", setupplan.PlatformModeOrg)
 	if err != nil {
 		t.Fatalf("renderAnalyticsManifest: %v", err)
 	}

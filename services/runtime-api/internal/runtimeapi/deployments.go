@@ -388,7 +388,7 @@ func (s *DeploymentService) EnsureCatalogNamespace(ctx context.Context, namespac
 	}
 	labels := map[string]string{
 		platformManagedLabel:    "true",
-		platformScopeLabel:      PlatformMode(),
+		platformScopeLabel:      scopeLabelForNamespace(namespace, ""),
 		podSecurityEnforceLabel: "restricted",
 		podSecurityAuditLabel:   "restricted",
 		podSecurityWarnLabel:    "restricted",
@@ -1579,13 +1579,9 @@ func defaultImageRepositoryScope(namespace, teamSlug string) string {
 	if teamSlug != "" {
 		return teamSlug
 	}
-	if isModeCatalogNamespace(namespace) {
-		switch PlatformMode() {
-		case platformModePublic:
-			return publishscope.PublicRegistryAlias
-		case platformModeOrg:
-			return publishscope.OrgRegistryAlias
-		}
+	if scope, ok := catalogScopeForNamespace(namespace); ok {
+		alias, _ := publishscope.RegistryAlias(scope)
+		return alias
 	}
 	return strings.TrimSpace(namespace)
 }
@@ -1599,13 +1595,9 @@ func allowedImageRepositoryScopes(namespace, teamSlug string) []string {
 	if expected != "" {
 		values = append(values, expected)
 	}
-	if isModeCatalogNamespace(namespace) {
-		switch PlatformMode() {
-		case platformModePublic:
-			values = append(values, publishscope.PublicRegistryAlias)
-		case platformModeOrg:
-			values = append(values, publishscope.OrgRegistryAlias)
-		}
+	if scope, ok := catalogScopeForNamespace(namespace); ok {
+		alias, _ := publishscope.RegistryAlias(scope)
+		values = append(values, alias)
 	}
 	return dedupeNonEmptyStrings(values)
 }

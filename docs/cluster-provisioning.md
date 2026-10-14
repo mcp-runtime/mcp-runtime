@@ -417,7 +417,7 @@ of git because TLS secrets contain private keys.
 | Setup image build says buildx is missing | Install the Docker buildx plugin, or set `DOCKER_BUILDKIT=0` and rerun setup. |
 | `server push` rejects a redirect | Set the final HTTPS origin with `auth login --api-url`. Uploads reject changes to method, scheme, or origin. |
 | `server push` fails on a small request body | The proxy in front of `/api/` is still at the default body limit. Allow a large body on that location. `/v2/` is a different path. |
-| Tenant `server push` says the caller has no team | The admin API key is not a team member. Create a team, add a user, and push with that user's token. `--scope org` is disabled in tenant mode. |
+| Tenant `server push` says the caller has no team | The admin API key is not a team member. Create a team, add a user, and push with that user's token. `--scope org` works in both modes; `--scope public` requires public mode. |
 | Team MCP server gets `ECONNREFUSED` to an internal HTTPS API the node can open | The team default-deny policy is refusing the pod. Set `--pod-egress-cidrs` and `--pod-egress-except-cidrs`. See [Pod egress to an internal network](#pod-egress-to-an-internal-network). |
 | Registry image pulls fail | Confirm `MCP_REGISTRY_ENDPOINT` is the exact host nodes pull, DNS resolves from every node, and the certificate chain is trusted by the node runtime. |
 | Setup dies in operator webhook wait with connection refused | The Kubernetes API was down, often right after a k3s restart to load `registries.yaml`. Rerun setup after the API answers. Confirm registry ingress auth was restored. |

@@ -194,26 +194,23 @@ at `platform.mcpruntime.org` is a separate installation.
 
 | Mode | Default namespace behavior | Non-admin behavior |
 |---|---|---|
-| `tenant` | Principal team namespace | Authenticated users read and write only team namespaces for teams they belong to. |
-| `org` | `mcp-servers-org` | Authenticated users publish and browse the org catalog together with their authorized team namespaces. |
-| `public` | `mcp-servers-public` | Anonymous users can read the public preview catalog; signed-in users publish to the public catalog namespace and browse it together with their authorized team namespaces. |
+| `org` (default) | `mcp-servers-org` | Authenticated users publish and browse the org catalog together with their authorized team namespaces. |
+| `public` | `mcp-servers-public` | Anonymous users read the public catalog; signed-in users also publish and browse org and authorized team namespaces. |
 
-- In `tenant` and `org` modes, anonymous callers cannot read the MCP server
+- In `org` mode, anonymous callers cannot read the MCP server
   catalog.
-- In `tenant` mode, non-admin callers listing MCP servers without a `namespace`
-  query see MCPs in their team namespaces.
 - In `org` and `public` modes, non-admin listings cover the active catalog
   namespace (`mcp-servers-org` or `mcp-servers-public` by default, plus any
   `PLATFORM_CATALOG_NAMESPACES` entries) **and** the team namespaces authorized
   on the caller's principal. Anonymous public-mode reads are limited to the
-  catalog namespaces.
+  public catalog namespaces only; org and team namespaces remain authenticated.
 - Server publish requests may pass `scope: tenant`, `scope: org`, or
   `scope: public` in place of an explicit catalog namespace. The API
-  resolves `org` and `public` only when the matching platform mode is enabled;
+  accepts `org` and `tenant` in both modes and `public` only in public mode;
   `tenant` resolves to the caller's team namespace unless an authorized team
   namespace is provided.
 - Non-admin callers cannot write servers, grants, or sessions into the shared
-  `mcp-servers` catalog namespace in `tenant` mode.
+  `mcp-servers` catalog namespace unless it is explicitly configured as an active catalog.
 - Non-admin callers can only read or write resources in namespaces listed on
   their authenticated principal, except for the active `org`/`public` mode
   catalog namespace.

@@ -59,6 +59,10 @@ Scripts compose supported CLI workflows. Shared `hack/lib/` and deployment
 | Automation / release manifest | `hack/README.md`, `hack/release/platformmanifest/` |
 
 Platform namespaces come from `pkg/platforminventory`; see `docs/namespaces.md`.
+Platform modes are `org` (default) and `public`; publish scopes are `tenant`
+(a team), `org`, and `public`. Public mode accepts all three scopes, but
+anonymous catalog reads must remain limited to public namespaces. Shared mode
+and catalog-namespace rules live in `pkg/platformmode`.
 Public paths are validated by `pkg/publicroutes`; see `docs/self-hosting.md` and
 `config/deployments/single-host.env.example`. Preserve platform API, registry,
 dashboard asset/session and MCP Auth discovery routes when changing prefixes.
@@ -230,3 +234,12 @@ against the installed version and record the reviewed source/date in contributor
 notes. Do not upgrade it during documentation work unless requested. When
 changing another development tool, keep its authoritative source/version and
 installation guidance in the focused guide or this file.
+
+<!-- cully:codex:start -->
+## Cully
+
+- Use the shared project skill at `.cully/skills/cully/SKILL.md` for Cully session controls.
+- In Codex, use /prompts:cully (or type /cully and select the saved cully prompt) for the in-session cully command.
+- For each substantive task, find relevant prior work with Cully MCP and save one concise work summary before finishing. Follow the Cully skill for project identity, owner section, and private-data rules.
+- Use the configured Cully MCP tools for shared personal and project memory.
+<!-- cully:codex:end -->

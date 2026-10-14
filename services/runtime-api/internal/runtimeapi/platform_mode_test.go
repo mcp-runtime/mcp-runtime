@@ -6,12 +6,12 @@ import (
 	"testing"
 )
 
-func TestDefaultCatalogNamespaceForModeIgnoresCatalogOverrideInTenantMode(t *testing.T) {
-	t.Setenv("PLATFORM_MODE", "tenant")
+func TestDefaultCatalogNamespaceForModeUsesCatalogOverrideInDefaultOrgMode(t *testing.T) {
+	t.Setenv("PLATFORM_MODE", "org")
 	t.Setenv("PLATFORM_CATALOG_NAMESPACE", "custom-catalog")
 
-	if got := defaultCatalogNamespaceForMode(); got != "" {
-		t.Fatalf("default catalog namespace = %q, want empty tenant namespace", got)
+	if got := defaultCatalogNamespaceForMode(); got != "custom-catalog" {
+		t.Fatalf("default catalog namespace = %q, want custom-catalog", got)
 	}
 }
 
@@ -27,17 +27,17 @@ func TestDefaultCatalogNamespaceForModeUsesCatalogOverrideInSharedMode(t *testin
 func TestPlatformModeUsesStrictValues(t *testing.T) {
 	t.Setenv("PLATFORM_MODE", "tenent")
 
-	if got := PlatformMode(); got != platformModeTenant {
-		t.Fatalf("platform mode = %q, want tenant fallback", got)
+	if got := PlatformMode(); got != platformModeOrg {
+		t.Fatalf("platform mode = %q, want org fallback", got)
 	}
 }
 
 func TestCatalogNamespaceEntriesIncludeSharedCatalogInTenantMode(t *testing.T) {
-	t.Setenv("PLATFORM_MODE", "tenant")
+	t.Setenv("PLATFORM_MODE", "org")
 
 	got := appendCatalogNamespaceEntries(nil)
-	if len(got) != 1 {
-		t.Fatalf("catalog namespaces = %#v, want one shared catalog entry", got)
+	if len(got) != 2 {
+		t.Fatalf("catalog namespaces = %#v, want shared and org catalog entries", got)
 	}
 	if got[0]["namespace"] != sharedCatalogNamespace {
 		t.Fatalf("namespace = %#v, want %q", got[0]["namespace"], sharedCatalogNamespace)
@@ -113,10 +113,10 @@ func TestPublicCatalogFallbackRejectsNonCatalogOrMutatingRequests(t *testing.T) 
 }
 
 func TestPublicCatalogFallbackDisabledOutsidePublicMode(t *testing.T) {
-	t.Setenv("PLATFORM_MODE", "tenant")
+	t.Setenv("PLATFORM_MODE", "org")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/runtime/servers", nil)
 	if _, ok := PublicCatalogFallback(req); ok {
-		t.Fatal("unexpected public catalog fallback in tenant mode")
+		t.Fatal("unexpected public catalog fallback in org mode")
 	}
 }

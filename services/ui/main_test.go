@@ -146,13 +146,13 @@ func TestCatalogNamespacesForModeScopesPublicEnvToPublicMode(t *testing.T) {
 	}
 }
 
-func TestCatalogNamespaceOverrideIgnoredInTenantMode(t *testing.T) {
+func TestCatalogNamespaceOverrideUsedInDefaultOrgMode(t *testing.T) {
 	t.Setenv("PLATFORM_CATALOG_NAMESPACE", "custom-catalog")
 
-	if got := defaultCatalogNamespaceForMode("tenant"); got != "" {
+	if got := defaultCatalogNamespaceForMode("org"); got != "custom-catalog" {
 		t.Fatalf("tenant default namespace = %q, want empty", got)
 	}
-	if got := catalogNamespacesForMode("tenant"); len(got) != 0 {
+	if got := catalogNamespacesForMode("org"); len(got) != 1 || got[0] != "custom-catalog" {
 		t.Fatalf("tenant catalog namespaces = %v, want empty", got)
 	}
 	if got := defaultCatalogNamespaceForMode("org"); got != "custom-catalog" {

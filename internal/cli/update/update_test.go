@@ -739,7 +739,7 @@ func TestPlanCommitTaggedImageRebuildsExistingTag(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(actions) != 1 || actions[0].Action != ImageActionBuild || probes != 0 {
+	if len(actions) != 1 || actions[0].Action != ImageActionBuild || probes != 1 {
 		t.Fatalf("commit-tagged image must build without registry reuse: actions=%+v probes=%d", actions, probes)
 	}
 }

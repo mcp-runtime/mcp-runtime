@@ -191,6 +191,19 @@ blocked because the platform could not verify the agent appear as denied.
 In **Server Catalog** or **My Activity**, confirm the deployed server is
 visible to your account. Open its details to review the endpoint and connect
 configuration. The UI uses the same deployment and policy state as the CLI.
+The `Gateway` badge identifies servers configured to run the Runtime gateway;
+readiness and OAuth/header authentication have their own badges.
+
+Platform admins can open **Usage analytics** to filter recorded gateway
+requests by time range, public/org/team scope, team, server, MCP method, tool,
+policy decision/version and HTTP outcome. Choose **Teams**, search a team by
+name or slug, then select it to scope the chart and totals. The **Server
+requests** table combines method and tool activity, with request counts, HTTP
+errors, p95 latency and a link to the latest request trace per group. Its rows
+are the top selected number of groups; summary totals and the chart cover all
+matching recorded requests. The chart shows local time and requests per second.
+HTTP failures, latency, identified users/agents, sessions and response traffic
+come from recorded gateway events; servers without a gateway are not counted.
 
 The console sidebar groups pages under **Runtime**, **Workspace**, and
 **Platform**, according to your account's access. Use **Filter navigation** to

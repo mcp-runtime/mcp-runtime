@@ -156,7 +156,7 @@ func (s *RuntimeServer) handleRuntimeServerApply(w http.ResponseWriter, r *http.
 		writeAPIError(w, http.StatusForbidden, err.Error())
 		return
 	}
-	if p.Role != roleAdmin && namespace == sharedCatalogNamespace && !sharedCatalogWritableForUsers() {
+	if p.Role != roleAdmin && namespace == sharedCatalogNamespace && !isModeCatalogNamespace(namespace) {
 		writeAPIError(w, http.StatusForbidden, "shared catalog namespace is read-only for team users")
 		return
 	}
@@ -305,13 +305,13 @@ func (s *RuntimeServer) handleRuntimeServerApply(w http.ResponseWriter, r *http.
 }
 
 func (s *RuntimeServer) ensureServerApplyNamespace(ctx context.Context, p principal, namespace string, team principalTeam, isTeamNamespace bool) error {
-	if p.Role == roleAdmin {
-		return nil
-	}
 	if sharedCatalogWritableForUsers() && isModeCatalogNamespace(namespace) {
 		if err := s.Deployments().EnsureCatalogNamespace(ctx, namespace); err != nil {
 			return fmt.Errorf("catalog namespace %q: %w", namespace, err)
 		}
+		return nil
+	}
+	if p.Role == roleAdmin {
 		return nil
 	}
 	if isTeamNamespace {
@@ -497,7 +497,7 @@ func (s *RuntimeServer) scopedNamespaceForServerApply(ctx context.Context, reque
 	}
 	switch scope {
 	case publishscope.Public, publishscope.Org:
-		return scopedModeCatalogNamespaceForApply(p, requested)
+		return scopedModeCatalogNamespaceForApply(p, requested, scope)
 	case publishscope.Tenant:
 		return scopedTenantNamespaceForApply(p, requested)
 	default:
@@ -505,10 +505,13 @@ func (s *RuntimeServer) scopedNamespaceForServerApply(ctx context.Context, reque
 	}
 }
 
-func scopedModeCatalogNamespaceForApply(p principal, requested string) (string, error) {
-	namespace := defaultCatalogNamespaceForMode()
+func scopedModeCatalogNamespaceForApply(p principal, requested string, scope publishscope.Scope) (string, error) {
+	namespace := defaultCatalogNamespaceForScope(scope)
+	if namespace == "" {
+		return "", errors.New("catalog namespace is not configured for scope")
+	}
 	if requested != "" {
-		if !isModeCatalogNamespace(requested) {
+		if !stringInSlice(requested, catalogNamespacesForScope(scope)) {
 			return "", errors.New("scope does not match requested namespace")
 		}
 		namespace = requested
@@ -554,8 +557,8 @@ func scopeLabelForNamespace(namespace string, scope publishscope.Scope) string {
 	if scope != "" {
 		return string(scope)
 	}
-	if isModeCatalogNamespace(namespace) {
-		return PlatformMode()
+	if catalogScope, ok := catalogScopeForNamespace(namespace); ok {
+		return string(catalogScope)
 	}
 	if namespace != "" {
 		return string(publishscope.Tenant)

@@ -17,6 +17,10 @@ func (s *Service) HandleAdminUsage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit := clampInt(queryInt(r, "limit", 10), 1, 50)
+	if err := validateUsageFilters(r); err != nil {
+		apihttp.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_filter", "message": err.Error()})
+		return
+	}
 	windowDays := clampInt(queryInt(r, "window_days", defaultWindowDays), 1, maxWindowDays)
 	scope := scopeFromRequest(r, windowDays, limit)
 	applyAdminScopeFilters(r, &scope)

@@ -1,49 +1,93 @@
-import { grafanaPath } from "../../api/config";
 import { useMemo, useState } from "react";
-
+import { grafanaPath } from "../../api/config";
 import { AsyncSection } from "./AsyncSection";
 import { StatusBadge, decisionTone } from "../../ui/Badge";
 import { Button, ButtonLink } from "../../ui/Button";
 import { DataTable, buildColumns } from "../../ui/DataTable";
-import { SelectField } from "../../ui/Field";
+import { SelectField, TextField } from "../../ui/Field";
 import { FilterBar } from "../../ui/FilterBar";
 import { PageHeader } from "../../ui/PageHeader";
 import { ProportionList } from "../../ui/ProportionBar";
-import { ErrorState, LoadingState } from "../../ui/States";
+import { MetricGrid } from "../../ui/MetricCard";
 import { UsageMetrics } from "../usage/UsageMetrics";
-import { ServerUsageTable, ToolUsageTable } from "../usage/UsageTables";
 import { UsageSeries } from "../usage/UsageSeries";
 import { formatAbsolute, formatTimestamp } from "../../lib/format";
-import { useAdminReload, useUsage } from "../../hooks/useAdminData";
-import { useQuery } from "@tanstack/react-query";
-import { listEvents } from "../../api/admin";
-import { ADMIN_QUERY_KEY } from "../../hooks/useAdminData";
-import { eventRpcMethod, eventToolName, type GatewayEvent, type UsageResponse } from "../../api/types";
+import { useAdminReload, useTeams, useUsage } from "../../hooks/useAdminData";
+import type {
+  RequestUsage,
+  UsageFilterParams,
+  UsageResponse,
+} from "../../api/types";
 
-type UsageAnalyticsPanelProps = { onSignIn: () => void };
-
-const LIMIT_OPTIONS = [
-  { value: "10", label: "Top 10" },
-  { value: "25", label: "Top 25" },
-  { value: "50", label: "Top 50" },
-];
-
+type Props = { onSignIn: () => void };
 type Actor = NonNullable<UsageResponse["actors"]>[number];
+const WINDOW_OPTIONS = [
+  { value: "1", label: "Last hour" },
+  { value: "6", label: "Last 6 hours" },
+  { value: "24", label: "Last 24 hours" },
+  { value: "168", label: "Last 7 days" },
+  { value: "720", label: "Last 30 days" },
+];
+const options = (values: string[], label: string, selected = "") => [
+  { value: "", label },
+  ...[...new Set([...values, selected].filter(Boolean))]
+    .sort()
+    .map((value) => ({ value, label: value })),
+];
+const ms = (value?: number) =>
+  value === undefined
+    ? "—"
+    : `${value.toLocaleString(undefined, { maximumFractionDigits: 1 })} ms`;
+const bytes = (value?: number) =>
+  value === undefined
+    ? "—"
+    : value < 1024
+      ? `${value} B`
+      : value < 1048576
+        ? `${(value / 1024).toFixed(1)} KiB`
+        : `${(value / 1048576).toFixed(1)} MiB`;
 
-export function UsageAnalyticsPanel({ onSignIn }: UsageAnalyticsPanelProps) {
-  const [limit, setLimit] = useState("10");
-  const reload = useAdminReload();
-  const query = useUsage(true, limit);
-  const usage = query.data;
+export function traceExploreURL(traceID: string): string | undefined {
+  if (!/^[0-9a-f]{32}$/i.test(traceID)) return undefined;
+  const left = {
+    datasource: "tempo",
+    queries: [
+      {
+        refId: "A",
+        queryType: "traceId",
+        query: traceID,
+        datasource: { type: "tempo", uid: "tempo" },
+      },
+    ],
+    range: { from: "now-1h", to: "now" },
+  };
+  return `${grafanaPath()}/explore?left=${encodeURIComponent(JSON.stringify(left))}`;
+}
 
-  // Recent gateway decisions, the one legacy-dashboard view that had no React
-  // equivalent. Same authorized /events read the access drill-down uses.
-  const decisionsQuery = useQuery({
-    queryKey: [ADMIN_QUERY_KEY, "recent-events", limit],
-    queryFn: () => listEvents({ limit: String(Math.max(Number(limit) || 10, 25)) }),
-    refetchInterval: 15_000,
+export function UsageAnalyticsPanel({ onSignIn }: Props) {
+  const [limit, setLimit] = useState("25");
+  const [filters, setFilters] = useState<UsageFilterParams>({
+    window_hours: "24",
   });
-
+  const [teamSearch, setTeamSearch] = useState("");
+  const reload = useAdminReload();
+  const query = useUsage(true, limit, filters);
+  const teamsQuery = useTeams(true);
+  const usage = query.data;
+  const teams = teamsQuery.data || [];
+  const facets = usage?.facets;
+  const change = (key: keyof UsageFilterParams, value: string) =>
+    setFilters((current) => ({ ...current, [key]: value }));
+  const teamNames = new Map(
+    teams.map((team) => [team.id, team.name || team.slug]),
+  );
+  const matchingTeams = teams.filter(
+    (team) =>
+      team.id === filters.team_id ||
+      `${team.name} ${team.slug}`
+        .toLowerCase()
+        .includes(teamSearch.toLowerCase().trim()),
+  );
   const actorColumns = useMemo(
     () =>
       buildColumns<Actor>([
@@ -51,60 +95,154 @@ export function UsageAnalyticsPanel({ onSignIn }: UsageAnalyticsPanelProps) {
           id: "human",
           header: "Human",
           rowHeader: true,
-          sortValue: (row) => row.human_id || "",
-          cell: (row) => row.human_id || "—",
+          sortValue: (r) => r.human_id || "",
+          cell: (r) => r.human_id || "Anonymous / unreported",
         },
-        { id: "agent", header: "Agent", sortValue: (row) => row.agent_id || "", cell: (row) => row.agent_id || "—" },
-        { id: "events", header: "Requests", numeric: true, sortValue: (row) => row.events, cell: (row) => row.events.toLocaleString() },
-        { id: "servers", header: "Servers", numeric: true, sortValue: (row) => row.unique_servers, cell: (row) => String(row.unique_servers) },
-        { id: "tools", header: "Tools", numeric: true, sortValue: (row) => row.unique_tools, cell: (row) => String(row.unique_tools) },
-        { id: "denied", header: "Denied", numeric: true, sortValue: (row) => row.denied, cell: (row) => row.denied.toLocaleString() },
-      ]),
-    []
-  );
-
-  const eventColumns = useMemo(
-    () =>
-      buildColumns<GatewayEvent>([
         {
-          id: "time",
-          header: "Time",
+          id: "agent",
+          header: "Agent",
+          sortValue: (r) => r.agent_id || "",
+          cell: (r) => r.agent_id || "—",
+        },
+        {
+          id: "events",
+          header: "Requests",
+          numeric: true,
+          sortValue: (r) => r.events,
+          cell: (r) => r.events.toLocaleString(),
+        },
+        {
+          id: "servers",
+          header: "Servers",
+          numeric: true,
+          sortValue: (r) => r.unique_servers,
+          cell: (r) => String(r.unique_servers),
+        },
+        {
+          id: "denied",
+          header: "Denied",
+          numeric: true,
+          sortValue: (r) => r.denied,
+          cell: (r) => r.denied.toLocaleString(),
+        },
+      ]),
+    [],
+  );
+  const requestColumns = useMemo(
+    () =>
+      buildColumns<RequestUsage>([
+        {
+          id: "server",
+          header: "Server",
           rowHeader: true,
-          sortValue: (event) => Date.parse(event.timestamp || "") || 0,
-          cell: (event) => (
-            <span title={formatAbsolute(event.timestamp)}>{formatTimestamp(event.timestamp)}</span>
+          sortValue: (r) => `${r.namespace}/${r.server}`,
+          cell: (r) => (
+            <>
+              {r.server}
+              <span className="cell-detail">{r.namespace}</span>
+            </>
           ),
         },
-        { id: "server", header: "Server", sortValue: (event) => event.server || "", cell: (event) => event.server || "—" },
-        { id: "namespace", header: "Namespace", sortValue: (event) => event.namespace || "", cell: (event) => event.namespace || "—" },
-        { id: "tool", header: "Tool", sortValue: (event) => eventToolName(event), cell: (event) => eventToolName(event) || "—" },
-        { id: "method", header: "Method", sortValue: (event) => eventRpcMethod(event), cell: (event) => eventRpcMethod(event) || "—" },
+        {
+          id: "team",
+          header: "Team / scope",
+          sortValue: (r) => teamNames.get(r.team_id || "") || r.namespace,
+          cell: (r) =>
+            teamNames.get(r.team_id || "") ||
+            (r.namespace === "mcp-servers-public"
+              ? "Public"
+              : r.namespace === "mcp-servers-org"
+                ? "Organization"
+                : r.team_id || "Other"),
+        },
+        {
+          id: "method",
+          header: "MCP method",
+          sortValue: (r) => r.rpc_method,
+          cell: (r) => <code>{r.rpc_method || "HTTP transport"}</code>,
+        },
+        {
+          id: "tool",
+          header: "Tool",
+          sortValue: (r) => r.tool_name || "",
+          cell: (r) => r.tool_name || "—",
+        },
+        {
+          id: "events",
+          header: "Requests",
+          numeric: true,
+          sortValue: (r) => r.events,
+          cell: (r) => r.events.toLocaleString(),
+        },
         {
           id: "decision",
-          header: "Decision",
-          sortValue: (event) => event.decision || "",
-          cell: (event) => (
-            <StatusBadge tone={decisionTone(event.decision)}>{event.decision || "unknown"}</StatusBadge>
+          header: "Policy decision",
+          sortValue: (r) => r.decision,
+          cell: (r) => (
+            <StatusBadge tone={decisionTone(r.decision)}>
+              {r.decision || "unknown"}
+            </StatusBadge>
           ),
         },
         {
-          id: "reason",
-          header: "Reason",
-          cell: (event) => <span className="wrap-anywhere">{(event.payload?.reason as string) || "—"}</span>,
+          id: "policy",
+          header: "Policy version",
+          sortValue: (r) => r.policy_version || "",
+          cell: (r) => r.policy_version || "—",
+        },
+        {
+          id: "errors",
+          header: "HTTP errors",
+          numeric: true,
+          sortValue: (r) => r.http_failures,
+          cell: (r) => r.http_failures.toLocaleString(),
+        },
+        {
+          id: "latency",
+          header: "p95 latency",
+          numeric: true,
+          sortValue: (r) => r.p95_latency_ms,
+          cell: (r) => ms(r.p95_latency_ms),
+        },
+        {
+          id: "last",
+          header: "Last seen",
+          sortValue: (r) => Date.parse(r.last_seen),
+          cell: (r) => (
+            <time dateTime={r.last_seen} title={formatAbsolute(r.last_seen)}>
+              {formatTimestamp(r.last_seen)}
+            </time>
+          ),
+        },
+        {
+          id: "trace",
+          header: "Latest trace",
+          cell: (r) => {
+            const url = traceExploreURL(r.trace_id || "");
+            return url ? (
+              <a href={url} target="_blank" rel="noreferrer" title={r.trace_id}>
+                Open trace
+              </a>
+            ) : (
+              "—"
+            );
+          },
         },
       ]),
-    []
+    [teamsQuery.data],
   );
-
-  const decisions = usage?.decisions ?? [];
-  const decisionTotal = decisions.reduce((sum, row) => sum + row.events, 0);
-
+  const decisions = usage?.decisions || [];
+  const totals = usage?.totals;
+  const reset = () => {
+    setFilters({ window_hours: "24" });
+    setTeamSearch("");
+  };
   return (
     <>
       <PageHeader
         title="Usage analytics"
         breadcrumb={[{ label: "Administration" }, { label: "Usage analytics" }]}
-        description="Gateway events aggregated across the platform by server, actor, tool, and decision."
+        description="Request activity across public, organization and team servers. Filters apply to the chart, totals and request table."
         actions={
           <>
             <ButtonLink
@@ -121,7 +259,7 @@ export function UsageAnalyticsPanel({ onSignIn }: UsageAnalyticsPanelProps) {
               variant="secondary"
               icon="refresh"
               onClick={reload}
-              busy={(query.isFetching && !query.isPending) || (decisionsQuery.isFetching && !decisionsQuery.isPending)}
+              busy={query.isFetching && !query.isPending}
               data-testid="analytics-refresh"
             >
               Refresh
@@ -129,18 +267,167 @@ export function UsageAnalyticsPanel({ onSignIn }: UsageAnalyticsPanelProps) {
           </>
         }
       />
-
-      <FilterBar label="Analytics options">
+      <FilterBar label="Analytics filters">
+        <SelectField
+          label="Time range"
+          value={filters.window_hours || "24"}
+          options={WINDOW_OPTIONS}
+          onChange={(e) => change("window_hours", e.target.value)}
+          data-testid="analytics-window"
+        />
+        <SelectField
+          label="Scope"
+          value={filters.scope || ""}
+          options={[
+            { value: "", label: "All scopes" },
+            { value: "public", label: "Public" },
+            { value: "org", label: "Organization" },
+            { value: "tenant", label: "Teams" },
+          ]}
+          onChange={(e) => {
+            setFilters((current) => ({
+              ...current,
+              scope: e.target.value,
+              team_id: "",
+              server: "",
+              rpc_method: "",
+              tool_name: "",
+            }));
+            setTeamSearch("");
+          }}
+          data-testid="analytics-scope"
+        />
+        {filters.scope === "tenant" ? (
+          <>
+            <TextField
+              label="Find a team"
+              type="search"
+              value={teamSearch}
+              onChange={(e) => setTeamSearch(e.target.value)}
+              placeholder="Team name or slug"
+              data-testid="analytics-team-search"
+            />
+            <SelectField
+              label="Team"
+              value={filters.team_id || ""}
+              options={[
+                {
+                  value: "",
+                  label: teamsQuery.isPending ? "Loading teams…" : "All teams",
+                },
+                ...matchingTeams.map((t) => ({
+                  value: t.id,
+                  label: t.name || t.slug,
+                })),
+              ]}
+              disabled={teamsQuery.isPending || !!teamsQuery.error}
+              onChange={(e) =>
+                setFilters((current) => ({
+                  ...current,
+                  team_id: e.target.value,
+                  server: "",
+                  rpc_method: "",
+                  tool_name: "",
+                }))
+              }
+              data-testid="analytics-team"
+            />
+          </>
+        ) : null}
+        <SelectField
+          label="Server"
+          value={filters.server || ""}
+          options={options(
+            facets?.servers || [],
+            "All servers",
+            filters.server,
+          )}
+          onChange={(e) => change("server", e.target.value)}
+          data-testid="analytics-server"
+        />
+        <SelectField
+          label="MCP method"
+          value={filters.rpc_method || ""}
+          options={options(
+            facets?.methods || [],
+            "All methods",
+            filters.rpc_method,
+          )}
+          onChange={(e) =>
+            setFilters((current) => ({
+              ...current,
+              rpc_method: e.target.value,
+              tool_name: "",
+            }))
+          }
+          data-testid="analytics-method"
+        />
+        <SelectField
+          label="Tool"
+          value={filters.tool_name || ""}
+          options={options(facets?.tools || [], "All tools", filters.tool_name)}
+          disabled={!!filters.rpc_method && filters.rpc_method !== "tools/call"}
+          onChange={(e) =>
+            setFilters((current) => ({
+              ...current,
+              tool_name: e.target.value,
+              rpc_method: e.target.value ? "tools/call" : current.rpc_method,
+            }))
+          }
+          data-testid="analytics-tool"
+        />
+        <SelectField
+          label="Policy decision"
+          value={filters.decision || ""}
+          options={[
+            { value: "", label: "All decisions" },
+            { value: "allow", label: "Allowed" },
+            { value: "deny", label: "Denied" },
+          ]}
+          onChange={(e) => change("decision", e.target.value)}
+          data-testid="analytics-decision"
+        />
+        <SelectField
+          label="Policy version"
+          value={filters.policy_version || ""}
+          options={options(
+            facets?.policy_versions || [],
+            "All versions",
+            filters.policy_version,
+          )}
+          onChange={(e) => change("policy_version", e.target.value)}
+          data-testid="analytics-policy"
+        />
+        <SelectField
+          label="HTTP outcome"
+          value={filters.http_status || ""}
+          options={[
+            { value: "", label: "All outcomes" },
+            { value: "2xx", label: "2xx success" },
+            { value: "4xx", label: "4xx client errors" },
+            { value: "5xx", label: "5xx server errors" },
+          ]}
+          onChange={(e) => change("http_status", e.target.value)}
+          data-testid="analytics-http-status"
+        />
         <SelectField
           label="Rows"
           value={limit}
-          options={LIMIT_OPTIONS}
-          hint="How many rows the analytics API returns per table."
+          options={[
+            { value: "10", label: "Top 10 groups" },
+            { value: "25", label: "Top 25 groups" },
+            { value: "50", label: "Top 50 groups" },
+          ]}
+          onChange={(e) => setLimit(e.target.value)}
           data-testid="analytics-limit"
-          onChange={(event) => setLimit(event.target.value)}
         />
+        <Button variant="ghost" onClick={reset} data-testid="analytics-clear">
+          Reset filters
+        </Button>
       </FilterBar>
-
+      {filters.scope === "tenant" && teamsQuery.error ? (
+        <p role="alert">Teams could not be loaded. Retry with Refresh.</p>
+      ) : null}
       <AsyncSection
         query={query}
         loadingLabel="Loading usage analytics…"
@@ -149,102 +436,128 @@ export function UsageAnalyticsPanel({ onSignIn }: UsageAnalyticsPanelProps) {
         onSignIn={onSignIn}
         testId="analytics"
       >
-        <>
-          {usage ? <UsageMetrics totals={usage.totals} scope="the whole platform" testId="analytics-stats" /> : null}
-
-          {usage?.series?.length ? <UsageSeries points={usage.series} /> : null}
-
-          {decisions.length > 0 ? (
-            <section className="section">
-              <div className="section-head">
-                <h2 className="section-title" id="analytics-decisions-title">
-                  Decisions
-                </h2>
-                <p className="section-note">Totals across the window the analytics API aggregated.</p>
-              </div>
-              <ProportionList
-                label="Gateway decisions"
-                unit="events"
-                testId="analytics-decision-breakdown"
-                rows={decisions.map((row) => ({
-                  id: row.decision,
-                  name: row.decision,
-                  value: row.events,
-                  detail: decisionTotal ? `${Math.round((row.events / decisionTotal) * 100)}%` : undefined,
-                  tone: row.decision.toLowerCase().startsWith("deny") ? "danger" : "accent",
-                }))}
+        {usage ? (
+          <>
+            <p className="section-note">
+              Recorded gateway requests only. Servers without a gateway and
+              requests whose analytics were not delivered are not included.
+            </p>
+            <UsageMetrics
+              totals={usage.totals}
+              scope="the selected filters"
+              testId="analytics-stats"
+            />
+            <MetricGrid
+              label="Request reliability and usage"
+              testId="analytics-reliability"
+              metrics={[
+                {
+                  label: "HTTP errors",
+                  value: totals?.http_failures,
+                  hint: "Responses with HTTP status 400 or higher, including denials",
+                },
+                {
+                  label: "Server errors",
+                  value: totals?.server_errors,
+                  hint: "HTTP 5xx responses",
+                },
+                { label: "p95 latency", value: ms(totals?.p95_latency_ms) },
+                {
+                  label: "Average latency",
+                  value: ms(totals?.average_latency_ms),
+                },
+                {
+                  label: "Active users",
+                  value: totals?.unique_humans,
+                  hint: "Identified callers; anonymous requests are not unique users",
+                },
+                { label: "Active agents", value: totals?.unique_agents },
+                { label: "Sessions", value: totals?.unique_sessions },
+                { label: "Response traffic", value: bytes(totals?.bytes_out) },
+              ]}
+            />
+            {usage.series?.length ? (
+              <UsageSeries
+                points={usage.series}
+                bucketSeconds={usage.bucket_seconds}
               />
-            </section>
-          ) : null}
-
-          <section className="section">
-            <div className="section-head">
-              <h2 className="section-title" id="analytics-servers-title">
-                Servers
-              </h2>
-            </div>
-            <ServerUsageTable rows={usage?.servers ?? []} />
-          </section>
-
-          <section className="section">
-            <div className="section-head">
-              <h2 className="section-title" id="analytics-tools-title">
-                Tools
-              </h2>
-            </div>
-            <ToolUsageTable rows={usage?.tools ?? []} />
-          </section>
-
-          {usage?.actors && usage.actors.length > 0 ? (
-            <section className="section">
+            ) : null}
+            <section
+              className="section"
+              aria-labelledby="analytics-requests-title"
+            >
               <div className="section-head">
-                <h2 className="section-title" id="analytics-actors-title">
-                  Actors
-                </h2>
+                <div>
+                  <h2 className="section-title" id="analytics-requests-title">
+                    Server requests
+                  </h2>
+                  <p className="section-note">
+                    Requests grouped by server, MCP method, tool and policy. Top{" "}
+                    {limit} groups by volume; refreshes every 15 seconds. Trace
+                    links open the latest request in each group.
+                  </p>
+                </div>
               </div>
               <DataTable
-                columns={actorColumns}
-                rows={usage.actors}
-                rowKey={(row) => `${row.human_id}/${row.agent_id}`}
-                caption="Humans and agents by request volume."
-                regionLabel="Actor usage"
-                testId="analytics-actors-table"
-                emptyMessage="No actor activity recorded."
+                columns={requestColumns}
+                rows={usage.requests || []}
+                rowKey={(r) =>
+                  JSON.stringify([
+                    r.namespace,
+                    r.server,
+                    r.team_id,
+                    r.rpc_method,
+                    r.tool_name,
+                    r.decision,
+                    r.policy_version,
+                  ])
+                }
+                caption="Server requests by MCP method, tool and policy decision for the selected filters."
+                regionLabel="Server requests"
+                testId="analytics-requests-table"
+                rowTestId="analytics-request-row"
+                minWidth={1250}
+                emptyMessage="No server requests match these filters."
+                pageNote={`Top ${limit} request groups in this time range; totals and chart include all matching requests.`}
               />
             </section>
-          ) : null}
-        </>
+            {decisions.length ? (
+              <section className="section">
+                <div className="section-head">
+                  <h2 className="section-title">Policy decisions</h2>
+                </div>
+                <ProportionList
+                  label="Policy decision breakdown"
+                  unit="requests"
+                  testId="analytics-decision-breakdown"
+                  rows={decisions.map((r) => ({
+                    id: r.decision,
+                    name: r.decision,
+                    value: r.events,
+                    tone: r.decision === "deny" ? "danger" : "accent",
+                  }))}
+                />
+              </section>
+            ) : null}
+            {usage.actors?.length ? (
+              <section className="section">
+                <div className="section-head">
+                  <h2 className="section-title">Active callers</h2>
+                </div>
+                <DataTable
+                  columns={actorColumns}
+                  rows={usage.actors}
+                  rowKey={(r) => `${r.human_id}/${r.agent_id}`}
+                  caption="Identified callers ranked by request volume in the selected filters."
+                  regionLabel="Actor usage"
+                  testId="analytics-actors-table"
+                  emptyMessage="No identified callers in this window."
+                />
+              </section>
+            ) : null}
+          </>
+        ) : null}
       </AsyncSection>
-
-      <section className="section">
-        <div className="section-head">
-          <h2 className="section-title" id="analytics-events-title">
-            Recent policy decisions
-          </h2>
-            <p className="section-note">The most recent gateway decisions, including tool calls. Servers, tools, and this table refresh every 15 seconds.</p>
-        </div>
-        {decisionsQuery.isPending ? (
-          <LoadingState label="Loading recent decisions…" testId="analytics-events-loading" />
-        ) : decisionsQuery.error ? (
-          <ErrorState
-            title="Recent decisions are unavailable."
-            detail="Gateway decision events come from the analytics service, which is not answering on this cluster. This is not the same as no traffic."
-            testId="analytics-events-error"
-          />
-        ) : (
-          <DataTable
-            columns={eventColumns}
-            rows={decisionsQuery.data ?? []}
-            rowKey={(event) =>
-              `${event.timestamp || ""}-${event.server || ""}-${eventToolName(event)}-${eventRpcMethod(event)}-${event.decision || ""}-${event.namespace || ""}`
-            }
-            caption="Recent gateway decisions with namespace, tool, decision, and reason."
-            regionLabel="Recent policy decisions"
-            testId="analytics-events-table"
-            emptyMessage="No gateway decisions recorded yet."
-          />
-        )}
-      </section>
     </>
   );
 }

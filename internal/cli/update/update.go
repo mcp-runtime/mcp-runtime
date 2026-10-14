@@ -1,6 +1,6 @@
 // Package update owns the `mcp-runtime update` command, which moves an
-// installed MCP Runtime platform to a release by patching only the images of
-// platform services whose versions changed.
+// installed MCP Runtime platform to a release through declared images, wiring,
+// configuration and additive platform resources.
 package update
 
 import (
@@ -45,6 +45,7 @@ type Options struct {
 	Source             string
 	ImagePlatform      string
 	BuildParallelism   int
+	PlatformMode       string
 }
 
 // kubeHandle is the Kubernetes client pair update needs for inventory and CRD apply.
@@ -107,9 +108,13 @@ and fields, validates that they grant no wildcard or escalating access, applies
 them before rolling images, and restores previous wiring if a rollout fails
 (objects are additive and are not rolled back). Wiring also applies on its own
 when an image is unchanged.
-With --only, CRD and platform object apply are skipped so scoped image updates
-cannot mutate cluster schemas or RBAC. update never modifies Secrets, PVCs,
-ConfigMaps, cert-manager Issuers/Certificates, Services, or Ingresses, and never
+Release-declared ConfigMap keys are applied without replacing unrelated keys;
+dependent workloads restart and failed rollouts restore the previous keys.
+Use --platform-mode org|public to change mode and prepare its catalog namespaces.
+Existing catalog scopes cannot be changed, and namespaces are never deleted.
+With --only, CRD, platform object and ConfigMap apply are skipped; --platform-mode
+cannot be combined with --only. update never modifies Secrets, PVCs,
+cert-manager Issuers/Certificates, Services, or Ingresses, and never
 deletes or recreates workloads. mcp-auth and cert-manager are skipped unless
 selected with --include-auth, --include-cert-manager, or --only.
 
@@ -154,6 +159,7 @@ Relative repositories resolve against the registry of the running image.`,
 	f.StringVar(&opts.Source, "source", ".", "Repository root used with --build (must contain go.mod, services/, k8s/)")
 	f.StringVar(&opts.ImagePlatform, "image-platform", "", "Docker --platform for --build (default: MCP_IMAGE_PLATFORM or linux/amd64)")
 	f.IntVar(&opts.BuildParallelism, "build-parallelism", defaultBuildParallelism, "Max concurrent image builds with --build (default 1; raise carefully)")
+	f.StringVar(&opts.PlatformMode, "platform-mode", "", "Set platform mode (org or public), prepare catalog namespaces, and restart mode-dependent services (incompatible with --only)")
 	return cmd
 }
 
@@ -174,6 +180,11 @@ func run(ctx context.Context, out io.Writer, opts Options, d deps) error {
 	}
 	if want := strings.TrimSpace(opts.ExpectClusterID); want != "" && kh.Cluster.ClusterID != want {
 		return core.NewWithBase(core.ErrUpdateClusterMismatch, fmt.Sprintf("context %q is cluster %s, not the expected %s; no changes were made", kh.Cluster.Context, dash(kh.Cluster.ClusterID), want))
+	}
+	if opts.PlatformMode != "" {
+		if err := setManifestPlatformMode(ctx, kh.Clientset, manifest, opts.PlatformMode); err != nil {
+			return core.WrapWithBase(core.ErrUpdateInventoryFailed, err, err.Error())
+		}
 	}
 	plan, err := BuildPlan(ctx, kh.Clientset, manifest, Selection{
 		Only:               opts.Only,
@@ -282,6 +293,9 @@ func run(ctx context.Context, out io.Writer, opts Options, d deps) error {
 				if len(plan.configToWrite) > 0 {
 					extra += fmt.Sprintf(" and %d ConfigMap(s)", len(plan.configToWrite))
 				}
+				if len(plan.namespacesToWrite) > 0 {
+					extra += fmt.Sprintf(" and %d catalog namespace(s)", len(plan.namespacesToWrite))
+				}
 				buildNote := ""
 				if opts.Build {
 					var builds, reuses int
@@ -342,6 +356,9 @@ func run(ctx context.Context, out io.Writer, opts Options, d deps) error {
 }
 
 func validateOptions(opts Options) error {
+	if err := validatePlatformModeOptions(opts); err != nil {
+		return err
+	}
 	if strings.TrimSpace(opts.To) == "" && strings.TrimSpace(opts.ReleaseManifest) == "" {
 		return core.NewWithBase(core.ErrUpdateTargetRequired, "no update target: pass --to <version> or --release-manifest <path|https-url>; update never picks a release implicitly")
 	}

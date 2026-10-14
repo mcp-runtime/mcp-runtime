@@ -13,6 +13,7 @@ import {
   readOperations,
 } from "../api/admin";
 import { UnauthorizedError } from "../api/client";
+import type { UsageFilterParams } from "../api/types";
 
 export const ADMIN_QUERY_KEY = "admin";
 
@@ -115,10 +116,10 @@ export function useOperations(enabled: boolean, filters: OperationsFilters) {
   });
 }
 
-export function useUsage(enabled: boolean, limit: string) {
+export function useUsage(enabled: boolean, limit: string, filters: UsageFilterParams = {}) {
   return useQuery({
-    queryKey: [ADMIN_QUERY_KEY, "usage", limit],
-    queryFn: () => listUsage(limit),
+    queryKey: [ADMIN_QUERY_KEY, "usage", limit, filters],
+    queryFn: () => listUsage(limit, filters),
     enabled,
     refetchInterval: 15_000,
   });
