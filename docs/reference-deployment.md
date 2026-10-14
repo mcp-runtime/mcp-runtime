@@ -354,9 +354,9 @@ Before a breaking release reset, follow the backup, fresh-install and recovery
 procedure below, including disposable rehearsal and database-native recovery.
 No wrapper authorizes data reset as part of an ordinary update.
 
-### Upgrading an existing cert-manager installation
-
 <span id="platform-mode-update"></span>
+
+### Changing platform mode
 
 The v0.9.0 Runtime configuration supports `org` and `public` platform modes;
 `tenant` remains a team publish scope. Before upgrading an older profile that
@@ -388,6 +388,8 @@ and team catalogs. Run hosted certificate/grant acceptance for allowed and
 denied calls as well. The
 [`test-mcpsnoop` example](https://github.com/mcp-runtime/mcp-runtime/tree/main/examples/test-mcpsnoop)
 provides a separate unauthenticated two-tool server for payload inspection.
+
+### Upgrading an existing cert-manager installation
 
 `setup` retains an existing cert-manager installation; the new install pin does
 not perform a multi-minor upgrade. `cluster doctor` checks the controller,

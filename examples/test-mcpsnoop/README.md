@@ -15,6 +15,8 @@ The server is stateless and returns JSON responses. The metadata deliberately
 sets `gateway.enabled: false` and omits `auth`, policy, grants, and sessions.
 This publishes the read-only demo without Runtime gateway authentication,
 governance, or gateway analytics. Requests remain visible in MCPSnoop.
+Runtime supplies `MCP_PATH` for the deployed public route; the server honors
+that value and uses `/mcp` when running locally without it.
 
 ## Build, publish, and deploy
 
