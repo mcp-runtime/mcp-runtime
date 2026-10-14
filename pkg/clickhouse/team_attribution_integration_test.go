@@ -87,36 +87,40 @@ func TestClickHouseActorAuthorityMigrationRoundTrip(t *testing.T) {
 	if err = client.InsertEvents(ctx, batch); err != nil {
 		t.Fatal(err)
 	}
+	checkAttribution := func(t *testing.T) {
+		rows, err := client.QueryEventsFiltered(ctx, EventFilters{SubjectTeamID: "actor-b", ResourceTeamID: "resource-a", Limit: 100})
+		if err != nil || len(rows) != 1 {
+			t.Fatalf("cross-team rows=%+v err=%v", rows, err)
+		}
+		if rows[0].TeamID != "resource-a" || rows[0].ResourceTeamID != "resource-a" || rows[0].SubjectTeamID != "actor-b" || rows[0].Namespace != "team-a" || rows[0].TraceID != "trace-cross" {
+			t.Fatalf("actor/authority/trace changed: %+v", rows[0])
+		}
+		rows, err = client.QueryEventsFiltered(ctx, EventFilters{ResourceTeamID: "resource-a", Limit: 100})
+		if err != nil || len(rows) != 3 {
+			t.Fatalf("authority rows=%+v err=%v", rows, err)
+		}
+		legacyFound := false
+		for _, row := range rows {
+			if row.TraceID == "trace-legacy" {
+				legacyFound = true
+				if row.SubjectTeamID != "" || row.ResourceTeamID != "resource-a" || row.TeamID != "resource-a" {
+					t.Fatalf("legacy caller was guessed: %+v", row)
+				}
+			}
+		}
+		if !legacyFound {
+			t.Fatal("legacy record lost")
+		}
+		rows, err = client.QueryEventsFiltered(ctx, EventFilters{TeamID: "actor-b", Limit: 100})
+		if err != nil || len(rows) != 0 {
+			t.Fatalf("legacy authority filter became caller scope: %+v err=%v", rows, err)
+		}
+	}
+	t.Run("ordinary_update_before_projection_columns", checkAttribution)
 	for _, query := range queries {
 		if err = conn.Exec(ctx, query); err != nil {
 			t.Fatalf("migration query %s: %v", query, err)
 		}
 	}
-	rows, err := client.QueryEventsFiltered(ctx, EventFilters{SubjectTeamID: "actor-b", ResourceTeamID: "resource-a", Limit: 100})
-	if err != nil || len(rows) != 1 {
-		t.Fatalf("cross-team rows=%+v err=%v", rows, err)
-	}
-	if rows[0].TeamID != "resource-a" || rows[0].ResourceTeamID != "resource-a" || rows[0].SubjectTeamID != "actor-b" || rows[0].Namespace != "team-a" || rows[0].TraceID != "trace-cross" {
-		t.Fatalf("actor/authority/trace changed: %+v", rows[0])
-	}
-	rows, err = client.QueryEventsFiltered(ctx, EventFilters{ResourceTeamID: "resource-a", Limit: 100})
-	if err != nil || len(rows) != 3 {
-		t.Fatalf("authority rows=%+v err=%v", rows, err)
-	}
-	legacyFound := false
-	for _, row := range rows {
-		if row.TraceID == "trace-legacy" {
-			legacyFound = true
-			if row.SubjectTeamID != "" || row.ResourceTeamID != "resource-a" || row.TeamID != "resource-a" {
-				t.Fatalf("legacy caller was guessed: %+v", row)
-			}
-		}
-	}
-	if !legacyFound {
-		t.Fatal("legacy record lost")
-	}
-	rows, err = client.QueryEventsFiltered(ctx, EventFilters{TeamID: "actor-b", Limit: 100})
-	if err != nil || len(rows) != 0 {
-		t.Fatalf("legacy authority filter became caller scope: %+v err=%v", rows, err)
-	}
+	t.Run("setup_with_materialized_projection_columns", checkAttribution)
 }

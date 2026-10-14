@@ -54,7 +54,7 @@ paths:
   /api/v1/events:
     get:
       summary: Query audit events (admin only)
-      description: Exact access-object attribution and time filters are applied before pagination. Attribution namespace identifies the matched object, separately from the server namespace. Events without explicit matched attribution are excluded from those filters.
+      description: Exact access-object attribution and time filters are applied before pagination. Attribution namespace identifies the matched object, separately from the server namespace. Events without explicit matched attribution are excluded from those filters. Actor and resource team fields always derive from the authoritative payload, including before optional ClickHouse projections are initialized by setup; ordinary image updates need no schema change for these reads.
       parameters:
         - in: query
           name: subject_team_id

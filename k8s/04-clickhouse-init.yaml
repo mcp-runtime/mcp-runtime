@@ -28,7 +28,9 @@ spec:
             - configMapRef:
                 name: mcp-shared-config
           command: ["/bin/sh", "-c"]
-          # Run schema initialization before rolling out analytics-api queries.
+          # These materialized projections are prepared by supported setup;
+          # ordinary update does not rerun this Job. Analytics API derives both
+          # fields from payload unconditionally and works before initialization.
           # Legacy team_id remains resource authority; missing subject attribution
           # stays unknown rather than being inferred from that authority.
           args:

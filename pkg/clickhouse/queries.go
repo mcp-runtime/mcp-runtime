@@ -53,8 +53,13 @@ type DashboardSummary struct {
 }
 
 const (
-	eventSelectColumns = "timestamp, trace_id, source, event_type, server, namespace, team_id, cluster, human_id, agent_id, session_id, decision, tool_name, subject_team_id, resource_team_id, payload"
-	maxEventOffset     = 100000
+	// Event payload remains authoritative. Ordinary image updates do not rerun
+	// the ClickHouse initialization Job, so use these canonical expressions on
+	// every read rather than requiring optional materialized projection columns.
+	subjectTeamIDExpression  = "JSONExtractString(payload, 'subject_team_id')"
+	resourceTeamIDExpression = "if(JSONExtractString(payload, 'resource_team_id') != '', JSONExtractString(payload, 'resource_team_id'), JSONExtractString(payload, 'team_id'))"
+	eventSelectColumns       = "timestamp, trace_id, source, event_type, server, namespace, team_id, cluster, human_id, agent_id, session_id, decision, tool_name, " + subjectTeamIDExpression + " AS subject_team_id, " + resourceTeamIDExpression + " AS resource_team_id, payload"
+	maxEventOffset           = 100000
 )
 
 // RowScanner abstracts row scanning for testability.
@@ -238,11 +243,11 @@ func buildEventFilterWhereClause(filters EventFilters) (string, []interface{}) {
 		args = append(args, filters.TeamID)
 	}
 	if filters.SubjectTeamID != "" {
-		conditions = append(conditions, "subject_team_id = ?")
+		conditions = append(conditions, subjectTeamIDExpression+" = ?")
 		args = append(args, filters.SubjectTeamID)
 	}
 	if filters.ResourceTeamID != "" {
-		conditions = append(conditions, "resource_team_id = ?")
+		conditions = append(conditions, resourceTeamIDExpression+" = ?")
 		args = append(args, filters.ResourceTeamID)
 	}
 	if filters.Cluster != "" {

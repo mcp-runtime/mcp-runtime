@@ -14,7 +14,7 @@ import (
 
 func TestAuditActorAndAuthorityFiltersRemainDistinct(t *testing.T) {
 	where, args := buildEventFilterWhereClause(EventFilters{TeamID: "resource-a", SubjectTeamID: "actor-b", ResourceTeamID: "resource-a"})
-	for _, condition := range []string{"team_id = ?", "subject_team_id = ?", "resource_team_id = ?"} {
+	for _, condition := range []string{"team_id = ?", subjectTeamIDExpression + " = ?", resourceTeamIDExpression + " = ?"} {
 		if !strings.Contains(where, condition) {
 			t.Fatalf("missing exact filter %q: %s", condition, where)
 		}
