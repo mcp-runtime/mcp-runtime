@@ -106,6 +106,40 @@ func (b *platformSessionBackend) RevokeSession(ctx context.Context, name, namesp
 	return sessionBackendError(b.client.SetSessionRevoked(ctx, namespace, name, true, "access_revoked"), name)
 }
 
+func (b *platformSessionBackend) RevokeGrantSessions(ctx context.Context, namespace, name string) (int64, error) {
+	if err := b.configured(); err != nil {
+		return 0, err
+	}
+	client, ok := b.client.(interface {
+		RevokeSessions(context.Context, sessionstate.Filter, string) (int64, error)
+	})
+	if !ok {
+		return 0, fmt.Errorf("platform session store does not support bulk revocation")
+	}
+	return client.RevokeSessions(ctx, sessionstate.Filter{GrantNamespace: namespace, GrantName: name}, "grant_revoked")
+}
+
+func (b *platformSessionBackend) ListGrantSessions(ctx context.Context, namespace, name string) (*mcpaccess.MCPAgentSessionList, error) {
+	if err := b.configured(); err != nil {
+		return nil, err
+	}
+	client, ok := b.client.(interface {
+		ListSessionsFiltered(context.Context, sessionstate.Filter) ([]sessionstate.Session, error)
+	})
+	if !ok {
+		return nil, fmt.Errorf("platform session store does not support filtered grant listing")
+	}
+	rows, err := client.ListSessionsFiltered(ctx, sessionstate.Filter{GrantNamespace: namespace, GrantName: name})
+	if err != nil {
+		return nil, err
+	}
+	result := &mcpaccess.MCPAgentSessionList{Items: []mcpaccess.MCPAgentSession{}}
+	for _, row := range rows {
+		result.Items = append(result.Items, *sessionFromState(row))
+	}
+	return result, nil
+}
+
 func (b *platformSessionBackend) UnrevokeSession(ctx context.Context, name, namespace string) error {
 	if err := b.configured(); err != nil {
 		return err

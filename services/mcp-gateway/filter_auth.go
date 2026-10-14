@@ -61,7 +61,11 @@ func (s *gatewayServer) authFilter(ex *Exchange) Result {
 		return Continue
 	}
 
-	oauthResult := s.authenticateOAuth(ex.R, ex.Policy)
+	subjectTeam := ""
+	if certificateIdentity != nil {
+		subjectTeam = certificateIdentity.TeamID
+	}
+	oauthResult := s.authenticateOAuthForSubjectTeam(ex.R, ex.Policy, subjectTeam)
 	s.metrics.recordOAuthOutcome(s.metricScope(ex.Policy), oauthResult.Allowed, oauthResult.Reason)
 	ex.Identity = oauthResult.Identity
 	ex.OAuthToken = oauthResult.Token

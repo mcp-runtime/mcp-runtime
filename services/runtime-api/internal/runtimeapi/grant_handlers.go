@@ -172,7 +172,7 @@ func (s *AccessService) handleRuntimeGrantApply(w http.ResponseWriter, r *http.R
 	crossTeam := strings.TrimSpace(string(req.Subject.TeamID)) != strings.TrimSpace(string(targetServer.Spec.TeamID))
 	if crossTeam {
 		if err := s.validateCrossTeamSubject(ctx, req.Subject); err != nil {
-			writeAPIError(w, http.StatusUnprocessableEntity, err.Error())
+			writeAPIError(w, crossTeamSubjectStatus(err), err.Error())
 			return
 		}
 		if err := validateCrossTeamGrantExpiry(&req); err != nil {

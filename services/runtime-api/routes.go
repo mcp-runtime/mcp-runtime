@@ -96,6 +96,7 @@ func (rr runtimeRoutes) registerRoutes(mux *http.ServeMux) {
 	rr.mount("/runtime/teams", rr.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		runtimehandlers.HandleRuntimeTeams(runtimeServer, w, r)
 	})))
+	rr.mount("/runtime/delegation-recipients", rr.auth(http.HandlerFunc(runtimeServer.HandleDelegationRecipients)))
 	rr.mount("/runtime/teams/", rr.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		runtimehandlers.HandleRuntimeTeamItemPath(runtimeServer, w, r)
 	})))

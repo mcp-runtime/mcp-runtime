@@ -36,6 +36,77 @@ paths:
             application/yaml:
               schema:
                 type: string
+  /api/v1/runtime/delegation-recipients:
+    get:
+      description: Resolve one known recipient team for a resource namespace manager without exposing global directory listings.
+      parameters:
+        - {name: namespace, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 63}}
+        - {name: team, in: query, required: true, description: Exact recipient team slug, schema: {type: string, minLength: 1, maxLength: 63}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
+        - {name: agent_cursor, in: query, schema: {type: string, maxLength: 1024}}
+        - {name: member_cursor, in: query, schema: {type: string, maxLength: 512}}
+      responses:
+        "200":
+          description: Minimal recipient identities, with independent pagination for active agents and member IDs.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [team, agents, members]
+                properties:
+                  team:
+                    type: object
+                    required: [id, slug, name]
+                    properties:
+                      id: {type: string}
+                      slug: {type: string}
+                      name: {type: string}
+                  agents:
+                    type: array
+                    maxItems: 100
+                    items:
+                      type: object
+                      properties:
+                        id: {type: string}
+                        name: {type: string}
+                        status: {type: string, const: active}
+                        team_id: {type: string}
+                        team_slug: {type: string}
+                  members:
+                    type: array
+                    maxItems: 100
+                    items:
+                      type: object
+                      required: [user_id]
+                      properties:
+                        user_id: {type: string}
+                  agent_next_cursor: {type: string}
+                  member_next_cursor: {type: string}
+        "400":
+          description: Invalid exact-team query, limit, or cursor.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+        "401":
+          description: Authentication required.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+        "403":
+          description: Resource namespace management required.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+        "404":
+          description: Exact recipient team not found.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+        "503":
+          description: Recipient directory unavailable.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ErrorEnvelope"}
   /api/v1/runtime/servers:
     get:
       responses:

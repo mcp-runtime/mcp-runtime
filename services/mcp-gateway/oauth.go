@@ -80,6 +80,10 @@ func (s *gatewayServer) handleOAuthProtectedResource(w http.ResponseWriter, r *h
 }
 
 func (s *gatewayServer) authenticateOAuth(r *http.Request, policy *policypkg.Document) oauthAuthResult {
+	return s.authenticateOAuthForSubjectTeam(r, policy, "")
+}
+
+func (s *gatewayServer) authenticateOAuthForSubjectTeam(r *http.Request, policy *policypkg.Document, subjectTeam string) oauthAuthResult {
 	result := oauthAuthResult{
 		Allowed:  true,
 		Status:   http.StatusOK,
@@ -141,6 +145,10 @@ func (s *gatewayServer) authenticateOAuth(r *http.Request, policy *policypkg.Doc
 			Identity: result.Identity,
 		}
 	}
+	teamID, teamAllowed := oauthTeamIDForSubject(jwt.MapClaims(claims.Raw), policy, subjectTeam)
+	if !teamAllowed {
+		return oauthAuthResult{Status: http.StatusUnauthorized, Reason: "certificate_oauth_team_mismatch", Identity: result.Identity}
+	}
 	return oauthAuthResult{
 		Allowed: true,
 		Status:  http.StatusOK,
@@ -148,10 +156,32 @@ func (s *gatewayServer) authenticateOAuth(r *http.Request, policy *policypkg.Doc
 		Identity: identityContext{
 			HumanID:   claims.Subject,
 			AgentID:   policypkg.FirstNonEmpty(stringClaim(claims.Raw, "azp"), stringClaim(claims.Raw, "client_id")),
-			TeamID:    oauthTeamID(jwt.MapClaims(claims.Raw), policy),
+			TeamID:    teamID,
 			SessionID: stringClaim(claims.Raw, "sid"),
 		},
 	}
+}
+
+// A certificate already binds the caller's subject team. When OAuth lists
+// multiple memberships, select that asserted team rather than the resource's
+// owning team; explicit single-team claims remain authoritative.
+func oauthTeamIDForSubject(claims jwt.MapClaims, policy *policypkg.Document, subjectTeam string) (string, bool) {
+	if subjectTeam == "" {
+		return oauthTeamID(claims, policy), true
+	}
+	if explicit := policypkg.FirstNonEmpty(stringClaim(claims, "team_id"), stringClaim(claims, "tenant_id"), stringClaim(claims, "tid")); explicit != "" {
+		return explicit, true
+	}
+	teams := stringClaims(claims, "team_ids")
+	for _, team := range teams {
+		if team == subjectTeam {
+			return subjectTeam, true
+		}
+	}
+	if len(teams) > 0 {
+		return "", false
+	}
+	return "", true
 }
 
 func oauthTeamID(claims jwt.MapClaims, policy *policypkg.Document) string {

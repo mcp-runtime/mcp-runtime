@@ -491,8 +491,8 @@ func TestGrantRevokeSessionsOnlyTouchesLinkedSessionsAndIsRetrySafe(t *testing.T
 	if err != nil || !linkedAfterVersioned.Spec.Revoked {
 		t.Fatalf("linked session after versioned revoke = %#v, err=%v; want revoked", linkedAfterVersioned, err)
 	}
-	if len(audit.events) != 1 || audit.events[0].Action != "grant.session.revoked" {
-		t.Fatalf("audit events after versioned revoke = %#v, want exactly one successful session revocation", audit.events)
+	if len(audit.events) != 2 || audit.events[0].Action != "grant.session.revoked" || audit.events[1].Action != "grant.sessions.revoked" {
+		t.Fatalf("audit events after versioned revoke = %#v, want per-session and atomic-operation revocation audits", audit.events)
 	}
 	if rec := revoke("/api/runtime/grants/mcp-team-acme/cross-team/revoke-sessions"); rec.Code != http.StatusOK {
 		t.Fatalf("retry status=%d body=%s", rec.Code, rec.Body.String())
@@ -505,8 +505,8 @@ func TestGrantRevokeSessionsOnlyTouchesLinkedSessionsAndIsRetrySafe(t *testing.T
 	if err != nil || unlinkedAfter.Spec.Revoked {
 		t.Fatalf("unlinked session after revoke = %#v, err=%v; want unchanged", unlinkedAfter, err)
 	}
-	if len(audit.events) != 1 || audit.events[0].Action != "grant.session.revoked" {
-		t.Fatalf("audit events = %#v, want exactly one successful session revocation", audit.events)
+	if len(audit.events) != 3 || audit.events[0].Action != "grant.session.revoked" || audit.events[2].Action != "grant.sessions.revoked" {
+		t.Fatalf("audit events = %#v, want one session audit and an operation audit for each retry", audit.events)
 	}
 }
 
