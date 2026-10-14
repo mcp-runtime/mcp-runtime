@@ -356,6 +356,39 @@ No wrapper authorizes data reset as part of an ordinary update.
 
 ### Upgrading an existing cert-manager installation
 
+<span id="platform-mode-update"></span>
+
+The v0.9.0 Runtime configuration supports `org` and `public` platform modes;
+`tenant` remains a team publish scope. Before upgrading an older profile that
+uses `MCP_SETUP_PLATFORM_MODE=tenant`, explicitly choose `org` or `public`.
+The hosted reference platform uses `public`, with public previews/listings,
+signed-in organization publishing, and team publishing all available.
+
+For this configuration-only transition, take the protected setup snapshot
+described in [Backups and recovery](#backups-and-recovery), build the CLI from
+the exact reviewed revision, and use a targeted `mcp-runtime update` manifest
+for `runtime-api`, `platform-api`, and `ui`. The reviewed manifest must declare
+only `PLATFORM_MODE` in each existing `mcp-shared-config` ConfigMap in
+`mcp-platform` and `mcp-observability`, with the new mode as its value. List
+`runtime-api`, `platform-api`, and `ui` as restart dependents of the platform
+ConfigMap. Do not pass `--only` when applying these ConfigMap entries: it skips
+release ConfigMaps. Review `--dry-run` with an explicit kubeconfig, context,
+and `--expect-cluster-id` before applying the same plan.
+
+This transition needs no fresh setup or data reset. Preserve platform databases,
+registry images, Secrets, certificates, and the separately hosted identity
+provider's data/TLS state. Retain the existing mcp-auth release. Keep the
+snapshot and prior exact image references outside git. If verification fails,
+recover the previous three images and prior ConfigMap mode through a reviewed
+rollback update manifest; restore only those changed fields.
+
+Verify signed-in login, CLI image publishing in all enabled scopes, server
+deployment, anonymous public-catalog visibility, and anonymous denial for org
+and team catalogs. Run hosted certificate/grant acceptance for allowed and
+denied calls as well. The
+[`test-mcpsnoop` example](https://github.com/mcp-runtime/mcp-runtime/tree/main/examples/test-mcpsnoop)
+provides a separate unauthenticated two-tool server for payload inspection.
+
 `setup` retains an existing cert-manager installation; the new install pin does
 not perform a multi-minor upgrade. `cluster doctor` checks the controller,
 webhook, and cainjector versions against the reviewed upstream support matrix.

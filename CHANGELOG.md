@@ -9,15 +9,15 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Added
 
-- An unauthenticated `test-mcpsnoop` example with read-only `echo` and `todays_info` tools and instructions for CLI publishing, deployment, and inspecting real MCP payloads with MCPSnoop.
+- An unauthenticated `test-mcpsnoop` example with read-only `echo` and `todays_info` tools and instructions for CLI publishing, deployment, and inspecting real MCP payloads with MCPSnoop ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
 
 ### Changed
 
-- Platform modes are now `org` (default) and `public`. Publishing retains three scopes: `tenant` for a team, `org` for all signed-in organization users, and `public` for public previews or public MCP listings. Public mode accepts all three scopes, with separate org/public image prefixes and catalog namespaces; anonymous readers cannot list org or team catalogs. Existing configurations using platform mode `tenant` must explicitly select `org` or `public` before deployment. No data reset or certificate replacement is required; use the reviewed `mcp-runtime update` workflow for the hosted reference platform.
+- Platform modes are now `org` (default) and `public`. Publishing retains three scopes: `tenant` for a team, `org` for all signed-in organization users, and `public` for public previews or public MCP listings. Public mode accepts all three scopes, with separate org/public image prefixes and catalog namespaces; anonymous readers cannot list org or team catalogs. Existing configurations using platform mode `tenant` must explicitly select `org` or `public` before deployment. No data reset or certificate replacement is required; use the reviewed `mcp-runtime update` workflow for the hosted reference platform ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
 
 ### Removed
 
-- The `tenant` platform mode and `setup --platform-mode tenant`; `--scope tenant` remains the team publishing workflow. This configuration change requires a new minor release.
+- The `tenant` platform mode and `setup --platform-mode tenant`; `--scope tenant` remains the team publishing workflow. This configuration change requires a new minor release ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
 
 ## [0.8.1] - 2026-10-14
 
