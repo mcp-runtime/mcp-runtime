@@ -5865,6 +5865,8 @@ for item in json.load(sys.stdin).get("sessions", []):
     wait_for_adapter_certificate_initialize "${ADAPTER_CERT_URL}" 401 session_not_found \
       "${WORKDIR}/adapter-after-retire-headers.txt" "${WORKDIR}/adapter-after-retire.json" true
     cleanup_mcp_server_and_wait "${WRONG_SERVER_NAME}" mcp-servers 120s
+    source "${PROJECT_ROOT}/test/e2e/scenarios/cross-team.sh"
+    run_e2e_cross_team_scenario
   fi
   fi
 
