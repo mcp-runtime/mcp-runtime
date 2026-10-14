@@ -79,6 +79,21 @@ platform_update_write_manifest() {
   } | jq -s '{apiVersion: "mcpruntime.org/v1alpha1", kind: "PlatformRelease", version: "v0.0.0-e2e", components: .}' >"${path}"
 }
 
+# platform_update_remove_dns_option <namespace> <deployment> <option>: removes one
+# pod resolver option (and dnsConfig itself if it was the only one).
+platform_update_remove_dns_option() {
+  local namespace="$1" deployment="$2" option="$3" index count patch_path
+  index="$(kubectl get deployment "${deployment}" -n "${namespace}" -o json | jq --arg o "${option}" '(.spec.template.spec.dnsConfig.options // []) | map(.name) | index($o) // empty')"
+  [[ -n "${index}" ]] || return 0
+  count="$(kubectl get deployment "${deployment}" -n "${namespace}" -o json | jq '(.spec.template.spec.dnsConfig.options // []) | length')"
+  if [[ "${count}" == "1" ]]; then
+    patch_path="/spec/template/spec/dnsConfig"
+  else
+    patch_path="/spec/template/spec/dnsConfig/options/${index}"
+  fi
+  kubectl patch deployment "${deployment}" -n "${namespace}" --type=json -p "[{\"op\":\"remove\",\"path\":\"${patch_path}\"}]" >/dev/null
+}
+
 platform_update_cli() {
   ./bin/mcp-runtime update --kubeconfig "${KUBECONFIG_FILE}" "$@"
 }
@@ -222,9 +237,9 @@ run_e2e_platform_update_scenario() {
   kubectl delete serviceaccount mcp-update-e2e -n mcp-observability >/dev/null
   kubectl set env deployment/mcp-ui -n mcp-platform -c ui MCP_UPDATE_E2E- >/dev/null
   # Remove only the probe's resolver option; the platform's own ndots option stays.
-  kubectl get deployment mcp-ui -n mcp-platform -o json \
-    | jq 'del(.spec.template.spec.dnsConfig.options[]? | select(.name == "attempts")) | if ((.spec.template.spec.dnsConfig.options // []) | length) == 0 then del(.spec.template.spec.dnsConfig) else . end' \
-    | kubectl replace -f - >/dev/null
+  # A JSON patch has no resourceVersion precondition, so it cannot lose a race
+  # with the Deployment controller the way get-then-replace does.
+  platform_update_remove_dns_option mcp-platform mcp-ui attempts
   kubectl patch deployment mcp-processor -n mcp-observability --type=json \
     -p '[{"op":"remove","path":"/spec/template/metadata/annotations/mcpruntime.org~1config-hash.mcp-update-e2e"}]' >/dev/null 2>&1 || true
   rollout_status_with_logs mcp-observability deploy mcp-processor 300s
