@@ -7,6 +7,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-14
+
 ### Added
 
 - An unauthenticated `test-mcpsnoop` example with read-only `echo` and `todays_info` tools and instructions for CLI publishing, deployment, and inspecting real MCP payloads with MCPSnoop ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
@@ -427,7 +429,8 @@ upgrade from 0.4.x; see the migration note under **Changed**.
 
 - Targeted platform updates through `mcp-runtime update`, including embedded CRD updates and `--build` to build/push missing component images before rollout ([#491](https://github.com/mcp-runtime/mcp-runtime/pull/491)).
 
-[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.7.2...v0.8.0
 [0.7.2]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.7.1...v0.7.2
