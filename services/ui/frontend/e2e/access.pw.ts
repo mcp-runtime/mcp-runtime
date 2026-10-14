@@ -67,3 +67,30 @@ test("gateway audit opens exact grant and session deep links", async ({ page }) 
   await page.getByRole("link", { name: "team-a/delegated", exact: true }).click();
   await expect(page.getByTestId("access-detail-kicker")).toHaveText("team-a / MCPAccessGrant");
 });
+
+test("resource owner creates a time-bound grant for a known foreign team's active agent", async ({ page }) => {
+  await fixture(page);
+  await page.route("**/auth/status", (route) => route.fulfill({ json: { authenticated: true, principal: { role: "user", subject: "owner-a", namespace: "team-a" } } }));
+  await page.route("**/api/ui/v1/runtime/teams", (route) => route.fulfill({ json: { teams: [{ id: "A", slug: "a", name: "Team A", namespace: "team-a", role: "owner" }] } }));
+  await page.route("**/api/ui/v1/runtime/delegation-recipients?**", (route) => route.fulfill({ json: { team: { id: "B", slug: "b", name: "Team B" }, agents: [{ id: "agt-b", name: "B Agent", status: "active", team_id: "B", team_slug: "b" }], members: [{ user_id: "alice" }] } }));
+  let submitted: Record<string, unknown> | undefined;
+  await page.route("**/api/ui/v1/runtime/grants", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    submitted = route.request().postDataJSON();
+    return route.fulfill({ status: 201, json: { grant: submitted } });
+  });
+  await page.goto("/#/access");
+  await page.getByTestId("grant-create-toggle").click();
+  await page.getByTestId("grant-name").fill("delegation-b");
+  await page.getByRole("textbox", { name: "Server (required)", exact: true }).fill("demo");
+  await page.getByRole("checkbox", { name: "Delegate to another team" }).check();
+  await page.getByTestId("delegation-team-slug").fill("b");
+  await page.getByTestId("delegation-lookup").click();
+  await page.getByTestId("delegation-agent").selectOption("agt-b");
+  await expect(page.getByTestId("grant-expires-at")).not.toHaveValue("");
+  await page.screenshot({ path: test.info().outputPath("cross-team-grant.png"), fullPage: true });
+  await page.getByTestId("grant-create-submit").click();
+  await expect.poll(() => submitted).toMatchObject({ namespace: "team-a", subject: { teamID: "B", agentID: "agt-b" } });
+  expect(submitted?.subject).not.toHaveProperty("humanID");
+  expect(Date.parse(String(submitted?.expiresAt))).toBeGreaterThan(Date.now());
+});

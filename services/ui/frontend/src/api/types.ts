@@ -438,6 +438,8 @@ export type AdminOperations = {
 };
 
 export type GatewayEvent = {
+  subject_team_id?: string;
+  resource_team_id?: string;
   timestamp?: string;
   server?: string;
   namespace?: string;

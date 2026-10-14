@@ -10,7 +10,9 @@ In the resource definitions, `MCPServer.spec.teamID` records the owning team.
 
 The source-of-truth data plane is:
 
-- `MCPServer`, `MCPAccessGrant`, and `MCPAgentSession` are namespaced resources.
+- `MCPServer` and `MCPAccessGrant` are namespaced Kubernetes resources.
+  Agent sessions are namespace-qualified platform records stored by platform-api;
+  Kubernetes session objects do not control authorization.
 - `MCPServer.spec.teamID` is the stable platform team ID that owns the server.
 - `SubjectRef` contains `humanID`, `agentID`, and `teamID`; the gateway matches
   every non-empty field by exact string equality.
@@ -30,6 +32,23 @@ The source-of-truth data plane is:
   session named by a verified adapter certificate.
 
 ## When to use this
+
+To delegate through the dashboard, open **Access control**, select the resource
+namespace, create a grant, and choose **Delegate to another team**. Enter the
+recipient's exact team slug and select an active agent, a stable member ID, both,
+or explicitly the entire recipient team. Recipient lookup requires resource
+namespace management rights and does not expose general foreign-team directory
+or membership-management access. Choices are paginated and are cleared when the
+resource or lookup changes. The form defaults to a 24-hour expiry; the API
+enforces the configured maximum and revalidates recipients when saving.
+
+Use **Revoke sessions** on a grant to atomically revoke all explicitly linked
+platform sessions, including links stored in another namespace. Disable or
+expire the grant as well to prevent future issuance. Retrying revocation reports
+only newly revoked sessions; revoked history remains inspectable. Administration's
+Gateway audit shows actor and resource teams separately. Unknown historical
+actor attribution stays unknown; the resource `team_id` does not prove actor
+membership.
 
 The default `mcp-servers` namespace is fine for a single team, local
 development, and simple evaluation clusters. For a deployment that hosts

@@ -336,7 +336,9 @@ jobs:
         run: bash test/e2e/staging_lib_test.sh
 
       - name: Test platform session E2E management helpers
-        run: python3 test/e2e/session_management_test.py
+        run: |
+          python3 test/e2e/session_management_test.py
+          python3 test/e2e/cross_team_assertions_test.py
 
       - name: Install kubectl
         run: |

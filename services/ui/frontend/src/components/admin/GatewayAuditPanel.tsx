@@ -26,6 +26,8 @@ export function GatewayAuditPanel() {
     { id: "server", header: "Server", cell: (event) => `${event.namespace || "?"}/${event.server || "?"}` },
     { id: "tool", header: "Tool / method", cell: (event) => event.tool_name || String(event.payload?.rpc_method || "—") },
     { id: "decision", header: "Decision", cell: (event) => <StatusBadge tone={decisionTone(event.decision)}>{event.decision || "unknown"}</StatusBadge> },
+    { id: "actor", header: "Actor team", cell: (event) => event.subject_team_id || String(event.payload?.subject_team_id || "Unknown") },
+    { id: "authority", header: "Resource team", cell: (event) => event.resource_team_id || String(event.payload?.resource_team_id || "Unknown") },
     { id: "grant", header: "Matched grant", cell: (event) => <EventAccessLink event={event} kind="grant" /> },
     { id: "session", header: "Matched session", cell: (event) => <EventAccessLink event={event} kind="session" /> },
   ]);
