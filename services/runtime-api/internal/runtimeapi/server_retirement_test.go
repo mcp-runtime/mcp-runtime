@@ -11,6 +11,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	kubernetesfake "k8s.io/client-go/kubernetes/fake"
 	clienttesting "k8s.io/client-go/testing"
@@ -22,10 +23,11 @@ import (
 
 func TestServerRetirementAuthorizationAndRecovery(t *testing.T) {
 	for _, tc := range []struct {
-		name                string
-		missing, deny, fail bool
+		name                              string
+		missing, deny, fail, secretDenied bool
 	}{
 		{name: "owned"}, {name: "orphan recovery", missing: true}, {name: "denied", deny: true}, {name: "partial cleanup", fail: true},
+		{name: "credential permission denied", secretDenied: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			scheme := runtime.NewScheme()
@@ -40,8 +42,18 @@ func TestServerRetirementAuthorizationAndRecovery(t *testing.T) {
 			dynamic := dynamicfake.NewSimpleDynamicClient(scheme, objects...)
 			secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "demo-analytics-creds", Namespace: "team-a", Labels: map[string]string{"app.kubernetes.io/managed-by": "mcp-runtime"}}}
 			pull := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "shared-pull", Namespace: "team-a"}, Type: corev1.SecretTypeDockerConfigJson}
-			api := &RuntimeServer{k8sClients: &k8sclient.Clients{Dynamic: dynamic, Clientset: kubernetesfake.NewSimpleClientset(secret, pull)}}
+			kube := kubernetesfake.NewSimpleClientset(secret, pull)
+			api := &RuntimeServer{k8sClients: &k8sclient.Clients{Dynamic: dynamic, Clientset: kube}}
 			failed := false
+			if tc.secretDenied {
+				kube.PrependReactor("delete", "secrets", func(a clienttesting.Action) (bool, runtime.Object, error) {
+					if !failed {
+						failed = true
+						return true, nil, apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, secret.Name, errors.New("RBAC denied"))
+					}
+					return false, nil, nil
+				})
+			}
 			if tc.fail {
 				dynamic.PrependReactor("delete", mcpv1alpha1.MCPAgentSessionResource, func(a clienttesting.Action) (bool, runtime.Object, error) {
 					if !failed {
@@ -78,13 +90,25 @@ func TestServerRetirementAuthorizationAndRecovery(t *testing.T) {
 				}
 				return
 			}
-			if tc.fail {
+			if tc.fail || tc.secretDenied {
 				if w.Code != http.StatusInternalServerError {
 					t.Fatalf("status %d", w.Code)
 				}
 				current, err := api.controlPlane().GetServer(context.Background(), "team-a", "demo")
 				if err != nil || current.Annotations[mcpaccess.ServerRetiringAnnotation] != "true" {
 					t.Fatalf("missing retirement marker: %+v %v", current, err)
+				}
+				if tc.secretDenied {
+					manager := mcpaccess.NewManager(dynamic, nil)
+					if _, err := manager.GetGrant(context.Background(), "grant", "team-b"); !apierrors.IsNotFound(err) {
+						t.Fatalf("grant survived credential cleanup failure: %v", err)
+					}
+					if _, err := manager.GetSession(context.Background(), "session", "team-b"); !apierrors.IsNotFound(err) {
+						t.Fatalf("session survived credential cleanup failure: %v", err)
+					}
+					if _, err := kube.CoreV1().Secrets("team-a").Get(context.Background(), secret.Name, metav1.GetOptions{}); err != nil {
+						t.Fatalf("credential lost after denied cleanup: %v", err)
+					}
 				}
 				w = request()
 			}

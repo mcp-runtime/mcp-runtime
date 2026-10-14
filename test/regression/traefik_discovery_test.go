@@ -163,3 +163,49 @@ func TestTraefikDiscoveryDelegationIsNamespaceScoped(t *testing.T) {
 		}
 	}
 }
+
+func TestServerCredentialRetirementRBACIsNamespaceScoped(t *testing.T) {
+	file, err := os.Open(filepath.Join(repoRoot(t), "k8s/08-runtime-api-rbac.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	decoder := yaml.NewDecoder(file)
+	found := false
+	for {
+		var doc struct {
+			discoveryManifest `yaml:",inline"`
+			RoleRef           struct {
+				Name string `yaml:"name"`
+			} `yaml:"roleRef"`
+		}
+		if err := decoder.Decode(&doc); err == io.EOF {
+			break
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		if doc.Kind == "ClusterRoleBinding" && doc.RoleRef.Name == "mcp-runtime-api-team-secrets" {
+			t.Fatal("server credential cleanup role must not be bound cluster-wide")
+		}
+		if doc.Kind != "ClusterRole" {
+			continue
+		}
+		for _, rule := range doc.Rules {
+			if doc.Metadata.Name == "mcp-runtime-api" && (slices.Contains(rule.Resources, "secrets") || slices.Contains(rule.Resources, "*")) && (slices.Contains(rule.Verbs, "delete") || slices.Contains(rule.Verbs, "*")) {
+				t.Fatal("cluster-wide runtime API role must not delete secrets")
+			}
+			if doc.Metadata.Name != "mcp-runtime-api-team-secrets" {
+				continue
+			}
+			if slices.Contains(rule.APIGroups, "*") || slices.Contains(rule.Resources, "*") || slices.Contains(rule.Verbs, "*") {
+				t.Fatal("managed credential role must use explicit permissions")
+			}
+			if slices.Contains(rule.APIGroups, "") && slices.Contains(rule.Resources, "secrets") {
+				found = slices.Contains(rule.Verbs, "get") && slices.Contains(rule.Verbs, "list") && slices.Contains(rule.Verbs, "delete")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("managed-namespace credentials require get/list/delete for safe server retirement")
+	}
+}
