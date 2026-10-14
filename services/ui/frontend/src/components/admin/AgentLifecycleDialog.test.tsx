@@ -47,11 +47,13 @@ it("previews visible sessions and verifies recorded revocations while retaining 
 
 it("shows partial failure alongside verified final session states", async () => {
   const user = userEvent.setup();
-  setup({ partial: true });
+  const { fetchMock } = setup({ partial: true });
   await screen.findByText(/1 visible active sessions/);
   await user.click(screen.getByTestId("agent-confirm-yes"));
   expect(await screen.findByRole("alert")).toHaveTextContent("revocation is incomplete");
   expect(screen.getByTestId("agent-lifecycle-result")).toHaveTextContent("Final agent status: inactive");
+  await user.click(screen.getByRole("button", { name: "Retry deactivation" }));
+  expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(2);
 });
 
 it("does not claim verified success when the final read fails", async () => {

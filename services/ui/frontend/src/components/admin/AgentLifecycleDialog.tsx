@@ -4,6 +4,7 @@ import { getAgent, setAgentActive } from "../../api/admin";
 import type { AgentRecord, SessionSummary } from "../../api/types";
 import { ADMIN_QUERY_KEY } from "../../hooks/useAdminData";
 import { ConfirmDialog } from "../../ui/ConfirmDialog";
+import { Button } from "../../ui/Button";
 import { ErrorState, LoadingState } from "../../ui/States";
 import { AccessLink, revocationLabel } from "../access/accessLinks";
 import { sessionState } from "./AccessControlPanel";
@@ -16,7 +17,7 @@ export function AgentLifecycleDialog({ agent, onClose, onChanged }: { agent: Age
   const sessions = snapshot.data?.sessions ?? [];
   async function apply() {
     if (!snapshot.data?.can_manage || busy) return;
-    const before = snapshot.data.sessions;
+    const before = result?.verified ? result.sessions : snapshot.data.sessions;
     setBusy(true);
     let error = "";
     try { await setAgentActive(agent.id, !deactivating); }
@@ -34,12 +35,12 @@ export function AgentLifecycleDialog({ agent, onClose, onChanged }: { agent: Age
   if (result) {
     const changed = result.sessions.filter((session) => session.revoked && session.revocationCause === "agent_deactivated" && result.before.some((prior) => prior.namespace === session.namespace && prior.name === session.name && !prior.revoked));
     return <ConfirmDialog title="Agent lifecycle result" body={<>
-      {result.error ? <p role="alert">{result.error}</p> : null}
+      {result.error ? <><p className="notice notice-danger" role="alert">{result.error}</p>{deactivating ? <Button variant="secondary" disabled={busy} onClick={() => void apply()}>Retry deactivation</Button> : null}</> : null}
       {result.verified ? <><p>Final agent status: {result.status}. {deactivating ? `${changed.length} visible sessions newly recorded as revoked by agent deactivation.` : "Previously revoked sessions remain revoked."}</p>
         <p>Results cover sessions visible to you. Concurrent changes may also appear.</p>
         <ul>{result.sessions.map((session) => <li key={`${session.namespace}/${session.name}`}><AccessLink kind="session" namespace={session.namespace} name={session.name} agent={agent.id} />: {sessionState(session).label}{session.revoked ? ` — ${revocationLabel(session)}` : ""}</li>)}</ul>
       </> : null}
-    </>} confirmLabel="Done" onConfirm={onClose} onCancel={onClose} testId="agent-lifecycle-result" />;
+    </>} confirmLabel="Done" busy={busy} onConfirm={onClose} onCancel={onClose} testId="agent-lifecycle-result" />;
   }
   const active = sessions.filter((session) => sessionState(session).label === "Active");
   return <ConfirmDialog title={`${deactivating ? "Deactivate" : "Reactivate"} agent “${agent.name}”?`} body={<>
