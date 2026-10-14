@@ -7,6 +7,27 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-14
+
+This release adds correlated request debugging (gateway and ingress tracing,
+per-tool metrics with trace exemplars, an `X-Trace-ID` response header,
+correlated completion logs and Grafana trace/log/metric links) and makes
+`mcp-runtime update` deliver configuration, not just images: it now applies the
+ServiceAccounts, RBAC, ConfigMaps, container flags and resolver options a release
+declares, and restarts the workloads that read a changed ConfigMap. Use the
+v0.8.0 CLI: `mcp-runtime update --to v0.8.0 --build --expect-cluster-id <uid>`
+needs no full setup, and the platform gateway (Traefik 3.7.14), Prometheus and
+Grafana are updated by it. `update` and `setup` take `--expect-cluster-id`, and
+`rollout.sh` and `setup.sh` are removed, so this is a new minor version. There are
+no CRD changes.
+
+Operators: rotate each namespace's pull credential once
+(`registry enable-auth --pull-namespace <namespace> --realm ...`) so
+`cluster diagnostics` can pull its smoke image, and install the approval policies
+in `config/cert-manager/approval-policies.yaml` (see `docs/connect-clients.md`)
+before enabling `MCP_ADAPTER_CERTIFICATES=true` in production. Hosted acceptance
+requires certificate mode.
+
 ### Added
 
 - `config/cert-manager/approval-policies.yaml` and `hack/qa/approval-policy-rehearsal.sh`: a tested cert-manager approver-policy set for the workload issuer (only the runtime API may obtain a session-bound SPIFFE identity certificate; platform and public certificates still issue and renew) plus a Kind rehearsal that asserts approval, denial and renewal. `docs/connect-clients.md` documents the production order and rollback. Required before `MCP_ADAPTER_CERTIFICATES=true` on a production install.
@@ -372,7 +393,8 @@ upgrade from 0.4.x; see the migration note under **Changed**.
 
 - Targeted platform updates through `mcp-runtime update`, including embedded CRD updates and `--build` to build/push missing component images before rollout ([#491](https://github.com/mcp-runtime/mcp-runtime/pull/491)).
 
-[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.7.2...HEAD
+[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.7.2...v0.8.0
 [0.7.2]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.6.6...v0.7.0
