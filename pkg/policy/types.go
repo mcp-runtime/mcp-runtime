@@ -27,7 +27,12 @@ var supportedSchemaVersions = map[string]struct{}{
 	SchemaVersion:                 {},
 	SchemaVersionGrantExpiry:      {},
 	SchemaVersionDelegatedHeaders: {},
+	SchemaVersionSessionSync:      {},
 }
+
+// SchemaVersionSessionSync requires externally synchronized sessions. Older
+// gateways reject it rather than activating a policy without session state.
+const SchemaVersionSessionSync = "v4"
 
 // SchemaVersionDelegatedHeaders is required when auth.mode is header. Older
 // gateways reject the document instead of ignoring delegated header fields.
@@ -35,6 +40,9 @@ const SchemaVersionDelegatedHeaders = "v3"
 
 // RequiredSchemaVersion returns the lowest schema version that can carry doc.
 func RequiredSchemaVersion(doc *Document) string {
+	if doc != nil && doc.Session != nil && doc.Session.Store == "platform" {
+		return SchemaVersionSessionSync
+	}
 	if doc != nil && doc.Auth != nil && strings.EqualFold(strings.TrimSpace(doc.Auth.Mode), "header") {
 		return SchemaVersionDelegatedHeaders
 	}
@@ -56,6 +64,8 @@ func schemaRank(version string) int {
 		return 2
 	case SchemaVersionDelegatedHeaders:
 		return 3
+	case SchemaVersionSessionSync:
+		return 4
 	default:
 		return 0
 	}
@@ -104,6 +114,7 @@ type Document struct {
 
 // Server identifies the MCP server this policy applies to.
 type Server struct {
+	UID       string     `json:"uid,omitempty"`
 	Name      ServerName `json:"name"`
 	Namespace Namespace  `json:"namespace"`
 	TeamID    TeamID     `json:"team_id,omitempty"`

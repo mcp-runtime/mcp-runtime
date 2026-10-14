@@ -34,6 +34,9 @@ func (s *gatewayServer) authzFilter(ex *Exchange) Result {
 	}
 
 	switch {
+	case ex.Policy != nil && ex.Policy.Session != nil && ex.Policy.Session.Store == "platform" &&
+		ex.Policy.Policy != nil && ex.Policy.Policy.Mode != "observe" && !s.sessionSync.fresh():
+		ex.Decision = policypkg.Deny(http.StatusServiceUnavailable, "policy_unavailable", policypkg.PolicyVersion(ex.Policy))
 	case ex.PolicyErr != nil:
 		ex.Decision = policypkg.Deny(
 			http.StatusServiceUnavailable,
@@ -51,6 +54,7 @@ func (s *gatewayServer) authzFilter(ex *Exchange) Result {
 			Identity:  policyIdentity(ex.Identity),
 			RPCMethod: ex.Inspection.Method,
 			ToolName:  policypkg.ToolName(ex.Inspection.ToolName),
+			Session:   ex.Identity.Session,
 		}, time.Now())
 	}
 

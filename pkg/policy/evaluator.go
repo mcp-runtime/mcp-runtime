@@ -20,6 +20,9 @@ type Request struct {
 	Identity  Identity
 	RPCMethod string
 	ToolName  ToolName
+	// Session is the binding resolved from the synchronized platform store.
+	// It is request-scoped and never changes the immutable policy document.
+	Session *Binding
 }
 
 // Decision is the result of evaluating a rendered policy document.
@@ -101,6 +104,11 @@ func Authorize(policy *Document, request Request, now time.Time) Decision {
 	}
 
 	sessions, tools, grants := policySlices(policy)
+	if request.Session != nil {
+		sessions = []Binding{*request.Session}
+	} else if policy != nil && policy.Session != nil && policy.Session.Store == "platform" {
+		sessions = nil
+	}
 	session, sessionFound := findSession(sessions, identity)
 	if sessionRequired(policy) {
 		if !sessionFound {

@@ -11,11 +11,13 @@ import (
 // /config/status. It deliberately omits the policy body (grants, sessions,
 // identities) and reports only contract metadata and reload state.
 type configStatus struct {
-	Ready           bool   `json:"ready"`
-	SchemaVersion   string `json:"schema_version,omitempty"`
-	Revision        string `json:"revision,omitempty"`
-	LoadedAt        string `json:"loaded_at,omitempty"`
-	LastReloadError string `json:"last_reload_error,omitempty"`
+	Ready                 bool     `json:"ready"`
+	SchemaVersion         string   `json:"schema_version,omitempty"`
+	Revision              string   `json:"revision,omitempty"`
+	LoadedAt              string   `json:"loaded_at,omitempty"`
+	LastReloadError       string   `json:"last_reload_error,omitempty"`
+	SessionSyncReady      bool     `json:"session_sync_ready"`
+	SessionSyncAgeSeconds *float64 `json:"session_sync_age_seconds,omitempty"`
 }
 
 // handleReady is a readiness probe that succeeds only after the first valid
@@ -29,6 +31,10 @@ func (s *gatewayServer) handleReady(w http.ResponseWriter, _ *http.Request) {
 			payload["last_reload_error"] = snapshot.Err.Error()
 		}
 		serviceutil.WriteJSON(w, http.StatusServiceUnavailable, payload)
+		return
+	}
+	if snapshot.Policy != nil && snapshot.Policy.Session != nil && snapshot.Policy.Session.Store == "platform" && !s.sessionSync.fresh() {
+		serviceutil.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not_ready", "reason": "session_sync_unavailable"})
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -51,6 +57,15 @@ func (s *gatewayServer) handleConfigStatus(w http.ResponseWriter, _ *http.Reques
 	}
 	if snapshot.Err != nil {
 		status.LastReloadError = snapshot.Err.Error()
+	}
+	if s.sessionSync != nil {
+		status.SessionSyncReady = s.sessionSync.fresh()
+		s.sessionSync.mu.RLock()
+		if !s.sessionSync.lastSync.IsZero() {
+			age := time.Since(s.sessionSync.lastSync).Seconds()
+			status.SessionSyncAgeSeconds = &age
+		}
+		s.sessionSync.mu.RUnlock()
 	}
 	serviceutil.WriteJSON(w, http.StatusOK, status)
 }

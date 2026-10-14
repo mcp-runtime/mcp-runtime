@@ -44,6 +44,14 @@ func Validate(doc *Document) error {
 	if strings.TrimSpace(string(doc.Server.Name)) == "" {
 		return fmt.Errorf("policy: server.name is required")
 	}
+	if doc.Session != nil && doc.Session.Store == "platform" {
+		if strings.TrimSpace(doc.Server.UID) == "" {
+			return fmt.Errorf("policy: platform sessions require server.uid")
+		}
+		if len(doc.Sessions) > 0 {
+			return fmt.Errorf("policy: platform sessions cannot be embedded in the policy document")
+		}
+	}
 
 	if err := validateAuth(doc.Auth); err != nil {
 		return err

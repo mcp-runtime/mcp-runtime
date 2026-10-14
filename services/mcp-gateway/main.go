@@ -23,6 +23,7 @@ import (
 
 	"mcp-runtime/pkg/mcpdefaults"
 	"mcp-runtime/pkg/serviceutil"
+	"mcp-runtime/pkg/sessionstate"
 )
 
 func main() {
@@ -84,6 +85,33 @@ func main() {
 	}
 	if err := srv.startPolicyCache(); err != nil {
 		log.Fatalf("initial policy load failed: %v", err)
+	}
+	if baseURL := strings.TrimSpace(os.Getenv("SESSION_SYNC_URL")); baseURL != "" {
+		staleWindow := sessionstate.DefaultStaleWindow
+		if raw := strings.TrimSpace(os.Getenv("SESSION_SYNC_STALE_WINDOW")); raw != "" {
+			var err error
+			staleWindow, err = time.ParseDuration(raw)
+			if err != nil || staleWindow <= 0 || staleWindow > sessionstate.DefaultStaleWindow {
+				log.Fatal("SESSION_SYNC_STALE_WINDOW must be positive and at most 10m")
+			}
+		}
+		srv.sessionSync = &gatewaySessionSync{
+			server:  sessionstate.Server{Name: srv.serverName, Namespace: srv.serverNamespace, UID: strings.TrimSpace(os.Getenv("MCP_SERVER_UID"))},
+			baseURL: baseURL, token: newTokenFileSource(strings.TrimSpace(os.Getenv("SESSION_SYNC_TOKEN_FILE"))),
+			client:      &http.Client{Timeout: 3 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }},
+			staleWindow: staleWindow,
+		}
+		if srv.sessionSync.server.UID == "" {
+			log.Fatal("MCP_SERVER_UID is required for session sync")
+		}
+		prometheus.MustRegister(prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "mcp_gateway_session_sync_age_seconds", Help: "Age of the last complete session sync; -1 before the first sync."}, func() float64 {
+			srv.sessionSync.mu.RLock()
+			defer srv.sessionSync.mu.RUnlock()
+			if srv.sessionSync.lastSync.IsZero() {
+				return -1
+			}
+			return time.Since(srv.sessionSync.lastSync).Seconds()
+		}))
 	}
 
 	mux := http.NewServeMux()
@@ -167,6 +195,9 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if srv.sessionSync != nil {
+		go srv.sessionSync.run(ctx)
+	}
 	if tlsReloader != nil {
 		go tlsReloader.watch(ctx, defaultCertReloadInterval)
 	}

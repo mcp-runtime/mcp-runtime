@@ -1431,22 +1431,10 @@ func TestRenderGatewayPolicyIncludesCrossNamespaceReferences(t *testing.T) {
 	if len(renderedGrant.AllowedSideEffects) != 1 || renderedGrant.AllowedSideEffects[0] != "write" {
 		t.Fatalf("expected grant side effects to be rendered, got %+v", renderedGrant.AllowedSideEffects)
 	}
-	if len(doc.Sessions) != 3 {
-		t.Fatalf("expected 3 matching sessions, got %d: %+v", len(doc.Sessions), doc.Sessions)
+	if len(doc.Sessions) != 0 {
+		t.Fatalf("platform sessions must not be embedded: %+v", doc.Sessions)
 	}
-	sessionsByName := make(map[string]policy.Binding, len(doc.Sessions))
-	for _, session := range doc.Sessions {
-		sessionsByName[string(session.Name)] = session
-	}
-	if foreign := sessionsByName["session-foreign"]; foreign.TeamID != "team-foreign" {
-		t.Fatalf("expected foreign-team session to render explicit subject teamID, got %+v", foreign)
-	}
-	if renderedSession := sessionsByName["session-a"]; renderedSession.TeamID != "team-payments" {
-		t.Fatalf("expected session teamID to be rendered, got %+v", renderedSession)
-	}
-	if defaulted := sessionsByName["session-default"]; defaulted.TeamID != "team-payments" {
-		t.Fatalf("expected missing session teamID to default to server teamID, got %+v", defaulted)
-	}
+
 }
 
 func TestBuildIngressAnnotations(t *testing.T) {

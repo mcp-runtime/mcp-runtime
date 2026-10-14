@@ -40,6 +40,25 @@ var (
 type Manager struct {
 	dynamic   dynamic.Interface
 	clientset kubernetes.Interface
+	sessions  SessionBackend
+}
+
+// SessionBackend owns runtime session persistence. Grants remain Kubernetes
+// resources; platform-managed sessions use the platform API instead of CRDs.
+type SessionBackend interface {
+	ListSessions(context.Context, string) (*MCPAgentSessionList, error)
+	GetSession(context.Context, string, string) (*MCPAgentSession, error)
+	ApplySession(context.Context, *MCPAgentSession) (*MCPAgentSession, error)
+	RevokeSession(context.Context, string, string) error
+	UnrevokeSession(context.Context, string, string) error
+	DeleteSession(context.Context, string, string) error
+}
+
+// WithSessionBackend selects the authoritative session store at construction.
+// A configured backend error never falls back to Kubernetes session state.
+func (m *Manager) WithSessionBackend(backend SessionBackend) *Manager {
+	m.sessions = backend
+	return m
 }
 
 // NewManager creates a new access resource manager.
@@ -223,6 +242,9 @@ func (m *Manager) patchGrant(ctx context.Context, name, namespace string, patch 
 
 // ListSessions returns all MCPAgentSession resources, optionally filtered by namespace.
 func (m *Manager) ListSessions(ctx context.Context, namespace string) (*MCPAgentSessionList, error) {
+	if m.sessions != nil {
+		return m.sessions.ListSessions(ctx, namespace)
+	}
 	var result *MCPAgentSessionList
 	var err error
 
@@ -251,6 +273,9 @@ func (m *Manager) ListSessions(ctx context.Context, namespace string) (*MCPAgent
 
 // GetSession returns a specific MCPAgentSession resource.
 func (m *Manager) GetSession(ctx context.Context, name, namespace string) (*MCPAgentSession, error) {
+	if m.sessions != nil {
+		return m.sessions.GetSession(ctx, name, namespace)
+	}
 	obj, err := m.dynamic.Resource(sessionGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get session %s/%s: %w", namespace, name, err)
@@ -260,6 +285,9 @@ func (m *Manager) GetSession(ctx context.Context, name, namespace string) (*MCPA
 
 // ApplySession creates or updates an MCPAgentSession resource.
 func (m *Manager) ApplySession(ctx context.Context, session *MCPAgentSession) (*MCPAgentSession, error) {
+	if m.sessions != nil {
+		return m.sessions.ApplySession(ctx, session)
+	}
 	if err := m.bindServerUID(ctx, session, session.Spec.ServerRef); err != nil {
 		return nil, err
 	}
@@ -276,6 +304,9 @@ func (m *Manager) ApplySession(ctx context.Context, session *MCPAgentSession) (*
 
 // RevokeSession revokes an MCPAgentSession by setting spec.revoked to true.
 func (m *Manager) RevokeSession(ctx context.Context, name, namespace string) error {
+	if m.sessions != nil {
+		return m.sessions.RevokeSession(ctx, name, namespace)
+	}
 	patch := map[string]interface{}{
 		"spec": map[string]interface{}{
 			"revoked": true,
@@ -286,6 +317,9 @@ func (m *Manager) RevokeSession(ctx context.Context, name, namespace string) err
 
 // UnrevokeSession clears the revoked flag on an MCPAgentSession.
 func (m *Manager) UnrevokeSession(ctx context.Context, name, namespace string) error {
+	if m.sessions != nil {
+		return m.sessions.UnrevokeSession(ctx, name, namespace)
+	}
 	patch := map[string]interface{}{
 		"spec": map[string]interface{}{
 			"revoked": false,
@@ -296,6 +330,9 @@ func (m *Manager) UnrevokeSession(ctx context.Context, name, namespace string) e
 
 // DeleteSession removes an MCPAgentSession.
 func (m *Manager) DeleteSession(ctx context.Context, name, namespace string) error {
+	if m.sessions != nil {
+		return m.sessions.DeleteSession(ctx, name, namespace)
+	}
 	if err := m.dynamic.Resource(sessionGVR).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
 		return fmt.Errorf("delete session %s/%s: %w", namespace, name, err)
 	}

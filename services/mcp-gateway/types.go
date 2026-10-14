@@ -20,6 +20,7 @@ type identityContext struct {
 	AgentID   string
 	TeamID    string
 	SessionID string
+	Session   *policypkg.Binding
 }
 
 // policySnapshot is the atomically-swapped view of the active gateway policy.
@@ -104,6 +105,7 @@ type gatewayServer struct {
 	oauthMu                sync.Mutex
 	oauthProviders         map[string]*oauthProvider
 	policyState            atomic.Value
+	sessionSync            *gatewaySessionSync
 }
 
 type statusRecorder struct {
