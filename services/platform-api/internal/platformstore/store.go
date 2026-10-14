@@ -30,6 +30,10 @@ func Open(ctx context.Context, dsn string, jwtSecret []byte) (*Store, error) {
 		_ = db.Close()
 		return nil, err
 	}
+	if err := s.initializeSessions(ctx); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	return s, nil
 }
 

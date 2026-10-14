@@ -177,3 +177,46 @@ spec:
       ports:
         - protocol: TCP
           port: 443
+        - protocol: TCP
+          port: 6443 # MCP_KUBERNETES_API_PORT
+---
+# Tenant workloads can reach only the authenticated gateway read audience.
+# Public and control-plane traffic cannot reach the dedicated sync listener.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mcp-platform-api-ingress
+  namespace: mcp-platform
+spec:
+  podSelector:
+    matchLabels:
+      app: mcp-platform-api
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 8080
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/managed-by: mcp-runtime
+      ports:
+        - protocol: TCP
+          port: 8085
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: mcp-observability
+          podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - protocol: TCP
+          port: 9090

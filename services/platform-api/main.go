@@ -171,13 +171,20 @@ func main() {
 
 	mux := http.NewServeMux()
 	server.registerRoutes(mux)
+	gatewaySessions, err := server.startGatewaySessions()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	if err := svcboot.Run(svcboot.Config{
 		ServiceName: "mcp-platform-api",
 		Port:        port,
 		MetricsPort: metricsPort,
 		Handler:     mux,
-		OnShutdown: func(context.Context) error {
+		OnShutdown: func(ctx context.Context) error {
+			if err := shutdownGatewaySessions(ctx, gatewaySessions); err != nil {
+				return err
+			}
 			if store != nil {
 				return store.Close()
 			}

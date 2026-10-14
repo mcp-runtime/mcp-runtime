@@ -6,6 +6,7 @@ import (
 	"mcp-platform-api/admin"
 	"mcp-platform-api/identity"
 	"mcp-platform-api/internal/platforminternal"
+	"mcp-platform-api/internal/sessionapi"
 	"mcp-platform-api/registry"
 	"mcp-runtime/pkg/apihttp"
 	"mcp-runtime/pkg/openapi"
@@ -21,6 +22,7 @@ func (s *apiServer) registerRoutes(mux *http.ServeMux) {
 		Token:               s.internalAuthToken,
 		AuthenticateRequest: s.authenticateRequest,
 	}.Register(mux)
+	sessionapi.Handler{Store: s.platform, Token: s.internalAuthToken}.RegisterAccess(mux)
 
 	auth := s.authentic.Middleware
 	adminOnly := func(h http.Handler) http.Handler {
