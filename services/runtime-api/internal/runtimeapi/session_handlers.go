@@ -201,7 +201,14 @@ func (s *AccessService) sessionGrantLink(ctx context.Context, req accessSessionR
 	if grantName == "" {
 		return nil, nil, nil
 	}
-	grant, err := s.accessMgr.GetGrant(ctx, grantName, runtimeaccess.DefaultAccessNamespace(req.Namespace))
+	grantNamespace := strings.TrimSpace(req.GrantNamespace)
+	if grantNamespace == "" {
+		grantNamespace = req.Namespace
+	}
+	if err := mcpaccess.ValidateResourceName("grantNamespace", grantNamespace); err != nil {
+		return nil, nil, err
+	}
+	grant, err := s.accessMgr.GetGrant(ctx, grantName, runtimeaccess.DefaultAccessNamespace(grantNamespace))
 	if err != nil || grant == nil || grant.Spec.Disabled || (grant.Spec.ExpiresAt != nil && !grant.Spec.ExpiresAt.After(time.Now())) {
 		return nil, nil, errors.New("grantName does not identify an active grant in this namespace")
 	}

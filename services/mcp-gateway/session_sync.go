@@ -34,6 +34,15 @@ type gatewaySessionSync struct {
 }
 
 var errSessionSyncCatchingUp = errors.New("session sync catching up")
+var errSessionSyncIdentityInvalid = errors.New("gateway session identity rejected")
+
+func (c *gatewaySessionSync) invalidate() {
+	c.mu.Lock()
+	c.epoch = ""
+	c.lastSync = time.Time{}
+	c.sessions = nil
+	c.mu.Unlock()
+}
 
 func (c *gatewaySessionSync) fresh() bool {
 	if c == nil {
@@ -59,6 +68,10 @@ func (c *gatewaySessionSync) getJSON(ctx context.Context, path string, out any) 
 		return err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		c.invalidate()
+		return errSessionSyncIdentityInvalid
+	}
 	if resp.StatusCode == http.StatusGone {
 		return sessionstate.ErrReset
 	}
@@ -109,6 +122,8 @@ func (c *gatewaySessionSync) sync(ctx context.Context) error {
 		if errors.Is(err, sessionstate.ErrReset) {
 			c.mu.Lock()
 			c.epoch = ""
+			c.lastSync = time.Time{}
+			c.sessions = nil
 			c.mu.Unlock()
 		}
 		return err
@@ -116,6 +131,8 @@ func (c *gatewaySessionSync) sync(ctx context.Context) error {
 	if changes.Epoch != epoch || changes.Sequence < sequence {
 		c.mu.Lock()
 		c.epoch = ""
+		c.lastSync = time.Time{}
+		c.sessions = nil
 		c.mu.Unlock()
 		return sessionstate.ErrReset
 	}

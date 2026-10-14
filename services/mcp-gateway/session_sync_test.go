@@ -159,3 +159,32 @@ func TestSessionSyncConcurrentReadsUseIndependentBindings(t *testing.T) {
 		t.Fatal("reader mutated cache")
 	}
 }
+
+func TestSessionSyncKnownResetOrIdentityRejectionInvalidatesWarmState(t *testing.T) {
+	for _, status := range []int{401, 403, 410} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			responseStatus := 200
+			cache := newTestSessionSync(t, func(w http.ResponseWriter, r *http.Request) {
+				if responseStatus != 200 {
+					w.WriteHeader(responseStatus)
+					return
+				}
+				_ = json.NewEncoder(w).Encode(sessionstate.Snapshot{Epoch: "epoch", Sequence: 1, Sessions: []sessionstate.Session{testSyncSession("session")}})
+			})
+			if err := cache.sync(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			responseStatus = status
+			if err := cache.sync(context.Background()); err == nil {
+				t.Fatal("rejection accepted")
+			}
+			responseStatus = 503
+			if err := cache.sync(context.Background()); err == nil {
+				t.Fatal("outage accepted")
+			}
+			if binding, reason := cache.binding(context.Background(), "team", "session"); binding != nil || reason != "policy_unavailable" {
+				t.Fatalf("invalid authority remained usable: %+v %s", binding, reason)
+			}
+		})
+	}
+}

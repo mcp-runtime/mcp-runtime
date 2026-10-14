@@ -51,7 +51,7 @@ Scripts compose supported CLI workflows. Shared `hack/lib/` and deployment
 | Operator / gateway reconciliation | `cmd/operator/`, `internal/operator/` |
 | API / CRDs | `api/v1alpha1/`, `config/crd/bases/` |
 | Agents / adapters | `internal/cli/adapter/`, `internal/agentadapter/`, `services/runtime-api/internal/runtimeapi/adapter*.go` |
-| Access / policy | `pkg/access/`, `pkg/policy/` |
+| Access / policy | `pkg/access/`, `pkg/policy/`, `pkg/sessionstate/`; platform-api owns Postgres sessions and the gateway sync contract |
 | Cluster / manifests / registry | `pkg/controlplane/`, `pkg/k8sclient/`, `pkg/kubeworkload/`, `pkg/manifest/`, `pkg/metadata/` |
 | Platform / services | `pkg/platformstack/`, `pkg/platforminventory/`, `services/*` (separate modules where present) |
 | Samples / installation | `examples/`, `k8s/`, `config/` |
@@ -59,6 +59,10 @@ Scripts compose supported CLI workflows. Shared `hack/lib/` and deployment
 | Automation / release manifest | `hack/README.md`, `hack/release/platformmanifest/` |
 
 Platform namespaces come from `pkg/platforminventory`; see `docs/namespaces.md`.
+Sessions are managed through the platform CLI/UI and stored by platform-api;
+Kubernetes session writes do not change authorization. See
+`docs/contributor/gateway-session-sync.md` for the dedicated port, workload
+identity, revocation and database-restore contract.
 Platform modes are `org` (default) and `public`; publish scopes are `tenant`
 (a team), `org`, and `public`. Public mode accepts all three scopes, but
 anonymous catalog reads must remain limited to public namespaces. Shared mode

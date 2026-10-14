@@ -157,7 +157,7 @@ func ToSessionSummary(session MCPAgentSession) SessionSummary {
 		ExpiresAt:       session.Spec.ExpiresAt,
 		Age:             session.CreationTimestamp.Format("2006-01-02T15:04:05Z"),
 		PolicyVersion:   session.Spec.PolicyVersion,
-		ServerUID:       session.Annotations["mcpruntime.org/session-server-uid"],
+		ServerUID:       session.Annotations[ServerUIDAnnotation],
 		GrantName:       session.Annotations["mcpruntime.org/access-grant-name"],
 		GrantNamespace:  session.Annotations["mcpruntime.org/access-grant-namespace"],
 		RevokedAt:       session.Annotations["mcpruntime.org/session-revoked-at"],

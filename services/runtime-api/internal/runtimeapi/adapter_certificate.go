@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	mcpaccess "mcp-runtime/pkg/access"
 	"mcp-runtime/pkg/certauth"
 	"mcp-runtime/pkg/identity"
 )
@@ -119,6 +120,10 @@ func (s *AccessService) HandleAdapterCertificate(w http.ResponseWriter, r *http.
 		writeAPIError(w, http.StatusForbidden, "adapter session belongs to a retired server deployment")
 		return
 	}
+	if targetServer.GetAnnotations()[mcpaccess.ServerRetiringAnnotation] == "true" {
+		writeAPIError(w, http.StatusForbidden, "target server is retiring")
+		return
+	}
 	trustDomain := strings.TrimSpace(os.Getenv("MCP_TRUST_DOMAIN"))
 	if trustDomain == "" {
 		writeAPIError(w, http.StatusServiceUnavailable, "platform SPIFFE trust domain is not configured")
@@ -151,7 +156,7 @@ func (s *AccessService) HandleAdapterCertificate(w http.ResponseWriter, r *http.
 		return
 	}
 	latest, err := s.accessMgr.GetSession(r.Context(), req.Session, req.Namespace)
-	if err != nil || latest == nil || latest.Spec.Revoked {
+	if err != nil || latest == nil || latest.Spec.Revoked || latest.UID != session.UID || latest.Annotations[sessionServerUIDAnnotation] != session.Annotations[sessionServerUIDAnnotation] {
 		writeAPIError(w, http.StatusForbidden, "adapter session was revoked during certificate enrollment")
 		return
 	}

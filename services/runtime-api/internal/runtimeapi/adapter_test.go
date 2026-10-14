@@ -209,6 +209,37 @@ func TestAdapterSessionRefreshCapsExistingSessionWhenGrantExpiryIsShortened(t *t
 	}
 }
 
+func TestAdapterSessionDeletionNeverReusesCertificateIdentity(t *testing.T) {
+	grant := mcpv1alpha1.MCPAccessGrant{
+		ObjectMeta: metav1.ObjectMeta{Name: "grant", Namespace: "mcp-team-acme"},
+		Spec:       mcpv1alpha1.MCPAccessGrantSpec{ServerRef: mcpv1alpha1.ServerReference{Name: "demo", Namespace: "mcp-team-acme"}, Subject: mcpv1alpha1.SubjectRef{AgentID: "agt_01arz3ndektsv4rrffq69g5fav", TeamID: "team-acme"}, MaxTrust: "high"},
+	}
+	fixture := newAdapterTestFixture(t, grant)
+	issue := func() adapterSessionResponse {
+		t.Helper()
+		req := adapterRequest(t, adapterSessionRequest{ServerName: "demo", Namespace: "mcp-team-acme", AgentID: "agt_01arz3ndektsv4rrffq69g5fav"})
+		req = req.WithContext(withPrincipal(req.Context(), fixture.principal))
+		response := httptest.NewRecorder()
+		fixture.server.Access().HandleAdapterSession(response, req)
+		if response.Code != 200 {
+			t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+		}
+		return decodeAdapterResponse(t, response)
+	}
+	first := issue()
+	reused := issue()
+	if reused.Name != first.Name || !reused.Reused {
+		t.Fatalf("live session not reused: %+v %+v", first, reused)
+	}
+	if err := fixture.server.accessMgr.DeleteSession(t.Context(), first.Name, first.Namespace); err != nil {
+		t.Fatal(err)
+	}
+	replacement := issue()
+	if replacement.Name == first.Name || replacement.Reused {
+		t.Fatalf("old certificate identity resurrected: %+v", replacement)
+	}
+}
+
 func TestAdapterSessionCannotRefreshExpiredGrant(t *testing.T) {
 	grant := mcpv1alpha1.MCPAccessGrant{
 		ObjectMeta: metav1.ObjectMeta{Name: "expired-debug", Namespace: "mcp-team-acme"},

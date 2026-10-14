@@ -2,6 +2,7 @@ package runtimeapi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -16,7 +17,7 @@ import (
 	"mcp-runtime/pkg/sessionstate"
 )
 
-const sessionServerUIDAnnotation = "mcpruntime.org/session-server-uid"
+const sessionServerUIDAnnotation = mcpaccess.ServerUIDAnnotation
 
 type platformSessionClient interface {
 	PutSession(context.Context, sessionstate.Session) (sessionstate.Session, error)
@@ -87,6 +88,9 @@ func (b *platformSessionBackend) ApplySession(ctx context.Context, session *mcpa
 	if server.UID == "" {
 		return nil, fmt.Errorf("server UID is required for session persistence")
 	}
+	if bound := session.Annotations[mcpaccess.ServerUIDAnnotation]; bound != "" && bound != string(server.UID) {
+		return nil, sessionstate.ErrConflict
+	}
 	row := sessionToState(session, string(server.UID), server.Spec.TeamID)
 	stored, err := b.client.PutSession(ctx, row)
 	if err != nil {
@@ -99,21 +103,41 @@ func (b *platformSessionBackend) RevokeSession(ctx context.Context, name, namesp
 	if err := b.configured(); err != nil {
 		return err
 	}
-	return b.client.SetSessionRevoked(ctx, namespace, name, true, "access_revoked")
+	return sessionBackendError(b.client.SetSessionRevoked(ctx, namespace, name, true, "access_revoked"), name)
 }
 
 func (b *platformSessionBackend) UnrevokeSession(ctx context.Context, name, namespace string) error {
 	if err := b.configured(); err != nil {
 		return err
 	}
-	return b.client.SetSessionRevoked(ctx, namespace, name, false, "access_unrevoked")
+	return sessionBackendError(b.client.SetSessionRevoked(ctx, namespace, name, false, "access_unrevoked"), name)
 }
 
 func (b *platformSessionBackend) DeleteSession(ctx context.Context, name, namespace string) error {
 	if err := b.configured(); err != nil {
 		return err
 	}
-	return b.client.DeleteSession(ctx, namespace, name)
+	return sessionBackendError(b.client.DeleteSession(ctx, namespace, name), name)
+}
+
+func (b *platformSessionBackend) DeleteSessionVersioned(ctx context.Context, name, namespace, uid string) error {
+	if err := b.configured(); err != nil {
+		return err
+	}
+	client, ok := b.client.(interface {
+		DeleteSessionIfUID(context.Context, string, string, string) error
+	})
+	if !ok {
+		return fmt.Errorf("versioned platform session deletion is unavailable")
+	}
+	return sessionBackendError(client.DeleteSessionIfUID(ctx, namespace, name, uid), name)
+}
+
+func sessionBackendError(err error, name string) error {
+	if errors.Is(err, sessionstate.ErrNotFound) {
+		return apierrors.NewNotFound(schema.GroupResource{Group: mcpaccess.APIGroup, Resource: mcpaccess.AccessSessionResource}, name)
+	}
+	return err
 }
 
 func sessionToState(session *mcpaccess.MCPAgentSession, serverUID, authorityTeam string) sessionstate.Session {

@@ -583,12 +583,13 @@ cleanup() {
       cp "${KIND_CONFIG}" "${E2E_ARTIFACT_DIR}/kind-config.yaml" 2>/dev/null || true
     fi
   fi
+  if [[ -n "${ADAPTER_CERT_SESSION:-}" && -n "${ADAPTER_PLATFORM_TOKEN:-}" ]]; then
+    qa_session_delete_if_present "${ADAPTER_CERT_SESSION}" || echo "[cleanup] platform session cleanup failed" >&2
+  fi
   for pid in "${PIDS[@]:-}"; do
     stop_process_tree "${pid}"
   done
   if scenario_selected "adapter-certificates" && [[ -n "${KUBECONFIG_FILE:-}" && -f "${KUBECONFIG_FILE}" ]]; then
-    KUBECONFIG="${KUBECONFIG_FILE}" kubectl delete mcpagentsession "${ADAPTER_CERT_SESSION}" \
-      -n mcp-servers --ignore-not-found --wait=false >/dev/null 2>&1 || true
     KUBECONFIG="${KUBECONFIG_FILE}" kubectl delete mcpaccessgrant "${OAUTH_SERVER_NAME}-adapter-cert-grant" \
       -n mcp-servers --ignore-not-found --wait=false >/dev/null 2>&1 || true
     KUBECONFIG="${KUBECONFIG_FILE}" kubectl delete mcpserver "${ADAPTER_CERT_WRONG_SERVER_NAME}" \
@@ -1347,11 +1348,66 @@ start_e2e_adapter_proxy() {
   MCP_SESSION_URL="${MCP_TRUST_SESSION_URL}"
 }
 
+# qa_platform_cli exercises session management through the authenticated
+# platform path; Kubernetes session CRs are no longer authoritative.
+qa_platform_cli() {
+  if [[ -z "${ADAPTER_PLATFORM_TOKEN:-}" ]]; then
+    ensure_api_port_forward
+    ensure_gateway_port_forward
+    ADAPTER_PLATFORM_TOKEN="$(PLATFORM_ADMIN_EMAIL="${PLATFORM_ADMIN_EMAIL}" PLATFORM_ADMIN_PASSWORD="${PLATFORM_ADMIN_PASSWORD}" python3 -c '
+import json, os
+print(json.dumps({"email": os.environ["PLATFORM_ADMIN_EMAIL"], "password": os.environ["PLATFORM_ADMIN_PASSWORD"]}))
+' | curl -fsS -X POST -H 'content-type: application/json' --data-binary @- \
+      "http://127.0.0.1:${API_SERVICE_PORT}/api/v1/auth/login" | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')"
+  fi
+  env MCP_PLATFORM_API_URL="http://127.0.0.1:${PLATFORM_PORT}" \
+    MCP_PLATFORM_API_TOKEN="${ADAPTER_PLATFORM_TOKEN}" "${PROJECT_ROOT}/bin/mcp-runtime" "$@"
+}
+
+qa_session_update() {
+  local name="$1" patch="$2" namespace="${3:-mcp-servers}"
+  local current="${WORKDIR}/${name}-session-current.json" manifest="${WORKDIR}/${name}-session-update.json"
+  qa_platform_cli access session get "${name}" --namespace "${namespace}" >"${current}"
+  python3 - "${current}" "${patch}" "${manifest}" <<'PY'
+import json, sys
+session = json.load(open(sys.argv[1]))
+spec = {k: session[k] for k in ("serverRef", "subject", "consentedTrust", "revoked", "expiresAt", "policyVersion") if k in session}
+spec.update(json.loads(sys.argv[2]))
+annotations = {}
+for field, key in (("grantName", "mcpruntime.org/access-grant-name"), ("grantNamespace", "mcpruntime.org/access-grant-namespace"), ("serverUID", "mcpruntime.org/server-uid")):
+    if session.get(field):
+        annotations[key] = session[field]
+with open(sys.argv[3], "w") as output:
+    json.dump({"apiVersion": "mcpruntime.org/v1alpha1", "kind": "MCPAgentSession", "metadata": {"name": session["name"], "namespace": session["namespace"], "annotations": annotations}, "spec": spec}, output)
+PY
+  qa_platform_cli access session apply --file "${manifest}"
+}
+
+qa_session_assert_field() {
+  local name="$1" field="$2" expected="$3" namespace="${4:-mcp-servers}"
+  qa_platform_cli access session get "${name}" --namespace "${namespace}" | python3 -c '
+import json,sys
+session = json.load(sys.stdin)
+assert str(session.get(sys.argv[1])) == sys.argv[2], session
+' "${field}" "${expected}"
+}
+
+qa_session_delete_if_present() {
+  local name="$1" namespace="${2:-mcp-servers}" code
+  qa_platform_cli auth status >/dev/null
+  code="$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer ${ADAPTER_PLATFORM_TOKEN}" \
+    "http://127.0.0.1:${PLATFORM_PORT}/api/v1/runtime/sessions/${namespace}/${name}")"
+  case "${code}" in
+    200) qa_platform_cli access session delete "${name}" --namespace "${namespace}" ;;
+    404) return 0 ;;
+    *) echo "session inspection failed during cleanup: HTTP ${code}" >&2; return 1 ;;
+  esac
+}
+
 # emit_cert_session_deny_reasons exercises session lifecycle denials through the
 # enrolled adapter certificate so observability still sees session_not_found /
 # session_revoked / session_expired without X-MCP header injection.
-# Wait on live initialize (not a one-shot curl): ConfigMap updates can land
-# before the gateway sidecar has reloaded the projected policy.
+# Wait on live initialize so the probe includes the gateway session sync path.
 emit_cert_session_deny_reasons() {
   ensure_trust_session_proxy
   if [[ -z "${ADAPTER_SESSION_NAME:-}" ]]; then
@@ -1360,33 +1416,28 @@ emit_cert_session_deny_reasons() {
   fi
 
   local expires_backup
-  expires_backup="$(kubectl get mcpagentsession "${ADAPTER_SESSION_NAME}" -n mcp-servers -o jsonpath='{.spec.expiresAt}' 2>/dev/null || true)"
+  expires_backup="$(qa_platform_cli access session get "${ADAPTER_SESSION_NAME}" --namespace mcp-servers | python3 -c 'import json,sys; print(json.load(sys.stdin).get("expiresAt") or "")')"
 
   log_line mcp "emitting session_revoked via adapter certificate"
-  kubectl patch mcpagentsession "${ADAPTER_SESSION_NAME}" -n mcp-servers --type=merge \
-    -p '{"spec":{"revoked":true}}'
+  qa_platform_cli access session revoke "${ADAPTER_SESSION_NAME}" --namespace mcp-servers
   wait_for_mcp_initialize_result "${MCP_TRUST_SESSION_URL}" 401 "session_revoked"
-  kubectl patch mcpagentsession "${ADAPTER_SESSION_NAME}" -n mcp-servers --type=merge \
-    -p '{"spec":{"revoked":false}}'
+  qa_platform_cli access session unrevoke "${ADAPTER_SESSION_NAME}" --namespace mcp-servers
   wait_for_mcp_initialize_result "${MCP_TRUST_SESSION_URL}" 200
   wait_for_mcp_tool_result "${MCP_TRUST_SESSION_URL}" "aaa-ping" '{}' 200 "pong" 20 "" "" "cert-session-unrevoke"
 
   log_line mcp "emitting session_expired via adapter certificate"
-  kubectl patch mcpagentsession "${ADAPTER_SESSION_NAME}" -n mcp-servers --type=merge \
-    -p '{"spec":{"expiresAt":"2000-01-01T00:00:00Z"}}'
+  qa_session_update "${ADAPTER_SESSION_NAME}" '{"expiresAt":"2000-01-01T00:00:00Z"}'
   wait_for_mcp_initialize_result "${MCP_TRUST_SESSION_URL}" 401 "session_expired"
   if [[ -n "${expires_backup}" ]]; then
-    kubectl patch mcpagentsession "${ADAPTER_SESSION_NAME}" -n mcp-servers --type=merge \
-      -p "{\"spec\":{\"expiresAt\":\"${expires_backup}\"}}"
+    qa_session_update "${ADAPTER_SESSION_NAME}" "{\"expiresAt\":\"${expires_backup}\"}"
   else
-    kubectl patch mcpagentsession "${ADAPTER_SESSION_NAME}" -n mcp-servers --type=json \
-      -p '[{"op":"remove","path":"/spec/expiresAt"}]' || true
+    qa_session_update "${ADAPTER_SESSION_NAME}" '{"expiresAt":null}'
   fi
   wait_for_mcp_initialize_result "${MCP_TRUST_SESSION_URL}" 200
   wait_for_mcp_tool_result "${MCP_TRUST_SESSION_URL}" "aaa-ping" '{}' 200 "pong" 20 "" "" "cert-session-unexpire"
 
   log_line mcp "emitting session_not_found via adapter certificate"
-  kubectl delete mcpagentsession "${ADAPTER_SESSION_NAME}" -n mcp-servers --wait=true
+  qa_platform_cli access session delete "${ADAPTER_SESSION_NAME}" --namespace mcp-servers
   wait_for_mcp_initialize_result "${MCP_TRUST_SESSION_URL}" 401 "session_not_found"
   # Recreate the deterministic adapter session and re-enroll a fresh certificate.
   ensure_trust_adapter_session
@@ -1454,7 +1505,7 @@ ensure_trust_adapter_session() {
     ADAPTER_TEAM_ID="$(printf '%s' "${session_resp}" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("teamID") or "")')"
   fi
   TRUST_SESSION_NAME="${ADAPTER_SESSION_NAME}"
-  wait_for_policy_text "\"name\": \"${ADAPTER_SESSION_NAME}\""
+  qa_platform_cli access session get "${ADAPTER_SESSION_NAME}" --namespace mcp-servers >/dev/null
 }
 
 # ensure_trust_session_proxy starts a certificate adapter for trust/governance
@@ -1502,11 +1553,11 @@ print(json.dumps({"email": os.environ["PLATFORM_ADMIN_EMAIL"], "password": os.en
     --password "${member_password}" \
     --role member >/dev/null
 
-  agent_response="$(curl -fsS -X POST \
-    -H "Authorization: Bearer ${admin_token}" \
-    -H "content-type: application/json" \
-    --data '{"name":"E2E adapter agent"}' \
-    "http://127.0.0.1:${PLATFORM_PORT}/api/v1/runtime/teams/${team_slug}/agents")"
+  ADAPTER_TEAM_SLUG="${team_slug}"
+  ADAPTER_AGENT_ID="$(env "${platform_env[@]}" ./bin/mcp-runtime agent create "${team_slug}" \
+    --name "E2E adapter agent" | python3 -c 'import re,sys; text=sys.stdin.read(); match=re.search(r"\bagt_[0-9a-z]{26}\b", text); assert match, text; print(match.group(0))')"
+  agent_response="$(curl -fsS -H "Authorization: Bearer ${admin_token}" \
+    "http://127.0.0.1:${PLATFORM_PORT}/api/v1/runtime/agents/${ADAPTER_AGENT_ID}")"
   ADAPTER_AGENT_ID="$(printf '%s' "${agent_response}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["agent"]["id"])')"
   ADAPTER_TEAM_ID="$(printf '%s' "${agent_response}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["agent"]["team_id"])')"
   ADAPTER_AGENT_EXPIRES_AT="$(python3 -c 'from datetime import datetime,timedelta,timezone; print((datetime.now(timezone.utc)+timedelta(hours=1)).replace(microsecond=0).isoformat().replace("+00:00","Z"))')"
@@ -3211,16 +3262,15 @@ restore_policy_server_grant_defaults() {
 
   if [[ -f "${WORKDIR}/access-session.yaml" ]]; then
     log_line policy "restoring baseline session consented trust after trust checks"
-    (cd "${WORKDIR}" && "${PROJECT_ROOT}/bin/mcp-runtime" access --use-kube session apply --file access-session.yaml)
+    qa_platform_cli access session apply --file "${WORKDIR}/access-session.yaml"
   fi
 
   # Cert-backed trust checks use the adapter grant/session, not ops-agent.
   ensure_trust_adapter_grant
   if [[ -n "${ADAPTER_SESSION_NAME:-}" ]]; then
     log_line policy "restoring adapter session consented trust to low"
-    kubectl patch mcpagentsession "${ADAPTER_SESSION_NAME}" -n mcp-servers --type=merge \
-      -p '{"spec":{"consentedTrust":"low"}}'
-    wait_for_policy_text "\"name\": \"${ADAPTER_SESSION_NAME}\""
+    qa_session_update "${ADAPTER_SESSION_NAME}" '{"consentedTrust":"low"}'
+    qa_platform_cli access session get "${ADAPTER_SESSION_NAME}" --namespace mcp-servers >/dev/null
   fi
 
   # ConfigMap updates can appear in kubectl before the gateway sidecar's mounted
@@ -4143,12 +4193,9 @@ if cache_mode_enabled; then
     "alice-${MT_TENANT_A}" \
     "bob-${MT_TENANT_B}" \
     --ignore-not-found --wait=true >/dev/null
-  kubectl delete mcpagentsession -n mcp-servers \
-    "${SESSION_ID}" \
-    "${SERVER_NAME}-e2e-api-session" \
-    "${MT_SESSION_A}" \
-    "${MT_SESSION_B}" \
-    --ignore-not-found --wait=true >/dev/null
+  for cached_session in "${SESSION_ID}" "${SERVER_NAME}-e2e-api-session" "${MT_SESSION_A}" "${MT_SESSION_B}"; do
+    qa_session_delete_if_present "${cached_session}"
+  done
   echo "[cache] removing previous policy/OAuth test workloads before cluster doctor"
   kubectl delete mcpserver -n mcp-servers "${SERVER_NAME}" "${OAUTH_SERVER_NAME}" "${GO_EXAMPLE_STANDALONE_NAME}" "${MT_TENANT_A}" "${MT_TENANT_B}" --ignore-not-found --wait=true >/dev/null
   kubectl delete deployment -n mcp-servers "${SERVER_NAME}" "${OAUTH_SERVER_NAME}" "${GO_EXAMPLE_STANDALONE_NAME}" "${MT_TENANT_A}" "${MT_TENANT_B}" --ignore-not-found --wait=true >/dev/null
@@ -4495,11 +4542,17 @@ PYEOF
 
 if checkpoint_enabled "policy"; then
   ensure_traefik_port_forward
+  ensure_adapter_agent_identity
+  # Platform session writes validate the active managed agent and its team.
+  # Use the real member subject instead of bypassing that validation with a CR.
+  AGENT_ID="$(qa_platform_cli agent create "${ADAPTER_TEAM_SLUG}" --name "E2E baseline policy agent" | python3 -c 'import re,sys; text=sys.stdin.read(); match=re.search(r"\bagt_[0-9a-z]{26}\b", text); assert match, text; print(match.group(0))')"
+  HUMAN_ID="$(ADAPTER_IDENTITY_TOKEN="${ADAPTER_CALLER_TOKEN}" python3 -c 'import base64,json,os; part=os.environ["ADAPTER_IDENTITY_TOKEN"].split(".")[1]; print(json.loads(base64.urlsafe_b64decode(part+"="*((4-len(part)%4)%4)))["sub"])')"
   echo "[policy] applying access grant via CLI"
   "${PROJECT_ROOT}/bin/mcp-runtime" access --use-kube grant init "${SERVER_NAME}-grant" \
     --server "${SERVER_NAME}" \
     --human-id "${HUMAN_ID}" \
     --agent-id "${AGENT_ID}" \
+    --team-id "${ADAPTER_TEAM_ID}" \
     --trust high \
     --side-effect read \
     --tool-rule aaa-ping:allow:low \
@@ -4507,24 +4560,31 @@ if checkpoint_enabled "policy"; then
     --tool-rule upper:allow:medium \
     --output "${WORKDIR}/access-grant.yaml" \
     --force
+  python3 - "${WORKDIR}/access-grant.yaml" "${ADAPTER_AGENT_EXPIRES_AT}" <<'PY'
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+path.write_text(path.read_text().replace("spec:\n", "spec:\n  expiresAt: " + sys.argv[2] + "\n", 1))
+PY
   (cd "${WORKDIR}" && "${PROJECT_ROOT}/bin/mcp-runtime" access --use-kube grant apply --file access-grant.yaml)
 
   echo "[policy] applying low-trust session via CLI"
-  "${PROJECT_ROOT}/bin/mcp-runtime" access --use-kube session init "${SESSION_ID}" \
+  "${PROJECT_ROOT}/bin/mcp-runtime" access session init "${SESSION_ID}" \
     --server "${SERVER_NAME}" \
     --human-id "${HUMAN_ID}" \
     --agent-id "${AGENT_ID}" \
+    --team-id "${ADAPTER_TEAM_ID}" \
     --trust low \
     --output "${WORKDIR}/access-session.yaml" \
     --force
-  (cd "${WORKDIR}" && "${PROJECT_ROOT}/bin/mcp-runtime" access --use-kube session apply --file access-session.yaml)
+  qa_platform_cli access session apply --file "${WORKDIR}/access-session.yaml"
 
-  wait_for_policy_text "\"name\": \"${SESSION_ID}\""
-  wait_for_policy_text "\"consented_trust\": \"low\""
+  qa_platform_cli access session get "${SESSION_ID}" --namespace mcp-servers >/dev/null
+  qa_session_assert_field "${SESSION_ID}" consentedTrust low
   print_gateway_policy_debug
   ./bin/mcp-runtime server --use-kube policy inspect "${SERVER_NAME}" \
     --namespace mcp-servers >"${WORKDIR}/server-policy.json"
-  assert_file_contains "${SESSION_ID}" "${WORKDIR}/server-policy.json"
+  python3 -c 'import json,sys; assert not json.load(sys.stdin).get("sessions"), "sessions leaked into policy ConfigMap"' <"${WORKDIR}/server-policy.json"
 
   if scenario_selected "governance"; then
     echo "[cli] checking access management commands"
@@ -4532,10 +4592,10 @@ if checkpoint_enabled "policy"; then
     assert_file_contains "${SERVER_NAME}-grant" "${WORKDIR}/access-grant-list.txt"
     ./bin/mcp-runtime access --use-kube grant get "${SERVER_NAME}-grant" --namespace mcp-servers >"${WORKDIR}/access-grant-get.yaml"
     assert_file_contains "maxTrust: high" "${WORKDIR}/access-grant-get.yaml"
-    ./bin/mcp-runtime access --use-kube session list --namespace mcp-servers >"${WORKDIR}/access-session-list.txt"
+    qa_platform_cli access session list --namespace mcp-servers >"${WORKDIR}/access-session-list.txt"
     assert_file_contains "${SESSION_ID}" "${WORKDIR}/access-session-list.txt"
-    ./bin/mcp-runtime access --use-kube session get "${SESSION_ID}" --namespace mcp-servers >"${WORKDIR}/access-session-get.yaml"
-    assert_file_contains "consentedTrust: low" "${WORKDIR}/access-session-get.yaml"
+    qa_platform_cli access session get "${SESSION_ID}" --namespace mcp-servers >"${WORKDIR}/access-session-get.yaml"
+    assert_file_contains '"consentedTrust": "low"' "${WORKDIR}/access-session-get.yaml"
 
     cat >"${WORKDIR}/access-temp.yaml" <<EOF
 apiVersion: mcpruntime.org/v1alpha1
@@ -4547,8 +4607,10 @@ spec:
   serverRef:
     name: ${SERVER_NAME}
   subject:
-    humanID: ${HUMAN_ID}-cli-temp
-    agentID: ${AGENT_ID}-cli-temp
+    humanID: ${HUMAN_ID}
+    agentID: ${AGENT_ID}
+    teamID: ${ADAPTER_TEAM_ID}
+  expiresAt: ${ADAPTER_AGENT_EXPIRES_AT}
   maxTrust: low
   allowedSideEffects: [read]
   policyVersion: v1
@@ -4562,18 +4624,19 @@ spec:
   serverRef:
     name: ${SERVER_NAME}
   subject:
-    humanID: ${HUMAN_ID}-cli-temp
-    agentID: ${AGENT_ID}-cli-temp
+    humanID: ${HUMAN_ID}
+    agentID: ${AGENT_ID}
+    teamID: ${ADAPTER_TEAM_ID}
   consentedTrust: low
   policyVersion: v1
 EOF
-    ./bin/mcp-runtime access --use-kube grant apply --file "${WORKDIR}/access-temp.yaml"
+    qa_platform_cli access grant apply --file "${WORKDIR}/access-temp.yaml"
     ./bin/mcp-runtime access --use-kube grant disable "${SERVER_NAME}-grant-cli-temp" --namespace mcp-servers
     ./bin/mcp-runtime access --use-kube grant enable "${SERVER_NAME}-grant-cli-temp" --namespace mcp-servers
-    ./bin/mcp-runtime access --use-kube session revoke "${SESSION_ID}-cli-temp" --namespace mcp-servers
-    ./bin/mcp-runtime access --use-kube session unrevoke "${SESSION_ID}-cli-temp" --namespace mcp-servers
+    qa_platform_cli access session revoke "${SESSION_ID}-cli-temp" --namespace mcp-servers
+    qa_platform_cli access session unrevoke "${SESSION_ID}-cli-temp" --namespace mcp-servers
     ./bin/mcp-runtime access --use-kube grant delete "${SERVER_NAME}-grant-cli-temp" --namespace mcp-servers
-    ./bin/mcp-runtime access --use-kube session delete "${SESSION_ID}-cli-temp" --namespace mcp-servers
+    qa_platform_cli access session delete "${SESSION_ID}-cli-temp" --namespace mcp-servers
   fi
 
   if scenario_selected "governance" || scenario_selected "adapter-proxy"; then
@@ -4632,11 +4695,11 @@ assert resp['expiresAt'], resp
 print('adapter-session issued:', resp['name'], 'reused=', resp['reused'])
 "
     ADAPTER_SESSION_NAME="$(echo "${ADAPTER_SESSION_RESP}" | python3 -c 'import json,sys;print(json.load(sys.stdin)["name"])')"
-    if ! kubectl get mcpagentsession "${ADAPTER_SESSION_NAME}" -n mcp-servers >/dev/null 2>&1; then
-      echo "expected MCPAgentSession ${ADAPTER_SESSION_NAME} in mcp-servers" >&2
+    if ! qa_platform_cli access session get "${ADAPTER_SESSION_NAME}" --namespace mcp-servers >/dev/null; then
+      echo "expected platform session ${ADAPTER_SESSION_NAME} in mcp-servers" >&2
       exit 1
     fi
-    wait_for_policy_text "\"name\": \"${ADAPTER_SESSION_NAME}\""
+    qa_platform_cli access session get "${ADAPTER_SESSION_NAME}" --namespace mcp-servers >/dev/null
 
     # The second call must hit the platform's reuse path: same body within the
     # same run, no Kubernetes round-trip, reused=true. This is independent of
@@ -4712,10 +4775,9 @@ print(json.dumps({"email": os.environ["PLATFORM_ADMIN_EMAIL"], "password": os.en
     wait_for_mcp_tool_result "${MCP_TRUST_SESSION_URL}" "upper" '{"message":"governance"}' 403 "trust_too_low"
 
     log_line policy "raising adapter consented trust to medium; upper should become allowed while add stays ungranted"
-    kubectl patch mcpagentsession "${ADAPTER_SESSION_NAME}" -n mcp-servers --type=merge \
-      -p '{"spec":{"consentedTrust":"medium"}}'
+    qa_session_update "${ADAPTER_SESSION_NAME}" '{"consentedTrust":"medium"}'
 
-    wait_for_policy_text "\"consented_trust\": \"medium\""
+    qa_session_assert_field "${ADAPTER_SESSION_NAME}" consentedTrust medium
     print_gateway_policy_debug
     log_line mcp "waiting for updated consented trust to reach the gateway"
     wait_for_mcp_tool_result "${MCP_TRUST_SESSION_URL}" "upper" '{"message":"governance"}' 200 "GOVERNANCE"
@@ -5618,14 +5680,13 @@ EOF
       "${OAUTH_AUDIENCE%/${OAUTH_SERVER_NAME}/mcp}/${WRONG_SERVER_NAME}/mcp" adapter-wrong-token.txt
     ADAPTER_OAUTH_TOKEN="$(tr -d '\n' <"${OAUTH_FIXTURE_DIR}/adapter-token.txt")"
     ADAPTER_WRONG_OAUTH_TOKEN="$(tr -d '\n' <"${OAUTH_FIXTURE_DIR}/adapter-wrong-token.txt")"
-    if ! kubectl get mcpagentsession "${ADAPTER_CERT_SESSION}" -n mcp-servers >/dev/null 2>&1; then
-      echo "expected MCPAgentSession ${ADAPTER_CERT_SESSION} in mcp-servers after adapter enrollment" >&2
+    if ! qa_platform_cli access session get "${ADAPTER_CERT_SESSION}" --namespace mcp-servers >/dev/null; then
+      echo "expected platform session ${ADAPTER_CERT_SESSION} in mcp-servers after adapter enrollment" >&2
       exit 1
     fi
-    # The gateway authenticates the SPIFFE ID against its rendered policy.
-    # Session creation is asynchronous with policy reconciliation, so wait for
-    # this exact binding before sending the first certificate-authenticated call.
-    wait_for_policy_text "\"name\": \"${ADAPTER_CERT_SESSION}\"" "${OAUTH_SERVER_NAME}"
+    # Read the authoritative platform binding; the certificate probe below
+    # waits for the gateway's session sync to observe it.
+    qa_platform_cli access session get "${ADAPTER_CERT_SESSION}" --namespace mcp-servers >/dev/null
 
     ensure_traefik_tls_port_forward
     ADAPTER_CERT_URL="https://127.0.0.1:${TRAEFIK_TLS_PORT}${OAUTH_INGRESS_PATH}"
@@ -5723,12 +5784,37 @@ EOF
     fi
 
     log_line oauth "a revoked session must stop a live adapter certificate"
-    kubectl patch mcpagentsession "${ADAPTER_CERT_SESSION}" -n mcp-servers --type=merge -p '{"spec":{"revoked":true}}'
-    # Observe revocation for this certificate on its OAuth server; the generic
-    # policy-text helper defaults to SERVER_NAME, which is a different server.
-    wait_for_adapter_certificate_initialize "${ADAPTER_CERT_URL}" 401 session_revoked \
-      "${WORKDIR}/adapter-revoked-headers.txt" "${WORKDIR}/adapter-revoked-session.json"
-    kubectl patch mcpagentsession "${ADAPTER_CERT_SESSION}" -n mcp-servers --type=merge -p '{"spec":{"revoked":false}}'
+    SESSION_POLICY_REVISION="$(kubectl get configmap "${OAUTH_SERVER_NAME}-gateway-policy" -n mcp-servers -o jsonpath='{.metadata.resourceVersion}')"
+    qa_platform_cli access session revoke "${ADAPTER_CERT_SESSION}" --namespace mcp-servers
+    # Measure from the completed management write, polling more frequently than
+    # the ordinary readiness helper so a two-second retry cannot hide the bound.
+    SESSION_CHECK_URL="${ADAPTER_CERT_URL}" SESSION_CHECK_CERT="${ADAPTER_CERT_PATH}" \
+      SESSION_CHECK_TOKEN="${ADAPTER_OAUTH_TOKEN}" SESSION_CHECK_HOST="${OAUTH_SERVER_HOST}" \
+      SESSION_CHECK_PROTOCOL="${MCP_PROTOCOL_VERSION}" python3 <<'PY'
+import json, os, subprocess, time
+start = time.monotonic()
+while time.monotonic() - start < 1:
+    command = ["curl", "-ksS", "--max-time", "0.2", "--cert", os.environ["SESSION_CHECK_CERT"] + "/client.crt", "--key", os.environ["SESSION_CHECK_CERT"] + "/client.key", "-H", "Host: " + os.environ["SESSION_CHECK_HOST"], "-H", "Authorization: Bearer " + os.environ["SESSION_CHECK_TOKEN"], "-H", "content-type: application/json", "-H", "accept: application/json, text/event-stream", "-H", "Mcp-Protocol-Version: " + os.environ["SESSION_CHECK_PROTOCOL"], "--data", '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}', os.environ["SESSION_CHECK_URL"]]
+    response = subprocess.run(command, capture_output=True, text=True)
+    if response.returncode == 0:
+        try:
+            denied = json.loads(response.stdout).get("error") == "session_revoked"
+        except ValueError:
+            denied = False
+        if denied:
+            elapsed = time.monotonic() - start
+            if elapsed <= 1:
+                print(f"session revocation reached the gateway in {elapsed:.3f}s")
+                break
+    time.sleep(0.025)
+else:
+    raise SystemExit("session revocation did not reach the gateway within 1 second")
+PY
+    if [[ "$(kubectl get configmap "${OAUTH_SERVER_NAME}-gateway-policy" -n mcp-servers -o jsonpath='{.metadata.resourceVersion}')" != "${SESSION_POLICY_REVISION}" ]]; then
+      echo "session revocation changed the static policy ConfigMap" >&2
+      exit 1
+    fi
+    qa_platform_cli access session unrevoke "${ADAPTER_CERT_SESSION}" --namespace mcp-servers
 
     log_line oauth "direct gateway access with an adapter certificate must be rejected as untrusted_proxy"
     port_forward_bg mcp-servers "${OAUTH_SERVER_NAME}" "${ADAPTER_CERT_DIRECT_PORT}" 80 "${WORKDIR}/adapter-cert-direct-port-forward.log"
@@ -5756,7 +5842,7 @@ EOF
     env "${RETIRE_PLATFORM_ENV[@]}" ./bin/mcp-runtime server delete "${OAUTH_SERVER_NAME}" --namespace mcp-servers
     # Required cleanup must complete through the platform operation, without
     # using a Kubernetes mutation to hide a retirement regression.
-    kubectl get mcpaccessgrants,mcpagentsessions -A -o json | python3 -c '
+    kubectl get mcpaccessgrants -A -o json | python3 -c '
 import json, sys
 name = sys.argv[1]
 for item in json.load(sys.stdin)["items"]:
@@ -5764,6 +5850,15 @@ for item in json.load(sys.stdin)["items"]:
     namespace = ref.get("namespace") or item["metadata"]["namespace"]
     if namespace == "mcp-servers" and ref.get("name") == name:
         raise SystemExit("retirement left authorization: " + item["metadata"]["name"])
+' "${OAUTH_SERVER_NAME}"
+    curl -fsS -H "Authorization: Bearer ${ADAPTER_PLATFORM_TOKEN}" \
+      "http://127.0.0.1:${PLATFORM_PORT}/api/v1/runtime/sessions" | python3 -c '
+import json,sys
+name = sys.argv[1]
+for item in json.load(sys.stdin).get("sessions", []):
+    ref = item.get("serverRef", {})
+    if (ref.get("namespace") or item["namespace"]) == "mcp-servers" and ref.get("name") == name:
+        raise SystemExit("retirement left platform session: " + item["name"])
 ' "${OAUTH_SERVER_NAME}"
     kubectl wait --for=delete "mcpserver/${OAUTH_SERVER_NAME}" -n mcp-servers --timeout=120s
     kubectl wait --for=delete "deployment/${OAUTH_SERVER_NAME}" -n mcp-servers --timeout=120s
@@ -5835,11 +5930,11 @@ assert resp['expiresAt'], resp
 print('adapter-session issued:', resp['name'], 'reused=', resp['reused'])
 "
   ADAPTER_SESSION_NAME="$(echo "${ADAPTER_SESSION_RESP}" | python3 -c 'import json,sys;print(json.load(sys.stdin)["name"])')"
-  if ! kubectl get mcpagentsession "${ADAPTER_SESSION_NAME}" -n mcp-servers >/dev/null 2>&1; then
-    echo "expected MCPAgentSession ${ADAPTER_SESSION_NAME} in mcp-servers" >&2
+  if ! qa_platform_cli access session get "${ADAPTER_SESSION_NAME}" --namespace mcp-servers >/dev/null; then
+    echo "expected platform session ${ADAPTER_SESSION_NAME} in mcp-servers" >&2
     exit 1
   fi
-  wait_for_policy_text "\"name\": \"${ADAPTER_SESSION_NAME}\""
+  qa_platform_cli access session get "${ADAPTER_SESSION_NAME}" --namespace mcp-servers >/dev/null
 
   # The second call must hit the platform's reuse path: same body within the
   # same run, no Kubernetes round-trip, reused=true. This is independent of

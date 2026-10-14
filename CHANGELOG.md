@@ -23,6 +23,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Changed
 
+- Runtime sessions are persisted by platform-api in Postgres and synchronized into server-scoped gateway caches; session changes no longer rewrite policy ConfigMaps. Policy schema v4 requires matching updated gateways. Use the platform CLI/UI for sessions; direct `--use-kube` session management is rejected. Re-enroll adapters after upgrading rather than importing old Kubernetes session state. New adapter session names prevent retired certificates from naming replacement bindings ([#659](https://github.com/mcp-runtime/mcp-runtime/issues/659), [#718](https://github.com/mcp-runtime/mcp-runtime/issues/718)).
+
 - Platform modes are now `org` (default) and `public`. Publishing retains three scopes: `tenant` for a team, `org` for all signed-in organization users, and `public` for public previews or public MCP listings. Public mode accepts all three scopes, with separate org/public image prefixes and catalog namespaces; anonymous readers cannot list org or team catalogs. Existing configurations using platform mode `tenant` must explicitly select `org` or `public` before deployment. No data reset or certificate replacement is required; use the reviewed `mcp-runtime update` workflow for the hosted reference platform ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
 
 ### Removed

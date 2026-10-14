@@ -74,6 +74,8 @@ type MCPServerReconciler struct {
 
 	// GatewayOTLPEndpoint is the OTLP/HTTP endpoint injected into MCP gateway sidecars.
 	GatewayOTLPEndpoint string
+	// GatewaySessionSyncURL overrides the internal platform session listener.
+	GatewaySessionSyncURL string
 
 	// DefaultAnalyticsIngestURL is the default analytics ingest endpoint used when analytics is enabled.
 	DefaultAnalyticsIngestURL string

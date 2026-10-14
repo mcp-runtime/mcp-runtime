@@ -11,7 +11,7 @@ description: Apply and debug MCP Runtime access grants, agent sessions, gateway 
 |------|--------|
 | **UI** | Create/apply grants and sessions; toggle enable/revoke |
 | **CLI (default)** | `mcp-runtime auth login --api-url <url>` → `agent create|list|...` and `access grant init` / `access grant apply --file …` |
-| **Adapter (recommended for agents)** | `adapter proxy --server <name> --agent <id> [--auto-refresh]` → certificate-backed `MCPAgentSession`; add OAuth only when the server configures it |
+| **Adapter (recommended for agents)** | `adapter proxy --server <name> --agent <id> [--auto-refresh]` → certificate-backed platform session; add OAuth only when the server configures it |
 | **Optional header adapter** | `adapter proxy --auth-mode header --runtime-url https://… --credential-header-env Name=ENV` injects client-local credential headers and does not enroll a certificate. Direct clients can send the same headers without the adapter. |
 | **Explicit Kubernetes test/recovery** | `access … --use-kube` only when that path is explicitly requested; never bypass a failed CLI/UI flow |
 
@@ -25,7 +25,8 @@ Session apply via platform API is **admin-only**. Adapters usually skip manual s
 - Managed agent IDs come from the team directory (`mcp-runtime agent create <team-slug> --name …`). New IDs use `agt_<26-character lowercase ULID>`; names can change, IDs cannot. Deactivation revokes active sessions.
 - Agent subjects must use an active directory ID owned by the selected subject team. Unknown, malformed, inactive, and wrong-team IDs fail closed; the access forms do not accept free-text agent IDs.
 - A cross-team grant names the subject's `teamID` and must expire; its TTL is capped by the runtime API. Audit fields distinguish the subject/actor team from the server/resource authority team.
-- `server policy inspect` shows rendered policy; the operator stamps the policy revision on server pods so the gateway sees new grants/sessions within ~10s. Wait that long before assuming `session_not_found`.
+- `server policy inspect` shows rendered grants/tools, not session state. Platform-api owns sessions in Postgres; gateway sync polls at 500ms on the dedicated port 8085. Cold or known-reset caches deny; disconnected caches expire after at most 10m. See [the session sync contract](../../../docs/contributor/gateway-session-sync.md).
+- `MCPAgentSession` YAML is an input format for admin platform apply. Inspect, create, revoke and delete sessions through the platform CLI/UI; direct `--use-kube` session management is rejected and Kubernetes edits do not change gateway authorization.
 - CLI `server delete` and UI Retire disable grants and revoke sessions before removing exact server-reference authorization across namespaces. Cleanup failures require retry; `mcpruntime.org/retiring` blocks issuance/redeployment while recovery completes. Admins can repeat deletion for an absent server to clean orphaned access. Shared pull credentials and audit history remain.
 - New grants/sessions bind to `mcpruntime.org/server-uid`; policy rendering rejects a binding from an earlier same-name deployment. Explicit `server delete --use-kube` removes only the Kubernetes server object and does not perform platform access retirement.
 - OAuth is optional and is enabled by `MCPServer.spec.auth` without `mode: header`. Direct clients use a bearer only on OAuth-enabled servers. An adapter always presents its enrolled certificate and adds a bearer only when the target enables OAuth.
