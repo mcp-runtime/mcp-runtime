@@ -885,7 +885,19 @@ needs a ServiceAccount that does not exist is blocked until you re-run without
 `--only`. The plan lists each object (`create`, `update` or `skipped`) and the
 wiring change per component.
 
-update never modifies Secrets, PVCs, ConfigMaps, cert-manager
+Release-declared ConfigMap keys are applied while preserving unrelated keys;
+dependent workloads restart and failed rollouts restore the previous keys.
+`--platform-mode org|public` also sets `PLATFORM_MODE` in existing shared
+ConfigMaps, prepares the required catalog namespaces, and restarts runtime-api,
+platform-api and UI. Missing mode-dependent manifest entries become config-only
+entries, preserving their images. Namespace selection comes from the target
+cluster's shared configuration, never the workstation environment. Existing
+namespaces must already be managed catalogs with the requested scope; update
+refuses to expose an organization/team namespace as public. Catalog namespaces
+are additive and retained on rollback or a later mode change. `--only` skips
+ConfigMaps and catalog preparation and cannot be combined with `--platform-mode`.
+
+update never modifies Secrets, PVCs, cert-manager
 Issuers/Certificates, Services, or Ingresses, other RBAC, or other Deployment
 settings, and never deletes or recreates workloads. mcp-auth and cert-manager
 are skipped unless selected with `--include-auth`, `--include-cert-manager`, or
@@ -899,6 +911,9 @@ and cancel sibling builds. Existing tags are reused except for commit-tagged
 release images: these are rebuilt from a clean checkout of the exact source
 commit even if the tag exists. Without `--build`, images must already be
 published.
+Registry probes run before builds, including commit-tagged images, so invalid
+Docker registry credentials fail before an expensive build. `--dry-run` skips
+registry access and does not require Docker.
 Published release manifests tag Runtime-built images with the full source
 commit (`vX.Y.Z-g<commit>`), so images from another release commit have a
 different registry tag. update compares their release version without treating
@@ -928,6 +943,7 @@ Relative repositories resolve against the registry of the running image.
 | `--source` | `.` | Repository root used with `--build` |
 | `--image-platform` | `MCP_IMAGE_PLATFORM` or `linux/amd64` | Docker `--platform` for `--build` |
 | `--build-parallelism` | `1` | Max concurrent image builds with `--build` |
+| `--platform-mode` | unchanged | `org` or `public`; prepares catalogs and restarts mode-dependent services; incompatible with `--only` |
 | `--kubeconfig`, `--context` | current kubeconfig context | Target cluster |
 
 Components: `operator`, `gateway-proxy`, `platform-api`, `runtime-api`,

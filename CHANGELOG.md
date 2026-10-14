@@ -10,6 +10,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 ### Added
 
 - An unauthenticated `test-mcpsnoop` example with read-only `echo` and `todays_info` tools and instructions for CLI publishing, deployment, and inspecting real MCP payloads with MCPSnoop ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
+- `mcp-runtime update --platform-mode org|public` changes mode, prepares managed catalog namespaces, and restarts mode-dependent services without hand-written ConfigMap rollout entries. Namespace scopes cannot be changed and new catalogs survive rollback. `--build` checks registry access before building commit-tagged images so invalid Docker credentials fail earlier ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
 
 ### Changed
 

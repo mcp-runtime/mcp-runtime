@@ -182,21 +182,22 @@ func planImageBuilds(ctx context.Context, plan *Plan, opts BuildOptions) ([]Imag
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", row.Component, err)
 		}
-		if _, ok := platformrelease.ReleaseCommitFromImageTag(ref.Tag); ok {
+		_, commitTagged := platformrelease.ReleaseCommitFromImageTag(ref.Tag)
+		if commitTagged {
 			action.Reason = "release image requires build from its source commit"
-			out = append(out, action)
-			continue
 		}
 		if opts.SkipRegistryProbe {
-			action.Reason = "registry not checked (dry-run)"
+			if !commitTagged {
+				action.Reason = "registry not checked (dry-run)"
+			}
 			out = append(out, action)
 			continue
 		}
 		exists, err := probe(ctx, image)
 		if err != nil {
-			return nil, fmt.Errorf("check registry for %s: %w", image, err)
+			return nil, fmt.Errorf("check registry for %s before building (verify Docker registry login): %w", image, err)
 		}
-		if exists {
+		if exists && !commitTagged {
 			action.Action = ImageActionReuse
 			action.Reason = "target tag already in registry"
 		}

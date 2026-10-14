@@ -140,7 +140,7 @@ default. Override the path with `MCP_DEPLOY_ENV=/path/to/other.env`. See
 | `MCP_REGISTRY_PUSH_MODE` | `internal` | rollout | `public` pushes directly to `registry.<domain>` using the workstation's selected Docker daemon. |
 
 MCP Auth updates use a separately reviewed release manifest and
-`mcp-runtime update --only mcp-auth`. The Runtime rollout wrapper does not build,
+`mcp-runtime update --only mcp-auth`. Runtime updates do not build,
 copy or change MCP Auth images.
 
 <a id="setup-behavior-read-by-hackdeploymcpruntime-orgsetupsh"></a>
@@ -215,11 +215,12 @@ gateway fails closed with 401 when a token's `aud` does not match.
 
 #### Rollout-only (`mcp-runtime update`)
 
-Set `MCP_DEPLOY_REF` to the selected stable release, `MCP_KUBE_CONTEXT` to the
-explicit target context, and `MCP_EXPECTED_CLUSTER_UID` to that cluster's
-`kube-system` namespace UID. The wrapper requires a clean source checkout at
-the release commit and delegates all component rollouts to `mcp-runtime update`.
-It does not rewrite pull Secrets or tenant NetworkPolicies.
+Use `mcp-runtime update` with the selected release or reviewed candidate
+manifest, an explicit `--kubeconfig`, `--context`, and `--expect-cluster-id`.
+For `--build`, use a clean source checkout matching the image source commit.
+Review `--dry-run` before applying with `--yes`. The CLI owns build, apply,
+rollout and rollback; no rollout shell wrapper is needed. It does not rewrite
+pull Secrets or tenant NetworkPolicies.
 
 <a id="multitenancy-test-hackdeploymcpruntime-orgmultitenancy-testsh"></a>
 
@@ -325,7 +326,7 @@ change; review it before `--yes`.
 
 `update` uses the published component manifest. All changed Runtime components roll sequentially with the CLI's
 rollback behavior. Existing registry-scoped pull Secrets, certificates,
-configuration and MCP Auth remain unchanged. Supply existing Docker registry
+unmanaged configuration keys and MCP Auth remain unchanged. Supply existing Docker registry
 credentials through an approved login workflow; `update` never copies an
 admin key into Kubernetes pull Secrets.
 
@@ -364,16 +365,27 @@ uses `MCP_SETUP_PLATFORM_MODE=tenant`, explicitly choose `org` or `public`.
 The hosted reference platform uses `public`, with public previews/listings,
 signed-in organization publishing, and team publishing all available.
 
-For this configuration-only transition, take the protected setup snapshot
-described in [Backups and recovery](#backups-and-recovery), build the CLI from
-the exact reviewed revision, and use a targeted `mcp-runtime update` manifest
-for `runtime-api`, `platform-api`, and `ui`. The reviewed manifest must declare
-only `PLATFORM_MODE` in each existing `mcp-shared-config` ConfigMap in
-`mcp-platform` and `mcp-observability`, with the new mode as its value. List
-`runtime-api`, `platform-api`, and `ui` as restart dependents of the platform
-ConfigMap. Do not pass `--only` when applying these ConfigMap entries: it skips
-release ConfigMaps. Review `--dry-run` with an explicit kubeconfig, context,
-and `--expect-cluster-id` before applying the same plan.
+Take the protected setup snapshot described in
+[Backups and recovery](#backups-and-recovery) and build the CLI from the exact
+reviewed revision. Use the reviewed candidate manifest with `--platform-mode`:
+
+```bash
+./bin/mcp-runtime update --release-manifest /protected/candidate.json \
+  --platform-mode public --kubeconfig "$MCP_SETUP_KUBECONFIG" \
+  --context "$MCP_KUBE_CONTEXT" --expect-cluster-id "$MCP_EXPECTED_CLUSTER_UID" \
+  --dry-run
+# Review the plan, then repeat with --yes instead of --dry-run.
+```
+
+The CLI sets only `PLATFORM_MODE` in the existing shared ConfigMaps, prepares
+the mode's catalog namespaces, and restarts runtime-api, platform-api and UI.
+The candidate manifest controls image changes; missing mode-dependent entries
+keep their current images. There is no need to write ConfigMap/restart entries
+manually. Do not pass `--only`: it skips shared configuration and conflicts
+with `--platform-mode`. Existing namespaces with another scope or no catalog
+ownership are rejected. Newly created catalogs remain after rollback; they
+are never deleted by update. Record `MCP_SETUP_PLATFORM_MODE=public` in the
+private installation profile so later setup uses the same reviewed mode.
 
 This transition needs no fresh setup or data reset. Preserve platform databases,
 registry images, Secrets, certificates, and the separately hosted identity

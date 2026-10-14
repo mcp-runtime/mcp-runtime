@@ -29,7 +29,8 @@ const (
 var preservedResources = []string{
 	"Secrets (credentials, registry pull secrets, TLS material)",
 	"PersistentVolumeClaims and PersistentVolumes (ClickHouse, Kafka, Postgres, registry data)",
-	"ConfigMaps (mcp-shared-config, operator and gateway config)",
+	"ConfigMap keys not declared by the release or --platform-mode",
+	"Namespace contents and scope labels (catalog namespaces are additive; existing scopes cannot change)",
 	"cert-manager Issuers, ClusterIssuers, and Certificates",
 	"Existing MCP Runtime custom resources (MCPServer, grants, sessions)",
 	"Services, Ingresses, IngressRoutes, NetworkPolicies, and RBAC (except the platform ServiceAccount/RBAC objects a release declares)",
@@ -92,8 +93,10 @@ type Plan struct {
 	ConfigMaps []ObjectResult `json:"configMaps,omitempty"`
 	// configMaps are the declared ConfigMaps; configToWrite are those whose
 	// live data differs.
-	configMaps    []platformrelease.ManifestConfigMap
-	configToWrite []platformrelease.ManifestConfigMap
+	configMaps        []platformrelease.ManifestConfigMap
+	configToWrite     []platformrelease.ManifestConfigMap
+	CatalogNamespaces []ObjectResult `json:"catalogNamespaces,omitempty"`
+	namespacesToWrite []*corev1.Namespace
 	// crdsYAML is the multi-document YAML applied when ApplyCRDs is true.
 	// It is omitted from JSON output (large); use CRDNames in plans.
 	crdsYAML  string
@@ -115,7 +118,7 @@ func (p *Plan) Changed() []Row {
 
 // NeedsApply reports whether the plan would mutate the cluster (CRDs and/or images).
 func (p *Plan) NeedsApply() bool {
-	return p != nil && (p.ApplyCRDs || len(p.objects) > 0 || len(p.configToWrite) > 0 || len(p.Changed()) > 0)
+	return p != nil && (p.ApplyCRDs || len(p.objects) > 0 || len(p.configToWrite) > 0 || len(p.namespacesToWrite) > 0 || len(p.Changed()) > 0)
 }
 
 // Blocked returns rows blocked by a safety rule.
@@ -238,6 +241,9 @@ func BuildPlan(ctx context.Context, cs kubernetes.Interface, m *platformrelease.
 		} else {
 			plan.configMaps = m.ConfigMaps
 		}
+	}
+	if err := planCatalogNamespaces(ctx, cs, plan); err != nil {
+		return nil, core.WrapWithBase(core.ErrUpdateInventoryFailed, err, err.Error())
 	}
 	only := sel.onlySet()
 	installedVersions := map[string]bool{}

@@ -71,6 +71,12 @@ func writePlanText(out io.Writer, plan *Plan) {
 		}
 		_ = tw.Flush()
 	}
+	if len(plan.CatalogNamespaces) > 0 {
+		fmt.Fprintln(out, "\nCatalog namespaces (additive; retained on rollback):")
+		for _, ns := range plan.CatalogNamespaces {
+			fmt.Fprintf(out, "  %s: %s\n", ns.Key, ns.Action)
+		}
+	}
 	if len(plan.CRDPreview) > 0 {
 		fmt.Fprintln(out, "\nCustomResourceDefinitions:")
 		tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
@@ -104,6 +110,9 @@ func writeConfirmSummary(out io.Writer, plan *Plan, build bool) {
 	if len(plan.configToWrite) > 0 {
 		fmt.Fprintf(out, "This update will write %d ConfigMap(s) and restart the workloads that read them.\n", len(plan.configToWrite))
 	}
+	if len(plan.namespacesToWrite) > 0 {
+		fmt.Fprintf(out, "This update will prepare %d catalog namespace(s); namespaces are retained on rollback.\n", len(plan.namespacesToWrite))
+	}
 	if build && len(plan.ImageBuilds) > 0 {
 		var builds, reuses int
 		for _, a := range plan.ImageBuilds {
@@ -125,6 +134,9 @@ func writeConfirmSummary(out io.Writer, plan *Plan, build bool) {
 
 func writeResultText(out io.Writer, res *Result) {
 	fmt.Fprintln(out, "\nUpdate result:")
+	for _, ns := range res.CatalogNamespaces {
+		fmt.Fprintf(out, "Catalog namespace %s: %s %s\n", ns.Key, dash(ns.Action), dash(ns.Error))
+	}
 	if len(res.PlatformObjects) > 0 {
 		tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 		fmt.Fprintln(tw, "OBJECT\tACTION\tDETAIL")
