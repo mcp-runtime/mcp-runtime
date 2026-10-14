@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Fixed
+
+- Platform API ingress accepts both bundled and Helm/k3s Traefik pod labels, restoring public registry authentication while keeping the gateway session-sync port isolated from Traefik ([#718](https://github.com/mcp-runtime/mcp-runtime/issues/718), [#745](https://github.com/mcp-runtime/mcp-runtime/pull/745)).
+
 ## [0.9.0] - 2026-10-14
 
 ### Added

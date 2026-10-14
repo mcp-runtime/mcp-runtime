@@ -19,6 +19,11 @@ on their own listener, and the service's sync port has no ingress route. The
 platform NetworkPolicy permits tenant gateway pods only on `8085`; `8080`
 accepts platform peers and the ingress controller. Operator gateway egress
 and projected token mounting are delivered by the migration PR.
+Ingress-controller access on `8080` matches the bundled Traefik's `app: traefik`
+label and Helm/k3s Traefik's `app.kubernetes.io/name: traefik` label, including
+controllers outside the `traefik` namespace. This permits public API routing
+and registry forward-auth; neither Traefik selector permits `8085`. Session sync
+still requires a managed gateway pod and the Pod-bound token checks below.
 
 TokenReview must confirm the requested audience and return the bound Pod name
 and UID. Platform-api then reads the live Pod, ReplicaSet, Deployment, and

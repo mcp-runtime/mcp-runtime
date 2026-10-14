@@ -195,6 +195,11 @@ spec:
   ingress:
     - from:
         - podSelector: {}
+        # Bundled ingress uses app=traefik; Helm/k3s uses the standard name label.
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              app: traefik
         - namespaceSelector: {}
           podSelector:
             matchLabels:

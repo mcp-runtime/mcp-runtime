@@ -9,9 +9,12 @@ import (
 	"strings"
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"mcp-runtime/pkg/sessionstate"
 )
@@ -38,6 +41,101 @@ func manifestObjects(t *testing.T, path string) []json.RawMessage {
 		}
 	}
 	return objects
+}
+
+func TestPlatformIngressAllowsSupportedTraefikWithoutSessionSync(t *testing.T) {
+	var ingress networkingv1.NetworkPolicy
+	for _, raw := range manifestObjects(t, "k8s/22-split-api-networkpolicy.yaml") {
+		var policy networkingv1.NetworkPolicy
+		if err := json.Unmarshal(raw, &policy); err != nil {
+			t.Fatal(err)
+		}
+		if policy.Name == "mcp-platform-api-ingress" {
+			ingress = policy
+		}
+	}
+	if ingress.Name == "" {
+		t.Fatal("platform API ingress policy missing")
+	}
+	var bundledLabels map[string]string
+	for _, raw := range manifestObjects(t, "config/ingress/base/traefik.yaml") {
+		var deployment appsv1.Deployment
+		if err := json.Unmarshal(raw, &deployment); err != nil {
+			t.Fatal(err)
+		}
+		if deployment.Kind == "Deployment" && deployment.Name == "traefik" {
+			bundledLabels = deployment.Spec.Template.Labels
+		}
+	}
+	if len(bundledLabels) == 0 {
+		t.Fatal("bundled Traefik pod labels missing")
+	}
+	for _, tc := range []struct {
+		name, namespace string
+		podLabels       map[string]string
+		public, sync    bool
+	}{
+		{"bundled Traefik", "traefik", bundledLabels, true, false},
+		{"k3s Traefik", "kube-system", map[string]string{"app.kubernetes.io/name": "traefik", "app.kubernetes.io/instance": "traefik-kube-system"}, true, false},
+		{"Helm Traefik custom namespace", "ingress", map[string]string{"app.kubernetes.io/name": "traefik", "app.kubernetes.io/instance": "traefik-ingress"}, true, false},
+		{"platform UI", "mcp-platform", map[string]string{"app": "mcp-ui"}, true, false},
+		{"tenant gateway", "team-a", map[string]string{"app.kubernetes.io/managed-by": "mcp-runtime"}, false, true},
+		{"unrelated tenant", "team-a", map[string]string{"app": "tenant-app"}, false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := networkPolicyAllowsTCP(t, ingress, tc.namespace, tc.podLabels, 8080); got != tc.public {
+				t.Errorf("public API ingress = %v, want %v", got, tc.public)
+			}
+			if got := networkPolicyAllowsTCP(t, ingress, tc.namespace, tc.podLabels, sessionstate.GatewayPort); got != tc.sync {
+				t.Errorf("session sync ingress = %v, want %v", got, tc.sync)
+			}
+		})
+	}
+}
+
+// Evaluate the peer AND/OR semantics and numeric TCP ports used by this policy.
+func networkPolicyAllowsTCP(t *testing.T, policy networkingv1.NetworkPolicy, namespace string, podLabels map[string]string, port int32) bool {
+	t.Helper()
+	for _, rule := range policy.Spec.Ingress {
+		portAllowed := len(rule.Ports) == 0
+		for _, candidate := range rule.Ports {
+			if candidate.Protocol != nil && *candidate.Protocol != corev1.ProtocolTCP {
+				continue
+			}
+			if candidate.Port == nil || candidate.Port.IntVal == port {
+				portAllowed = true
+			}
+		}
+		if !portAllowed {
+			continue
+		}
+		for _, peer := range rule.From {
+			if peer.NamespaceSelector == nil {
+				if namespace != policy.Namespace {
+					continue
+				}
+			} else {
+				selector, err := metav1.LabelSelectorAsSelector(peer.NamespaceSelector)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !selector.Matches(labels.Set{"kubernetes.io/metadata.name": namespace}) {
+					continue
+				}
+			}
+			if peer.PodSelector != nil {
+				selector, err := metav1.LabelSelectorAsSelector(peer.PodSelector)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !selector.Matches(labels.Set(podLabels)) {
+					continue
+				}
+			}
+			return true
+		}
+	}
+	return false
 }
 
 func TestSessionSyncPortIsNeverAnIngressBackend(t *testing.T) {
