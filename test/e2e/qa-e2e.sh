@@ -4553,6 +4553,7 @@ if checkpoint_enabled "policy"; then
     --human-id "${HUMAN_ID}" \
     --agent-id "${AGENT_ID}" \
     --team-id "${ADAPTER_TEAM_ID}" \
+    --expires-at "${ADAPTER_AGENT_EXPIRES_AT}" \
     --trust high \
     --side-effect read \
     --tool-rule aaa-ping:allow:low \
@@ -4560,12 +4561,6 @@ if checkpoint_enabled "policy"; then
     --tool-rule upper:allow:medium \
     --output "${WORKDIR}/access-grant.yaml" \
     --force
-  python3 - "${WORKDIR}/access-grant.yaml" "${ADAPTER_AGENT_EXPIRES_AT}" <<'PY'
-from pathlib import Path
-import sys
-path = Path(sys.argv[1])
-path.write_text(path.read_text().replace("spec:\n", "spec:\n  expiresAt: " + sys.argv[2] + "\n", 1))
-PY
   (cd "${WORKDIR}" && "${PROJECT_ROOT}/bin/mcp-runtime" access --use-kube grant apply --file access-grant.yaml)
 
   echo "[policy] applying low-trust session via CLI"
