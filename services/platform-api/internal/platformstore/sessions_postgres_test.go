@@ -143,8 +143,52 @@ func TestPostgresSessionSyncLifecycle(t *testing.T) {
 	}
 	base.ServerUID = "generation-2"
 	base.Binding.Name = "new-generation"
+	newItem, err := s.PutSession(ctx, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.DeleteSessionVersioned(ctx, newItem.Namespace, string(newItem.Binding.Name), newItem.UID); err != nil {
+		t.Fatal(err)
+	}
+	base.ServerUID = "generation-3"
+	if _, err = s.PutSession(ctx, base); !errors.Is(err, sessionstate.ErrConflict) {
+		t.Fatalf("deleted certificate name reused after republish: %v", err)
+	}
+	deletedName := base.Binding.Name
+	base.Binding.Name = "fresh-generation"
+	if _, err = s.PutSession(ctx, base); err != nil {
+		t.Fatalf("new name rejected: %v", err)
+	}
+	// Advance the global sequence and write once to exercise real retention
+	// pruning without synthesizing 100,000 session records. Identity reservations
+	// and persisted agent revocations must outlive the bounded change log.
+	if _, err = db.ExecContext(ctx, `UPDATE session_sync_state SET sequence=sequence+$1 WHERE singleton`, sessionChangeRetention+1); err != nil {
+		t.Fatal(err)
+	}
 	if _, err = s.PutSession(ctx, base); err != nil {
 		t.Fatal(err)
+	}
+	var historicalDeletes int
+	if err = db.QueryRowContext(ctx, `SELECT count(*) FROM session_changes WHERE data->>'id'=$1 AND data->>'operation'='delete'`, newItem.ID).Scan(&historicalDeletes); err != nil {
+		t.Fatal(err)
+	}
+	if historicalDeletes != 0 {
+		t.Fatal("deleted change event was not pruned")
+	}
+	deletedCandidate := base
+	deletedCandidate.Binding.Name = deletedName
+	if _, err = s.PutSession(ctx, deletedCandidate); !errors.Is(err, sessionstate.ErrConflict) {
+		t.Fatalf("deleted identity reservation lost after pruning: %v", err)
+	}
+	revoked, found, err := s.GetSession(ctx, item.Namespace, string(item.Binding.Name))
+	if err != nil || !found || !revoked.Binding.Revoked {
+		t.Fatalf("agent revocation lost after pruning: %+v found=%v err=%v", revoked, found, err)
+	}
+	retiredCandidate := base
+	retiredCandidate.ServerUID = server.UID
+	retiredCandidate.Binding.Name = "new-name-old-server"
+	if _, err = s.PutSession(ctx, retiredCandidate); !errors.Is(err, sessionstate.ErrConflict) {
+		t.Fatalf("retired server reservation lost after pruning: %v", err)
 	}
 	// A restore fence works even when sequence remains numerically unchanged.
 	snap, err = s.SessionSnapshot(ctx, sessionstate.Server{Namespace: server.Namespace, UID: base.ServerUID})

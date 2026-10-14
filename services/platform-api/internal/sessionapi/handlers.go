@@ -70,7 +70,7 @@ func storeError(w http.ResponseWriter, err error) {
 	case errors.Is(err, sessionstate.ErrNotFound):
 		fail(w, 404, "session not found")
 	case errors.Is(err, sessionstate.ErrConflict):
-		fail(w, 409, "session identity conflicts with existing state or retired server")
+		fail(w, 409, "session identity conflicts, was deleted, or belongs to a retired server; create a new session name")
 	case errors.Is(err, sessionstate.ErrInactiveAgent):
 		fail(w, 403, "session agent is not active in the subject team")
 	default:

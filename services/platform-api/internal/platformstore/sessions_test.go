@@ -29,7 +29,7 @@ func TestHumanAndTeamOnlySessionsDoNotRequireAgentDirectory(t *testing.T) {
 			}
 			mock.ExpectBegin()
 			expectStateLock(mock)
-			mock.ExpectQuery("SELECT EXISTS.*session_retired_servers").WithArgs(item.ServerUID).WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+			mock.ExpectQuery("SELECT EXISTS.*session_retired_servers").WithArgs(item.ServerUID, item.ID).WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
 			mock.ExpectQuery("SELECT data FROM sessions WHERE id=").WithArgs(item.ID).WillReturnError(sql.ErrNoRows)
 			mock.ExpectExec("INSERT INTO sessions").WillReturnResult(sqlmock.NewResult(0, 1))
 			mock.ExpectQuery("UPDATE session_sync_state SET sequence=sequence\\+1").WillReturnRows(sqlmock.NewRows([]string{"sequence"}).AddRow(11))
@@ -155,7 +155,7 @@ func TestPutSessionRejectsRetiredUIDBeforeAgentCheck(t *testing.T) {
 	s, mock := sessionTestStore(t)
 	mock.ExpectBegin()
 	expectStateLock(mock)
-	mock.ExpectQuery("SELECT EXISTS.*session_retired_servers").WithArgs("generation-1").WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery("SELECT EXISTS.*session_retired_servers").WithArgs("generation-1", "tenant/sess").WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectRollback()
 	_, err := s.PutSession(context.Background(), sessionFixture())
 	if !errors.Is(err, sessionstate.ErrConflict) {
@@ -169,7 +169,7 @@ func TestPutSessionRejectsInactiveOrWrongTeam(t *testing.T) {
 			s, mock := sessionTestStore(t)
 			mock.ExpectBegin()
 			expectStateLock(mock)
-			mock.ExpectQuery("SELECT EXISTS.*session_retired_servers").WithArgs("generation-1").WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+			mock.ExpectQuery("SELECT EXISTS.*session_retired_servers").WithArgs("generation-1", "tenant/sess").WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
 			mock.ExpectQuery("SELECT status,team_id::text FROM agents WHERE id=.*FOR UPDATE").WithArgs("agent").WillReturnRows(sqlmock.NewRows([]string{"status", "team"}).AddRow(tt.status, tt.team))
 			mock.ExpectRollback()
 			_, err := s.PutSession(context.Background(), sessionFixture())
@@ -227,5 +227,22 @@ func TestDeleteSessionChecksExpectedUID(t *testing.T) {
 	mock.ExpectRollback()
 	if err := s.DeleteSessionVersioned(context.Background(), item.Namespace, string(item.Binding.Name), "old-session-uid"); !errors.Is(err, sessionstate.ErrConflict) {
 		t.Fatalf("stale delete error=%v", err)
+	}
+}
+
+func TestDeleteSessionReservesCertificateIdentityBeforeCommit(t *testing.T) {
+	s, mock := sessionTestStore(t)
+	item := sessionFixture()
+	data, _ := json.Marshal(item)
+	mock.ExpectBegin()
+	expectStateLock(mock)
+	mock.ExpectQuery("SELECT data FROM sessions WHERE namespace=.*AND name=").WithArgs(item.Namespace, string(item.Binding.Name)).WillReturnRows(sqlmock.NewRows([]string{"data"}).AddRow(data))
+	mock.ExpectExec("INSERT INTO session_deleted_identities").WithArgs(item.ID).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("DELETE FROM sessions WHERE namespace=.*AND name=").WithArgs(item.Namespace, string(item.Binding.Name)).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery("UPDATE session_sync_state SET sequence=sequence\\+1").WillReturnRows(sqlmock.NewRows([]string{"sequence"}).AddRow(11))
+	mock.ExpectExec("INSERT INTO session_changes").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+	if err := s.DeleteSessionVersioned(context.Background(), item.Namespace, string(item.Binding.Name), item.UID); err != nil {
+		t.Fatal(err)
 	}
 }

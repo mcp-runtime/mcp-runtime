@@ -46,6 +46,14 @@ issuance validates and locks the agent in the same transaction.
 Management supports human-only and team-only sessions too; directory validation
 applies only when an agent ID is present. Deletion can supply `?uid=<session UID>`
 to reject a stale retirement snapshot rather than delete a replacement session.
+Deleted session names are permanently reserved within their namespace. Create a
+new name or re-enroll the adapter after deletion; reusing the deleted name
+returns `409 Conflict`, even for a republished server with a different UID.
+Certificates identify `namespace/name`, so allowing that name to identify a new
+row would let an old certificate inherit the new binding. Identity reservations
+are retained separately from the bounded change log and must be included in
+database backups. Existing rows can still be updated or explicitly unrevoked
+when their agent and server remain active.
 
 A snapshot contains all active, unexpired sessions for the authenticated server
 and one epoch/sequence cursor. Snapshot and changes use a repeatable-read SQL

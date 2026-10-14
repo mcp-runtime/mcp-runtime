@@ -33,6 +33,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 - The public MCPSnoop demo enables its gateway in observe mode, retaining anonymous access while exposing trace IDs, correlated logs, tool metrics and analytics ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
 - Admin usage analytics now includes the per-server gateway events written with `<server>-gateway` source labels, instead of querying only the unused global `mcp-gateway` label ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
 
+### Security
+
+- Deleted session names remain permanently reserved within their namespace so an old certificate cannot inherit a replacement session's access. After deletion, create a new session name or re-enroll the adapter; recreating a deleted name returns `409 Conflict`, including after server retirement and republishing ([#718](https://github.com/mcp-runtime/mcp-runtime/issues/718)).
+
 ## [0.8.1] - 2026-10-14
 
 v0.8.0 was tagged but its release assets were never published: the release

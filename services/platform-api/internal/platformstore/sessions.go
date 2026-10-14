@@ -41,6 +41,11 @@ CREATE INDEX IF NOT EXISTS idx_session_changes_server ON session_changes(server_
 CREATE TABLE IF NOT EXISTS session_retired_servers (
  server_uid text PRIMARY KEY, retired_at timestamptz NOT NULL DEFAULT now()
 );
+-- Certificate identities contain namespace/name, not the row UID. Keep deleted
+-- identity reservations permanently, independently of bounded sync history.
+CREATE TABLE IF NOT EXISTS session_deleted_identities (
+ id text PRIMARY KEY, deleted_at timestamptz NOT NULL DEFAULT now()
+);
 `
 
 const sessionChangeRetention = 100000
@@ -151,7 +156,7 @@ func (s *Store) PutSession(ctx context.Context, item sessionstate.Session) (sess
 		return sessionstate.Session{}, err
 	}
 	var retired bool
-	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM session_retired_servers WHERE server_uid=$1)`, item.ServerUID).Scan(&retired); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM session_retired_servers WHERE server_uid=$1) OR EXISTS(SELECT 1 FROM session_deleted_identities WHERE id=$2)`, item.ServerUID, item.ID).Scan(&retired); err != nil {
 		return sessionstate.Session{}, err
 	}
 	if retired {
@@ -351,6 +356,9 @@ func (s *Store) DeleteSessionVersioned(ctx context.Context, namespace, name, uid
 	}
 	if uid != "" && item.UID != uid {
 		return sessionstate.ErrConflict
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO session_deleted_identities(id) VALUES($1) ON CONFLICT DO NOTHING`, item.ID); err != nil {
+		return err
 	}
 	if _, err = tx.ExecContext(ctx, `DELETE FROM sessions WHERE namespace=$1 AND name=$2`, namespace, name); err != nil {
 		return err
