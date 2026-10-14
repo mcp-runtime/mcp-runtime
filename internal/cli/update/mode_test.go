@@ -93,6 +93,33 @@ func TestModeCommandFailureRestoresConfigRetainsCatalogs(t *testing.T) {
 	}
 }
 
+func TestModeOnlyDependentsNeverBuildRetainedImages(t *testing.T) {
+	cs := modeInstall()
+	m := manifest(t, "v0.9.0")
+	m.Components = []platformrelease.ManifestComponent{{Name: "ui", ConfigOnly: true}}
+	d := testDeps(cs, m, nil)
+	d.build = BuildOptions{
+		RegistryHasImage: func(context.Context, string) (bool, error) {
+			t.Fatal("config-only images must not be probed")
+			return false, nil
+		},
+		BuildImage: func(context.Context, string, string, imageBuildSpec, string) error {
+			t.Fatal("config-only images must not be built")
+			return nil
+		},
+	}
+	if _, err := execute(t, d, "--release-manifest", "candidate.json", "--platform-mode", "public", "--build", "--source", "../../..", "--yes"); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range modeDependents {
+		component, _ := platformrelease.Lookup(name)
+		dep, err := cs.AppsV1().Deployments(component.Namespace).Get(context.Background(), component.Deployment, metav1.GetOptions{})
+		if err != nil || !strings.HasSuffix(dep.Spec.Template.Spec.Containers[0].Image, ":v0.8.1") {
+			t.Fatalf("mode-only dependent image changed: %+v %v", dep, err)
+		}
+	}
+}
+
 func TestModeCommandRejectsUnsafeOptionsBeforeClusterAccess(t *testing.T) {
 	for _, args := range [][]string{
 		{"--platform-mode", "tenant"}, {"--platform-mode", " "}, {"--platform-mode", "public", "--only", "ui"},

@@ -63,8 +63,9 @@ type Row struct {
 	// (ServiceAccount, token mount, required env).
 	Wiring []string `json:"wiring,omitempty"`
 
-	component platformrelease.Component
-	wiring    *wiringChange
+	component  platformrelease.Component
+	wiring     *wiringChange
+	configOnly bool
 }
 
 // Plan is the full update plan.
@@ -261,6 +262,7 @@ func BuildPlan(ctx context.Context, cs kubernetes.Interface, m *platformrelease.
 			plan.Rows = append(plan.Rows, row)
 			continue
 		}
+		row.configOnly = entry.ConfigOnly
 		row.TargetVersion = entry.Tag
 		if entry.ConfigOnly {
 			row.TargetVersion = ""

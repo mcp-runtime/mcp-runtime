@@ -1,6 +1,6 @@
 // Package update owns the `mcp-runtime update` command, which moves an
-// installed MCP Runtime platform to a release by patching only the images of
-// platform services whose versions changed.
+// installed MCP Runtime platform to a release through declared images, wiring,
+// configuration and additive platform resources.
 package update
 
 import (

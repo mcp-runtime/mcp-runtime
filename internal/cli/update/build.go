@@ -136,7 +136,7 @@ func rewriteBuiltTargetsToTags(plan *Plan) error {
 	}
 	for i := range plan.Rows {
 		row := &plan.Rows[i]
-		if row.Action != ActionUpdate || !row.component.Built {
+		if row.Action != ActionUpdate || !row.component.Built || row.configOnly {
 			continue
 		}
 		tagOnly, err := tagOnlyImage(row.TargetImage)
@@ -163,7 +163,7 @@ func planImageBuilds(ctx context.Context, plan *Plan, opts BuildOptions) ([]Imag
 	seen := map[string]bool{}
 	var out []ImageBuildAction
 	for _, row := range plan.Changed() {
-		if !row.component.Built {
+		if !row.component.Built || row.configOnly {
 			continue
 		}
 		if _, ok := builtImageSpecs[row.Component]; !ok {
