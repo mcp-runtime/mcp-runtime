@@ -31,6 +31,22 @@ explicit isolated Kind kubeconfig from the contributor guide.
 | Metadata | `go test ./pkg/metadata/... -count=1` | `.mcp` loading, host resolution, manifest generation |
 | Platform services | `go test -race -count=1 ./...` in each service module | API, UI, ingest, processor, proxy service logic |
 
+## Frontend and browser regressions
+
+In `services/ui/frontend`, run `npm ci`, `npm test -- --maxWorkers=4`, and
+`npm run build`. The build replaces committed assets under `services/ui/static`;
+commit the generated HTML, JavaScript and CSS together.
+
+Install the pinned browser with `npx playwright install chromium`, then run
+`npm run test:browser`. The `@playwright/test` version in `package-lock.json`
+owns the browser revision; follow the [official Playwright CI guide](https://playwright.dev/docs/ci)
+when updating it. CI installs system browser dependencies too. These tests
+exercise the rendered application with explicit API fixtures, including agent
+lifecycle failures and namespace-qualified access links. They do not establish
+real service authorization, certificate enforcement or live cluster readiness.
+Use Kind/Staging E2E and the dashboard QA skill for those gates. Failed browser
+runs retain screenshots and traces in `frontend/test-results` (ignored by Git).
+
 ## Golden CLI Tests
 
 CLI help and stable output snapshots live under `test/golden/cli`.

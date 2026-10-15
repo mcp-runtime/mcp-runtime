@@ -86,7 +86,7 @@ describe("AgentsPanel", () => {
     const user = userEvent.setup();
     setup({ role: "user", teamRole: "owner", accessNamespace: "mcp-team-other" });
     await user.click(await screen.findByTestId("agent-open"));
-    expect(await screen.findByText("agent-grant")).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "mcp-team-other/agent-grant" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Disable" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Revoke" })).not.toBeInTheDocument();
   });

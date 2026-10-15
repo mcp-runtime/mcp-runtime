@@ -15,6 +15,26 @@ import (
 
 type matrixEventStub struct{}
 
+func TestAttributedEventQueriesRemainAdminOnly(t *testing.T) {
+	srv := &server{authentic: platformauth.Authenticator{Secret: []byte("test-secret"), Audience: platformauth.AudienceAnalytics, ServiceAPIKeys: map[string]struct{}{"test-user": {}, "test-admin": {}}, AdminAPIKeys: map[string]struct{}{"test-admin": {}}}, events: analytics.NewHandler(matrixEventStub{})}
+	mux := http.NewServeMux()
+	srv.registerRoutes(mux)
+	for _, tt := range []struct {
+		key    string
+		status int
+	}{{"", 401}, {"test-user", 403}, {"test-admin", 200}} {
+		req := httptest.NewRequest("GET", "/api/v1/events?matched_grant=grant&matched_grant_namespace=tenant&matched_session=session&matched_session_namespace=tenant&since=2026-10-07T12:00:00Z&until=2026-10-14T12:00:00Z", nil)
+		if tt.key != "" {
+			req.Header.Set("x-api-key", tt.key)
+		}
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != tt.status {
+			t.Fatalf("key=%q status=%d body=%s", tt.key, rec.Code, rec.Body.String())
+		}
+	}
+}
+
 func (matrixEventStub) QueryEvents(_ context.Context, limit, _ int) ([]clickhousepkg.EventRow, error) {
 	return make([]clickhousepkg.EventRow, limit), nil
 }

@@ -2,7 +2,10 @@ package analytics
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"strings"
+	"time"
 
 	"mcp-runtime/pkg/apihttp"
 	clickhousepkg "mcp-runtime/pkg/clickhouse"
@@ -39,7 +42,11 @@ func (h *Handler) Events(w http.ResponseWriter, r *http.Request) {
 
 	var events []clickhousepkg.EventRow
 	if hasEventFilters(r) {
-		filters := eventFiltersFromRequest(r, limit)
+		filters, filterErr := eventFiltersFromRequest(r, limit, time.Now().UTC())
+		if filterErr != nil {
+			apihttp.WriteError(w, nil, filterErr)
+			return
+		}
 		filters.Offset = offset
 		events, err = h.events.QueryEventsFiltered(r.Context(), filters)
 	} else {
@@ -112,30 +119,66 @@ func hasEventFilters(r *http.Request) bool {
 	for _, key := range []string{
 		"trace_id", "source", "event_type", "server", "namespace", "team_id",
 		"cluster", "human_id", "agent_id", "session_id", "decision", "tool_name", "reason",
+		"matched_grant", "matched_grant_namespace", "matched_session", "matched_session_namespace", "since", "until",
 	} {
-		if q.Get(key) != "" {
+		if q.Get(key) != "" || ((key == "since" || key == "until") && q.Has(key)) {
 			return true
 		}
 	}
 	return false
 }
 
-func eventFiltersFromRequest(r *http.Request, limit int) clickhousepkg.EventFilters {
+func eventFiltersFromRequest(r *http.Request, limit int, now time.Time) (clickhousepkg.EventFilters, error) {
 	q := r.URL.Query()
-	return clickhousepkg.EventFilters{
-		TraceID:   q.Get("trace_id"),
-		Source:    q.Get("source"),
-		EventType: q.Get("event_type"),
-		Server:    q.Get("server"),
-		Namespace: q.Get("namespace"),
-		TeamID:    q.Get("team_id"),
-		Cluster:   q.Get("cluster"),
-		HumanID:   q.Get("human_id"),
-		AgentID:   q.Get("agent_id"),
-		SessionID: q.Get("session_id"),
-		Decision:  q.Get("decision"),
-		ToolName:  q.Get("tool_name"),
-		Reason:    q.Get("reason"),
-		Limit:     limit,
+	filters := clickhousepkg.EventFilters{
+		TraceID:      q.Get("trace_id"),
+		Source:       q.Get("source"),
+		EventType:    q.Get("event_type"),
+		Server:       q.Get("server"),
+		Namespace:    q.Get("namespace"),
+		TeamID:       q.Get("team_id"),
+		Cluster:      q.Get("cluster"),
+		HumanID:      q.Get("human_id"),
+		AgentID:      q.Get("agent_id"),
+		SessionID:    q.Get("session_id"),
+		Decision:     q.Get("decision"),
+		ToolName:     q.Get("tool_name"),
+		Reason:       q.Get("reason"),
+		Limit:        limit,
+		MatchedGrant: q.Get("matched_grant"), MatchedGrantNamespace: q.Get("matched_grant_namespace"),
+		MatchedSession: q.Get("matched_session"), MatchedSessionNamespace: q.Get("matched_session_namespace"),
 	}
+	for _, pair := range []struct{ name, namespace string }{{"matched_grant", "matched_grant_namespace"}, {"matched_session", "matched_session_namespace"}} {
+		name, namespace := q.Get(pair.name), q.Get(pair.namespace)
+		if (name == "") != (namespace == "") {
+			return filters, apihttp.BadRequest(apihttp.CodeInvalidQueryParam, fmt.Sprintf("%s and %s must be supplied together", pair.name, pair.namespace))
+		}
+		if len(name) > 256 || len(namespace) > 256 || strings.TrimSpace(name) != name || strings.TrimSpace(namespace) != namespace {
+			return filters, apihttp.BadRequest(apihttp.CodeInvalidQueryParam, "matched access names and namespaces must be exact values of at most 256 bytes")
+		}
+	}
+	if filters.MatchedGrant != "" || filters.MatchedSession != "" || q.Has("since") || q.Has("until") {
+		var err error
+		filters.Since, err = apihttp.QueryRFC3339Time(r, "since")
+		if err != nil {
+			return filters, err
+		}
+		filters.Until, err = apihttp.QueryRFC3339Time(r, "until")
+		if err != nil {
+			return filters, err
+		}
+		if filters.Until.IsZero() {
+			filters.Until = now
+		}
+		if filters.Since.IsZero() {
+			filters.Since = filters.Until.Add(-7 * 24 * time.Hour)
+		}
+		if !filters.Since.Before(filters.Until) {
+			return filters, apihttp.BadRequest(apihttp.CodeInvalidQueryParam, "since must be earlier than until")
+		}
+		if filters.Until.Sub(filters.Since) > 365*24*time.Hour {
+			return filters, apihttp.BadRequest(apihttp.CodeInvalidQueryParam, "event time window must not exceed 365 days")
+		}
+	}
+	return filters, nil
 }

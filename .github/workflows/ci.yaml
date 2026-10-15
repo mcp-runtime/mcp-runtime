@@ -203,6 +203,43 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
 
+  ui-regression:
+    name: UI unit and browser regressions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: services/ui/frontend/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: services/ui/frontend
+        run: npm ci
+      - name: Unit and accessibility tests
+        working-directory: services/ui/frontend
+        run: npm test -- --maxWorkers=2
+      - name: Install Chromium
+        working-directory: services/ui/frontend
+        run: npx playwright install --with-deps chromium
+      - name: Browser workflows with API fixtures
+        working-directory: services/ui/frontend
+        run: npm run test:browser
+      - name: Verify committed frontend assets
+        working-directory: services/ui/frontend
+        run: |
+          npm run build
+          git diff --exit-code -- ../static
+          test -z "$(git ls-files --others --exclude-standard ../static)"
+      - name: Upload failed browser evidence
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ui-browser-failures
+          path: services/ui/frontend/test-results
+          if-no-files-found: ignore
+
   qa-e2e:
     name: QA E2E
     runs-on: ubuntu-24.04

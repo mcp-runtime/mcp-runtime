@@ -176,7 +176,7 @@ export function App() {
   } else if (route.workspace === "agents") {
     content = <AgentsPanel auth={auth} onSignIn={handleSignIn} initialTeam={route.params.team} initialAgent={route.params.agent} onTeamChange={(team) => setParams({ team })} onAgentChange={(agent) => setParams({ agent })} />;
   } else if (route.workspace === "access") {
-    content = <AccessWorkspace auth={auth} onSignIn={handleSignIn} />;
+    content = <AccessWorkspace auth={auth} onSignIn={handleSignIn} params={route.params} onClearReference={() => navigate({ workspace: "access" })} />;
   } else if (route.workspace === "activity") {
     content = <ActivityWorkspace auth={auth} onSignIn={handleSignIn} />;
   } else if (route.workspace === "keys") {

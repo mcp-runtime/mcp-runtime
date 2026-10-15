@@ -53,6 +53,40 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
   /api/v1/events:
     get:
+      summary: Query audit events (admin only)
+      description: Exact access-object attribution and time filters are applied before pagination. Attribution namespace identifies the matched object, separately from the server namespace. Events without explicit matched attribution are excluded from those filters.
+      parameters:
+        - in: query
+          name: matched_grant
+          description: Exact payload matched_grant name; requires matched_grant_namespace.
+          schema: {type: string, maxLength: 256}
+        - in: query
+          name: matched_grant_namespace
+          description: Exact namespace of the matched grant; requires matched_grant.
+          schema: {type: string, maxLength: 256}
+        - in: query
+          name: matched_session
+          description: Exact payload matched_session name; requires matched_session_namespace.
+          schema: {type: string, maxLength: 256}
+        - in: query
+          name: matched_session_namespace
+          description: Exact namespace of the matched session; requires matched_session.
+          schema: {type: string, maxLength: 256}
+        - in: query
+          name: since
+          description: Inclusive RFC3339 lower timestamp bound. Attribution or explicit time filters default to seven days before until. The maximum window is 365 days.
+          schema: {type: string, format: date-time}
+        - in: query
+          name: until
+          description: Exclusive RFC3339 upper timestamp bound, defaulting to now for attribution or time filters; must be later than since.
+          schema: {type: string, format: date-time}
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 1000, default: 100}
+        - in: query
+          name: cursor
+          description: Opaque pagination cursor from the previous response. Keep the same filters while paging.
+          schema: {type: string}
       responses:
         "200":
           description: event list
@@ -68,6 +102,12 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "401":
           description: unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "403":
+          description: admin role required
           content:
             application/json:
               schema:

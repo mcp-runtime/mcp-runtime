@@ -5,7 +5,9 @@ import { AccessControlPanel, type AccessSelection } from "../admin/AccessControl
 import { AccessDetail } from "../admin/AccessDetail";
 import { Button } from "../../ui/Button";
 import { PageHeader } from "../../ui/PageHeader";
-import { EmptyState, LoadingState } from "../../ui/States";
+import { EmptyState, ErrorState, LoadingState } from "../../ui/States";
+import { getAgent, listGrants, listSessions } from "../../api/admin";
+import { ADMIN_QUERY_KEY } from "../../hooks/useAdminData";
 import { listNamespaces } from "../../api/catalog";
 import { isAdmin, type AuthStatus } from "../../api/types";
 import { CATALOG_QUERY_KEY } from "../../hooks/useCatalog";
@@ -14,14 +16,30 @@ import { useTeams } from "../../hooks/useAdminData";
 type AccessWorkspaceProps = {
   auth: AuthStatus;
   onSignIn: () => void;
+  params?: Record<string, string>;
+  onClearReference?: () => void;
 };
 
 // Grants and agent sessions are any authenticated user's territory, not
 // admin-only - the backend registers /runtime/grants and /runtime/sessions
 // with its plain auth() middleware, not adminOnly().
-export function AccessWorkspace({ auth, onSignIn }: AccessWorkspaceProps) {
+export function AccessWorkspace({ auth, onSignIn, params = {}, onClearReference }: AccessWorkspaceProps) {
   const [namespace, setNamespace] = useState("");
   const [selection, setSelection] = useState<AccessSelection | null>(null);
+  const linked = (params.kind === "grant" || params.kind === "session") && Boolean(params.namespace && params.name);
+  const linkedQuery = useQuery({
+    queryKey: [ADMIN_QUERY_KEY, "access-reference", params.kind, params.namespace, params.name, params.agent],
+    enabled: auth.authenticated && linked,
+    queryFn: async (): Promise<AccessSelection | null> => {
+      const agent = params.agent ? await getAgent(params.agent) : null;
+      if (params.kind === "grant") {
+        const item = (agent?.grants ?? await listGrants(params.namespace)).find((row) => row.name === params.name && row.namespace === params.namespace);
+        return item ? { kind: "grant", item } : null;
+      }
+      const item = (agent?.sessions ?? await listSessions(params.namespace)).find((row) => row.name === params.name && row.namespace === params.namespace);
+      return item ? { kind: "session", item } : null;
+    },
+  });
   const teamsQuery = useTeams(auth.authenticated);
   const canManage = isAdmin(auth) || teamsQuery.data?.some((team) => team.namespace === namespace && team.role === "owner") === true;
 
@@ -70,11 +88,14 @@ export function AccessWorkspace({ auth, onSignIn }: AccessWorkspaceProps) {
     );
   }
 
-  if (selection) {
+  if (linked && linkedQuery.isPending) return <LoadingState label="Loading access record…" />;
+  if (linked && (linkedQuery.error || !linkedQuery.data)) return <ErrorState title="Access record is unavailable." detail="It may have been removed or may be outside your permitted scope." onRetry={() => void linkedQuery.refetch()} />;
+  const activeSelection = linked ? linkedQuery.data : selection;
+  if (activeSelection) {
     return (
       <AccessDetail
-        selection={selection}
-        onBack={() => setSelection(null)}
+        selection={activeSelection}
+        onBack={() => { setSelection(null); onClearReference?.(); }}
         sectionLabel="Access control"
       />
     );

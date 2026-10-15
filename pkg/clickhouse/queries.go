@@ -151,21 +151,27 @@ func (c *Client) QueryEventTypes(ctx context.Context) ([]EventTypeStat, error) {
 
 // EventFilters provides filtering options for events.
 type EventFilters struct {
-	TraceID   string
-	Source    string
-	EventType string
-	Server    string
-	Namespace string
-	TeamID    string
-	Cluster   string
-	HumanID   string
-	AgentID   string
-	SessionID string
-	Decision  string
-	ToolName  string
-	Reason    string
-	Limit     int
-	Offset    int
+	TraceID                 string
+	Source                  string
+	EventType               string
+	Server                  string
+	Namespace               string
+	TeamID                  string
+	Cluster                 string
+	HumanID                 string
+	AgentID                 string
+	SessionID               string
+	Decision                string
+	ToolName                string
+	Reason                  string
+	MatchedGrant            string
+	MatchedGrantNamespace   string
+	MatchedSession          string
+	MatchedSessionNamespace string
+	Since                   time.Time
+	Until                   time.Time
+	Limit                   int
+	Offset                  int
 }
 
 // QueryEventsFiltered returns events filtered by various fields.
@@ -253,6 +259,23 @@ func buildEventFilterWhereClause(filters EventFilters) (string, []interface{}) {
 	if filters.Reason != "" {
 		conditions = append(conditions, "JSONExtractString(payload, 'reason') = ?")
 		args = append(args, filters.Reason)
+	}
+	for _, filter := range []struct{ field, value string }{
+		{"matched_grant", filters.MatchedGrant}, {"matched_grant_namespace", filters.MatchedGrantNamespace},
+		{"matched_session", filters.MatchedSession}, {"matched_session_namespace", filters.MatchedSessionNamespace},
+	} {
+		if filter.value != "" {
+			conditions = append(conditions, "JSONExtractString(payload, '"+filter.field+"') = ?")
+			args = append(args, filter.value)
+		}
+	}
+	if !filters.Since.IsZero() {
+		conditions = append(conditions, "timestamp >= ?")
+		args = append(args, filters.Since.UTC())
+	}
+	if !filters.Until.IsZero() {
+		conditions = append(conditions, "timestamp < ?")
+		args = append(args, filters.Until.UTC())
 	}
 
 	whereClause := ""

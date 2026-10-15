@@ -11,6 +11,7 @@ import { ProportionList } from "../../ui/ProportionBar";
 import { MetricGrid } from "../../ui/MetricCard";
 import { UsageMetrics } from "../usage/UsageMetrics";
 import { UsageSeries } from "../usage/UsageSeries";
+import { GatewayAuditPanel } from "./GatewayAuditPanel";
 import { formatAbsolute, formatTimestamp } from "../../lib/format";
 import { useAdminReload, useTeams, useUsage } from "../../hooks/useAdminData";
 import type {
@@ -558,6 +559,7 @@ export function UsageAnalyticsPanel({ onSignIn }: Props) {
           </>
         ) : null}
       </AsyncSection>
+      <GatewayAuditPanel />
     </>
   );
 }
