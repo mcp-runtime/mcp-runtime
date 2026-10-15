@@ -61,7 +61,7 @@ classify_path() {
       add_scenario "oauth"
       return
       ;;
-    test/e2e/scenarios/cross-team.sh|test/e2e/cross_team_assertions.py|test/e2e/cross_team_assertions_test.py|services/runtime-api/internal/runtimeapi/cross_team*|services/runtime-api/internal/runtimeapi/delegation_recipients*|services/runtime-api/internal/runtimeapi/grant_bulk_revoke*|pkg/access/grant_sessions.go|test/e2e/lib/adapter-certificates.sh|test/e2e/lib/certmanager-acceptance.sh)
+    test/e2e/scenarios/cross-team.sh|test/e2e/cross_team_assertions.py|test/e2e/cross_team_assertions_test.py|services/runtime-api/internal/runtimeapi/cross_team*|services/runtime-api/internal/runtimeapi/delegation_recipients*|services/runtime-api/internal/runtimeapi/grant_bulk_revoke*|pkg/access/grant_sessions.go|test/e2e/session_revocation.py|test/e2e/session_revocation_test.py|test/e2e/lib/adapter-certificates.sh|test/e2e/lib/certmanager-acceptance.sh)
       add_scenario "adapter-certificates"
       return
       ;;

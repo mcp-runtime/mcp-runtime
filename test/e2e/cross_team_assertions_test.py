@@ -29,7 +29,7 @@ class CrossTeamAssertionsTest(unittest.TestCase):
 
     def test_revocation_requires_http_401_and_session_revoked(self):
         response = subprocess.CompletedProcess([], 0, '{"error":"session_revoked"}\n401', "")
-        with patch("cross_team_assertions.subprocess.run", return_value=response) as run, patch("cross_team_assertions.time.monotonic", side_effect=[0, 0.1, 0.2]):
+        with patch("session_revocation.subprocess.run", return_value=response) as run, patch("session_revocation.time.monotonic", side_effect=[0, 0.1, 0.2]):
             elapsed = wait_for_revocation("https://kind/mcp", "/tmp/test-credentials", "kind", "2025-06-18", "mcp-session")
         self.assertEqual(elapsed, 0.2)
         command = run.call_args.args[0]
@@ -39,7 +39,7 @@ class CrossTeamAssertionsTest(unittest.TestCase):
 
     def test_ungranted_tool_denial_is_not_revocation(self):
         response = subprocess.CompletedProcess([], 0, '{"error":"tool_not_granted"}\n403', "")
-        with patch("cross_team_assertions.subprocess.run", return_value=response), patch("cross_team_assertions.time.sleep"), patch("cross_team_assertions.time.monotonic", side_effect=[0, 0.1, 0.2, 1.1]):
+        with patch("session_revocation.subprocess.run", return_value=response), patch("session_revocation.time.sleep"), patch("session_revocation.time.monotonic", side_effect=[0, 0.1, 0.2, 1.1]):
             with self.assertRaisesRegex(AssertionError, "one second"):
                 wait_for_revocation("https://kind/mcp", "/tmp/test-credentials", "kind", "2025-06-18", "mcp-session")
 
