@@ -47,8 +47,8 @@ registry_token_case() (
   PLATFORM_URL=https://platform.e2e.mcpruntime.org
   local scenario="$1"
   curl() {
-    local args="$*"
-    [[ "${args}" == *'--data-urlencode service=mcp-runtime-registry'* && "${args}" == *'scope=repository:demo:pull'* && "${args}" == *'https://platform.e2e.mcpruntime.org/api/v1/registry/token'* ]] || return 1
+    local request_args="$*"
+    [[ "${request_args}" == *'--data-urlencode service=mcp-runtime-registry'* && "${request_args}" == *'scope=repository:demo:pull'* && "${request_args}" == *'https://platform.e2e.mcpruntime.org/api/v1/registry/token'* ]] || return 1
     case "${scenario}" in
       success) printf '{"token":"signed.test.token"}' >"${WORK_DIR}/registry-token-response.json"; printf 200 ;;
       denied) printf '{"error":"forbidden"}' >"${WORK_DIR}/registry-token-response.json"; printf 403 ;;
@@ -280,6 +280,33 @@ expect_ok "adapter authorization accepts an allowed can-i result" staging_auth_d
 expect_fail "adapter authorization reports API errors" staging_auth_decision_case forbidden 1 no
 
 # --- diagnostics failed-check parsing -------------------------------------------
+diagnostics_before_login_case() (
+  local mode="$1" out="${TMP}/diagnostics-${1}" calls="${TMP}/diagnostics-api-${1}"
+  PLATFORM_URL=https://platform.example.test
+  unset E2E_PLATFORM_API_TOKEN
+  if [[ "${mode}" == authenticated ]]; then E2E_PLATFORM_API_TOKEN=test-only; fi
+  kubectl() {
+    if [[ "$*" == 'get configmap mcp-shared-config -n mcp-platform -o yaml' ]]; then
+      printf 'collected after sessions\n'
+    fi
+    return 0
+  }
+  staging_api_curl() {
+    [[ -n "${E2E_PLATFORM_API_TOKEN}" ]] || return 1
+    printf 'called\n' >"${calls}"
+    printf '{"sessions":[]}'
+  }
+  staging_collect_diagnostics "${out}"
+  grep -q 'collected after sessions' "${out}/mcp-shared-config.yaml" || return 1
+  if [[ "${mode}" == authenticated ]]; then
+    [[ -f "${calls}" ]] && jq -e '.sessions == []' "${out}/sessions.json" >/dev/null
+  else
+    [[ ! -f "${calls}" ]] && jq -e '.skipped | contains("credentials unavailable")' "${out}/sessions.json" >/dev/null
+  fi
+)
+expect_ok "diagnostics continue after setup fails before login" diagnostics_before_login_case missing
+expect_ok "diagnostics collect sessions after login" diagnostics_before_login_case authenticated
+
 printf '\033[30;42m SUCCESS \033[0m ok check — fine\n\033[30;101m  ERROR  \033[0m \033[91mplatform OIDC configuration — org mode\033[0m\n\033[30;101m         \033[0m continuation line\n  ERROR   MCPServer reconcile smoke — timed out\n' >"${TMP}/diag.log"
 expect_eq "failed checks parsed" "$(staging_failed_checks "${TMP}/diag.log" | paste -sd'|' -)" \
   "MCPServer reconcile smoke|platform OIDC configuration"

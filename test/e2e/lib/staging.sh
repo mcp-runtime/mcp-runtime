@@ -569,7 +569,11 @@ staging_collect_diagnostics() {
   kubectl get secrets -A >"${out}/secret-names.txt" 2>&1 || true
   kubectl get mcpservers -A -o yaml >"${out}/mcpservers.yaml" 2>&1 || true
   kubectl get mcpaccessgrants -A >"${out}/grants.txt" 2>&1 || true
-  staging_api_curl --fail "${PLATFORM_URL}/api/v1/runtime/sessions" >"${out}/sessions.json" 2>&1 || true
+  if [[ -n "${E2E_PLATFORM_API_TOKEN:-}" ]]; then
+    staging_api_curl --fail "${PLATFORM_URL}/api/v1/runtime/sessions" >"${out}/sessions.json" 2>&1 || true
+  else
+    printf '%s\n' '{"skipped":"platform API credentials unavailable before login"}' >"${out}/sessions.json"
+  fi
   kubectl get configmap mcp-shared-config -n mcp-platform -o yaml >"${out}/mcp-shared-config.yaml" 2>&1 || true
   while IFS= read -r ns; do
     kubectl get namespace "${ns}" >/dev/null 2>&1 || continue

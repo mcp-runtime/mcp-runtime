@@ -33,6 +33,8 @@ hosted platform; see [the release deployment procedure](docs/reference-deploymen
 
 ### Fixed
 
+- Platform readiness reads the final HTTP status after bounded curl retries, so a recovered connection refusal no longer fails a healthy setup; failed probes, malformed status and non-200 responses still fail. Staging failure diagnostics continue collecting workload/configuration/certificate metadata when setup fails before API login ([#750](https://github.com/mcp-runtime/mcp-runtime/issues/750), [#751](https://github.com/mcp-runtime/mcp-runtime/issues/751)).
+
 - Post-setup platform API readiness tolerates a brief Service endpoint propagation delay after the deployment becomes Ready, while still failing after a bounded retry window ([#748](https://github.com/mcp-runtime/mcp-runtime/pull/748)).
 - The cross-team certificate E2E journey waits for initial Traefik TLS and session readiness instead of exiting on an early handshake failure; retries stay bounded and use the recipient certificate without forwarding a preceding fixture's OAuth token ([#748](https://github.com/mcp-runtime/mcp-runtime/pull/748)).
 - Platform API ingress accepts bundled and Helm/k3s Traefik pod labels and the analytics API authentication client, restoring public registry authentication and analytics requests while keeping the gateway session-sync port isolated from those callers ([#718](https://github.com/mcp-runtime/mcp-runtime/issues/718), [#745](https://github.com/mcp-runtime/mcp-runtime/pull/745)).

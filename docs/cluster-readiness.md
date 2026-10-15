@@ -675,6 +675,11 @@ before `setup`. It checks:
 - Streams the current check before running it, including helper pod probes and waits, so a slow run shows what it is doing.
 - Prints the distribution-specific registry remediation hint only when registry or image-pull checks fail; Traefik and platform failures use their own check-specific remedies.
 
+Platform API `/health` and `/ready` probes retry transient connection refusals
+within a bounded startup window. Readiness uses the final validated HTTP status
+from a successful probe; earlier retry diagnostics do not turn a recovered 200
+into a failure. Failed probes and non-200 responses still fail readiness.
+
 Diagnostics discover cluster-specific values where Kubernetes exposes them.
 Failed kubectl reads include the underlying diagnostic, such as RBAC denial,
 missing resources, or a network error. If the initial node-list request fails,
