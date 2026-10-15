@@ -6,6 +6,7 @@ python3 "$(dirname "$0")/ui_assets_test.py"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 python3 "${SCRIPT_DIR}/image_architecture_test.py"
 python3 "${SCRIPT_DIR}/resource_usage_test.py"
+python3 "${SCRIPT_DIR}/session_revocation_test.py"
 bash "${SCRIPT_DIR}/namespace_placement_test.sh"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 QA_E2E_SCRIPT="${PROJECT_ROOT}/test/e2e/qa-e2e.sh"
@@ -293,3 +294,6 @@ for target in re.findall(r'^source "\$\{PROJECT_ROOT\}/([^"\n]+)"', script.read_
 print("[pass] E2E source targets exist")
 PY
 bash "${SCRIPT_DIR}/adapter_certificates_test.sh"
+
+selector_expect "session-revocation-probe" "smoke-auth,adapter-certificates" "test/e2e/session_revocation.py"
+selector_expect "session-revocation-tests" "smoke-auth,adapter-certificates" "test/e2e/session_revocation_test.py"

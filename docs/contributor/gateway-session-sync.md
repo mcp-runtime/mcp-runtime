@@ -113,6 +113,11 @@ namespace callers, and the analytics API in `mcp-observability` (which uses it
 for authentication). Analytics is selected by both namespace and pod labels;
 that exception does not grant access to session-sync port 8085.
 
+Revocation E2E measures from the completed management write and requires an
+HTTP 401 `session_revoked` response within one second. Each probe can use only
+the remaining overall budget; shorter per-request timeouts must not discard a
+valid observation. Failures include the last curl exit code and HTTP status.
+
 ## Verification
 
 Run platform-api and runtime client tests with an empty kubeconfig:
