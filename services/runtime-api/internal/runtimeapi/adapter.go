@@ -357,7 +357,7 @@ func (s *AccessService) selectAdapterGrant(ctx context.Context, namespace, serve
 	if s == nil || s.accessMgr == nil {
 		return nil, "", fmt.Errorf("kubernetes not available")
 	}
-	server, err := s.accessMgr.GetMCPServerRef(ctx, mcpaccess.ServerReference{Name: mcpaccess.ServerName(serverName), Namespace: mcpaccess.Namespace(namespace)})
+	server, err := s.accessMgr.GetActiveMCPServerRef(ctx, mcpaccess.ServerReference{Name: mcpaccess.ServerName(serverName), Namespace: mcpaccess.Namespace(namespace)})
 	if err != nil {
 		return nil, "", err
 	}

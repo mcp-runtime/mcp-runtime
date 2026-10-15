@@ -81,7 +81,7 @@ func (b *platformSessionBackend) ApplySession(ctx context.Context, session *mcpa
 	if strings.TrimSpace(string(ref.Namespace)) == "" {
 		ref.Namespace = mcpaccess.Namespace(session.Namespace)
 	}
-	server, err := b.access.GetMCPServerRef(ctx, ref)
+	server, err := b.access.GetActiveMCPServerRef(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
