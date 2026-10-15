@@ -9,6 +9,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Fixed
 
+- Administrators and team owners can manage or remove grants and sessions while a server is retiring, including after partial cleanup failures. New grant/session issuance remains blocked with an explicit conflict response, and ownership checks retain the retiring server's labels ([#743](https://github.com/mcp-runtime/mcp-runtime/pull/743)).
+
 - Retiring a server through the CLI or UI invalidates and removes its grants and sessions across namespaces, removes exclusively managed analytics credentials using namespace-scoped cleanup permissions that are repaired for CLI-applied servers, and reports cleanup failures for retry. Republishing the same server name cannot authorize delayed writes from its previous deployment; admins can retry retirement for already absent servers without removing shared pull credentials or audit history ([#707](https://github.com/mcp-runtime/mcp-runtime/issues/707)).
 
 ## [0.9.0] - 2026-10-14

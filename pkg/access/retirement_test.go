@@ -3,6 +3,7 @@ package access
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -112,5 +113,38 @@ func TestAuthorizationBoundToServerDeployment(t *testing.T) {
 	}
 	if bound.Annotations[ServerUIDAnnotation] != "new" {
 		t.Fatal("new grant not bound to deployment")
+	}
+}
+
+func TestRetiringServerLookupAllowsManagementButBlocksIssuance(t *testing.T) {
+	for _, deleting := range []bool{false, true} {
+		t.Run(fmt.Sprint("deleting=", deleting), func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			_ = mcpv1alpha1.AddToScheme(scheme)
+			server := &mcpv1alpha1.MCPServer{ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "team-a", UID: "uid", Labels: map[string]string{"owner": "owner"}}}
+			if deleting {
+				now := metav1.Now()
+				server.DeletionTimestamp = &now
+			} else {
+				server.Annotations = map[string]string{ServerRetiringAnnotation: "true"}
+			}
+			manager := NewManager(dynamicfake.NewSimpleDynamicClient(scheme, server), nil)
+			ref := ServerReference{Name: "demo", Namespace: "team-a"}
+			got, err := manager.GetMCPServerRef(context.Background(), ref)
+			if err != nil || got.Labels["owner"] != "owner" {
+				t.Fatalf("management lookup lost authority: %+v %v", got, err)
+			}
+			if err := manager.AssertMCPServerRef(context.Background(), ref); !apierrors.IsConflict(err) {
+				t.Fatalf("issuance accepted retiring target: %v", err)
+			}
+			grant := &MCPAccessGrant{ObjectMeta: metav1.ObjectMeta{Name: "new", Namespace: "team-a"}, Spec: MCPAccessGrantSpec{ServerRef: ref}}
+			if _, err := manager.ApplyGrant(context.Background(), grant); !apierrors.IsConflict(err) {
+				t.Fatalf("grant issuance: %v", err)
+			}
+			session := &MCPAgentSession{ObjectMeta: metav1.ObjectMeta{Name: "new", Namespace: "team-a"}, Spec: MCPAgentSessionSpec{ServerRef: ref}}
+			if _, err := manager.ApplySession(context.Background(), session); !apierrors.IsConflict(err) {
+				t.Fatalf("session issuance: %v", err)
+			}
+		})
 	}
 }

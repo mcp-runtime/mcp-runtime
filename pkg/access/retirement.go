@@ -3,10 +3,10 @@ package access
 import (
 	"context"
 	"fmt"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"strings"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // ServerRetiringAnnotation prevents issuing access or republishing a server
@@ -21,7 +21,7 @@ func (m *Manager) bindServerUID(ctx context.Context, object metav1.Object, ref S
 	if strings.TrimSpace(string(ref.Namespace)) == "" {
 		ref.Namespace = Namespace(object.GetNamespace())
 	}
-	server, err := m.GetMCPServerRef(ctx, ref)
+	server, err := m.GetActiveMCPServerRef(ctx, ref)
 	if IsMCPServerNotFoundForRef(err) {
 		// Preserve the manager's low-level import behavior. The API validates
 		// existence before calling Apply; a previously bound import stays fenced.
