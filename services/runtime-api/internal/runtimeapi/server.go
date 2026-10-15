@@ -82,6 +82,10 @@ func NewRuntimeServer(db clickhouse.Conn, dbName string, apiKeys map[string]stru
 	if k8sClients != nil {
 		control = controlplane.New(k8sClients)
 		accessMgr = mcpaccess.NewManager(k8sClients.Dynamic, k8sClients.Clientset)
+		// Platform sessions are authoritative even when the platform connection
+		// is unavailable: never fall back to stale Kubernetes session objects.
+		sessionClient, _ := identity.(platformSessionClient)
+		accessMgr.WithSessionBackend(&platformSessionBackend{client: sessionClient, access: accessMgr})
 		stackMgr = platformstack.NewManager(k8sClients.Clientset)
 	}
 

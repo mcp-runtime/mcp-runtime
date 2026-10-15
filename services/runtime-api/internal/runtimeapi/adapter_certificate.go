@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	mcpaccess "mcp-runtime/pkg/access"
 	"mcp-runtime/pkg/certauth"
 	"mcp-runtime/pkg/identity"
 )
@@ -108,11 +109,19 @@ func (s *AccessService) HandleAdapterCertificate(w http.ResponseWriter, r *http.
 	if serverNamespace == "" {
 		serverNamespace = req.Namespace
 	}
-	_, err = s.k8sClients.Dynamic.Resource(adapterMCPServerGVR).Namespace(serverNamespace).Get(
+	targetServer, err := s.k8sClients.Dynamic.Resource(adapterMCPServerGVR).Namespace(serverNamespace).Get(
 		r.Context(), serverName, metav1.GetOptions{},
 	)
 	if err != nil {
 		writeAPIError(w, http.StatusServiceUnavailable, "read target MCPServer", err)
+		return
+	}
+	if boundUID := session.Annotations[sessionServerUIDAnnotation]; boundUID != "" && boundUID != string(targetServer.GetUID()) {
+		writeAPIError(w, http.StatusForbidden, "adapter session belongs to a retired server deployment")
+		return
+	}
+	if targetServer.GetAnnotations()[mcpaccess.ServerRetiringAnnotation] == "true" {
+		writeAPIError(w, http.StatusForbidden, "target server is retiring")
 		return
 	}
 	trustDomain := strings.TrimSpace(os.Getenv("MCP_TRUST_DOMAIN"))
@@ -147,7 +156,7 @@ func (s *AccessService) HandleAdapterCertificate(w http.ResponseWriter, r *http.
 		return
 	}
 	latest, err := s.accessMgr.GetSession(r.Context(), req.Session, req.Namespace)
-	if err != nil || latest == nil || latest.Spec.Revoked {
+	if err != nil || latest == nil || latest.Spec.Revoked || latest.UID != session.UID || latest.Annotations[sessionServerUIDAnnotation] != session.Annotations[sessionServerUIDAnnotation] {
 		writeAPIError(w, http.StatusForbidden, "adapter session was revoked during certificate enrollment")
 		return
 	}

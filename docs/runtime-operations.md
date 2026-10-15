@@ -20,7 +20,9 @@ The runtime runs on top of your ingress and networking layer and handles MCP-spe
 
 ## Core resources
 
-Three CRDs form the runtime surface: `MCPServer`, `MCPAccessGrant`, and `MCPAgentSession`.
+`MCPServer` and `MCPAccessGrant` are declarative Kubernetes resources.
+Sessions are platform-owned Postgres records; `MCPAgentSession` YAML remains
+the CLI input format, while legacy Kubernetes session objects are not consulted.
 Many grants and sessions can reference one `MCPServer`. With allow-list policy,
 the gateway evaluates the matching grant and, when `session.required: true`,
 the session on each tool call. Observe mode records calls without enforcing
@@ -35,7 +37,7 @@ For every `MCPServer`, the operator reconciles:
 - **Deployment**: image, replicas, resource requests/limits, env, image-pull secrets.
 - **Service**: ClusterIP exposing `spec.servicePort` → `spec.port`.
 - **Ingress**: routes `spec.publicPathPrefix` as `/<prefix>/mcp`, or explicit `spec.ingressHost` + `spec.ingressPath`, to the Service with per-class annotations (Traefik / NGINX / Istio).
-- **Policy ConfigMap**: rendered from the matching `MCPAccessGrant` + `MCPAgentSession` resources, consumed by the proxy sidecar when `gateway.enabled`.
+- **Policy ConfigMap**: rendered from matching `MCPAccessGrant` resources and tool metadata, consumed by the gateway sidecar when `gateway.enabled`. Sessions arrive through the platform sync API and are never embedded.
 
 `MCPServer.status` exposes:
 
@@ -107,14 +109,14 @@ flowchart LR
 
 ### Gateway policy snapshots
 
-The operator renders `MCPServer` + `MCPAccessGrant` + `MCPAgentSession` state
+The operator renders `MCPServer` + `MCPAccessGrant` state
 into a JSON policy ConfigMap that the gateway sidecar mounts and reloads. The
 rendered document carries this metadata, separate from the authorization
 `policyVersion`:
 
 | Field | Meaning |
 |---|---|
-| `schema_version` | Compatibility of the rendered JSON contract. The gateway rejects any version it does not support. Documents are `v1` unless a grant sets `expiresAt`; those are `v2`, so a gateway built before grant expiry rejects them and keeps its last valid policy instead of ignoring the expiry. |
+| `schema_version` | Compatibility of the rendered JSON contract. The gateway rejects versions it does not support. Grant expiry requires `v2`, delegated headers require `v3`, and platform session sync requires `v4`. Updated operator and gateway images must be deployed together for `v4`. |
 | `revision` | Deterministic `sha256:` digest of the canonical policy content. Identical content always yields the same revision. `generated_at` is excluded from the digest, so timestamps never change it. |
 | `generated_at` | Informational only; set at write time and never affects `revision`. |
 

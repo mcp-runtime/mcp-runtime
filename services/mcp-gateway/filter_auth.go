@@ -40,8 +40,12 @@ func (s *gatewayServer) authFilter(ex *Exchange) Result {
 		strings.TrimSpace(ex.R.Header.Get(s.verifiedSPIFFEHeaderName())) != "" {
 		verifiedIdentity, reason := s.authenticateAdapterCertificate(ex.R, ex.Policy)
 		if reason != "" {
+			status := http.StatusUnauthorized
+			if reason == "policy_unavailable" {
+				status = http.StatusServiceUnavailable
+			}
 			ex.Decision = policypkg.Deny(
-				http.StatusUnauthorized,
+				status,
 				reason,
 				policypkg.ChoosePolicyVersion(policypkg.PolicyVersion(ex.Policy), s.defaultPolicyVersion),
 			)
@@ -82,6 +86,34 @@ func (s *gatewayServer) authFilter(ex *Exchange) Result {
 			return Reject
 		}
 		ex.Identity = *certificateIdentity
+	} else if ex.Identity.SessionID != "" && ex.Policy.Session != nil && ex.Policy.Session.Store == "platform" && (ex.Inspection.ToolCall || ex.Inspection.Indeterminate) {
+		binding, reason := s.sessionSync.binding(ex.R.Context(), string(ex.Policy.Server.Namespace), ex.Identity.SessionID)
+		if reason == "" {
+			if binding.Revoked {
+				reason = "session_revoked"
+			} else if mtlsBindingExpired(binding.ExpiresAt) {
+				reason = "session_expired"
+			} else if (string(binding.HumanID) != "" && string(binding.HumanID) != ex.Identity.HumanID) ||
+				(string(binding.AgentID) != "" && string(binding.AgentID) != ex.Identity.AgentID) ||
+				(string(binding.TeamID) != "" && string(binding.TeamID) != ex.Identity.TeamID) {
+				reason = "session_identity_mismatch"
+			}
+		}
+		if reason != "" {
+			// Optional sessions previously ignored missing/revoked/mismatched
+			// bindings while still enforcing identity and grant policy.
+			if !ex.Policy.Session.Required && reason != "policy_unavailable" {
+				return Continue
+			}
+			status := http.StatusUnauthorized
+			if reason == "policy_unavailable" {
+				status = http.StatusServiceUnavailable
+			}
+			ex.Decision = policypkg.Deny(status, reason, policypkg.PolicyVersion(ex.Policy))
+			s.writeDeniedResponse(ex)
+			return Reject
+		}
+		ex.Identity.Session = binding
 	}
 	return Continue
 }
@@ -144,7 +176,15 @@ func (s *gatewayServer) authenticateAdapterCertificate(r *http.Request, policy *
 		return identityContext{}, "invalid_spiffe_identity"
 	}
 
-	for _, binding := range policy.Sessions {
+	bindings := policy.Sessions
+	if policy.Session != nil && policy.Session.Store == "platform" {
+		binding, reason := s.sessionSync.binding(r.Context(), namespace, sessionID)
+		if reason != "" {
+			return identityContext{}, reason
+		}
+		bindings = []policypkg.Binding{*binding}
+	}
+	for _, binding := range bindings {
 		if string(binding.Namespace) != namespace || string(binding.Name) != sessionID {
 			continue
 		}
@@ -159,6 +199,7 @@ func (s *gatewayServer) authenticateAdapterCertificate(r *http.Request, policy *
 			AgentID:   string(binding.AgentID),
 			TeamID:    string(binding.TeamID),
 			SessionID: string(binding.Name),
+			Session:   &binding,
 		}, ""
 	}
 	return identityContext{}, "session_not_found"

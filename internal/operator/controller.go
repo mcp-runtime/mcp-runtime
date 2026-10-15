@@ -74,6 +74,8 @@ type MCPServerReconciler struct {
 
 	// GatewayOTLPEndpoint is the OTLP/HTTP endpoint injected into MCP gateway sidecars.
 	GatewayOTLPEndpoint string
+	// GatewaySessionSyncURL overrides the internal platform session listener.
+	GatewaySessionSyncURL string
 
 	// DefaultAnalyticsIngestURL is the default analytics ingest endpoint used when analytics is enabled.
 	DefaultAnalyticsIngestURL string
@@ -461,7 +463,6 @@ func (r *MCPServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Service{}).
 		Owns(&networkingv1.Ingress{}).
 		Watches(&mcpv1alpha1.MCPAccessGrant{}, handler.EnqueueRequestsFromMapFunc(r.requestsForReferencedServer)).
-		Watches(&mcpv1alpha1.MCPAgentSession{}, handler.EnqueueRequestsFromMapFunc(r.requestsForReferencedServer)).
 		Watches(&networkingv1.NetworkPolicy{}, handler.EnqueueRequestsFromMapFunc(r.requestsForTraefikEgressPolicy)).
 		Complete(r)
 }

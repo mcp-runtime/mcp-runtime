@@ -14,7 +14,7 @@ flowchart LR
     Entry --> Control["Control plane\nplatform-api, runtime-api, UI, CLI, Kubernetes"]
     Entry --> Runtime["Runtime plane\nIngress, gateway, MCP server"]
     Entry --> Registry["Registry plane\nDocker registry and authz"]
-    Control --> Policy["Policy plane\nMCPAccessGrant, MCPAgentSession, rendered ConfigMap"]
+    Control --> Policy["Policy plane\nMCPAccessGrant, platform sessions, rendered grant/tool ConfigMap"]
     Runtime --> Policy
     Runtime --> Analytics["Analytics plane\nIngest, Kafka, processor, ClickHouse"]
     Control --> Tenancy["Tenant plane\nusers, teams, namespaces, RBAC"]
@@ -50,8 +50,9 @@ sequenceDiagram
     CLI->>API: platform-backed server/access/team requests
     API->>Platform: POST /internal/auth/resolve (service token)
     CLI->>K8s: --use-kube admin/dev/test requests
-    API->>K8s: MCPServer, grants, sessions, Deployments, RBAC
-    K8s-->>Operator: watch MCPServer/grant/session changes
+    API->>K8s: MCPServer, grants, Deployments, RBAC
+    API->>Platform: persist sessions in Postgres
+    K8s-->>Operator: watch MCPServer/grant changes
     Operator->>K8s: Deployment, Service, Ingress, policy ConfigMap, status
     K8s-->>Runtime: pods roll out with app container and optional gateway
 ```
@@ -128,6 +129,7 @@ sequenceDiagram
     participant Agent
     participant Adapter as local HTTP adapter proxy
     participant API as runtime-api
+    participant Platform as platform-api / Postgres
     participant K8s as Kubernetes API
     participant Operator
     participant Traefik
@@ -136,9 +138,9 @@ sequenceDiagram
 
     Agent->>Adapter: Streamable HTTP MCP request
     Adapter->>API: POST /api/v1/runtime/adapter/sessions
-    API->>K8s: create or reuse MCPAgentSession
-    K8s-->>Operator: session watch event
-    Operator->>K8s: render gateway policy ConfigMap
+    API->>Platform: create or reuse server-UID-bound session
+    Platform-->>API: persisted session
+    Gateway->>Platform: synchronize server-scoped session changes
     API-->>Adapter: session name and expiry
     Adapter->>Adapter: generate private key and session-bound CSR
     Adapter->>API: POST /api/v1/runtime/adapter/certificates

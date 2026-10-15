@@ -75,6 +75,12 @@ func (m *Manager) RetireServerAccess(ctx context.Context, namespace, name string
 	}
 	for _, session := range sessions.Items {
 		if matches(session.Namespace, session.Spec.ServerRef) && !session.Spec.Revoked {
+			if m.sessions != nil {
+				if err := m.RevokeSession(ctx, session.Name, session.Namespace); err != nil && !apierrors.IsNotFound(err) {
+					return fmt.Errorf("revoke server session: %w", err)
+				}
+				continue
+			}
 			patch := map[string]interface{}{"metadata": map[string]interface{}{"uid": session.UID, "resourceVersion": session.ResourceVersion}, "spec": map[string]interface{}{"revoked": true}}
 			if err := m.patchSession(ctx, session.Name, session.Namespace, patch); err != nil && !apierrors.IsNotFound(err) {
 				return fmt.Errorf("revoke server session: %w", err)
@@ -83,6 +89,20 @@ func (m *Manager) RetireServerAccess(ctx context.Context, namespace, name string
 	}
 	for _, session := range sessions.Items {
 		if matches(session.Namespace, session.Spec.ServerRef) {
+			if m.sessions != nil {
+				var err error
+				if backend, ok := m.sessions.(interface {
+					DeleteSessionVersioned(context.Context, string, string, string) error
+				}); ok {
+					err = backend.DeleteSessionVersioned(ctx, session.Name, session.Namespace, string(session.UID))
+				} else {
+					err = m.DeleteSession(ctx, session.Name, session.Namespace)
+				}
+				if err != nil && !apierrors.IsNotFound(err) {
+					return err
+				}
+				continue
+			}
 			uid := session.UID
 			if err := m.dynamic.Resource(sessionGVR).Namespace(session.Namespace).Delete(ctx, session.Name, metav1.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &uid}}); err != nil && !apierrors.IsNotFound(err) {
 				return err

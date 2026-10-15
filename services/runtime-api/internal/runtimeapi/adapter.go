@@ -2,6 +2,7 @@ package runtimeapi
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -179,8 +180,38 @@ func (s *AccessService) HandleAdapterSession(w http.ResponseWriter, r *http.Requ
 
 	// Reuse an existing session when its identity, policy version, and trust
 	// still match and it has enough remaining lifetime to be useful.
-	existing, _ := s.accessMgr.GetSession(ctx, sessionName, req.Namespace)
-	if existing != nil && existing.Annotations[mcpaccess.ServerUIDAnnotation] == grant.Annotations[mcpaccess.ServerUIDAnnotation] && adapterSessionReusable(existing, policyVersion, consentedTrust) && adapterSessionWithinGrant(existing, grant) && adapterSessionLinkedToGrant(existing, grant) {
+	target, err := s.accessMgr.GetMCPServerRef(ctx, mcpaccess.ServerReference{Name: mcpaccess.ServerName(req.ServerName), Namespace: mcpaccess.Namespace(req.Namespace)})
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "target server is unavailable for session issuance")
+		return
+	}
+	available, err := s.accessMgr.ListSessions(ctx, req.Namespace)
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "platform sessions are unavailable")
+		return
+	}
+	var existing *mcpaccess.MCPAgentSession
+	for i := range available.Items {
+		candidate := &available.Items[i]
+		refNS := string(candidate.Spec.ServerRef.Namespace)
+		if refNS == "" {
+			refNS = candidate.Namespace
+		}
+		if refNS != req.Namespace || string(candidate.Spec.ServerRef.Name) != req.ServerName ||
+			string(candidate.Spec.Subject.HumanID) != humanID || string(candidate.Spec.Subject.AgentID) != req.AgentID || string(candidate.Spec.Subject.TeamID) != teamID {
+			continue
+		}
+		if uid := candidate.Annotations[mcpaccess.ServerUIDAnnotation]; uid != "" && uid != string(target.UID) {
+			continue
+		}
+		if !adapterSessionReusable(candidate, policyVersion, consentedTrust) || !adapterSessionWithinGrant(candidate, grant) || !adapterSessionLinkedToGrant(candidate, grant) {
+			continue
+		}
+		if existing == nil || candidate.Spec.ExpiresAt.After(existing.Spec.ExpiresAt.Time) {
+			existing = candidate
+		}
+	}
+	if existing != nil {
 		writeJSON(w, http.StatusOK, adapterSessionResponse{
 			Name:           existing.Name,
 			Namespace:      existing.Namespace,
@@ -195,6 +226,17 @@ func (s *AccessService) HandleAdapterSession(w http.ResponseWriter, r *http.Requ
 			TrustDomain:    strings.TrimSpace(os.Getenv("MCP_TRUST_DOMAIN")),
 		})
 		return
+	}
+	// Every newly issued binding gets an unpredictable identity, including after
+	// deletion or same-name server publication. Old certificates can never name
+	// a replacement binding. Existing live bindings are reused above.
+	{
+		var suffix [8]byte
+		if _, err := rand.Read(suffix[:]); err != nil {
+			writeAPIError(w, http.StatusInternalServerError, "failed to allocate a session identity")
+			return
+		}
+		sessionName = sessionName + "-" + hex.EncodeToString(suffix[:])
 	}
 
 	session := &mcpaccess.MCPAgentSession{

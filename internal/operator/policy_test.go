@@ -320,16 +320,15 @@ func TestReconcilePolicyConfigMapAnnotatesServerPodsOnChange(t *testing.T) {
 		t.Fatalf("stable pod annotated on ConfigMap create: %q", got)
 	}
 
-	// An adapter session is issued: the ConfigMap changes and the server's
-	// running pods must carry the new revision.
-	session := &mcpv1alpha1.MCPAgentSession{
-		ObjectMeta: metav1.ObjectMeta{Name: "adapter-0123456789abcdef", Namespace: namespace},
-		Spec: mcpv1alpha1.MCPAgentSessionSpec{
+	// A grant changes the policy; runtime sessions do not change it.
+	grant := &mcpv1alpha1.MCPAccessGrant{
+		ObjectMeta: metav1.ObjectMeta{Name: "grant-1", Namespace: namespace},
+		Spec: mcpv1alpha1.MCPAccessGrantSpec{
 			Subject:   mcpv1alpha1.SubjectRef{HumanID: "user-1", AgentID: "cursor"},
 			ServerRef: mcpv1alpha1.ServerReference{Name: "workspace-demo"},
 		},
 	}
-	if err := kube.Create(ctx, session); err != nil {
+	if err := kube.Create(ctx, grant); err != nil {
 		t.Fatalf("create session: %v", err)
 	}
 	if err := r.reconcilePolicyConfigMap(ctx, mcpServer); err != nil {
@@ -343,8 +342,8 @@ func TestReconcilePolicyConfigMapAnnotatesServerPodsOnChange(t *testing.T) {
 	if err := json.Unmarshal([]byte(cm.Data[gatewayPolicyFileName]), &doc); err != nil {
 		t.Fatalf("decode policy: %v", err)
 	}
-	if len(doc.Sessions) != 1 || string(doc.Sessions[0].Name) != session.Name {
-		t.Fatalf("rendered sessions = %+v, want %s", doc.Sessions, session.Name)
+	if len(doc.Grants) != 1 || doc.Grants[0].Name != grant.Name {
+		t.Fatalf("rendered grants = %+v, want %s", doc.Grants, grant.Name)
 	}
 	for _, name := range []string{stable.Name, canary.Name} {
 		if got := getPod(name).Annotations[gatewayPolicyRevisionAnnotation]; got != doc.Revision {

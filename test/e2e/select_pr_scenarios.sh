@@ -61,7 +61,7 @@ classify_path() {
       add_scenario "oauth"
       return
       ;;
-    test/e2e/lib/adapter-certificates.sh|test/e2e/lib/certmanager-acceptance.sh)
+    test/e2e/session_revocation.py|test/e2e/session_revocation_test.py|test/e2e/lib/adapter-certificates.sh|test/e2e/lib/certmanager-acceptance.sh)
       add_scenario "adapter-certificates"
       return
       ;;

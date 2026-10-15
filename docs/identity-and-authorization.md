@@ -81,12 +81,12 @@ An agent call carries a delegated governance identity:
 humanID   the platform user responsible for the call
 agentID   the agent or client acting for that user
 teamID    the stable team whose server and policy are in use
-sessionID the active MCPAgentSession resource
+sessionID the active platform-owned session name
 ```
 
 The adapter obtains a session-bound certificate from the platform. Traefik
-verifies it and the gateway resolves its SPIFFE URI to the rendered
-`MCPAgentSession`. Caller-supplied identity headers are never accepted as
+verifies it and the gateway resolves its SPIFFE URI against its synchronized
+platform session cache. Caller-supplied identity headers are never accepted as
 authentication.
 
 The platform agent directory gives each managed `AgentID` a stable record
@@ -133,9 +133,9 @@ validate agent ownership against the identity store. Direct Kubernetes CRD
 writes do not consult the identity store and therefore bypass these directory
 checks; adapter session issuance and certificate enrollment still verify the
 agent before they issue credentials.
-Deactivation first marks the agent inactive,
-then revokes its active sessions across namespaces and audits each revocation.
-If revocation fails, the agent remains inactive; retry deactivation to finish.
+Platform-api marks the agent inactive and revokes its active sessions in one
+Postgres transaction. Session issuance locks and validates the same directory
+record, so a concurrent enrollment cannot escape deactivation.
 
 For audit, keep the **actor** (the agent named by the session) separate from
 the **authority** (the human or team that delegated access). A session and its
@@ -276,7 +276,7 @@ never reused; do not invent an agent ID for a new managed subject.
 
 ## Session: active delegated consent
 
-An `MCPAgentSession` answers:
+A platform session, represented by `MCPAgentSession` YAML for CLI input, answers:
 
 > Is this human-agent-team identity currently active for this server, and how
 > much trust is consented for this session?
@@ -303,11 +303,25 @@ For the normal adapter flow:
 2. The platform verifies the user's team and namespace access.
 3. The platform selects a matching enabled grant.
 4. Requested trust is capped by the grant's `maxTrust`.
-5. The platform creates or reuses an `MCPAgentSession`.
+5. The platform persists a new session or reuses a live matching session.
 6. The adapter presents the certificate and, when the target enables OAuth, forwards the bearer token.
 
 The session controls expiry, revocation, and consented trust. It does **not**
 contain tool rules or `allowedSideEffects`; those remain grant policy.
+
+Session state lives in Postgres, owned by platform-api. The gateway synchronizes
+only its server UID's sessions through a separate, authenticated internal port;
+ordinary authorization uses its in-process cache. New adapter session names
+include a random suffix so a retired certificate cannot name a replacement
+session. Use the platform CLI/UI for session creation, inspection and revocation;
+Kubernetes session edits do not affect access.
+
+The gateway polls changes every 500 ms. A cold gateway denies until the first
+sync. A disconnected gateway retains its last complete snapshot for at most
+ten minutes (configurable downward with `SESSION_SYNC_STALE_WINDOW`), then
+denies. An epoch/cursor reset immediately invalidates the cache until relisting
+succeeds. See [session sync](contributor/gateway-session-sync.md) for restore
+requirements and the policy schema v4 migration.
 
 ## Tool metadata: what the server declares
 

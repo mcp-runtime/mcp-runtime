@@ -25,6 +25,12 @@ controllers outside the `traefik` namespace. This permits public API routing
 and registry forward-auth; neither Traefik selector permits `8085`. Session sync
 still requires a managed gateway pod and the Pod-bound token checks below.
 
+The operator uses `http://mcp-platform-api.mcp-platform.svc.cluster.local:8085`
+by default. Set `MCP_GATEWAY_SESSION_SYNC_URL` on the operator to use a different
+trusted internal endpoint, and configure matching network policy for that
+deployment. It must expose the dedicated gateway audience, never the shared
+control-plane API. Tokens are mounted only in the gateway container.
+
 TokenReview must confirm the requested audience and return the bound Pod name
 and UID. Platform-api then reads the live Pod, ReplicaSet, Deployment, and
 MCPServer controller references and checks every UID. A shared tenant service
@@ -79,6 +85,20 @@ to the same server UID and must not advance the global freshness timestamp.
 Authorization remains in process and still enforces expiry, revocation, grants,
 side effects, and trust restrictions.
 
+A known epoch/cursor reset or an explicit `401`/`403` identity rejection
+immediately invalidates cached authority. It cannot keep serving the old
+snapshot while a relist fails. `SESSION_SYNC_STALE_WINDOW` can shorten the
+ten-minute maximum for network/store outages. `/config/status` and
+`mcp_gateway_session_sync_age_seconds` report freshness; `-1` on the metric
+means no successful sync yet. Policy publication rejects grant/tool documents
+larger than 700 KiB and increments `mcp_runtime_gateway_policy_oversize_total`.
+
+Roll out matching platform-api, runtime-api, operator and gateway images.
+Re-deploy servers through the supported CLI so gateway token mounts and
+namespace egress rules are refreshed. Old Kubernetes sessions are not imported;
+adapters re-enroll through the platform. This is a policy schema v4 change and
+requires a new minor release while the project is `0.x`.
+
 Every platform-api process start rotates the shared database epoch. Ordinary
 restarts therefore cause a safe additional snapshot; concurrent replicas also
 observe the shared epoch and converge after startup. **After restoring
@@ -92,6 +112,11 @@ The platform API ingress policy preserves port 8080 for Traefik, platform
 namespace callers, and the analytics API in `mcp-observability` (which uses it
 for authentication). Analytics is selected by both namespace and pod labels;
 that exception does not grant access to session-sync port 8085.
+
+Revocation E2E measures from the completed management write and requires an
+HTTP 401 `session_revoked` response within one second. Each probe can use only
+the remaining overall budget; shorter per-request timeouts must not discard a
+valid observation. Failures include the last curl exit code and HTTP status.
 
 ## Verification
 
