@@ -204,6 +204,14 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/name: traefik
+        # Analytics authenticates through platform-api on the control-plane
+        # port; this peer must never inherit gateway session-sync access.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: mcp-observability
+          podSelector:
+            matchLabels:
+              app: mcp-analytics-api
       ports:
         - protocol: TCP
           port: 8080
