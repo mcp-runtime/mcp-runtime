@@ -29,6 +29,15 @@ cross_team_certificate_request() {
     -D "${headers}" -o "${output}" -w '%{http_code}' --data "${body}" "${url}"
 }
 
+# A Ready workload can precede Traefik TLS/session convergence. Scope the
+# recipient credentials and omit the preceding OAuth fixture's bearer.
+cross_team_wait_for_initialize() {
+  local credentials="$1" url="$2" host="$3" body="$4" output="$5" headers="$6"
+  ADAPTER_CERT_PATH="${credentials}" OAUTH_SERVER_HOST="${host}" ADAPTER_OAUTH_TOKEN="" \
+    ADAPTER_CERT_POLICY_WAIT_SECONDS=120 wait_for_adapter_certificate_initialize \
+    "${url}" 200 "" "${headers}" "${output}" true "" "${body}"
+}
+
 cross_team_cleanup() {
   local status="$1" token="$2" namespace="$3" server="$4"
   if ! cross_team_cli "${token}" server delete "${server}" --namespace "${namespace}"; then
@@ -47,7 +56,8 @@ run_e2e_cross_team_scenario() (
   ensure_gateway_port_forward
   ensure_traefik_tls_port_forward
   qa_platform_cli auth status >/dev/null
-  local admin_token="${ADAPTER_PLATFORM_TOKEN}" run_id="$(date +%s)"
+  local admin_token="${ADAPTER_PLATFORM_TOKEN}" run_id
+  run_id="$(date +%s)"
   local team_a="e2e-delegate-a-${run_id}" team_b="e2e-delegate-b-${run_id}" team_c="e2e-delegate-c-${run_id}"
   local email_a="${team_a}@mcpruntime.org" email_b="${team_b}@mcpruntime.org" email_c="${team_c}@mcpruntime.org"
   local password="test-password-123" server_name="e2e-cross-team-${run_id}" grant_name="e2e-cross-team-grant"
@@ -112,13 +122,8 @@ PY
   host="$(kubectl get mcpserver "${server_name}" -n "${namespace_a}" -o jsonpath='{.spec.ingressHost}')"
   url="https://127.0.0.1:${TRAEFIK_TLS_PORT}/${server_name}/mcp"
   initialize_body="$(CROSS_PROTOCOL="${MCP_PROTOCOL_VERSION}" python3 -c 'import json,os; print(json.dumps({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":os.environ["CROSS_PROTOCOL"],"capabilities":{},"clientInfo":{"name":"cross-team-e2e","version":"1"}}}))')"
-  deadline=$((SECONDS+120))
-  while true; do
-    status="$(cross_team_certificate_request "${credentials_b}" "${url}" "${host}" "${initialize_body}" "${WORKDIR}/cross-team-initialize.json" "${WORKDIR}/cross-team-initialize.headers")"
-    [[ "${status}" != "200" ]] || break
-    ((SECONDS<deadline)) || { echo "cross-team certificate did not initialize: HTTP ${status}" >&2; return 1; }
-    sleep 0.2
-  done
+  cross_team_wait_for_initialize "${credentials_b}" "${url}" "${host}" "${initialize_body}" \
+    "${WORKDIR}/cross-team-initialize.json" "${WORKDIR}/cross-team-initialize.headers"
   mcp_session="$(awk 'BEGIN{IGNORECASE=1} /^Mcp-Session-Id:/{sub(/\r$/,"",$2);print $2}' "${WORKDIR}/cross-team-initialize.headers")"
   status="$(cross_team_certificate_request "${credentials_b}" "${url}" "${host}" '{"jsonrpc":"2.0","method":"notifications/initialized"}' "${WORKDIR}/cross-team-notification.json" "${WORKDIR}/cross-team-notification.headers" "${mcp_session}")"
   [[ "${status}" == "200" || "${status}" == "202" ]] || { echo "cross-team initialized notification failed: HTTP ${status}" >&2; return 1; }

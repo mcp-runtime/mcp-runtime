@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/adapter-certificates.sh"
+source "${SCRIPT_DIR}/scenarios/cross-team.sh"
 TEST_DIR="$(mktemp -d)"
 trap 'rm -rf "${TEST_DIR}"' EXIT
 
@@ -130,3 +131,49 @@ run_case route-stays-unavailable 401 session_not_found '500 Internal Server Erro
 run_case route-accepts-certificate 401 session_not_found '200 {"result":{}}' 1 1 180 true
 run_scoped_path_prefers_path_over_config_root
 run_parse_enroll_output
+
+# Exercise the cross-team caller under errexit: TLS startup failures must reach
+# the bounded wait, using the recipient's credentials and complete handshake.
+run_cross_team_initialize_convergence() (
+  local scoped="${TEST_DIR}/recipient"
+  mkdir -p "${scoped}"
+  : >"${scoped}/client.crt"
+  : >"${scoped}/client.key"
+  export ADAPTER_CERT_PATH="${TEST_DIR}" OAUTH_SERVER_HOST=previous.example \
+    ADAPTER_OAUTH_TOKEN=previous-fixture-token MCP_PROTOCOL_VERSION=2025-06-18
+  printf '%s\n' 'tls-error' '503 {}' '401 {"error":"session_not_found"}' '200 {"result":{}}' >"${TEST_DIR}/responses"
+  : >"${TEST_DIR}/cross-request-args"
+  curl() {
+    printf '%s\n' "$@" >>"${TEST_DIR}/cross-request-args"
+    local body="" headers="" response
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        -o) body="$2"; shift ;;
+        -D) headers="$2"; shift ;;
+      esac
+      shift
+    done
+    response="$(head -n 1 "${TEST_DIR}/responses")"
+    tail -n +2 "${TEST_DIR}/responses" >"${TEST_DIR}/next"
+    mv "${TEST_DIR}/next" "${TEST_DIR}/responses"
+    [[ "${response}" != "tls-error" ]] || return 35
+    printf 'Mcp-Session-Id: recipient-session\r\n' >"${headers}"
+    printf '%s' "${response#* }" >"${body}"
+    printf '%s' "${response%% *}"
+  }
+  sleep() { :; }
+  local payload='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{}}}'
+  cross_team_wait_for_initialize "${scoped}" https://localhost/mcp recipient.example "${payload}" \
+    "${TEST_DIR}/body" "${TEST_DIR}/headers"
+  [[ "$(grep -Fxc "${scoped}/client.crt" "${TEST_DIR}/cross-request-args")" == 4 ]]
+  [[ "$(grep -Fxc 'Host: recipient.example' "${TEST_DIR}/cross-request-args")" == 4 ]]
+  [[ "$(grep -Fxc "${payload}" "${TEST_DIR}/cross-request-args")" == 4 ]]
+  if grep -q 'Authorization:' "${TEST_DIR}/cross-request-args"; then
+    echo '[fail] cross-team initialization forwarded the preceding OAuth token' >&2
+    return 1
+  fi
+  [[ "${ADAPTER_CERT_PATH}" == "${TEST_DIR}" && "${OAUTH_SERVER_HOST}" == previous.example && "${ADAPTER_OAUTH_TOKEN}" == previous-fixture-token ]]
+  grep -q 'recipient-session' "${TEST_DIR}/headers"
+  echo '[pass] cross-team-initialize-converges-after-tls-error'
+)
+run_cross_team_initialize_convergence

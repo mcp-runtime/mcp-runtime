@@ -282,6 +282,11 @@ pinned Gitleaks hook for staged secret detection. Install with
 want the full local hook suite. The full suite includes integration hooks that
 install envtest assets and set `KUBEBUILDER_ASSETS`.
 
+The cross-team certificate fixture uses the shared, bounded initialization wait
+for Traefik TLS/session readiness. It supplies the recipient certificate and
+full initialize payload without reusing another fixture's bearer. Tool calls
+and the one-second revocation assertion retain their original checks.
+
 ## Choosing Coverage
 
 | Change | Minimum local check |
