@@ -7,24 +7,34 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Added
+
+- Agent session details now link exact recorded authorizing grants, show visible lifecycle counts, and preview and verify deactivation impact. Admin gateway audit links open shared namespace-qualified grant/session details with server-filtered seven-day decision activity; missing attribution and partial failures are explicit ([#549](https://github.com/mcp-runtime/mcp-runtime/issues/549), [#309](https://github.com/mcp-runtime/mcp-runtime/issues/309)).
+- Platform-api now provides Postgres session persistence and a dedicated, server-scoped gateway sync audience with revocation tombstones, bounded change retention, restore epochs, and atomic agent deactivation. Gateways authenticate with Pod-bound projected tokens without database credentials or the shared internal token; runtime/gateway migration is tracked separately in #659 ([#718](https://github.com/mcp-runtime/mcp-runtime/issues/718)).
+
+### Changed
+
+- Runtime sessions are persisted by platform-api in Postgres and synchronized into server-scoped gateway caches; session changes no longer rewrite policy ConfigMaps. Policy schema v4 requires matching updated gateways. Use the platform CLI/UI for sessions; direct `--use-kube` session management is rejected. Re-enroll adapters after upgrading rather than importing old Kubernetes session state. New adapter session names prevent retired certificates from naming replacement bindings ([#659](https://github.com/mcp-runtime/mcp-runtime/issues/659), [#718](https://github.com/mcp-runtime/mcp-runtime/issues/718)).
+
 ### Fixed
 
 - Platform API ingress accepts both bundled and Helm/k3s Traefik pod labels, restoring public registry authentication while keeping the gateway session-sync port isolated from Traefik ([#718](https://github.com/mcp-runtime/mcp-runtime/issues/718), [#745](https://github.com/mcp-runtime/mcp-runtime/pull/745)).
+- Retiring a server through the CLI or UI invalidates and removes its grants and sessions across namespaces, removes exclusively managed analytics credentials using namespace-scoped cleanup permissions that are repaired for CLI-applied servers, and reports cleanup failures for retry. Republishing the same server name cannot authorize delayed writes from its previous deployment; admins can retry retirement for already absent servers without removing shared pull credentials or audit history ([#707](https://github.com/mcp-runtime/mcp-runtime/issues/707)).
+
+### Security
+
+- Deleted session names remain permanently reserved within their namespace so an old certificate cannot inherit a replacement session's access. After deletion, create a new session name or re-enroll the adapter; recreating a deleted name returns `409 Conflict`, including after server retirement and republishing ([#718](https://github.com/mcp-runtime/mcp-runtime/issues/718)).
 
 ## [0.9.0] - 2026-10-14
 
 ### Added
 
-- Agent session details now link exact recorded authorizing grants, show visible lifecycle counts, and preview and verify deactivation impact. Admin gateway audit links open shared namespace-qualified grant/session details with server-filtered seven-day decision activity; missing attribution and partial failures are explicit ([#549](https://github.com/mcp-runtime/mcp-runtime/issues/549), [#309](https://github.com/mcp-runtime/mcp-runtime/issues/309)).
-- Platform-api now provides Postgres session persistence and a dedicated, server-scoped gateway sync audience with revocation tombstones, bounded change retention, restore epochs, and atomic agent deactivation. Gateways authenticate with Pod-bound projected tokens without database credentials or the shared internal token; runtime/gateway migration is tracked separately in #659 ([#718](https://github.com/mcp-runtime/mcp-runtime/issues/718)).
 - An unauthenticated `test-mcpsnoop` example with read-only `echo` and `todays_info` tools and instructions for CLI publishing, deployment, and inspecting real MCP payloads with MCPSnoop ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
 - Server cards and details show a `Gateway` badge when the Runtime gateway is enabled, separately from readiness and authentication badges. The server API now reports `gatewayEnabled` explicitly ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
 - Admin usage analytics combines server, MCP method and tool activity in one request table, with scope/searchable-team, time, policy and HTTP outcome filters applied in ClickHouse. A labelled time/rate chart, HTTP error and latency summaries, caller/session counts, response traffic and latest-trace links help investigate recorded gateway traffic ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
 - `mcp-runtime update --platform-mode org|public` changes mode, prepares managed catalog namespaces, and restarts mode-dependent services without hand-written ConfigMap rollout entries. Namespace scopes cannot be changed and new catalogs survive rollback. `--build` checks external registry access before building commit-tagged images so invalid Docker credentials fail earlier; bundled registries retain their selected-cluster push transport ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
 
 ### Changed
-
-- Runtime sessions are persisted by platform-api in Postgres and synchronized into server-scoped gateway caches; session changes no longer rewrite policy ConfigMaps. Policy schema v4 requires matching updated gateways. Use the platform CLI/UI for sessions; direct `--use-kube` session management is rejected. Re-enroll adapters after upgrading rather than importing old Kubernetes session state. New adapter session names prevent retired certificates from naming replacement bindings ([#659](https://github.com/mcp-runtime/mcp-runtime/issues/659), [#718](https://github.com/mcp-runtime/mcp-runtime/issues/718)).
 
 - Platform modes are now `org` (default) and `public`. Publishing retains three scopes: `tenant` for a team, `org` for all signed-in organization users, and `public` for public previews or public MCP listings. Public mode accepts all three scopes, with separate org/public image prefixes and catalog namespaces; anonymous readers cannot list org or team catalogs. Existing configurations using platform mode `tenant` must explicitly select `org` or `public` before deployment. No data reset or certificate replacement is required; use the reviewed `mcp-runtime update` workflow for the hosted reference platform ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
 
@@ -34,15 +44,9 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Fixed
 
-- Retiring a server through the CLI or UI invalidates and removes its grants and sessions across namespaces, removes exclusively managed analytics credentials using namespace-scoped cleanup permissions, and reports cleanup failures for retry. Republishing the same server name cannot authorize delayed writes from its previous deployment; admins can retry retirement for already absent servers without removing shared pull credentials or audit history ([#707](https://github.com/mcp-runtime/mcp-runtime/issues/707)).
-
 - Admin server deployment now prepares public/org catalog namespace permissions, resource controls, network policy and registry pulls just like user deployment, so a newly enabled catalog can host its first MCP server ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
 - The public MCPSnoop demo enables its gateway in observe mode, retaining anonymous access while exposing trace IDs, correlated logs, tool metrics and analytics ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
 - Admin usage analytics now includes the per-server gateway events written with `<server>-gateway` source labels, instead of querying only the unused global `mcp-gateway` label ([#740](https://github.com/mcp-runtime/mcp-runtime/pull/740)).
-
-### Security
-
-- Deleted session names remain permanently reserved within their namespace so an old certificate cannot inherit a replacement session's access. After deletion, create a new session name or re-enroll the adapter; recreating a deleted name returns `409 Conflict`, including after server retirement and republishing ([#718](https://github.com/mcp-runtime/mcp-runtime/issues/718)).
 
 ## [0.8.1] - 2026-10-14
 
