@@ -13,6 +13,7 @@ import (
 
 	"github.com/lib/pq"
 	"golang.org/x/text/cases"
+	"mcp-runtime/pkg/sessionstate"
 )
 
 var (
@@ -191,26 +192,39 @@ WHERE id = $1 RETURNING id, team_id::text, name, status, COALESCE(created_by::te
 }
 
 func (s *Store) SetAgentStatus(ctx context.Context, id, status, actorID string) (Agent, error) {
-	var item Agent
-	var err error
-	if status == "inactive" {
-		err = s.db.QueryRowContext(ctx, `UPDATE agents SET status = 'inactive', updated_at = now(), deactivated_at = COALESCE(deactivated_at, now()), deactivated_by = NULLIF($2, '')::uuid
-		WHERE id = $1 RETURNING id, team_id::text, name, status, COALESCE(created_by::text, ''), created_at, updated_at, deactivated_at, COALESCE(deactivated_by::text, '')`, strings.TrimSpace(id), strings.TrimSpace(actorID)).Scan(
-			&item.ID, &item.TeamID, &item.Name, &item.Status, &item.CreatedBy, &item.CreatedAt, &item.UpdatedAt, &item.DeactivatedAt, &item.DeactivatedBy)
-	} else {
-		err = s.db.QueryRowContext(ctx, `UPDATE agents SET status = 'active', updated_at = now(), deactivated_at = NULL, deactivated_by = NULL
-		WHERE id = $1 RETURNING id, team_id::text, name, status, COALESCE(created_by::text, ''), created_at, updated_at, deactivated_at, COALESCE(deactivated_by::text, '')`, strings.TrimSpace(id)).Scan(
-			&item.ID, &item.TeamID, &item.Name, &item.Status, &item.CreatedBy, &item.CreatedAt, &item.UpdatedAt, &item.DeactivatedAt, &item.DeactivatedBy)
+	if status != "active" && status != "inactive" {
+		return Agent{}, fmt.Errorf("invalid agent status")
 	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Agent{}, err
+	}
+	defer tx.Rollback()
+	if err = lockSessionState(ctx, tx); err != nil {
+		return Agent{}, err
+	}
+	var item Agent
+	err = tx.QueryRowContext(ctx, `UPDATE agents SET status=$2, updated_at=now(),
+ deactivated_at=CASE WHEN $2='inactive' THEN COALESCE(deactivated_at,now()) ELSE NULL END,
+ deactivated_by=CASE WHEN $2='inactive' THEN NULLIF($3,'')::uuid ELSE NULL END
+ WHERE id=$1 RETURNING id,team_id::text,name,status,COALESCE(created_by::text,''),created_at,updated_at,deactivated_at,COALESCE(deactivated_by::text,'')`,
+		strings.TrimSpace(id), status, strings.TrimSpace(actorID)).Scan(&item.ID, &item.TeamID, &item.Name, &item.Status, &item.CreatedBy, &item.CreatedAt, &item.UpdatedAt, &item.DeactivatedAt, &item.DeactivatedBy)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Agent{}, ErrAgentNotFound
 	}
-	if err == nil {
-		var slug string
-		err = s.db.QueryRowContext(ctx, `SELECT slug FROM teams WHERE id = $1`, item.TeamID).Scan(&slug)
-		item.TeamSlug = slug
+	if err != nil {
+		return Agent{}, err
 	}
-	return item, err
+	if status == "inactive" {
+		if _, err = revokeSessionsTx(ctx, tx, sessionstate.Filter{AgentID: item.ID}, "agent_deactivated"); err != nil {
+			return Agent{}, err
+		}
+	}
+	err = tx.QueryRowContext(ctx, `SELECT slug FROM teams WHERE id=$1`, item.TeamID).Scan(&item.TeamSlug)
+	if err != nil {
+		return Agent{}, err
+	}
+	return item, tx.Commit()
 }
 
 func clampAgentPageSize(limit int) int {

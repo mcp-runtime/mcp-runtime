@@ -36,3 +36,36 @@ subjects:
   - kind: ServiceAccount
     name: mcp-platform-api
     namespace: mcp-platform
+---
+# Gateways may run in any managed tenant namespace. Read only the live bound
+# workload controller chain; no list/watch, Secret reads, or tenant mutations.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: mcp-platform-api-gateway-identity
+rules:
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets", "deployments"]
+    verbs: ["get"]
+  - apiGroups: ["mcpruntime.org"]
+    resources: ["mcpservers"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: mcp-platform-api-gateway-identity
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: mcp-platform-api-gateway-identity
+subjects:
+  - kind: ServiceAccount
+    name: mcp-platform-api
+    namespace: mcp-platform

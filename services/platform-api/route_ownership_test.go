@@ -26,6 +26,8 @@ func TestRouteOwnershipV1Only(t *testing.T) {
 		"/api/v1/runtime/servers",
 		"/api/v1/stats",
 		"/api/v1/deployments",
+		"/internal/gateway/v1/sessions",
+		"/internal/gateway/v1/sessions/changes",
 	} {
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))

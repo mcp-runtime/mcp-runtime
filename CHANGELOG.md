@@ -7,11 +7,19 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Added
+
+- Platform-api now provides Postgres session persistence and a dedicated, server-scoped gateway sync audience with revocation tombstones, bounded change retention, restore epochs, and atomic agent deactivation. Gateways authenticate with Pod-bound projected tokens without database credentials or the shared internal token; runtime/gateway migration is tracked separately in #659 ([#718](https://github.com/mcp-runtime/mcp-runtime/issues/718)).
+
 ### Fixed
 
+- Platform API ingress accepts bundled and Helm/k3s Traefik pod labels and the analytics API authentication client, restoring public registry authentication and analytics requests while keeping the gateway session-sync port isolated from those callers ([#718](https://github.com/mcp-runtime/mcp-runtime/issues/718), [#745](https://github.com/mcp-runtime/mcp-runtime/pull/745)).
+- Retiring a server through the CLI or UI invalidates and removes its grants and sessions across namespaces, removes exclusively managed analytics credentials using namespace-scoped cleanup permissions that are repaired for CLI-applied servers, and reports cleanup failures for retry. Republishing the same server name cannot authorize delayed writes from its previous deployment; admins can retry retirement for already absent servers without removing shared pull credentials or audit history ([#707](https://github.com/mcp-runtime/mcp-runtime/issues/707)).
 - Administrators and team owners can manage or remove grants and sessions while a server is retiring, including after partial cleanup failures. New grant/session issuance remains blocked with an explicit conflict response, and ownership checks retain the retiring server's labels ([#743](https://github.com/mcp-runtime/mcp-runtime/pull/743)).
 
-- Retiring a server through the CLI or UI invalidates and removes its grants and sessions across namespaces, removes exclusively managed analytics credentials using namespace-scoped cleanup permissions that are repaired for CLI-applied servers, and reports cleanup failures for retry. Republishing the same server name cannot authorize delayed writes from its previous deployment; admins can retry retirement for already absent servers without removing shared pull credentials or audit history ([#707](https://github.com/mcp-runtime/mcp-runtime/issues/707)).
+### Security
+
+- Deleted session names remain permanently reserved within their namespace so an old certificate cannot inherit a replacement session's access. After deletion, create a new session name or re-enroll the adapter; recreating a deleted name returns `409 Conflict`, including after server retirement and republishing ([#718](https://github.com/mcp-runtime/mcp-runtime/issues/718)).
 
 ## [0.9.0] - 2026-10-14
 

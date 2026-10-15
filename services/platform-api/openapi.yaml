@@ -359,8 +359,611 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
+  /internal/access/sessions:
+    x-audience: "runtime-api"
+    x-listener-port: 8080
+    get:
+      summary: "List persisted sessions"
+      responses:
+        200:
+          description: "List persisted sessions"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionPage"
+        400:
+          description: "Invalid request"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        401:
+          description: "Authentication required"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        403:
+          description: "Identity denied"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        404:
+          description: "Session not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        409:
+          description: "Session identity conflicts or server retired"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        503:
+          description: "Session store unavailable"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+      parameters: [{"name": "namespace", "in": "query", "required": false, "schema": {"type": "string"}}, {"name": "server", "in": "query", "required": false, "schema": {"type": "string"}}, {"name": "server_uid", "in": "query", "required": false, "schema": {"type": "string"}}, {"name": "agent_id", "in": "query", "required": false, "schema": {"type": "string"}}, {"name": "grant_namespace", "in": "query", "required": false, "schema": {"type": "string"}}, {"name": "grant_name", "in": "query", "required": false, "schema": {"type": "string"}}, {"name": "after", "in": "query", "required": false, "schema": {"type": "string"}}, {"name": "limit", "in": "query", "required": false, "schema": {"type": "integer"}}]
+      security: [{"ControlPlaneToken": []}]
+    post:
+      summary: "Create or update a consented session"
+      responses:
+        201:
+          description: "Create or update a consented session"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PersistedSession"
+        400:
+          description: "Invalid request"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        401:
+          description: "Authentication required"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        403:
+          description: "Identity denied"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        404:
+          description: "Session not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        409:
+          description: "Session identity conflicts or server retired"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        503:
+          description: "Session store unavailable"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PersistedSession"
+      security: [{"ControlPlaneToken": []}]
+  /internal/access/sessions/{namespace}/{name}:
+    x-audience: "runtime-api"
+    x-listener-port: 8080
+    parameters: [{"name": "namespace", "in": "path", "required": true, "schema": {"type": "string"}}, {"name": "name", "in": "path", "required": true, "schema": {"type": "string"}}]
+    get:
+      summary: "Get a persisted session"
+      responses:
+        200:
+          description: "Get a persisted session"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PersistedSession"
+        400:
+          description: "Invalid request"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        401:
+          description: "Authentication required"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        403:
+          description: "Identity denied"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        404:
+          description: "Session not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        409:
+          description: "Session identity conflicts or server retired"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        503:
+          description: "Session store unavailable"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+      security: [{"ControlPlaneToken": []}]
+    patch:
+      summary: "Set explicit session revocation state"
+      responses:
+        204:
+          description: "Set explicit session revocation state"
+        400:
+          description: "Invalid request"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        401:
+          description: "Authentication required"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        403:
+          description: "Identity denied"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        404:
+          description: "Session not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        409:
+          description: "Session identity conflicts or server retired"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        503:
+          description: "Session store unavailable"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: "object"
+              required: ["revoked"]
+              properties:
+                revoked:
+                  type: "boolean"
+                cause:
+                  type: "string"
+      security: [{"ControlPlaneToken": []}]
+    delete:
+      summary: "Delete session and publish tombstone"
+      parameters:
+        - in: query
+          name: uid
+          schema: {type: string}
+          description: Expected immutable session UID; reject a stale retirement snapshot with 409
+      responses:
+        204:
+          description: "Delete session and publish tombstone"
+        400:
+          description: "Invalid request"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        401:
+          description: "Authentication required"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        403:
+          description: "Identity denied"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        404:
+          description: "Session not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        409:
+          description: "Session identity conflicts or server retired"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        503:
+          description: "Session store unavailable"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+      security: [{"ControlPlaneToken": []}]
+  /internal/access/sessions/revoke:
+    x-audience: "runtime-api"
+    x-listener-port: 8080
+    post:
+      summary: "Bulk revoke by server UID, agent or grant"
+      responses:
+        200:
+          description: "Bulk revoke by server UID, agent or grant"
+          content:
+            application/json:
+              schema:
+                type: "object"
+                required: ["count"]
+                properties:
+                  count:
+                    type: "integer"
+        400:
+          description: "Invalid request"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        401:
+          description: "Authentication required"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        403:
+          description: "Identity denied"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        404:
+          description: "Session not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        409:
+          description: "Session identity conflicts or server retired"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        503:
+          description: "Session store unavailable"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: "object"
+              required: ["filter", "cause"]
+              properties:
+                filter:
+                  type: "object"
+                  properties:
+                    namespace:
+                      type: "string"
+                    server:
+                      type: "string"
+                    server_uid:
+                      type: "string"
+                    agent_id:
+                      type: "string"
+                    grant_namespace:
+                      type: "string"
+                    grant_name:
+                      type: "string"
+                cause:
+                  type: "string"
+      security: [{"ControlPlaneToken": []}]
+  /internal/gateway/v1/sessions:
+    x-audience: "gateway"
+    x-listener-port: 8085
+    get:
+      summary: "Snapshot authenticated server active sessions"
+      responses:
+        200:
+          description: "Snapshot authenticated server active sessions"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionSnapshot"
+        400:
+          description: "Invalid request"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        401:
+          description: "Authentication required"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        403:
+          description: "Identity denied"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        404:
+          description: "Session not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        409:
+          description: "Session identity conflicts or server retired"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        503:
+          description: "Session store unavailable"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+      security: [{"GatewayToken": []}]
+  /internal/gateway/v1/sessions/changes:
+    x-audience: "gateway"
+    x-listener-port: 8085
+    get:
+      summary: "Poll authenticated server changes after cursor"
+      responses:
+        200:
+          description: "Poll authenticated server changes after cursor"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionChanges"
+        400:
+          description: "Invalid request"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        401:
+          description: "Authentication required"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        403:
+          description: "Identity denied"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        404:
+          description: "Session not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        409:
+          description: "Session identity conflicts or server retired"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        503:
+          description: "Session store unavailable"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        410:
+          description: "Cursor compacted, ahead of current sequence, or epoch changed; relist required"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+      parameters: [{"name": "epoch", "in": "query", "required": true, "schema": {"type": "string"}}, {"name": "after", "in": "query", "required": true, "schema": {"type": "integer"}}]
+      security: [{"GatewayToken": []}]
+  /internal/gateway/v1/sessions/{namespace}/{name}:
+    x-audience: "gateway"
+    x-listener-port: 8085
+    parameters: [{"name": "namespace", "in": "path", "required": true, "schema": {"type": "string"}}, {"name": "name", "in": "path", "required": true, "schema": {"type": "string"}}]
+    get:
+      summary: "Get one session bound to the authenticated server UID"
+      responses:
+        200:
+          description: "Get one session bound to the authenticated server UID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PersistedSession"
+        400:
+          description: "Invalid request"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        401:
+          description: "Authentication required"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        403:
+          description: "Identity denied"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        404:
+          description: "Session not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        409:
+          description: "Session identity conflicts or server retired"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        503:
+          description: "Session store unavailable"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+      security: [{"GatewayToken": []}]
 components:
+  securitySchemes:
+    ControlPlaneToken: {type: http, scheme: bearer, description: Shared internal token for trusted control-plane services}
+    GatewayToken: {type: http, scheme: bearer, description: Pod-bound projected service-account token with mcp-runtime-gateway audience}
   schemas:
+    PersistedSession:
+      type: "object"
+      required: ["id", "namespace", "server_namespace", "server_name", "server_uid", "binding", "created_at"]
+      properties:
+        id:
+          type: "string"
+        uid:
+          type: "string"
+        namespace:
+          type: "string"
+        server_namespace:
+          type: "string"
+        server_name:
+          type: "string"
+        server_uid:
+          type: "string"
+        grant_namespace:
+          type: "string"
+        grant_name:
+          type: "string"
+        authority_team_id:
+          type: "string"
+        revocation_cause:
+          type: "string"
+        created_at:
+          type: "string"
+          format: "date-time"
+        revoked_at:
+          type: "string"
+          format: "date-time"
+        binding:
+          type: "object"
+          required: ["name"]
+          properties:
+            name:
+              type: "string"
+            namespace:
+              type: "string"
+            human_id:
+              type: "string"
+            agent_id:
+              type: "string"
+            team_id:
+              type: "string"
+            consented_trust:
+              type: "string"
+            expires_at:
+              type: "string"
+            policy_version:
+              type: "string"
+            upstream_token_ref:
+              type: "string"
+            revoked:
+              type: "boolean"
+        labels:
+          type: "object"
+          additionalProperties:
+            type: "string"
+        annotations:
+          type: "object"
+          additionalProperties:
+            type: "string"
+    SessionPage:
+      type: "object"
+      required: ["sessions"]
+      properties:
+        sessions:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/PersistedSession"
+        next_cursor:
+          type: "string"
+    SessionSnapshot:
+      type: "object"
+      required: ["epoch", "sequence", "sessions"]
+      properties:
+        epoch:
+          type: "string"
+        sequence:
+          type: "integer"
+        sessions:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/PersistedSession"
+    SessionChange:
+      type: "object"
+      required: ["kind", "sequence", "operation", "id"]
+      properties:
+        kind:
+          type: "string"
+          enum: ["session"]
+        sequence:
+          type: "integer"
+        operation:
+          type: "string"
+          enum: ["upsert", "delete"]
+        id:
+          type: "string"
+        session:
+          $ref: "#/components/schemas/PersistedSession"
+    SessionChanges:
+      type: "object"
+      required: ["epoch", "sequence", "changes", "more"]
+      properties:
+        epoch:
+          type: "string"
+        sequence:
+          type: "integer"
+        changes:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/SessionChange"
+        more:
+          type: "boolean"
     ErrorEnvelope:
       type: object
       required: [error, message]

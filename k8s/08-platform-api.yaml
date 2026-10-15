@@ -13,6 +13,9 @@ spec:
     - name: metrics
       port: 9090
       targetPort: 9090
+    - name: gateway-sync
+      port: 8085
+      targetPort: 8085
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -61,6 +64,7 @@ spec:
           ports:
             - containerPort: 8080
             - containerPort: 9090
+            - containerPort: 8085
           envFrom:
             - configMapRef:
                 name: mcp-shared-config
@@ -69,6 +73,8 @@ spec:
               value: "8080"
             - name: METRICS_PORT
               value: "9090"
+            - name: GATEWAY_SYNC_PORT
+              value: "8085"
             - name: API_KEYS
               valueFrom:
                 secretKeyRef:

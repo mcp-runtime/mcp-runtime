@@ -18,6 +18,6 @@ RUN cd services/platform-api && \
 FROM gcr.io/distroless/base-debian12
 WORKDIR /app
 COPY --from=build --chown=65532:65532 /out/platform-api /app/platform-api
-EXPOSE 8080 9090
+EXPOSE 8080 8085 9090
 USER 65532:65532
 ENTRYPOINT ["/app/platform-api"]
