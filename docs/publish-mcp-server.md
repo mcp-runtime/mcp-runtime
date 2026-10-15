@@ -323,7 +323,12 @@ extends credential access to reserved infrastructure namespaces.
 
 A cleanup error means retirement is incomplete. Retry the same command; the
 server remains marked as retiring and refuses new access or redeployment while
-cleanup completes. If the server was already deleted, a platform admin must
+cleanup completes. Administrators and team owners can still delete, disable,
+or revoke existing access through its management endpoints; the retiring
+server retains its ownership checks. New grants and manually applied sessions
+return `409 Conflict`, and adapter enrollment remains blocked.
+
+If the server was already deleted, a platform admin must
 run the same command to recover orphaned grants, sessions, and managed
 credentials, because its previous ownership labels are no longer available.
 Publishing the same name creates a fresh deployment and requires new access.
