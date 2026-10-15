@@ -108,6 +108,11 @@ database while leaving the platform process running cannot be detected reliably
 from a numerical cursor alone. The cursor-ahead check additionally detects a
 restore that lowers the sequence.
 
+The platform API ingress policy preserves port 8080 for Traefik, platform
+namespace callers, and the analytics API in `mcp-observability` (which uses it
+for authentication). Analytics is selected by both namespace and pod labels;
+that exception does not grant access to session-sync port 8085.
+
 ## Verification
 
 Run platform-api and runtime client tests with an empty kubeconfig:

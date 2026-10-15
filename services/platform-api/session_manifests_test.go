@@ -79,6 +79,9 @@ func TestPlatformIngressAllowsSupportedTraefikWithoutSessionSync(t *testing.T) {
 		{"k3s Traefik", "kube-system", map[string]string{"app.kubernetes.io/name": "traefik", "app.kubernetes.io/instance": "traefik-kube-system"}, true, false},
 		{"Helm Traefik custom namespace", "ingress", map[string]string{"app.kubernetes.io/name": "traefik", "app.kubernetes.io/instance": "traefik-ingress"}, true, false},
 		{"platform UI", "mcp-platform", map[string]string{"app": "mcp-ui"}, true, false},
+		{"analytics API", "mcp-observability", map[string]string{"app": "mcp-analytics-api"}, true, false},
+		{"analytics label in tenant namespace", "team-a", map[string]string{"app": "mcp-analytics-api"}, false, false},
+		{"unrelated observability pod", "mcp-observability", map[string]string{"app": "unrelated"}, false, false},
 		{"tenant gateway", "team-a", map[string]string{"app.kubernetes.io/managed-by": "mcp-runtime"}, false, true},
 		{"unrelated tenant", "team-a", map[string]string{"app": "tenant-app"}, false, false},
 	} {
