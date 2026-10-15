@@ -256,6 +256,12 @@ func (r *MCPServerReconciler) renderGatewayPolicy(ctx context.Context, mcpServer
 		return nil, err
 	}
 	for _, grant := range grants.Items {
+		if mcpServer.Annotations["mcpruntime.org/retiring"] == "true" {
+			continue
+		}
+		if uid := grant.Annotations["mcpruntime.org/server-uid"]; uid != "" && uid != string(mcpServer.UID) {
+			continue
+		}
 		if !serverReferenceMatches(grant.Namespace, grant.Spec.ServerRef, mcpServer) {
 			continue
 		}
@@ -291,6 +297,12 @@ func (r *MCPServerReconciler) renderGatewayPolicy(ctx context.Context, mcpServer
 		return nil, err
 	}
 	for _, session := range sessions.Items {
+		if mcpServer.Annotations["mcpruntime.org/retiring"] == "true" {
+			continue
+		}
+		if uid := session.Annotations["mcpruntime.org/server-uid"]; uid != "" && uid != string(mcpServer.UID) {
+			continue
+		}
 		if !serverReferenceMatches(session.Namespace, session.Spec.ServerRef, mcpServer) {
 			continue
 		}

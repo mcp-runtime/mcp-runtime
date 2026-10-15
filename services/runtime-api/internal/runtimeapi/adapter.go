@@ -180,7 +180,7 @@ func (s *AccessService) HandleAdapterSession(w http.ResponseWriter, r *http.Requ
 	// Reuse an existing session when its identity, policy version, and trust
 	// still match and it has enough remaining lifetime to be useful.
 	existing, _ := s.accessMgr.GetSession(ctx, sessionName, req.Namespace)
-	if existing != nil && adapterSessionReusable(existing, policyVersion, consentedTrust) && adapterSessionWithinGrant(existing, grant) && adapterSessionLinkedToGrant(existing, grant) {
+	if existing != nil && existing.Annotations[mcpaccess.ServerUIDAnnotation] == grant.Annotations[mcpaccess.ServerUIDAnnotation] && adapterSessionReusable(existing, policyVersion, consentedTrust) && adapterSessionWithinGrant(existing, grant) && adapterSessionLinkedToGrant(existing, grant) {
 		writeJSON(w, http.StatusOK, adapterSessionResponse{
 			Name:           existing.Name,
 			Namespace:      existing.Namespace,
@@ -204,6 +204,7 @@ func (s *AccessService) HandleAdapterSession(w http.ResponseWriter, r *http.Requ
 			Annotations: map[string]string{
 				adapterGrantNameAnnotation:      grant.Name,
 				adapterGrantNamespaceAnnotation: grant.Namespace,
+				mcpaccess.ServerUIDAnnotation:   grant.Annotations[mcpaccess.ServerUIDAnnotation],
 			},
 		},
 		Spec: mcpaccess.MCPAgentSessionSpec{
@@ -314,6 +315,10 @@ func (s *AccessService) selectAdapterGrant(ctx context.Context, namespace, serve
 	if s == nil || s.accessMgr == nil {
 		return nil, "", fmt.Errorf("kubernetes not available")
 	}
+	server, err := s.accessMgr.GetActiveMCPServerRef(ctx, mcpaccess.ServerReference{Name: mcpaccess.ServerName(serverName), Namespace: mcpaccess.Namespace(namespace)})
+	if err != nil {
+		return nil, "", err
+	}
 	grants, err := s.accessMgr.ListGrants(ctx, namespace)
 	if err != nil {
 		return nil, "", fmt.Errorf("list grants in %s: %w", namespace, err)
@@ -324,6 +329,12 @@ func (s *AccessService) selectAdapterGrant(ctx context.Context, namespace, serve
 	}
 	var matches []grantMatch
 	for _, g := range grants.Items {
+		if refNS := strings.TrimSpace(string(g.Spec.ServerRef.Namespace)); refNS != "" && refNS != namespace {
+			continue
+		}
+		if uid := g.Annotations[mcpaccess.ServerUIDAnnotation]; uid != "" && uid != string(server.UID) {
+			continue
+		}
 		if g.Spec.Disabled || (g.Spec.ExpiresAt != nil && !g.Spec.ExpiresAt.After(time.Now())) {
 			continue
 		}
@@ -349,6 +360,10 @@ func (s *AccessService) selectAdapterGrant(ctx context.Context, namespace, serve
 		return matches[i].grant.CreationTimestamp.Time.Before(matches[j].grant.CreationTimestamp.Time)
 	})
 	g := matches[0]
+	if g.grant.Annotations == nil {
+		g.grant.Annotations = map[string]string{}
+	}
+	g.grant.Annotations[mcpaccess.ServerUIDAnnotation] = string(server.UID)
 	return &g.grant, g.teamID, nil
 }
 

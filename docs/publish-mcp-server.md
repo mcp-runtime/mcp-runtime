@@ -306,6 +306,35 @@ mcp-runtime server push --scope tenant --image payments:v1.0.0
 mcp-runtime server apply --file payments.yaml --use-kube
 ```
 
+## Retire a server
+
+Use `mcp-runtime server delete <name> --namespace <namespace>` or the UI's
+**Retire** action. Both use the same platform retirement operation: disable
+grants, revoke sessions, remove all access records referencing that exact
+server namespace/name (including records in other namespaces), remove its
+exclusively managed analytics credential, and delete the server. Shared image
+pull credentials, user-provided secrets, agents, teams, and historical audit
+and analytics records are retained.
+
+For servers applied directly through Kubernetes, retirement repairs a missing
+namespace-local API credential binding after checking ownership. It waits up to
+five seconds for Kubernetes authorization to observe that binding and never
+extends credential access to reserved infrastructure namespaces.
+
+A cleanup error means retirement is incomplete. Retry the same command; the
+server remains marked as retiring and refuses new access or redeployment while
+cleanup completes. Administrators and team owners can still delete, disable,
+or revoke existing access through its management endpoints; the retiring
+server retains its ownership checks. New grants and manually applied sessions
+return `409 Conflict`, and adapter enrollment remains blocked.
+
+If the server was already deleted, a platform admin must
+run the same command to recover orphaned grants, sessions, and managed
+credentials, because its previous ownership labels are no longer available.
+Publishing the same name creates a fresh deployment and requires new access.
+The explicit Kubernetes deletion path (`--use-kube`) deletes only the server
+object and does not perform platform authorization cleanup.
+
 ## What happens after deploy
 
 After the server description reaches the platform, the operator:

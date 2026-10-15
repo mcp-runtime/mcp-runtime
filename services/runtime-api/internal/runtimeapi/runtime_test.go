@@ -2606,6 +2606,7 @@ func TestRuntimeGrantListScopesBySubjectWithoutServerLookup(t *testing.T) {
 		}
 	}
 	server := &RuntimeServer{accessMgr: accessMgr}
+	serverGets = 0 // UID binding during seeding is separate from list behavior.
 	request := httptest.NewRequest(http.MethodGet, "/api/runtime/grants?namespace=mcp-team-acme", nil)
 	request = request.WithContext(withPrincipal(request.Context(), principal{
 		Role:      roleUser,
@@ -3074,6 +3075,7 @@ func TestRuntimeSessionListScopesBySubjectWithoutServerLookup(t *testing.T) {
 			t.Fatalf("seed %s: %v", name, err)
 		}
 	}
+	serverGets = 0 // UID binding during seeding is separate from list behavior.
 	server := &RuntimeServer{accessMgr: accessMgr}
 	request := httptest.NewRequest(http.MethodGet, "/api/runtime/sessions?namespace=mcp-team-acme", nil)
 	request = request.WithContext(withPrincipal(request.Context(), principal{
