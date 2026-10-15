@@ -115,9 +115,11 @@ func (s *AccessService) handleRuntimeSessionApply(w http.ResponseWriter, r *http
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	targetServer, err := s.accessMgr.GetMCPServerRef(ctx, req.ServerRef)
+	targetServer, err := s.accessMgr.GetActiveMCPServerRef(ctx, req.ServerRef)
 	if err != nil {
-		if mcpaccess.IsMCPServerNotFoundForRef(err) {
+		if apierrors.IsConflict(err) {
+			writeAPIError(w, http.StatusConflict, err.Error())
+		} else if mcpaccess.IsMCPServerNotFoundForRef(err) {
 			writeAPIError(w, http.StatusBadRequest, err.Error())
 		} else {
 			log.Printf("runtime session: assert MCPServer ref failed: %v", err)

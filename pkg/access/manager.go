@@ -77,10 +77,10 @@ func IsMCPServerNotFoundForRef(err error) bool {
 	return err != nil && errors.As(err, &missing)
 }
 
-// AssertMCPServerRef returns an error if no MCPServer exists at the given ref.
+// AssertMCPServerRef checks that a server exists and accepts new authorization.
 // Use this before creating grants or sessions so the API can reject unknown targets early.
 func (m *Manager) AssertMCPServerRef(ctx context.Context, ref ServerReference) error {
-	_, err := m.GetMCPServerRef(ctx, ref)
+	_, err := m.GetActiveMCPServerRef(ctx, ref)
 	return err
 }
 
@@ -102,10 +102,21 @@ func (m *Manager) GetMCPServerRef(ctx context.Context, ref ServerReference) (*mc
 	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, &server); err != nil {
 		return nil, fmt.Errorf("decode serverRef: %w", err)
 	}
-	if server.Annotations[ServerRetiringAnnotation] == "true" || server.DeletionTimestamp != nil {
-		return nil, fmt.Errorf("serverRef is being retired: %s/%s", ns, name)
-	}
 	return &server, nil
+}
+
+// GetActiveMCPServerRef resolves an authorization target for issuance. Ordinary
+// lookups retain retiring servers so management can still check ownership and
+// clean up access after a failed retirement.
+func (m *Manager) GetActiveMCPServerRef(ctx context.Context, ref ServerReference) (*mcpv1alpha1.MCPServer, error) {
+	server, err := m.GetMCPServerRef(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	if server.Annotations[ServerRetiringAnnotation] == "true" || server.DeletionTimestamp != nil {
+		return nil, apierrors.NewConflict(serverGVR.GroupResource(), server.Name, errors.New("server is being retired"))
+	}
+	return server, nil
 }
 
 // ListMCPServers returns all MCPServer resources, optionally filtered by namespace.
