@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -77,6 +78,9 @@ func TestServerRetirementAuthorizationAndRecovery(t *testing.T) {
 			}
 			w := request()
 			if tc.deny {
+				if len(kube.Actions()) != 0 {
+					t.Fatal("unauthorized credential or RBAC access")
+				}
 				if w.Code != http.StatusForbidden {
 					t.Fatalf("status %d: %s", w.Code, w.Body.String())
 				}
@@ -147,5 +151,72 @@ func TestRetirementPreservesSharedAnalyticsCredential(t *testing.T) {
 	}
 	if _, err := api.k8sClients.Clientset.CoreV1().Secrets("team-a").Get(context.Background(), secret.Name, metav1.GetOptions{}); err != nil {
 		t.Fatal("shared credential deleted")
+	}
+}
+
+func TestRetirementRepairsMissingNamespaceCredentialBinding(t *testing.T) {
+	for _, tc := range []struct {
+		name, namespace            string
+		missing, denied, protected bool
+	}{
+		{name: "existing credential", namespace: "mcp-servers"},
+		{name: "absent credential", namespace: "mcp-servers", missing: true},
+		{name: "persistent denial", namespace: "mcp-servers", denied: true},
+		{name: "protected namespace", namespace: "mcp-platform", protected: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+			defer cancel()
+			name := "demo-analytics-creds"
+			kube := kubernetesfake.NewSimpleClientset()
+			if !tc.missing {
+				_, err := kube.CoreV1().Secrets(tc.namespace).Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: tc.namespace, Labels: map[string]string{"app.kubernetes.io/managed-by": "mcp-runtime"}}}, metav1.CreateOptions{})
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			reads := 0
+			kube.PrependReactor("get", "secrets", func(a clienttesting.Action) (bool, runtime.Object, error) {
+				reads++
+				// Simulate an authorizer which observes the new binding after one retry.
+				if reads <= 2 || tc.denied || tc.protected {
+					return true, nil, apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, name, errors.New("namespace binding missing"))
+				}
+				return false, nil, nil
+			})
+			scheme := runtime.NewScheme()
+			_ = mcpv1alpha1.AddToScheme(scheme)
+			api := &RuntimeServer{k8sClients: &k8sclient.Clients{Clientset: kube, Dynamic: dynamicfake.NewSimpleDynamicClient(scheme)}}
+			err := api.retireServerCredentials(ctx, tc.namespace, "demo", nil)
+			if tc.denied || tc.protected {
+				if err == nil {
+					t.Fatal("credential denial was ignored")
+				}
+			} else if err != nil {
+				t.Fatal(err)
+			}
+			bindings, err := kube.RbacV1().RoleBindings(tc.namespace).List(context.Background(), metav1.ListOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.protected {
+				if len(bindings.Items) != 0 {
+					t.Fatal("granted credential access to infrastructure")
+				}
+				return
+			}
+			if len(bindings.Items) != 1 {
+				t.Fatalf("expected one namespace binding: %+v", bindings.Items)
+			}
+			binding := bindings.Items[0]
+			if binding.RoleRef.Kind != "ClusterRole" || binding.RoleRef.Name != platformNamespaceAPISecretAccessName || len(binding.Subjects) != 1 || binding.Subjects[0].Name != platformNamespaceAPIServiceAccountName || binding.Subjects[0].Namespace != "mcp-platform" {
+				t.Fatalf("unexpected access binding: %+v", binding)
+			}
+			if !tc.denied && !tc.missing {
+				if _, err := kube.CoreV1().Secrets(tc.namespace).Get(context.Background(), name, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+					t.Fatalf("credential survived: %v", err)
+				}
+			}
+		})
 	}
 }
