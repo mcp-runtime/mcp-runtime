@@ -105,3 +105,32 @@ func TestSessionStateRoundTripKeepsRevocationAndGrantLink(t *testing.T) {
 		t.Fatalf("round trip=%+v", summary)
 	}
 }
+
+func TestPlatformSessionBackendRejectsRetiringTarget(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		deleting bool
+	}{{"retiring", false}, {"deleting", true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			_ = mcpv1alpha1.AddToScheme(scheme)
+			server := &mcpv1alpha1.MCPServer{ObjectMeta: metav1.ObjectMeta{Name: "server", Namespace: "team", UID: types.UID("server-uid")}}
+			if tc.deleting {
+				now := metav1.Now()
+				server.DeletionTimestamp = &now
+			} else {
+				server.Annotations = map[string]string{mcpaccess.ServerRetiringAnnotation: "true"}
+			}
+			manager := mcpaccess.NewManager(dynamicfake.NewSimpleDynamicClient(scheme, server), nil)
+			client := &fakeSessionClient{}
+			manager.WithSessionBackend(&platformSessionBackend{client: client, access: manager})
+			session := &mcpaccess.MCPAgentSession{ObjectMeta: metav1.ObjectMeta{Name: "new", Namespace: "team"}, Spec: mcpaccess.MCPAgentSessionSpec{ServerRef: mcpaccess.ServerReference{Name: "server", Namespace: "team"}}}
+			if _, err := manager.ApplySession(context.Background(), session); !apierrors.IsConflict(err) {
+				t.Fatalf("retiring target issuance: %v", err)
+			}
+			if client.row.ID != "" {
+				t.Fatal("wrote a session for a retiring target")
+			}
+		})
+	}
+}

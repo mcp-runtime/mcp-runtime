@@ -3,8 +3,10 @@ package runtimeapi
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -218,5 +220,102 @@ func TestRetirementRepairsMissingNamespaceCredentialBinding(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestRetiringServerAccessManagementHandlers(t *testing.T) {
+	operations := []struct{ kind, method, suffix, body string }{
+		{"grants", http.MethodDelete, "", ""},
+		{"grants", http.MethodPatch, "", `{"disabled":true}`},
+		{"grants", http.MethodPatch, "", `{"disabled":false}`},
+		{"grants", http.MethodPost, "/disable", ""},
+		{"grants", http.MethodPost, "/enable", ""},
+		{"sessions", http.MethodDelete, "", ""},
+		{"sessions", http.MethodPatch, "", `{"revoked":true}`},
+		{"sessions", http.MethodPatch, "", `{"revoked":false}`},
+		{"sessions", http.MethodPost, "/revoke", ""},
+		{"sessions", http.MethodPost, "/unrevoke", ""},
+	}
+	for _, deleting := range []bool{false, true} {
+		for _, role := range []string{"admin", "owner", "member"} {
+			for _, op := range operations {
+				t.Run(fmt.Sprintf("%t/%s/%s/%s/%s/%s", deleting, role, op.kind, op.method, op.suffix, op.body), func(t *testing.T) {
+					scheme := runtime.NewScheme()
+					_ = mcpv1alpha1.AddToScheme(scheme)
+					server := ownedTestMCPServer("demo", "team-a", "owner")
+					if deleting {
+						now := metav1.Now()
+						server.DeletionTimestamp = &now
+					} else {
+						server.Annotations = map[string]string{mcpaccess.ServerRetiringAnnotation: "true"}
+					}
+					grant := &mcpv1alpha1.MCPAccessGrant{ObjectMeta: metav1.ObjectMeta{Name: "access", Namespace: "team-a"}, Spec: mcpv1alpha1.MCPAccessGrantSpec{ServerRef: mcpv1alpha1.ServerReference{Name: "demo", Namespace: "team-a"}}}
+					session := &mcpv1alpha1.MCPAgentSession{ObjectMeta: grant.ObjectMeta, Spec: mcpv1alpha1.MCPAgentSessionSpec{ServerRef: grant.Spec.ServerRef}}
+					dyn := dynamicfake.NewSimpleDynamicClient(scheme, server, grant, session)
+					api := &RuntimeServer{accessMgr: mcpaccess.NewManager(dyn, nil)}
+					p := principal{Role: roleAdmin, Subject: "owner", Namespace: "team-a"}
+					if role != "admin" {
+						p.Role = roleUser
+						p.Subject = role
+						teamRole := teamRoleOwner
+						if role == "member" {
+							teamRole = teamRoleMember
+						}
+						p.Teams = []principalTeam{{ID: "team-a-id", Namespace: "team-a", Role: teamRole}}
+					}
+					req := httptest.NewRequest(op.method, "/api/runtime/"+op.kind+"/team-a/access"+op.suffix, strings.NewReader(op.body))
+					req = req.WithContext(withPrincipal(req.Context(), p))
+					w := httptest.NewRecorder()
+					if op.kind == "grants" {
+						api.Access().HandleGrantItemPath(w, req)
+					} else {
+						api.Access().HandleSessionItemPath(w, req)
+					}
+					expected := http.StatusOK
+					if role == "member" {
+						expected = http.StatusForbidden
+					}
+					if w.Code != expected {
+						t.Fatalf("status=%d expected=%d body=%s", w.Code, expected, w.Body.String())
+					}
+					if role == "member" {
+						for _, a := range dyn.Actions() {
+							if a.GetVerb() == "delete" || a.GetVerb() == "patch" || a.GetVerb() == "create" || a.GetVerb() == "update" {
+								t.Fatal("unauthorized access mutation")
+							}
+						}
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestRetiringServerIssuanceHandlersRejectConflict(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = mcpv1alpha1.AddToScheme(scheme)
+	server := ownedTestMCPServer("demo", "team-a", "owner")
+	server.Annotations = map[string]string{mcpaccess.ServerRetiringAnnotation: "true"}
+	dyn := dynamicfake.NewSimpleDynamicClient(scheme, server)
+	api := &RuntimeServer{accessMgr: mcpaccess.NewManager(dyn, nil)}
+	for _, kind := range []string{"grants", "sessions"} {
+		body := `{"name":"new","namespace":"team-a","serverRef":{"name":"demo"},"subject":{"humanID":"owner"},"maxTrust":"low","allowedSideEffects":["read"]}`
+		if kind == "sessions" {
+			body = `{"name":"new","namespace":"team-a","serverRef":{"name":"demo"},"subject":{"humanID":"owner"},"consentedTrust":"low"}`
+		}
+		req := httptest.NewRequest(http.MethodPost, "/api/runtime/"+kind, strings.NewReader(body))
+		req = req.WithContext(withPrincipal(req.Context(), principal{Role: roleAdmin, Subject: "owner"}))
+		w := httptest.NewRecorder()
+		if kind == "grants" {
+			api.Access().HandleRuntimeGrants(w, req)
+		} else {
+			api.Access().HandleRuntimeSessions(w, req)
+		}
+		if w.Code != http.StatusConflict {
+			t.Fatalf("%s status=%d body=%s", kind, w.Code, w.Body.String())
+		}
+	}
+	if _, _, err := api.Access().selectAdapterGrant(context.Background(), "team-a", "demo", "owner", "", nil, "", true); !apierrors.IsConflict(err) {
+		t.Fatalf("adapter issuance accepted retiring target: %v", err)
 	}
 }
