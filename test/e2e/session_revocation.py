@@ -16,7 +16,8 @@ def wait_for_revocation(url, credentials, host, protocol, mcp_session="", budget
     while (elapsed := time.monotonic() - started) < budget:
         # A denial taking 300ms still meets a one-second target. A fixed 200ms
         # timeout would discard it and could make every observation fail.
-        command = ["curl", "-ksS", "--max-time", f"{budget - elapsed:.6f}", "--cert", str(Path(credentials) / "client.crt"), "--key", str(Path(credentials) / "client.key"), "-H", "Host: " + host, "-H", "content-type: application/json", "-H", "accept: application/json, text/event-stream", "-H", "Mcp-Protocol-Version: " + protocol]
+        # curl treats a timeout rounded to zero as unlimited.
+        command = ["curl", "-ksS", "--max-time", f"{max(0.001, budget - elapsed):.6f}", "--cert", str(Path(credentials) / "client.crt"), "--key", str(Path(credentials) / "client.key"), "-H", "Host: " + host, "-H", "content-type: application/json", "-H", "accept: application/json, text/event-stream", "-H", "Mcp-Protocol-Version: " + protocol]
         if mcp_session:
             command += ["-H", "Mcp-Session-Id: " + mcp_session]
         if oauth_token:
