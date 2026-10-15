@@ -23,6 +23,13 @@ class SessionRevocationTest(unittest.TestCase):
         self.assertIn("Authorization: Bearer fixture-token", command)
         self.assertFalse(any(header.startswith("Mcp-Session-Id:") for header in command))
 
+    def test_near_deadline_timeout_cannot_round_to_unlimited(self):
+        response = subprocess.CompletedProcess([], 0, '{"error":"session_revoked"}\n401', "")
+        with patch("session_revocation.subprocess.run", return_value=response) as run, patch("session_revocation.time.monotonic", side_effect=[0, 0.9999999, 0.99999999]):
+            wait_for_revocation("https://kind/mcp", "/tmp/cert", "kind", "2025-06-18")
+        command = run.call_args.args[0]
+        self.assertEqual(float(command[command.index("--max-time") + 1]), 0.001)
+
     def test_late_revocation_does_not_pass_the_one_second_bound(self):
         response = subprocess.CompletedProcess([], 0, '{"error":"session_revoked"}\n401', "")
         with patch("session_revocation.subprocess.run", return_value=response), patch("session_revocation.time.sleep"), patch("session_revocation.time.monotonic", side_effect=[0, 0.1, 1.1, 1.2]):
