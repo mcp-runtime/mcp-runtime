@@ -2,11 +2,16 @@ package runtimeapi
 
 import (
 	"context"
+	"fmt"
+	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
 	mcpaccess "mcp-runtime/pkg/access"
+	"mcp-runtime/pkg/kubeworkload"
 )
 
 // Only the runtime-managed analytics credential is an exclusively generated
@@ -15,7 +20,7 @@ import (
 func (s *RuntimeServer) retireServerCredentials(ctx context.Context, namespace, name string, current *mcpv1alpha1.MCPServer) error {
 	secretName := publishedServerAnalyticsSecretName(name)
 	secrets := s.k8sClients.Clientset.CoreV1().Secrets(namespace)
-	secret, err := secrets.Get(ctx, secretName, metav1.GetOptions{})
+	secret, err := s.serverRetirementCredential(ctx, namespace, secretName)
 	if apierrors.IsNotFound(err) {
 		return nil
 	}
@@ -75,4 +80,32 @@ func serverUsesCredential(spec mcpv1alpha1.MCPServerSpec, name string) bool {
 		}
 	}
 	return false
+}
+
+// Called only after the retirement handler has checked namespace and server
+// ownership. CLI-applied servers can predate the namespace-local API binding;
+// repair that binding without granting access to infrastructure namespaces.
+func (s *RuntimeServer) serverRetirementCredential(ctx context.Context, namespace, name string) (*corev1.Secret, error) {
+	secrets := s.k8sClients.Clientset.CoreV1().Secrets(namespace)
+	secret, err := secrets.Get(ctx, name, metav1.GetOptions{})
+	if !apierrors.IsForbidden(err) || kubeworkload.OperatorSecretNamespaceProtected(namespace) {
+		return secret, err
+	}
+	if err := ensureNamespacePlatformAPISecretAccess(ctx, s.k8sClients.Clientset, namespace); err != nil {
+		return nil, fmt.Errorf("ensure retirement credential access: %w", err)
+	}
+	// Kubernetes authorizer caches can lag a newly created RoleBinding. Retry
+	// only Forbidden; absence and other API errors retain their normal meaning.
+	var readErr error
+	err = wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
+		secret, readErr = secrets.Get(ctx, name, metav1.GetOptions{})
+		if apierrors.IsForbidden(readErr) {
+			return false, nil
+		}
+		return true, readErr
+	})
+	if err != nil && apierrors.IsForbidden(readErr) {
+		return nil, fmt.Errorf("waiting for retirement credential access: %w (last error: %v)", err, readErr)
+	}
+	return secret, err
 }

@@ -316,6 +316,11 @@ exclusively managed analytics credential, and delete the server. Shared image
 pull credentials, user-provided secrets, agents, teams, and historical audit
 and analytics records are retained.
 
+For servers applied directly through Kubernetes, retirement repairs a missing
+namespace-local API credential binding after checking ownership. It waits up to
+five seconds for Kubernetes authorization to observe that binding and never
+extends credential access to reserved infrastructure namespaces.
+
 A cleanup error means retirement is incomplete. Retry the same command; the
 server remains marked as retiring and refuses new access or redeployment while
 cleanup completes. If the server was already deleted, a platform admin must
