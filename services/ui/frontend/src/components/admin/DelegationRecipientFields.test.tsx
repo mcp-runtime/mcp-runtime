@@ -86,3 +86,14 @@ it("requests the next active-agent page without losing the chosen member", async
   expect(fetchMock.mock.calls.some(([url]) => String(url).includes("agent_cursor=next-agent"))).toBe(true);
   expect(screen.getByTestId("delegation-human")).toHaveValue("bob");
 });
+
+it("offers only named recipient modes accepted by cross-team validation", async () => {
+  const { submit } = setup();
+  const user = await lookup();
+  const mode = await screen.findByTestId("delegation-mode");
+  expect(Array.from((mode as HTMLSelectElement).options, (option) => option.value)).toEqual(["agent", "human", "human_agent"]);
+  await user.selectOptions(mode, "human");
+  await user.selectOptions(screen.getByTestId("delegation-human"), "bob");
+  await user.click(screen.getByTestId("grant-create-submit"));
+  expect(submit).toHaveBeenCalledWith(expect.objectContaining({ teamID: "B", humanID: "bob", agentID: "" }));
+});
