@@ -5785,26 +5785,7 @@ EOF
     # the ordinary readiness helper so a two-second retry cannot hide the bound.
     SESSION_CHECK_URL="${ADAPTER_CERT_URL}" SESSION_CHECK_CERT="${ADAPTER_CERT_PATH}" \
       SESSION_CHECK_TOKEN="${ADAPTER_OAUTH_TOKEN}" SESSION_CHECK_HOST="${OAUTH_SERVER_HOST}" \
-      SESSION_CHECK_PROTOCOL="${MCP_PROTOCOL_VERSION}" python3 <<'PY'
-import json, os, subprocess, time
-start = time.monotonic()
-while time.monotonic() - start < 1:
-    command = ["curl", "-ksS", "--max-time", "0.2", "--cert", os.environ["SESSION_CHECK_CERT"] + "/client.crt", "--key", os.environ["SESSION_CHECK_CERT"] + "/client.key", "-H", "Host: " + os.environ["SESSION_CHECK_HOST"], "-H", "Authorization: Bearer " + os.environ["SESSION_CHECK_TOKEN"], "-H", "content-type: application/json", "-H", "accept: application/json, text/event-stream", "-H", "Mcp-Protocol-Version: " + os.environ["SESSION_CHECK_PROTOCOL"], "--data", '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}', os.environ["SESSION_CHECK_URL"]]
-    response = subprocess.run(command, capture_output=True, text=True)
-    if response.returncode == 0:
-        try:
-            denied = json.loads(response.stdout).get("error") == "session_revoked"
-        except ValueError:
-            denied = False
-        if denied:
-            elapsed = time.monotonic() - start
-            if elapsed <= 1:
-                print(f"session revocation reached the gateway in {elapsed:.3f}s")
-                break
-    time.sleep(0.025)
-else:
-    raise SystemExit("session revocation did not reach the gateway within 1 second")
-PY
+      SESSION_CHECK_PROTOCOL="${MCP_PROTOCOL_VERSION}" python3 "${PROJECT_ROOT}/test/e2e/session_revocation.py"
     if [[ "$(kubectl get configmap "${OAUTH_SERVER_NAME}-gateway-policy" -n mcp-servers -o jsonpath='{.metadata.resourceVersion}')" != "${SESSION_POLICY_REVISION}" ]]; then
       echo "session revocation changed the static policy ConfigMap" >&2
       exit 1
