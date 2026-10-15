@@ -34,11 +34,11 @@ adapter_certificate_credential_dir() {
   printf '%s' "${cert_dir}"
 }
 
-# Wait for the data plane to apply a session change. ConfigMap contents alone
-# do not prove the mounted policy has been projected and reloaded. By default,
+# Wait for the data plane to apply a session change. A persisted session alone
+# does not prove the gateway cache has caught up. By default,
 # retry only the expected previous state: a missing session during enrollment,
 # or a still accepted certificate during revocation. The optional sixth
-# argument also retries transient TLS-port-forward failures and HTTP 5xx while
+# argument also retries transient TLS-port-forward failures, route 404 and 5xx while
 # a newly created Traefik route converges. The optional eighth argument supplies
 # a complete initialize payload. Never retry a tool invocation.
 wait_for_adapter_certificate_initialize() {
@@ -80,7 +80,7 @@ wait_for_adapter_certificate_initialize() {
     if [[ "${status}" == "${expected_status}" && "${error}" == "${expected_error}" ]]; then
       return 0
     fi
-    if [[ "${retry_transient_server_errors}" == "true" && "${status}" =~ ^(500|502|503)$ ]]; then
+    if [[ "${retry_transient_server_errors}" == "true" && "${status}" =~ ^(404|500|502|503)$ ]]; then
       if (( SECONDS < deadline )); then
         sleep 2
         continue

@@ -32,6 +32,8 @@ def wait_for_revocation(url, credentials, host, protocol, mcp_session="", budget
                 body, code = response.stdout.rsplit("\n", 1)
                 revoked = code == "401" and json.loads(body).get("error") == "session_revoked"
             except (ValueError, TypeError, AttributeError):
+                # A malformed/intermediate response is not proof of revocation.
+                # Keep probing within the deadline; diagnostics retain its status.
                 pass
         # Report transport/status metadata, never bearer values or raw payloads.
         last_response = f"curl exit {response.returncode}, HTTP {code}"

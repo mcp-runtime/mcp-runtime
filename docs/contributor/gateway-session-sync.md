@@ -152,3 +152,10 @@ and revocation with real MCP traffic, check the policy ConfigMap revision stays
 unchanged, measure revoke-to-deny delay, and test cold/warm/stale behavior.
 Use the explicit Kind/staging target guards from the contributor runbooks;
 never point these suites at production.
+
+After retiring and republishing a server, prove the old certificate receives the
+exact `401 session_not_found` denial through the recreated ingress. A transient
+Traefik 404 is route convergence, not an authorization decision. The certificate
+initialize helper retries it only when its bounded route-startup option is
+explicitly enabled; persistent 404s time out and accepting the retired
+certificate fails immediately. Tool invocations are never retried for readiness.

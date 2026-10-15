@@ -7,17 +7,35 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-15
+
+This breaking release moves runtime sessions from Kubernetes policy documents to
+Postgres-backed platform storage and server-scoped gateway synchronization.
+Policy schema v4 requires matching platform-api, runtime-api, operator and gateway
+versions. Use the v0.10.0 CLI and a backed-up fresh setup; an images-only update
+is insufficient for the new sync listener, projected tokens and network/RBAC wiring.
+Preserve platform databases, registry images, required Secrets and certificates,
+and external identity-provider data/TLS state. Restore required application data,
+restart platform-api after any Postgres restore, redeploy servers through the CLI,
+and re-enroll adapters: old Kubernetes sessions are intentionally not imported.
+Deleted session names remain reserved. Rehearse recovery before resetting the
+hosted platform; see [the release deployment procedure](docs/reference-deployment.md#v0100-session-storage-release).
+
 ### Added
 
 - Resource owners can look up one known recipient team and select its active agents or stable member IDs for time-bound cross-team grants; the form offers only recipient modes accepted by server validation. Gateway audit records expose actor and resource team IDs separately; grant-wide session revocation is atomic across linked namespaces, and directory outages report service unavailable rather than invalid membership ([#469](https://github.com/mcp-runtime/mcp-runtime/issues/469)).
 - Agent session details now link exact recorded authorizing grants, show visible lifecycle counts, and preview and verify deactivation impact. Admin gateway audit links open shared namespace-qualified grant/session details with server-filtered seven-day decision activity; missing attribution and partial failures are explicit ([#549](https://github.com/mcp-runtime/mcp-runtime/issues/549), [#309](https://github.com/mcp-runtime/mcp-runtime/issues/309)).
-- Platform-api now provides Postgres session persistence and a dedicated, server-scoped gateway sync audience with revocation tombstones, bounded change retention, restore epochs, and atomic agent deactivation. Gateways authenticate with Pod-bound projected tokens without database credentials or the shared internal token; runtime/gateway migration is tracked separately in #659 ([#718](https://github.com/mcp-runtime/mcp-runtime/issues/718)).
+- Platform-api now provides Postgres session persistence and a dedicated, server-scoped gateway sync audience with revocation tombstones, bounded change retention, restore epochs, and atomic agent deactivation. Gateways authenticate with Pod-bound projected tokens without database credentials or the shared internal token; runtime management and gateway authorization now use this storage in #659 ([#718](https://github.com/mcp-runtime/mcp-runtime/issues/718)).
 
 ### Changed
 
 - Runtime sessions are persisted by platform-api in Postgres and synchronized into server-scoped gateway caches; session changes no longer rewrite policy ConfigMaps. Policy schema v4 requires matching updated gateways. Use the platform CLI/UI for sessions; direct `--use-kube` session management is rejected. Re-enroll adapters after upgrading rather than importing old Kubernetes session state. New adapter session names prevent retired certificates from naming replacement bindings ([#659](https://github.com/mcp-runtime/mcp-runtime/issues/659), [#718](https://github.com/mcp-runtime/mcp-runtime/issues/718)).
 
 ### Fixed
+
+- Certificate E2E checks wait for transient Traefik route 404s only inside their explicitly enabled startup window after server recreation. Persistent routing failures still time out, and accepting a retired certificate still fails immediately instead of being retried ([#752](https://github.com/mcp-runtime/mcp-runtime/issues/752)).
+
+- Platform readiness reads the final HTTP status after bounded curl retries, so a recovered connection refusal no longer fails a healthy setup; failed probes, malformed status and non-200 responses still fail. Staging failure diagnostics continue collecting workload/configuration/certificate metadata when setup fails before API login ([#750](https://github.com/mcp-runtime/mcp-runtime/issues/750), [#751](https://github.com/mcp-runtime/mcp-runtime/issues/751)).
 
 - Post-setup platform API readiness tolerates a brief Service endpoint propagation delay after the deployment becomes Ready, while still failing after a bounded retry window ([#748](https://github.com/mcp-runtime/mcp-runtime/pull/748)).
 - The cross-team certificate E2E journey waits for initial Traefik TLS and session readiness instead of exiting on an early handshake failure; retries stay bounded and use the recipient certificate without forwarding a preceding fixture's OAuth token ([#748](https://github.com/mcp-runtime/mcp-runtime/pull/748)).
@@ -452,7 +470,8 @@ upgrade from 0.4.x; see the migration note under **Changed**.
 
 - Targeted platform updates through `mcp-runtime update`, including embedded CRD updates and `--build` to build/push missing component images before rollout ([#491](https://github.com/mcp-runtime/mcp-runtime/pull/491)).
 
-[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.7.2...v0.8.0

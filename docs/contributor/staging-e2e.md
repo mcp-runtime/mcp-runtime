@@ -161,6 +161,11 @@ describe, per-deployment logs, certificates/orders/challenges, ClusterIssuers,
 ingress and Traefik CRs, Secret names only, and the served public
 certificates). A failed stage prints the likely cause and the artifact to open
 first; a failed critical stage skips the stages that depend on it.
+Session diagnostics require the token established by platform login. If setup
+fails before that stage, `diagnostics/sessions.json` records an explicit skipped
+reason and collection continues with Kubernetes/configuration/workload and
+certificate metadata. The collector does not send an unauthenticated session
+request or include token values in that reason.
 
 | Stage | Asserts |
 | --- | --- |

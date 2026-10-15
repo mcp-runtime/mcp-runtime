@@ -399,7 +399,7 @@ func doctorCurlServiceEndpoint(kubectl core.KubectlRunner, url string) (string, 
 	image := "curlimages/curl:8.7.1"
 	curlArgs := []string{
 		"-sS", "-o", "/dev/null",
-		"-w", "%{http_code}",
+		"-w", "\n%{http_code}\n",
 		"--connect-timeout", "5",
 		"--max-time", "20",
 		// Deployment readiness can precede Service endpoint propagation.
@@ -437,7 +437,17 @@ func doctorCurlServiceEndpoint(kubectl core.KubectlRunner, url string) (string, 
 	if logsErr != nil {
 		return "", fmt.Errorf("failed reading probe logs: %v", logsErr)
 	}
-	return strings.TrimSpace(out), nil
+	// Pod logs combine stdout and stderr. Earlier curl retry diagnostics must
+	// not become part of the final status, or a recovered probe fails readiness.
+	status := strings.TrimSpace(out)
+	if i := strings.LastIndexByte(status, '\n'); i >= 0 {
+		status = strings.TrimSpace(status[i+1:])
+	}
+	code, parseErr := strconv.Atoi(status)
+	if len(status) != 3 || parseErr != nil || code < 100 || code > 599 {
+		return "", fmt.Errorf("probe logs did not end with a valid HTTP status")
+	}
+	return status, nil
 }
 
 func decodePlatformSecretValue(key, encoded string) (string, *DoctorCheck) {
