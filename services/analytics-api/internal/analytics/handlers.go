@@ -117,7 +117,7 @@ func (h *Handler) EventTypes(w http.ResponseWriter, r *http.Request) {
 func hasEventFilters(r *http.Request) bool {
 	q := r.URL.Query()
 	for _, key := range []string{
-		"trace_id", "source", "event_type", "server", "namespace", "team_id",
+		"trace_id", "source", "event_type", "server", "namespace", "team_id", "subject_team_id", "resource_team_id",
 		"cluster", "human_id", "agent_id", "session_id", "decision", "tool_name", "reason",
 		"matched_grant", "matched_grant_namespace", "matched_session", "matched_session_namespace", "since", "until",
 	} {
@@ -131,12 +131,13 @@ func hasEventFilters(r *http.Request) bool {
 func eventFiltersFromRequest(r *http.Request, limit int, now time.Time) (clickhousepkg.EventFilters, error) {
 	q := r.URL.Query()
 	filters := clickhousepkg.EventFilters{
-		TraceID:      q.Get("trace_id"),
-		Source:       q.Get("source"),
-		EventType:    q.Get("event_type"),
-		Server:       q.Get("server"),
-		Namespace:    q.Get("namespace"),
-		TeamID:       q.Get("team_id"),
+		TraceID:       q.Get("trace_id"),
+		Source:        q.Get("source"),
+		EventType:     q.Get("event_type"),
+		Server:        q.Get("server"),
+		Namespace:     q.Get("namespace"),
+		TeamID:        q.Get("team_id"),
+		SubjectTeamID: q.Get("subject_team_id"), ResourceTeamID: q.Get("resource_team_id"),
 		Cluster:      q.Get("cluster"),
 		HumanID:      q.Get("human_id"),
 		AgentID:      q.Get("agent_id"),
@@ -147,6 +148,12 @@ func eventFiltersFromRequest(r *http.Request, limit int, now time.Time) (clickho
 		Limit:        limit,
 		MatchedGrant: q.Get("matched_grant"), MatchedGrantNamespace: q.Get("matched_grant_namespace"),
 		MatchedSession: q.Get("matched_session"), MatchedSessionNamespace: q.Get("matched_session_namespace"),
+	}
+	for _, key := range []string{"subject_team_id", "resource_team_id"} {
+		value := q.Get(key)
+		if len(value) > 256 || strings.TrimSpace(value) != value {
+			return filters, apihttp.BadRequest(apihttp.CodeInvalidQueryParam, key+" must be an exact team ID of at most 256 bytes")
+		}
 	}
 	for _, pair := range []struct{ name, namespace string }{{"matched_grant", "matched_grant_namespace"}, {"matched_session", "matched_session_namespace"}} {
 		name, namespace := q.Get(pair.name), q.Get(pair.namespace)

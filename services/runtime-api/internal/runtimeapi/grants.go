@@ -115,7 +115,7 @@ func (s *AccessService) handleGrantRevokeSessions(w http.ResponseWriter, r *http
 		writeAPIError(w, http.StatusForbidden, "forbidden server")
 		return
 	}
-	sessions, err := s.accessMgr.ListSessions(ctx, namespace)
+	sessions, err := s.accessMgr.ListGrantSessions(ctx, namespace, name)
 	if err != nil {
 		writeAPIError(w, http.StatusInternalServerError, "failed to list grant sessions")
 		return
@@ -124,20 +124,22 @@ func (s *AccessService) handleGrantRevokeSessions(w http.ResponseWriter, r *http
 	if server, serverErr := s.accessMgr.GetMCPServerRef(ctx, grant.Spec.ServerRef); serverErr == nil && server != nil {
 		resourceTeam = strings.TrimSpace(string(server.Spec.TeamID))
 	}
-	revoked := 0
+	revoked, err := s.accessMgr.RevokeGrantSessions(ctx, namespace, name)
+	if err != nil {
+		if s.audit != nil {
+			p, _ := principalFromContext(r.Context())
+			s.audit.WriteAudit(ctx, auditEvent{UserID: p.Subject, Action: "grant.sessions.revoked", Resource: name, Namespace: namespace, Status: "error", Message: "linked session revocation failed; retry required", AuthIdentity: auditIdentityLabel(p)})
+		}
+		writeAPIError(w, http.StatusInternalServerError, "failed to revoke every grant session; retry revocation")
+		return
+	}
 	for _, session := range sessions.Items {
 		if session.Annotations[adapterGrantNameAnnotation] != grant.Name || session.Annotations[adapterGrantNamespaceAnnotation] != grant.Namespace {
 			continue
 		}
 		if session.Spec.Revoked {
-			revoked++
 			continue
 		}
-		if err := s.accessMgr.RevokeSession(ctx, session.Name, session.Namespace); err != nil {
-			writeAPIError(w, http.StatusInternalServerError, "failed to revoke every grant session")
-			return
-		}
-		revoked++
 		if s.audit != nil {
 			p, _ := principalFromContext(r.Context())
 			message, _ := json.Marshal(map[string]string{
@@ -148,6 +150,11 @@ func (s *AccessService) handleGrantRevokeSessions(w http.ResponseWriter, r *http
 			})
 			s.audit.WriteAudit(ctx, auditEvent{UserID: p.Subject, Action: "grant.session.revoked", Resource: session.Name, Namespace: session.Namespace, Status: "success", Message: string(message), AuthIdentity: auditIdentityLabel(p)})
 		}
+	}
+	if s.audit != nil {
+		p, _ := principalFromContext(r.Context())
+		message, _ := json.Marshal(map[string]any{"grant": name, "grant_namespace": namespace, "revoked_sessions": revoked, "subject_team_id": string(grant.Spec.Subject.TeamID), "resource_team_id": resourceTeam})
+		s.audit.WriteAudit(ctx, auditEvent{UserID: p.Subject, Action: "grant.sessions.revoked", Resource: name, Namespace: namespace, Status: "success", Message: string(message), AuthIdentity: auditIdentityLabel(p)})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"grant": name, "revokedSessions": revoked})
 }

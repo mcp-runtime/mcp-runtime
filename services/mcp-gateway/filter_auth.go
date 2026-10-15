@@ -40,6 +40,10 @@ func (s *gatewayServer) authFilter(ex *Exchange) Result {
 		strings.TrimSpace(ex.R.Header.Get(s.verifiedSPIFFEHeaderName())) != "" {
 		verifiedIdentity, reason := s.authenticateAdapterCertificate(ex.R, ex.Policy)
 		if reason != "" {
+			// A revoked/expired binding still identifies the caller of a verified
+			// certificate. Preserve that trusted identity for denial audit only;
+			// every unverified/unknown certificate path returns an empty identity.
+			ex.Identity = verifiedIdentity
 			status := http.StatusUnauthorized
 			if reason == "policy_unavailable" {
 				status = http.StatusServiceUnavailable
@@ -61,7 +65,11 @@ func (s *gatewayServer) authFilter(ex *Exchange) Result {
 		return Continue
 	}
 
-	oauthResult := s.authenticateOAuth(ex.R, ex.Policy)
+	subjectTeam := ""
+	if certificateIdentity != nil {
+		subjectTeam = certificateIdentity.TeamID
+	}
+	oauthResult := s.authenticateOAuthForSubjectTeam(ex.R, ex.Policy, subjectTeam)
 	s.metrics.recordOAuthOutcome(s.metricScope(ex.Policy), oauthResult.Allowed, oauthResult.Reason)
 	ex.Identity = oauthResult.Identity
 	ex.OAuthToken = oauthResult.Token
@@ -188,19 +196,14 @@ func (s *gatewayServer) authenticateAdapterCertificate(r *http.Request, policy *
 		if string(binding.Namespace) != namespace || string(binding.Name) != sessionID {
 			continue
 		}
+		boundIdentity := identityContext{HumanID: string(binding.HumanID), AgentID: string(binding.AgentID), TeamID: string(binding.TeamID), SessionID: string(binding.Name), Session: &binding}
 		if binding.Revoked {
-			return identityContext{}, "session_revoked"
+			return boundIdentity, "session_revoked"
 		}
 		if mtlsBindingExpired(binding.ExpiresAt) {
-			return identityContext{}, "session_expired"
+			return boundIdentity, "session_expired"
 		}
-		return identityContext{
-			HumanID:   string(binding.HumanID),
-			AgentID:   string(binding.AgentID),
-			TeamID:    string(binding.TeamID),
-			SessionID: string(binding.Name),
-			Session:   &binding,
-		}, ""
+		return boundIdentity, ""
 	}
 	return identityContext{}, "session_not_found"
 }

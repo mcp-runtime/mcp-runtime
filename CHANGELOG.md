@@ -9,6 +9,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Added
 
+- Resource owners can look up one known recipient team and select its active agents or stable member IDs for time-bound cross-team grants; the form offers only recipient modes accepted by server validation. Gateway audit records expose actor and resource team IDs separately; grant-wide session revocation is atomic across linked namespaces, and directory outages report service unavailable rather than invalid membership ([#469](https://github.com/mcp-runtime/mcp-runtime/issues/469)).
 - Agent session details now link exact recorded authorizing grants, show visible lifecycle counts, and preview and verify deactivation impact. Admin gateway audit links open shared namespace-qualified grant/session details with server-filtered seven-day decision activity; missing attribution and partial failures are explicit ([#549](https://github.com/mcp-runtime/mcp-runtime/issues/549), [#309](https://github.com/mcp-runtime/mcp-runtime/issues/309)).
 - Platform-api now provides Postgres session persistence and a dedicated, server-scoped gateway sync audience with revocation tombstones, bounded change retention, restore epochs, and atomic agent deactivation. Gateways authenticate with Pod-bound projected tokens without database credentials or the shared internal token; runtime/gateway migration is tracked separately in #659 ([#718](https://github.com/mcp-runtime/mcp-runtime/issues/718)).
 
@@ -18,10 +19,12 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Fixed
 
-- Certificate revocation E2E probes use the time remaining in their one-second observation budget instead of cancelling every HTTP request after 200 ms. They still reject late or incorrect denials and report transport/status metadata when the bound is missed ([#744](https://github.com/mcp-runtime/mcp-runtime/pull/744)).
+- Post-setup platform API readiness tolerates a brief Service endpoint propagation delay after the deployment becomes Ready, while still failing after a bounded retry window ([#748](https://github.com/mcp-runtime/mcp-runtime/pull/748)).
+- The cross-team certificate E2E journey waits for initial Traefik TLS and session readiness instead of exiting on an early handshake failure; retries stay bounded and use the recipient certificate without forwarding a preceding fixture's OAuth token ([#748](https://github.com/mcp-runtime/mcp-runtime/pull/748)).
 - Platform API ingress accepts bundled and Helm/k3s Traefik pod labels and the analytics API authentication client, restoring public registry authentication and analytics requests while keeping the gateway session-sync port isolated from those callers ([#718](https://github.com/mcp-runtime/mcp-runtime/issues/718), [#745](https://github.com/mcp-runtime/mcp-runtime/pull/745)).
 - Retiring a server through the CLI or UI invalidates and removes its grants and sessions across namespaces, removes exclusively managed analytics credentials using namespace-scoped cleanup permissions that are repaired for CLI-applied servers, and reports cleanup failures for retry. Republishing the same server name cannot authorize delayed writes from its previous deployment; admins can retry retirement for already absent servers without removing shared pull credentials or audit history ([#707](https://github.com/mcp-runtime/mcp-runtime/issues/707)).
 - Administrators and team owners can manage or remove grants and sessions while a server is retiring, including after partial cleanup failures. New grant/session issuance remains blocked with an explicit conflict response, and ownership checks retain the retiring server's labels ([#743](https://github.com/mcp-runtime/mcp-runtime/pull/743)).
+- Certificate revocation E2E probes use the time remaining in their one-second observation budget instead of cancelling every HTTP request after 200 ms. They still reject late or incorrect denials and report transport/status metadata when the bound is missed ([#744](https://github.com/mcp-runtime/mcp-runtime/pull/744)).
 
 ### Security
 

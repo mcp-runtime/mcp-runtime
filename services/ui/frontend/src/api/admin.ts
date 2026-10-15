@@ -143,6 +143,18 @@ export async function getAgent(id: string): Promise<AgentDetail> {
   return await fetchJSON(`/runtime/agents/${segment(id)}`) as AgentDetail;
 }
 
+export type DelegationRecipients = {
+  team: { id: string; slug: string; name: string };
+  agents: AgentRecord[];
+  members: { user_id: string }[];
+  agent_next_cursor?: string;
+  member_next_cursor?: string;
+};
+
+export async function delegationRecipients(namespace: string, team: string, agentCursor = "", memberCursor = ""): Promise<DelegationRecipients> {
+  return await fetchJSON(withQuery("/runtime/delegation-recipients", { namespace, team, limit: "100", agent_cursor: agentCursor, member_cursor: memberCursor })) as DelegationRecipients;
+}
+
 export async function createTeamAgent(slug: string, name: string): Promise<AgentRecord> {
   const payload = asRecord(await fetchJSON(`/runtime/teams/${segment(slug)}/agents`, jsonBody({ name })));
   return asRecord(payload.agent) as unknown as AgentRecord;

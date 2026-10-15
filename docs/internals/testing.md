@@ -77,6 +77,14 @@ workflow.
 
 ## QA E2E
 
+The `adapter-certificates` scenario includes cross-team delegation: resource
+owner A publishes and deploys through the CLI, grants a known team-B human/agent
+time-bound access, verifies B's allowed and ungranted calls and unrelated C's
+denial, revokes linked sessions, and checks certificate denial within one second
+and persisted actor-B/resource-A audit fields. It runs only on its explicit Kind
+target. The offline helper checks are `python3 test/e2e/cross_team_assertions_test.py`;
+they verify assertions and timing logic without replacing the live journey.
+
 `test/e2e/qa-e2e.sh` creates a Kind cluster, configures a local registry mirror,
 builds and publishes runtime images, runs `setup --test-mode`, deploys example
 servers, exercises MCP requests, and verifies governance/observability paths.
@@ -273,6 +281,11 @@ pinned Gitleaks hook for staged secret detection. Install with
 `pre-commit install`; run `pre-commit run --all-files` before pushing when you
 want the full local hook suite. The full suite includes integration hooks that
 install envtest assets and set `KUBEBUILDER_ASSETS`.
+
+The cross-team certificate fixture uses the shared, bounded initialization wait
+for Traefik TLS/session readiness. It supplies the recipient certificate and
+full initialize payload without reusing another fixture's bearer. Tool calls
+and the one-second revocation assertion retain their original checks.
 
 ## Choosing Coverage
 

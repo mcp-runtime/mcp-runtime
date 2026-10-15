@@ -143,7 +143,7 @@ func (s *AccessService) handleRuntimeSessionApply(w http.ResponseWriter, r *http
 	if grant != nil {
 		if strings.TrimSpace(string(req.Subject.TeamID)) != strings.TrimSpace(string(targetServer.Spec.TeamID)) {
 			if err := s.validateCrossTeamSubject(ctx, req.Subject); err != nil {
-				writeAPIError(w, http.StatusUnprocessableEntity, err.Error())
+				writeAPIError(w, crossTeamSubjectStatus(err), err.Error())
 				return
 			}
 		}

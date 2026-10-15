@@ -6,6 +6,7 @@ import { SelectField, TextField } from "../../ui/Field";
 import { EmptyState, ErrorState, LoadingState } from "../../ui/States";
 import type { ServerSummary } from "../../api/types";
 import { useTeamAgents, useTeamMembers, useTeams } from "../../hooks/useAdminData";
+import { DelegationRecipientFields } from "./DelegationRecipientFields";
 
 export type GrantDraft = {
   name: string;
@@ -414,8 +415,13 @@ export function GrantForm({
   fixedAgent,
 }: GrantFormProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const crossTeam = subjectIsCrossTeam(servers, draft);
-  const updateDraft = (next: GrantDraft) => onChange(withCrossTeamExpiry(draft, next, servers));
+  const [delegating, setDelegating] = useState(false);
+  const crossTeam = delegating || subjectIsCrossTeam(servers, draft);
+  const updateDraft = (next: GrantDraft) => {
+    if (delegating && (next.namespace !== draft.namespace || next.server !== draft.server)) next = { ...next, teamID: "", humanID: "", agentID: "" };
+    if (delegating && next.teamID && !next.expiresAt) next = { ...next, expiresAt: defaultCrossTeamExpiry() };
+    onChange(withCrossTeamExpiry(draft, next, servers));
+  };
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -486,11 +492,12 @@ export function GrantForm({
 
       <fieldset className="form-fieldset">
         <legend>Subject</legend>
+        {!fixedAgent ? <label className="inline-actions"><input type="checkbox" checked={delegating} onChange={(event) => { setDelegating(event.target.checked); updateDraft({ ...draft, teamID: "", humanID: "", agentID: "" }); }} />Delegate to another team</label> : null}
         <div className="form-grid">
           {fixedAgent ? <dl className="detail-grid" data-testid="grant-fixed-agent">
             <div><dt>Team</dt><dd>{fixedAgent.teamSlug}</dd></div>
             <div><dt>Agent ID</dt><dd>{fixedAgent.id}</dd></div>
-          </dl> : <SubjectFields
+          </dl> : delegating ? <DelegationRecipientFields key={`${draft.namespace}/${draft.server}`} namespace={draft.namespace} onChange={(subject) => updateDraft({ ...draft, ...subject })} /> : <SubjectFields
             testPrefix="grant"
             subject={draft}
             onChange={(subject) => updateDraft({ ...draft, ...subject })}

@@ -16,6 +16,7 @@ export const SESSION_PROXY_GET_PATHS = new Set([
   "/runtime/sessions",
   "/runtime/teams",
   "/runtime/agents",
+  "/runtime/delegation-recipients",
   "/runtime/components",
   "/admin/operations",
   "/admin/deployments",

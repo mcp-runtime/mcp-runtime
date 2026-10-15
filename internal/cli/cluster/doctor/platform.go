@@ -402,6 +402,10 @@ func doctorCurlServiceEndpoint(kubectl core.KubectlRunner, url string) (string, 
 		"-w", "%{http_code}",
 		"--connect-timeout", "5",
 		"--max-time", "20",
+		// Deployment readiness can precede Service endpoint propagation.
+		// Retry transient connection refusal during that bounded convergence window.
+		"--retry", "10", "--retry-connrefused",
+		"--retry-delay", "1", "--retry-max-time", "30",
 		url,
 	}
 	defer func() {

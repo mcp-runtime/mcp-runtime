@@ -54,8 +54,20 @@ paths:
   /api/v1/events:
     get:
       summary: Query audit events (admin only)
-      description: Exact access-object attribution and time filters are applied before pagination. Attribution namespace identifies the matched object, separately from the server namespace. Events without explicit matched attribution are excluded from those filters.
+      description: Exact access-object attribution and time filters are applied before pagination. Attribution namespace identifies the matched object, separately from the server namespace. Events without explicit matched attribution are excluded from those filters. Actor and resource team fields always derive from the authoritative payload, including before optional ClickHouse projections are initialized by setup; ordinary image updates need no schema change for these reads.
       parameters:
+        - in: query
+          name: subject_team_id
+          description: Exact caller/actor team ID; independent of the server's resource authority.
+          schema: {type: string, maxLength: 256}
+        - in: query
+          name: resource_team_id
+          description: Exact server/resource authority team ID. Legacy events use their existing team_id value; caller team remains unknown when absent.
+          schema: {type: string, maxLength: 256}
+        - in: query
+          name: team_id
+          description: Existing resource authority filter, retaining its original meaning.
+          schema: {type: string}
         - in: query
           name: matched_grant
           description: Exact payload matched_grant name; requires matched_grant_namespace.
@@ -94,6 +106,11 @@ paths:
             application/json:
               schema:
                 type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AuditEvent"
         "400":
           description: invalid query
           content:
@@ -198,6 +215,16 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
 components:
   schemas:
+    AuditEvent:
+      type: object
+      properties:
+        timestamp: {type: string, format: date-time}
+        trace_id: {type: string}
+        team_id: {type: string, description: Existing server/resource authority team ID.}
+        subject_team_id: {type: string, description: Caller team; absent when the event did not identify its actor team.}
+        resource_team_id: {type: string, description: Server authority team; falls back to legacy team_id when explicit attribution is absent.}
+        namespace: {type: string, description: Server/resource namespace.}
+        payload: {}
     UsageResponse:
       type: object
       properties:

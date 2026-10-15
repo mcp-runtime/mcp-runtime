@@ -106,6 +106,26 @@ func TestEventsBuildsFiltersFromQueryParams(t *testing.T) {
 	}
 }
 
+func TestEventsUseDistinctActorAndAuthorityFilters(t *testing.T) {
+	stub := &eventReaderStub{}
+	rec := httptest.NewRecorder()
+	NewHandler(stub).Events(rec, httptest.NewRequest("GET", "/api/v1/events?subject_team_id=actor-b&resource_team_id=resource-a&team_id=resource-a", nil))
+	if rec.Code != 200 || stub.filters.SubjectTeamID != "actor-b" || stub.filters.ResourceTeamID != "resource-a" || stub.filters.TeamID != "resource-a" {
+		t.Fatalf("status=%d filters=%+v", rec.Code, stub.filters)
+	}
+}
+
+func TestEventsRejectOversizeActorAndAuthorityFilters(t *testing.T) {
+	for _, key := range []string{"subject_team_id", "resource_team_id"} {
+		stub := &eventReaderStub{}
+		rec := httptest.NewRecorder()
+		NewHandler(stub).Events(rec, httptest.NewRequest("GET", "/api/v1/events?"+key+"="+strings.Repeat("a", 257), nil))
+		if rec.Code != 400 || stub.queries != 0 {
+			t.Fatalf("status=%d queries=%d", rec.Code, stub.queries)
+		}
+	}
+}
+
 func TestEventsRejectsInvalidLimit(t *testing.T) {
 	handler := NewHandler(&eventReaderStub{})
 	recorder := httptest.NewRecorder()

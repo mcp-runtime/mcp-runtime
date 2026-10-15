@@ -30,6 +30,7 @@ var sessionProxyRuntimePrefixes = []string{
 	"/runtime/observability/prometheus/query",
 	"/runtime/teams",
 	"/runtime/agents",
+	"/runtime/delegation-recipients",
 	"/runtime/grants",
 	"/runtime/sessions",
 	"/runtime/components",

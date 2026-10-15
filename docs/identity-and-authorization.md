@@ -259,6 +259,25 @@ targets sessions with this explicit link, including adapter-issued sessions.
 Manually created sessions without `grantName` are not part of a grant's
 revoke-all operation.
 
+Resource namespace owners can look up one known recipient team through
+`GET /api/v1/runtime/delegation-recipients?namespace=<resource-namespace>&team=<exact-team-slug>`.
+The response contains only the team's ID/name, active agent identities, and
+member user IDs. It does not grant access to global team listings or foreign
+account metadata. `limit` defaults to 50 and is capped at 100; use
+`agent_cursor` and `member_cursor` with the corresponding next cursors to
+continue each list. Ordinary team members and unrelated namespace owners
+cannot use this lookup for a resource they do not manage. Directory outages
+return 503; invalid foreign subjects and invalid grant expiry return 422.
+
+Grant-wide revocation is a single platform session-store transaction, scoped
+by the exact grant namespace and name, including migrated links in other
+namespaces. The response counts newly revoked sessions; repeating the action
+is safe and returns zero when no active linked sessions remain. Per-session
+audits and an operation audit preserve subject and resource teams. A store
+failure returns an error and requires a retry, without a successful revocation
+audit. An enabled grant can issue a fresh session later; its new identity does
+not reactivate a previously revoked certificate.
+
 The grant controls:
 
 - Whether a specific tool is allowed or denied
