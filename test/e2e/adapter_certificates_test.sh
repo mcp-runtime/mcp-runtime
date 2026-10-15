@@ -127,6 +127,10 @@ run_case gateway-error 200 '' '503 {"error":"policy_unavailable"}' 1 1
 run_case timeout 200 '' '401 {"error":"session_not_found"}' 1 1 0
 run_case tls-error 200 '' curl-error 1 1
 run_case route-converges 401 session_not_found $'curl-error\n500 Internal Server Error\n502 Bad Gateway\n401 {"error":"session_not_found"}' 0 4 180 true
+run_case recreated-route-converges 401 session_not_found $'404 404 page not found\n401 {"error":"session_not_found"}' 0 2 180 true
+run_case recreated-route-stays-missing 401 session_not_found '404 404 page not found' 1 1 0 true
+run_case route-404-without-startup-wait 401 session_not_found '404 404 page not found' 1 1
+run_case recreated-route-accepts-retired-certificate 401 session_not_found $'404 404 page not found\n200 {"result":{}}' 1 2 180 true
 run_case route-stays-unavailable 401 session_not_found '500 Internal Server Error' 1 1 0 true
 run_case route-accepts-certificate 401 session_not_found '200 {"result":{}}' 1 1 180 true
 run_scoped_path_prefers_path_over_config_root

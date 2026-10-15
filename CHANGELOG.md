@@ -33,6 +33,8 @@ hosted platform; see [the release deployment procedure](docs/reference-deploymen
 
 ### Fixed
 
+- Certificate E2E checks wait for transient Traefik route 404s only inside their explicitly enabled startup window after server recreation. Persistent routing failures still time out, and accepting a retired certificate still fails immediately instead of being retried ([#752](https://github.com/mcp-runtime/mcp-runtime/issues/752)).
+
 - Platform readiness reads the final HTTP status after bounded curl retries, so a recovered connection refusal no longer fails a healthy setup; failed probes, malformed status and non-200 responses still fail. Staging failure diagnostics continue collecting workload/configuration/certificate metadata when setup fails before API login ([#750](https://github.com/mcp-runtime/mcp-runtime/issues/750), [#751](https://github.com/mcp-runtime/mcp-runtime/issues/751)).
 
 - Post-setup platform API readiness tolerates a brief Service endpoint propagation delay after the deployment becomes Ready, while still failing after a bounded retry window ([#748](https://github.com/mcp-runtime/mcp-runtime/pull/748)).

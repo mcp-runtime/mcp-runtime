@@ -5766,7 +5766,7 @@ EOF
     WRONG_SERVER_URL="https://127.0.0.1:${TRAEFIK_TLS_PORT}/${WRONG_SERVER_NAME}/mcp"
     # MCPServer readiness confirms the route object exists but not that
     # Traefik has loaded the newly issued backend transport certificates.
-    # Retry only transport failures/5xx while that dynamic config converges;
+    # Retry only transport failures/route 404/5xx while that config converges;
     # a successful or otherwise unexpected MCP response still fails at once.
     if ! wait_for_adapter_certificate_initialize "${WRONG_SERVER_URL}" 401 session_not_found \
       "${WORKDIR}/adapter-wrong-server-headers.txt" "${WORKDIR}/adapter-wrong-server.json" true \
