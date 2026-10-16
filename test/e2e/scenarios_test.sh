@@ -11,6 +11,19 @@ bash "${SCRIPT_DIR}/namespace_placement_test.sh"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 QA_E2E_SCRIPT="${PROJECT_ROOT}/test/e2e/qa-e2e.sh"
 SELECT_SCRIPT="${PROJECT_ROOT}/test/e2e/select_pr_scenarios.sh"
+bash "${SCRIPT_DIR}/rollout_diagnostics_test.sh"
+python3 - "${QA_E2E_SCRIPT}" "${SCRIPT_DIR}/scenarios/port-transition.sh" <<'PY'
+from pathlib import Path
+import sys
+qa = Path(sys.argv[1]).read_text(encoding="utf-8")
+scenario = Path(sys.argv[2]).read_text(encoding="utf-8")
+assert 'source "${PROJECT_ROOT}/test/e2e/scenarios/port-transition.sh"' in qa
+assert "run_e2e_port_transition_scenario" in qa
+assert "missing-port-transition-fixture" in scenario
+assert "port_transition_assert_old_route" in scenario
+assert "port-transition-retained" in scenario and "port-transition-promoted" in scenario
+print("[pass] #533 fault-injected route scenario remains wired to guarded Kind QA")
+PY
 
 run_valid() {
   local name="$1"

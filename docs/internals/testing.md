@@ -88,6 +88,14 @@ they verify assertions and timing logic without replacing the live journey.
 `test/e2e/qa-e2e.sh` creates a Kind cluster, configures a local registry mirror,
 builds and publishes runtime images, runs `setup --test-mode`, deploys example
 servers, exercises MCP requests, and verifies governance/observability paths.
+When a rollout or MCPServer readiness wait fails, it records allowlisted,
+bounded MCPServer conditions, workload readiness, matching Warning Events, and
+recent operator logs under the run's `rollout-diagnostics` artifact directory.
+Collection uses only the explicit E2E kubeconfig after confirming its
+`kind-${CLUSTER_NAME}` context; failed or unauthorized reads produce explicit
+collection-gap files. The fake-tool regression
+`bash test/e2e/rollout_diagnostics_test.sh` checks failure preservation,
+redaction, and collection before cleanup without contacting a cluster.
 
 For the component-level request paths behind each scenario, see [Request Flows](request-flows.md).
 
