@@ -77,6 +77,11 @@ Full recipe, the OAuth state machine, and symptom→cause table (SSE 404 red her
 
 ## MCPServer pod / gateway sidecar
 
+If the operator is healthy but later MCPServers stop creating workloads after a
+diagnostic check, inspect reflector errors for cluster-wide Event list/watch
+denials. Warning Events have namespace-scoped RBAC; diagnostics must use the
+uncached API reader with a bounded request, rather than starting an informer.
+
 When a server is deployed but grants, policy, or analytics look wrong:
 
 ```bash

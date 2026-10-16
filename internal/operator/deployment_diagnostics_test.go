@@ -41,8 +41,10 @@ func TestDeploymentFailureDetailsReportsNewCrashLoopPodAndEvent(t *testing.T) {
 		InvolvedObject: corev1.ObjectReference{Kind: "Pod", Name: newCrashLoopPod.Name, UID: newCrashLoopPod.UID},
 		Type:           corev1.EventTypeWarning, Reason: "BackOff", Message: "Back-off restarting failed container", LastTimestamp: metav1.NewTime(time.Now()),
 	}
-	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(oldReadyPod, newCrashLoopPod, event).Build()
-	r := &MCPServerReconciler{Client: client}
+	// The cached client must never list Events: their RBAC is namespace-scoped.
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(oldReadyPod, newCrashLoopPod).Build()
+	reader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(event).Build()
+	r := &MCPServerReconciler{Client: client, APIReader: reader}
 	server := &mcpv1alpha1.MCPServer{ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "team"}}
 	one := int32(1)
 	deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "team", Generation: 2}, Spec: appsv1.DeploymentSpec{Replicas: &one}, Status: appsv1.DeploymentStatus{ObservedGeneration: 2, Replicas: 1, ReadyReplicas: 1, AvailableReplicas: 1}}
@@ -58,5 +60,22 @@ func TestDeploymentFailureDetailsReportsNewCrashLoopPodAndEvent(t *testing.T) {
 	}
 	if strings.Contains(got, "demo-old") {
 		t.Fatalf("diagnostics selected the previous Ready pod: %q", got)
+	}
+}
+
+func TestDeploymentWarningEventRejectsReusedPodName(t *testing.T) {
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "demo", UID: "current-pod"}}
+	for _, tc := range []struct {
+		uid  types.UID
+		want bool
+	}{
+		{"current-pod", true},
+		{"previous-pod", false},
+		{"", false},
+	} {
+		event := &corev1.Event{InvolvedObject: corev1.ObjectReference{Kind: "Pod", Name: "demo", UID: tc.uid}}
+		if got := eventMatchesPod(event, pod); got != tc.want {
+			t.Errorf("event UID %q: matched=%v, want %v", tc.uid, got, tc.want)
+		}
 	}
 }

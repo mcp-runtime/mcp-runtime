@@ -109,8 +109,17 @@ func containerFailure(status corev1.ContainerStatus) (container, reason, message
 }
 
 func (r *MCPServerReconciler) latestWarningEventForPod(ctx context.Context, namespace string, pod *corev1.Pod) *corev1.Event {
+	// Events are readable only in managed workload namespaces. A cached List
+	// would start a cluster-wide informer that cannot sync under that RBAC,
+	// blocking the reconcile worker even for other servers.
+	reader := r.APIReader
+	if reader == nil {
+		reader = r.Client
+	}
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
 	events := &corev1.EventList{}
-	if err := r.List(ctx, events, client.InNamespace(namespace)); err != nil {
+	if err := reader.List(ctx, events, client.InNamespace(namespace)); err != nil {
 		return nil
 	}
 	var latest *corev1.Event
@@ -127,8 +136,13 @@ func (r *MCPServerReconciler) latestWarningEventForPod(ctx context.Context, name
 }
 
 func eventMatchesPod(event *corev1.Event, pod *corev1.Pod) bool {
-	return event.InvolvedObject.Kind == "Pod" &&
-		((pod.UID != "" && event.InvolvedObject.UID == pod.UID) || event.InvolvedObject.Name == pod.Name)
+	if event.InvolvedObject.Kind != "Pod" {
+		return false
+	}
+	if pod.UID != "" {
+		return event.InvolvedObject.UID == pod.UID
+	}
+	return event.InvolvedObject.Name == pod.Name
 }
 
 func eventTime(event *corev1.Event) time.Time {
