@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -991,6 +992,85 @@ func TestRuntimeObservabilityPrometheusProxyLogsBoundedFailureBody(t *testing.T)
 	}
 	if strings.Contains(got, "secret-after-limit") {
 		t.Fatalf("log included content beyond %d-byte limit: %q", prometheusErrorBodyLimit, got)
+	}
+}
+
+func TestRuntimeObservabilityMetricsReturnsScopedFixedSummary(t *testing.T) {
+	var mu sync.Mutex
+	queries := make([]string, 0, 5)
+	prometheus := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		query := r.URL.Query().Get("query")
+		mu.Lock()
+		queries = append(queries, query)
+		mu.Unlock()
+		tool := ""
+		value := "0.25"
+		switch {
+		case strings.Contains(query, "mcp_gateway_tool_call_duration_seconds_bucket"):
+			tool, value = "search", "1.25"
+		case strings.Contains(query, "mcp_gateway_policy_decisions_total"):
+			value = "3"
+		case strings.Contains(query, "status=~"):
+			value = "0.02"
+		case strings.Contains(query, "request_duration_seconds_bucket"):
+			value = "0.4"
+		}
+		labels := "{}"
+		if tool != "" {
+			labels = `{"tool":"search"}`
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"status":"success","data":{"result":[{"metric":%s,"value":["1","%s"]}]}}`, labels, value)
+	}))
+	defer prometheus.Close()
+	t.Setenv(envMCPPrometheusAPIURL, prometheus.URL)
+
+	server := newRuntimeServerWithMCPServers(t, ownedTestMCPServer("demo", "user-1", "user-1"))
+	request := httptest.NewRequest(http.MethodGet, "/api/runtime/observability/metrics?namespace=user-1&server=demo", nil)
+	request = request.WithContext(withPrincipal(request.Context(), principal{
+		Role: roleUser, Subject: "user-1", Namespace: "user-1", AllowedNamespaces: []string{"user-1"},
+	}))
+	recorder := httptest.NewRecorder()
+	server.HandleRuntimeObservabilityMetrics(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	var summary observabilityMetricsSummary
+	if err := json.NewDecoder(recorder.Body).Decode(&summary); err != nil {
+		t.Fatal(err)
+	}
+	if summary.Window != "1h" || summary.ToolCallRate == nil || *summary.ToolCallRate != .25 || summary.ToolCallP95 == nil || *summary.ToolCallP95 != .4 || summary.Upstream5xxRate == nil || *summary.Upstream5xxRate != .02 || summary.PolicyDenyCount == nil || *summary.PolicyDenyCount != 3 || summary.SlowestTool != "search" {
+		t.Fatalf("unexpected metrics summary: %#v", summary)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(queries) != 5 {
+		t.Fatalf("got %d Prometheus queries, want five fixed queries: %#v", len(queries), queries)
+	}
+	for _, query := range queries {
+		if !strings.Contains(query, `namespace="user-1",server="demo"`) {
+			t.Errorf("query is not scoped to the authorized server: %q", query)
+		}
+		if strings.Contains(query, "tenant-b") || strings.Contains(query, "caller") {
+			t.Errorf("query contains caller-controlled or foreign scope: %q", query)
+		}
+	}
+}
+
+func TestRuntimeObservabilityMetricsRejectsCrossTenantBeforeQuery(t *testing.T) {
+	called := false
+	prometheus := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { called = true }))
+	defer prometheus.Close()
+	t.Setenv(envMCPPrometheusAPIURL, prometheus.URL)
+	server := newRuntimeServerWithMCPServers(t, ownedTestMCPServer("demo", "tenant-b", "tenant-b"))
+	request := httptest.NewRequest(http.MethodGet, "/api/runtime/observability/metrics?namespace=tenant-b&server=demo", nil)
+	request = request.WithContext(withPrincipal(request.Context(), principal{
+		Role: roleUser, Subject: "tenant-a", Namespace: "tenant-a", AllowedNamespaces: []string{"tenant-a"},
+	}))
+	recorder := httptest.NewRecorder()
+	server.HandleRuntimeObservabilityMetrics(recorder, request)
+	if recorder.Code != http.StatusNotFound || called {
+		t.Fatalf("status=%d prometheus_called=%v body=%s", recorder.Code, called, recorder.Body.String())
 	}
 }
 

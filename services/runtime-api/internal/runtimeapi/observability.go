@@ -7,11 +7,14 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"mcp-runtime/pkg/serviceutil"
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -61,6 +64,20 @@ type observabilityGrafanaLink struct {
 	URL             string `json:"url,omitempty"`
 	DirectAdminOnly bool   `json:"direct_admin_only"`
 	Reason          string `json:"reason,omitempty"`
+}
+
+type observabilityMetricsSummary struct {
+	Window          string   `json:"window"`
+	ToolCallRate    *float64 `json:"tools_call_rate_per_second"`
+	ToolCallP95     *float64 `json:"tools_call_p95_seconds"`
+	Upstream5xxRate *float64 `json:"upstream_5xx_rate_per_second"`
+	PolicyDenyCount *float64 `json:"policy_deny_count"`
+	SlowestTool     string   `json:"slowest_tool,omitempty"`
+}
+
+type observabilityMetricQuery struct {
+	id    string
+	query string
 }
 
 type scopedPrometheusQuery struct {
@@ -160,6 +177,121 @@ func (s *RuntimeServer) HandleRuntimeObservabilityPrometheusQuery(w http.Respons
 		"query":      query.Query,
 		"prometheus": payload,
 	})
+}
+
+// HandleRuntimeObservabilityMetrics returns a fixed set of owner-scoped,
+// one-hour gateway metric values. Callers cannot submit PromQL.
+func (s *RuntimeServer) HandleRuntimeObservabilityMetrics(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("allow", http.MethodGet)
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
+		return
+	}
+	_, target, err := s.authorizedObservabilityTarget(r)
+	if err != nil {
+		writeObservabilityError(w, err)
+		return
+	}
+
+	queries := scopedObservabilityMetricQueries(target.Namespace, target.Name)
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	type result struct {
+		id    string
+		value *float64
+		tool  string
+		err   error
+	}
+	results := make(chan result, len(queries))
+	var wg sync.WaitGroup
+	for _, query := range queries {
+		query := query
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			value, tool, err := fetchObservabilityMetric(ctx, query.query)
+			results <- result{id: query.id, value: value, tool: tool, err: err}
+		}()
+	}
+	go func() { wg.Wait(); close(results) }()
+
+	var summary observabilityMetricsSummary
+	summary.Window = "1h"
+	for result := range results {
+		if result.err != nil {
+			log.Printf("observability metric query failed namespace=%q server=%q query_id=%q err=%v", target.Namespace, target.Name, result.id, result.err)
+			continue
+		}
+		switch result.id {
+		case "tools_call_rate":
+			summary.ToolCallRate = result.value
+		case "tools_call_p95":
+			summary.ToolCallP95 = result.value
+		case "upstream_5xx_rate":
+			summary.Upstream5xxRate = result.value
+		case "policy_deny_count":
+			summary.PolicyDenyCount = result.value
+		case "slowest_tool":
+			summary.SlowestTool = result.tool
+		}
+	}
+	writeJSON(w, http.StatusOK, summary)
+}
+
+func scopedObservabilityMetricQueries(namespace, serverName string) []observabilityMetricQuery {
+	selector := fmt.Sprintf(`namespace=%s,server=%s`, promQLString(namespace), promQLString(serverName))
+	callSelector := selector + `,rpc_method="tools/call"`
+	toolSelector := selector
+	return []observabilityMetricQuery{
+		{id: "tools_call_rate", query: fmt.Sprintf(`sum(rate(mcp_gateway_requests_total{%s}[1h]))`, callSelector)},
+		{id: "tools_call_p95", query: fmt.Sprintf(`histogram_quantile(0.95, sum by (le) (rate(mcp_gateway_request_duration_seconds_bucket{%s}[1h])))`, callSelector)},
+		{id: "upstream_5xx_rate", query: fmt.Sprintf(`sum(rate(mcp_gateway_requests_total{%s,decision="allow",status=~"5.."}[1h]))`, callSelector)},
+		{id: "policy_deny_count", query: fmt.Sprintf(`sum(increase(mcp_gateway_policy_decisions_total{%s,decision="deny"}[1h]))`, selector)},
+		{id: "slowest_tool", query: fmt.Sprintf(`topk(1, histogram_quantile(0.95, sum by (le,tool) (rate(mcp_gateway_tool_call_duration_seconds_bucket{%s}[1h]))) and on (tool) (sum by (tool) (increase(mcp_gateway_tool_call_duration_seconds_count{%s}[1h])) >= 5))`, toolSelector, toolSelector)},
+	}
+}
+
+func fetchObservabilityMetric(ctx context.Context, query string) (*float64, string, error) {
+	queryURL, err := prometheusQueryURL(prometheusAPIBaseURL(), query)
+	if err != nil {
+		return nil, "", err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, queryURL, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	resp, err := serviceutil.DoHTTP(nil, req)
+	if err != nil {
+		return nil, "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", fmt.Errorf("prometheus returned status %d", resp.StatusCode)
+	}
+	var payload struct {
+		Status string `json:"status"`
+		Data   struct {
+			Result []struct {
+				Metric map[string]string `json:"metric"`
+				Value  []json.RawMessage `json:"value"`
+			} `json:"result"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, prometheusErrorBodyLimit*4)).Decode(&payload); err != nil || payload.Status != "success" {
+		return nil, "", errors.New("invalid prometheus response")
+	}
+	if len(payload.Data.Result) == 0 || len(payload.Data.Result[0].Value) < 2 {
+		return nil, "", nil
+	}
+	var textValue string
+	if err := json.Unmarshal(payload.Data.Result[0].Value[1], &textValue); err != nil {
+		return nil, "", err
+	}
+	value, err := strconv.ParseFloat(textValue, 64)
+	if err != nil || math.IsNaN(value) || math.IsInf(value, 0) {
+		return nil, "", errors.New("invalid prometheus sample")
+	}
+	return &value, payload.Data.Result[0].Metric["tool"], nil
 }
 
 // HandleRuntimeObservabilityLogs exposes only the authenticated server's

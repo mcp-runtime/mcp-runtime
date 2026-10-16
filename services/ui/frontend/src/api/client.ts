@@ -12,6 +12,7 @@ export const SESSION_PROXY_GET_PATHS = new Set([
   "/runtime/tools",
   "/runtime/server-events",
   "/runtime/observability/prometheus/query",
+  "/runtime/observability/metrics",
   "/runtime/observability/logs/query",
   // Phase 4 admin reads. Each is already GET-allowlisted server-side in
   // sessionProxyRuntimePrefixes / sessionProxyAnalyticsPrefixes.

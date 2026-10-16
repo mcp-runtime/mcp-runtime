@@ -624,7 +624,9 @@ describe("ServersWorkspace connect config, protocol inventory, and observability
         ? NAMESPACES
         : url.includes("/runtime/servers")
           ? catalog
-          : url.includes("/runtime/observability/logs/query")
+          : url.includes("/runtime/observability/metrics")
+            ? { window: "1h", tools_call_rate_per_second: 0.25, tools_call_p95_seconds: 0.4, upstream_5xx_rate_per_second: 0.02, policy_deny_count: 3, slowest_tool: "search" }
+            : url.includes("/runtime/observability/logs/query")
             ? { entries: [{ timestamp: "1720000000000000000", line: "server started", container: "server", pod: "workspace-assistant-abc" }] }
           : TOOLS;
       return { ok: true, status: 200, json: async () => payload } as unknown as Response;
@@ -819,6 +821,24 @@ describe("ServersWorkspace connect config, protocol inventory, and observability
     const [richCard] = await screen.findAllByTestId("server-card");
     expect(within(richCard).queryByTestId("server-card-observability")).not.toBeInTheDocument();
     expect(within(richCard).queryByRole("link", { name: /grafana|target health|request rate|deny rate|p95 latency/i })).not.toBeInTheDocument();
+  });
+  it("shows owner-scoped numeric metrics in server details without tenant Grafana access", async () => {
+    const user = userEvent.setup();
+    const fetchMock = stubRichCatalog(true);
+    renderWorkspace({ authenticated: true, auth: { authenticated: true, principal: { role: "user" } } });
+    await screen.findByTestId("server-list");
+    const [richCard] = screen.getAllByTestId("server-card");
+    await user.click(within(richCard).getByTestId("server-card-details"));
+
+    const observability = await screen.findByTestId("server-detail-observability");
+    const metrics = within(observability).getByTestId("server-detail-metric-summary");
+    expect(await within(metrics).findByText("0.25 / sec")).toBeInTheDocument();
+    expect(within(metrics).getByText("400 ms")).toBeInTheDocument();
+    expect(within(metrics).getByText("0.020 / sec")).toBeInTheDocument();
+    expect(within(metrics).getByText("3")).toBeInTheDocument();
+    expect(within(metrics).getByText("search")).toBeInTheDocument();
+    expect(within(observability).queryByRole("link", { name: "Grafana dashboard" })).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/runtime/observability/metrics?namespace=mcp-servers&server=workspace-assistant"), expect.anything());
   });
 });
 

@@ -230,6 +230,13 @@ remains admin-only because its shared Prometheus and Loki datasources do not
 enforce tenant isolation; a dashboard URL template or visibility flag cannot
 make those datasources safe for tenant users.
 
+Authorized server details also show a fixed one-hour metrics summary: `tools/call`
+rate and p95, allowed-call HTTP 5xx rate, policy deny count, and the slowest
+tool p95 after at least five calls. Runtime-api builds these PromQL queries from
+the live server identity and returns numeric results; callers cannot submit
+PromQL. This provides scoped values without exposing Grafana Explore or its
+shared datasources to tenants.
+
 Prometheus requests use
 `/api/v1/runtime/observability/prometheus/query?namespace=<namespace>&server=<server>&query_id=<id>`.
 The `query_id` is allowlisted (`up`, `request_rate`, `deny_rate`,
@@ -249,6 +256,9 @@ Server logs use
 The API constructs a fixed Loki selector from the live authorized MCPServer,
 returns at most 100 lines from the last hour, and does not accept caller-supplied
 LogQL. UI requests use the session proxy route under `/api/ui/v1/runtime`.
+The numeric summary uses
+`/api/v1/runtime/observability/metrics?namespace=<namespace>&server=<server>`;
+the endpoint applies the same owner/team authorization and fixed-query policy.
 
 The bundled dashboard is provisioned at `/grafana/d/mcp-server/mcp-server` and
 is available directly to admins. To use another admin dashboard, set

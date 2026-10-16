@@ -18,7 +18,7 @@ import {
   type ServerSummary,
   type ToolRow,
 } from "../../api/types";
-import { listServerEvents, listServerLogs } from "../../api/catalog";
+import { getServerObservabilityMetrics, listServerEvents, listServerLogs } from "../../api/catalog";
 
 type ServerDetailProps = {
   server: ServerSummary;
@@ -145,6 +145,12 @@ export function ServerDetail({ server, tools, onClose, onShowTools, onSelectTool
     queryFn: () => listServerLogs(server.namespace, server.name),
     enabled: !!server.observability,
     staleTime: 15_000,
+  });
+  const metricsQuery = useQuery({
+    queryKey: ["server-metrics", server.namespace, server.name],
+    queryFn: () => getServerObservabilityMetrics(server.namespace, server.name),
+    enabled: !!server.observability,
+    staleTime: 30_000,
   });
 
   const configTabs = useMemo(() => {
@@ -363,6 +369,22 @@ export function ServerDetail({ server, tools, onClose, onShowTools, onSelectTool
             ))}
             {server.observability.grafana.available ? (
               <ButtonLink size="sm" href={server.observability.grafana.url} target="_blank" rel="noreferrer">Grafana dashboard</ButtonLink>
+            ) : null}
+          </div>
+          <div data-testid="server-detail-metric-summary" aria-label="Server metrics summary">
+            {metricsQuery.isPending ? <p className="section-note">Loading one-hour metrics…</p> : null}
+            {metricsQuery.error ? <p className="section-note">Server metrics are unavailable.</p> : null}
+            {metricsQuery.data ? (
+              <>
+                <dl className="detail-rows">
+                  <div><dt>tools/call rate</dt><dd>{metricsQuery.data.tools_call_rate_per_second == null ? "No data" : `${metricsQuery.data.tools_call_rate_per_second.toFixed(2)} / sec`}</dd></div>
+                  <div><dt>tools/call p95</dt><dd>{metricsQuery.data.tools_call_p95_seconds == null ? "No data" : `${(metricsQuery.data.tools_call_p95_seconds * 1000).toFixed(0)} ms`}</dd></div>
+                  <div><dt>Upstream HTTP 5xx rate</dt><dd>{metricsQuery.data.upstream_5xx_rate_per_second == null ? "No data" : `${metricsQuery.data.upstream_5xx_rate_per_second.toFixed(3)} / sec`}</dd></div>
+                  <div><dt>Policy denies</dt><dd>{metricsQuery.data.policy_deny_count == null ? "No data" : Math.round(metricsQuery.data.policy_deny_count)}</dd></div>
+                  <div><dt>Slowest tool p95</dt><dd>{metricsQuery.data.slowest_tool || "Not enough calls"}</dd></div>
+                </dl>
+                <p className="section-note">Window: last {metricsQuery.data.window}. The slowest tool is shown after at least five calls.</p>
+              </>
             ) : null}
           </div>
           <div>

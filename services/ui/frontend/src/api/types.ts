@@ -81,6 +81,15 @@ export type ServerLogEntry = {
   pod?: string;
 };
 
+export type ServerObservabilityMetrics = {
+  window: string;
+  tools_call_rate_per_second: number | null;
+  tools_call_p95_seconds: number | null;
+  upstream_5xx_rate_per_second: number | null;
+  policy_deny_count: number | null;
+  slowest_tool?: string;
+};
+
 export type ServerSummary = {
   name: string;
   namespace: string;

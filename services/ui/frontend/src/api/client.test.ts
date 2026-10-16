@@ -53,6 +53,9 @@ describe("apiURL", () => {
     expect(apiURL("/runtime/observability/logs/query?namespace=team-a&server=demo", "/api/v1")).toBe(
       "/api/ui/v1/runtime/observability/logs/query?namespace=team-a&server=demo"
     );
+    expect(apiURL("/runtime/observability/metrics?namespace=team-a&server=demo", "/api/v1")).toBe(
+      "/api/ui/v1/runtime/observability/metrics?namespace=team-a&server=demo"
+    );
   });
 
   it("keeps unmigrated paths on the public API base", () => {

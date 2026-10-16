@@ -1,5 +1,5 @@
 import { fetchJSON, fetchPublicJSON, withQuery } from "./client";
-import type { GatewayEvent, NamespaceEntry, PublishPolicy, ServerLogEntry, ServerSummary, ToolRow } from "./types";
+import type { GatewayEvent, NamespaceEntry, PublishPolicy, ServerLogEntry, ServerObservabilityMetrics, ServerSummary, ToolRow } from "./types";
 
 function asArray<T>(value: unknown, key: string): T[] {
   if (!value || typeof value !== "object") {
@@ -64,4 +64,8 @@ export async function listServerEvents(namespace: string, server: string): Promi
 export async function listServerLogs(namespace: string, server: string): Promise<ServerLogEntry[]> {
   const data = await fetchJSON(withQuery("/runtime/observability/logs/query", { namespace, server }));
   return asArray<ServerLogEntry>(data, "entries");
+}
+
+export async function getServerObservabilityMetrics(namespace: string, server: string): Promise<ServerObservabilityMetrics> {
+  return (await fetchJSON(withQuery("/runtime/observability/metrics", { namespace, server }))) as ServerObservabilityMetrics;
 }
