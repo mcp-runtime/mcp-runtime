@@ -184,7 +184,7 @@ func addServiceCommands(parent *cobra.Command) {
 				if err != nil {
 					return err
 				}
-				f, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+				f, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600) // #nosec G304 -- explicit user-selected destination; exclusive creation and owner-only mode prevent overwrite and credential exposure.
 				if err != nil {
 					return err
 				}

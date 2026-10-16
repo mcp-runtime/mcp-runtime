@@ -22,7 +22,7 @@ import (
 )
 
 const ProtocolVersion = 1
-const LocalCredentialHeader = "X-MCP-Local-Token"
+const LocalCredentialHeader = "X-MCP-Local-Token" // #nosec G101 -- this is an HTTP header name, not a credential value.
 
 // Profile is stored only in the owner-protected store, never returned as status.
 // PlatformToken authenticates certificate renewal, LocalToken authenticates the
@@ -65,7 +65,8 @@ func CheckPrivate(path string, dir bool) error {
 		return err
 	}
 	owner, ok := st.Sys().(*syscall.Stat_t)
-	if !ok || owner.Uid != uint32(os.Getuid()) || st.Mode()&os.ModeSymlink != 0 || st.IsDir() != dir || st.Mode().Perm()&0077 != 0 {
+	uid, uidErr := strconv.ParseUint(strconv.Itoa(os.Getuid()), 10, 32)
+	if !ok || uidErr != nil || uint64(owner.Uid) != uid || st.Mode()&os.ModeSymlink != 0 || st.IsDir() != dir || st.Mode().Perm()&0077 != 0 {
 		return fmt.Errorf("adapter path must be owner-only and owned by this user: %s", path)
 	}
 	if !dir && !st.Mode().IsRegular() {
@@ -97,7 +98,12 @@ func (s Store) Load() ([]Profile, error) {
 		}
 		return nil, err
 	}
-	f, err := os.Open(path)
+	root, err := os.OpenRoot(s.Dir)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	f, err := root.OpenFile("profiles.json", os.O_RDONLY|syscall.O_NOFOLLOW, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -134,16 +140,13 @@ func (s Store) Save(profiles []Profile) error {
 	}
 	defer os.Remove(f.Name())
 	if err := f.Chmod(0600); err != nil {
-		f.Close()
-		return err
+		return errors.Join(err, f.Close())
 	}
 	if _, err := f.Write(b); err != nil {
-		f.Close()
-		return err
+		return errors.Join(err, f.Close())
 	}
 	if err := f.Sync(); err != nil {
-		f.Close()
-		return err
+		return errors.Join(err, f.Close())
 	}
 	if err := f.Close(); err != nil {
 		return err
@@ -198,12 +201,10 @@ func (s Store) Lock(name string) (*os.File, error) {
 	}
 	f := os.NewFile(uintptr(fd), path)
 	if err := CheckPrivate(path, false); err != nil {
-		f.Close()
-		return nil, err
+		return nil, errors.Join(err, f.Close())
 	}
 	if err := syscall.Flock(fd, syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		f.Close()
-		return nil, errors.New("adapter operation already running")
+		return nil, errors.Join(errors.New("adapter operation already running"), f.Close())
 	}
 	return f, nil
 }

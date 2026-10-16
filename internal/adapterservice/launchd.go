@@ -51,7 +51,10 @@ func (s Store) launchctl(ctx context.Context, args ...string) error {
 		return errors.New("adapter user service installation requires macOS")
 	}
 	// Arguments are structured, with no shell expansion or credentials.
-	if err := exec.CommandContext(ctx, "/bin/launchctl", args...).Run(); err != nil {
+	if len(args) < 2 || (args[0] != "bootstrap" && args[0] != "kickstart" && args[0] != "bootout") {
+		return errors.New("unsupported launchctl operation")
+	}
+	if err := exec.CommandContext(ctx, "/bin/launchctl", args...).Run(); err != nil { // #nosec G204 -- fixed executable and allowlisted verb; args are structured, without shell expansion.
 		return fmt.Errorf("launchctl %s failed; run from the signed-in macOS desktop session: %w", args[0], err)
 	}
 	return nil
@@ -71,7 +74,7 @@ func (s Store) Install(ctx context.Context, executable string) error {
 			return err
 		}
 	}
-	in, err := os.Open(executable)
+	in, err := os.Open(executable) // #nosec G304 -- caller supplies os.Executable(), which is copied into the managed per-user service directory.
 	if err != nil {
 		return err
 	}
@@ -82,16 +85,13 @@ func (s Store) Install(ctx context.Context, executable string) error {
 	}
 	defer os.Remove(out.Name())
 	if err := out.Chmod(0700); err != nil {
-		out.Close()
-		return err
+		return errors.Join(err, out.Close())
 	}
 	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
-		return err
+		return errors.Join(err, out.Close())
 	}
 	if err := out.Sync(); err != nil {
-		out.Close()
-		return err
+		return errors.Join(err, out.Close())
 	}
 	if err := out.Close(); err != nil {
 		return err
@@ -115,12 +115,10 @@ func (s Store) Install(ctx context.Context, executable string) error {
 	}
 	defer os.Remove(tmp.Name())
 	if err := tmp.Chmod(0600); err != nil {
-		tmp.Close()
-		return err
+		return errors.Join(err, tmp.Close())
 	}
 	if _, err := tmp.Write(s.Plist(managed)); err != nil {
-		tmp.Close()
-		return err
+		return errors.Join(err, tmp.Close())
 	}
 	if err := tmp.Close(); err != nil {
 		return err
@@ -167,7 +165,7 @@ func (s Store) Stop(ctx context.Context) error {
 		return errors.New("adapter service lifecycle requires macOS")
 	}
 	// print distinguishes an already-unloaded job from a bootout failure.
-	if exec.CommandContext(ctx, "/bin/launchctl", "print", s.serviceTarget()).Run() != nil {
+	if exec.CommandContext(ctx, "/bin/launchctl", "print", s.serviceTarget()).Run() != nil { // #nosec G204 -- fixed executable and verb; target is generated from owner UID and store path hash.
 		if _, err := s.Request(ctx, "GET", "/v1/status"); err == nil {
 			return errors.New("a foreground daemon is running; stop it in its owning terminal")
 		}
@@ -184,8 +182,7 @@ func (s Store) Stop(ctx context.Context) error {
 	for {
 		lock, err := s.Lock("daemon")
 		if err == nil {
-			lock.Close()
-			return nil
+			return lock.Close()
 		}
 		select {
 		case <-ctx.Done():
