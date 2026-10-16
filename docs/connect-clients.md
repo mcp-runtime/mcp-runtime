@@ -218,6 +218,37 @@ The CA bundle does not receive or sign the CSR itself. The platform certificate
 endpoint submits the validated request to the configured issuer and returns the
 issuer's chain as the bundle.
 
+## macOS background adapter service (CLI preview)
+
+The macOS CLI can run isolated adapter profiles in a per-user background
+service. Each profile is explicitly authorized for one platform, team, human,
+agent, server and session; local MCP clients receive a separate owner-only
+credential. Session expiry still requires interactive authorization. The
+current implementation is the daemon and CLI management layer only: it does
+not yet include the planned native Dock app or signed/notarized distribution,
+and its sleep/wake and two-profile desktop acceptance remains to be validated.
+
+```bash
+mcp-runtime adapter profile add work \
+  --runtime-url https://mcp.example.com/workspace-assistant/mcp \
+  --namespace mcp-team-acme \
+  --server workspace-assistant \
+  --agent agt_01arz3ndektsv4rrffq69g5fav
+mcp-runtime adapter service install
+mcp-runtime adapter profile client-config work --output ~/mcp-work.json
+mcp-runtime adapter service status
+```
+
+`profile add` uses the selected interactive platform login to authorize the
+session. `client-config` refuses to overwrite an existing file and writes the
+local credential with mode `0600`; protect that file as a credential. The
+daemon binds only to IPv4 loopback, rejects browser-origin requests, and
+requires the profile's local token. `service logs` and `service status` report
+fixed redacted events and measured state, not certificates, private keys,
+tokens or MCP payloads. `service uninstall` preserves profiles unless
+`--purge` is supplied. This daemon slice is for macOS and is not a substitute
+for the existing foreground `adapter proxy` workflow on other platforms.
+
 ## Optional header mode
 
 Use header mode when the MCP server authenticates the caller with its own
