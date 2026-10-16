@@ -2,6 +2,7 @@ package benchmark
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -12,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -41,11 +43,24 @@ func BenchmarkReconcile(b *testing.B) {
 		},
 	}
 
-	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
+	// Policy reconciliation uses the manager's effective target-server index,
+	// including when no grants exist. Register the same index on the fake.
+	kube := fake.NewClientBuilder().WithScheme(scheme).
+		WithIndex(&mcpv1alpha1.MCPAccessGrant{}, "mcpruntime.org/effective-target-server", func(obj client.Object) []string {
+			grant := obj.(*mcpv1alpha1.MCPAccessGrant)
+			if grant.Spec.ServerRef.Name == "" {
+				return nil
+			}
+			namespace := strings.TrimSpace(grant.Spec.ServerRef.Namespace)
+			if namespace == "" {
+				namespace = grant.Namespace
+			}
+			return []string{(types.NamespacedName{Namespace: namespace, Name: grant.Spec.ServerRef.Name}).String()}
+		}).WithObjects(mcpServer).Build()
 	// Gateway defaults on when Spec.Gateway is omitted; the reconciler needs a
 	// proxy image the same way production sets MCP_GATEWAY_PROXY_IMAGE.
 	reconciler := &operator.MCPServerReconciler{
-		Client:            client,
+		Client:            kube,
 		Scheme:            scheme,
 		GatewayProxyImage: "example.com/mcp-gateway:bench",
 	}
