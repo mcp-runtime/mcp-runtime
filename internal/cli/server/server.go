@@ -108,13 +108,23 @@ For pushing MCP server images, use 'server push'.`,
 	listCmd := &cobra.Command{
 		Use:   "list",
 		Short: "List MCP servers",
-		Long:  "List all MCP server deployments",
+		Long: `List MCP servers visible to the signed-in user: public and organization
+catalogs where enabled, the personal namespace, and the user's teams.
+Admins see all servers. No filter is required.
+
+Use --team <slug> to list one authorized team (for example, acme, not
+mcp-team-acme). Use --namespace to select a catalog or personal namespace
+directly; the platform API still checks read access. --team and --namespace
+are mutually exclusive.
+
+With --use-kube, --namespace selects a Kubernetes namespace (default:
+mcp-servers); --team is unavailable.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return mgr.ListServers(namespace, team)
 		},
 	}
-	listCmd.Flags().StringVar(&namespace, "namespace", "", "Namespace to list servers from")
-	listCmd.Flags().StringVar(&team, "team", "", "Team slug to resolve namespace from via the platform API")
+	listCmd.Flags().StringVar(&namespace, "namespace", "", "Catalog or personal namespace filter; Kubernetes namespace with --use-kube")
+	listCmd.Flags().StringVar(&team, "team", "", "Filter to an authorized team slug (for example, acme; platform API only)")
 
 	var getNamespace string
 	getCmd := &cobra.Command{
