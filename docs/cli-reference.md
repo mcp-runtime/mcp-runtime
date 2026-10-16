@@ -354,8 +354,28 @@ mcp-runtime server policy inspect workspace-demo --namespace mcp-team-acme
 
 ### Inspect and manage
 
+`server list` requires no filter. It lists servers visible to the signed-in user:
+public and organization catalogs where enabled, the personal namespace, and
+the user's teams. Admins see all servers. The output includes each server's
+namespace to distinguish servers with the same name.
+
+Use `server list --team acme` to filter to one authorized team. `--team` accepts
+a team slug such as `acme`, not a Kubernetes namespace such as `mcp-team-acme`.
+Read authorization still applies, including when selecting a team explicitly.
+`--namespace` remains useful for catalog-only or personal-only lists, which
+have no team slug; for example, `server list --namespace mcp-servers-org`
+selects the default organization catalog. Use the namespace shown in list
+output for a personal namespace filter. `--team` and `--namespace` are mutually
+exclusive.
+
+In explicit direct Kubernetes mode, use
+`server list --use-kube --namespace mcp-team-acme`. This requires operator
+Kubernetes access, defaults to `mcp-servers` when no namespace is supplied, and
+does not support `--team`.
+
 ```bash
 mcp-runtime server list
+mcp-runtime server list --team acme
 mcp-runtime server get workspace-demo --namespace mcp-team-acme
 mcp-runtime server status --namespace mcp-team-acme
 mcp-runtime server connect-config workspace-demo --namespace mcp-team-acme --client claude

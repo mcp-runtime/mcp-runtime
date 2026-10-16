@@ -1,12 +1,22 @@
-List all MCP server deployments
+List MCP servers visible to the signed-in user: public and organization
+catalogs where enabled, the personal namespace, and the user's teams.
+Admins see all servers. No filter is required.
+
+Use --team <slug> to list one authorized team (for example, acme, not
+mcp-team-acme). Use --namespace to select a catalog or personal namespace
+directly; the platform API still checks read access. --team and --namespace
+are mutually exclusive.
+
+With --use-kube, --namespace selects a Kubernetes namespace (default:
+mcp-servers); --team is unavailable.
 
 Usage:
   mcp-runtime server list [flags]
 
 Flags:
   -h, --help               help for list
-      --namespace string   Namespace to list servers from
-      --team string        Team slug to resolve namespace from via the platform API
+      --namespace string   Catalog or personal namespace filter; Kubernetes namespace with --use-kube
+      --team string        Filter to an authorized team slug (for example, acme; platform API only)
 
 Global Flags:
       --debug      Enable debug mode with structured error logging

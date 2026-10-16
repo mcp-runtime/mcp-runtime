@@ -301,7 +301,7 @@ func (m *ServerManager) Logger() *zap.Logger {
 	return m.logger
 }
 
-// ListServers lists all MCP servers in the given namespace.
+// ListServers lists visible MCP servers, optionally filtered by namespace or team slug.
 func (m *ServerManager) ListServers(namespace, team string) error {
 	namespace = strings.TrimSpace(namespace)
 	team = strings.TrimSpace(team)
@@ -321,7 +321,10 @@ func (m *ServerManager) ListServers(namespace, team string) error {
 			if err != nil {
 				return err
 			}
-			namespace = t.Namespace
+			namespace = strings.TrimSpace(t.Namespace)
+			if namespace == "" {
+				return core.NewWithBase(nil, fmt.Sprintf("team %q has no namespace; cannot filter servers", team))
+			}
 		}
 		if namespace != "" {
 			namespace, err = validateManifestValue("namespace", namespace)

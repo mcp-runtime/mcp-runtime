@@ -364,6 +364,9 @@ func TestServerManager_ListServersModeSelection(t *testing.T) {
 			if r.Header.Get("x-api-key") != "token-1" {
 				t.Fatalf("x-api-key = %q, want token-1", r.Header.Get("x-api-key"))
 			}
+			if r.URL.RawQuery != "" {
+				t.Fatalf("unfiltered list unexpectedly sends query %q", r.URL.RawQuery)
+			}
 			w.Header().Set("content-type", "application/json")
 			_, _ = w.Write([]byte(`{"servers":[{"name":"oauth-example-go-2025-11-25","namespace":"mcp-team-acme","ready":"True","status":"Ready","age":"1m"}]}`))
 		}))
