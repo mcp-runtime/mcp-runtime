@@ -46,6 +46,16 @@ describe("apiURL", () => {
       "/api/ui/v1/runtime/servers?namespace=mcp-servers"
     );
     expect(apiURL("/runtime/tools", "/api/v1")).toBe("/api/ui/v1/runtime/tools");
+    expect(apiURL("/runtime/server-events", "/api/v1")).toBe("/api/ui/v1/runtime/server-events");
+    expect(apiURL("/runtime/observability/prometheus/query?namespace=team-a&server=demo", "/api/v1")).toBe(
+      "/api/ui/v1/runtime/observability/prometheus/query?namespace=team-a&server=demo"
+    );
+    expect(apiURL("/runtime/observability/logs/query?namespace=team-a&server=demo", "/api/v1")).toBe(
+      "/api/ui/v1/runtime/observability/logs/query?namespace=team-a&server=demo"
+    );
+    expect(apiURL("/runtime/observability/metrics?namespace=team-a&server=demo", "/api/v1")).toBe(
+      "/api/ui/v1/runtime/observability/metrics?namespace=team-a&server=demo"
+    );
   });
 
   it("keeps unmigrated paths on the public API base", () => {

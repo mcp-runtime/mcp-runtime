@@ -93,6 +93,9 @@ data:
             replacement: "$$1"
           - source_labels: [__meta_kubernetes_namespace]
             target_label: namespace
+          # A name can be reused by a different owner after deletion.
+          - source_labels: [__meta_kubernetes_pod_label_mcpruntime_org_server_uid]
+            target_label: server_uid
           - source_labels: [__meta_kubernetes_pod_name]
             target_label: pod
           - source_labels: [__meta_kubernetes_pod_container_name]

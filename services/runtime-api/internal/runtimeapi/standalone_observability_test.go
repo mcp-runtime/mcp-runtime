@@ -36,6 +36,7 @@ func TestStandaloneServersDoNotAdvertiseOrProxyGatewayMetrics(t *testing.T) {
 			for path, handler := range map[string]http.HandlerFunc{
 				"links":            server.HandleRuntimeObservabilityLinks,
 				"prometheus/query": server.HandleRuntimeObservabilityPrometheusQuery,
+				"logs/query":       server.HandleRuntimeObservabilityLogs,
 			} {
 				request := httptest.NewRequest(http.MethodGet, "/api/runtime/observability/"+path+"?namespace=user-1&server=standalone", nil)
 				request = request.WithContext(withPrincipal(request.Context(), p))

@@ -144,6 +144,9 @@ data:
             source_labels: [__meta_kubernetes_service_name]
             target_label: server
           - action: replace
+            source_labels: [__meta_kubernetes_pod_label_mcpruntime_org_server_uid]
+            target_label: server_uid
+          - action: replace
             source_labels: [__meta_kubernetes_pod_name]
             target_label: pod
   rules.yml: |

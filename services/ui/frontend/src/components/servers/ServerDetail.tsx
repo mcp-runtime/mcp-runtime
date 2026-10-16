@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { StatusBadge, riskTone } from "../../ui/Badge";
-import { Button } from "../../ui/Button";
+import { Button, ButtonLink } from "../../ui/Button";
 import { CopyButton } from "../../ui/CopyButton";
 import { DetailSheet } from "../../ui/DetailSheet";
 import { formatAbsolute, formatAge } from "../../lib/format";
@@ -18,7 +18,7 @@ import {
   type ServerSummary,
   type ToolRow,
 } from "../../api/types";
-import { listServerEvents } from "../../api/catalog";
+import { getServerObservabilityMetrics, listServerEvents, listServerLogs } from "../../api/catalog";
 
 type ServerDetailProps = {
   server: ServerSummary;
@@ -28,6 +28,13 @@ type ServerDetailProps = {
   onSelectTool: (key: string) => void;
   selectedInventory?: string;
 };
+
+function parseLogTimestamp(value: string): Date | undefined {
+  const milliseconds = Number(value) / 1_000_000;
+  if (!Number.isFinite(milliseconds)) return undefined;
+  const date = new Date(milliseconds);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
 
 function InventoryGroup({ title, items, selectedInventory }: { title: string; items: InventoryDetail[]; selectedInventory?: string }) {
   if (items.length === 0) return null;
@@ -128,6 +135,21 @@ export function ServerDetail({ server, tools, onClose, onShowTools, onSelectTool
   const eventsQuery = useQuery({
     queryKey: ["server-events", server.namespace, server.name],
     queryFn: () => listServerEvents(server.namespace, server.name),
+    staleTime: 30_000,
+  });
+
+  // Observability is included by the API only for principals authorized to
+  // inspect this gateway-backed server. The logs endpoint repeats that check.
+  const logsQuery = useQuery({
+    queryKey: ["server-logs", server.namespace, server.name],
+    queryFn: () => listServerLogs(server.namespace, server.name),
+    enabled: !!server.observability,
+    staleTime: 15_000,
+  });
+  const metricsQuery = useQuery({
+    queryKey: ["server-metrics", server.namespace, server.name],
+    queryFn: () => getServerObservabilityMetrics(server.namespace, server.name),
+    enabled: !!server.observability,
     staleTime: 30_000,
   });
 
@@ -330,6 +352,60 @@ export function ServerDetail({ server, tools, onClose, onShowTools, onSelectTool
           <InventoryGroup title="Prompts" items={prompts} selectedInventory={selectedInventory} />
           <InventoryGroup title="Resources" items={resources} selectedInventory={selectedInventory} />
           <InventoryGroup title="Tasks" items={tasks} selectedInventory={selectedInventory} />
+        </section>
+      ) : null}
+
+      {server.observability ? (
+        <section className="protocol-inventory" data-testid="server-detail-observability">
+          <div className="section-head">
+            <p className="detail-label">Server observability</p>
+            <span className="section-note">Scoped to {server.namespace}/{server.name}</span>
+          </div>
+          <div className="inline-actions" aria-label="Server metrics">
+            {server.observability.prometheus.queries.map((query) => (
+              <ButtonLink key={query.id} size="sm" href={query.url} target="_blank" rel="noreferrer">
+                {query.name}
+              </ButtonLink>
+            ))}
+            {server.observability.grafana.available ? (
+              <ButtonLink size="sm" href={server.observability.grafana.url} target="_blank" rel="noreferrer">Grafana dashboard</ButtonLink>
+            ) : null}
+          </div>
+          <div data-testid="server-detail-metric-summary" aria-label="Server metrics summary">
+            {metricsQuery.isPending ? <p className="section-note">Loading one-hour metrics…</p> : null}
+            {metricsQuery.error ? <p className="section-note">Server metrics are unavailable.</p> : null}
+            {metricsQuery.data ? (
+              <>
+                <dl className="detail-rows">
+                  <div><dt>tools/call rate</dt><dd>{metricsQuery.data.tools_call_rate_per_second == null ? "No data" : `${metricsQuery.data.tools_call_rate_per_second.toFixed(2)} / sec`}</dd></div>
+                  <div><dt>tools/call p95</dt><dd>{metricsQuery.data.tools_call_p95_seconds == null ? "No data" : `${(metricsQuery.data.tools_call_p95_seconds * 1000).toFixed(0)} ms`}</dd></div>
+                  <div><dt>Upstream HTTP 5xx rate</dt><dd>{metricsQuery.data.upstream_5xx_rate_per_second == null ? "No data" : `${metricsQuery.data.upstream_5xx_rate_per_second.toFixed(3)} / sec`}</dd></div>
+                  <div><dt>Policy denies</dt><dd>{metricsQuery.data.policy_deny_count == null ? "No data" : Math.round(metricsQuery.data.policy_deny_count)}</dd></div>
+                  <div><dt>Slowest tool p95</dt><dd>{metricsQuery.data.slowest_tool || "Not enough calls"}</dd></div>
+                </dl>
+                <p className="section-note">Window: last {metricsQuery.data.window}. The slowest tool is shown after at least five calls.</p>
+              </>
+            ) : null}
+          </div>
+          <div>
+            <div className="section-head">
+              <p className="detail-label">Recent server logs</p>
+              <span className="section-note">Last hour · up to 100 lines</span>
+            </div>
+            {logsQuery.isPending ? <p className="section-note">Loading server logs…</p> : null}
+            {logsQuery.error ? <p className="section-note">Server logs are unavailable.</p> : null}
+            {!logsQuery.isPending && !logsQuery.error && (logsQuery.data || []).length === 0 ? <p className="section-note">No recent server logs.</p> : null}
+            {(logsQuery.data || []).length > 0 ? (
+              <div className="event-list" data-testid="server-detail-logs" role="log" aria-label={`Recent logs for ${server.name}`}>
+                {(logsQuery.data || []).map((entry, index) => (
+                  <div className="event-row" key={`${entry.timestamp}-${index}`}>
+                    <time dateTime={parseLogTimestamp(entry.timestamp)?.toISOString()}>{parseLogTimestamp(entry.timestamp)?.toLocaleString() ?? "Unknown time"}</time>
+                    <span className="wrap-anywhere" title={entry.container ? `${entry.container}${entry.pod ? ` · ${entry.pod}` : ""}` : undefined}>{entry.line}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </section>
       ) : null}
 

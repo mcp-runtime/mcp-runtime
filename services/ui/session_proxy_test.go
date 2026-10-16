@@ -116,6 +116,8 @@ func TestSessionProxyUpstreamPathAllowlist(t *testing.T) {
 		{in: "/api/ui/v1/runtime/tools", want: "/api/v1/runtime/tools", ok: true},
 		{in: "/api/ui/v1/runtime/delegation-recipients", want: "/api/v1/runtime/delegation-recipients", ok: true},
 		{in: "/api/ui/v1/runtime/observability/prometheus/query", want: "/api/v1/runtime/observability/prometheus/query", ok: true},
+		{in: "/api/ui/v1/runtime/observability/metrics", want: "/api/v1/runtime/observability/metrics", ok: true},
+		{in: "/api/ui/v1/runtime/observability/logs/query", want: "/api/v1/runtime/observability/logs/query", ok: true},
 		{in: "/api/ui/v1/runtime/observability/grafana/dashboard", ok: false},
 		{in: "/api/ui/v1/runtime/servers/", want: "/api/v1/runtime/servers", ok: true},
 		{in: "/api/ui/v1/events", want: "/api/v1/events", ok: true},

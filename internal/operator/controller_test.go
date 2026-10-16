@@ -388,6 +388,7 @@ func TestReconcileDeploymentLabels(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-server",
 			Namespace: "default",
+			UID:       types.UID("current-server-instance"),
 		},
 		Spec: mcpv1alpha1.MCPServerSpec{
 			Image:       "example.com/test-server",
@@ -435,6 +436,9 @@ func TestReconcileDeploymentLabels(t *testing.T) {
 
 	if deployment.Spec.Template.Labels["app"] != mcpServer.Name {
 		t.Fatalf("pod template label app = %q, want %q", deployment.Spec.Template.Labels["app"], mcpServer.Name)
+	}
+	if got := deployment.Spec.Template.Labels["mcpruntime.org/server-uid"]; got != string(mcpServer.UID) {
+		t.Fatalf("pod template server UID = %q, want %q", got, mcpServer.UID)
 	}
 	if deployment.Spec.Template.Labels["app.kubernetes.io/managed-by"] != "mcp-runtime" {
 		t.Fatalf("pod template label managed-by = %q, want %q", deployment.Spec.Template.Labels["app.kubernetes.io/managed-by"], "mcp-runtime")
