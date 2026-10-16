@@ -224,6 +224,14 @@ contains the gateway service, `mcp-ingest`, `mcp-processor`,
 and the `kafka.produce`, `kafka.consume`, `clickhouse.insert_event`, and
 `clickhouse.insert_batch` spans.
 
+For [#498](https://github.com/mcp-runtime/mcp-runtime/issues/498), the same
+scenario follows the controlled invalid-token MCP request by its audit trace ID
+through Grafana. It requires an error span from the OAuth-protected gateway and
+a Loki `event=gateway.request` log with the matching trace ID, HTTP 401, and
+bounded `invalid_token` reason. OAuth refresh failures inside a separate
+provider or client cannot be generated or instrumented by this repository; see
+the documented boundary in [Follow an MCP request](../request-debugging.md).
+
 PRs with runtime or CI changes run short QA E2E with `smoke-auth` as the baseline;
 documentation-only PRs skip the Kind job. Changelog, contributor guide, article,
 and skill reference edits do not force all scenarios when changed alongside code.
