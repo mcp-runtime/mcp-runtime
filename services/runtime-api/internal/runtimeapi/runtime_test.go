@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -808,9 +809,12 @@ func TestRuntimeObservabilityLinksAllowOwnedNamespace(t *testing.T) {
 	}
 }
 
-func TestRuntimeObservabilityLinksGenerateGrafanaURLAfterAuthorization(t *testing.T) {
+func TestRuntimeObservabilityLinksKeepGrafanaAdminOnly(t *testing.T) {
 	t.Setenv(envGrafanaServerDashboardURL, "/grafana/d/server/mcp-server?var-namespace={namespace}&var-server={server}")
-	t.Setenv(envGrafanaScopedUserAccess, "true")
+	// This legacy flag only changes link visibility; it does not constrain
+	// Grafana's Prometheus and Loki datasources, so it must never grant tenants
+	// direct access to the shared Grafana instance.
+	t.Setenv("GRAFANA_SCOPED_USER_ACCESS", "true")
 	server := newRuntimeServerWithMCPServers(t, &mcpv1alpha1.MCPServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "team-demo",
@@ -849,15 +853,13 @@ func TestRuntimeObservabilityLinksGenerateGrafanaURLAfterAuthorization(t *testin
 	if err := json.NewDecoder(recorder.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if !payload.Grafana.Available {
-		t.Fatalf("grafana should be available with scoped user access enabled: %#v", payload.Grafana)
+	if payload.Grafana.Available || !payload.Grafana.DirectAdminOnly || payload.Grafana.URL != "" {
+		t.Fatalf("tenant Grafana access must remain disabled: %#v", payload.Grafana)
 	}
-	wantURL := "/grafana/d/server/mcp-server?var-namespace=mcp-team-acme&var-server=team-demo"
-	if payload.Grafana.URL != wantURL {
-		t.Fatalf("grafana URL = %q, want %q", payload.Grafana.URL, wantURL)
-	}
-	if got := payload.Prometheus.Queries[0].GrafanaURL; got != wantURL+"&viewPanel=1" {
-		t.Fatalf("Grafana panel URL = %q, want %q", got, wantURL+"&viewPanel=1")
+	for _, query := range payload.Prometheus.Queries {
+		if query.GrafanaURL != "" {
+			t.Fatalf("tenant query %q included an unrestricted Grafana URL %q", query.ID, query.GrafanaURL)
+		}
 	}
 }
 
@@ -989,6 +991,82 @@ func TestRuntimeObservabilityPrometheusProxyLogsBoundedFailureBody(t *testing.T)
 	}
 	if strings.Contains(got, "secret-after-limit") {
 		t.Fatalf("log included content beyond %d-byte limit: %q", prometheusErrorBodyLimit, got)
+	}
+}
+
+func TestRuntimeObservabilityLogsProxyScopesQuery(t *testing.T) {
+	var gotPath string
+	var got url.Values
+	loki := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		got = r.URL.Query()
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"success","data":{"result":[{"stream":{"namespace":"user-1","app":"demo","container":"server","pod":"demo-abc"},"values":[["1720000000000000000","started"]]}]}}`))
+	}))
+	defer loki.Close()
+	t.Setenv(envLokiAPIURL, loki.URL)
+
+	server := newRuntimeServerWithMCPServers(t, ownedTestMCPServer("demo", "user-1", "user-1"))
+	request := httptest.NewRequest(http.MethodGet, "/api/runtime/observability/logs/query?namespace=user-1&server=demo", nil)
+	request = request.WithContext(withPrincipal(request.Context(), principal{
+		Role:              roleUser,
+		Subject:           "user-1",
+		Namespace:         "user-1",
+		AllowedNamespaces: []string{"user-1", sharedCatalogNamespace},
+	}))
+	recorder := httptest.NewRecorder()
+	server.HandleRuntimeObservabilityLogs(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if gotPath != "/loki/api/v1/query_range" {
+		t.Fatalf("Loki path = %q, want /loki/api/v1/query_range", gotPath)
+	}
+	if got.Get("query") != `{namespace="user-1",app="demo"}` || got.Get("limit") != fmt.Sprint(observabilityLogLimit) || got.Get("direction") != "backward" {
+		t.Fatalf("Loki query parameters = %#v", got)
+	}
+	var payload struct {
+		Entries []struct {
+			Line      string `json:"line"`
+			Container string `json:"container"`
+			Pod       string `json:"pod"`
+		} `json:"entries"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Entries) != 1 || payload.Entries[0].Line != "started" || payload.Entries[0].Container != "server" || payload.Entries[0].Pod != "demo-abc" {
+		t.Fatalf("entries = %#v", payload.Entries)
+	}
+	if strings.Contains(recorder.Body.String(), "tenant-b") {
+		t.Fatalf("response leaked foreign tenant marker: %s", recorder.Body.String())
+	}
+}
+
+func TestRuntimeObservabilityLogsRejectsCrossTenantServer(t *testing.T) {
+	var lokiCalls int
+	loki := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		lokiCalls++
+		_, _ = w.Write([]byte(`{"status":"success","data":{"result":[]}}`))
+	}))
+	defer loki.Close()
+	t.Setenv(envLokiAPIURL, loki.URL)
+	server := newRuntimeServerWithMCPServers(t, ownedTestMCPServer("demo", "tenant-b", "user-b"))
+	request := httptest.NewRequest(http.MethodGet, "/api/runtime/observability/logs/query?namespace=tenant-b&server=demo", nil)
+	request = request.WithContext(withPrincipal(request.Context(), principal{
+		Role:              roleUser,
+		Subject:           "user-a",
+		Namespace:         "tenant-a",
+		AllowedNamespaces: []string{"tenant-a", sharedCatalogNamespace},
+	}))
+	recorder := httptest.NewRecorder()
+	server.HandleRuntimeObservabilityLogs(recorder, request)
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404: %s", recorder.Code, recorder.Body.String())
+	}
+	if lokiCalls != 0 {
+		t.Fatalf("cross-tenant request reached Loki %d times", lokiCalls)
 	}
 }
 

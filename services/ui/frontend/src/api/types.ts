@@ -74,6 +74,13 @@ export type ObservabilityLinks = {
   };
 };
 
+export type ServerLogEntry = {
+  timestamp: string;
+  line: string;
+  container?: string;
+  pod?: string;
+};
+
 export type ServerSummary = {
   name: string;
   namespace: string;

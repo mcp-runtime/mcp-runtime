@@ -10,6 +10,7 @@ import (
 	"mcp-runtime/pkg/serviceutil"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -22,12 +23,15 @@ import (
 
 const (
 	defaultPrometheusAPIURL  = "http://prometheus.mcp-observability.svc:9090/prometheus"
+	defaultLokiAPIURL        = "http://loki.mcp-observability.svc:3100"
 	prometheusErrorBodyLimit = 1024
+	observabilityBodyLimit   = 4 << 20
+	observabilityLogLimit    = 100
 
 	envPrometheusAPIURL          = "PROMETHEUS_API_URL"
 	envMCPPrometheusAPIURL       = "MCP_PROMETHEUS_API_URL"
+	envLokiAPIURL                = "LOKI_API_URL"
 	envGrafanaServerDashboardURL = "GRAFANA_SERVER_DASHBOARD_URL"
-	envGrafanaScopedUserAccess   = "GRAFANA_SCOPED_USER_ACCESS"
 )
 
 type observabilityLinksResponse struct {
@@ -156,6 +160,116 @@ func (s *RuntimeServer) HandleRuntimeObservabilityPrometheusQuery(w http.Respons
 		"query":      query.Query,
 		"prometheus": payload,
 	})
+}
+
+// HandleRuntimeObservabilityLogs exposes only the authenticated server's
+// recent container logs. The LogQL selector is constructed from the resolved
+// MCPServer identity; callers cannot supply arbitrary Loki queries.
+func (s *RuntimeServer) HandleRuntimeObservabilityLogs(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("allow", http.MethodGet)
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
+		return
+	}
+	_, target, err := s.authorizedObservabilityTarget(r)
+	if err != nil {
+		writeObservabilityError(w, err)
+		return
+	}
+
+	query := fmt.Sprintf(`{namespace=%s,app=%s}`, promQLString(target.Namespace), promQLString(target.Name))
+	queryURL, err := lokiQueryURL(lokiAPIBaseURL(), query)
+	if err != nil {
+		log.Printf("observability loki proxy configuration error: %v", err)
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "logs not configured"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, queryURL, nil)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "query_build_failed"})
+		return
+	}
+	resp, err := serviceutil.DoHTTP(nil, req)
+	if err != nil {
+		log.Printf("observability loki query failed namespace=%q server=%q err=%v", target.Namespace, target.Name, err)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "loki_unavailable"})
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("observability loki query failed namespace=%q server=%q status=%d", target.Namespace, target.Name, resp.StatusCode)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "loki_query_failed"})
+		return
+	}
+	var payload struct {
+		Status string `json:"status"`
+		Data   struct {
+			Result []struct {
+				Stream map[string]string `json:"stream"`
+				Values [][]string        `json:"values"`
+			} `json:"result"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, observabilityBodyLimit)).Decode(&payload); err != nil || payload.Status != "success" {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "loki_response_invalid"})
+		return
+	}
+	type logEntry struct {
+		Timestamp string `json:"timestamp"`
+		Line      string `json:"line"`
+		Container string `json:"container,omitempty"`
+		Pod       string `json:"pod,omitempty"`
+	}
+	entries := make([]logEntry, 0, observabilityLogLimit)
+	for _, stream := range payload.Data.Result {
+		for _, value := range stream.Values {
+			if len(value) < 2 {
+				continue
+			}
+			entries = append(entries, logEntry{Timestamp: value[0], Line: value[1], Container: stream.Stream["container"], Pod: stream.Stream["pod"]})
+		}
+	}
+	sort.SliceStable(entries, func(i, j int) bool { return entries[i].Timestamp > entries[j].Timestamp })
+	if len(entries) > observabilityLogLimit {
+		entries = entries[:observabilityLogLimit]
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"namespace": target.Namespace, "server": target.Name, "entries": entries})
+}
+
+func lokiAPIBaseURL() string {
+	return strings.TrimSpace(envOr(envLokiAPIURL, defaultLokiAPIURL))
+}
+
+func lokiQueryURL(base, query string) (string, error) {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		return "", errors.New("Loki API URL is empty")
+	}
+	u, err := url.Parse(base)
+	if err != nil {
+		return "", err
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return "", errors.New("Loki API URL must be absolute http(s)")
+	}
+	joined, err := url.JoinPath(u.String(), "loki", "api", "v1", "query_range")
+	if err != nil {
+		return "", err
+	}
+	queryURL, err := url.Parse(joined)
+	if err != nil {
+		return "", err
+	}
+	values := queryURL.Query()
+	values.Set("query", query)
+	values.Set("limit", fmt.Sprint(observabilityLogLimit))
+	values.Set("direction", "backward")
+	values.Set("start", fmt.Sprint(time.Now().Add(-time.Hour).UnixNano()))
+	values.Set("end", fmt.Sprint(time.Now().UnixNano()))
+	queryURL.RawQuery = values.Encode()
+	return queryURL.String(), nil
 }
 
 func (s *RuntimeServer) authorizedObservabilityTarget(r *http.Request) (principal, *mcpv1alpha1.MCPServer, error) {
@@ -304,11 +418,11 @@ func grafanaLinkForServer(info controlplane.ServerInfo, p principal) observabili
 		}
 	}
 	link := expandObservabilityURLTemplate(template, info.Namespace, info.Name)
-	if p.Role == roleAdmin || grafanaScopedUserAccessEnabled() {
+	if p.Role == roleAdmin {
 		return observabilityGrafanaLink{
 			Available:       true,
 			URL:             link,
-			DirectAdminOnly: !grafanaScopedUserAccessEnabled(),
+			DirectAdminOnly: true,
 		}
 	}
 	return observabilityGrafanaLink{
@@ -346,15 +460,6 @@ func expandObservabilityURLTemplate(template, namespace, serverName string) stri
 		"{server}", url.QueryEscape(serverName),
 	)
 	return replacer.Replace(template)
-}
-
-func grafanaScopedUserAccessEnabled() bool {
-	switch strings.ToLower(strings.TrimSpace(envOr(envGrafanaScopedUserAccess, ""))) {
-	case "1", "true", "yes", "on", "enabled":
-		return true
-	default:
-		return false
-	}
 }
 
 func mcpServerObservableByPrincipal(server mcpv1alpha1.MCPServer, p principal) bool {

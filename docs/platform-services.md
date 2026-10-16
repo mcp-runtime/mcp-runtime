@@ -224,8 +224,11 @@ admin-only, so these links are shown to admins by default.
 
 The API checks the live `MCPServer` before returning links or querying
 Prometheus. Normal users are limited to their team namespaces or explicitly
-caller-owned catalog servers. Their Grafana links remain hidden unless a
-tenant-aware Grafana deployment is configured.
+caller-owned catalog servers. Their server detail page also shows recent Loki
+logs scoped to the authorized server namespace and workload label. Grafana
+remains admin-only because its shared Prometheus and Loki datasources do not
+enforce tenant isolation; a dashboard URL template or visibility flag cannot
+make those datasources safe for tenant users.
 
 Prometheus requests use
 `/api/v1/runtime/observability/prometheus/query?namespace=<namespace>&server=<server>&query_id=<id>`.
@@ -239,15 +242,21 @@ through the UI session proxy (`x-mcp-source: ui`) get
 the signed-in platform session to runtime-api. Direct API and CLI callers get
 `/api/v1/runtime/observability/...` links, which they call with their own API
 key or bearer token. Both paths apply the same runtime-api authorization and
-tenant checks. Grafana and panel links open Grafana directly.
+tenant checks. The session proxy allowlists only the fixed query routes.
 
-The bundled dashboard is provisioned at `/grafana/d/mcp-server/mcp-server`.
-The UI opens Grafana panel links directly; it does not display raw Prometheus
-query responses as dashboards. To use another dashboard, set
+Server logs use
+`/api/v1/runtime/observability/logs/query?namespace=<namespace>&server=<server>`.
+The API constructs a fixed Loki selector from the live authorized MCPServer,
+returns at most 100 lines from the last hour, and does not accept caller-supplied
+LogQL. UI requests use the session proxy route under `/api/ui/v1/runtime`.
+
+The bundled dashboard is provisioned at `/grafana/d/mcp-server/mcp-server` and
+is available directly to admins. To use another admin dashboard, set
 `GRAFANA_SERVER_DASHBOARD_URL` to a URL template containing `{namespace}` and
-`{server}`. Its first four panel IDs must correspond to the four links above.
-Expose these links to normal users only when the Grafana deployment enforces
-tenant-aware data source access, then set `GRAFANA_SCOPED_USER_ACCESS=true`.
+`{server}`. Its first four panel IDs must correspond to the four metric links
+above. Tenant-safe Grafana SSO requires a separate integration that enforces
+server scope at the data-source boundary; this runtime does not grant that
+access through `GRAFANA_SCOPED_USER_ACCESS`.
 
 The bundled Prometheus uses read-only Kubernetes discovery for annotated
 MCPServer Services and scrapes the gateway sidecar `/metrics` endpoint.

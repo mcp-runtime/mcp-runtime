@@ -604,13 +604,28 @@ describe("ServersWorkspace connect config, protocol inventory, and observability
     ],
   };
 
-  function stubRichCatalog() {
+  function stubRichCatalog(tenantSafe = false) {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
+      const catalog = tenantSafe ? {
+        servers: RICH_SERVERS.servers.map((server) => server.observability ? ({
+          ...server,
+          observability: {
+            ...server.observability,
+            grafana: { available: false, direct_admin_only: true, reason: "admin only" },
+            prometheus: {
+              ...server.observability.prometheus,
+              queries: server.observability.prometheus.queries.map(({ grafana_url: _grafanaURL, ...query }) => query),
+            },
+          },
+        }) : server),
+      } : RICH_SERVERS;
       const payload = url.includes("/runtime/namespaces")
         ? NAMESPACES
         : url.includes("/runtime/servers")
-          ? RICH_SERVERS
+          ? catalog
+          : url.includes("/runtime/observability/logs/query")
+            ? { entries: [{ timestamp: "1720000000000000000", line: "server started", container: "server", pod: "workspace-assistant-abc" }] }
           : TOOLS;
       return { ok: true, status: 200, json: async () => payload } as unknown as Response;
     });
@@ -752,6 +767,22 @@ describe("ServersWorkspace connect config, protocol inventory, and observability
     }
     expect(within(observability).getAllByRole("link")).toHaveLength(5);
     expect(observability.innerHTML).not.toContain("http://prom/query");
+  });
+
+  it("shows scoped metrics and recent logs in the server detail view", async () => {
+    const user = userEvent.setup();
+    const fetchMock = stubRichCatalog(true);
+    renderWorkspace({ authenticated: true, auth: { authenticated: true, principal: { role: "user" } } });
+    await screen.findByTestId("server-list");
+    const [richCard] = screen.getAllByTestId("server-card");
+    await user.click(within(richCard).getByTestId("server-card-details"));
+
+    const observability = await screen.findByTestId("server-detail-observability");
+    expect(within(observability).getByText("Scoped to mcp-servers/workspace-assistant")).toBeInTheDocument();
+    expect(within(observability).getByRole("link", { name: "Target health" })).toHaveAttribute("href", "http://prom/query?up");
+    expect(within(observability).queryByRole("link", { name: "Grafana dashboard" })).not.toBeInTheDocument();
+    expect(await within(observability).findByText("server started")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/runtime/observability/logs/query?namespace=mcp-servers&server=workspace-assistant"), expect.anything());
   });
 
   it("does not render Grafana or raw Prometheus query links when Grafana access is unavailable", async () => {

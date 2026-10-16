@@ -10,6 +10,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 ### Added
 
 - `mcp-runtime server get` now includes the runtime API's latest live MCP tool, prompt, and resource inventory alongside declared server metadata and safe authentication configuration, so operators can query observed server capabilities from the CLI ([#291](https://github.com/mcp-runtime/mcp-runtime/issues/291)).
+- Authorized server detail views include recent workload logs from the fixed, server-scoped Loki query API. Tenant users continue to use scoped Prometheus routes; direct Grafana access remains admin-only because its shared datasources do not enforce tenant isolation ([#441](https://github.com/mcp-runtime/mcp-runtime/issues/441)).
 
 ### Changed
 

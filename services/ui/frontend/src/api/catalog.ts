@@ -1,5 +1,5 @@
 import { fetchJSON, fetchPublicJSON, withQuery } from "./client";
-import type { GatewayEvent, NamespaceEntry, PublishPolicy, ServerSummary, ToolRow } from "./types";
+import type { GatewayEvent, NamespaceEntry, PublishPolicy, ServerLogEntry, ServerSummary, ToolRow } from "./types";
 
 function asArray<T>(value: unknown, key: string): T[] {
   if (!value || typeof value !== "object") {
@@ -59,4 +59,9 @@ export async function retireServer(namespace: string, name: string): Promise<voi
 export async function listServerEvents(namespace: string, server: string): Promise<GatewayEvent[]> {
   const data = await fetchJSON(withQuery("/runtime/server-events", { namespace, server, limit: "20" }));
   return asArray<GatewayEvent>(data, "events");
+}
+
+export async function listServerLogs(namespace: string, server: string): Promise<ServerLogEntry[]> {
+  const data = await fetchJSON(withQuery("/runtime/observability/logs/query", { namespace, server }));
+  return asArray<ServerLogEntry>(data, "entries");
 }
