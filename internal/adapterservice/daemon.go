@@ -204,7 +204,7 @@ func (d *Daemon) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// No ambient cookies, browser Origins or cross-site management calls.
 		if r.Header.Get("Origin") != "" || r.Host != "adapter.local" {
-			http.Error(w, "forbidden", 403)
+			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -215,7 +215,7 @@ func (d *Daemon) Handler() http.Handler {
 			d.control.Lock()
 			defer d.control.Unlock()
 			if err := d.reload(); err != nil {
-				http.Error(w, "invalid profiles; current profiles retained", 409)
+				http.Error(w, "invalid profiles; current profiles retained", http.StatusConflict)
 				return
 			}
 			_ = json.NewEncoder(w).Encode(d.Status())
