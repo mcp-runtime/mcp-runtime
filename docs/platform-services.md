@@ -230,12 +230,14 @@ remains admin-only because its shared Prometheus and Loki datasources do not
 enforce tenant isolation; a dashboard URL template or visibility flag cannot
 make those datasources safe for tenant users.
 
-Authorized server details also show a fixed one-hour metrics summary: `tools/call`
-rate and p95, allowed-call HTTP 5xx rate, policy deny count, and the slowest
-tool p95 after at least five calls. Runtime-api builds these PromQL queries from
-the live server identity and returns numeric results; callers cannot submit
-PromQL. This provides scoped values without exposing Grafana Explore or its
-shared datasources to tenants.
+Authorized server cards and details show a fixed one-hour metrics summary:
+`tools/call` rate and p95, allowed-call HTTP 5xx rate, policy deny count, and the
+slowest tool p95 after at least five calls. Cards fetch summaries only as they
+approach the viewport and share the detail view's short-lived query cache.
+Runtime-api builds these PromQL queries from the live server identity and
+returns numeric results; callers cannot submit PromQL. Tenant users get scoped
+values without Grafana Explore or its shared datasources; direct Grafana access
+remains admin-only until its query path can enforce the same tenant boundary.
 
 The operator sets `mcpruntime.org/server-uid` on stable and canary pods.
 Prometheus and Promtail copy it into `server_uid`, and runtime-api includes the

@@ -14,6 +14,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 - Server observability queries select the live MCPServer UID carried by workload, Prometheus and Loki labels, preventing a recreated server from exposing its predecessor's logs or metrics. Unlabelled historical telemetry is excluded; deploy the matching operator and collector configuration together ([#761](https://github.com/mcp-runtime/mcp-runtime/pull/761)).
 - Authorized server detail views include recent workload logs from the fixed, server-scoped Loki query API. Tenant users continue to use scoped Prometheus routes; direct Grafana access remains admin-only because its shared datasources do not enforce tenant isolation ([#441](https://github.com/mcp-runtime/mcp-runtime/issues/441)).
 - Authorized server details show a fixed one-hour summary of tools/call rate and p95, allowed-call HTTP 5xx rate, policy denies, and the slowest tool p95 after five calls. Tenant Grafana SSO and Explore isolation remain unresolved ([#699](https://github.com/mcp-runtime/mcp-runtime/issues/699)).
+- Authorized server cards now show that fixed one-hour summary as they approach the viewport and share the detail view's short-lived query cache. Grafana access remains admin-only until tenant-isolated Explore is available ([#699](https://github.com/mcp-runtime/mcp-runtime/issues/699)).
 
 ### Changed
 

@@ -147,7 +147,7 @@ export function ServerDetail({ server, tools, onClose, onShowTools, onSelectTool
     staleTime: 15_000,
   });
   const metricsQuery = useQuery({
-    queryKey: ["server-metrics", server.namespace, server.name],
+    queryKey: ["server-metrics", server.namespace, server.name, server.uid || ""],
     queryFn: () => getServerObservabilityMetrics(server.namespace, server.name),
     enabled: !!server.observability,
     staleTime: 30_000,
