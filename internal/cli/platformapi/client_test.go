@@ -350,7 +350,7 @@ func TestPlatformClientTeamAndServerRoutes(t *testing.T) {
 				}
 				return &http.Response{
 					StatusCode: http.StatusOK,
-					Body:       io.NopCloser(strings.NewReader(`{"servers":[]}`)),
+					Body:       io.NopCloser(strings.NewReader(`{"servers":[{"name":"demo","namespace":"mcp-team-core","uid":"server-uid","authMode":"header","authHeaders":["X-API-Key"],"credentialPresence":"all","gatewayEnabled":true,"servicePort":8080,"tools":[{"name":"lookup"}],"prompts":[{"name":"summary"}],"liveInventory":{"fetchedAt":"2026-10-16T12:00:00Z","protocolVersion":"2025-06-18","tools":[{"name":"lookup","inputSchema":{"type":"object"}}],"prompts":[{"name":"summary","arguments":[{"name":"id","required":true}]}],"resources":[{"uri":"file:///readme","mimeType":"text/plain"}]},"liveInventoryError":""}]}`)),
 				}, nil
 			case r.Method == http.MethodGet && r.URL.Path == "/api/v1/auth/me":
 				return &http.Response{
@@ -418,8 +418,25 @@ func TestPlatformClientTeamAndServerRoutes(t *testing.T) {
 	if upserted.UserID != "user-1" || upserted.Role != "member" {
 		t.Fatalf("upserted membership = %#v", upserted)
 	}
-	if _, err := client.ListRuntimeServers(context.Background(), ""); err != nil {
+	servers, err := client.ListRuntimeServers(context.Background(), "")
+	if err != nil {
 		t.Fatalf("ListRuntimeServers() error = %v", err)
+	}
+	if len(servers) != 1 {
+		t.Fatalf("ListRuntimeServers() returned %d servers, want 1", len(servers))
+	}
+	server := servers[0]
+	if server.UID != "server-uid" || server.AuthMode != "header" || !server.GatewayEnabled || server.ServicePort != 8080 {
+		t.Fatalf("server runtime details were not decoded: %#v", server)
+	}
+	if server.LiveInventory == nil || server.LiveInventory.ProtocolVersion != "2025-06-18" || len(server.LiveInventory.Tools) != 1 || string(server.LiveInventory.Tools[0].InputSchema) != `{"type":"object"}` {
+		t.Fatalf("live inventory was not decoded: %#v", server.LiveInventory)
+	}
+	if len(server.LiveInventory.Prompts) != 1 || len(server.LiveInventory.Prompts[0].Arguments) != 1 || !server.LiveInventory.Prompts[0].Arguments[0].Required {
+		t.Fatalf("live prompt inventory was not decoded: %#v", server.LiveInventory.Prompts)
+	}
+	if len(server.LiveInventory.Resources) != 1 || server.LiveInventory.Resources[0].MIMEType != "text/plain" {
+		t.Fatalf("live resource inventory was not decoded: %#v", server.LiveInventory.Resources)
 	}
 	principal, err := client.CurrentPrincipal(context.Background())
 	if err != nil {

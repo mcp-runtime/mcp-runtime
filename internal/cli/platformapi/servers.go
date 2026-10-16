@@ -18,22 +18,69 @@ import (
 
 // ServerListItem is one row from the platform API runtime servers list.
 type ServerListItem struct {
-	Name        string             `json:"name"`
-	Namespace   string             `json:"namespace"`
-	TeamID      string             `json:"team_id,omitempty"`
-	Image       string             `json:"image,omitempty"`
-	ImageTag    string             `json:"imageTag,omitempty"`
-	Description string             `json:"description,omitempty"`
-	Ready       string             `json:"ready"`
-	Status      string             `json:"status"`
-	Message     string             `json:"message,omitempty"`
-	Conditions  []metav1.Condition `json:"conditions,omitempty"`
-	Generation  int64              `json:"generation,omitempty"`
-	Labels      map[string]string  `json:"labels"`
-	Age         string             `json:"age"`
-	Endpoint    string             `json:"endpoint,omitempty"`
-	Tools       []ToolConfig       `json:"tools,omitempty"`
-	AccessJSON  map[string]any     `json:"access_json,omitempty"`
+	Name               string                      `json:"name"`
+	Namespace          string                      `json:"namespace"`
+	UID                string                      `json:"uid,omitempty"`
+	TeamID             string                      `json:"team_id,omitempty"`
+	Image              string                      `json:"image,omitempty"`
+	ImageTag           string                      `json:"imageTag,omitempty"`
+	Description        string                      `json:"description,omitempty"`
+	Ready              string                      `json:"ready"`
+	Status             string                      `json:"status"`
+	Message            string                      `json:"message,omitempty"`
+	Conditions         []metav1.Condition          `json:"conditions,omitempty"`
+	Generation         int64                       `json:"generation,omitempty"`
+	Labels             map[string]string           `json:"labels"`
+	Age                string                      `json:"age"`
+	Endpoint           string                      `json:"endpoint,omitempty"`
+	AuthMode           string                      `json:"authMode,omitempty"`
+	AuthHeaders        []string                    `json:"authHeaders,omitempty"`
+	CredentialPresence string                      `json:"credentialPresence,omitempty"`
+	GatewayEnabled     bool                        `json:"gatewayEnabled"`
+	ServicePort        int32                       `json:"servicePort,omitempty"`
+	Tools              []ToolConfig                `json:"tools,omitempty"`
+	Prompts            []mcpv1alpha1.InventoryItem `json:"prompts,omitempty"`
+	Resources          []mcpv1alpha1.InventoryItem `json:"resources,omitempty"`
+	Tasks              []mcpv1alpha1.InventoryItem `json:"tasks,omitempty"`
+	LiveInventory      *LiveInventory              `json:"liveInventory,omitempty"`
+	LiveInventoryError string                      `json:"liveInventoryError,omitempty"`
+	AccessJSON         map[string]any              `json:"access_json,omitempty"`
+}
+
+type LivePromptArgument struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Required    bool   `json:"required,omitempty"`
+}
+
+// LiveInventory is the latest tools/list, prompts/list and resources/list
+// result observed by the platform runtime API. It is cached and may be absent
+// until the first probe completes.
+type LiveInventory struct {
+	FetchedAt       string         `json:"fetchedAt"`
+	ProtocolVersion string         `json:"protocolVersion,omitempty"`
+	Tools           []LiveTool     `json:"tools"`
+	Prompts         []LivePrompt   `json:"prompts"`
+	Resources       []LiveResource `json:"resources"`
+}
+
+type LiveTool struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description,omitempty"`
+	InputSchema json.RawMessage `json:"inputSchema,omitempty"`
+}
+
+type LivePrompt struct {
+	Name        string               `json:"name"`
+	Description string               `json:"description,omitempty"`
+	Arguments   []LivePromptArgument `json:"arguments,omitempty"`
+}
+
+type LiveResource struct {
+	URI         string `json:"uri,omitempty"`
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+	MIMEType    string `json:"mimeType,omitempty"`
 }
 
 type serverListResponse struct {
