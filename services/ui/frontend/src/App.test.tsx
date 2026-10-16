@@ -157,11 +157,6 @@ describe("App", () => {
     await user.type(screen.getByTestId("login-password"), "admin@123");
     await user.click(screen.getByTestId("login-submit"));
 
-    await user.click(await screen.findByTestId("account-trigger"));
-    expect(await screen.findByText("Administrator")).toBeInTheDocument();
-    expect(screen.getAllByText("admin@mcpruntime.org")).toHaveLength(2);
-    expect(screen.getByTestId("logout-button")).toBeInTheDocument();
-
     const loginCall = calls.find((call) => call.url === "/auth/login");
     expect(loginCall?.init.credentials).toBe("same-origin");
     expect(new Headers(loginCall?.init.headers).get("authorization")).toBeNull();
@@ -172,6 +167,15 @@ describe("App", () => {
         "/api/ui/v1/runtime/servers"
       )
     );
+
+    const serverListRequests = calls.filter((call) => call.url === "/api/ui/v1/runtime/servers").length;
+    await user.click(await screen.findByTestId("account-trigger"));
+    expect(await screen.findByText("Administrator")).toBeInTheDocument();
+    expect(screen.getAllByText("admin@mcpruntime.org")).toHaveLength(2);
+    expect(screen.getByTestId("logout-button")).toBeInTheDocument();
+    expect(screen.queryByText("Deployed MCP servers")).not.toBeInTheDocument();
+    expect(screen.queryByText("Platform jwt")).not.toBeInTheDocument();
+    expect(calls.filter((call) => call.url === "/api/ui/v1/runtime/servers")).toHaveLength(serverListRequests);
   });
 
   it("signs in with an API key without exposing it after submit", async () => {

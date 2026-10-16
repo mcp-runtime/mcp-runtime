@@ -151,7 +151,6 @@ export function AppShell({
               workspace={workspace}
               onSignIn={onSignIn}
               onSignOut={onSignOut}
-              onOpenCatalog={() => onSelectWorkspace("servers")}
             />
 
             <span className="topbar-divider" aria-hidden="true" />

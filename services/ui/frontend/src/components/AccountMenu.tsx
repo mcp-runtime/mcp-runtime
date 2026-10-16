@@ -1,9 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 
-import { listServers } from "../api/catalog";
 import type { AuthStatus } from "../api/types";
-import { CATALOG_QUERY_KEY } from "../hooks/useCatalog";
 import { Button } from "../ui/Button";
 import { Icon } from "../ui/Icon";
 
@@ -13,7 +10,6 @@ type AccountMenuProps = {
   workspace: string;
   onSignIn: () => void;
   onSignOut: () => void;
-  onOpenCatalog: () => void;
 };
 
 function accountIdentity(auth: AuthStatus): string {
@@ -32,20 +28,12 @@ function accountRole(auth: AuthStatus): string {
   return role.replace(/[_-]+/g, " ").replace(/^\w/, (letter) => letter.toUpperCase());
 }
 
-function authMethod(auth: AuthStatus): string | undefined {
-  const method = auth.principal?.auth_type?.trim();
-  if (!method) return undefined;
-  if (method === "ui_api_key") return "API key";
-  return method.replace(/[_-]+/g, " ").replace(/^\w/, (letter) => letter.toUpperCase());
-}
-
 export function AccountMenu({
   auth,
   authBusy,
   workspace,
   onSignIn,
   onSignOut,
-  onOpenCatalog,
 }: AccountMenuProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -53,16 +41,6 @@ export function AccountMenu({
   const authenticated = auth.authenticated === true;
   const identity = accountIdentity(auth);
   const role = accountRole(auth);
-  const method = authMethod(auth);
-  const serversQuery = useQuery({
-    queryKey: [CATALOG_QUERY_KEY, "servers", ""],
-    queryFn: () => listServers(),
-    enabled: open && authenticated,
-    staleTime: 30_000,
-    retry: false,
-  });
-  const servers = serversQuery.data?.servers ?? [];
-  const shownServers = servers.slice(0, 6);
 
   useEffect(() => {
     setOpen(false);
@@ -88,11 +66,6 @@ export function AccountMenu({
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [open]);
-
-  function openCatalog() {
-    setOpen(false);
-    onOpenCatalog();
-  }
 
   return (
     <div className="account-menu" ref={rootRef} data-testid="account-menu">
@@ -124,53 +97,10 @@ export function AccountMenu({
                   <span className={role === "Administrator" ? "account-role-badge is-admin" : "account-role-badge"}>
                     {role}
                   </span>
-                  {method ? <span className="account-method">{method}</span> : null}
                 </div>
                 <p className="account-access-scope">
                   {role === "Administrator" ? "Access across all platform namespaces." : "Access scoped to your namespaces."}
                 </p>
-              </div>
-
-              <div className="account-server-section">
-                <div className="account-server-heading">
-                  <div>
-                    <h2>Deployed MCP servers</h2>
-                    <p>Visible to your account</p>
-                  </div>
-                  {!serversQuery.isPending && !serversQuery.isError ? (
-                    <span className="account-server-count">{servers.length}</span>
-                  ) : null}
-                </div>
-
-                {serversQuery.isPending ? (
-                  <p className="account-server-state" role="status">Loading your servers…</p>
-                ) : serversQuery.isError ? (
-                  <div className="account-server-error" role="alert">
-                    <span>Couldn’t load the server list.</span>
-                    <button type="button" onClick={() => void serversQuery.refetch()}>Retry</button>
-                  </div>
-                ) : servers.length === 0 ? (
-                  <p className="account-server-state">No MCP servers are visible to your account yet.</p>
-                ) : (
-                  <ul className="account-server-list">
-                    {shownServers.map((server) => (
-                      <li className="account-server-item" key={`${server.namespace}/${server.name}`}>
-                        <span className="account-server-icon" aria-hidden="true"><Icon name="server" size={14} /></span>
-                        <span className="account-server-copy">
-                          <strong title={server.name}>{server.name}</strong>
-                          <span title={server.namespace}>{server.namespace}</span>
-                        </span>
-                        <span className="account-server-status">{server.status || "Unknown"}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {servers.length > shownServers.length ? (
-                  <p className="account-server-more">and {servers.length - shownServers.length} more</p>
-                ) : null}
-                <Button variant="secondary" size="sm" icon="server" block onClick={openCatalog}>
-                  Open server catalog
-                </Button>
               </div>
 
               <div className="account-popover-footer">
@@ -194,7 +124,7 @@ export function AccountMenu({
             <div className="account-signed-out">
               <span className="account-avatar account-avatar-large" aria-hidden="true"><Icon name="user" size={19} /></span>
               <h2>Sign in to your account</h2>
-              <p>View your deployed servers, tools, and platform access.</p>
+              <p>Access your workspace and platform tools.</p>
               <Button data-testid="account-menu-signin" variant="primary" icon="login" block onClick={() => { setOpen(false); onSignIn(); }}>
                 Sign in
               </Button>

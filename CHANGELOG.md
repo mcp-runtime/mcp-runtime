@@ -17,6 +17,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Changed
 
+- The account popover now shows account identity and role without listing deployed servers or exposing the authentication mechanism; server catalog loading remains on the Servers workspace ([#542](https://github.com/mcp-runtime/mcp-runtime/issues/542)).
 - Operator policy reconciliation looks up grants by their effective target server using a cache index, avoiding copies and scans of unrelated grants while preserving cross-namespace references. Runtime sessions remain platform-owned ([#657](https://github.com/mcp-runtime/mcp-runtime/issues/657)).
 
 ### Fixed
