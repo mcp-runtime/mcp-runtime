@@ -315,7 +315,7 @@ func checkOperatorRecentReconcileErrors(kubectl core.KubectlRunner) DoctorCheck 
 			Remedy: "inspect operator logs directly and fix reconcile failures",
 		}
 	}
-	patterns := []string{"reconciler error", "failed to reconcile", "error syncing"}
+	patterns := []string{"reconciler error", "failed to reconcile", "error syncing", "forbidden"}
 	scanner := bufio.NewScanner(bytes.NewReader(out))
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {

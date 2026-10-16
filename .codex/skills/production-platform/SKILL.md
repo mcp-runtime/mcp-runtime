@@ -18,6 +18,14 @@ platform. Do not add legacy compatibility or general migration infrastructure
 for earlier reference-platform releases. Existing production and Staging E2E
 guardrails still apply.
 
+Ordinary `mcp-runtime update` reconciles the target release's declared operator
+RBAC before rolling images, with setup's SSA field manager; review the dry-run
+object plan and use an unscoped update (`--only` skips RBAC). A separate RBAC
+repair is not part of routine deploys. Run `cluster doctor` afterwards to verify
+effective bundled permissions and forbidden informer errors. See
+[the deployment runbook](../../../docs/reference-deployment.md) for optional auth,
+SubjectAccessReview permissions and the intentional two-replica leader election.
+
 ## Modes
 
 | Mode | Load |

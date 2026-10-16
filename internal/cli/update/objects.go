@@ -2,14 +2,17 @@ package update
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 
 	"mcp-runtime/internal/platformrelease"
@@ -201,6 +204,9 @@ func applyPlatformObjects(ctx context.Context, cs kubernetes.Interface, plan *Pl
 }
 
 func writeObject(ctx context.Context, cs kubernetes.Interface, obj platformrelease.PlatformObject, action string) error {
+	if operatorReleaseObject(obj) {
+		return applyOperatorObject(ctx, cs, obj)
+	}
 	create := metav1.CreateOptions{FieldManager: objectFieldManager}
 	update := metav1.UpdateOptions{FieldManager: objectFieldManager}
 	switch obj.Kind {
@@ -307,4 +313,34 @@ func writeObject(ctx context.Context, cs kubernetes.Interface, obj platformrelea
 		return err
 	}
 	return fmt.Errorf("unsupported kind %q", obj.Kind)
+}
+
+// Operator resources are also owned by setup. Keep one SSA field manager so
+// upgrades remove obsolete rules and never introduce a client-side apply owner.
+func operatorReleaseObject(obj platformrelease.PlatformObject) bool {
+	return strings.HasPrefix(obj.Name, "mcp-runtime-operator-")
+}
+
+func applyOperatorObject(ctx context.Context, cs kubernetes.Interface, obj platformrelease.PlatformObject) error {
+	data, err := json.Marshal(obj.Object)
+	if err != nil {
+		return err
+	}
+	force := true
+	opts := metav1.PatchOptions{FieldManager: "mcp-runtime", Force: &force}
+	switch obj.Kind {
+	case "ServiceAccount":
+		_, err = cs.CoreV1().ServiceAccounts(obj.Namespace).Patch(ctx, obj.Name, types.ApplyPatchType, data, opts)
+	case "ClusterRole":
+		_, err = cs.RbacV1().ClusterRoles().Patch(ctx, obj.Name, types.ApplyPatchType, data, opts)
+	case "Role":
+		_, err = cs.RbacV1().Roles(obj.Namespace).Patch(ctx, obj.Name, types.ApplyPatchType, data, opts)
+	case "ClusterRoleBinding":
+		_, err = cs.RbacV1().ClusterRoleBindings().Patch(ctx, obj.Name, types.ApplyPatchType, data, opts)
+	case "RoleBinding":
+		_, err = cs.RbacV1().RoleBindings(obj.Namespace).Patch(ctx, obj.Name, types.ApplyPatchType, data, opts)
+	default:
+		return fmt.Errorf("unsupported operator object %s", obj.Key())
+	}
+	return err
 }

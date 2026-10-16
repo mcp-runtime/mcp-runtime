@@ -255,7 +255,7 @@ func TestRealReleaseConvergesLikeTheProductionGate(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := manifest(t, "v0.8.0")
-	objects, err := platformrelease.BundlePlatformObjects(k8sDir, wiring.PlatformObjects)
+	objects, err := platformrelease.BundlePlatformObjects(k8sDir, wiring.PlatformObjects, "../../../config/rbac")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +274,7 @@ func TestRealReleaseConvergesLikeTheProductionGate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cs := fake.NewSimpleClientset(append(installedWithIngestEnv("v0.7.2"), thirdParty()...)...)
+	cs := fake.NewClientset(append(installedWithIngestEnv("v0.7.2"), thirdParty()...)...)
 	first := planAndRefine(t, cs, m)
 	if !first.NeedsApply() {
 		t.Fatal("the new release must have work to do against the previous release")
