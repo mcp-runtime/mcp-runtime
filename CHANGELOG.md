@@ -17,6 +17,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Fixed
 
+- The CI reconciliation benchmark registers the grant target-server index on its fake Kubernetes client, restoring benchmark runs after indexed policy lookups were introduced ([#657](https://github.com/mcp-runtime/mcp-runtime/issues/657)).
+
 - `update` now bundles and reconciles operator RBAC from the target release before image rollouts, previews drift, and stops on permission-apply failure. Doctor verifies effective bundled permissions and flags forbidden informer errors; hosted deployment gates on these checks ([#633](https://github.com/mcp-runtime/mcp-runtime/issues/633)).
 
 - `server list` help now explains visible-server defaults, admin scope, team slug filtering, and catalog/personal namespace selectors. A team lookup without a namespace now fails instead of silently listing all visible servers ([#612](https://github.com/mcp-runtime/mcp-runtime/issues/612)).
