@@ -1566,6 +1566,7 @@ func TestRenderAnalyticsSecretManifestDisablesExistingDevLoginsOutsideTestMode(t
 
 func TestRenderAnalyticsConfigManifestInjectsMTLSClusterIssuer(t *testing.T) {
 	t.Setenv("MCP_MTLS_CLUSTER_ISSUER", "mcp-runtime-ca")
+	t.Setenv("MCP_ADAPTER_CERTIFICATES", "true")
 	mock := &core.MockExecutor{
 		CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
 			return &core.MockCommand{Args: spec.Args}
@@ -1580,6 +1581,7 @@ metadata:
   namespace: mcp-platform
 data:
   MCP_MTLS_CLUSTER_ISSUER: ""
+  MCP_ADAPTER_CERTIFICATES: ""
   PLATFORM_MODE: "org"
 `, setupplan.PlatformModeOrg, AnalyticsImageSet{})
 	if err != nil {
@@ -1594,6 +1596,9 @@ data:
 	}
 	if got := payload.Data["MCP_MTLS_CLUSTER_ISSUER"]; got != "mcp-runtime-ca" {
 		t.Fatalf("expected MCP_MTLS_CLUSTER_ISSUER to be injected into the platform ConfigMap, got %q", got)
+	}
+	if got := payload.Data["MCP_ADAPTER_CERTIFICATES"]; got != "true" {
+		t.Fatalf("expected MCP_ADAPTER_CERTIFICATES to be injected into the platform ConfigMap, got %q", got)
 	}
 }
 

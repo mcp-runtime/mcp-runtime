@@ -56,6 +56,11 @@ func fakeMTLSServer(t *testing.T, expiresAt time.Time, certCalls *int32) (*httpt
 	var serial int64 = 2
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runtime/adapter/preflight":
+			_ = json.NewEncoder(w).Encode(platformapi.AdapterPreflight{
+				Ready: true, AdapterCertificates: true, Issuer: "mcp-runtime-ca", IssuerReady: true,
+				TrustDomain: "mcpruntime.org", RouteEligible: true, RouteReady: true,
+			})
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runtime/adapter/sessions":
 			var req platformapi.AdapterSessionRequest
 			_ = json.NewDecoder(r.Body).Decode(&req)
@@ -69,6 +74,8 @@ func fakeMTLSServer(t *testing.T, expiresAt time.Time, certCalls *int32) (*httpt
 				TrustDomain: "mcpruntime.org",
 				ExpiresAt:   expiresAt,
 			})
+		case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/api/v1/runtime/adapter/sessions/"):
+			w.WriteHeader(http.StatusOK)
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runtime/adapter/certificates":
 			atomic.AddInt32(certCalls, 1)
 			var req platformapi.AdapterCertificateRequest
@@ -120,6 +127,67 @@ func fakeMTLSServer(t *testing.T, expiresAt time.Time, certCalls *int32) (*httpt
 		t.Fatalf("NewPlatformClient: %v", err)
 	}
 	return server, client
+}
+
+func TestAdapterEnrollmentPreflightRunsBeforeSessionCreation(t *testing.T) {
+	var sessionCalls int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Path == "/api/v1/runtime/adapter/preflight" {
+			_ = json.NewEncoder(w).Encode(platformapi.AdapterPreflight{Ready: false, Reason: "configured workload issuer is not Ready", Issuer: "corp-ca"})
+			return
+		}
+		if r.Method == http.MethodPost && r.URL.Path == "/api/v1/runtime/adapter/sessions" {
+			atomic.AddInt32(&sessionCalls, 1)
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+	t.Setenv("MCP_PLATFORM_API_URL", server.URL)
+	t.Setenv("MCP_PLATFORM_API_TOKEN", "test-token")
+	client, err := platformapi.NewPlatformClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = issueAdapterCredential(context.Background(), client, platformSessionFlags{server: "demo", namespace: "mcp-team-acme", agent: "agt_test"}, "")
+	if err == nil || !strings.Contains(err.Error(), "issuer is not Ready") || !strings.Contains(err.Error(), `issuer="corp-ca"`) {
+		t.Fatalf("error = %v, want detailed issuer preflight failure", err)
+	}
+	if got := atomic.LoadInt32(&sessionCalls); got != 0 {
+		t.Fatalf("session calls = %d, want 0 before PKI readiness", got)
+	}
+}
+
+func TestAdapterEnrollmentCleansOnlyNewPendingSessionOnIssueFailure(t *testing.T) {
+	var cleanups int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runtime/adapter/preflight":
+			_ = json.NewEncoder(w).Encode(platformapi.AdapterPreflight{Ready: true, TrustDomain: "mcpruntime.org"})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runtime/adapter/sessions":
+			_ = json.NewEncoder(w).Encode(platformapi.AdapterSession{Name: "session-new", Namespace: "mcp-team-acme", TrustDomain: "mcpruntime.org", ExpiresAt: time.Now().Add(time.Hour)})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runtime/adapter/certificates":
+			http.Error(w, "issuer request denied", http.StatusServiceUnavailable)
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/v1/runtime/adapter/sessions/mcp-team-acme/session-new":
+			atomic.AddInt32(&cleanups, 1)
+			w.WriteHeader(http.StatusOK)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	t.Setenv("MCP_PLATFORM_API_URL", server.URL)
+	t.Setenv("MCP_PLATFORM_API_TOKEN", "test-token")
+	client, err := platformapi.NewPlatformClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = issueAdapterCredential(context.Background(), client, platformSessionFlags{server: "demo", namespace: "mcp-team-acme", agent: "agt_test"}, "")
+	if err == nil || !strings.Contains(err.Error(), "issue adapter certificate") {
+		t.Fatalf("error = %v, want certificate issuance failure", err)
+	}
+	if got := atomic.LoadInt32(&cleanups); got != 1 {
+		t.Fatalf("cleanup calls = %d, want 1 newly-created pending session cleanup", got)
+	}
 }
 
 func TestBuildSessionCSROnlySpiffeSAN(t *testing.T) {

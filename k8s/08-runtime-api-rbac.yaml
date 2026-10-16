@@ -19,6 +19,10 @@ rules:
   - apiGroups: ["cert-manager.io"]
     resources: ["certificaterequests"]
     verbs: ["create", "get"]
+  # Preflight reads only issuer readiness metadata. It never reads CA Secrets.
+  - apiGroups: ["cert-manager.io"]
+    resources: ["clusterissuers"]
+    verbs: ["get"]
   - apiGroups: ["mcpruntime.org"]
     resources: ["mcpaccessgrants", "mcpagentsessions"]
     verbs: ["get", "list", "watch"]

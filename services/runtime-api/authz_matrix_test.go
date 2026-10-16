@@ -89,6 +89,8 @@ func TestAuthzMatrixCoversRegisteredRoutes(t *testing.T) {
 		"/api/v1/runtime/grants",
 		"/api/v1/runtime/sessions",
 		"/api/v1/runtime/adapter/sessions",
+		"/api/v1/runtime/adapter/sessions/",
+		"/api/v1/runtime/adapter/preflight",
 		"/api/v1/runtime/adapter/certificates",
 		"/api/v1/runtime/registry/push",
 		"/api/v1/runtime/components",

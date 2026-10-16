@@ -591,6 +591,12 @@ identity headers are not supported.
 
 The platform issues certificates only when an enabled `MCPAccessGrant` matches the server, signed-in user, and agent. Apply the grant first with `access grant apply`.
 
+Before creating a session, `adapter enroll` checks that adapter certificates are
+enabled, the configured workload issuer is Ready, and the selected server has a
+Ready gateway route that accepts client certificates. If certificate issuance
+fails, a newly created pending session is deleted; an existing reused session is
+left intact. The API repeats these readiness checks when creating the session.
+
 `--platform-url` takes scheme and host only, with no `/api` path. It defaults to the URL saved by `auth login` or `$MCP_PLATFORM_API_URL`.
 
 ```bash
