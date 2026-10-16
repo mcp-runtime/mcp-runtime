@@ -12,7 +12,6 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -450,6 +449,9 @@ func (r *MCPServerReconciler) defaultedMCPServerForReconcile(mcpServer *mcpv1alp
 }
 
 func (r *MCPServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := registerGrantTargetServerIndex(context.Background(), mgr.GetFieldIndexer()); err != nil {
+		return err
+	}
 	if err := r.setupBundledOAuthResourcesController(mgr); err != nil {
 		return err
 	}
@@ -468,26 +470,9 @@ func (r *MCPServerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *MCPServerReconciler) requestsForReferencedServer(_ context.Context, obj client.Object) []ctrl.Request {
-	switch resource := obj.(type) {
-	case *mcpv1alpha1.MCPAccessGrant:
-		namespace := resource.Spec.ServerRef.Namespace
-		if namespace == "" {
-			namespace = resource.Namespace
-		}
-		if resource.Spec.ServerRef.Name == "" {
-			return nil
-		}
-		return []ctrl.Request{{NamespacedName: types.NamespacedName{Name: resource.Spec.ServerRef.Name, Namespace: namespace}}}
-	case *mcpv1alpha1.MCPAgentSession:
-		namespace := resource.Spec.ServerRef.Namespace
-		if namespace == "" {
-			namespace = resource.Namespace
-		}
-		if resource.Spec.ServerRef.Name == "" {
-			return nil
-		}
-		return []ctrl.Request{{NamespacedName: types.NamespacedName{Name: resource.Spec.ServerRef.Name, Namespace: namespace}}}
-	default:
+	grant, ok := obj.(*mcpv1alpha1.MCPAccessGrant)
+	if !ok || grant.Spec.ServerRef.Name == "" {
 		return nil
 	}
+	return []ctrl.Request{{NamespacedName: effectiveServerReference(grant.Namespace, grant.Spec.ServerRef)}}
 }

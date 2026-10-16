@@ -257,7 +257,7 @@ func (r *MCPServerReconciler) renderGatewayPolicy(ctx context.Context, mcpServer
 	}
 
 	var grants mcpv1alpha1.MCPAccessGrantList
-	if err := r.List(ctx, &grants); err != nil {
+	if err := r.List(ctx, &grants, client.MatchingFields{grantTargetServerIndex: targetServerKey(mcpServer.Namespace, mcpServer.Name)}); err != nil {
 		return nil, err
 	}
 	for _, grant := range grants.Items {
@@ -327,11 +327,7 @@ func subjectTeamIDForServer(serverTeamID, subjectTeamID string) string {
 }
 
 func serverReferenceMatches(objectNamespace string, ref mcpv1alpha1.ServerReference, server *mcpv1alpha1.MCPServer) bool {
-	namespace := strings.TrimSpace(ref.Namespace)
-	if namespace == "" {
-		namespace = objectNamespace
-	}
-	return ref.Name == server.Name && namespace == server.Namespace
+	return effectiveServerReference(objectNamespace, ref) == (types.NamespacedName{Namespace: server.Namespace, Name: server.Name})
 }
 
 func gatewayPolicyConfigMapName(serverName string) string {

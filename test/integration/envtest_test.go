@@ -83,6 +83,10 @@ func TestControllerWithEnvtest(t *testing.T) {
 	_ = corev1.AddToScheme(scheme)
 	_ = networkingv1.AddToScheme(scheme)
 
+	t.Run("GrantTargetCacheIndex", func(t *testing.T) {
+		testGrantTargetCacheIndex(t, cfg, scheme)
+	})
+
 	t.Run("SetupWithManager", func(t *testing.T) {
 		testSetupWithManager(t, cfg, scheme)
 	})

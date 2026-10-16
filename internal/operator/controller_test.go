@@ -894,7 +894,7 @@ func TestReconcileResources(t *testing.T) {
 				IngressPath: "/test",
 			},
 		}
-		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
+		client := fake.NewClientBuilder().WithScheme(scheme).WithIndex(&mcpv1alpha1.MCPAccessGrant{}, grantTargetServerIndex, grantTargetServerKeys).WithObjects(mcpServer).Build()
 		r := MCPServerReconciler{
 			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 		err := r.reconcileResources(context.Background(), mcpServer, logr.Discard())
@@ -1389,7 +1389,7 @@ func TestRenderGatewayPolicyIncludesCrossNamespaceReferences(t *testing.T) {
 	}
 
 	client := fake.NewClientBuilder().
-		WithScheme(scheme).
+		WithScheme(scheme).WithIndex(&mcpv1alpha1.MCPAccessGrant{}, grantTargetServerIndex, grantTargetServerKeys).
 		WithObjects(mcpServer, grant, defaultedGrant, foreignTeamGrant, session, defaultedSession, foreignTeamSession, unrelatedGrant).
 		Build()
 	r := MCPServerReconciler{
@@ -1856,7 +1856,7 @@ func TestReconcile(t *testing.T) {
 	_ = networkingv1.AddToScheme(scheme)
 
 	t.Run("returns not found when MCPServer does not exist", func(t *testing.T) {
-		client := fake.NewClientBuilder().WithScheme(scheme).Build()
+		client := fake.NewClientBuilder().WithScheme(scheme).WithIndex(&mcpv1alpha1.MCPAccessGrant{}, grantTargetServerIndex, grantTargetServerKeys).Build()
 		r := MCPServerReconciler{
 			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 
@@ -1886,7 +1886,7 @@ func TestReconcile(t *testing.T) {
 				PublicPathPrefix: "test-server",
 			},
 		}
-		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
+		client := fake.NewClientBuilder().WithScheme(scheme).WithIndex(&mcpv1alpha1.MCPAccessGrant{}, grantTargetServerIndex, grantTargetServerKeys).WithObjects(mcpServer).Build()
 		r := MCPServerReconciler{
 			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 
@@ -1910,7 +1910,7 @@ func TestReconcile(t *testing.T) {
 				IngressPath: "/test-server/mcp",
 			},
 		}
-		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
+		client := fake.NewClientBuilder().WithScheme(scheme).WithIndex(&mcpv1alpha1.MCPAccessGrant{}, grantTargetServerIndex, grantTargetServerKeys).WithObjects(mcpServer).Build()
 		r := MCPServerReconciler{
 			GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 

@@ -47,6 +47,20 @@ normal garbage collection cleans them up with the `MCPServer`. The exception is
 the Traefik egress NetworkPolicy, which lives in the ingress controller
 namespace and cannot carry a cross-namespace owner reference.
 
+## Gateway Policy Grant Lookup
+
+Manager setup registers a cache field index for each grant's effective target
+server (namespace and name). An omitted reference namespace defaults to the
+grant's own namespace. Policy rendering queries this index across namespaces,
+so explicit cross-namespace grants are retained without scanning unrelated
+grants. Registration or query failures surface as errors; there is no unindexed
+fallback. Grant updates enqueue both old and new targets, so moving a reference
+removes it from the old server's policy as well as adding it to the new one.
+
+Runtime sessions are owned by platform-api in Postgres and synchronized directly
+to gateways. They are neither indexed nor watched by the operator and do not
+appear in policy ConfigMaps. See [gateway session sync](../contributor/gateway-session-sync.md).
+
 ## Traefik Egress
 
 The bundled Traefik runs under a default-deny NetworkPolicy, and its static
