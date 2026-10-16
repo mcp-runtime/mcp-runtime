@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Added
+
+- `mcp-runtime server get` now includes the runtime API's latest live MCP tool, prompt, and resource inventory alongside declared server metadata and safe authentication configuration, so operators can query observed server capabilities from the CLI ([#291](https://github.com/mcp-runtime/mcp-runtime/issues/291)).
+
 ### Changed
 
 - Operator policy reconciliation looks up grants by their effective target server using a cache index, avoiding copies and scans of unrelated grants while preserving cross-namespace references. Runtime sessions remain platform-owned ([#657](https://github.com/mcp-runtime/mcp-runtime/issues/657)).
