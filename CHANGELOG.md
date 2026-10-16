@@ -17,6 +17,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Changed
 
+- First-party Go service image executables use `-trimpath` and omit linker symbol and DWARF sections. At source revision `576353d1`, with Go 1.26.9, Linux/amd64 and CGO disabled, the `platform-api` executable shrank from 70,601,998 to 49,479,842 bytes (29.9%). This executable-only measurement does not establish image, memory, startup, build-time or request-latency savings. Keep an unstripped local build for external debugger or symbol-table analysis ([#701](https://github.com/mcp-runtime/mcp-runtime/issues/701)).
 - Operator policy reconciliation looks up grants by their effective target server using a cache index, avoiding copies and scans of unrelated grants while preserving cross-namespace references. Runtime sessions remain platform-owned ([#657](https://github.com/mcp-runtime/mcp-runtime/issues/657)).
 
 ### Fixed

@@ -21,7 +21,7 @@ COPY --from=frontend /src/services/ui/static/ ./services/ui/static/
 ARG TARGETOS
 ARG TARGETARCH
 RUN cd services/ui && \
-    mkdir -p /out && CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /out/ui .
+    mkdir -p /out && CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" -o /out/ui .
 
 FROM gcr.io/distroless/base-debian12
 WORKDIR /app
