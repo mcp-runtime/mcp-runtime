@@ -71,6 +71,14 @@ nav:
       - Teams and Access: teams-and-access.md
       - Client Connections: connect-clients.md
       - MCP OAuth: mcp-oauth.md
+      - MCP Implementation Reference:
+          - Overview: mcp-implementation/README.md
+          - Session Lifecycle: mcp-implementation/session-lifecycle.md
+          - Transports: mcp-implementation/transports.md
+          - Tool Registration: mcp-implementation/tool-registration.md
+          - Auth Propagation: mcp-implementation/auth-propagation.md
+          - Error Reference: mcp-implementation/error-reference.md
+          - State Model: mcp-implementation/state-model.md
   - Deployment and Operations:
       - Overview: hosting-overview.md
       - Installation:

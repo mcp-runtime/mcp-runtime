@@ -49,6 +49,8 @@ a successful governed tool call also requires valid caller identity and policy.
 3. [Guided tutorials](learn/README.md): learn concepts, deploy a server, and set up teams.
 
 OAuth setup and identity-provider configuration: [MCP authorization](mcp-oauth.md).
+Operational details for MCP implementers: [MCP implementation
+reference](mcp-implementation/README.md).
 
 ## How it works
 
@@ -149,7 +151,7 @@ preparation.
 | Section | What you will find |
 |---|---|
 | [Getting Started](start-here.md) | Try user and team workflows on the public platform, or install your own platform for admin workflows |
-| [Server and Client Guides](usage-overview.md) | Publishing, team access, client connections, and optional OAuth |
+| [Server and Client Guides](usage-overview.md) | Publishing, team access, client connections, optional OAuth, and MCP implementation behavior |
 | [Deployment and Operations](hosting-overview.md) | Installation, the public reference deployment, and ongoing operations |
 | [Concepts and Architecture](concepts-overview.md) | Resources, identity, policy, and the platform's component model |
 | [CLI and API Reference](reference-overview.md) | Commands, API and resource contracts, endpoint authorization, and Go packages |

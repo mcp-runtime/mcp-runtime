@@ -19,6 +19,7 @@
 - Multi-team isolation: https://docs.mcpruntime.org/teams-and-access/ — Team namespaces, RBAC, NetworkPolicy, and cross-team grants.
 - Agent adapters: https://docs.mcpruntime.org/connect-clients/ — Enroll a session-bound certificate, configure the local HTTP proxy, and pass OAuth tokens when the target uses OAuth.
 - MCP authorization: https://docs.mcpruntime.org/mcp-oauth/ — Configure the optional authorization server and OAuth resource settings.
+- MCP implementation reference: https://docs.mcpruntime.org/mcp-implementation/ — Operational reference for session lifecycle, transports, tool registration, auth propagation, errors, and state ownership.
 
 ## Deployment and operations
 
