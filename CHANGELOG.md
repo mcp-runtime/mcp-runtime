@@ -20,6 +20,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Fixed
 
+- Failed QA E2E rollout and MCPServer readiness waits now attach bounded, redacted operator logs, server conditions, workload readiness, and Warning Events to artifacts. Collection is guarded by the explicit disposable Kind context and reports missing access as a collection gap ([#763](https://github.com/mcp-runtime/mcp-runtime/issues/763)).
 - Deployment warning Events are read through a bounded, uncached namespace request, preventing diagnostics from blocking all reconciles on an unauthorized cluster-wide Event informer. Event attribution uses pod UIDs when available ([#757](https://github.com/mcp-runtime/mcp-runtime/pull/757)).
 - `server deploy` now reports the newest unready workload pod's container failure and recent warning event when a rollout times out, while readiness continues to require replicas from the current Deployment revision ([#636](https://github.com/mcp-runtime/mcp-runtime/issues/636)).
 - The CI reconciliation benchmark registers the grant target-server index on its fake Kubernetes client, restoring benchmark runs after indexed policy lookups were introduced ([#657](https://github.com/mcp-runtime/mcp-runtime/issues/657)).
