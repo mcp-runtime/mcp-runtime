@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -1311,29 +1312,83 @@ func TestConfigureKubeconfigFromProviderGKE(t *testing.T) {
 }
 
 func TestResolveKubeconfigPath(t *testing.T) {
-	t.Run("returns provided path", func(t *testing.T) {
-		path, err := resolveKubeconfigPath("/custom/path")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if path != "/custom/path" {
-			t.Fatalf("expected /custom/path, got %q", path)
-		}
-	})
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	defaultPath := filepath.Join(tmpDir, ".kube", "config")
+	const k3sPath = "/etc/rancher/k3s/k3s.yaml"
 
-	t.Run("returns default path when empty", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		t.Setenv("HOME", tmpDir)
-
-		path, err := resolveKubeconfigPath("")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		expected := filepath.Join(tmpDir, ".kube", "config")
-		if path != expected {
-			t.Fatalf("expected %q, got %q", expected, path)
-		}
-	})
+	tests := []struct {
+		name       string
+		provided   string
+		defaultErr error
+		k3sErr     error
+		want       string
+		wantProbes []string
+	}{
+		{
+			name:     "explicit path skips autodetection",
+			provided: "/custom/path",
+			want:     "/custom/path",
+		},
+		{
+			name:       "existing user config takes precedence over k3s",
+			want:       defaultPath,
+			wantProbes: []string{defaultPath},
+		},
+		{
+			name:       "missing user and k3s configs returns default path",
+			defaultErr: os.ErrNotExist,
+			k3sErr:     os.ErrNotExist,
+			want:       defaultPath,
+			wantProbes: []string{defaultPath, k3sPath},
+		},
+		{
+			name:       "missing user config discovers k3s",
+			defaultErr: os.ErrNotExist,
+			want:       k3sPath,
+			wantProbes: []string{defaultPath, k3sPath},
+		},
+		{
+			name:       "failed user config stat still discovers k3s",
+			defaultErr: os.ErrPermission,
+			want:       k3sPath,
+			wantProbes: []string{defaultPath, k3sPath},
+		},
+		{
+			name:       "failed k3s stat returns default path",
+			defaultErr: os.ErrNotExist,
+			k3sErr:     os.ErrPermission,
+			want:       defaultPath,
+			wantProbes: []string{defaultPath, k3sPath},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var probes []string
+			stat := func(path string) (os.FileInfo, error) {
+				probes = append(probes, path)
+				switch path {
+				case defaultPath:
+					return nil, tt.defaultErr
+				case k3sPath:
+					return nil, tt.k3sErr
+				default:
+					t.Fatalf("unexpected file probe %q", path)
+					return nil, os.ErrNotExist
+				}
+			}
+			path, err := resolveKubeconfigPathWithStat(tt.provided, stat)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if path != tt.want {
+				t.Fatalf("expected %q, got %q", tt.want, path)
+			}
+			if !slices.Equal(probes, tt.wantProbes) {
+				t.Fatalf("expected file probes %q, got %q", tt.wantProbes, probes)
+			}
+		})
+	}
 }
 
 func TestConfigureClusterConfigCmdFlags(t *testing.T) {
