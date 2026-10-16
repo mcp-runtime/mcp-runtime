@@ -597,7 +597,7 @@ func TestAuditPayloadDoesNotPersistRawQueryString(t *testing.T) {
 		"",
 		identityContext{HumanID: "human-1"},
 		nil,
-		policypkg.Decision{Allowed: true, Reason: "allowed", PolicyVersion: "test-policy"},
+		policypkg.Decision{Allowed: true, Reason: "trust_too_low", WouldDeny: true, WouldDenyReason: "trust_too_low", PolicyVersion: "test-policy"},
 		http.StatusOK,
 		12,
 		34,
@@ -605,6 +605,9 @@ func TestAuditPayloadDoesNotPersistRawQueryString(t *testing.T) {
 
 	if _, exists := payload["query"]; exists {
 		t.Fatalf("audit payload unexpectedly retained query string: %#v", payload)
+	}
+	if payload["would_deny"] != true || payload["would_deny_reason"] != "trust_too_low" {
+		t.Fatalf("audit payload = %#v, want shadow-denial fields", payload)
 	}
 }
 

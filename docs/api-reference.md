@@ -151,6 +151,16 @@ matches every non-empty subject field exactly.
 
 ### MCPAccessGrant
 
+`spec.mode` accepts `enforce` or `monitor` and defaults to enforcement when
+omitted. A monitor grant lets calls through when that matched grant would deny
+for a tool rule, trust ceiling, or side-effect restriction, and records
+`would_deny` plus the original reason in gateway audit events and the
+`mcp_gateway_policy_would_deny_total` metric. Identity and required-session
+checks, disabled/expired grants, and denials from matching enforce-mode grants
+remain enforced. Monitor-mode policy documents require gateway policy schema
+v5, so older gateways reject them instead of silently enforcing or ignoring
+the mode.
+
 For platform API and adapter flows, `agentID` must be an active ID from the
 platform agent directory. The sample ID below shows the format; use an ID from
 `mcp-runtime agent list <team-slug> --status active` in your own resources.
@@ -168,6 +178,7 @@ metadata:
   name: payments-ops-agent
   namespace: mcp-servers
 spec:
+  mode: enforce
   serverRef:
     name: payments
   subject:
