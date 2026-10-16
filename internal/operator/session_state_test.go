@@ -18,7 +18,7 @@ func TestRuntimeSessionChangesDoNotRewritePolicy(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = mcpv1alpha1.AddToScheme(scheme)
 	server := &mcpv1alpha1.MCPServer{ObjectMeta: metav1.ObjectMeta{Name: "server", Namespace: "team", UID: "server-uid"}, Spec: mcpv1alpha1.MCPServerSpec{Session: &mcpv1alpha1.SessionConfig{Required: true}}}
-	kube := fake.NewClientBuilder().WithScheme(scheme).WithObjects(server).Build()
+	kube := fake.NewClientBuilder().WithScheme(scheme).WithIndex(&mcpv1alpha1.MCPAccessGrant{}, grantTargetServerIndex, grantTargetServerKeys).WithObjects(server).Build()
 	reconciler := &MCPServerReconciler{Client: kube, Scheme: scheme}
 	before, err := reconciler.renderGatewayPolicy(context.Background(), server)
 	if err != nil {

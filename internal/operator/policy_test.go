@@ -29,7 +29,7 @@ func TestRenderGatewayPolicyStampsAndValidates(t *testing.T) {
 			},
 		},
 	}
-	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
+	client := fake.NewClientBuilder().WithScheme(scheme).WithIndex(&mcpv1alpha1.MCPAccessGrant{}, grantTargetServerIndex, grantTargetServerKeys).WithObjects(mcpServer).Build()
 	r := MCPServerReconciler{
 		GatewayProxyImage: "example.com/mcp-gateway:test", Client: client, Scheme: scheme}
 
@@ -67,7 +67,7 @@ func TestRenderGatewayPolicyIncludesAdapterTrustWithoutOAuth(t *testing.T) {
 			Gateway: &mcpv1alpha1.GatewayConfig{Enabled: mcpv1alpha1.BoolPtr(true)},
 		},
 	}
-	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mcpServer).Build()
+	client := fake.NewClientBuilder().WithScheme(scheme).WithIndex(&mcpv1alpha1.MCPAccessGrant{}, grantTargetServerIndex, grantTargetServerKeys).WithObjects(mcpServer).Build()
 	r := MCPServerReconciler{
 		GatewayProxyImage:          "example.com/mcp-gateway:test",
 		Client:                     client,
@@ -297,7 +297,7 @@ func TestReconcilePolicyConfigMapAnnotatesServerPodsOnChange(t *testing.T) {
 	terminating.DeletionTimestamp = &now
 	terminating.Finalizers = []string{"test/keep"}
 
-	kube := fake.NewClientBuilder().WithScheme(scheme).
+	kube := fake.NewClientBuilder().WithScheme(scheme).WithIndex(&mcpv1alpha1.MCPAccessGrant{}, grantTargetServerIndex, grantTargetServerKeys).
 		WithObjects(mcpServer, stable, canary, other, terminating).Build()
 	r := MCPServerReconciler{
 		GatewayProxyImage: "example.com/mcp-gateway:test", Client: kube, Scheme: scheme}
@@ -376,7 +376,7 @@ func TestRenderGatewayPolicyObserveWhenPolicyOmitted(t *testing.T) {
 			Gateway: &mcpv1alpha1.GatewayConfig{Enabled: mcpv1alpha1.BoolPtr(true)},
 		},
 	}
-	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(server).Build()
+	client := fake.NewClientBuilder().WithScheme(scheme).WithIndex(&mcpv1alpha1.MCPAccessGrant{}, grantTargetServerIndex, grantTargetServerKeys).WithObjects(server).Build()
 	r := &MCPServerReconciler{Client: client, Scheme: scheme, ClusterName: "kind"}
 	doc, err := r.renderGatewayPolicy(context.Background(), server)
 	if err != nil {
@@ -404,7 +404,7 @@ func TestRenderGatewayPolicyHeaderModeEnforcesWithoutIdentity(t *testing.T) {
 			Tools: []mcpv1alpha1.ToolConfig{{Name: "list_projects", SideEffect: mcpv1alpha1.ToolSideEffectRead}},
 		},
 	}
-	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(server).Build()
+	client := fake.NewClientBuilder().WithScheme(scheme).WithIndex(&mcpv1alpha1.MCPAccessGrant{}, grantTargetServerIndex, grantTargetServerKeys).WithObjects(server).Build()
 	r := &MCPServerReconciler{
 		Client: client, Scheme: scheme, ClusterName: "kind",
 		AdapterCertificatesEnabled: true, AdapterTrustDomain: "example.org", MTLSClusterIssuer: "mcp-runtime-ca",

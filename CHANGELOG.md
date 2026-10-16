@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Changed
+
+- Operator policy reconciliation looks up grants by their effective target server using a cache index, avoiding copies and scans of unrelated grants while preserving cross-namespace references. Runtime sessions remain platform-owned ([#657](https://github.com/mcp-runtime/mcp-runtime/issues/657)).
+
 ### Fixed
 
 - `server list` help now explains visible-server defaults, admin scope, team slug filtering, and catalog/personal namespace selectors. A team lookup without a namespace now fails instead of silently listing all visible servers ([#612](https://github.com/mcp-runtime/mcp-runtime/issues/612)).
