@@ -98,6 +98,12 @@ func (m *ClusterManager) InitCluster(kubeconfig, context string) error {
 }
 
 func resolveKubeconfigPath(kubeconfig string) (string, error) {
+	return resolveKubeconfigPathWithStat(kubeconfig, os.Stat)
+}
+
+// resolveKubeconfigPathWithStat lets tests control file discovery without probing
+// the host's administrator kubeconfig.
+func resolveKubeconfigPathWithStat(kubeconfig string, stat func(string) (os.FileInfo, error)) (string, error) {
 	if kubeconfig != "" {
 		return kubeconfig, nil
 	}
@@ -109,7 +115,7 @@ func resolveKubeconfigPath(kubeconfig string) (string, error) {
 		return "", wrappedErr
 	}
 	defaultPath := filepath.Join(home, ".kube", "config")
-	if _, err := os.Stat(defaultPath); err == nil {
+	if _, err := stat(defaultPath); err == nil {
 		return defaultPath, nil
 	}
 
@@ -119,7 +125,7 @@ func resolveKubeconfigPath(kubeconfig string) (string, error) {
 	// Keep an explicitly supplied path authoritative, but safely discover the
 	// standard k3s path when the normal kubeconfig is absent.
 	const k3sPath = "/etc/rancher/k3s/k3s.yaml"
-	if _, err := os.Stat(k3sPath); err == nil {
+	if _, err := stat(k3sPath); err == nil {
 		return k3sPath, nil
 	}
 
