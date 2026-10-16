@@ -19,6 +19,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 - Operator policy reconciliation looks up grants by their effective target server using a cache index, avoiding copies and scans of unrelated grants while preserving cross-namespace references. Runtime sessions remain platform-owned ([#657](https://github.com/mcp-runtime/mcp-runtime/issues/657)).
 
+- `server init --from-server` and `server validate --from-server` now discover tools with MCP 2026-07-28 when the server advertises it, and fall back to the MCP 2025-11-25 initialize handshake only on an unrecognized HTTP 400 response. Modern protocol errors remain visible instead of triggering a silent downgrade ([#662](https://github.com/mcp-runtime/mcp-runtime/issues/662)).
+
 ### Fixed
 
 - Deployment warning Events are read through a bounded, uncached namespace request, preventing diagnostics from blocking all reconciles on an unauthorized cluster-wide Event informer. Event attribution uses pod UIDs when available ([#757](https://github.com/mcp-runtime/mcp-runtime/pull/757)).
