@@ -107,7 +107,7 @@ func TestReleaseWiringMatchesK8sManifests(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := BundlePlatformObjects("../../k8s", wiring.PlatformObjects); err != nil {
+	if _, err := BundlePlatformObjects("../../k8s", wiring.PlatformObjects, "../../config/rbac"); err != nil {
 		t.Fatalf("declared platform objects must exist in k8s/: %v", err)
 	}
 	if _, err := BundleConfigMaps("../../k8s", wiring.ConfigMaps); err != nil {

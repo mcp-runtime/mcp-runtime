@@ -128,25 +128,17 @@ jobs:
           export KUBECONFIG="$kubeconfig"
           make build
           if [[ "$VERIFY_ONLY" != true ]]; then
-            ./bin/mcp-runtime cluster operator-rbac apply --dry-run \
-              --kubeconfig "$kubeconfig" --context default
-            ./bin/mcp-runtime cluster operator-rbac apply --yes \
-              --kubeconfig "$kubeconfig" --context default
-            operator=system:serviceaccount:mcp-runtime:mcp-runtime-operator-controller-manager
-            test "$(kubectl auth can-i list endpointslices --all-namespaces --as="$operator")" = yes
-            test "$(kubectl auth can-i create secrets -n mcp-servers --as="$operator")" = yes
-            test "$(kubectl auth can-i patch deployment/mcp-auth-server -n mcp-platform --as="$operator")" = yes
-            ./bin/mcp-runtime cluster doctor
             ./bin/mcp-runtime update --to "$RELEASE_TAG" --dry-run --build --source . \
               --image-platform linux/amd64 --kubeconfig "$kubeconfig" --context default
             ./bin/mcp-runtime update --to "$RELEASE_TAG" --build --source . \
               --image-platform linux/amd64 --kubeconfig "$kubeconfig" --context default --yes
           fi
+          ./bin/mcp-runtime cluster doctor
           ./bin/mcp-runtime update --to "$RELEASE_TAG" --dry-run --output json \
             --kubeconfig "$kubeconfig" --context default > "$RUNNER_TEMP/live-plan.json"
           jq -c '{pendingComponents:[.plan.components[] | select(.action == "update") | .component],crdRecheck:(.plan.applyCRDs // false)}' \
             "$RUNNER_TEMP/live-plan.json"
-          jq -e '[.plan.components[] | select(.action == "update")] | length == 0' \
+          jq -e '([.plan.components[] | select(.action == "update")] | length == 0) and ([.plan.platformObjects[]? | select(.action != "skipped")] | length == 0)' \
             "$RUNNER_TEMP/live-plan.json"
           if [[ -n "$MCP_AUTH_VERSION" ]]; then
             ./bin/mcp-runtime cluster mcp-auth-connector apply \

@@ -324,6 +324,24 @@ workloads that read a changed ConfigMap, so such a release needs no full setup.
 read or written. The dry-run plan lists every object, ConfigMap and wiring
 change; review it before `--yes`.
 
+Operator ServiceAccount, ClusterRole and namespace-scoped roles/bindings are
+bundled from the target release's canonical `config/rbac/` and `k8s/` manifests.
+`update` corrects their drift before any image rollout, using server-side apply
+with setup's `mcp-runtime` field manager; a permission apply failure stops
+rollouts. The bundled MCP Auth Role is included only when its Deployment exists.
+`--only` skips RBAC and emits a warning, so use an unscoped update for permission
+changes. Both text and JSON dry runs preview the affected objects. RBAC changes
+are not rolled back with images. No separate manual RBAC step is needed.
+
+After updating, run `mcp-runtime cluster doctor`: it checks effective operator
+ServiceAccount permissions against all bundled rules through SubjectAccessReview,
+including managed-server writes and the optional bundled issuer, and fails on
+recent forbidden informer errors. The caller needs permission to create
+SubjectAccessReviews. The operator manifest intentionally declares two replicas
+with `--leader-elect`; two ready pods can be normal high availability. Check
+Deployment/ReplicaSet rollout state and leader election before treating a second
+pod as a stuck rollout; the historical pod count alone cannot establish that.
+
 `update` uses the published component manifest. All changed Runtime components roll sequentially with the CLI's
 rollback behavior. Existing registry-scoped pull Secrets, certificates,
 unmanaged configuration keys and MCP Auth remain unchanged. Supply existing Docker registry

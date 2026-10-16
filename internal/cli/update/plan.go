@@ -233,7 +233,20 @@ func BuildPlan(ctx context.Context, cs kubernetes.Interface, m *platformrelease.
 			if err != nil {
 				return nil, core.WrapWithBase(core.ErrUpdateManifestInvalid, err, fmt.Sprintf("release %s platform objects: %v", m.Version, err))
 			}
-			plan.allObjects = objs
+			for _, obj := range objs {
+				// The bundled issuer is optional; external-auth installations
+				// must not gain its namespace-local write permission.
+				if obj.Namespace == "mcp-platform" && obj.Name == "mcp-runtime-operator-bundled-auth" {
+					_, err := cs.AppsV1().Deployments(obj.Namespace).Get(ctx, "mcp-auth-server", metav1.GetOptions{})
+					if apierrors.IsNotFound(err) {
+						continue
+					}
+					if err != nil {
+						return nil, fmt.Errorf("read optional MCP Auth deployment: %w", err)
+					}
+				}
+				plan.allObjects = append(plan.allObjects, obj)
+			}
 		}
 	}
 	if len(m.ConfigMaps) > 0 {

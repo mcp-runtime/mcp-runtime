@@ -1,7 +1,7 @@
 # Non-image Deployment configuration, ServiceAccounts/RBAC and ConfigMaps a
 # release requires, embedded in platform-manifest.json so `mcp-runtime update`
 # can apply them without a full setup. Everything here must match the
-# corresponding object in k8s/; tests enforce that.
+# corresponding object in k8s/ or config/rbac/; tests enforce that.
 #
 # update adds or corrects exactly the declared objects, keys and fields; other
 # env, flags and ConfigMap keys are untouched. Releases opt objects in
@@ -10,6 +10,15 @@
 # ServiceAccount/RBAC objects, as "<Kind>/<namespace>/<name>" (namespaced) or
 # "<Kind>/<name>" (cluster-scoped). Validated: no wildcard or escalating rules.
 platformObjects:
+  - ServiceAccount/mcp-runtime/mcp-runtime-operator-controller-manager
+  - ClusterRole/mcp-runtime-operator-role
+  - ClusterRole/mcp-runtime-operator-managed-secrets
+  - ClusterRole/mcp-runtime-operator-managed-workloads
+  - ClusterRoleBinding/mcp-runtime-operator-rolebinding
+  - RoleBinding/mcp-servers/mcp-runtime-operator-managed-secrets
+  - RoleBinding/mcp-servers/mcp-runtime-operator-managed-workloads
+  - Role/mcp-platform/mcp-runtime-operator-bundled-auth
+  - RoleBinding/mcp-platform/mcp-runtime-operator-bundled-auth
   - ServiceAccount/mcp-observability/mcp-ingest
   - ClusterRole/mcp-ingest-tokenreview
   - ClusterRoleBinding/mcp-ingest-tokenreview

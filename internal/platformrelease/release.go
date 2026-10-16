@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 )
 
@@ -39,7 +40,11 @@ func GenerateReleaseManifest(opts ReleaseOptions) (*Manifest, error) {
 		}
 	}
 	dir := strings.TrimSpace(opts.K8sDir)
-	objects, err := BundlePlatformObjects(dir, release.PlatformObjects)
+	var rbacDirs []string
+	if strings.TrimSpace(opts.WiringPath) != "" {
+		rbacDirs = append(rbacDirs, filepath.Join(filepath.Dir(opts.WiringPath), "../rbac"))
+	}
+	objects, err := BundlePlatformObjects(dir, release.PlatformObjects, rbacDirs...)
 	if err != nil {
 		return nil, err
 	}
