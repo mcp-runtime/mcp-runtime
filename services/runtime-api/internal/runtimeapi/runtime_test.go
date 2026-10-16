@@ -20,6 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	kubernetesfake "k8s.io/client-go/kubernetes/fake"
 	ktesting "k8s.io/client-go/testing"
@@ -820,6 +821,7 @@ func TestRuntimeObservabilityLinksKeepGrafanaAdminOnly(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "team-demo",
 			Namespace: "mcp-team-acme",
+			UID:       types.UID("team-demo-uid"),
 		},
 		Spec: mcpv1alpha1.MCPServerSpec{
 			Image:   "registry.example.com/acme/team-demo",
@@ -944,7 +946,7 @@ func TestRuntimeObservabilityPrometheusProxyScopesQuery(t *testing.T) {
 	if gotPath != "/prometheus/api/v1/query" {
 		t.Fatalf("prometheus path = %q, want /prometheus/api/v1/query", gotPath)
 	}
-	wantQuery := `sum(rate(mcp_gateway_requests_total{namespace="user-1",server="demo"}[5m]))`
+	wantQuery := `sum(rate(mcp_gateway_requests_total{namespace="user-1",server="demo",server_uid="user-1-demo-uid"}[5m]))`
 	if gotQuery != wantQuery {
 		t.Fatalf("prometheus query = %q, want %q", gotQuery, wantQuery)
 	}
@@ -1048,7 +1050,7 @@ func TestRuntimeObservabilityMetricsReturnsScopedFixedSummary(t *testing.T) {
 		t.Fatalf("got %d Prometheus queries, want five fixed queries: %#v", len(queries), queries)
 	}
 	for _, query := range queries {
-		if !strings.Contains(query, `namespace="user-1",server="demo"`) {
+		if !strings.Contains(query, `namespace="user-1",server="demo",server_uid="user-1-demo-uid"`) {
 			t.Errorf("query is not scoped to the authorized server: %q", query)
 		}
 		if strings.Contains(query, "tenant-b") || strings.Contains(query, "caller") {
@@ -1103,7 +1105,7 @@ func TestRuntimeObservabilityLogsProxyScopesQuery(t *testing.T) {
 	if gotPath != "/loki/api/v1/query_range" {
 		t.Fatalf("Loki path = %q, want /loki/api/v1/query_range", gotPath)
 	}
-	if got.Get("query") != `{namespace="user-1",app="demo"}` || got.Get("limit") != fmt.Sprint(observabilityLogLimit) || got.Get("direction") != "backward" {
+	if got.Get("query") != `{namespace="user-1",app="demo",server_uid="user-1-demo-uid"}` || got.Get("limit") != fmt.Sprint(observabilityLogLimit) || got.Get("direction") != "backward" {
 		t.Fatalf("Loki query parameters = %#v", got)
 	}
 	var payload struct {
@@ -2233,6 +2235,7 @@ func ownedTestMCPServer(name, namespace, userID string) *mcpv1alpha1.MCPServer {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
+			UID:       types.UID(namespace + "-" + name + "-uid"),
 			Labels: map[string]string{
 				platformUserIDLabel: userID,
 			},

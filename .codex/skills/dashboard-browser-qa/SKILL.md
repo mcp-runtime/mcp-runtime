@@ -99,7 +99,7 @@ Diff guidance:
 | `services/ui/main.go` | Dashboard Load, Auth, UI->API Proxy, affected tabs |
 | `services/ui/static/**` | Browser Matrix, Static Assets, Responsive/A11y |
 | `services/runtime-api/internal/runtimeapi/**` | Catalog, Governance, Operations, API Contract |
-| `services/runtime-api/internal/runtimeapi/*observability*`, `services/mcp-gateway/**`, `k8s/*prometheus*` | My Activity scoped observability, Prometheus and Grafana actions, scoped query evidence, tenant negative checks |
+| `services/runtime-api/internal/runtimeapi/*observability*`, `services/mcp-gateway/**`, `k8s/*prometheus*`, `k8s/*promtail*` | My Activity scoped observability, Prometheus and Grafana actions, scoped query evidence including the live `server_uid`, tenant negative checks and deleted-name reuse |
 | `services/platform-api/internal/platformstore/**` or auth code | Auth, API Keys, Role Gating |
 | `config/ingress/**`, `k8s/**` UI ingress | Public-host Defense |
 | `docs/**`, `website/**` only | Dashboard Load smoke, then report docs-only scope |

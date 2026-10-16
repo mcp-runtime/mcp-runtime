@@ -225,7 +225,7 @@ admin-only, so these links are shown to admins by default.
 The API checks the live `MCPServer` before returning links or querying
 Prometheus. Normal users are limited to their team namespaces or explicitly
 caller-owned catalog servers. Their server detail page also shows recent Loki
-logs scoped to the authorized server namespace and workload label. Grafana
+logs scoped to the authorized server namespace, workload label, and object UID. Grafana
 remains admin-only because its shared Prometheus and Loki datasources do not
 enforce tenant isolation; a dashboard URL template or visibility flag cannot
 make those datasources safe for tenant users.
@@ -236,6 +236,14 @@ tool p95 after at least five calls. Runtime-api builds these PromQL queries from
 the live server identity and returns numeric results; callers cannot submit
 PromQL. This provides scoped values without exposing Grafana Explore or its
 shared datasources to tenants.
+
+The operator sets `mcpruntime.org/server-uid` on stable and canary pods.
+Prometheus and Promtail copy it into `server_uid`, and runtime-api includes the
+live object's UID in every scoped telemetry query. Reusing a deleted server's
+name therefore does not expose its predecessor's logs, metric values, or tool
+names. Deploy the matching operator and collector configurations together;
+historical telemetry without the UID label is excluded, and existing workloads
+must reconcile onto the labelled pod template before new telemetry appears.
 
 Prometheus requests use
 `/api/v1/runtime/observability/prometheus/query?namespace=<namespace>&server=<server>&query_id=<id>`.

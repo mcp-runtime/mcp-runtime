@@ -124,7 +124,7 @@ func (s *RuntimeServer) HandleRuntimeObservabilityPrometheusQuery(w http.Respons
 	}
 
 	queryID := strings.TrimSpace(r.URL.Query().Get("query_id"))
-	query, ok := scopedPrometheusQueryByID(queryID, target.Namespace, target.Name)
+	query, ok := scopedPrometheusQueryByID(queryID, target.Namespace, target.Name, string(target.UID))
 	if !ok {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown query_id"})
 		return
@@ -193,7 +193,7 @@ func (s *RuntimeServer) HandleRuntimeObservabilityMetrics(w http.ResponseWriter,
 		return
 	}
 
-	queries := scopedObservabilityMetricQueries(target.Namespace, target.Name)
+	queries := scopedObservabilityMetricQueries(target.Namespace, target.Name, string(target.UID))
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 	type result struct {
@@ -238,8 +238,8 @@ func (s *RuntimeServer) HandleRuntimeObservabilityMetrics(w http.ResponseWriter,
 	writeJSON(w, http.StatusOK, summary)
 }
 
-func scopedObservabilityMetricQueries(namespace, serverName string) []observabilityMetricQuery {
-	selector := fmt.Sprintf(`namespace=%s,server=%s`, promQLString(namespace), promQLString(serverName))
+func scopedObservabilityMetricQueries(namespace, serverName, uid string) []observabilityMetricQuery {
+	selector := observabilityMetricSelector(namespace, serverName, uid)
 	callSelector := selector + `,rpc_method="tools/call"`
 	toolSelector := selector
 	return []observabilityMetricQuery{
@@ -309,7 +309,7 @@ func (s *RuntimeServer) HandleRuntimeObservabilityLogs(w http.ResponseWriter, r 
 		return
 	}
 
-	query := fmt.Sprintf(`{namespace=%s,app=%s}`, promQLString(target.Namespace), promQLString(target.Name))
+	query := fmt.Sprintf(`{namespace=%s,app=%s,server_uid=%s}`, promQLString(target.Namespace), promQLString(target.Name), promQLString(string(target.UID)))
 	queryURL, err := lokiQueryURL(lokiAPIBaseURL(), query)
 	if err != nil {
 		log.Printf("observability loki proxy configuration error: %v", err)
@@ -438,6 +438,9 @@ func (s *RuntimeServer) authorizedObservabilityTarget(r *http.Request) (principa
 	if !mcpServerObservableByPrincipal(*target, p) {
 		return principal{}, nil, observabilityRequestError{status: http.StatusNotFound, message: "server not found"}
 	}
+	if target.UID == "" {
+		return principal{}, nil, observabilityRequestError{status: http.StatusServiceUnavailable, message: "server identity not available"}
+	}
 	return p, target, nil
 }
 
@@ -470,7 +473,7 @@ func observabilityLinksForMCPServer(server mcpv1alpha1.MCPServer, p principal, r
 }
 
 func observabilityLinksForServerInfo(info controlplane.ServerInfo, p principal, r *http.Request) observabilityLinksResponse {
-	queries := scopedPrometheusQueries(info.Namespace, info.Name)
+	queries := scopedPrometheusQueries(info.Namespace, info.Name, info.UID)
 	grafana := grafanaLinkForServer(info, p)
 	queryLinks := make([]observabilityPrometheusQueryLink, 0, len(queries))
 	for _, query := range queries {
@@ -649,12 +652,12 @@ func serverHasUserOwnerLabel(labels map[string]string, p principal) bool {
 	return strings.TrimSpace(labels[platformUserIDLabel]) == userID
 }
 
-func scopedPrometheusQueryByID(queryID, namespace, serverName string) (scopedPrometheusQuery, bool) {
+func scopedPrometheusQueryByID(queryID, namespace, serverName, uid string) (scopedPrometheusQuery, bool) {
 	queryID = strings.TrimSpace(queryID)
 	if queryID == "" {
 		queryID = "up"
 	}
-	for _, query := range scopedPrometheusQueries(namespace, serverName) {
+	for _, query := range scopedPrometheusQueries(namespace, serverName, uid) {
 		if query.ID == queryID {
 			return query, true
 		}
@@ -662,8 +665,12 @@ func scopedPrometheusQueryByID(queryID, namespace, serverName string) (scopedPro
 	return scopedPrometheusQuery{}, false
 }
 
-func scopedPrometheusQueries(namespace, serverName string) []scopedPrometheusQuery {
-	selector := fmt.Sprintf(`namespace=%s,server=%s`, promQLString(namespace), promQLString(serverName))
+func observabilityMetricSelector(namespace, serverName, uid string) string {
+	return fmt.Sprintf(`namespace=%s,server=%s,server_uid=%s`, promQLString(namespace), promQLString(serverName), promQLString(uid))
+}
+
+func scopedPrometheusQueries(namespace, serverName, uid string) []scopedPrometheusQuery {
+	selector := observabilityMetricSelector(namespace, serverName, uid)
 	return []scopedPrometheusQuery{
 		{
 			ID:          "up",
