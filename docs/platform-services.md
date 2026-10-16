@@ -378,6 +378,40 @@ metrics on `METRICS_PORT` (default `9091`).
 | `POST` | `/events` | Validate and enqueue one event to Kafka topic `KAFKA_TOPIC` (default `mcp.events`). Max body size is 1 MiB. |
 | `GET` | `/metrics` | Prometheus metrics on the metrics server. |
 
+Kafka readiness is checked in the background, so kubelet requests to `/ready`
+read cached state and do not perform a DNS lookup or TCP dial. Prometheus scrapes
+the service on `mcp-ingest:9091`. To compare DNS and TCP-connect latency, use the
+phase label on the check histogram; the total phase covers a full check across
+configured brokers:
+
+```promql
+histogram_quantile(0.95, sum by (le, phase) (
+  rate(mcp_ingest_kafka_readiness_check_duration_seconds_bucket[15m])
+))
+```
+
+The `reason` label on the failure counter distinguishes DNS failures and
+timeouts, refused connections, other dial errors, missing broker configuration,
+and an expired cached result:
+
+```promql
+sum by (reason) (increase(mcp_ingest_kafka_readiness_check_failures_total[15m]))
+```
+
+The last cached Kafka check result is also available as a gauge:
+
+```promql
+mcp_ingest_kafka_ready
+```
+
+Successful checks slower than one second and readiness state transitions also
+include per-broker DNS and connect durations in the `mcp-ingest` logs. Compare
+these signals across replicas with Kafka broker load, node pressure, and DNS
+resolution data when investigating slow dials. These metrics help localize the
+delay; they do not establish a root cause or prove the reference-platform
+under-one-second acceptance target. That acceptance still requires measured
+reference-platform evidence.
+
 Event intake body:
 
 ```json

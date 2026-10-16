@@ -9,6 +9,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Added
 
+- Ingest operations docs now include PromQL for Kafka readiness DNS/connect/total latency and bounded failure reasons, plus guidance for correlating slow checks with broker, node and DNS signals. This exposes investigation paths; reference-platform root-cause and under-one-second acceptance remain outstanding ([#624](https://github.com/mcp-runtime/mcp-runtime/issues/624)).
 - `mcp-runtime server get` now includes the runtime API's latest live MCP tool, prompt, and resource inventory alongside declared server metadata and safe authentication configuration, so operators can query observed server capabilities from the CLI ([#291](https://github.com/mcp-runtime/mcp-runtime/issues/291)).
 - Server observability queries select the live MCPServer UID carried by workload, Prometheus and Loki labels, preventing a recreated server from exposing its predecessor's logs or metrics. Unlabelled historical telemetry is excluded; deploy the matching operator and collector configuration together ([#761](https://github.com/mcp-runtime/mcp-runtime/pull/761)).
 - Authorized server detail views include recent workload logs from the fixed, server-scoped Loki query API. Tenant users continue to use scoped Prometheus routes; direct Grafana access remains admin-only because its shared datasources do not enforce tenant isolation ([#441](https://github.com/mcp-runtime/mcp-runtime/issues/441)).
