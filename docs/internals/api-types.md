@@ -42,9 +42,12 @@ Key spec areas:
 | Governance | `auth`, `policy`, `session`, `gateway`, `analytics` | Changes usually require updates in `pkg/access`, platform services, and e2e policy scenarios. |
 | Rollout | `rollout` | Reconciled into Deployment strategy/canary behavior where supported. |
 
-`MCPServerStatus` reports phase, message, Kubernetes conditions, and readiness
-booleans for deployment, service, ingress, gateway, policy, and canary state.
-Status fields are operator-owned; user-facing commands should not mutate them.
+`MCPServerStatus` reports phase, message, the most recently observed server
+error, Kubernetes conditions, and readiness booleans for deployment, service,
+ingress, gateway, policy, and canary state. `lastError` is retained after
+recovery and contains only a bounded reason, summary, and observation time;
+runtime request/session details remain in the platform analytics API. Status
+fields are operator-owned; user-facing commands should not mutate them.
 
 ## Access Resources
 

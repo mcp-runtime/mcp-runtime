@@ -371,9 +371,12 @@ exclusive.
 `server get <name>` prints a JSON detail record from the platform API. Alongside
 readiness, endpoint, authentication configuration, and declared tools, it
 includes the most recently probed live tools, prompts, and resources when a
-probe has completed. `liveInventoryError` explains why a live inventory is not
-available; it can be empty while the first probe is still running. Credential
-values are never included.
+probe has completed. `runtimeStatus` reports transport, connection readiness,
+authentication source, the last observed error, and the most recent probe time.
+For viewers allowed to inspect server activity, it also reports the latest
+observed session and tool call. `liveInventoryError` explains why a live
+inventory is not available; it can be empty while the first probe is still
+running. Credential values and request payloads are never included.
 
 In explicit direct Kubernetes mode, use
 `server list --use-kube --namespace mcp-team-acme`. This requires operator

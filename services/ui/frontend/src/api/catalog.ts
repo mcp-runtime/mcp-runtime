@@ -28,6 +28,15 @@ export async function listServers(namespace?: string): Promise<ServerList> {
   };
 }
 
+export async function getRuntimeServer(namespace: string, name: string): Promise<ServerSummary> {
+  const data = await fetchJSON(`/runtime/servers/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`);
+  const record = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+  if (!record.server || typeof record.server !== "object") {
+    throw new Error("Runtime server response is missing server details.");
+  }
+  return record.server as ServerSummary;
+}
+
 export async function listTools(namespace?: string): Promise<ToolRow[]> {
   const path = withQuery("/runtime/tools", { namespace });
   return asArray<ToolRow>(await fetchJSON(path), "tools");

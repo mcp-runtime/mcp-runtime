@@ -347,6 +347,10 @@ type MCPServerStatus struct {
 	// Message provides additional information about the status.
 	Message string `json:"message,omitempty"`
 
+	// LastError preserves the latest observed server or reconciliation failure
+	// after the server recovers, so operators can inspect what happened.
+	LastError *MCPServerErrorEvent `json:"lastError,omitempty"`
+
 	// Conditions represent the latest available observations.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
@@ -373,6 +377,15 @@ type MCPServerStatus struct {
 	// this value instead of rebuilding it, so every surface agrees with what
 	// the ingress and gateway actually serve. Empty when no host is known.
 	URL string `json:"url,omitempty"`
+}
+
+// MCPServerErrorEvent records a bounded, operator-observed failure summary.
+// It intentionally contains no request payloads or credential values.
+// +kubebuilder:object:generate=true
+type MCPServerErrorEvent struct {
+	Reason     string      `json:"reason"`
+	Message    string      `json:"message"`
+	ObservedAt metav1.Time `json:"observedAt"`
 }
 
 // +kubebuilder:object:root=true
