@@ -204,7 +204,13 @@ func (r *MCPServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	phase, allReady := determinePhase(readiness, mcpServer)
-	r.updateStatus(ctx, mcpServer, phase, "All resources reconciled", readiness)
+	statusMessage := "All resources reconciled"
+	if !readiness.Deployment {
+		if details := r.deploymentFailureDetails(ctx, mcpServer); details != "" {
+			statusMessage = details
+		}
+	}
+	r.updateStatus(ctx, mcpServer, phase, statusMessage, readiness)
 
 	logger.Info("Successfully reconciled MCPServer", "name", mcpServer.Name, "phase", phase)
 
