@@ -75,10 +75,13 @@ mcp-runtime auth login --api-url https://platform.example.com
 mcp-runtime team create acme --name "Acme"
 mcp-runtime team user create acme \
   --username acme-user@example.com \
-  --password '...' \
   --role member
 mcp-runtime team list
 ```
+
+`team user create` prompts twice for a hidden password. For non-interactive
+use, provide the password through stdin with `--password-stdin`; password
+values are not accepted as command-line arguments.
 
 `team create` records the team in the platform store and asks the API to ensure
 the managed namespace, quota, limit range, default deny network policy, default
@@ -111,6 +114,11 @@ form rather than resetting the account password. Platform admins and team owners
 A saved login token keeps the membership from the moment it was issued, so
 run `mcp-runtime auth login` again before `server build`, `server push`, or
 `server deploy` for that team.
+
+Remove membership with `mcp-runtime team user remove <team-slug> <user-id>`;
+removing the only owner requires `--confirm-last-owner`. This removes access to
+that team, but does not delete the account or revoke its account-wide API keys
+and sessions.
 
 `team init` is **deprecated** and rejects at runtime. Use `team create` above
 for the normal platform-backed flow. The managed namespace shape that

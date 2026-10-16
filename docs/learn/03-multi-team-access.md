@@ -44,11 +44,11 @@ mcp-runtime auth login \
 
 MCP_PLATFORM_API_PROFILE=admin mcp-runtime team create acme --name "Acme Corp"
 MCP_PLATFORM_API_PROFILE=admin mcp-runtime team user create acme \
-  --username alice@acme.com --password 'alice123' --role owner
+  --username alice@acme.com --role owner
 
 MCP_PLATFORM_API_PROFILE=admin mcp-runtime team create globex --name "Globex Corp"
 MCP_PLATFORM_API_PROFILE=admin mcp-runtime team user create globex \
-  --username bob@globex.com --password 'bob456' --role member
+  --username bob@globex.com --role member
 
 MCP_PLATFORM_API_PROFILE=admin mcp-runtime agent create globex \
   --name "Cursor assistant"
