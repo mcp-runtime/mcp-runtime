@@ -103,3 +103,14 @@ evaluator comparison, overlay only `pkg/policy/evaluator.go` from `554181fa` whi
 keeping the current benchmark/compilation fixtures, then run the same
 `BenchmarkAuthorizeScaling/indexed/` cases. The old evaluator ignores the private
 indexes. Never infer performance acceptance from a single noisy sample.
+
+## Upstream capacity and timeouts
+
+Upstream capacity rejects before dispatch with HTTP 429 / `upstream_backpressure`;
+an open circuit returns HTTP 503 / `upstream_unavailable`. Policy decision counters
+retain the authorization result for these operational failures. GET session streams
+and upgrades have a separate capacity budget; POST SSE responses retain an active
+RPC slot. Actual SSE responses have no unary body deadline. A stalled unary body
+can time out after HTTP 200 headers, so check the audit `upstream_timeout` reason
+and partial-response failure rather than looking only for HTTP 504. See the
+gateway upstream bounds in `docs/platform-services.md`.

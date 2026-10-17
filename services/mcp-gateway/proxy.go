@@ -38,15 +38,24 @@ func newUpstreamReverseProxyWithTimeout(target *url.URL, responseHeaderTimeout t
 			req.Out.Host = target.Host
 			req.SetXForwarded()
 		},
-		Transport: newUpstreamTransport(responseHeaderTimeout),
+		Transport:    newUpstreamTransport(responseHeaderTimeout),
+		ErrorHandler: handleUpstreamError,
 	}
 	return proxy
 }
 
 func newUpstreamTransport(responseHeaderTimeout time.Duration) http.RoundTripper {
+	if responseHeaderTimeout <= 0 {
+		responseHeaderTimeout = upstreamResponseHeaderTimeout
+	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.MaxIdleConns = 128
+	transport.MaxIdleConnsPerHost = 128
+	transport.MaxConnsPerHost = 0 // admission is bounded separately for streams/unary
+	transport.IdleConnTimeout = 90 * time.Second
+	transport.TLSHandshakeTimeout = 5 * time.Second
 	transport.ResponseHeaderTimeout = responseHeaderTimeout
-	return serviceutil.TracedTransport(transport)
+	return newResilientUpstreamTransport(serviceutil.TracedTransport(transport), responseHeaderTimeout, 128, 32, 5, 5*time.Second)
 }
 
 func handleUpstreamError(w http.ResponseWriter, r *http.Request, err error) {
@@ -55,12 +64,17 @@ func handleUpstreamError(w http.ResponseWriter, r *http.Request, err error) {
 	status := http.StatusBadGateway
 	errorCode := "upstream_error"
 	message := "upstream error"
+	var gate upstreamGateError
+	if errors.As(err, &gate) {
+		status, errorCode, message = gate.status, gate.reason, gate.reason
+	}
 	if isUpstreamTimeout(err) {
 		logMessage = "gateway upstream response timeout"
 		status = http.StatusGatewayTimeout
 		errorCode = "upstream_timeout"
 		message = "upstream response timeout"
 	}
+	markUpstreamOutcome(r, status, errorCode, gate.reason != "")
 	serviceutil.RecordSpanFailure(r.Context(), "gateway.upstream", errorCode, status, nil)
 	serviceutil.LogfCtx(r.Context(), "event=gateway.upstream service=%q message=%q status=%d reason=%q",
 		serviceutil.EnvOr("OTEL_SERVICE_NAME", "mcp-gateway"), logMessage, status, errorCode)
@@ -83,12 +97,17 @@ func isUpstreamTimeout(err error) bool {
 // and then unconditionally runs stage 6 (audit/analytics finalization).
 func (s *gatewayServer) handleGateway(w http.ResponseWriter, r *http.Request) {
 	ex := newExchange(serviceutil.CorrelateResponse(w, r.Context()), r, s.defaultPolicyVersion)
+	// ReverseProxy aborts a partially written response on body read failure.
+	// Audit must still run during that unwind, after upstream outcome capture.
+	defer func() { s.recordGatewayOutcome(ex); s.emitAuditFromExchange(ex) }()
 
 	policy, _ := s.currentPolicy()
 	scope := s.metricScope(policy)
 	stopInflight := s.metrics.trackInflight(scope)
 	defer stopInflight()
 	policyDecisionObserved := false
+	var authorizationDecision policypkg.Decision
+	authorizationObserved := false
 	defer func() {
 		metricScope := s.metricScope(ex.Policy)
 		s.metrics.recordRequest(
@@ -99,8 +118,12 @@ func (s *gatewayServer) handleGateway(w http.ResponseWriter, r *http.Request) {
 			s.metrics.recordToolCall(ex.R.Context(), metricScope, ex.Policy,
 				ex.Inspection.ToolName, ex.Decision, ex.W.status, time.Since(ex.StartTime))
 		}
-		if policyDecisionObserved {
-			s.metrics.recordPolicyDecision(metricScope, ex.Inspection.Method, ex.Decision)
+		if policyDecisionObserved || authorizationObserved {
+			decision := ex.Decision
+			if authorizationObserved {
+				decision = authorizationDecision
+			}
+			s.metrics.recordPolicyDecision(metricScope, ex.Inspection.Method, decision)
 		}
 	}()
 
@@ -109,15 +132,27 @@ func (s *gatewayServer) handleGateway(w http.ResponseWriter, r *http.Request) {
 		ctx, span := otel.Tracer("mcp-runtime/gateway").Start(parent,
 			"gateway."+gatewayStageNames[i], trace.WithSpanKind(trace.SpanKindInternal))
 		ex.R = ex.R.WithContext(ctx)
-		result := f.Handle(ex)
-		span.SetAttributes(attribute.String("mcp.method.name", metricRPCMethod(ex.Inspection.Method)),
-			attribute.String("gateway.stage", gatewayStageNames[i]),
-			attribute.String("gateway.decision.reason", ex.Decision.Reason))
-		if result != Continue && ex.W.status >= http.StatusBadRequest {
-			span.SetStatus(codes.Error, "gateway request rejected")
+		result := Continue
+		completed := false
+		func() {
+			defer func() {
+				span.SetAttributes(attribute.String("mcp.method.name", metricRPCMethod(ex.Inspection.Method)),
+					attribute.String("gateway.stage", gatewayStageNames[i]),
+					attribute.String("gateway.decision.reason", ex.Decision.Reason))
+				if !completed || result != Continue && (ex.W.status >= http.StatusBadRequest || ex.Decision.Status >= http.StatusBadRequest) {
+					span.SetStatus(codes.Error, "gateway request failed")
+				}
+				span.End()
+				ex.R = ex.R.WithContext(parent)
+			}()
+			result = f.Handle(ex)
+			completed = true
+		}()
+		// Upstream availability/backpressure is an operational denial, not a
+		// grant restriction. Preserve the actual authorization counter result.
+		if i == 3 && (ex.Inspection.ToolCall || ex.Inspection.Indeterminate) {
+			authorizationDecision, authorizationObserved = ex.Decision, true
 		}
-		span.End()
-		ex.R = ex.R.WithContext(parent)
 		if result != Continue {
 			break
 		}
@@ -138,8 +173,6 @@ func (s *gatewayServer) handleGateway(w http.ResponseWriter, r *http.Request) {
 	if len(ex.Inspection.ToolName) > 0 && len(ex.Inspection.ToolName) <= 128 {
 		trace.SpanFromContext(ex.R.Context()).SetAttributes(attribute.String("gen_ai.tool.name", ex.Inspection.ToolName))
 	}
-	s.recordGatewayOutcome(ex)
-	s.emitAuditFromExchange(ex)
 }
 
 // recordGatewayOutcome marks the request span as failed and writes a
