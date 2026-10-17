@@ -7,6 +7,11 @@ import { readRuntimeConfig, uiPath } from "./config";
 export const SESSION_PROXY_PREFIX = "/api/ui/v1";
 
 export const SESSION_PROXY_GET_PATHS = new Set([
+  "/runtime/workspace/teams",
+  "/runtime/workspace/servers",
+  "/runtime/workspace/access",
+  "/admin/overview/directory",
+  "/admin/overview/servers",
   "/runtime/namespaces",
   "/runtime/servers",
   "/runtime/tools",

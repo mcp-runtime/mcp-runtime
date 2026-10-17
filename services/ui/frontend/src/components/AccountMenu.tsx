@@ -104,6 +104,7 @@ export function AccountMenu({
               </div>
 
               <div className="account-popover-footer">
+                <a className="btn btn-secondary" href="#/workspace" onClick={() => setOpen(false)}>My workspace</a>
                 <Button
                   variant="ghost"
                   size="sm"

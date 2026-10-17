@@ -76,6 +76,25 @@ afterEach(() => {
 });
 
 describe("App", () => {
+  it("restores My workspace deep links and keeps navigation independent of analytics", async () => {
+    window.location.hash = "#/workspace";
+    stubRoutes({
+      "/auth/status": { status: 200, body: { authenticated: true, principal: { role: "user", subject: "me" } } },
+      "/api/ui/v1/runtime/workspace/teams": { status: 200, body: { teams: [] } },
+      "/api/ui/v1/runtime/workspace/servers": { status: 200, body: { servers: [], deployment_attribution: "unavailable" } },
+      "/api/ui/v1/runtime/workspace/access": { status: 200, body: { grants: [], sessions: [] } },
+      "/api/ui/v1/user/analytics/usage": { status: 503, body: {} },
+      ...EMPTY_CATALOG,
+    });
+    renderApp();
+    expect(await screen.findByRole("heading", { name: "My workspace", level: 1 })).toBeInTheDocument();
+    expect(await screen.findByText("You are not a member of any team.")).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("workspace-tab-servers"));
+    expect(window.location.hash).toBe("#/servers");
+    window.location.hash = "#/workspace";
+    expect(await screen.findByRole("heading", { name: "My workspace", level: 1 })).toBeInTheDocument();
+  });
   it("renders the signed-out shell with a sign-in action", async () => {
     const user = userEvent.setup();
     stubRoutes({ "/auth/status": SIGNED_OUT });

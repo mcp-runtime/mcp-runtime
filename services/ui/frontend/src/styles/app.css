@@ -1097,3 +1097,9 @@
   margin-left: auto;
   color: var(--danger);
 }
+/* Resource overviews keep each independent read and long resource name usable. */
+.overview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: var(--space-4); padding: 0; list-style: none; }
+.overview-card { padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); overflow-wrap: anywhere; min-width: 0; }
+.overview-card h3 { margin-top: 0; }
+.overview-card dd { margin: var(--space-2) 0 0; font-size: 1.6rem; font-weight: 650; }
+.overview-resource-list { overflow-wrap: anywhere; }

@@ -73,6 +73,12 @@ dashboard asset/session and MCP Auth discovery routes when changing prefixes.
 
 ## Product management paths
 
+The console's `#/workspace` shows actual personal memberships and scoped access;
+`#/admin/overview` uses administrator-only complete platform counts. Keep those
+scopes separate when adding resource summaries. Ownership labels do not establish
+historical deployment attribution. Team owners manage memberships through
+`#/workspace/team?team=<slug>` using the same supported forms and APIs as admins.
+
 Use supported CLI and UI workflows for setup, teams/users, registry publishing,
 servers, grants, sessions, updates and cleanup. For servers, use `server init` →
 `server validate` → `server build` → `server push` → `server deploy`.

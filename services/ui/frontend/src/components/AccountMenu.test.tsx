@@ -36,6 +36,7 @@ describe("AccountMenu", () => {
     expect(screen.getAllByText("admin@example.test")).toHaveLength(2);
     expect(screen.getByText("Administrator")).toBeInTheDocument();
     expect(screen.getByTestId("logout-button")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "My workspace" })).toHaveAttribute("href", "#/workspace");
     expect(screen.queryByText("Deployed MCP servers")).not.toBeInTheDocument();
     expect(screen.queryByText("Platform jwt")).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();

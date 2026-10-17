@@ -1,5 +1,19 @@
 # Platform UI Coverage Checklist
 
+For `#/workspace` and `#/admin/overview`, verify member, owner and administrator
+roles separately. The account menu must make no server-list request. Personal
+memberships come from `/runtime/workspace/teams`, including for administrators;
+all-platform visibility is not personal membership or deployment attribution.
+Exercise `#/workspace/team?team=<slug>` as owner/member, including a direct
+membership-write denial for a member. Check accessible versus manageable server
+labels, explicit unavailable deployment attribution, grant/session expiry, and
+namespace-wide activity wording. Break analytics, directory counts or audit
+independently and confirm unaffected sections remain usable. Overview totals
+must come from `/admin/overview/{directory,servers}`, not paginated operations
+rows. Verify hash refresh/back/forward, keyboard links, long names and 390px
+layout. Headless DOM/API tests cover scope and partial errors; real-cluster
+browser acceptance remains required when a browser-capable target is available.
+
 For React Teams (`#/admin/teams`), check new-account password validation,
 inline API error messages, duplicate-email conflict recovery, and **Add existing
 user** by user ID. Existing-user submissions must send only membership role,

@@ -623,8 +623,28 @@ Services live in `services/`, manifests in `k8s/`, and shared libraries in `pkg/
 ## Console navigation
 
 The console keeps workspace navigation in one left sidebar. Runtime and
-Workspace links appear alongside the admin-only Organization links (Teams and
-Operations) and Platform links (Platform health and Usage analytics). Selecting
+Workspace links include **My workspace** (`#/workspace`), also reachable from
+the compact account menu. Opening that menu reads no server directory. My
+workspace lists actual memberships, team-owned agents with explicit management
+permissions, accessible versus manageable servers, personal and team grants,
+and the current human's sessions. The API derives these scopes from the
+resolved principal; administrator authority does not invent memberships or
+deployment history. **Deployed by me** remains unavailable because ownership
+labels are authorization metadata rather than immutable deployment actors.
+Each section loads independently, so an analytics outage does not hide teams.
+Recent activity is explicitly namespace-wide, rather than attributed to the
+signed-in user. Team owners can follow **Manage members** to
+`#/workspace/team?team=<slug>`; member accounts cannot manage memberships.
+
+Admin-only Organization links include **Platform overview** (`#/admin/overview`),
+Teams and Operations; Platform links include Platform health and Usage analytics. The
+overview uses complete database counts for non-deleted users/teams, agents of
+current teams, and unrevoked, unexpired sessions excluding retired servers and
+inactive agents. Server totals come from the complete MCPServer list, not a
+partial operations page. Directory counts, server failures, component health
+and recent administrative audit records load independently and link to their
+existing management pages. Both overview APIs enforce administrator authority.
+Unknown data stays unavailable rather than displaying a misleading zero. Selecting
 a page changes the main content without opening a second sidebar. Filtering
 includes individual page names and section headings; the active page is marked
 in the sidebar. On compact screens, the navigation menu contains the same

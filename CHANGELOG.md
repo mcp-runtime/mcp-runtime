@@ -9,19 +9,22 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Added
 
+- The account menu links to My workspace, with actual team memberships, authorized management links, visible versus manageable servers, personal access and clearly scoped activity. Administrators have a separate Platform overview with complete directory totals, server failures, health and audit links; deployment attribution remains explicitly unavailable for historical servers ([#542](https://github.com/mcp-runtime/mcp-runtime/issues/542)).
+
 - Ingest operations docs now include PromQL for Kafka readiness DNS/connect/total latency and bounded failure reasons, plus guidance for correlating slow checks with broker, node and DNS signals. This exposes investigation paths; reference-platform root-cause and under-one-second acceptance remain outstanding ([#624](https://github.com/mcp-runtime/mcp-runtime/issues/624)).
 - `mcp-runtime server get` now includes the runtime API's latest live MCP tool, prompt, and resource inventory alongside declared server metadata and safe authentication configuration, so operators can query observed server capabilities from the CLI ([#291](https://github.com/mcp-runtime/mcp-runtime/issues/291)).
+- Server detail responses include bounded rollout errors, transport and readiness state, probe time, and the latest observed session for authorized viewers; CLI and platform UI expose this runtime status without storing platform-owned session data in the Kubernetes status subresource ([#291](https://github.com/mcp-runtime/mcp-runtime/issues/291)).
 - Server observability queries select the live MCPServer UID carried by workload, Prometheus and Loki labels, preventing a recreated server from exposing its predecessor's logs or metrics. Unlabelled historical telemetry is excluded; deploy the matching operator and collector configuration together ([#761](https://github.com/mcp-runtime/mcp-runtime/pull/761)).
 - Authorized server detail views include recent workload logs from the fixed, server-scoped Loki query API. Tenant users continue to use scoped Prometheus routes; direct Grafana access remains admin-only because its shared datasources do not enforce tenant isolation ([#441](https://github.com/mcp-runtime/mcp-runtime/issues/441)).
 - Authorized server details show a fixed one-hour summary of tools/call rate and p95, allowed-call HTTP 5xx rate, policy denies, and the slowest tool p95 after five calls. Tenant Grafana SSO and Explore isolation remain unresolved ([#699](https://github.com/mcp-runtime/mcp-runtime/issues/699)).
 
 ### Changed
 
-- The account popover now shows account identity and role without listing deployed servers or exposing the authentication mechanism; server catalog loading remains on the Servers workspace ([#542](https://github.com/mcp-runtime/mcp-runtime/issues/542)).
 - Operator policy reconciliation looks up grants by their effective target server using a cache index, avoiding copies and scans of unrelated grants while preserving cross-namespace references. Runtime sessions remain platform-owned ([#657](https://github.com/mcp-runtime/mcp-runtime/issues/657)).
 
 ### Fixed
 
+- Failed QA E2E rollout and MCPServer readiness waits now attach bounded, redacted operator logs, server conditions, workload readiness, and Warning Events to artifacts. Collection is guarded by the explicit disposable Kind context and reports missing access as a collection gap ([#763](https://github.com/mcp-runtime/mcp-runtime/issues/763)).
 - Deployment warning Events are read through a bounded, uncached namespace request, preventing diagnostics from blocking all reconciles on an unauthorized cluster-wide Event informer. Event attribution uses pod UIDs when available ([#757](https://github.com/mcp-runtime/mcp-runtime/pull/757)).
 - `server deploy` now reports the newest unready workload pod's container failure and recent warning event when a rollout times out, while readiness continues to require replicas from the current Deployment revision ([#636](https://github.com/mcp-runtime/mcp-runtime/issues/636)).
 - The CI reconciliation benchmark registers the grant target-server index on its fake Kubernetes client, restoring benchmark runs after indexed policy lookups were introduced ([#657](https://github.com/mcp-runtime/mcp-runtime/issues/657)).
