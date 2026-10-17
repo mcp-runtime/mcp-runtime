@@ -49,15 +49,25 @@ func main() {
 	proxy := newUpstreamReverseProxy(target)
 	proxy.ErrorHandler = handleUpstreamError
 
+	analyticsTLS, err := serviceutil.ClientTLSFromEnv("ANALYTICS")
+	if err != nil {
+		log.Fatalf("configure analytics TLS: %v", err)
+	}
+	if analyticsTLS != nil && !strings.HasPrefix(analyticsURL, "https://") {
+		log.Fatal("configured analytics TLS requires an HTTPS ingest URL")
+	}
 	analyticsTransport := otelhttp.NewTransport(&http.Transport{
+		TLSClientConfig:     analyticsTLS,
+		TLSHandshakeTimeout: 5 * time.Second,
 		MaxIdleConns:        100,
 		MaxIdleConnsPerHost: 10,
 		IdleConnTimeout:     90 * time.Second,
 	})
 
 	sharedClient := &http.Client{
-		Timeout:   3 * time.Second,
-		Transport: analyticsTransport,
+		Timeout:       3 * time.Second,
+		Transport:     analyticsTransport,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
 
 	srv := &gatewayServer{

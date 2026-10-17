@@ -58,7 +58,7 @@ func ValidateMTLSSetupCLIFlags(testMode, tlsEnabled bool, mtlsClusterIssuer stri
 func setupTLSStep(logger *zap.Logger, plan setupplan.Plan, deps SetupDeps) error {
 	// Step 3: Configure TLS (if enabled)
 	core.Step("Step 3: Configure TLS")
-	if !plan.TLSEnabled {
+	if !plan.TLSEnabled && (plan.TestMode || !plan.DeployAnalytics) {
 		core.Info("Skipped (TLS disabled, use --with-tls to enable)")
 		return nil
 	}
@@ -128,6 +128,16 @@ func setupTLSWithKubectlAndPlan(kubectl core.KubectlRunner, logger *zap.Logger, 
 }
 
 func setupTLSWithClientGoAndPlan(logger *zap.Logger, plan setupplan.Plan) error {
+	if err := setupPublicTLSWithClientGoAndPlan(logger, plan); err != nil {
+		return err
+	}
+	return setupAnalyticsTransportTLS(logger, plan)
+}
+
+func setupPublicTLSWithClientGoAndPlan(logger *zap.Logger, plan setupplan.Plan) error {
+	if !plan.TLSEnabled {
+		return nil
+	}
 	if plan.ProvidedTLSSecrets {
 		return setupTLSProvidedSecrets(plan)
 	}

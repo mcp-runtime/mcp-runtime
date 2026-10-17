@@ -1113,6 +1113,9 @@ func operatorEnvOverrides(gatewayProxyImage, existingGatewayOTLPEndpoint string)
 	if ingestURL != "" {
 		envVars = append(envVars, operatorEnvVar{Name: "MCP_ANALYTICS_INGEST_URL", Value: ingestURL})
 	}
+	if core.DefaultCLIConfig.InternalAnalyticsTLS {
+		envVars = append(envVars, operatorEnvVar{Name: "MCP_ANALYTICS_CA_CONFIGMAP", Value: analyticsCAConfigMap})
+	}
 	if mode := strings.TrimSpace(core.DefaultCLIConfig.IngressReadinessMode); mode != "" {
 		envVars = append(envVars, operatorEnvVar{Name: "MCP_INGRESS_READINESS_MODE", Value: mode})
 	}

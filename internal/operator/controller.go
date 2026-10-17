@@ -78,6 +78,8 @@ type MCPServerReconciler struct {
 
 	// DefaultAnalyticsIngestURL is the default analytics ingest endpoint used when analytics is enabled.
 	DefaultAnalyticsIngestURL string
+	// AnalyticsCAConfigMap names setup's public infrastructure trust in mcp-runtime.
+	AnalyticsCAConfigMap string
 
 	// ClusterName is the cluster label attached to policy and audit events.
 	ClusterName string
@@ -329,6 +331,9 @@ func (r *MCPServerReconciler) reconcileResources(ctx context.Context, mcpServer 
 		logOperatorError(logger, wrappedErr, "Failed to reconcile Traefik client Certificate")
 		r.updateStatus(ctx, mcpServer, "Error", fmt.Sprintf("Failed to reconcile Traefik client Certificate: %v", err), resourceReadiness{})
 		return wrappedErr
+	}
+	if err := r.reconcileAnalyticsCA(ctx, mcpServer); err != nil {
+		return fmt.Errorf("reconcile analytics trust: %w", err)
 	}
 	if err := r.reconcileDeployment(ctx, mcpServer); err != nil {
 		contextMap["resource"] = "deployment"
