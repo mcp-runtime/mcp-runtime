@@ -31,6 +31,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 - `server list` help now explains visible-server defaults, admin scope, team slug filtering, and catalog/personal namespace selectors. A team lookup without a namespace now fails instead of silently listing all visible servers ([#612](https://github.com/mcp-runtime/mcp-runtime/issues/612)).
 
+### Security
+
+- Restrict bundled Kafka ingress to ingest, processor, topic initialization and broker peers. Unscoped platform updates apply this release-declared policy to existing installs as well as fresh setup ([#775](https://github.com/mcp-runtime/mcp-runtime/pull/775), [#110](https://github.com/mcp-runtime/mcp-runtime/issues/110)).
+
 ## [0.10.0] - 2026-10-15
 
 This breaking release moves runtime sessions from Kubernetes policy documents to
@@ -69,8 +73,6 @@ hosted platform; see [the release deployment procedure](docs/reference-deploymen
 - Certificate revocation E2E probes use the time remaining in their one-second observation budget instead of cancelling every HTTP request after 200 ms. They still reject late or incorrect denials and report transport/status metadata when the bound is missed ([#744](https://github.com/mcp-runtime/mcp-runtime/pull/744)).
 
 ### Security
-
-- Restrict bundled Kafka ingress to ingest, processor, topic initialization and broker peers. Unscoped platform updates apply this release-declared policy to existing installs as well as fresh setup ([#775](https://github.com/mcp-runtime/mcp-runtime/pull/775), [#110](https://github.com/mcp-runtime/mcp-runtime/issues/110)).
 
 - Deleted session names remain permanently reserved within their namespace so an old certificate cannot inherit a replacement session's access. After deletion, create a new session name or re-enroll the adapter; recreating a deleted name returns `409 Conflict`, including after server retirement and republishing ([#718](https://github.com/mcp-runtime/mcp-runtime/issues/718)).
 
