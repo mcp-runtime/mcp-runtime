@@ -1058,6 +1058,37 @@ func TestUpdateStatus(t *testing.T) {
 		assertEqual(t, "message", updated.Status.Message, "All resources reconciled")
 	})
 
+	t.Run("retains the last observed error after recovery", func(t *testing.T) {
+		mcpServer := &mcpv1alpha1.MCPServer{
+			ObjectMeta: metav1.ObjectMeta{Name: "error-server", Namespace: "default"},
+		}
+		client := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithStatusSubresource(&mcpv1alpha1.MCPServer{}).
+			Build()
+		if err := client.Create(context.Background(), mcpServer); err != nil {
+			t.Fatalf("failed to create MCPServer: %v", err)
+		}
+		r := MCPServerReconciler{Client: client, Scheme: scheme}
+		r.updateStatus(context.Background(), mcpServer, "Error", "invalid MCPServer specification", resourceReadiness{})
+		failed := &mcpv1alpha1.MCPServer{}
+		if err := client.Get(context.Background(), types.NamespacedName{Name: mcpServer.Name, Namespace: mcpServer.Namespace}, failed); err != nil {
+			t.Fatalf("failed to fetch failed MCPServer: %v", err)
+		}
+		if failed.Status.LastError == nil || failed.Status.LastError.Reason != "ReconcileError" || failed.Status.LastError.Message != "invalid MCPServer specification" || failed.Status.LastError.ObservedAt.IsZero() {
+			t.Fatalf("lastError = %#v, want timestamped reconcile failure", failed.Status.LastError)
+		}
+
+		r.updateStatus(context.Background(), failed, "Ready", "All resources reconciled", resourceReadiness{Deployment: true})
+		recovered := &mcpv1alpha1.MCPServer{}
+		if err := client.Get(context.Background(), types.NamespacedName{Name: mcpServer.Name, Namespace: mcpServer.Namespace}, recovered); err != nil {
+			t.Fatalf("failed to fetch recovered MCPServer: %v", err)
+		}
+		if recovered.Status.LastError == nil || recovered.Status.LastError.Message != "invalid MCPServer specification" {
+			t.Fatalf("recovery cleared lastError: %#v", recovered.Status.LastError)
+		}
+	})
+
 	t.Run("publishes the derived public URL", func(t *testing.T) {
 		stored := &mcpv1alpha1.MCPServer{
 			ObjectMeta: metav1.ObjectMeta{Name: "buddy", Namespace: "default"},

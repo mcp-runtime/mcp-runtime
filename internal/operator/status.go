@@ -2,9 +2,12 @@ package operator
 
 import (
 	"context"
+	"strings"
+	"time"
+
 	discoveryv1 "k8s.io/api/discovery/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -12,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
@@ -155,6 +159,9 @@ func (r *MCPServerReconciler) updateStatus(ctx context.Context, mcpServer *mcpv1
 	// Update status fields
 	latest.Status.Phase = phase
 	latest.Status.Message = message
+	if runtimeStatusError := observedServerError(phase, message, readiness); runtimeStatusError != nil {
+		latest.Status.LastError = runtimeStatusError
+	}
 	latest.Status.DeploymentReady = readiness.Deployment
 	latest.Status.ServiceReady = readiness.Service
 	latest.Status.IngressReady = readiness.Ingress
@@ -180,6 +187,30 @@ func (r *MCPServerReconciler) updateStatus(ctx context.Context, mcpServer *mcpv1
 		} else {
 			logger.Error(err, "Failed to update MCPServer status", "resourceVersion", latest.ResourceVersion)
 		}
+	}
+}
+
+func observedServerError(phase, message string, readiness resourceReadiness) *mcpv1alpha1.MCPServerErrorEvent {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return nil
+	}
+	reason := ""
+	switch {
+	case strings.EqualFold(strings.TrimSpace(phase), "Error"):
+		reason = "ReconcileError"
+	case !readiness.Deployment && strings.HasPrefix(message, "Deployment is not ready;"):
+		reason = "DeploymentNotReady"
+	default:
+		return nil
+	}
+	if len(message) > maxDeploymentDiagnosticText {
+		message = message[:maxDeploymentDiagnosticText]
+	}
+	return &mcpv1alpha1.MCPServerErrorEvent{
+		Reason:     reason,
+		Message:    message,
+		ObservedAt: metav1.NewTime(time.Now().UTC()),
 	}
 }
 

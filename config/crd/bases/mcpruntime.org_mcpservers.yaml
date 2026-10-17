@@ -592,6 +592,23 @@ spec:
               ingressReady:
                 description: IngressReady indicates if the ingress is ready.
                 type: boolean
+              lastError:
+                description: |-
+                  LastError preserves the latest observed server or reconciliation failure
+                  after the server recovers, so operators can inspect what happened.
+                properties:
+                  message:
+                    type: string
+                  observedAt:
+                    format: date-time
+                    type: string
+                  reason:
+                    type: string
+                required:
+                - message
+                - observedAt
+                - reason
+                type: object
               message:
                 description: Message provides additional information about the status.
                 type: string

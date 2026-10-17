@@ -521,6 +521,7 @@ WORKDIR="$(mktemp -d)"
 E2E_PIPELINE_CONFIG_DIR="${WORKDIR}/e2e-pipeline-config"
 mkdir -p "${E2E_PIPELINE_CONFIG_DIR}"
 STAGE_LOG_DIR="${WORKDIR}/stage-logs"
+source "${PROJECT_ROOT}/test/e2e/lib/rollout-diagnostics.sh"
 KIND_CONFIG="$(mktemp)"
 KUBECONFIG_FILE="$(mktemp)"
 KUBECONFIG_BACKUP_FILE="$(mktemp)"
@@ -743,30 +744,6 @@ wait_for_traefik_http_response() {
     sleep 1
   done
   return 1
-}
-
-# Run rollout status with diagnostics on failure.
-rollout_status_with_logs() {
-  local namespace="$1"
-  local kind="$2"
-  local name="$3"
-  local timeout="$4"
-
-  set +e
-  kubectl rollout status "${kind}/${name}" -n "${namespace}" --timeout="${timeout}"
-  local status=$?
-  set -e
-
-  if [[ ${status} -ne 0 ]]; then
-    echo "[debug] rollout failed for ${kind}/${name}; collecting diagnostics" >&2
-    kubectl describe "${kind}/${name}" -n "${namespace}" || true
-    kubectl get pods -n "${namespace}" -l "app=${name}" -o wide || true
-    kubectl describe pods -n "${namespace}" -l "app=${name}" || true
-    kubectl logs -n "${namespace}" -l "app=${name}" --all-containers=true --tail=200 || true
-    kubectl logs -n "${namespace}" "deploy/${name}" --all-containers=true --tail=200 || true
-  fi
-
-  return ${status}
 }
 
 assert_file_contains() {
@@ -2911,30 +2888,6 @@ run_selected_http_flow_scenarios() {
   fi
 }
 
-wait_for_named_server_ready() {
-  local server_name="$1"
-  local namespace="${2:-mcp-servers}"
-  local tries="${3:-60}"
-  local i
-  for i in $(seq 1 "${tries}"); do
-    local deployment_ready
-    local phase
-    local service_ready
-    local ingress_ready
-    deployment_ready="$(kubectl get mcpserver "${server_name}" -n "${namespace}" -o jsonpath='{.status.deploymentReady}' 2>/dev/null || true)"
-    service_ready="$(kubectl get mcpserver "${server_name}" -n "${namespace}" -o jsonpath='{.status.serviceReady}' 2>/dev/null || true)"
-    ingress_ready="$(kubectl get mcpserver "${server_name}" -n "${namespace}" -o jsonpath='{.status.ingressReady}' 2>/dev/null || true)"
-    phase="$(kubectl get mcpserver "${server_name}" -n "${namespace}" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
-    if [[ "${deployment_ready}" == "true" && "${service_ready}" == "true" && "${ingress_ready}" == "true" && "${phase}" == "Ready" ]]; then
-      return 0
-    fi
-    sleep 2
-  done
-  echo "timed out waiting for MCPServer ${server_name} to report core readiness and phase Ready" >&2
-  kubectl get mcpserver "${server_name}" -n "${namespace}" -o yaml || true
-  return 1
-}
-
 print_gateway_policy_debug() {
   local policy_json
   policy_json="$(kubectl get configmap "${SERVER_NAME}-gateway-policy" -n mcp-servers -o "jsonpath={.data.policy\.json}" 2>/dev/null || true)"
@@ -2988,29 +2941,13 @@ wait_for_server_ready() {
   wait_for_named_server_ready "${SERVER_NAME}" "mcp-servers" "${1:-60}"
 }
 
-wait_for_deployment_exists() {
-  local namespace="$1"
-  local name="$2"
-  local tries="${3:-60}"
-  local i
-  for i in $(seq 1 "${tries}"); do
-    if kubectl get deployment "${name}" -n "${namespace}" >/dev/null 2>&1; then
-      return 0
-    fi
-    sleep 2
-  done
-  echo "timed out waiting for deployment ${name} in namespace ${namespace}" >&2
-  kubectl get deployment -n "${namespace}" || true
-  return 1
-}
-
 restart_deployment_pods() {
   local namespace="$1"
   local name="$2"
   local timeout="${3:-180s}"
 
   kubectl rollout restart "deploy/${name}" -n "${namespace}" >/dev/null
-  kubectl rollout status "deploy/${name}" -n "${namespace}" --timeout="${timeout}"
+  rollout_status_with_logs "${namespace}" deploy "${name}" "${timeout}" "${name}"
 }
 
 init_example_metadata() {
@@ -3190,16 +3127,7 @@ deploy_example_server_via_pipeline() {
 
   echo "[deploy] waiting for ${server_name} rollout"
   wait_for_deployment_exists mcp-servers "${server_name}"
-  if ! kubectl rollout status "deploy/${server_name}" -n mcp-servers --timeout=180s; then
-    echo "[debug] ${server_name} rollout failed; collecting diagnostics" >&2
-    kubectl get mcpserver "${server_name}" -n mcp-servers -o yaml || true
-    kubectl get deploy,rs,pods,svc,ingress,configmap -n mcp-servers || true
-    kubectl describe deployment "${server_name}" -n mcp-servers || true
-    kubectl describe pods -n mcp-servers -l "app=${server_name}" || true
-    kubectl logs -n mcp-servers -l "app=${server_name}" --all-containers=true --tail=200 || true
-    kubectl logs -n mcp-runtime deploy/mcp-runtime-operator-controller-manager --all-containers=true --tail=200 || true
-    exit 1
-  fi
+  rollout_status_with_logs mcp-servers deploy "${server_name}" 180s "${server_name}" || exit $?
   wait_for_named_server_ready "${server_name}" "mcp-servers" 60
 }
 
@@ -4410,16 +4338,7 @@ EOF
 
   echo "[deploy] waiting for MCP server rollout"
   wait_for_deployment_exists mcp-servers "${SERVER_NAME}"
-  if ! kubectl rollout status "deploy/${SERVER_NAME}" -n mcp-servers --timeout=180s; then
-    echo "[debug] MCP server rollout failed; collecting diagnostics" >&2
-    kubectl get mcpserver "${SERVER_NAME}" -n mcp-servers -o yaml || true
-    kubectl get deploy,rs,pods,svc,ingress,configmap -n mcp-servers || true
-    kubectl describe deployment "${SERVER_NAME}" -n mcp-servers || true
-    kubectl describe pods -n mcp-servers || true
-    kubectl logs -n mcp-servers -l "app=${SERVER_NAME}" --all-containers=true --tail=200 || true
-    kubectl logs -n mcp-runtime deploy/mcp-runtime-operator-controller-manager --all-containers=true --tail=200 || true
-    exit 1
-  fi
+  rollout_status_with_logs mcp-servers deploy "${SERVER_NAME}" 180s "${SERVER_NAME}" || exit $?
   wait_for_server_ready
 
   echo "[cli] checking server mutation helpers"
@@ -5270,12 +5189,6 @@ EOF
   run_logged_stage "deploy OAuth MCP server manifests" bash -lc "MCP_RUNTIME_CONFIG_DIR=\"${E2E_PIPELINE_CONFIG_DIR}\" ./bin/mcp-runtime server generate --metadata-file \"${OAUTH_METADATA_FILE}\" --output \"${OAUTH_MANIFEST_DIR}\" && ./bin/mcp-runtime server --use-kube apply --file \"${OAUTH_MANIFEST_DIR}/${OAUTH_SERVER_NAME}.yaml\""
   wait_for_deployment_exists mcp-servers "${OAUTH_SERVER_NAME}"
   if ! restart_deployment_pods mcp-servers "${OAUTH_SERVER_NAME}" 180s; then
-    echo "[debug] OAuth MCP server rollout failed; collecting diagnostics" >&2
-    kubectl get mcpserver "${OAUTH_SERVER_NAME}" -n mcp-servers -o yaml || true
-    kubectl get deploy,rs,pods,svc,ingress,configmap -n mcp-servers || true
-    kubectl describe deployment "${OAUTH_SERVER_NAME}" -n mcp-servers || true
-    kubectl describe pods -n mcp-servers || true
-    kubectl logs -n mcp-servers -l "app=${OAUTH_SERVER_NAME}" --all-containers=true --tail=200 || true
     exit 1
   fi
   wait_for_named_server_ready "${OAUTH_SERVER_NAME}"
@@ -5325,9 +5238,6 @@ EOF
     ./bin/mcp-runtime server --use-kube apply \
       --file "${GO_OAUTH_MANIFEST_DIR}/${GO_EXAMPLE_STANDALONE_NAME}.yaml"
   if ! restart_deployment_pods mcp-servers "${GO_EXAMPLE_STANDALONE_NAME}" 180s; then
-    echo "[debug] Go SDK OAuth server rollout failed" >&2
-    kubectl get mcpserver "${GO_EXAMPLE_STANDALONE_NAME}" -n mcp-servers -o yaml || true
-    kubectl logs -n mcp-servers -l "app=${GO_EXAMPLE_STANDALONE_NAME}" --all-containers=true --tail=200 || true
     exit 1
   fi
   wait_for_named_server_ready "${GO_EXAMPLE_STANDALONE_NAME}"
