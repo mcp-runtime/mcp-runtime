@@ -56,6 +56,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Fixed
 
+- Give non-root analytics clients and Kafka topic initialization the filesystem groups needed to read private TLS volumes without making key files world-readable.
+
 - Production workload identity requires a ready, dedicated enterprise issuer and rejects the shared bundled registry CA, aliased/copied signing keys, and unhealthy CA-backed issuers before TLS provisioning. Migrate by preserving registry trust and selecting an independently managed workload issuer; the bundled workload root remains available in test mode ([#535](https://github.com/mcp-runtime/mcp-runtime/issues/535)).
 - Gateways reload mounted client-CA trust during workload-root rollover, including overlapping roots and removal of retired roots from resumed TLS handshakes. Invalid replacement bundles retain the last validated trust state ([#535](https://github.com/mcp-runtime/mcp-runtime/issues/535)).
 - CLI access manifest submission validates grant and session input through the same canonical rules as the runtime API before making a request, preserving existing admission and historical-session contracts ([#268](https://github.com/mcp-runtime/mcp-runtime/issues/268)).
