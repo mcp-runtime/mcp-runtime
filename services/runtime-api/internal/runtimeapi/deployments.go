@@ -15,8 +15,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	networkingv1 "k8s.io/api/networking/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,34 +24,30 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
 
+	"mcp-runtime-api/internal/runtimeapi/k8sprovision"
 	"mcp-runtime/pkg/apihttp"
-	"mcp-runtime/pkg/egresscidrs"
 	"mcp-runtime/pkg/kubeworkload"
 	"mcp-runtime/pkg/mcpdefaults"
 	"mcp-runtime/pkg/metadata"
-	"mcp-runtime/pkg/platformstack"
 	"mcp-runtime/pkg/publishscope"
 	"mcp-runtime/pkg/serviceutil"
 )
 
 const (
-	platformManagedLabel           = "platform.mcpruntime.org/managed"
-	platformUserIDLabel            = "platform.mcpruntime.org/user-id"
-	platformTeamIDLabel            = "mcpruntime.org/team-id"
-	platformTeamSlugLabel          = "mcpruntime.org/team-slug"
-	platformScopeLabel             = "mcpruntime.org/scope"
-	createdByLabel                 = "created-by"
-	defaultDeployPort              = int32(mcpdefaults.MCPServerPort)
-	restrictedRunAsUser            = kubeworkload.RestrictedRunAsUser
-	traefikWatchRoleName           = "traefik-watch"
-	platformNamespaceOwnerRoleName = "platform-namespace-owner"
-	platformIngestPort             = 8081
-	platformOTLPPort               = 4318
-	registryNamespace              = "registry"
-	registryPort                   = 5000
-	podSecurityEnforceLabel        = "pod-security.kubernetes.io/enforce"
-	podSecurityAuditLabel          = "pod-security.kubernetes.io/audit"
-	podSecurityWarnLabel           = "pod-security.kubernetes.io/warn"
+	platformManagedLabel    = "platform.mcpruntime.org/managed"
+	platformUserIDLabel     = "platform.mcpruntime.org/user-id"
+	platformTeamIDLabel     = "mcpruntime.org/team-id"
+	platformTeamSlugLabel   = "mcpruntime.org/team-slug"
+	platformScopeLabel      = "mcpruntime.org/scope"
+	createdByLabel          = "created-by"
+	defaultDeployPort       = int32(mcpdefaults.MCPServerPort)
+	restrictedRunAsUser     = kubeworkload.RestrictedRunAsUser
+	traefikWatchRoleName    = k8sprovision.TraefikWatchRoleName
+	registryNamespace       = k8sprovision.RegistryNamespace
+	registryPort            = k8sprovision.RegistryPort
+	podSecurityEnforceLabel = "pod-security.kubernetes.io/enforce"
+	podSecurityAuditLabel   = "pod-security.kubernetes.io/audit"
+	podSecurityWarnLabel    = "pod-security.kubernetes.io/warn"
 )
 
 var (
@@ -464,66 +458,10 @@ func (s *DeploymentService) ensureAdminPublishNamespace(ctx context.Context, nam
 	return s.ensureTeamTraefikWatch(ctx, namespace, cfg)
 }
 
-func (s *DeploymentService) ensureManagedNamespace(ctx context.Context, namespace string, labels map[string]string, opts managedNamespaceOptions) error {
-	if s == nil || s.k8sClients == nil || strings.TrimSpace(namespace) == "" {
-		return nil
-	}
-	if kubeworkload.OperatorSecretNamespaceProtected(namespace) {
-		return fmt.Errorf("managed MCPServer namespace %q is reserved for platform infrastructure", namespace)
-	}
-	base := s.k8sClients.Clientset
-	current, err := base.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
-			Name:   namespace,
-			Labels: labels,
-		}}
-		if _, err := base.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{}); err != nil && !apierrors.IsAlreadyExists(err) {
-			return err
-		}
-	} else if err != nil {
-		return err
-	} else if mergeNamespaceLabels(current, labels) {
-		if _, err := base.CoreV1().Namespaces().Update(ctx, current, metav1.UpdateOptions{}); err != nil {
-			return err
-		}
-	}
-	if err := ensureResourceQuota(ctx, base, namespace); err != nil {
-		return err
-	}
-	if err := ensureLimitRange(ctx, base, namespace); err != nil {
-		return err
-	}
-	if err := ensureDefaultDenyNetworkPolicy(ctx, base, namespace, opts.ingressFromNamespaces...); err != nil {
-		return err
-	}
-	if err := kubeworkload.EnsureServiceAccount(ctx, base, namespace); err != nil {
-		return err
-	}
-	if err := ensureNamespacePlatformAPISecretAccess(ctx, base, namespace); err != nil {
-		return err
-	}
-	if err := ensureNamespaceOperatorSecretAccess(ctx, base, namespace); err != nil {
-		return err
-	}
-	if err := s.ensureNamespaceRegistryPullSecretAfterBinding(ctx, base, namespace); err != nil {
-		return fmt.Errorf("provision registry pull secret for namespace %q: %w", namespace, err)
-	}
-	return nil
-}
-
 const registryPullSecretName = "mcp-runtime-registry-pull" // #nosec G101 -- Kubernetes Secret object name, not credential material.
-const platformNamespaceAPISecretAccessName = "mcp-runtime-api-team-secrets"
-const platformNamespaceAPIServiceAccountName = "mcp-runtime-api"
-const operatorNamespaceSecretAccessName = "mcp-runtime-operator-managed-secrets"
-
-// ensureNamespaceOperatorSecretAccess grants the operator Secret access only
-// inside namespaces managed by the platform. The operator has no cluster-wide
-// Secret permissions; this binding lets it reconcile server-local certificates
-// and registry pull credentials without reaching unrelated platform Secrets.
-func ensureNamespaceOperatorSecretAccess(ctx context.Context, client kubernetes.Interface, namespace string) error {
-	return kubeworkload.EnsureOperatorSecretAccess(ctx, client, namespace)
-}
+const platformNamespaceAPISecretAccessName = k8sprovision.PlatformAPISecretAccessName
+const platformNamespaceAPIServiceAccountName = k8sprovision.PlatformAPIServiceAccountName
+const operatorNamespaceSecretAccessName = k8sprovision.OperatorSecretAccessName
 
 // A newly created RoleBinding can be visible before the API server's RBAC
 // authorizer observes it. Retry only Forbidden errors in this provisioning
@@ -631,288 +569,6 @@ func registryPullSecretOptional() bool {
 	}
 }
 
-func mergeNamespaceLabels(ns *corev1.Namespace, labels map[string]string) bool {
-	if ns.Labels == nil {
-		ns.Labels = map[string]string{}
-	}
-	changed := false
-	for key, value := range labels {
-		if strings.TrimSpace(key) == "" {
-			continue
-		}
-		if ns.Labels[key] == value {
-			continue
-		}
-		ns.Labels[key] = value
-		changed = true
-	}
-	return changed
-}
-
-func ensureNamespacePlatformAPISecretAccess(ctx context.Context, client kubernetes.Interface, namespace string) error {
-	binding := &rbacv1.RoleBinding{
-		ObjectMeta: metav1.ObjectMeta{Name: platformNamespaceAPISecretAccessName, Namespace: namespace},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     platformNamespaceAPISecretAccessName,
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      rbacv1.ServiceAccountKind,
-				Name:      platformNamespaceAPIServiceAccountName,
-				Namespace: platformstack.PlatformNamespace,
-			},
-		},
-	}
-	return upsertRoleBinding(ctx, client, binding)
-}
-
-func (s *DeploymentService) ensureNamespaceUserWorkloadRBAC(ctx context.Context, namespace, userID string) error {
-	if s == nil || s.k8sClients == nil || strings.TrimSpace(namespace) == "" || strings.TrimSpace(userID) == "" {
-		return nil
-	}
-	client := s.k8sClients.Clientset
-	role := &rbacv1.Role{
-		ObjectMeta: metav1.ObjectMeta{Name: platformNamespaceOwnerRoleName, Namespace: namespace},
-		Rules: []rbacv1.PolicyRule{
-			{APIGroups: []string{"apps"}, Resources: []string{"deployments"}, Verbs: []string{"get", "list", "watch", "create", "update", "patch", "delete"}},
-			{APIGroups: []string{""}, Resources: []string{"services"}, Verbs: []string{"get", "list", "watch", "create", "update", "patch", "delete"}},
-		},
-	}
-	if err := upsertRole(ctx, client, role); err != nil {
-		return err
-	}
-	binding := &rbacv1.RoleBinding{
-		ObjectMeta: metav1.ObjectMeta{Name: platformNamespaceOwnerRoleName, Namespace: namespace},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "Role",
-			Name:     platformNamespaceOwnerRoleName,
-		},
-		Subjects: []rbacv1.Subject{
-			{Kind: rbacv1.UserKind, Name: "platform:user:" + strings.TrimSpace(userID)},
-		},
-	}
-	return upsertRoleBinding(ctx, client, binding)
-}
-
-func ensureResourceQuota(ctx context.Context, client kubernetes.Interface, ns string) error {
-	quota := &corev1.ResourceQuota{ObjectMeta: metav1.ObjectMeta{Name: "platform-default-quota", Namespace: ns}, Spec: corev1.ResourceQuotaSpec{Hard: corev1.ResourceList{
-		corev1.ResourcePods:                   resource.MustParse("20"),
-		corev1.ResourceRequestsCPU:            resource.MustParse("4"),
-		corev1.ResourceRequestsMemory:         resource.MustParse("8Gi"),
-		corev1.ResourceLimitsCPU:              resource.MustParse("8"),
-		corev1.ResourceLimitsMemory:           resource.MustParse("16Gi"),
-		corev1.ResourcePersistentVolumeClaims: resource.MustParse("4"),
-	}}}
-	if _, err := client.CoreV1().ResourceQuotas(ns).Create(ctx, quota, metav1.CreateOptions{}); err != nil && !apierrors.IsAlreadyExists(err) {
-		return err
-	}
-	return nil
-}
-
-func ensureLimitRange(ctx context.Context, client kubernetes.Interface, ns string) error {
-	limit := &corev1.LimitRange{ObjectMeta: metav1.ObjectMeta{Name: "platform-default-limits", Namespace: ns}, Spec: corev1.LimitRangeSpec{Limits: []corev1.LimitRangeItem{{
-		Type: corev1.LimitTypeContainer,
-		DefaultRequest: corev1.ResourceList{
-			corev1.ResourceCPU:    resource.MustParse("100m"),
-			corev1.ResourceMemory: resource.MustParse("128Mi"),
-		},
-		Default: corev1.ResourceList{
-			corev1.ResourceCPU:    resource.MustParse("500m"),
-			corev1.ResourceMemory: resource.MustParse("512Mi"),
-		},
-	}}}}
-	if _, err := client.CoreV1().LimitRanges(ns).Create(ctx, limit, metav1.CreateOptions{}); err != nil && !apierrors.IsAlreadyExists(err) {
-		return err
-	}
-	return nil
-}
-
-func ensureDefaultDenyNetworkPolicy(ctx context.Context, client kubernetes.Interface, ns string, ingressFromNamespaces ...string) error {
-	policy := desiredDefaultDenyNetworkPolicy(ns, ingressFromNamespaces...)
-	if err := applyConfiguredPodEgress(policy); err != nil {
-		return err
-	}
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		current, err := client.NetworkingV1().NetworkPolicies(ns).Get(ctx, policy.Name, metav1.GetOptions{})
-		if apierrors.IsNotFound(err) {
-			_, err = client.NetworkingV1().NetworkPolicies(ns).Create(ctx, policy, metav1.CreateOptions{})
-			return err
-		}
-		if err != nil {
-			return err
-		}
-		updated := policy.DeepCopy()
-		updated.ResourceVersion = current.ResourceVersion
-		updated.Labels = current.Labels
-		updated.Annotations = current.Annotations
-		_, err = client.NetworkingV1().NetworkPolicies(ns).Update(ctx, updated, metav1.UpdateOptions{})
-		return err
-	})
-}
-
-func desiredDefaultDenyNetworkPolicy(ns string, ingressFromNamespaces ...string) *networkingv1.NetworkPolicy {
-	udpProtocol := corev1.ProtocolUDP
-	tcpProtocol := corev1.ProtocolTCP
-	ingress := make([]networkingv1.NetworkPolicyIngressRule, 0, 2)
-	ingress = append(ingress, networkingv1.NetworkPolicyIngressRule{
-		From: []networkingv1.NetworkPolicyPeer{
-			{PodSelector: &metav1.LabelSelector{}},
-		},
-	})
-	for _, namespace := range ingressFromNamespaces {
-		namespace = strings.TrimSpace(namespace)
-		if namespace == "" {
-			continue
-		}
-		ingress = append(ingress, networkingv1.NetworkPolicyIngressRule{
-			From: []networkingv1.NetworkPolicyPeer{
-				{
-					NamespaceSelector: &metav1.LabelSelector{
-						MatchLabels: map[string]string{"kubernetes.io/metadata.name": namespace},
-					},
-				},
-			},
-		})
-	}
-	for _, namespace := range []string{platformstack.PlatformNamespace, platformstack.ObservabilityNamespace} {
-		ingress = append(ingress, networkingv1.NetworkPolicyIngressRule{
-			From: []networkingv1.NetworkPolicyPeer{
-				{
-					NamespaceSelector: &metav1.LabelSelector{
-						MatchLabels: map[string]string{"kubernetes.io/metadata.name": namespace},
-					},
-				},
-			},
-		})
-	}
-	policy := &networkingv1.NetworkPolicy{
-		ObjectMeta: metav1.ObjectMeta{Name: "platform-default-deny", Namespace: ns},
-		Spec: networkingv1.NetworkPolicySpec{
-			PodSelector: metav1.LabelSelector{},
-			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeIngress, networkingv1.PolicyTypeEgress},
-			Ingress:     ingress,
-			Egress: []networkingv1.NetworkPolicyEgressRule{
-				{
-					To: []networkingv1.NetworkPolicyPeer{{
-						NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"kubernetes.io/metadata.name": platformstack.PlatformNamespace}},
-						PodSelector:       &metav1.LabelSelector{MatchLabels: map[string]string{"app": "mcp-platform-api"}},
-					}},
-					Ports: []networkingv1.NetworkPolicyPort{{Protocol: &tcpProtocol, Port: intstrPtr(8085)}},
-				},
-				{
-					To: []networkingv1.NetworkPolicyPeer{
-						{
-							NamespaceSelector: &metav1.LabelSelector{
-								MatchLabels: map[string]string{"kubernetes.io/metadata.name": "kube-system"},
-							},
-							PodSelector: &metav1.LabelSelector{
-								MatchLabels: map[string]string{"k8s-app": "kube-dns"},
-							},
-						},
-					},
-					Ports: []networkingv1.NetworkPolicyPort{
-						{Protocol: &udpProtocol, Port: intstrPtr(53)},
-						{Protocol: &tcpProtocol, Port: intstrPtr(53)},
-					},
-				},
-				{
-					To: []networkingv1.NetworkPolicyPeer{
-						{
-							NamespaceSelector: &metav1.LabelSelector{
-								MatchLabels: map[string]string{"kubernetes.io/metadata.name": platformstack.ObservabilityNamespace},
-							},
-						},
-					},
-					Ports: []networkingv1.NetworkPolicyPort{
-						{Protocol: &tcpProtocol, Port: intstrPtr(platformIngestPort)},
-						{Protocol: &tcpProtocol, Port: intstrPtr(platformOTLPPort)},
-					},
-				},
-				{
-					To: []networkingv1.NetworkPolicyPeer{
-						{
-							NamespaceSelector: &metav1.LabelSelector{
-								MatchLabels: map[string]string{"kubernetes.io/metadata.name": registryNamespace},
-							},
-						},
-					},
-					Ports: []networkingv1.NetworkPolicyPort{
-						{Protocol: &tcpProtocol, Port: intstrPtr(registryPort)},
-					},
-				},
-				{
-					To: []networkingv1.NetworkPolicyPeer{
-						{PodSelector: &metav1.LabelSelector{}},
-					},
-				},
-			},
-		},
-	}
-	// OAuth resource servers discover the public issuer through the platform's
-	// ingress controller. Permit HTTPS to that controller, not general Internet
-	// access. Include the Service and target ports for CNI implementations that
-	// enforce policy before or after Service destination translation.
-	for _, ingressNamespace := range ingressFromNamespaces {
-		ingressNamespace = strings.TrimSpace(ingressNamespace)
-		if ingressNamespace == "" {
-			continue
-		}
-		peers := make([]networkingv1.NetworkPolicyPeer, 0, 2)
-		for _, label := range []string{"app.kubernetes.io/name", "app"} {
-			peers = append(peers, networkingv1.NetworkPolicyPeer{
-				NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"kubernetes.io/metadata.name": ingressNamespace}},
-				PodSelector:       &metav1.LabelSelector{MatchLabels: map[string]string{label: "traefik"}},
-			})
-		}
-		policy.Spec.Egress = append(policy.Spec.Egress, networkingv1.NetworkPolicyEgressRule{
-			To: peers,
-			Ports: []networkingv1.NetworkPolicyPort{
-				{Protocol: &tcpProtocol, Port: intstrPtr(443)},
-				{Protocol: &tcpProtocol, Port: intstrPtr(8443)},
-			},
-		})
-	}
-	return policy
-}
-
-// applyConfiguredPodEgress opens TCP 443 to cluster-admin destination CIDRs.
-// Empty MCP_POD_EGRESS_CIDRS leaves the default policy unchanged. Private
-// destinations must list MCP_POD_EGRESS_EXCEPT_CIDRS so pod and service ranges
-// stay on the normal namespace policy.
-func applyConfiguredPodEgress(policy *networkingv1.NetworkPolicy) error {
-	allows, err := egresscidrs.Parse(os.Getenv("MCP_POD_EGRESS_CIDRS"))
-	if err != nil {
-		return err
-	}
-	if len(allows) == 0 {
-		return nil
-	}
-	except, err := egresscidrs.Parse(os.Getenv("MCP_POD_EGRESS_EXCEPT_CIDRS"))
-	if err != nil {
-		return err
-	}
-	blocks, err := egresscidrs.Blocks(allows, except)
-	if err != nil {
-		return err
-	}
-	tcpProtocol := corev1.ProtocolTCP
-	for _, block := range blocks {
-		policy.Spec.Egress = append(policy.Spec.Egress, networkingv1.NetworkPolicyEgressRule{
-			To: []networkingv1.NetworkPolicyPeer{{
-				IPBlock: &networkingv1.IPBlock{CIDR: block.CIDR, Except: block.Except},
-			}},
-			Ports: []networkingv1.NetworkPolicyPort{{
-				Protocol: &tcpProtocol,
-				Port:     intstrPtr(443),
-			}},
-		})
-	}
-	return nil
-}
-
 func teamIngressAllowNamespaces(cfg teamTraefikWatchConfig) []string {
 	if ns := strings.TrimSpace(envOr("PLATFORM_TRAEFIK_NAMESPACE", "")); ns != "" {
 		return []string{ns}
@@ -947,418 +603,6 @@ func platformTeamTraefikWatchConfig() teamTraefikWatchConfig {
 		deployment:     envOr("PLATFORM_TRAEFIK_DEPLOYMENT", "traefik"),
 		serviceAccount: envOr("PLATFORM_TRAEFIK_SERVICE_ACCOUNT", "traefik"),
 	}
-}
-
-func (s *DeploymentService) ensureTeamTraefikWatch(ctx context.Context, namespace string, cfg teamTraefikWatchConfig) error {
-	if s == nil || s.k8sClients == nil || strings.TrimSpace(namespace) == "" {
-		return nil
-	}
-	if cfg.mode == "disabled" {
-		return nil
-	}
-	// k3s Traefik watches ingresses cluster-wide without namespace-scoped args.
-	if cfg.mode == "auto" && strings.TrimSpace(cfg.namespace) == "kube-system" {
-		return nil
-	}
-	if cfg.mode == "auto" {
-		managed, err := traefikDeploymentHasNamespaceWatchArg(ctx, s.k8sClients.Clientset, cfg)
-		if err != nil {
-			return err
-		}
-		if !managed {
-			return nil
-		}
-	}
-	if err := ensureTraefikWatchRBAC(ctx, s.k8sClients.Clientset, namespace, cfg); err != nil {
-		return err
-	}
-	if err := ensureTraefikDeploymentWatchesNamespace(ctx, s.k8sClients.Clientset, namespace, cfg); err != nil {
-		if cfg.mode == "auto" && apierrors.IsNotFound(err) {
-			return nil
-		}
-		return err
-	}
-	return nil
-}
-
-func ensureTraefikWatchRBAC(ctx context.Context, client kubernetes.Interface, namespace string, cfg teamTraefikWatchConfig) error {
-	role := desiredTraefikWatchRole(namespace)
-	if err := ensureTraefikWatchRole(ctx, client, role); err != nil {
-		return err
-	}
-	binding := desiredTraefikWatchRoleBinding(namespace, cfg)
-	return ensureTraefikWatchRoleBinding(ctx, client, binding)
-}
-
-func desiredTraefikWatchRole(namespace string) *rbacv1.Role {
-	return &rbacv1.Role{
-		ObjectMeta: metav1.ObjectMeta{Name: traefikWatchRoleName, Namespace: namespace},
-		Rules: []rbacv1.PolicyRule{
-			{APIGroups: []string{""}, Resources: []string{"services", "endpoints", "secrets", "configmaps"}, Verbs: []string{"get", "list", "watch"}},
-			{APIGroups: []string{"networking.k8s.io"}, Resources: []string{"ingresses"}, Verbs: []string{"get", "list", "watch"}},
-			{APIGroups: []string{"discovery.k8s.io"}, Resources: []string{"endpointslices"}, Verbs: []string{"get", "list", "watch"}},
-			{APIGroups: []string{""}, Resources: []string{"pods"}, Verbs: []string{"get"}},
-		},
-	}
-}
-
-func ensureTraefikWatchRole(ctx context.Context, client kubernetes.Interface, role *rbacv1.Role) error {
-	current, err := client.RbacV1().Roles(role.Namespace).Get(ctx, role.Name, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		_, err = client.RbacV1().Roles(role.Namespace).Create(ctx, role, metav1.CreateOptions{})
-		return err
-	}
-	if err != nil {
-		return err
-	}
-	if roleRulesMatch(current, role) {
-		return nil
-	}
-	role.ResourceVersion = current.ResourceVersion
-	role.Labels = current.Labels
-	role.Annotations = current.Annotations
-	_, err = client.RbacV1().Roles(role.Namespace).Update(ctx, role, metav1.UpdateOptions{})
-	return err
-}
-
-func roleRulesMatch(current, desired *rbacv1.Role) bool {
-	if current == nil || desired == nil {
-		return false
-	}
-	if len(current.Rules) != len(desired.Rules) {
-		return false
-	}
-	for i := range desired.Rules {
-		if !policyRuleMatches(current.Rules[i], desired.Rules[i]) {
-			return false
-		}
-	}
-	return true
-}
-
-func policyRuleMatches(current, desired rbacv1.PolicyRule) bool {
-	return slicesEqual(current.APIGroups, desired.APIGroups) &&
-		slicesEqual(current.Resources, desired.Resources) &&
-		slicesEqual(current.Verbs, desired.Verbs)
-}
-
-func slicesEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func desiredTraefikWatchRoleBinding(namespace string, cfg teamTraefikWatchConfig) *rbacv1.RoleBinding {
-	return &rbacv1.RoleBinding{
-		ObjectMeta: metav1.ObjectMeta{Name: traefikWatchRoleName, Namespace: namespace},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "Role",
-			Name:     traefikWatchRoleName,
-		},
-		Subjects: []rbacv1.Subject{
-			{Kind: "ServiceAccount", Name: cfg.serviceAccount, Namespace: cfg.namespace},
-		},
-	}
-}
-
-func ensureTraefikWatchRoleBinding(ctx context.Context, client kubernetes.Interface, binding *rbacv1.RoleBinding) error {
-	current, err := client.RbacV1().RoleBindings(binding.Namespace).Get(ctx, binding.Name, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		_, err = client.RbacV1().RoleBindings(binding.Namespace).Create(ctx, binding, metav1.CreateOptions{})
-		return err
-	}
-	if err != nil {
-		return err
-	}
-	if roleBindingMatches(current, binding) {
-		return nil
-	}
-	binding.ResourceVersion = current.ResourceVersion
-	binding.Labels = current.Labels
-	binding.Annotations = current.Annotations
-	_, err = client.RbacV1().RoleBindings(binding.Namespace).Update(ctx, binding, metav1.UpdateOptions{})
-	return err
-}
-
-func roleBindingMatches(current, desired *rbacv1.RoleBinding) bool {
-	if current == nil || desired == nil {
-		return false
-	}
-	if current.RoleRef != desired.RoleRef || len(current.Subjects) != len(desired.Subjects) {
-		return false
-	}
-	for i := range desired.Subjects {
-		if current.Subjects[i] != desired.Subjects[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func upsertRole(ctx context.Context, client kubernetes.Interface, role *rbacv1.Role) error {
-	current, err := client.RbacV1().Roles(role.Namespace).Get(ctx, role.Name, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		_, err = client.RbacV1().Roles(role.Namespace).Create(ctx, role, metav1.CreateOptions{})
-		return err
-	}
-	if err != nil {
-		return err
-	}
-	role.ResourceVersion = current.ResourceVersion
-	role.Labels = current.Labels
-	role.Annotations = current.Annotations
-	_, err = client.RbacV1().Roles(role.Namespace).Update(ctx, role, metav1.UpdateOptions{})
-	return err
-}
-
-func upsertRoleBinding(ctx context.Context, client kubernetes.Interface, binding *rbacv1.RoleBinding) error {
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		current, err := client.RbacV1().RoleBindings(binding.Namespace).Get(ctx, binding.Name, metav1.GetOptions{})
-		if apierrors.IsNotFound(err) {
-			_, err = client.RbacV1().RoleBindings(binding.Namespace).Create(ctx, binding, metav1.CreateOptions{})
-			return err
-		}
-		if err != nil {
-			return err
-		}
-		if roleBindingMatches(current, binding) {
-			return nil
-		}
-		updated := binding.DeepCopy()
-		updated.ResourceVersion = current.ResourceVersion
-		updated.Labels = current.Labels
-		updated.Annotations = current.Annotations
-		_, err = client.RbacV1().RoleBindings(binding.Namespace).Update(ctx, updated, metav1.UpdateOptions{})
-		return err
-	})
-}
-
-func traefikDeploymentHasNamespaceWatchArg(ctx context.Context, client kubernetes.Interface, cfg teamTraefikWatchConfig) (bool, error) {
-	deployment, err := client.AppsV1().Deployments(cfg.namespace).Get(ctx, cfg.deployment, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	_, _, _, ok := traefikNamespaceWatchArg(deployment)
-	return ok, nil
-}
-
-func ensureTraefikDeploymentWatchesNamespace(ctx context.Context, client kubernetes.Interface, namespace string, cfg teamTraefikWatchConfig) error {
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		deployment, err := client.AppsV1().Deployments(cfg.namespace).Get(ctx, cfg.deployment, metav1.GetOptions{})
-		if err != nil {
-			return err
-		}
-		containerIndex, argIndex, argValue, ok := traefikNamespaceWatchArg(deployment)
-		if !ok {
-			if cfg.mode == "auto" {
-				return nil
-			}
-			return errors.New("traefik deployment does not expose --providers.kubernetesingress.namespaces")
-		}
-		watched := splitCSV(strings.TrimPrefix(argValue, traefikNamespaceWatchArgPrefix))
-		alreadyWatched := false
-		for _, watchedNamespace := range watched {
-			if watchedNamespace == namespace {
-				alreadyWatched = true
-				break
-			}
-		}
-		updated := deployment.DeepCopy()
-		if !alreadyWatched {
-			watched = append(watched, namespace)
-			updated.Spec.Template.Spec.Containers[containerIndex].Args[argIndex] = traefikNamespaceWatchArgPrefix + strings.Join(watched, ",")
-			appendTraefikNamespaceWatch(updated, traefikCRDNamespaceWatchArgPrefix, namespace)
-		}
-		// Drop deleted namespaces from both provider watches. Traefik v2.10
-		// stalls the whole CRD provider on a forbidden list/watch (no
-		// traefik-watch Role in a gone namespace), so IngressRoutes 404 and the
-		// Traefik→gateway mTLS hop never runs.
-		if changed, pruneErr := pruneMissingTraefikNamespaceWatches(ctx, client, updated); pruneErr != nil {
-			return pruneErr
-		} else if alreadyWatched && !changed {
-			return nil
-		}
-		_, err = client.AppsV1().Deployments(cfg.namespace).Update(ctx, updated, metav1.UpdateOptions{})
-		if apierrors.IsConflict(err) {
-			return err
-		}
-		if err != nil {
-			return err
-		}
-		return nil
-	})
-}
-
-// removeTraefikDeploymentWatchesNamespace drops a team namespace from both
-// Traefik provider watch args. Best-effort: missing Traefik deployment or
-// watch args are ignored so team delete still succeeds.
-func removeTraefikDeploymentWatchesNamespace(ctx context.Context, client kubernetes.Interface, namespace string, cfg teamTraefikWatchConfig) error {
-	namespace = strings.TrimSpace(namespace)
-	if namespace == "" || client == nil {
-		return nil
-	}
-	if cfg.mode == "disabled" {
-		return nil
-	}
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		deployment, err := client.AppsV1().Deployments(cfg.namespace).Get(ctx, cfg.deployment, metav1.GetOptions{})
-		if err != nil {
-			if apierrors.IsNotFound(err) {
-				return nil
-			}
-			return err
-		}
-		updated := deployment.DeepCopy()
-		changed := false
-		for _, prefix := range []string{traefikNamespaceWatchArgPrefix, traefikCRDNamespaceWatchArgPrefix} {
-			if removeTraefikNamespaceWatch(updated, prefix, namespace) {
-				changed = true
-			}
-		}
-		if !changed {
-			return nil
-		}
-		_, err = client.AppsV1().Deployments(cfg.namespace).Update(ctx, updated, metav1.UpdateOptions{})
-		if apierrors.IsConflict(err) {
-			return err
-		}
-		return err
-	})
-}
-
-func pruneMissingTraefikNamespaceWatches(ctx context.Context, client kubernetes.Interface, deployment *appsv1.Deployment) (bool, error) {
-	if deployment == nil || client == nil {
-		return false, nil
-	}
-	changed := false
-	for _, prefix := range []string{traefikNamespaceWatchArgPrefix, traefikCRDNamespaceWatchArgPrefix} {
-		for ci := range deployment.Spec.Template.Spec.Containers {
-			for ai, arg := range deployment.Spec.Template.Spec.Containers[ci].Args {
-				if !strings.HasPrefix(arg, prefix) {
-					continue
-				}
-				watched := splitCSV(strings.TrimPrefix(arg, prefix))
-				kept := make([]string, 0, len(watched))
-				for _, ns := range watched {
-					_, err := client.CoreV1().Namespaces().Get(ctx, ns, metav1.GetOptions{})
-					if apierrors.IsNotFound(err) {
-						changed = true
-						continue
-					}
-					if err != nil {
-						return false, err
-					}
-					kept = append(kept, ns)
-				}
-				if len(kept) != len(watched) {
-					deployment.Spec.Template.Spec.Containers[ci].Args[ai] = prefix + strings.Join(kept, ",")
-					changed = true
-				}
-			}
-		}
-	}
-	return changed, nil
-}
-
-const traefikNamespaceWatchArgPrefix = "--providers.kubernetesingress.namespaces="
-const traefikCRDNamespaceWatchArgPrefix = "--providers.kubernetescrd.namespaces="
-
-func appendTraefikNamespaceWatch(deployment *appsv1.Deployment, prefix, namespace string) {
-	if deployment == nil {
-		return
-	}
-	for ci := range deployment.Spec.Template.Spec.Containers {
-		for ai, arg := range deployment.Spec.Template.Spec.Containers[ci].Args {
-			if !strings.HasPrefix(arg, prefix) {
-				continue
-			}
-			watched := splitCSV(strings.TrimPrefix(arg, prefix))
-			for _, watchedNamespace := range watched {
-				if watchedNamespace == namespace {
-					return
-				}
-			}
-			watched = append(watched, namespace)
-			deployment.Spec.Template.Spec.Containers[ci].Args[ai] = prefix + strings.Join(watched, ",")
-			return
-		}
-	}
-}
-
-func removeTraefikNamespaceWatch(deployment *appsv1.Deployment, prefix, namespace string) bool {
-	if deployment == nil || strings.TrimSpace(namespace) == "" {
-		return false
-	}
-	changed := false
-	for ci := range deployment.Spec.Template.Spec.Containers {
-		for ai, arg := range deployment.Spec.Template.Spec.Containers[ci].Args {
-			if !strings.HasPrefix(arg, prefix) {
-				continue
-			}
-			watched := splitCSV(strings.TrimPrefix(arg, prefix))
-			kept := make([]string, 0, len(watched))
-			for _, watchedNamespace := range watched {
-				if watchedNamespace == namespace {
-					changed = true
-					continue
-				}
-				kept = append(kept, watchedNamespace)
-			}
-			if changed {
-				deployment.Spec.Template.Spec.Containers[ci].Args[ai] = prefix + strings.Join(kept, ",")
-			}
-			return changed
-		}
-	}
-	return false
-}
-
-func traefikNamespaceWatchArg(deployment *appsv1.Deployment) (int, int, string, bool) {
-	if deployment == nil {
-		return -1, -1, "", false
-	}
-	containerIndex := -1
-	argIndex := -1
-	argValue := ""
-	for ci, container := range deployment.Spec.Template.Spec.Containers {
-		for ai, arg := range container.Args {
-			if strings.HasPrefix(arg, traefikNamespaceWatchArgPrefix) {
-				containerIndex = ci
-				argIndex = ai
-				argValue = arg
-				break
-			}
-		}
-		if containerIndex >= 0 {
-			break
-		}
-	}
-	if containerIndex < 0 {
-		return -1, -1, "", false
-	}
-	return containerIndex, argIndex, argValue, true
-}
-
-func splitCSV(raw string) []string {
-	parts := strings.Split(raw, ",")
-	out := make([]string, 0, len(parts))
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part != "" {
-			out = append(out, part)
-		}
-	}
-	return out
 }
 
 func desiredDeployment(name, namespace, image string, port, replicas int32, labels map[string]string) *appsv1.Deployment {
@@ -1411,11 +655,6 @@ func desiredService(name, namespace string, port int32, labels map[string]string
 		Ports:    []corev1.ServicePort{{Name: "http", Port: 80, TargetPort: intstrFromInt32(port)}},
 		Type:     corev1.ServiceTypeClusterIP,
 	}}
-}
-
-func intstrPtr(port int) *intstr.IntOrString {
-	v := intstr.FromInt(port)
-	return &v
 }
 
 func upsertDeployment(ctx context.Context, client kubernetes.Interface, dep *appsv1.Deployment) (*appsv1.Deployment, error) {
@@ -1732,9 +971,35 @@ func (s *DeploymentService) ReconcileTeamNamespaceNetworkPolicies(ctx context.Co
 		return
 	}
 	for _, ns := range list.Items {
-		if err := ensureDefaultDenyNetworkPolicy(ctx, s.k8sClients.Clientset, ns.Name, ingress...); err != nil {
+		if err := k8sprovision.EnsureDefaultDenyNetworkPolicy(ctx, s.k8sClients.Clientset, ns.Name, ingress...); err != nil {
 			log.Printf("reconcile team namespace network policies: namespace %q: %v", ns.Name, err)
 		}
 	}
 	s.purgeExpiredRegistryPushTransfers(ctx)
+}
+
+func (cfg teamTraefikWatchConfig) provisioningConfig() k8sprovision.TraefikWatchConfig {
+	return k8sprovision.TraefikWatchConfig{Mode: cfg.mode, Namespace: cfg.namespace, Deployment: cfg.deployment, ServiceAccount: cfg.serviceAccount}
+}
+
+func (s *DeploymentService) ensureManagedNamespace(ctx context.Context, namespace string, labels map[string]string, opts managedNamespaceOptions) error {
+	if s == nil || s.k8sClients == nil {
+		return nil
+	}
+	provisioner := k8sprovision.Provisioner{Client: s.k8sClients.Clientset, EnsureRegistryPullSecret: s.ensureNamespaceRegistryPullSecretAfterBinding}
+	return provisioner.EnsureNamespace(ctx, namespace, labels, opts.ingressFromNamespaces...)
+}
+
+func (s *DeploymentService) ensureTeamTraefikWatch(ctx context.Context, namespace string, cfg teamTraefikWatchConfig) error {
+	if s == nil || s.k8sClients == nil {
+		return nil
+	}
+	return k8sprovision.EnsureTeamTraefikWatch(ctx, s.k8sClients.Clientset, namespace, cfg.provisioningConfig())
+}
+
+func (s *DeploymentService) ensureNamespaceUserWorkloadRBAC(ctx context.Context, namespace, userID string) error {
+	if s == nil || s.k8sClients == nil {
+		return nil
+	}
+	return k8sprovision.EnsureUserWorkloadRBAC(ctx, s.k8sClients.Clientset, namespace, userID)
 }
