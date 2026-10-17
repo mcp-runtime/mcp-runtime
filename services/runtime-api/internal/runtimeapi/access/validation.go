@@ -4,19 +4,18 @@ import (
 	"fmt"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	mcpaccess "mcp-runtime/pkg/access"
+	"mcp-runtime/pkg/access/specvalidation"
 )
 
 func ValidateTeamIDValue(name, value string) error {
 	value = strings.TrimSpace(value)
-	if value == "" {
-		return nil
-	}
-	if strings.ContainsAny(value, " \t\r\n") {
+	if issue := specvalidation.TeamIDField(field.NewPath(name), value); issue != nil {
+		if issue.Type == field.ErrorTypeTooLong {
+			return fmt.Errorf("%s must be at most 128 characters", name)
+		}
 		return fmt.Errorf("%s must not contain whitespace", name)
-	}
-	if len(value) > 128 {
-		return fmt.Errorf("%s must be at most 128 characters", name)
 	}
 	return nil
 }

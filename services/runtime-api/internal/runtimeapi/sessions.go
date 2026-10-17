@@ -9,25 +9,13 @@ import (
 	"net/http"
 	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtimeaccess "mcp-runtime-api/internal/runtimeapi/access"
 	mcpaccess "mcp-runtime/pkg/access"
 	"mcp-runtime/pkg/k8sclient"
 	"mcp-runtime/pkg/serviceutil"
 )
 
-type accessSessionRequest struct {
-	Name           string                    `json:"name"`
-	Namespace      string                    `json:"namespace"`
-	ServerRef      mcpaccess.ServerReference `json:"serverRef"`
-	Subject        mcpaccess.SubjectRef      `json:"subject"`
-	ConsentedTrust mcpaccess.TrustLevel      `json:"consentedTrust"`
-	ExpiresAt      *metav1.Time              `json:"expiresAt"`
-	Revoked        *bool                     `json:"revoked,omitempty"`
-	PolicyVersion  string                    `json:"policyVersion"`
-	GrantName      string                    `json:"grantName,omitempty"`
-	GrantNamespace string                    `json:"grantNamespace,omitempty"`
-}
+type accessSessionRequest = mcpaccess.SessionApplyRequest
 
 type accessSessionPatchRequest struct {
 	Revoked *bool `json:"revoked,omitempty"`
