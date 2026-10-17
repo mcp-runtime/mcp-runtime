@@ -358,6 +358,10 @@ the adapter.
 To authenticate adapters with session-bound client certificates, install
 cert-manager and an internal `ClusterIssuer` backed by your company CA, Vault,
 ADCS, or another workload PKI. Do not use Let's Encrypt for client certificates.
+Production requires a Ready issuer with an independent workload signing root;
+setup rejects the shared bundled registry CA and aliased/copied signing keys.
+The PKI owner manages encrypted off-host recovery, overlapping trust and leaf
+renewal: see [CA lifecycle](cli-reference.md#bundled-workload-ca-lifecycle).
 
 Local `setup --test-mode` installs cert-manager and provisions the bundled
 `mcp-runtime-ca` ClusterIssuer automatically so this flow can be validated on
@@ -464,7 +468,7 @@ Then, in this order, with the production kubeconfig passed explicitly:
 3. Add `--controllers=*,-certificaterequests-approver` to the `cert-manager`
    Deployment arguments. Keep a copy of the Deployment YAML first.
 4. Verify a gateway certificate and a session certificate still issue, and that
-   legitimate `CertificateRequest` is left pending. Negative requests must
+   no legitimate `CertificateRequest` is left pending. Negative requests must
    remain denied or unapproved with no issued certificate.
 5. Only then set `MCP_WORKLOAD_ISSUER_APPROVAL_ACK=true` for setup and enable
    `MCP_ADAPTER_CERTIFICATES=true` on the operator.

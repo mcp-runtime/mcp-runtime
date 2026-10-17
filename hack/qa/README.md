@@ -6,7 +6,7 @@ Deterministic live-cluster checks for the Kind contributor context
 | Script | Covers |
 |--------|--------|
 | `security-regression.sh` | Suites A/E/F/G/I (auth, headers, login, proxy, log secret scan) |
-| `perf-regression.sh` | Scenarios S1–S3 with local baseline compare |
+| `perf-regression.sh` | S1–S3 latency/throughput, S5 gateway/direct overhead, S6 bounded concurrency plateau and S7 trace-correlated audit lag; explicit matching baselines |
 | `validate-authz-matrix.sh` | Explicit per-service loopback URLs and a real non-admin credential; Kind only |
 | `multitenancy-test.sh` | CLI/API multi-team demo on loopback or disposable `.e2e.mcpruntime.org` targets |
 | `image-cache/` | Content-hash image reuse consumed by QA E2E |
@@ -27,12 +27,20 @@ export KUBECONFIG="$HOME/.kube/test-mcp-runtime-config"
 # PERF_RECORD_BASELINE=1 SCENARIOS=S3 bash hack/qa/perf-regression.sh
 kubectl -n traefik port-forward svc/traefik 18080:8000 >/tmp/pf-traefik.log 2>&1 &
 bash hack/qa/security-regression.sh
-SCENARIOS=S3 bash hack/qa/perf-regression.sh
+PERF_API_KEY="$KIND_ADMIN_API_KEY" SCENARIOS=S3 bash hack/qa/perf-regression.sh
 bash hack/qa/k8s-hardening-check.sh
 ```
 
 Posture inventory is read-only and may target an explicitly chosen kubeconfig. It checks Deployments, StatefulSets and DaemonSets, including init containers. It does not prove NetworkPolicy enforcement; use E2E traffic tests.
 
 The old S4 annotation timer was removed: waiting on an already-Ready server did not measure reconciliation. Use the operator integration and deployment E2E for reconciliation coverage.
+
+Performance inputs, fixed request/session bounds, microbenchmark/benchstat commands,
+and remaining live acceptance are documented in
+[the performance reference](../../.codex/skills/cluster-ops/references/performance.md).
+`perf_suite.py` is the script's shared implementation; its live commands also
+verify the explicit Kind context and actual nodes. S3/S7 require the existing
+admin analytics key in `PERF_API_KEY`; credentials and tool arguments are excluded
+from recorded environment files. No live measurements run as part of offline tests.
 
 Demo passwords are random and stored with mode 0600 in the private profile directory as `demo-credentials-<run-id>.json`. Reusing the run/profile retains them. Exclude this directory from shared artifacts. Demo accounts/teams remain on disposable infrastructure for inspection; cleanup selects only its own servers and sessions. See [the demo runbook](../../docs/reference-deployment.md#multitenancy-test) for configuration.
