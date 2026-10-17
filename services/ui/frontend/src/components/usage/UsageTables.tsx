@@ -84,7 +84,7 @@ export function ToolUsageTable({ rows }: { rows: ToolUsage[] }) {
 
 export function RecentActivityTable({ rows }: { rows: RecentActivity[] }) {
   return (
-    <div className="table-scroll" data-testid="recent-activity-scroll" tabIndex={0}>
+    <div className="table-region" data-testid="recent-activity-scroll" tabIndex={0} role="region" aria-label="Recent gateway activity">
       <table className="data-table" data-testid="recent-activity-table">
         <caption className="visually-hidden">Recent gateway activity in your accessible namespaces.</caption>
         <thead><tr><th scope="col">Time</th><th scope="col">Server</th><th scope="col">Tool</th><th scope="col">Decision</th></tr></thead>

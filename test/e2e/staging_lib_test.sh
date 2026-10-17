@@ -480,6 +480,33 @@ expect_ok "deactivation verifies saved token, existing session and idempotent CL
 expect_fail "deactivation cannot pass on unrelated tool denial" deactivation_acceptance_case wrong-denial
 expect_fail "deactivation cannot pass while saved token remains valid" deactivation_acceptance_case live-token
 
+expect_ok "workspace browser private fixture boundary" python3 "${SCRIPT_DIR}/workspace_browser_fixture_test.py"
+workspace_browser_transport_case() (
+  ROOT_DIR="${SCRIPT_DIR}/../.." WORK_DIR="${TMP}/workspace-browser" STAGING_ARTIFACT_DIR="${TMP}/browser-artifacts"
+  STAGING_MT_CONFIG_DIR="${TMP}/browser-config" STAGING_MT_RUN_ID=test
+  PLATFORM_URL=https://platform.e2e.mcpruntime.org E2E_RUN_MULTITENANCY=1
+  MCP_PLATFORM_ADMIN_EMAIL=admin@example.test MCP_PLATFORM_ADMIN_PASSWORD=private-admin-password
+  WORKSPACE_BROWSER_CANDIDATE='actual-checkout-sha'
+  export STAGING_MT_CONFIG_DIR STAGING_MT_RUN_ID PLATFORM_URL MCP_PLATFORM_ADMIN_EMAIL MCP_PLATFORM_ADMIN_PASSWORD WORKSPACE_BROWSER_CANDIDATE
+  mkdir -p "${STAGING_MT_CONFIG_DIR}"
+  printf '{"acme":"private-owner-password","globex":"private-member-password"}' >"${STAGING_MT_CONFIG_DIR}/demo-credentials-test.json"
+  docker() {
+    [[ " $* " == *' --interactive '* && "$*" == *'--cap-drop ALL'* && "$*" == *'dst=/repo,readonly'* && "$*" != *'private-'* ]] || return 1
+    python3 -c 'import json, sys; value=json.load(sys.stdin); assert value["roles"]["owner"]["password"] == "private-owner-password"; assert value["roles"]["member"]["password"] == "private-member-password"; assert value["roles"]["admin"]["password"] == "private-admin-password"'
+  }
+  staging_check_workspace_browser
+)
+expect_ok "workspace browser passes private JSON on stdin with no credential arguments" workspace_browser_transport_case
+workspace_browser_skip_case() (
+  E2E_RUN_MULTITENANCY=false
+  STAGING_ARTIFACT_DIR="${TMP}/browser-skip"
+  mkdir -p "${STAGING_ARTIFACT_DIR}/stages"
+  local status=0
+  staging_check_workspace_browser || status=$?
+  [[ "${status}" == "${STAGING_SKIP_RC}" ]]
+)
+expect_ok "workspace browser explicitly skips absent role fixtures" workspace_browser_skip_case
+
 if [[ "${FAILURES}" -ne 0 ]]; then
   echo "${FAILURES} staging lib test(s) failed" >&2
   exit 1
