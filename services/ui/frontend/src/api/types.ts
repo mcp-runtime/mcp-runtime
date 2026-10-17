@@ -90,6 +90,16 @@ export type ServerObservabilityMetrics = {
   slowest_tool?: string;
 };
 
+export type ServerRuntimeStatus = {
+  transport?: string;
+  connectionState?: string;
+  authSource?: string;
+  lastProbeTime?: string;
+  lastError?: { reason: string; message: string; observedAt: string };
+  lastSession?: { id: string; namespace?: string; usedAt: string; toolName?: string };
+  lastSessionState?: "observed" | "none" | "unavailable" | string;
+};
+
 export type ServerSummary = {
   name: string;
   namespace: string;
@@ -119,6 +129,7 @@ export type ServerSummary = {
   tasks?: InventoryItem[];
   liveInventory?: LiveInventory | null;
   liveInventoryError?: string;
+  runtimeStatus?: ServerRuntimeStatus;
   // The full MCP client config for this server ({"mcpServers": {...}}), only
   // present when the runtime resolved a public connect endpoint for it.
   access_json?: Record<string, unknown>;
