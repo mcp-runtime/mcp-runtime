@@ -106,6 +106,12 @@ func analyticsServiceManifests(postgresManifest string) []string {
 	return manifests
 }
 
+// analyticsMessagingManifests applies the broker policy before Kafka is
+// created, so the broker has no unfiltered startup window.
+func analyticsMessagingManifests(kafkaManifest string) []string {
+	return []string{"k8s/05-kafka-networkpolicy.yaml", kafkaManifest}
+}
+
 // pruneStalePlatformPodsClientGo removes Failed/Evicted/ContainerStatusUnknown
 // pods left behind by eviction churn so they do not obscure real platform
 // state during recovery. It is best-effort: a failure is reported but never
@@ -210,10 +216,7 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 	}
 
 	core.Info("Applying analytics storage and messaging components")
-	for _, manifest := range []string{
-		clickhouseManifest,
-		kafkaManifest,
-	} {
+	for _, manifest := range append([]string{clickhouseManifest}, analyticsMessagingManifests(kafkaManifest)...) {
 		if err := applyRenderedManifestClientGo(manifest, images, imagePullSecretName, platformMode); err != nil {
 			return err
 		}
@@ -361,10 +364,7 @@ func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap
 	}
 
 	core.Info("Applying analytics storage and messaging components")
-	for _, manifest := range []string{
-		clickhouseManifest,
-		kafkaManifest,
-	} {
+	for _, manifest := range append([]string{clickhouseManifest}, analyticsMessagingManifests(kafkaManifest)...) {
 		if err := applyRenderedManifest(kubectl, manifest, images, imagePullSecretName, platformMode); err != nil {
 			return err
 		}

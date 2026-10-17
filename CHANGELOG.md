@@ -34,6 +34,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 - `server list` help now explains visible-server defaults, admin scope, team slug filtering, and catalog/personal namespace selectors. A team lookup without a namespace now fails instead of silently listing all visible servers ([#612](https://github.com/mcp-runtime/mcp-runtime/issues/612)).
 
+### Security
+
+- Restrict bundled Kafka ingress to ingest, processor, topic initialization and broker peers. Unscoped platform updates apply this release-declared policy to existing installs as well as fresh setup ([#775](https://github.com/mcp-runtime/mcp-runtime/pull/775), [#110](https://github.com/mcp-runtime/mcp-runtime/issues/110)).
+
 ## [0.10.0] - 2026-10-15
 
 This breaking release moves runtime sessions from Kubernetes policy documents to
