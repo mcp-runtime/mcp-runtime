@@ -67,6 +67,9 @@ func (s *RuntimeServer) HandleRuntimeGrafana(w http.ResponseWriter, r *http.Requ
 		writeAPIError(w, http.StatusNotFound, "not_found")
 		return
 	}
+	if p.Role != roleAdmin && s.handleTenantGrafanaAuxiliary(w, r, suffix) {
+		return
+	}
 	var body io.Reader
 	if p.Role != roleAdmin {
 		if suffix == "/api/ds/query" && r.Method == http.MethodPost {
@@ -168,6 +171,56 @@ func tenantGrafanaReadPath(suffix string) bool {
 	// Grafana's immutable frontend files only; never /api/plugins/*/resources,
 	// datasource proxy, snapshots, rendering, Live, or arbitrary plugin paths.
 	return strings.HasPrefix(suffix, "/public/") && path.Clean(suffix) == suffix && !strings.ContainsAny(suffix, `\%`)
+}
+
+// Grafana 10.2 requests these auxiliary feeds while booting dashboards and
+// Explore. They deliberately return empty platform-owned metadata rather than
+// forwarding to global alert/metric/correlation stores. Unknown resource paths
+// remain denied. Exemplars are queries, so their expression is still live-
+// authorized even though bounded tenant Explore does not expose trace samples.
+func (s *RuntimeServer) handleTenantGrafanaAuxiliary(w http.ResponseWriter, r *http.Request, suffix string) bool {
+	if suffix == "/api/datasources/uid/prometheus/resources/api/v1/query_exemplars" && (r.Method == http.MethodGet || r.Method == http.MethodPost) {
+		r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+		if err := r.ParseForm(); err != nil {
+			writeAPIError(w, http.StatusBadRequest, "invalid_grafana_query")
+			return true
+		}
+		expr := r.Form.Get("query")
+		if expr == "test" {
+			// Grafana's Prometheus client probes exemplar support with this
+			// literal. It is metadata detection, never a backend data query.
+			writeJSON(w, http.StatusOK, map[string]any{"status": "success", "data": []any{}})
+			return true
+		}
+		payload := grafanaQueryRequest{From: strconv.FormatInt(time.Now().Add(-time.Hour).UnixMilli(), 10), To: strconv.FormatInt(time.Now().UnixMilli(), 10), Queries: []grafanaQuery{{RefID: "A", Datasource: grafanaDataSource{UID: "prometheus", Type: "prometheus"}, Expr: expr, Range: true}}}
+		if err := s.authorizeGrafanaQueries(r, &payload); err != nil {
+			writeObservabilityError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"status": "success", "data": []any{}})
+		return true
+	}
+	if r.Method == http.MethodGet {
+		switch suffix {
+		case "/api/prometheus/grafana/api/v1/rules", "/api/datasources/uid/prometheus/resources/api/v1/rules":
+			writeJSON(w, http.StatusOK, map[string]any{"status": "success", "data": map[string]any{"groups": []any{}}})
+			return true
+		case "/api/datasources/correlations":
+			writeJSON(w, http.StatusOK, map[string]any{"correlations": []any{}, "totalCount": 0, "page": 1, "limit": 100})
+			return true
+		case "/api/datasources/uid/prometheus/resources/api/v1/metadata":
+			writeJSON(w, http.StatusOK, map[string]any{"status": "success", "data": map[string]any{}})
+			return true
+		case "/api/datasources/uid/prometheus/resources/api/v1/label/__name__/values":
+			writeJSON(w, http.StatusOK, map[string]any{"status": "success", "data": []any{}})
+			return true
+		}
+	}
+	if suffix == "/api/datasources/uid/prometheus/resources/api/v1/labels" && (r.Method == http.MethodGet || r.Method == http.MethodPost) {
+		writeJSON(w, http.StatusOK, map[string]any{"status": "success", "data": []any{}})
+		return true
+	}
+	return false
 }
 
 func (s *RuntimeServer) authorizeGrafanaQueries(r *http.Request, payload *grafanaQueryRequest) error {

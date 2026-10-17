@@ -16,6 +16,7 @@ import (
 func grafanaSessionProxy(runtimeBase *url.URL, store *uiSessionStore, prefix string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Frame-Options", "DENY")
 		sess, ok := store.sessionFromRequest(r)
 		if !ok {
 			serviceutil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
@@ -69,6 +70,19 @@ func grafanaSessionProxy(runtimeBase *url.URL, store *uiSessionStore, prefix str
 		if err != nil {
 			serviceutil.WriteJSON(w, http.StatusBadGateway, map[string]string{"error": "upstream_error"})
 			return
+		}
+		if strings.HasPrefix(strings.ToLower(resp.Header.Get("Content-Type")), "text/html") {
+			// Grafana's bootstrap uses its own per-response script nonce. Two
+			// CSP headers are enforced cumulatively, so retaining the console's
+			// policy would block that bootstrap even with the correct nonce.
+			// Delegate only this trusted Grafana response, never the console.
+			policy := strings.TrimSpace(resp.Header.Get("Content-Security-Policy"))
+			if policy == "" {
+				drainAndClose(resp.Body)
+				serviceutil.WriteJSON(w, http.StatusBadGateway, map[string]string{"error": "grafana_security_policy_missing"})
+				return
+			}
+			w.Header().Del("Content-Security-Policy")
 		}
 		copySessionProxyResponse(w, resp)
 	})

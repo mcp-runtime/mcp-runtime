@@ -197,6 +197,8 @@ cookie through this path, so platform logout also removes Grafana access.
 Writes require the configured exact public Origin; `UI_PUBLIC_ORIGIN` defaults
 to `http://localhost:18080` locally and setup derives it from the public host and
 TLS options. Custom frontends must set their actual origin, including port.
+Grafana HTML uses its native response-specific nonce Content Security Policy;
+the console keeps its separate policy. A missing Grafana policy fails closed.
 
 Tenant dashboard and Explore requests support only the four fixed Prometheus
 queries supplied by runtime-api for currently observable servers. Unknown or
@@ -205,7 +207,13 @@ requests, Grafana Live, snapshots, rendering, query history, and tenant Loki or
 Tempo queries are rejected. This is deliberately bounded Explore access:
 opening Explore does not grant unrestricted PromQL/LogQL authoring. Tenant
 container logs remain available in the server detail through its fixed Loki
-endpoint; traces and unrestricted observability remain admin-only.
+endpoint; traces and unrestricted observability remain admin-only. The exact
+native alert-rules, correlations, metric metadata, metric-name and label feeds
+return empty platform-owned responses. Exemplars likewise return no samples;
+their expressions require the same authorization, except Grafana's literal
+`test` capability probe, which never queries a backend. No tenant auxiliary
+feed reads a global store. Native query-history and Live calls remain denied,
+so Explore does not save query history or open a Live connection.
 
 Grafana basic authentication remains enabled only for pod-local diagnostics and
 credential recovery (`mcp-runtime ops grafana check` and

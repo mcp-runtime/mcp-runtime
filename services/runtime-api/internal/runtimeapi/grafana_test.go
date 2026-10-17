@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -170,5 +171,72 @@ func TestGrafanaRechecksOwnershipAndAdminAccess(t *testing.T) {
 	server.HandleRuntimeGrafana(w, r)
 	if w.Code != 200 {
 		t.Fatalf("admin access: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestTenantGrafanaAuxiliaryFeedsNeverQueryGlobalStores(t *testing.T) {
+	t.Setenv("GRAFANA_SCOPED_USER_ACCESS", "true")
+	upstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Error("tenant auxiliary feed reached global Grafana data") }))
+	defer upstream.Close()
+	t.Setenv("GRAFANA_UPSTREAM", upstream.URL)
+	target := ownedTestMCPServer("demo", "mcp-servers", "alice")
+	server := newRuntimeServerWithMCPServers(t, target)
+	for _, suffix := range []string{
+		"/api/prometheus/grafana/api/v1/rules", "/api/datasources/uid/prometheus/resources/api/v1/rules",
+		"/api/datasources/correlations", "/api/datasources/uid/prometheus/resources/api/v1/metadata",
+		"/api/datasources/uid/prometheus/resources/api/v1/label/__name__/values", "/api/datasources/uid/prometheus/resources/api/v1/labels",
+	} {
+		r := httptest.NewRequest("GET", "/api/v1/runtime/observability/grafana"+suffix+"?namespace=foreign&query=up", nil)
+		r = r.WithContext(withPrincipal(r.Context(), principal{Role: roleUser, Subject: "alice"}))
+		w := httptest.NewRecorder()
+		server.HandleRuntimeGrafana(w, r)
+		if w.Code != 200 || strings.Contains(w.Body.String(), "foreign") {
+			t.Errorf("empty metadata feed %s: %d %s", suffix, w.Code, w.Body.String())
+		}
+	}
+	for _, allowed := range []bool{false, true} {
+		expr := scopedPrometheusQueries(target.Namespace, target.Name, string(target.UID))[0].Query
+		if !allowed {
+			expr = strings.ReplaceAll(expr, "demo", "foreign")
+		}
+		for _, method := range []string{"GET", "POST"} {
+			values := url.Values{"query": {expr}}
+			path := "/api/v1/runtime/observability/grafana/api/datasources/uid/prometheus/resources/api/v1/query_exemplars"
+			var r *http.Request
+			if method == "GET" {
+				r = httptest.NewRequest(method, path+"?"+values.Encode(), nil)
+			} else {
+				r = httptest.NewRequest(method, path, strings.NewReader(values.Encode()))
+				r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			}
+			r = r.WithContext(withPrincipal(r.Context(), principal{Role: roleUser, Subject: "alice", AllowedNamespaces: []string{"mcp-servers"}}))
+			w := httptest.NewRecorder()
+			server.HandleRuntimeGrafana(w, r)
+			want := 403
+			if allowed {
+				want = 200
+			}
+			if w.Code != want {
+				t.Fatalf("exemplar method=%s allowed=%v: %d %s", method, allowed, w.Code, w.Body.String())
+			}
+		}
+	}
+	// Native Grafana checks exemplar support with a literal metadata probe.
+	// It returns no data and must never reach the shared datasource.
+	for _, method := range []string{"GET", "POST"} {
+		path := "/api/v1/runtime/observability/grafana/api/datasources/uid/prometheus/resources/api/v1/query_exemplars"
+		var r *http.Request
+		if method == "GET" {
+			r = httptest.NewRequest(method, path+"?query=test", nil)
+		} else {
+			r = httptest.NewRequest(method, path, strings.NewReader("query=test"))
+			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		}
+		r = r.WithContext(withPrincipal(r.Context(), principal{Role: roleUser, Subject: "alice"}))
+		w := httptest.NewRecorder()
+		server.HandleRuntimeGrafana(w, r)
+		if w.Code != http.StatusOK || strings.TrimSpace(w.Body.String()) != "{\"data\":[],\"status\":\"success\"}" {
+			t.Fatalf("exemplar capability probe %s: %d %s", method, w.Code, w.Body.String())
+		}
 	}
 }

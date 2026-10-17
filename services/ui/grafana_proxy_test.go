@@ -83,3 +83,31 @@ func TestGrafanaPlatformSessionAndOriginBoundary(t *testing.T) {
 		t.Fatalf("logged-out platform session retained Grafana access: %d", w.Code)
 	}
 }
+
+func TestGrafanaUsesItsNoncePolicyWithoutWeakeningConsolePolicy(t *testing.T) {
+	for _, policy := range []string{"script-src 'nonce-grafana-response' 'strict-dynamic'; object-src 'none'", ""} {
+		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			if policy != "" {
+				w.Header().Set("Content-Security-Policy", policy)
+			}
+			fmt.Fprint(w, `<html><script nonce="grafana-response">window.fixture=true</script></html>`)
+		}))
+		base, _ := url.Parse(upstream.URL)
+		store := newUISessionStore(time.Now)
+		sess := createTestSession(t, store, uiSession{UpstreamAuthHeader: "Bearer platform-session"})
+		proxy := securityHeadersMiddleware(grafanaSessionProxy(base, store, "/grafana"))
+		r := httptest.NewRequest("GET", "/grafana/", nil)
+		r.AddCookie(&http.Cookie{Name: sessionCookieName, Value: sess.ID})
+		w := httptest.NewRecorder()
+		proxy.ServeHTTP(w, r)
+		upstream.Close()
+		if policy == "" {
+			if w.Code != 502 || strings.Contains(w.Body.String(), "window.fixture") {
+				t.Fatalf("HTML without upstream CSP escaped: %d %s", w.Code, w.Body.String())
+			}
+		} else if w.Code != 200 || len(w.Header().Values("Content-Security-Policy")) != 1 || w.Header().Get("Content-Security-Policy") != policy || w.Header().Get("X-Frame-Options") != "DENY" {
+			t.Fatalf("Grafana received cumulative incompatible CSPs: %d %v", w.Code, w.Header().Values("Content-Security-Policy"))
+		}
+	}
+}
