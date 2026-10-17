@@ -4142,8 +4142,8 @@ assert_file_contains "Status: LOGIN REQUIRED" "${WORKDIR}/cli-status-no-login.tx
 
 echo "[cli] checking bootstrap, cluster, registry, and ops commands"
 ./bin/mcp-runtime bootstrap --provider generic
-./bin/mcp-runtime cluster init
-./bin/mcp-runtime cluster config --ingress none
+./bin/mcp-runtime cluster init --kubeconfig "${KUBECONFIG_FILE}"
+./bin/mcp-runtime cluster config --ingress none --kubeconfig "${KUBECONFIG_FILE}"
 ./bin/mcp-runtime cluster provision \
   --provider kind \
   --name "${CLUSTER_NAME}-dry-run" \
