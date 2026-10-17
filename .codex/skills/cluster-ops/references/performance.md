@@ -1,5 +1,14 @@
 # Performance regression QA
 
+For sizing reports, use `E2E_CAPTURE_RESOURCES=1` with an explicit named Kind
+target and a fresh supported test-mode setup. Resource history uses an exact
+projected Prometheus identity and verified kubelet Summary API trust. Inspect
+`resource_collection_success`, same-window kubelet comparisons, collection wall
+time and per-PVC missing coverage in `grafana.json`. Missing driver statistics
+and local `du` fallback remain separate; PVC capacity is never consumption.
+Refresh setup for new nodes or trust changes. See
+`docs/platform-services.md#resource-history-for-sizing`.
+
 Use the maintained Kind-only script. Select an explicit contributor kubeconfig;
 the harness checks both context and actual node provider IDs.
 
@@ -35,6 +44,15 @@ replace a baseline to make a result green. Missing cluster/baseline access is
 blocked coverage unless baseline creation was the requested task.
 
 Gateway per-tool metrics distinguish allowed/denied calls and HTTP status. Use `mcp_gateway_tool_call_duration_seconds` for tool latency; configured names are bounded to 128 and unknown/overflow names use `__other__`. A sampled observation can link to Tempo via an exemplar. HTTP 200 does not prove a successful MCP tool result; inspect the server execution span for `isError` failures.
+
+Upstream capacity rejects before dispatch with HTTP 429 / `upstream_backpressure`;
+an open circuit returns HTTP 503 / `upstream_unavailable`. Policy decision counters
+retain the authorization result for these operational failures. GET session streams
+and upgrades have a separate capacity budget; POST SSE responses retain an active
+RPC slot. Actual SSE responses have no unary body deadline. A stalled unary body
+can time out after HTTP 200 headers, so check the audit `upstream_timeout` reason
+and partial-response failure rather than looking only for HTTP 504. See the
+gateway upstream bounds in `docs/platform-services.md`.
 
 ## Policy lookup microbenchmarks
 
@@ -103,14 +121,3 @@ evaluator comparison, overlay only `pkg/policy/evaluator.go` from `554181fa` whi
 keeping the current benchmark/compilation fixtures, then run the same
 `BenchmarkAuthorizeScaling/indexed/` cases. The old evaluator ignores the private
 indexes. Never infer performance acceptance from a single noisy sample.
-
-## Upstream capacity and timeouts
-
-Upstream capacity rejects before dispatch with HTTP 429 / `upstream_backpressure`;
-an open circuit returns HTTP 503 / `upstream_unavailable`. Policy decision counters
-retain the authorization result for these operational failures. GET session streams
-and upgrades have a separate capacity budget; POST SSE responses retain an active
-RPC slot. Actual SSE responses have no unary body deadline. A stalled unary body
-can time out after HTTP 200 headers, so check the audit `upstream_timeout` reason
-and partial-response failure rather than looking only for HTTP 504. See the
-gateway upstream bounds in `docs/platform-services.md`.

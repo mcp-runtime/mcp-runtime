@@ -38,6 +38,8 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/adapter-certificates.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/staging-grant-monitor.sh"
 # shellcheck source=staging-identity-diagnostics.sh
 source "$(dirname "${BASH_SOURCE[0]}")/staging-identity-diagnostics.sh"
+# shellcheck source=staging-workspace-browser.sh
+source "$(dirname "${BASH_SOURCE[0]}")/staging-workspace-browser.sh"
 
 staging_log() { printf '[%s] %s\n' "${STAGING_LOG_PREFIX}" "$*"; }
 staging_warn() { printf '[%s] WARNING: %s\n' "${STAGING_LOG_PREFIX}" "$*" >&2; }
@@ -2092,5 +2094,6 @@ staging_run_platform_stages() {
   staging_run_stage grant-monitor soft "monitor/enforce CLI mode switching, identity denial, or trace-correlated would-deny audit failed" staging_check_grant_monitor
   staging_run_stage analytics soft "events did not reach the analytics API/ClickHouse (ingest -> kafka -> processor path)" staging_check_analytics
   staging_run_stage registry-route-after-user-flows soft "a push/deploy/reconcile stage rewrote the registry Ingress rule host (Traefik 404 on the registry host); compare registry Ingress hosts in both registry-route stage logs" staging_check_registry_route
+  staging_run_stage workspace-browser critical "headless Chromium workspace role, navigation, rendered counts, partial failure, mobile layout, or session checks failed; see workspace-browser/" staging_check_workspace_browser
   staging_run_stage account-deactivation soft "account deactivation did not revoke the CLI-created user's saved token and enrolled certificate/session" staging_check_account_deactivation
 }

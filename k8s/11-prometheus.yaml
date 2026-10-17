@@ -39,6 +39,16 @@ data:
     rule_files:
       - /etc/prometheus/rules.yml
     scrape_configs:
+      # Dedicated bound token: this internal handler never accepts a human
+      # platform session/key or arbitrary service account identity.
+      - job_name: mcp-resource-history
+        scrape_interval: 30s
+        scrape_timeout: 10s
+        metrics_path: /internal/observability/resources/metrics
+        authorization:
+          credentials_file: /var/run/secrets/mcp-resource-history/token
+        static_configs:
+          - targets: ["mcp-runtime-api.mcp-platform.svc.cluster.local:8084"]
       - job_name: prometheus
         metrics_path: /prometheus/metrics
         static_configs:
@@ -157,6 +167,8 @@ data:
       - name: mcp-scrape-coverage
         rules:
           - record: mcp:scrape_required_target:info
+            expr: label_replace(vector(1), "job", "mcp-resource-history", "", "")
+          - record: mcp:scrape_required_target:info
             expr: label_replace(vector(1), "job", "mcp-platform-api", "", "")
           - record: mcp:scrape_required_target:info
             expr: label_replace(vector(1), "job", "mcp-runtime-api", "", "")
@@ -196,12 +208,19 @@ data:
             annotations:
               summary: "Required scrape target {{ $labels.job }} is not discovered"
           - alert: MCPRequiredScrapeTargetDown
-            expr: up{job=~"mcp-platform-api|mcp-runtime-api|mcp-analytics-api|mcp-ingest|mcp-processor|clickhouse|prometheus|otel-collector|loki|tempo|promtail"} == 0
+            expr: up{job=~"mcp-resource-history|mcp-platform-api|mcp-runtime-api|mcp-analytics-api|mcp-ingest|mcp-processor|clickhouse|prometheus|otel-collector|loki|tempo|promtail"} == 0
             for: 5m
             labels:
               severity: warning
             annotations:
               summary: "Required scrape target {{ $labels.job }} is down"
+          - alert: MCPResourceHistoryIncomplete
+            expr: mcp_resource_collection_success == 0
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Resource history collection is incomplete; check setup kubelet trust, node UID/IP, RBAC and connectivity"
       - name: mcp-oauth-and-telemetry
         rules:
           # Outcome is a bounded enum; no token, user, or request identifiers.
@@ -296,6 +315,9 @@ spec:
           ports:
             - containerPort: 9090
           volumeMounts:
+            - name: resource-history-token
+              mountPath: /var/run/secrets/mcp-resource-history
+              readOnly: true
             - name: config
               mountPath: /etc/prometheus
             # TSDB path; the image declares it as a VOLUME, which is not
@@ -303,6 +325,14 @@ spec:
             - name: data
               mountPath: /prometheus
       volumes:
+        - name: resource-history-token
+          projected:
+            defaultMode: 0444
+            sources:
+              - serviceAccountToken:
+                  audience: mcp-resource-history
+                  expirationSeconds: 600
+                  path: token
         - name: config
           configMap:
             name: prometheus-config
