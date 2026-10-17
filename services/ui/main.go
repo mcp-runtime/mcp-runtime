@@ -25,6 +25,7 @@ import (
 	"mcp-ui/internal/auth"
 
 	"mcp-runtime/pkg/mcpdefaults"
+	"mcp-runtime/pkg/platformauth"
 	"mcp-runtime/pkg/platformmode"
 	"mcp-runtime/pkg/publishscope"
 	"mcp-runtime/pkg/serviceutil"
@@ -378,32 +379,10 @@ func drainAndClose(body io.ReadCloser) {
 	_ = body.Close()
 }
 
-const loginClientUnknownIP = "unknown"
+const loginClientUnknownIP = platformauth.UnknownRequestIP
 
 func loginClientID(r *http.Request) string {
-	if forwardedFor := strings.TrimSpace(r.Header.Get("x-forwarded-for")); forwardedFor != "" {
-		if client := firstNonEmptyForwardedIP(forwardedFor); client != "" {
-			return client
-		}
-	}
-	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-		if host = strings.TrimSpace(host); host != "" {
-			return host
-		}
-	}
-	if remote := strings.TrimSpace(r.RemoteAddr); remote != "" {
-		return remote
-	}
-	return loginClientUnknownIP
-}
-
-func firstNonEmptyForwardedIP(xff string) string {
-	for _, part := range strings.Split(xff, ",") {
-		if ip := strings.TrimSpace(part); ip != "" {
-			return ip
-		}
-	}
-	return ""
+	return platformauth.RequestIP(r)
 }
 
 func newLoginAttemptTracker(now func() time.Time) *loginAttemptTracker {
