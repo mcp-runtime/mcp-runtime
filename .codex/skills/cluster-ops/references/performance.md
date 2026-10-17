@@ -14,9 +14,9 @@ the harness checks both context and actual node provider IDs.
 
 ```bash
 export KUBECONFIG=/path/to/contributor-kubeconfig
-SCENARIOS=S3 bash hack/qa/perf-regression.sh
+PERF_API_KEY="$KIND_ADMIN_API_KEY" SCENARIOS=S3 bash hack/qa/perf-regression.sh
 # Adapter path, with a running session-bound adapter:
-SCENARIOS=S1,S2,S3 bash hack/qa/perf-regression.sh
+PERF_API_KEY="$KIND_ADMIN_API_KEY" SCENARIOS=S1,S2,S3 bash hack/qa/perf-regression.sh
 ```
 
 S1 measures sequential tool latency, S2 concurrent tool traffic, and S3 analytics
@@ -30,6 +30,165 @@ Compare on comparable CPU, memory, node/image configuration and traffic. Record
 sample count, concurrency, warmup, p50/p95/p99, error count and the configured
 `PERF_REGRESSION_PCT` threshold. Use `PERF_OUT_DIR` and `PERF_BASELINE_DIR` to
 retain candidate/baseline evidence without replacing reviewed baselines.
+
+## Defined benchmark suite
+
+Existing CI's **Benchmarks** job now records three short samples from root
+policy/bearer/certificate/operator benchmarks and gateway session/audit emission
+benchmarks. Raw text is retained as `microbenchmark-samples`; CI smoke samples
+do not establish statistically significant performance changes. For a repeated
+comparison on the same host, Go version, GOMAXPROCS and fixture revision:
+
+```bash
+export KUBECONFIG="$(mktemp)" GOMAXPROCS=4 GOFLAGS=-p=4
+hack/ci/go-test.sh . ./pkg/policy ./pkg/platformauth ./pkg/certauth \
+  -run '^$' -bench 'Benchmark(Authorize|SessionLookup|VerifyPlatformBearer|SessionCertificateChain|SessionMTLSTransport)' \
+  -benchmem -count=10 > before-root.txt
+hack/ci/go-test.sh services/mcp-gateway ./... -run '^$' \
+  -bench 'Benchmark(SessionCertificateAuthorization|EmitAnalyticsEvent)' \
+  -benchmem -count=10 > before-gateway.txt
+# Repeat the identical commands after the change, writing after-*.txt.
+go run golang.org/x/perf/cmd/benchstat@v0.0.0-20261009192801-be2c69fb417e \
+  before-root.txt after-root.txt
+```
+
+Benchstat is the Go project's tool; the pinned module/version and ten-sample
+guidance were checked against its
+[official documentation](https://pkg.go.dev/golang.org/x/perf/cmd/benchstat)
+and [module metadata](https://proxy.golang.org/golang.org/x/perf/@v/v0.0.0-20261009192801-be2c69fb417e.info)
+on 2026-10-17. `go run` leaves the installed host tool version unchanged. Compare
+matching names within each package, with raw results and confidence intervals;
+do not compare a full-handshake benchmark directly to a different request path
+and present that ratio as a gateway improvement.
+
+`BenchmarkAuthorizeMatchingRules` holds the principal constant while increasing
+matching grants (1/10/100) and exact tool rules (1/32/128), testing both allow and
+last-grant explicit deny. Existing scaling benchmarks cover indexed versus
+linear distinct-subject and embedded-session lookup. `BenchmarkVerifyPlatformBearer`
+verifies real signed HS256 tokens, with 0/10/100 team claims and valid/foreign
+audiences; it does not measure database principal resolution.
+
+`BenchmarkSessionCertificateAuthorization` runs the gateway's actual per-request
+trusted-ingress SPIFFE/session-cache path at 1/100/10000 platform sessions for
+live, revoked, expired, stale-cache and foreign-identity cases. Its TLS state is
+already authenticated, matching that application boundary; it does not time a
+handshake. `BenchmarkSessionCertificateChain` verifies a real ephemeral P256
+chain and session URI. `BenchmarkSessionMTLSTransport` performs real loopback
+mutual TLS HTTP requests with verified peer chains, distinguishing a full
+handshake from a warmed reused connection. TLS resumption is disabled and the
+connection invariants are checked. These synthetic VM measurements do not
+include ingress, gateway policy, enrollment, Kafka or Postgres latency.
+
+## Kind request and pipeline measurements
+
+The maintained script supports these bounded scenarios:
+
+| Scenario | Measurement |
+|---|---|
+| S1 | Sequential adapter tools/call p50/p95/p99 after five warmups |
+| S2 | Exactly `PERF_SAMPLES` successful calls distributed across distinct initialized client connections |
+| S3 | Admin analytics usage latency, with a parsed successful response |
+| S5 | Alternating gateway/direct calls to the same deterministic upstream tool; both raw latency sets and percentile differences |
+| S6 | Increasing concurrent clients with separate MCP initialization, fixed requests per client, throughput/latency and a bounded plateau observation |
+| S7 | Real gateway tools/call to exact trace/current-server-UID event visibility through the analytics API |
+
+Use an existing healthy disposable Kind installation and supported CLI
+server/grant/session/adapter flows from `access-governance`. Keep existing
+platform management intact. Point `PERF_DIRECT_URL` at a read-only port-forward
+to that **same server's upstream port**, and `PERF_GATEWAY_URL` at its gateway
+route. Record the actual server with `PERF_SERVER_NAME` and
+`PERF_SERVER_NAMESPACE`; the harness reads its current UID/image/policy.
+The tool must return a deterministic result, since S5 verifies gateway/direct
+result equality. The default tool is `aaa-ping`; select another using
+`PERF_TOOL` and a JSON-object `PERF_TOOL_ARGS` (maximum 64KiB).
+
+Example configuration, after the existing test credentials and port-forwards
+are ready:
+
+```bash
+export KUBECONFIG=/path/to/contributor-kubeconfig
+export PERF_SERVER_NAME=policy-mcp-server PERF_SERVER_NAMESPACE=mcp-servers
+export PERF_GATEWAY_URL=http://127.0.0.1:18080/policy-mcp-server/mcp
+export PERF_DIRECT_URL=http://127.0.0.1:18095/mcp
+export PERF_AUTH_LABEL=same-enrolled-adapter-fixture
+export PERF_API_KEY="$KIND_ADMIN_API_KEY"
+SCENARIOS=S5,S6,S7 PERF_SAMPLES=100 PERF_CONCURRENCY_LEVELS=1,10,100 \
+  PERF_RECORD_BASELINE=1 PERF_OUT_DIR=/private/perf/before \
+  PERF_BASELINE_DIR=/private/perf/baseline bash hack/qa/perf-regression.sh
+# Same environment and traffic, after the source/image change:
+SCENARIOS=S5,S6,S7 PERF_SAMPLES=100 PERF_CONCURRENCY_LEVELS=1,10,100 \
+  PERF_OUT_DIR=/private/perf/after PERF_BASELINE_DIR=/private/perf/baseline \
+  bash hack/qa/perf-regression.sh
+```
+
+If the gateway requires request credentials, provide the existing fixture's
+headers through `PERF_MCP_HEADERS_JSON`, or `PERF_CLIENT_CERT`,
+`PERF_CLIENT_KEY` and `PERF_CA_FILE` for verified HTTPS. Do not print credentials
+or put them in command-line arguments. S3/S7 require an existing admin analytics
+key in `PERF_API_KEY`; this replaces automatic UI-key extraction. Shared
+authentication headers apply to both gateway/direct routes, which must be the
+same disposable fixture. The non-secret `PERF_AUTH_LABEL` describes that
+authentication setup. Only header names and argument hashes enter the report.
+The helper accepts only loopback targets, verifies the Kind context and actual
+node provider IDs even when invoked directly, and never follows redirects.
+
+S6 defaults to 1/10/100 clients, five timed requests per client, maximum 128
+clients and a 120-second batch budget. Raise `PERF_MAX_CLIENTS` explicitly for
+a bounded 1000-client experiment; its hard ceiling is 1000. There are at most
+16 increasing levels, 2000 initialized clients and 10000 timed calls in a
+sweep. `PERF_REQUESTS_PER_CLIENT` is bounded to 1–100 and
+`PERF_MAX_SECONDS` to 300. Clients use separate connections and, when the server
+issues them, distinct MCP session IDs. They share the selected authentication
+fixture; this is not a benchmark of 1000 separately enrolled agent identities.
+Two consecutive throughput gains below 10% report an observed plateau. If none
+occurs, saturation remains **not observed within bounds**. Failed or rejected
+calls fail the measurement; they never count as successful throughput or a
+usable baseline.
+
+S7 defaults to five samples, 500ms polling and a 60-second per-event deadline,
+bounded to 20 samples/120 seconds per event and the batch wall budget above.
+Each real tools/call sends a fresh sampled W3C trace ID, requires the gateway's
+matching `X-Trace-ID`, and waits for an `mcp.request` event matching that trace,
+namespace/server, live UID, tools/call method and HTTP 200. Reported lag runs
+from request submission to first successful analytics visibility; it includes
+request latency and polling/query delay. It is a polling upper bound, not
+independent timing of each ingest/Kafka/processor/ClickHouse stage.
+
+Every 2xx MCP result must be valid JSON-RPC with the exact response ID and no
+RPC/tool error. Responses and tool arguments are bounded; timeouts, missing
+counts, non-finite values, inconsistent percentiles, unrelated events and
+partial concurrency coverage fail. The fingerprint covers host architecture,
+kernel/CPU affinity, node versions/capacity, workload resource budgets, upstream
+image/policy, protocol/traffic configuration, authentication label and transports.
+Code/image revisions and ephemeral UIDs remain provenance so matching fresh
+clusters can be compared. Baselines missing matching environment evidence or
+using different coverage fail; `PERF_RECORD_BASELINE=1` creates missing files
+only, preserving existing reviewed baselines. Old pre-fingerprint baselines need
+deliberate recapture. Recording is not regression acceptance.
+
+## Historical proxy comparison and remaining live evidence
+
+The repository renamed `services/mcp-proxy` to `services/mcp-gateway` in
+[`1c3be5ea`](https://github.com/mcp-runtime/mcp-runtime/commit/1c3be5ea).
+The current service implements the policy-enforcement role; this checkout has
+no separately benchmarked `mcp-pep` binary. No historical mcp-proxy-versus-PEP
+latency, saturation or pipeline-lag result was recorded for #692, and this
+change makes no performance improvement claim for that transition.
+
+An eventual paired historical run must pin both source/image revisions and
+match MCP protocol, tool/result, upstream image, policy/authentication semantics,
+TLS/connection reuse, topology and resource budgets. Preserve both fingerprints
+and raw S5/S6/S7 output. Older revisions lacking matching protocol, session or
+trace/current-UID support are not comparable by disabling the new checks;
+record that gap explicitly instead of manufacturing an A/B result.
+
+This source checkpoint has offline/unit coverage and short repeated local
+microbenchmark execution only. Recorded Kind gateway/direct baselines, actual
+saturation and real pipeline visibility lag remain **unrun**. Additional E2E/
+Staging infrastructure and live dispatches are deferred. No staging load tests
+or CPU/heap profiles are part of these checks. Other proposed #692 areas such
+as streaming payload-size TTFB, enrollment/control-plane scale and slow-ingest
+capacity still need separate bounded fixtures and measured evidence.
 
 The historical S4 annotation timer was removed. An already-Ready resource could
 satisfy its wait before a new reconcile completed, so it did not prove operator
