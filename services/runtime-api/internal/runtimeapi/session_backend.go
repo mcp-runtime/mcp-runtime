@@ -154,6 +154,26 @@ func (b *platformSessionBackend) DeleteSession(ctx context.Context, name, namesp
 	return sessionBackendError(b.client.DeleteSession(ctx, namespace, name), name)
 }
 
+func (b *platformSessionBackend) CompleteSessionEnrollment(ctx context.Context, name, namespace, uid string) error {
+	client, ok := b.client.(interface {
+		CompleteSessionEnrollment(context.Context, string, string, string) error
+	})
+	if !ok {
+		return fmt.Errorf("conditional enrollment completion is unavailable")
+	}
+	return sessionBackendError(client.CompleteSessionEnrollment(ctx, namespace, name, uid), name)
+}
+
+func (b *platformSessionBackend) DeletePendingSession(ctx context.Context, name, namespace, uid, humanID string) error {
+	client, ok := b.client.(interface {
+		DeletePendingSession(context.Context, string, string, string, string) error
+	})
+	if !ok {
+		return fmt.Errorf("conditional pending-session cleanup is unavailable")
+	}
+	return sessionBackendError(client.DeletePendingSession(ctx, namespace, name, uid, humanID), name)
+}
+
 func (b *platformSessionBackend) DeleteSessionVersioned(ctx context.Context, name, namespace, uid string) error {
 	if err := b.configured(); err != nil {
 		return err

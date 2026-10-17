@@ -17,6 +17,14 @@ description: Apply and debug MCP Runtime access grants, agent sessions, gateway 
 
 Session apply via platform API is **admin-only**. Adapters usually skip manual session apply.
 
+Adapter enrollment preflight reads the deployed operator's on/off choice and
+ConfigMap-backed configuration, compares runtime issuer/trust domain, and follows
+the selected route's actual TLSOption. Unreadable/Secret-backed configuration,
+stale route ownership/readiness and missing client-certificate verification fail
+closed. `update` carries read-only preflight RBAC; do not enable certificates by
+hardcoding a runtime flag. Enrollment completion and pending cleanup use conditional
+platform-store mutations, never a full session upsert that could undo revocation.
+
 ## Rules (short)
 
 - One namespace per team; `MCPServer.spec.teamID` and `SubjectRef.teamID` must match gateway identity fields exactly when set.

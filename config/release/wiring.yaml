@@ -24,6 +24,10 @@ platformObjects:
   - ClusterRole/mcp-ingest-tokenreview
   - ClusterRoleBinding/mcp-ingest-tokenreview
   - ClusterRole/mcp-runtime-api-team-secrets
+  - ClusterRole/mcp-runtime-api-adapter-preflight
+  - ClusterRoleBinding/mcp-runtime-api-adapter-preflight
+  - Role/mcp-runtime/mcp-runtime-api-adapter-operator
+  - RoleBinding/mcp-runtime/mcp-runtime-api-adapter-operator
   - ClusterRole/mcp-platform-gateway-ingressclass
   - Role/mcp-platform/mcp-platform-gateway
   - Role/mcp-observability/mcp-platform-gateway

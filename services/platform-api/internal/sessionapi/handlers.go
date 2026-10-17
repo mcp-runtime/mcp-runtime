@@ -23,6 +23,8 @@ type Store interface {
 	SetSessionRevoked(context.Context, string, string, bool, string) error
 	DeleteSession(context.Context, string, string) error
 	DeleteSessionVersioned(context.Context, string, string, string) error
+	CompleteSessionEnrollment(context.Context, string, string, string) error
+	DeletePendingSession(context.Context, string, string, string, string) error
 	RevokeSessions(context.Context, sessionstate.Filter, string) (int64, error)
 	SessionSnapshot(context.Context, sessionstate.Server) (sessionstate.Snapshot, error)
 	SessionChanges(context.Context, sessionstate.Server, string, int64) (sessionstate.Changes, error)
@@ -154,6 +156,10 @@ func (h Handler) item(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	parts := strings.Split(path, "/")
+	if len(parts) == 3 && parts[0] != "" && parts[1] != "" && parts[2] == "enrollment" {
+		h.enrollment(w, r, parts[0], parts[1])
+		return
+	}
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		w.WriteHeader(404)
 		return
@@ -190,6 +196,38 @@ func (h Handler) item(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.WriteHeader(405)
 	}
+}
+
+// Enrollment mutations are conditional and never replace authorization fields.
+func (h Handler) enrollment(w http.ResponseWriter, r *http.Request, namespace, name string) {
+	var err error
+	switch r.Method {
+	case http.MethodPatch:
+		var request sessionstate.EnrollmentRequest
+		if !decode(w, r, &request) {
+			return
+		}
+		if request.UID == "" {
+			fail(w, 400, "session UID is required")
+			return
+		}
+		err = h.Store.CompleteSessionEnrollment(r.Context(), namespace, name, request.UID)
+	case http.MethodDelete:
+		uid, humanID := r.URL.Query().Get("uid"), r.URL.Query().Get("human_id")
+		if uid == "" || humanID == "" {
+			fail(w, 400, "session UID and owner are required")
+			return
+		}
+		err = h.Store.DeletePendingSession(r.Context(), namespace, name, uid, humanID)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if err != nil {
+		storeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // Gateway returns a mux used exclusively on the dedicated gateway port.
