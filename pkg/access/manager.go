@@ -210,6 +210,14 @@ func (m *Manager) ApplyGrant(ctx context.Context, grant *MCPAccessGrant) (*MCPAc
 	return convertToGrant(created)
 }
 
+// SetGrantMode updates only enforcement mode, preserving the grant restrictions.
+func (m *Manager) SetGrantMode(ctx context.Context, name, namespace string, mode GrantMode) error {
+	if mode != GrantModeEnforce && mode != GrantModeMonitor {
+		return fmt.Errorf("mode must be enforce or monitor")
+	}
+	return m.patchGrant(ctx, name, namespace, map[string]interface{}{"spec": map[string]interface{}{"mode": mode}})
+}
+
 // DisableGrant disables an MCPAccessGrant by setting spec.disabled to true.
 func (m *Manager) DisableGrant(ctx context.Context, name, namespace string) error {
 	patch := map[string]interface{}{

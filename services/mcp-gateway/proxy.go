@@ -315,6 +315,10 @@ func (s *gatewayServer) auditPayload(
 		"reason":           decision.Reason,
 		"policy_version":   policypkg.FirstNonEmpty(decision.PolicyVersion, s.defaultPolicyVersion),
 	}
+	if decision.WouldDeny {
+		payload["would_deny"] = true
+		payload["would_deny_reason"] = decision.WouldDenyReason
+	}
 	if policypkg.UsesDelegatedHeaders(policy) {
 		payload["auth_delegation"] = "upstream_header"
 		payload["caller_identity"] = "unverified"

@@ -27,9 +27,14 @@ type Request struct {
 
 // Decision is the result of evaluating a rendered policy document.
 type Decision struct {
-	Allowed            bool
-	Status             int
-	Reason             string
+	Allowed bool
+	Status  int
+	Reason  string
+	// WouldDeny is true when a matched monitor-mode grant would have denied this
+	// request. The request is allowed only after the normal identity and session
+	// checks have succeeded.
+	WouldDeny          bool
+	WouldDenyReason    string
 	PolicyVersion      string
 	RequiredTrust      string
 	RequiredSideEffect string
@@ -75,6 +80,56 @@ func Allow(reason, policyVersion string) Decision {
 
 // Authorize evaluates a rendered gateway policy document for a single MCP RPC request.
 func Authorize(policy *Document, request Request, now time.Time) Decision {
+	if policy == nil || UsesDelegatedHeaders(policy) || policyModeObserve(policy) || !IsToolCallMethod(request.RPCMethod) {
+		return authorize(policy, request, now)
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	var enforcing, monitoring []Grant
+	var activeEnforcing, activeMonitoring bool
+	for _, grant := range policy.Grants {
+		active := subjectMatchesTeam(grant.HumanID, grant.AgentID, grant.TeamID, request.Identity) && !grant.Disabled && !isExpiredAt(grant.ExpiresAt, now)
+		if strings.EqualFold(strings.TrimSpace(grant.Mode), "monitor") {
+			monitoring = append(monitoring, grant)
+			activeMonitoring = activeMonitoring || active
+		} else {
+			enforcing = append(enforcing, grant)
+			activeEnforcing = activeEnforcing || active
+		}
+	}
+	if !activeMonitoring {
+		return authorize(policy, request, now)
+	}
+	if _, sideEffect, _ := resolveToolMetadata(policy.Tools, request.ToolName); sideEffect == "" {
+		// Missing server metadata is not a restriction attributable to a grant.
+		return authorize(policy, request, now)
+	}
+	// Monitor grants cannot contribute permissions or restrictions to the
+	// enforcing policy. Evaluate both groups independently with the same identity
+	// and session gates, preserving existing aggregation within each group.
+	monitored := *policy
+	monitored.Grants = monitoring
+	shadow := authorize(&monitored, request, now)
+	decision := shadow
+	if activeEnforcing {
+		enforced := *policy
+		enforced.Grants = enforcing
+		decision = authorize(&enforced, request, now)
+		if !decision.Allowed {
+			return decision
+		}
+	}
+	if monitorableGrantDenial(shadow.Reason) {
+		decision.Allowed = true
+		decision.Status = http.StatusOK
+		decision.WouldDeny = true
+		decision.WouldDenyReason = shadow.Reason
+	}
+	return decision
+}
+
+func authorize(policy *Document, request Request, now time.Time) Decision {
 	if UsesDelegatedHeaders(policy) {
 		return authorizeDelegated(policy, request)
 	}
@@ -239,6 +294,15 @@ func Authorize(policy *Document, request Request, now time.Time) Decision {
 		MatchedGrantNamespace:   grant.grantNamespace,
 		MatchedSession:          matchedSession,
 		MatchedSessionNamespace: matchedSessionNamespace,
+	}
+}
+
+func monitorableGrantDenial(reason string) bool {
+	switch reason {
+	case "tool_denied", "tool_not_granted", "side_effect_not_allowed", "trust_too_low":
+		return true
+	default:
+		return false
 	}
 }
 

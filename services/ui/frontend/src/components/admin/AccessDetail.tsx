@@ -101,7 +101,7 @@ export function AccessDetail({ selection, onBack, sectionLabel }: AccessDetailPr
   );
 
   const session = !isGrant ? item as SessionSummary : null;
-  const grant = isGrant ? (item as { disabled: boolean; maxTrust?: string; allowedSideEffects?: string[] }) : null;
+  const grant = isGrant ? (item as { disabled: boolean; mode?: string; maxTrust?: string; allowedSideEffects?: string[] }) : null;
 
   return (
     <div data-testid="access-detail">
@@ -124,6 +124,7 @@ export function AccessDetail({ selection, onBack, sectionLabel }: AccessDetailPr
       />
 
       <dl className="detail-grid" style={{ marginBottom: "var(--space-6)" }}>
+        {isGrant ? <div><dt>Policy mode</dt><dd>{grant?.mode || "enforce"}</dd></div> : null}
         <div>
           <dt>Server</dt>
           <dd>{item.serverRef?.name || "—"}</dd>

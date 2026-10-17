@@ -76,6 +76,7 @@ type SecretKeyRef struct {
 
 // MCPAccessGrantSpec defines who can use which MCP server and with what trust ceiling.
 type MCPAccessGrantSpec struct {
+	Mode               GrantMode        `json:"mode,omitempty"`
 	ServerRef          ServerReference  `json:"serverRef"`
 	Subject            SubjectRef       `json:"subject"`
 	MaxTrust           TrustLevel       `json:"maxTrust,omitempty"`
@@ -85,6 +86,14 @@ type MCPAccessGrantSpec struct {
 	ExpiresAt          *metav1.Time     `json:"expiresAt,omitempty"`
 	ToolRules          []ToolRule       `json:"toolRules,omitempty"`
 }
+
+// GrantMode controls whether a grant enforces or shadows its restrictions.
+type GrantMode string
+
+const (
+	GrantModeEnforce GrantMode = "enforce"
+	GrantModeMonitor GrantMode = "monitor"
+)
 
 // MCPAccessGrantStatus captures observed grant state.
 type MCPAccessGrantStatus struct {
