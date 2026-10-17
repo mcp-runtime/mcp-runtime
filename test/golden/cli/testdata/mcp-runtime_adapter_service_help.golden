@@ -1,0 +1,24 @@
+Manage the per-user macOS background adapter
+
+Usage:
+  mcp-runtime adapter service [command]
+
+Available Commands:
+  install     Install or update the LaunchAgent and start at login
+  logs        Show bounded, redacted diagnostic events as JSON
+  reconnect   Reload validated profiles and reconnect without extending consent
+  restart     Drain and restart the user service
+  run         Run the protected daemon in the foreground
+  start       Start the installed user service
+  status      Show measured daemon and profile state as JSON
+  stop        Stop the user service until started or next login
+  uninstall   Stop and remove the LaunchAgent; preserve profiles by default
+
+Flags:
+  -h, --help   help for service
+
+Global Flags:
+      --debug              Enable debug mode with structured error logging
+      --state-dir string   Owner-only adapter state directory (default "~/.mcpruntime/adapter")
+
+Use "mcp-runtime adapter service [command] --help" for more information about a command.

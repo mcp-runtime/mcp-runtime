@@ -93,6 +93,7 @@ func analyticsServiceManifests(postgresManifest string) []string {
 		"k8s/08-analytics-api.yaml",
 		"k8s/22-split-api-networkpolicy.yaml",
 		"k8s/23-scoped-observability-networkpolicy.yaml",
+		"k8s/24-resource-history-networkpolicy.yaml",
 		"k8s/09-ui.yaml",
 		"k8s/10-gateway.yaml",
 		"k8s/11-prometheus.yaml",
@@ -245,6 +246,9 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 	}
 
 	core.Info("Applying analytics services")
+	if err := provisionResourceHistoryTrust(); err != nil {
+		return err
+	}
 	for _, manifest := range analyticsServiceManifests(postgresManifest) {
 		if manifest == "k8s/23-scoped-observability-networkpolicy.yaml" {
 			if supported, _ := scopedGrafanaPolicyCapability(); !supported {
@@ -404,6 +408,9 @@ func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap
 	}
 
 	core.Info("Applying analytics services")
+	if err := provisionResourceHistoryTrust(); err != nil {
+		return err
+	}
 	for _, manifest := range analyticsServiceManifests(postgresManifest) {
 		if manifest == "k8s/23-scoped-observability-networkpolicy.yaml" {
 			if supported, _ := scopedGrafanaPolicyCapability(); !supported {

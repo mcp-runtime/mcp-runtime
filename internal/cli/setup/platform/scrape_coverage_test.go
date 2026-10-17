@@ -13,6 +13,7 @@ import (
 // Removing one of these jobs from k8s/11-prometheus.yaml, or from the required
 // target inventory in rules.yml, must fail this test.
 var requiredScrapeJobs = []string{
+	"mcp-resource-history",
 	"mcp-platform-api",
 	"mcp-runtime-api",
 	"mcp-analytics-api",

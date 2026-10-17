@@ -42,6 +42,32 @@ expect_eq() {
   if [[ "$2" == "$3" ]]; then pass "$1"; else failed "$1: got '$2', want '$3'"; fi
 }
 
+identity_diagnostic_case() (
+  local fixture_exit="$1" fixture_message="$2"
+  BIN=identity_fixture_cli
+  identity_fixture_cli() {
+    [[ "$*" == 'cluster identity status --server mcp-servers/fixture' ]] || return 97
+    printf '%s\n' "${fixture_message}" 'Remedy: reconcile workload trust'
+    return "${fixture_exit}"
+  }
+  staging_identity_expect_failure mcp-servers/fixture 'workload CA expires within 30 days' "${TMP}/identity-output"
+)
+identity_cleanup_case() (
+  local cleanup_status="$1" original_status="$2"
+  cleanup_identity_probe() { return "${cleanup_status}"; }
+  trap 'staging_identity_finish "$?"' EXIT
+  exit "${original_status}"
+)
+expect_ok 'identity cleanup retains successful acceptance' identity_cleanup_case 0 0
+expect_fail 'identity cleanup failure fails otherwise successful acceptance' identity_cleanup_case 1 0
+expect_fail 'identity successful cleanup preserves original diagnostic failure' identity_cleanup_case 0 2
+expect_ok 'identity diagnostic requires nonzero status and exact public reason' identity_diagnostic_case 1 'workload CA expires within 30 days'
+expect_fail 'identity diagnostic rejects a zero exit despite warning text' identity_diagnostic_case 0 'workload CA expires within 30 days'
+expect_fail 'identity diagnostic rejects an unrelated failure' identity_diagnostic_case 1 'connection refused'
+expect_fail 'identity diagnostic rejects private key output' identity_diagnostic_case 1 $'workload CA expires within 30 days\n-----BEGIN EC PRIVATE KEY-----'
+expect_fail 'identity diagnostic rejects unused Secret field output' identity_diagnostic_case 1 $'workload CA expires within 30 days\ne2e-private-field-sentinel'
+expect_fail 'identity diagnostic rejects full certificate output' identity_diagnostic_case 1 $'workload CA expires within 30 days\n-----BEGIN CERTIFICATE-----'
+
 registry_token_case() (
   WORK_DIR="${TMP}"
   PLATFORM_URL=https://platform.e2e.mcpruntime.org
@@ -358,7 +384,8 @@ expect_fail "staging restore reports when no snapshot exists" snapshot_none_case
 adapter_grant_convergence_case() (
   local scenario="$1" state="${TMP}/grant-probe-${1}" body="${TMP}/grant-probe-${1}.json"
   : >"${state}"
-  STAGING_ADAPTER_POLICY_WAIT_SECONDS=3
+  STAGING_ADAPTER_POLICY_WAIT_SECONDS=30
+  if [[ "${scenario}" == persistent ]]; then STAGING_ADAPTER_POLICY_WAIT_SECONDS=0; fi
   sleep() { SECONDS=$((SECONDS + 3)); }
   staging_adapter_capture_policy_status() { printf captured >>"${state}"; }
   staging_adapter_mcp_post() {
@@ -383,7 +410,7 @@ adapter_grant_convergence_case() (
   if [[ "${scenario}" == converges ]]; then
     [[ "${status}" == 0 && "$(cat "${state}")" == callcall ]]
   elif [[ "${scenario}" == persistent ]]; then
-    [[ "${status}" != 0 && "$(cat "${state}")" == callcallcaptured ]]
+    [[ "${status}" != 0 && "$(cat "${state}")" == callcaptured ]]
   else
     [[ "${status}" != 0 && "$(cat "${state}")" == call ]]
   fi
@@ -484,6 +511,33 @@ expect_ok "deactivation verifies saved token, existing session and idempotent CL
 expect_fail "deactivation cannot pass on unrelated tool denial" deactivation_acceptance_case wrong-denial
 expect_fail "deactivation cannot pass while saved token remains valid" deactivation_acceptance_case live-token
 expect_fail "deactivation cannot mistake an unknown token-probe route for revocation" deactivation_acceptance_case unknown-route
+
+expect_ok "workspace browser private fixture boundary" python3 "${SCRIPT_DIR}/workspace_browser_fixture_test.py"
+workspace_browser_transport_case() (
+  ROOT_DIR="${SCRIPT_DIR}/../.." WORK_DIR="${TMP}/workspace-browser" STAGING_ARTIFACT_DIR="${TMP}/browser-artifacts"
+  STAGING_MT_CONFIG_DIR="${TMP}/browser-config" STAGING_MT_RUN_ID=test
+  PLATFORM_URL=https://platform.e2e.mcpruntime.org E2E_RUN_MULTITENANCY=1
+  MCP_PLATFORM_ADMIN_EMAIL=admin@example.test MCP_PLATFORM_ADMIN_PASSWORD=private-admin-password
+  WORKSPACE_BROWSER_CANDIDATE='actual-checkout-sha'
+  export STAGING_MT_CONFIG_DIR STAGING_MT_RUN_ID PLATFORM_URL MCP_PLATFORM_ADMIN_EMAIL MCP_PLATFORM_ADMIN_PASSWORD WORKSPACE_BROWSER_CANDIDATE
+  mkdir -p "${STAGING_MT_CONFIG_DIR}"
+  printf '{"acme":"private-owner-password","globex":"private-member-password"}' >"${STAGING_MT_CONFIG_DIR}/demo-credentials-test.json"
+  docker() {
+    [[ " $* " == *' --interactive '* && "$*" == *'--cap-drop ALL'* && "$*" == *'dst=/repo,readonly'* && "$*" != *'private-'* ]] || return 1
+    python3 -c 'import json, sys; value=json.load(sys.stdin); assert value["roles"]["owner"]["password"] == "private-owner-password"; assert value["roles"]["member"]["password"] == "private-member-password"; assert value["roles"]["admin"]["password"] == "private-admin-password"'
+  }
+  staging_check_workspace_browser
+)
+expect_ok "workspace browser passes private JSON on stdin with no credential arguments" workspace_browser_transport_case
+workspace_browser_skip_case() (
+  E2E_RUN_MULTITENANCY=false
+  STAGING_ARTIFACT_DIR="${TMP}/browser-skip"
+  mkdir -p "${STAGING_ARTIFACT_DIR}/stages"
+  local status=0
+  staging_check_workspace_browser || status=$?
+  [[ "${status}" == "${STAGING_SKIP_RC}" ]]
+)
+expect_ok "workspace browser explicitly skips absent role fixtures" workspace_browser_skip_case
 
 if [[ "${FAILURES}" -ne 0 ]]; then
   echo "${FAILURES} staging lib test(s) failed" >&2

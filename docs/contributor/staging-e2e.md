@@ -27,6 +27,37 @@ after sourcing the preserved VM environment. The default inherits that
 environment and neither choice rewrites provider credentials/backups. A skipped OIDC stage is not
 evidence that OAuth login works.
 
+The critical `workspace-browser` stage runs before account deactivation and
+teardown. It uses headless Chromium in the official Playwright
+`v1.64.1-noble` image, pinned to
+`sha256:7852dc5a7d72f5fe458a597d690f6c42fbc8e9e26ddfa95f8e6ef552558d9bbf`
+(reviewed 2026-10-17). The image supplies browsers and OS dependencies;
+`npm ci --ignore-scripts` installs the frontend's locked Playwright package
+inside the disposable container. See the [official Docker instructions](https://playwright.dev/docs/docker).
+When the frontend Playwright lock changes, review and update this image pin
+and the version check in `test/e2e/lib/staging-workspace-browser.sh` together.
+
+The browser signs in through the supported password UI as the configured
+administrator and the multitenancy fixture's CLI-created owner/member. It
+checks actual membership/server counts, scoped owner management, member
+denial, platform totals, back/forward/refresh, isolated section outages,
+390-pixel layout and logout. Only the explicitly labelled outage responses
+are intercepted; other requests use the real platform. Without multitenancy
+fixtures the stage reports `skipped`, which is not workspace acceptance.
+
+Generated passwords reach the driver only through stdin. The container
+receives no password arguments/environment, browser state, traces or HARs.
+Artifacts under `workspace-browser/` contain screenshots and a JSON record of
+checks, request paths/statuses, console errors and mobile bounds; they omit
+credentials, headers and response bodies. The workflow passes the packaged
+checkout's `git rev-parse HEAD` as `WORKSPACE_BROWSER_CANDIDATE`, independently
+of the workflow ref, so the evidence identifies the tested source. The browser refuses non-disposable
+targets and permits external requests only for credential-free public Google
+font assets. It first verifies the target's certificate chain and hostname
+using the runner's public CA bundle, then pins that verified certificate for
+Chromium. A browser run against mocked APIs is driver development evidence,
+not real-platform acceptance.
+
 Adapter fixtures rotate their own server namespace pull credential using
 `registry enable-auth --pull-namespace` after the fixture deployments exist,
 so the broker grants their exact repositories. They never reuse another
@@ -209,8 +240,10 @@ request or include token values in that reason.
 | `oidc` | mcp-auth discovery, authorization-server metadata, JWKS, `auth provider-check`, optional Keycloak test-user token (skipped when `E2E_WITH_MCP_AUTH` is off) |
 | `adapter-enrollment` | On a cert-only gateway MCPServer (omit `spec.auth`) and a grant, `adapter enroll` issues a session-bound SPIFFE certificate; HTTPS calls through `https://mcp.e2e.mcpruntime.org/<server>/mcp` with that client certificate reach the granted tool, while an ungranted tool (403), tools/call without a certificate (401), and the same certificate on another server (401 `session_not_found`) are refused. When `E2E_MCP_OAUTH_ACCESS_TOKEN` is set for the managed Globex member and MCP resource, a second OAuth+cert pair also proves bearer requirement, wrong-audience/`session_not_found` denial, and the same grant/deny matrix. Ungranted agents are refused a session. Skipped when the ref has no `adapter enroll`, no mTLS issuer, or the operator lacks `MCP_ADAPTER_CERTIFICATES=true`. On failure, `adapter-enrollment/` holds the redacted routing, certificate, policy, and service diagnostics. |
 | `multitenancy` | `hack/qa/multitenancy-test.sh`: teams/users, `server build image` -> `server push` -> `server deploy`, pull-secret checks, grants, adapter tool calls, direct-call denial, server events |
+| `identity-diagnostics` | Supported read-only `cluster identity status` reports a healthy real tenant route, refuses an isolated foreign issuer/root bundle and a CA expiring within 30 days, omits certificate/Secret material, and confirms the existing route stays healthy. Creates only a unique diagnostic Secret and reserved `.invalid` route on the guarded local disposable k3s API; active roots, issuers and TLSOptions are unchanged. |
 | `governance` | Granted agent session allowed; ungranted agent and forged-session tool calls denied |
 | `grant-monitor` | Supported CLI grant mode changes on the CLI-created tenant fixture: a restrictive monitor grant allows `add` and records `would_deny`; the identical enforcing grant returns 403. Audit evidence must match the actual response trace, platform session, agent, server and tool. Missing identity still returns 401. Temporary grants are removed. |
+| `workspace-browser` | Headless Chromium signs in as the CLI-created member/owner and configured administrator, verifies workspace memberships and authority, scoped management and member denial, complete admin totals, browser navigation, isolated section failures, 390px layout and logout. Screenshots and redacted console/path/status evidence are captured before account deactivation and teardown. Skipped when multitenancy is disabled. |
 | `account-deactivation` | After other tenant checks, the supported administrator CLI deactivates the enrolled fixture user. Its saved API token is refused and its existing certificate/session is denied within five seconds; repeated cleanup returns zero counts. Skipped when this ref has no `user deactivate`. The fixture session is removed before teardown. |
 | `analytics` | Analytics API stats/events and ClickHouse rows for the tenant server |
 | `collect-diagnostics`, `snapshot`, `teardown` | Diagnostics, TLS snapshot refresh (kept only when complete), VM wipe confirmed |

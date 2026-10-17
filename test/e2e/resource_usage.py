@@ -177,6 +177,13 @@ class Sampler:
         return result
 
 
+def node_usage(sample, group, field, divisor=1, largest=False):
+    values = [node.get("usage", {}).get(group, {}).get(field) for node in sample.get("nodes", [])]
+    if not values or any(value is None for value in values):
+        return None
+    return (max(values) if largest else sum(values)) / divisor
+
+
 def summarize(samples, profile, scenarios, status):
     valid = [sample for sample in samples if sample.get("nodes")]
     def peak(field, getter, source=None):
@@ -192,11 +199,11 @@ def summarize(samples, profile, scenarios, status):
                          "Node usage includes Kubernetes infrastructure; Colima/host disk includes other clusters and caches. Host CPU includes other applications.",
                          "Stage labels identify the most recently started stage; parallel stages can overlap.",
                          "PVC capacity is a reservation, not bytes consumed. No hard minimum is inferred from idle usage."]}
-    summary.update(peak("peak_node_cpu_cores", lambda s: sum(n["usage"].get("cpu", {}).get("usageNanoCores", 0) / 1e9 for n in s["nodes"])))
-    summary.update(peak("peak_node_memory_bytes", lambda s: sum(n["usage"].get("memory", {}).get("workingSetBytes", 0) for n in s["nodes"])))
+    summary.update(peak("peak_node_cpu_cores", lambda s: node_usage(s, "cpu", "usageNanoCores", 1e9)))
+    summary.update(peak("peak_node_memory_bytes", lambda s: node_usage(s, "memory", "workingSetBytes")))
     summary.update(peak("peak_cpu_requests_cores", lambda s: s.get("requests", {}).get("cpu_cores")))
     summary.update(peak("peak_memory_requests_bytes", lambda s: s.get("requests", {}).get("memory_bytes")))
-    summary.update(peak("peak_node_filesystem_used_bytes", lambda s: max(n["usage"].get("fs", {}).get("usedBytes", 0) for n in s["nodes"])))
+    summary.update(peak("peak_node_filesystem_used_bytes", lambda s: node_usage(s, "fs", "usedBytes", largest=True)))
     summary.update(peak("peak_host_cpu_cores", lambda s: s.get("host", {}).get("cpu_used_cores"), samples))
     summary.update(peak("peak_host_swap_bytes", lambda s: s.get("host", {}).get("swap_used_bytes"), samples))
     summary.update(peak("peak_host_filesystem_used_bytes", lambda s: s.get("host", {}).get("filesystem_used_bytes"), samples))
@@ -210,12 +217,14 @@ def summarize(samples, profile, scenarios, status):
                         ref = volume["pvcRef"]
                         key = ref["namespace"] + "/" + ref["name"]
                         volumes[key] = max(volumes.get(key, 0), volume["usedBytes"])
-    summary["volume_peak_used_bytes"] = volumes
+    summary["volume_peak_used_bytes"] = dict(volumes)
     summary["disk_partial_samples"] = sum(any(n.get("partial") for n in s.get("node_disks", [])) for s in samples)
+    local_volumes = {}
     for sample in valid:
         for node in sample.get("node_disks", []):
             for name, used in node["data_volumes"].items():
-                volumes[name] = max(volumes.get(name, 0), used)
+                local_volumes[name] = max(local_volumes.get(name, 0), used)
+    summary["local_du_volume_peak_used_bytes"] = local_volumes
     summary.update(peak("peak_containerd_bytes", lambda s: sum(n.get("containerd_bytes", 0) for n in s.get("node_disks", [])) if s.get("node_disks") else None))
     def vm_used(sample):
         rows = re.findall(r"^Mem:\s+(\d+)\s+(\d+)", sample.get("colima_memory", ""), re.M)
@@ -225,10 +234,12 @@ def summarize(samples, profile, scenarios, status):
     summary["host"] = samples[-1].get("host", {}) if samples else {}
     summary["stages"] = {}
     for sample in valid:
-        stage = summary["stages"].setdefault(sample.get("stage_last_started", "unknown"), {"samples": 0, "peak_node_memory_bytes": 0, "peak_node_cpu_cores": 0})
+        stage = summary["stages"].setdefault(sample.get("stage_last_started", "unknown"), {"samples": 0, "peak_node_memory_bytes": None, "peak_node_cpu_cores": None})
         stage["samples"] += 1
-        stage["peak_node_memory_bytes"] = max(stage["peak_node_memory_bytes"], sum(n["usage"].get("memory", {}).get("workingSetBytes", 0) for n in sample["nodes"]))
-        stage["peak_node_cpu_cores"] = max(stage["peak_node_cpu_cores"], sum(n["usage"].get("cpu", {}).get("usageNanoCores", 0) / 1e9 for n in sample["nodes"]))
+        for key, value in [("peak_node_memory_bytes", node_usage(sample, "memory", "workingSetBytes")),
+                           ("peak_node_cpu_cores", node_usage(sample, "cpu", "usageNanoCores", 1e9))]:
+            if value is not None:
+                stage[key] = max(stage[key], value) if stage[key] is not None else value
     return summary
 
 
@@ -245,10 +256,9 @@ def write_summary(output, profile, scenarios, status):
         writer = csv.writer(stream)
         writer.writerow(["epoch_seconds", "stage_last_started", "node_cpu_cores", "node_memory_bytes", "cpu_requests_cores", "memory_requests_bytes", "host_cpu_cores", "host_swap_bytes"])
         for sample in samples:
-            nodes = sample.get("nodes", [])
             writer.writerow([sample["time"], sample.get("stage_last_started"),
-                             sum(n["usage"].get("cpu", {}).get("usageNanoCores", 0) / 1e9 for n in nodes) if nodes else None,
-                             sum(n["usage"].get("memory", {}).get("workingSetBytes", 0) for n in nodes) if nodes else None,
+                             node_usage(sample, "cpu", "usageNanoCores", 1e9),
+                             node_usage(sample, "memory", "workingSetBytes"),
                              sample.get("requests", {}).get("cpu_cores"), sample.get("requests", {}).get("memory_bytes"),
                              sample.get("host", {}).get("cpu_used_cores"), sample.get("host", {}).get("swap_used_bytes")])
     lines = ["# Kind E2E resource observations", "", f"Profile: {profile}; scenarios: {scenarios}; exit status: {status}", "",
