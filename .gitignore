@@ -64,3 +64,7 @@ __pycache__/
 /.local/
 /support/
 /examples/lead-discovery/
+
+# Local service build outputs
+/services/ui/mcp-sentinel-ui
+/services/mcp-gateway/mcp-sentinel-mcp-gateway
