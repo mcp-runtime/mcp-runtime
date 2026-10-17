@@ -19,7 +19,7 @@ func authorizeDelegated(policy *Document, request Request) Decision {
 	if !IsToolCallMethod(request.RPCMethod) {
 		return Allow("delegated_lifecycle", version)
 	}
-	requiredTrust, requiredSideEffect, riskLevel := resolveToolMetadata(policyTools(policy), request.ToolName)
+	requiredTrust, requiredSideEffect, riskLevel := resolvePolicyToolMetadata(policy, request.ToolName)
 	for _, rule := range policy.Policy.DelegatedToolRules {
 		if !strings.EqualFold(string(rule.Name), string(request.ToolName)) {
 			continue

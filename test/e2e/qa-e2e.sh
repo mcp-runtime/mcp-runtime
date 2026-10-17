@@ -1534,9 +1534,9 @@ print(json.dumps({"email": os.environ["PLATFORM_ADMIN_EMAIL"], "password": os.en
   )
   env "${platform_env[@]}" ./bin/mcp-runtime team create "${team_slug}" \
     --name "E2E adapter ${team_slug}" >/dev/null
-  env "${platform_env[@]}" ./bin/mcp-runtime team user create "${team_slug}" \
+  printf '%s\n' "${member_password}" | env "${platform_env[@]}" ./bin/mcp-runtime team user create "${team_slug}" \
     --email "${member_email}" \
-    --password "${member_password}" \
+    --password-stdin \
     --role member >/dev/null
 
   ADAPTER_TEAM_SLUG="${team_slug}"
@@ -4690,9 +4690,9 @@ print(json.dumps({"email": os.environ["PLATFORM_ADMIN_EMAIL"], "password": os.en
     env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime auth status >/dev/null
     env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team list >/dev/null
     env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team create "${DEEP_CLI_TEAM_SLUG}" --name "E2E CLI ${DEEP_CLI_TEAM_SLUG}" >/dev/null
-    env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team user create "${DEEP_CLI_TEAM_SLUG}" \
+    printf '%s\n' "test-password-123" | env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team user create "${DEEP_CLI_TEAM_SLUG}" \
       --email "${DEEP_CLI_USER_EMAIL}" \
-      --password "test-password-123" \
+      --password-stdin \
       --role member >/dev/null
     env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team user list "${DEEP_CLI_TEAM_SLUG}" >/dev/null
     env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime server list --namespace mcp-servers >/dev/null
@@ -5899,9 +5899,9 @@ print(json.dumps({"email": os.environ["PLATFORM_ADMIN_EMAIL"], "password": os.en
   env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime auth status >/dev/null
   env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team list >/dev/null
   env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team create "${DEEP_CLI_TEAM_SLUG}" --name "E2E CLI ${DEEP_CLI_TEAM_SLUG}" >/dev/null
-  env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team user create "${DEEP_CLI_TEAM_SLUG}" \
+  printf '%s\n' "test-password-123" | env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team user create "${DEEP_CLI_TEAM_SLUG}" \
     --email "${DEEP_CLI_USER_EMAIL}" \
-    --password "test-password-123" \
+    --password-stdin \
     --role member >/dev/null
   env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team user list "${DEEP_CLI_TEAM_SLUG}" >/dev/null
   env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime server list --namespace mcp-servers >/dev/null

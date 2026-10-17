@@ -19,6 +19,13 @@ Session apply via platform API is **admin-only**. Adapters usually skip manual s
 
 ## Rules (short)
 
+- Workload issuer admission: `hack/qa/approval-policy-rehearsal.sh` uses a private,
+  disposable Kind cluster; it refuses existing names and tests requester RBAC,
+  exact session identities, hidden SAN types, public/internal TLS and reissue.
+  Reviewed pins (2026-10-17): cert-manager v1.21.2, approver-policy v0.28.0,
+  Kubernetes 1.36.4. Follow `docs/connect-clients.md` rollout/rollback order;
+  passing direct CSR tests does not prove supported CLI enrollment.
+
 - One namespace per team; `MCPServer.spec.teamID` and `SubjectRef.teamID` must match gateway identity fields exactly when set.
 - Platform API rejects cross-namespace `serverRef` and shared-catalog writes for non-admins.
 - Each `MCPServer.spec.tools[]` needs `sideEffect: read|write|destructive`; grants need explicit `allowedSideEffects` (empty = deny all classes).
@@ -33,6 +40,7 @@ Session apply via platform API is **admin-only**. Adapters usually skip manual s
 - CLI `server delete` and UI Retire disable grants and revoke sessions before removing exact server-reference authorization across namespaces. Cleanup failures require retry; `mcpruntime.org/retiring` blocks issuance/redeployment while recovery completes. Admins can repeat deletion for an absent server to clean orphaned access. Shared pull credentials and audit history remain.
 - New grants/sessions bind to `mcpruntime.org/server-uid`; policy rendering rejects a binding from an earlier same-name deployment. Explicit `server delete --use-kube` removes only the Kubernetes server object and does not perform platform access retirement.
 - OAuth is optional and is enabled by `MCPServer.spec.auth` without `mode: header`. Direct clients use a bearer only on OAuth-enabled servers. An adapter always presents its enrolled certificate and adds a bearer only when the target enables OAuth.
+- Diagnose PKI with `cluster identity status --server <namespace>/<name>`. Resolve the selected containers' declared ConfigMap sources and the selected route's actual TLSOption; unreadable configuration must fail rather than appear disabled. Read only public certificate fields from Secrets.
 - `auth.mode: header` forwards every configured credential header unchanged for the upstream server to authenticate. The gateway enforces allow-list tool rules and default deny, and it does not derive a Runtime identity from those headers. Grants, sessions, and observation mode are rejected on this path.
 - When an adapter calls an OAuth-enabled server, the gateway requires the token subject to equal the session human and forwards the validated bearer to the same logical MCP resource server.
 - The upstream MCP application validates the same issuer and audience and must never forward this token to a third-party API.

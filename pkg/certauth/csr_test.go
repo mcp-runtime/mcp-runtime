@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/pem"
 	"math/big"
 	"net/url"
@@ -71,6 +72,69 @@ func TestValidateCSRPEMRejectsAdditionalSANs(t *testing.T) {
 	}
 }
 
+func TestSessionIdentityRejectsUnparsedSANs(t *testing.T) {
+	t.Parallel()
+	const expected = "spiffe://example.org/ns/team-a/session/session-1"
+	_, validPEM, _, err := BuildSessionCSR("example.org", "team-a", "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	validDER, err := ValidateCSRPEM(string(validPEM), expected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory, err := asn1.Marshal(pkix.Name{CommonName: "other-session"}.ToRDNSequence())
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherName, err := asn1.Marshal(struct {
+		Type  asn1.ObjectIdentifier
+		Value asn1.RawValue
+	}{asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 311, 20, 2, 3}, asn1.RawValue{Class: 2, Tag: 0, IsCompound: true, Bytes: []byte{12, 4, 'e', 'v', 'i', 'l'}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var otherSequence asn1.RawValue
+	if _, err := asn1.Unmarshal(otherName, &otherSequence); err != nil {
+		t.Fatal(err)
+	}
+	for name, hidden := range map[string]asn1.RawValue{
+		"directoryName": {Class: 2, Tag: 4, IsCompound: true, Bytes: directory},
+		"otherName":     {Class: 2, Tag: 0, IsCompound: true, Bytes: otherSequence.Bytes},
+	} {
+		t.Run(name, func(t *testing.T) {
+			sans, err := asn1.Marshal([]asn1.RawValue{{Class: 2, Tag: 6, Bytes: []byte(expected)}, hidden})
+			if err != nil {
+				t.Fatal(err)
+			}
+			extension := pkix.Extension{Id: asn1.ObjectIdentifier{2, 5, 29, 17}, Value: sans}
+			der, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{ExtraExtensions: []pkix.Extension{extension}}, key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			parsed, err := x509.ParseCertificateRequest(der)
+			if err != nil || len(parsed.URIs) != 1 || parsed.URIs[0].String() != expected || len(parsed.DNSNames)+len(parsed.EmailAddresses)+len(parsed.IPAddresses) != 0 {
+				t.Fatalf("fixture must hide the additional SAN from parsed identity fields: %v", err)
+			}
+			if err := parsed.CheckSignature(); err != nil {
+				t.Fatal(err)
+			}
+			pemCSR := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: der})
+			if _, err := ValidateCSRPEM(string(pemCSR), expected); err == nil {
+				t.Fatal("accepted signed CSR with hidden identity")
+			}
+			cert := issueTestCert(t, validDER, func(c *x509.Certificate) { c.ExtraExtensions = []pkix.Extension{extension} })
+			if err := ValidateIssuedCertificatePEM(cert, validDER, expected, time.Hour, time.Now()); err == nil {
+				t.Fatal("accepted issued certificate with hidden identity")
+			}
+		})
+	}
+}
+
 func TestWritePrivateFileRejectsTraversal(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -123,6 +187,7 @@ func TestValidateIssuedCertificatePEM(t *testing.T) {
 		"extra uri":      {func(c *x509.Certificate) { c.URIs = append(c.URIs, forged) }, true},
 		"dns san":        {func(c *x509.Certificate) { c.DNSNames = []string{"x.example.org"} }, true},
 		"server auth":    {func(c *x509.Certificate) { c.ExtKeyUsage = append(c.ExtKeyUsage, x509.ExtKeyUsageServerAuth) }, true},
+		"unknown usage":  {func(c *x509.Certificate) { c.UnknownExtKeyUsage = []asn1.ObjectIdentifier{{1, 2, 3, 4}} }, true},
 		"ca":             {func(c *x509.Certificate) { c.IsCA = true; c.BasicConstraintsValid = true }, true},
 		"too long lived": {func(c *x509.Certificate) { c.NotAfter = time.Now().Add(48 * time.Hour) }, true},
 	}
