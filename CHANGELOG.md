@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Security
+
+- Session CSR and issued-certificate validation reject hidden SAN identity types and unknown extended key usages. The disposable issuer-approval rehearsal now uses the reviewed cert-manager/approver versions and refuses existing cluster names ([#538](https://github.com/mcp-runtime/mcp-runtime/issues/538)).
+
 ### Added
 
 - `adapter enroll` checks the operator's adapter-certificate configuration, matching workload issuer/trust domain, issuer readiness, and the selected route's actual client-certificate TLSOption before creating a session. Enrollment completion preserves concurrent revocation, and failure cleanup conditionally removes only the caller's pending session. `update` installs the required read-only preflight permissions while preserving the operator's existing on/off choice ([#539](https://github.com/mcp-runtime/mcp-runtime/issues/539)).
@@ -24,6 +28,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 - Authorized server details show a fixed one-hour summary of tools/call rate and p95, allowed-call HTTP 5xx rate, policy denies, and the slowest tool p95 after five calls. Tenant Grafana SSO and Explore isolation remain unresolved ([#699](https://github.com/mcp-runtime/mcp-runtime/issues/699)).
 
 ### Changed
+
+- Gateways compile immutable tool, session and subject-grant indexes when activating a validated policy, keeping lookups independent of unrelated policy entries and retaining the last valid snapshot after a failed reload ([#319](https://github.com/mcp-runtime/mcp-runtime/issues/319)).
 
 - Operator policy reconciliation looks up grants by their effective target server using a cache index, avoiding copies and scans of unrelated grants while preserving cross-namespace references. Runtime sessions remain platform-owned ([#657](https://github.com/mcp-runtime/mcp-runtime/issues/657)).
 
