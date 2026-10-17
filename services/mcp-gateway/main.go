@@ -2,10 +2,7 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"errors"
-	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -156,11 +153,13 @@ func main() {
 	tlsKeyFile := strings.TrimSpace(os.Getenv("TLS_KEY_FILE"))
 	tlsClientCAFile := strings.TrimSpace(os.Getenv("TLS_CLIENT_CA_FILE"))
 	var tlsReloader *certReloader
+	var trustReloader *clientCAReloader
 	if tlsCertFile != "" || tlsKeyFile != "" || tlsClientCAFile != "" {
-		tlsConfig, err := gatewayTLSConfig(tlsClientCAFile)
+		tlsConfig, clientTrust, err := gatewayTLSConfig(tlsClientCAFile)
 		if err != nil {
 			log.Fatalf("configure gateway mTLS: %v", err)
 		}
+		trustReloader = clientTrust
 		if tlsCertFile == "" || tlsKeyFile == "" {
 			log.Fatal("configure gateway mTLS: TLS_CERT_FILE and TLS_KEY_FILE are required")
 		}
@@ -202,6 +201,9 @@ func main() {
 	if tlsReloader != nil {
 		go tlsReloader.watch(ctx, defaultCertReloadInterval)
 	}
+	if trustReloader != nil {
+		go trustReloader.watch(ctx, defaultCertReloadInterval)
+	}
 
 	select {
 	case err := <-serverErrs:
@@ -220,25 +222,6 @@ func main() {
 		}
 		srv.stopAnalyticsDispatcher()
 	}
-}
-
-func gatewayTLSConfig(clientCAFile string) (*tls.Config, error) {
-	if clientCAFile == "" {
-		return nil, errors.New("TLS_CLIENT_CA_FILE is required")
-	}
-	caPEM, err := os.ReadFile(clientCAFile)
-	if err != nil {
-		return nil, fmt.Errorf("read client CA bundle: %w", err)
-	}
-	clientCAs := x509.NewCertPool()
-	if !clientCAs.AppendCertsFromPEM(caPEM) {
-		return nil, errors.New("client CA bundle contains no certificates")
-	}
-	return &tls.Config{
-		MinVersion: tls.VersionTLS12,
-		ClientAuth: tls.RequireAndVerifyClientCert,
-		ClientCAs:  clientCAs,
-	}, nil
 }
 
 // initTracer initializes OpenTelemetry tracing for the service.

@@ -72,8 +72,8 @@ type Input struct {
 	TLSClusterIssuer string
 	// MTLSClusterIssuer enables optional adapter client-certificate validation
 	// for gateway server and adapter client certificates. Name an enterprise
-	// ClusterIssuer, or the bundled mcp-runtime-ca to have setup provision it.
-	// Test mode defaults this to mcp-runtime-ca automatically.
+	// ClusterIssuer with an independent signing root in production. Test mode
+	// defaults to the bundled mcp-runtime-ca and may provision it automatically.
 	MTLSClusterIssuer  string
 	InstallCertManager bool
 }
