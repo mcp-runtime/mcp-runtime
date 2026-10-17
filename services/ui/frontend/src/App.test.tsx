@@ -76,6 +76,25 @@ afterEach(() => {
 });
 
 describe("App", () => {
+  it("restores My workspace deep links and keeps navigation independent of analytics", async () => {
+    window.location.hash = "#/workspace";
+    stubRoutes({
+      "/auth/status": { status: 200, body: { authenticated: true, principal: { role: "user", subject: "me" } } },
+      "/api/ui/v1/runtime/workspace/teams": { status: 200, body: { teams: [] } },
+      "/api/ui/v1/runtime/workspace/servers": { status: 200, body: { servers: [], deployment_attribution: "unavailable" } },
+      "/api/ui/v1/runtime/workspace/access": { status: 200, body: { grants: [], sessions: [] } },
+      "/api/ui/v1/user/analytics/usage": { status: 503, body: {} },
+      ...EMPTY_CATALOG,
+    });
+    renderApp();
+    expect(await screen.findByRole("heading", { name: "My workspace", level: 1 })).toBeInTheDocument();
+    expect(await screen.findByText("You are not a member of any team.")).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("workspace-tab-servers"));
+    expect(window.location.hash).toBe("#/servers");
+    window.location.hash = "#/workspace";
+    expect(await screen.findByRole("heading", { name: "My workspace", level: 1 })).toBeInTheDocument();
+  });
   it("renders the signed-out shell with a sign-in action", async () => {
     const user = userEvent.setup();
     stubRoutes({ "/auth/status": SIGNED_OUT });
@@ -157,11 +176,6 @@ describe("App", () => {
     await user.type(screen.getByTestId("login-password"), "admin@123");
     await user.click(screen.getByTestId("login-submit"));
 
-    await user.click(await screen.findByTestId("account-trigger"));
-    expect(await screen.findByText("Administrator")).toBeInTheDocument();
-    expect(screen.getAllByText("admin@mcpruntime.org")).toHaveLength(2);
-    expect(screen.getByTestId("logout-button")).toBeInTheDocument();
-
     const loginCall = calls.find((call) => call.url === "/auth/login");
     expect(loginCall?.init.credentials).toBe("same-origin");
     expect(new Headers(loginCall?.init.headers).get("authorization")).toBeNull();
@@ -172,6 +186,15 @@ describe("App", () => {
         "/api/ui/v1/runtime/servers"
       )
     );
+
+    const serverListRequests = calls.filter((call) => call.url === "/api/ui/v1/runtime/servers").length;
+    await user.click(await screen.findByTestId("account-trigger"));
+    expect(await screen.findByText("Administrator")).toBeInTheDocument();
+    expect(screen.getAllByText("admin@mcpruntime.org")).toHaveLength(2);
+    expect(screen.getByTestId("logout-button")).toBeInTheDocument();
+    expect(screen.queryByText("Deployed MCP servers")).not.toBeInTheDocument();
+    expect(screen.queryByText("Platform jwt")).not.toBeInTheDocument();
+    expect(calls.filter((call) => call.url === "/api/ui/v1/runtime/servers")).toHaveLength(serverListRequests);
   });
 
   it("signs in with an API key without exposing it after submit", async () => {

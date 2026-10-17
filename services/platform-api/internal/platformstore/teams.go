@@ -365,12 +365,19 @@ func (s *Store) UpsertTeamMembership(ctx context.Context, teamSlug, userID, role
 	} else if !exists {
 		return TeamMembership{}, sql.ErrNoRows
 	}
-	if _, err := s.db.ExecContext(ctx, `
+	insert, err := s.db.ExecContext(ctx, `
+WITH account AS (SELECT id FROM users WHERE id=$3 AND deleted_at IS NULL FOR SHARE)
 INSERT INTO team_memberships (id, team_id, user_id, role)
-VALUES ($1, $2, $3, $4)
+SELECT $1, $2, id, $4 FROM account
 ON CONFLICT (team_id, user_id) WHERE deleted_at IS NULL
-DO UPDATE SET role = EXCLUDED.role, deleted_at = NULL`, uuid.NewString(), team.ID, userID, role); err != nil {
+DO UPDATE SET role = EXCLUDED.role, deleted_at = NULL`, uuid.NewString(), team.ID, userID, role)
+	if err != nil {
 		return TeamMembership{}, err
+	}
+	if count, err := insert.RowsAffected(); err != nil {
+		return TeamMembership{}, err
+	} else if count == 0 {
+		return TeamMembership{}, ErrAccountInactive
 	}
 	return TeamMembership{
 		TeamID:        team.ID,

@@ -9,7 +9,57 @@ import (
 	"testing"
 
 	"gopkg.in/yaml.v3"
+	networkingv1 "k8s.io/api/networking/v1"
+	sigsyaml "sigs.k8s.io/yaml"
 )
+
+func TestKafkaNetworkPolicyRestrictsPlaintextClientIngress(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "k8s", "05-kafka-networkpolicy.yaml"))
+	if err != nil {
+		t.Fatalf("read Kafka NetworkPolicy: %v", err)
+	}
+	var policy networkingv1.NetworkPolicy
+	if err := sigsyaml.Unmarshal(raw, &policy); err != nil {
+		t.Fatalf("decode Kafka NetworkPolicy: %v", err)
+	}
+	if policy.ObjectMeta.Name != "kafka-client-ingress" || policy.ObjectMeta.Namespace != "mcp-observability" {
+		t.Fatalf("NetworkPolicy identity = %s/%s, want mcp-observability/kafka-client-ingress", policy.ObjectMeta.Namespace, policy.ObjectMeta.Name)
+	}
+	if policy.Spec.PodSelector.MatchLabels["app"] != "kafka" || len(policy.Spec.Ingress) != 2 {
+		t.Fatalf("NetworkPolicy must select Kafka pods and have separate client and broker ingress rules: %#v", policy.Spec)
+	}
+
+	clientRule := policy.Spec.Ingress[0]
+	if len(clientRule.From) != 3 || len(clientRule.Ports) != 1 || clientRule.Ports[0].Port == nil || clientRule.Ports[0].Port.IntValue() != 9092 {
+		t.Fatalf("Kafka client rule must allow only the three platform clients on 9092: %#v", clientRule)
+	}
+	clients := map[string]bool{}
+	for _, peer := range clientRule.From {
+		if peer.NamespaceSelector != nil || peer.PodSelector == nil {
+			t.Fatalf("Kafka clients must be selected by same-namespace pod labels: %#v", peer)
+		}
+		clients[peer.PodSelector.MatchLabels["app"]] = true
+	}
+	for _, app := range []string{"mcp-ingest", "mcp-processor", "kafka-topic-init"} {
+		if !clients[app] {
+			t.Errorf("Kafka clients missing %q", app)
+		}
+	}
+
+	brokerRule := policy.Spec.Ingress[1]
+	if len(brokerRule.From) != 1 || brokerRule.From[0].NamespaceSelector != nil || brokerRule.From[0].PodSelector == nil || brokerRule.From[0].PodSelector.MatchLabels["app"] != "kafka" {
+		t.Fatalf("Kafka inter-broker rule must be same-namespace broker-only: %#v", brokerRule)
+	}
+	ports := map[int32]bool{}
+	for _, port := range brokerRule.Ports {
+		if port.Port != nil {
+			ports[int32(port.Port.IntValue())] = true
+		}
+	}
+	if !ports[9092] || !ports[9093] || len(ports) != 2 {
+		t.Fatalf("Kafka inter-broker rule ports = %v, want 9092 and 9093", ports)
+	}
+}
 
 type kafkaKRaftDoc struct {
 	Kind     string `yaml:"kind"`

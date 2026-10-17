@@ -22,6 +22,7 @@ with `mcp-runtime agent create <team-slug> --name <name>`.
 | Inspect a running server | `server list` · `server get` · `server policy inspect` |
 | View analytics logs | `ops status` · `ops logs api` |
 | Check setup readiness | `cluster doctor` |
+| Inspect workload adapter certificate health | `cluster identity status --server <namespace>/<name>` |
 | Diagnose an installed cluster | `cluster diagnostics` |
 | Check an OIDC provider before mcp-auth | `auth provider-check` |
 
@@ -590,6 +591,18 @@ identity headers are not supported.
 
 The platform issues certificates only when an enabled `MCPAccessGrant` matches the server, signed-in user, and agent. Apply the grant first with `access grant apply`.
 
+Before creating a session, `adapter enroll` checks the operator's existing
+adapter-certificate choice, matching operator/API issuer and trust domain, issuer
+readiness, and the selected route's actual client-certificate TLSOption and
+workload CA bundle reference. Configuration drift, unreadable configuration and
+routes without client-certificate verification fail with the current readiness
+state. `update` installs the required read-only permissions without enabling
+certificates on an installation where the operator has them off. The API repeats
+these checks before session and certificate issuance. A later failure removes
+only the newly created, caller-owned session while it is still pending;
+reused and completed sessions survive, including concurrent enrollment cleanup.
+Completing enrollment cannot undo an administrator's concurrent revocation.
+
 `--platform-url` takes scheme and host only, with no `/api` path. It defaults to the URL saved by `auth login` or `$MCP_PLATFORM_API_URL`.
 
 ```bash
@@ -629,6 +642,13 @@ identity. Certificate identity requires an `https` runtime URL.
 
 See [Agent adapters](connect-clients.md#enterprise-mtls-and-spiffe) for gateway and Traefik certificate setup.
 
+On macOS, `adapter profile` and `adapter service` manage the per-user
+background adapter daemon. This CLI preview does not yet ship the planned
+native Dock app or signed/notarized distribution; desktop sleep/wake,
+two-profile isolation and full lifecycle acceptance remain open. See the
+[macOS service guide](connect-clients.md#macos-background-adapter-service-cli-preview)
+for profile authorization, client configuration and credential handling.
+
 ## agent
 
 Create and manage immutable, team-scoped agent identities used by access grants
@@ -655,6 +675,16 @@ team. The API rejects unknown, malformed, inactive, and wrong-team agent IDs.
 
 ## team
 
+For account-wide cleanup, `mcp-runtime user deactivate <user-id> --yes --json`
+permanently disables a platform account and returns non-secret committed cleanup
+counts. This administrator-only command removes memberships and revokes stored
+API keys, registry credentials, refresh tokens and human MCP sessions, retaining
+audit history and the identity tombstone. Repeating cleanup is idempotent.
+The signed-in administrator, last active administrator and sole active team
+owners are protected; transfer authority first. This differs from membership-only
+`team user remove`. See [Teams and access](teams-and-access.md) for the disposable
+test-identity workflow and gateway sync/registry bearer expiry limits.
+
 Platform admins create teams. A team owner can add users to their own team
 or update their team role.
 
@@ -666,18 +696,26 @@ MCP_PLATFORM_API_PROFILE=admin mcp-runtime team list
 MCP_PLATFORM_API_PROFILE=admin mcp-runtime team create acme --name "Acme Corp"
 
 MCP_PLATFORM_API_PROFILE=admin mcp-runtime team user create acme \
-  --email alice@acme.com --password '...' --role owner
+  --email alice@acme.com --role owner
 
 # Add an existing platform user to a team or update their team role. Use their
 # immutable user ID; their password stays unchanged.
 MCP_PLATFORM_API_PROFILE=admin mcp-runtime team user add acme <user-id> --role member
 
+MCP_PLATFORM_API_PROFILE=admin mcp-runtime team user remove acme <user-id>
+
 MCP_PLATFORM_API_PROFILE=admin mcp-runtime team user list acme
 ```
 
-A saved login token keeps the membership from the moment it was issued. Run
-`mcp-runtime auth login` again before `server build`, `server push`, or
-`server deploy` for that team.
+`team user create` prompts twice for a hidden password. For automation, pass it
+through stdin with `--password-stdin`; the command line does not accept a
+password value. Removing a team's only owner requires `--confirm-last-owner`.
+Membership removal does not delete the platform account or revoke account-wide
+API keys and sessions.
+
+After validating a saved login token, the APIs resolve current account and
+membership state. Role and membership changes take effect on the next request;
+directory outages deny access rather than relying on stale token claims.
 
 Team users log in with:
 
@@ -900,7 +938,8 @@ With `--only`, CRD apply is skipped so a scoped image update cannot mutate
 cluster schemas; re-run without `--only` to apply schema changes. `--dry-run`
 prints the plan only and does not apply CRDs or roll images.
 
-A release can also declare the ServiceAccounts and RBAC its workloads need
+A release can also declare the ServiceAccounts, RBAC and supported platform
+NetworkPolicies its workloads need
 (`platformObjects`) and per-component Deployment wiring (ServiceAccount, token
 mount and required env). update creates or corrects only those declared objects
 and fields before rolling images, so a release such as v0.7.2 (gateway-to-ingest
@@ -1029,6 +1068,7 @@ mcp-runtime cluster cert apply
 mcp-runtime cluster cert wait --timeout 10m
 
 mcp-runtime cluster doctor                                   # pre-setup readiness
+mcp-runtime cluster identity status --server mcp-servers-public/example-server # workload issuer/route mTLS health
 KUBECONFIG=~/.kube/config mcp-runtime cluster diagnostics    # post-setup diagnostic
 
 # Repair operator RBAC from this release after an image-only update.
@@ -1040,6 +1080,20 @@ mcp-runtime cluster operator-rbac apply --kubeconfig /path/to/kubeconfig --conte
 bundled MCP Auth is installed, it also grants the operator `patch` on only the
 `mcp-platform/mcp-auth-server` Deployment. It does not change workload images,
 Secrets, or tenant namespace bindings.
+
+`cluster identity status` is a read-only check for a selected MCPServer. It
+compares the operator deployment's adapter-certificate, issuer, and trust-domain
+settings with the runtime API's configured values; checks workload
+`ClusterIssuer` readiness; and reports the selected route's client-certificate
+TLSOption, public CA subject, issuer, SHA-256 fingerprint, expiry, and trusted
+bundle fingerprint. Both deployments resolve the selected container's literal
+environment, ConfigMap key references and declared `envFrom` sources using
+Kubernetes precedence. Unreadable or Secret-backed configuration is a failed
+check; it is never reported as disabled. The check follows the route's actual
+TLSOption, including explicit overrides, and rejects plaintext routes or options
+that do not verify client certificates. Adapter certificates disabled in the operator are reported
+as off by choice. The command reads only the public `ca.crt`/`tls.ca` fields and
+never reads or prints Secret private keys or credentials.
 
 ## Further reading
 

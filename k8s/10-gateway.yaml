@@ -611,9 +611,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: mcp-platform-gateway-observability
-  namespace: mcp-observability
-  annotations:
-    traefik.ingress.kubernetes.io/router.middlewares: platform-admin-auth@file
+  namespace: mcp-platform
 spec:
   ingressClassName: traefik
   rules:
@@ -623,9 +621,9 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: grafana
+                name: mcp-ui
                 port:
-                  number: 3000
+                  number: 8082
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress

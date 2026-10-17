@@ -218,6 +218,75 @@ The CA bundle does not receive or sign the CSR itself. The platform certificate
 endpoint submits the validated request to the configured issuer and returns the
 issuer's chain as the bundle.
 
+## macOS background adapter and companion
+
+The macOS CLI can run isolated adapter profiles in a per-user background
+service. Each profile is explicitly authorized for one platform, team, human,
+agent, server and session; local MCP clients receive a separate owner-only
+credential. Session expiry still requires interactive authorization. The
+native companion is a normal Dock app with one status/control window. It uses
+the bundled CLI's protected management API, never reads credential storage,
+and leaves the daemon running when closed or quit. It reports local readiness
+separately from measured upstream authorization, profile identity, certificate
+expiry and redacted errors. Reconnect renews only the existing session; a new
+consent lifetime still requires interactive CLI authorization.
+
+```bash
+mcp-runtime adapter profile add work \
+  --runtime-url https://mcp.example.com/workspace-assistant/mcp \
+  --namespace mcp-team-acme \
+  --server workspace-assistant \
+  --agent agt_01arz3ndektsv4rrffq69g5fav
+mcp-runtime adapter service install
+mcp-runtime adapter profile client-config work --output ~/mcp-work.json
+mcp-runtime adapter service status
+```
+
+`profile add` uses the selected interactive platform login to authorize the
+session. `client-config` refuses to overwrite an existing file and writes the
+local credential with mode `0600`; protect that file as a credential. The
+daemon binds only to IPv4 loopback, rejects browser-origin requests, and
+requires the profile's local token. `service logs` and `service status` report
+fixed redacted events and measured state, not certificates, private keys,
+tokens or MCP payloads. `service uninstall` preserves profiles unless
+`--purge` is supplied. This daemon slice is for macOS and is not a substitute
+for the existing foreground `adapter proxy` workflow on other platforms.
+
+The companion targets macOS 13 or later on Apple Silicon and Intel. Its
+authoritative target and Swift 5 language mode are in `desktop/macos/build.sh`;
+use Xcode 14 or later from [Apple's Xcode distribution](https://developer.apple.com/xcode/)
+and select its command-line tools (`xcode-select --install` for the standalone
+tools). These requirements were reviewed on 2026-10-17; this change does not
+upgrade a developer's installed toolchain. Build each
+architecture on a Mac with those tools and the Go version in
+`go.mod`; these commands compile/package without opening the app or starting
+the daemon:
+
+```bash
+bash desktop/macos/build.sh arm64 dist
+bash desktop/macos/build.sh amd64 dist
+```
+
+PR build artifacts are explicitly **unsigned previews**. They are not the
+signed/notarized distribution. For distribution, configure a Developer ID
+Application identity and a `notarytool` profile in the build user's Keychain,
+then set `MCP_DESKTOP_SIGNING_IDENTITY` and `MCP_DESKTOP_NOTARY_PROFILE` to those
+names and add `--sign` to each build command. Signing runs inside-out with the
+hardened runtime, submits to Apple, staples the accepted ticket and verifies
+Gatekeeper before producing `*-notarized.zip`. See Apple's
+[notarization workflow](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution)
+and [Developer ID guidance](https://developer.apple.com/developer-id/).
+
+Install the app in Applications and use **Install and enable login startup**
+after configuring profiles. To update, replace the app and reinstall the
+service from it; the CLI copies a stable managed binary and preserves profiles.
+The app and daemon require management protocol version 1. To remove startup
+and stop the daemon, choose **Uninstall service**; deleting the app alone does
+not uninstall the daemon. Remove stored profiles only through the explicit CLI
+purge option. Signing/notarization and real macOS sleep/wake, install/update/
+uninstall and two-profile desktop acceptance still need release evidence;
+Linux/headless compilation checks cannot establish those results.
+
 ## Optional header mode
 
 Use header mode when the MCP server authenticates the caller with its own
@@ -315,6 +384,18 @@ the platform's SPIFFE trust domain. Production must configure both
 `MCP_TRUST_DOMAIN` and `MCP_SETUP_MTLS_CLUSTER_ISSUER`; test mode defaults the
 issuer to `mcp-runtime-ca`.
 
+Enrollment checks this deployed operator choice before creating a session. The
+operator and runtime API must use the same workload issuer and trust domain,
+and the selected IngressRoute must request and verify client certificates using
+the configured workload CA bundle. Preflight reads deployment/ConfigMap, issuer,
+route and TLSOption metadata; it never reads certificate private keys. Secret-backed
+operator configuration is reported as unavailable. Normal `mcp-runtime update`
+installs these read-only permissions and preserves the existing on/off choice.
+If certificate issuance later fails, the CLI conditionally deletes only its new
+pending enrollment, with a bounded cleanup attempt even after cancellation.
+Completion and cleanup check current session state under the same store lock as
+revocation, so cleanup cannot remove a completed session or reactivate a revoke.
+
 **Approval gate.** The runtime API creates the session certificate as a
 cert-manager `CertificateRequest` against the workload issuer, and cert-manager
 auto-approves requests to built-in issuers by default. Any other principal able
@@ -335,7 +416,7 @@ issued certificate whose URI, key, usages, or lifetime differ from the submitted
 CSR, and its ClusterRole only grants `create` and `get` on `CertificateRequests`.
 
 **Approval policies for production.** `config/cert-manager/approval-policies.yaml`
-holds a tested policy set. Turning off cert-manager's default approver is
+holds the hosted policy set. Turning off cert-manager's default approver is
 cluster-wide, so every request the platform makes needs a policy:
 
 | Policy | Requester | Issuer | Allows |
@@ -356,17 +437,35 @@ cluster and kubeconfig, and asserts approval, denial and renewal):
 hack/qa/approval-policy-rehearsal.sh
 ```
 
+The rehearsal pins cert-manager **v1.21.2**, approver-policy **v0.28.0** and a
+digest-pinned Kubernetes **1.36.4** Kind node (reviewed 2026-10-17). It refuses an
+existing cluster name and keeps Helm state inside its temporary directory.
+The node pin comes from [Kind v0.33.0](https://github.com/kubernetes-sigs/kind/releases/tag/v0.33.0);
+cert-manager's [support matrix](https://cert-manager.io/docs/releases/) covers
+Kubernetes 1.33–1.36 for the 1.21 series. The Workload Issuer Approval PR workflow
+runs this headless admission matrix on its own GitHub runner.
+These are admission tests using direct CertificateRequests, including hidden
+`otherName`/`directoryName` SANs; they do not replace the supported CLI adapter
+enrollment journey. The runtime API and adapter also inspect the complete SAN
+extension, because Go's parsed URI/DNS fields omit those additional name types.
+Approver-policy versions before v0.27.0 lack fixes for raw SAN and subject
+validation bypasses; use the reviewed pin rather than the former v0.17.0 example.
+See the [upstream security fixes](https://github.com/cert-manager/approver-policy/releases/tag/v0.27.0)
+and [v0.28.0 maintenance release](https://github.com/cert-manager/approver-policy/releases/tag/v0.28.0).
+
 Then, in this order, with the production kubeconfig passed explicitly:
 
-1. Install approver-policy for your cert-manager version (for cert-manager
-   v1.16: `helm install approver-policy jetstack/cert-manager-approver-policy
-   --version v0.17.0 -n cert-manager --wait`). It changes nothing yet.
+1. On cert-manager v1.21.2, install the reviewed approver:
+   `helm upgrade --install approver-policy oci://quay.io/jetstack/charts/cert-manager-approver-policy
+   --version v0.28.0 -n cert-manager --wait`. Confirm its Deployment is ready.
+   It changes no approval decisions while the default approver is still enabled.
 2. `kubectl apply -f config/cert-manager/approval-policies.yaml` and confirm all
    three policies report `Ready=True`.
 3. Add `--controllers=*,-certificaterequests-approver` to the `cert-manager`
    Deployment arguments. Keep a copy of the Deployment YAML first.
 4. Verify a gateway certificate and a session certificate still issue, and that
-   no `CertificateRequest` is left pending.
+   legitimate `CertificateRequest` is left pending. Negative requests must
+   remain denied or unapproved with no issued certificate.
 5. Only then set `MCP_WORKLOAD_ISSUER_APPROVAL_ACK=true` for setup and enable
    `MCP_ADAPTER_CERTIFICATES=true` on the operator.
 

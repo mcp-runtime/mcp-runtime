@@ -8,7 +8,6 @@ import (
 	"io"
 	"log"
 	"math"
-	"mcp-runtime/pkg/serviceutil"
 	"net/http"
 	"net/url"
 	"sort"
@@ -19,9 +18,11 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
+	chpkg "mcp-runtime/pkg/clickhouse"
 	"mcp-runtime/pkg/controlplane"
 	"mcp-runtime/pkg/k8sclient"
 	"mcp-runtime/pkg/platformauth"
+	"mcp-runtime/pkg/serviceutil"
 )
 
 const (
@@ -213,6 +214,12 @@ func (s *RuntimeServer) HandleRuntimeObservabilityMetrics(w http.ResponseWriter,
 			results <- result{id: query.id, value: value, tool: tool, err: err}
 		}()
 	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		tool, err := s.slowestObservedTool(ctx, target.Namespace, target.Name, string(target.UID))
+		results <- result{id: "slowest_tool", tool: tool, err: err}
+	}()
 	go func() { wg.Wait(); close(results) }()
 
 	var summary observabilityMetricsSummary
@@ -241,14 +248,44 @@ func (s *RuntimeServer) HandleRuntimeObservabilityMetrics(w http.ResponseWriter,
 func scopedObservabilityMetricQueries(namespace, serverName, uid string) []observabilityMetricQuery {
 	selector := observabilityMetricSelector(namespace, serverName, uid)
 	callSelector := selector + `,rpc_method="tools/call"`
-	toolSelector := selector
 	return []observabilityMetricQuery{
 		{id: "tools_call_rate", query: fmt.Sprintf(`sum(rate(mcp_gateway_requests_total{%s}[1h]))`, callSelector)},
 		{id: "tools_call_p95", query: fmt.Sprintf(`histogram_quantile(0.95, sum by (le) (rate(mcp_gateway_request_duration_seconds_bucket{%s}[1h])))`, callSelector)},
 		{id: "upstream_5xx_rate", query: fmt.Sprintf(`sum(rate(mcp_gateway_requests_total{%s,decision="allow",status=~"5.."}[1h]))`, callSelector)},
 		{id: "policy_deny_count", query: fmt.Sprintf(`sum(increase(mcp_gateway_policy_decisions_total{%s,decision="deny"}[1h]))`, selector)},
-		{id: "slowest_tool", query: fmt.Sprintf(`topk(1, histogram_quantile(0.95, sum by (le,tool) (rate(mcp_gateway_tool_call_duration_seconds_bucket{%s}[1h]))) and on (tool) (sum by (tool) (increase(mcp_gateway_tool_call_duration_seconds_count{%s}[1h])) >= 5))`, toolSelector, toolSelector)},
 	}
+}
+
+// Use actual allowed tools/call rows, rather than extrapolated histogram counts,
+// before naming a slowest tool. The immutable UID prevents name-reuse leaks.
+func (s *RuntimeServer) slowestObservedTool(ctx context.Context, namespace, server, uid string) (string, error) {
+	if s.db == nil || s.db.Conn == nil {
+		return "", nil
+	}
+	if err := chpkg.ValidateDBName(s.db.DBName); err != nil {
+		return "", err
+	}
+	query := `SELECT tool_name FROM ` + s.db.DBName + `.events
+		WHERE namespace = ? AND server = ? AND JSONExtractString(payload, 'server_uid') = ?
+		AND timestamp >= now() - INTERVAL 1 HOUR AND timestamp <= now()
+		AND JSONExtractString(payload, 'rpc_method') = 'tools/call'
+		AND event_type = 'mcp.request'
+		AND decision = 'allow' AND tool_name != '' AND JSONHas(payload, 'latency_ms')
+		GROUP BY tool_name HAVING count() >= 5
+		ORDER BY quantileExact(0.95)(JSONExtractInt(payload, 'latency_ms')) DESC, tool_name ASC LIMIT 1`
+	rows, err := s.db.Conn.Query(ctx, query, namespace, server, uid)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return "", rows.Err()
+	}
+	var tool string
+	if err := rows.Scan(&tool); err != nil {
+		return "", err
+	}
+	return tool, rows.Err()
 }
 
 func fetchObservabilityMetric(ctx context.Context, query string) (*float64, string, error) {
@@ -535,6 +572,10 @@ func publicAPIURL(r *http.Request, apiPath string) string {
 }
 
 func grafanaLinkForServer(info controlplane.ServerInfo, p principal) observabilityGrafanaLink {
+	if grafanaScopedAccessEnabled() {
+		values := url.Values{"var-namespace": {info.Namespace}, "var-server": {info.Name}, "var-server_uid": {info.UID}}
+		return observabilityGrafanaLink{Available: true, URL: strings.TrimSuffix(envOr("UI_GRAFANA_PATH", "/grafana"), "/") + "/d/mcp-server/mcp-server?" + values.Encode()}
+	}
 	template := strings.TrimSpace(envOr(envGrafanaServerDashboardURL, ""))
 	if template == "" {
 		if p.Role != roleAdmin {
@@ -546,6 +587,7 @@ func grafanaLinkForServer(info controlplane.ServerInfo, p principal) observabili
 		values := url.Values{}
 		values.Set("var-namespace", info.Namespace)
 		values.Set("var-server", info.Name)
+		values.Set("var-server_uid", info.UID)
 		return observabilityGrafanaLink{
 			Available:       true,
 			URL:             strings.TrimSuffix(envOr("UI_GRAFANA_PATH", "/grafana"), "/") + "/d/mcp-server/mcp-server?" + values.Encode(),
@@ -655,7 +697,12 @@ func serverHasUserOwnerLabel(labels map[string]string, p principal) bool {
 func scopedPrometheusQueryByID(queryID, namespace, serverName, uid string) (scopedPrometheusQuery, bool) {
 	queryID = strings.TrimSpace(queryID)
 	if queryID == "" {
-		queryID = "up"
+		queryID = "request_rate"
+	}
+	// Preserve explicit old health API links without advertising the redundant
+	// panel on cards/details or in the provisioned server dashboard.
+	if queryID == "up" {
+		return scopedPrometheusQuery{ID: "up", Name: "Target health", Query: "up{" + observabilityMetricSelector(namespace, serverName, uid) + "}"}, true
 	}
 	for _, query := range scopedPrometheusQueries(namespace, serverName, uid) {
 		if query.ID == queryID {
@@ -671,34 +718,32 @@ func observabilityMetricSelector(namespace, serverName, uid string) string {
 
 func scopedPrometheusQueries(namespace, serverName, uid string) []scopedPrometheusQuery {
 	selector := observabilityMetricSelector(namespace, serverName, uid)
+	callSelector := selector + `,rpc_method="tools/call"`
 	return []scopedPrometheusQuery{
 		{
-			ID:          "up",
-			Name:        "Target health",
-			Description: "Prometheus scrape health for this MCP server scope.",
-			Query:       "up{" + selector + "}",
-			PanelID:     1,
-		},
-		{
 			ID:          "request_rate",
-			Name:        "Request rate",
-			Description: "Five-minute MCP gateway request rate for this server.",
-			Query:       "sum(rate(mcp_gateway_requests_total{" + selector + "}[5m]))",
+			Name:        "tools/call rate",
+			Description: "One-hour tools/call rate for this server.",
+			Query:       "sum(rate(mcp_gateway_requests_total{" + callSelector + "}[1h]))",
 			PanelID:     2,
 		},
 		{
 			ID:          "deny_rate",
-			Name:        "Deny rate",
-			Description: "Five-minute policy denial rate for this server.",
-			Query:       `sum(rate(mcp_gateway_policy_decisions_total{` + selector + `,decision="deny"}[5m]))`,
+			Name:        "Policy denies",
+			Description: "One-hour policy denial count for this server.",
+			Query:       `sum(increase(mcp_gateway_policy_decisions_total{` + selector + `,decision="deny"}[1h]))`,
 			PanelID:     3,
 		},
 		{
 			ID:          "latency_p95",
-			Name:        "p95 latency",
-			Description: "Five-minute p95 gateway latency for this server.",
-			Query:       "histogram_quantile(0.95, sum(rate(mcp_gateway_request_duration_seconds_bucket{" + selector + "}[5m])) by (le))",
+			Name:        "tools/call p95",
+			Description: "One-hour tools/call p95 gateway latency for this server.",
+			Query:       "histogram_quantile(0.95, sum by (le) (rate(mcp_gateway_request_duration_seconds_bucket{" + callSelector + "}[1h])))",
 			PanelID:     4,
+		},
+		{
+			ID: "upstream_5xx_rate", Name: "Upstream 5xx rate", Description: "One-hour allowed tools/call upstream HTTP 5xx rate.",
+			Query: "sum(rate(mcp_gateway_requests_total{" + callSelector + `,decision="allow",status=~"5.."}[1h]))`, PanelID: 5,
 		},
 	}
 }

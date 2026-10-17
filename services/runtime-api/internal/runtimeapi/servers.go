@@ -631,13 +631,13 @@ func (s *RuntimeServer) handleRuntimeServerGet(w http.ResponseWriter, r *http.Re
 	if allowed, err := s.Access().canAdministerNamedServer(ctx, namespace, name); err != nil {
 		log.Printf("runtime server status: inspect activity permission for %s/%s failed: %v", namespace, name, err)
 	} else if allowed {
-		server.RuntimeStatus.LastSession, server.RuntimeStatus.LastSessionState = s.latestServerSession(ctx, namespace, name)
+		server.RuntimeStatus.LastSession, server.RuntimeStatus.LastSessionState = s.latestServerSession(ctx, namespace, name, info.UID)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"server": server})
 }
 
-func (s *RuntimeServer) latestServerSession(ctx context.Context, namespace, name string) (*controlplane.ServerLastSession, string) {
-	if s == nil || s.db == nil || s.db.Conn == nil {
+func (s *RuntimeServer) latestServerSession(ctx context.Context, namespace, name, uid string) (*controlplane.ServerLastSession, string) {
+	if uid == "" || s == nil || s.db == nil || s.db.Conn == nil {
 		return nil, "unavailable"
 	}
 	queryCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
@@ -646,17 +646,27 @@ func (s *RuntimeServer) latestServerSession(ctx context.Context, namespace, name
 		EventType: "mcp.request",
 		Namespace: namespace,
 		Server:    name,
+		ServerUID: uid,
 		Limit:     1000,
 	})
 	if err != nil {
 		log.Printf("runtime server status: latest session query for %s/%s failed: %v", namespace, name, err)
 		return nil, "unavailable"
 	}
-	return latestServerSessionFromEvents(namespace, rows)
+	return latestServerSessionFromEvents(namespace, uid, rows)
 }
 
-func latestServerSessionFromEvents(namespace string, rows []chpkg.EventRow) (*controlplane.ServerLastSession, string) {
+func latestServerSessionFromEvents(namespace, uid string, rows []chpkg.EventRow) (*controlplane.ServerLastSession, string) {
+	if uid == "" {
+		return nil, "unavailable"
+	}
 	for _, row := range rows {
+		var identity struct {
+			ServerUID string `json:"server_uid"`
+		}
+		if json.Unmarshal(row.Payload, &identity) != nil || identity.ServerUID != uid {
+			continue
+		}
 		if sessionID := strings.TrimSpace(row.SessionID); sessionID != "" {
 			return &controlplane.ServerLastSession{
 				ID:        sessionID,

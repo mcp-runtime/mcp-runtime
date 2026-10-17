@@ -45,11 +45,11 @@ export function AppShell({
     description: string; active: boolean; select: () => void };
   const groups: { label: string; items: NavItem[] }[] = [
     { label: "Runtime", ids: ["servers", "agents", "access"] },
-    { label: "Workspace", ids: ["activity", "keys"] },
+    { label: "Workspace", ids: ["workspace", "activity", "keys"] },
   ].map((group) => ({ label: group.label, items: tabs.filter((tab) => group.ids.includes(tab.id))
     .map((tab) => ({ ...tab, active: tab.id === workspace, select: () => onSelectWorkspace(tab.id) })) }));
   if (isAdmin(auth)) {
-    const icons = { teams: "users", operations: "activity", platform: "gauge", analytics: "chart" } as const;
+    const icons = { overview: "gauge", teams: "users", operations: "activity", platform: "gauge", analytics: "chart" } as const;
     groups.push(...ADMIN_GROUPS.map((label) => ({ label, items: ADMIN_SECTIONS
       .filter((item) => item.group === label).map((item) => ({ ...item, id: `admin-${item.id}`,
         icon: icons[item.id], active: workspace === "admin" && adminSection(section).id === item.id,
@@ -151,7 +151,6 @@ export function AppShell({
               workspace={workspace}
               onSignIn={onSignIn}
               onSignOut={onSignOut}
-              onOpenCatalog={() => onSelectWorkspace("servers")}
             />
 
             <span className="topbar-divider" aria-hidden="true" />

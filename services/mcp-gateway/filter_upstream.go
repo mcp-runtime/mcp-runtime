@@ -1,6 +1,10 @@
 package main
 
-import policypkg "mcp-runtime/pkg/policy"
+import (
+	"context"
+
+	policypkg "mcp-runtime/pkg/policy"
+)
 
 // upstreamFilter is stage 5 of the gateway pipeline. It preserves the OAuth
 // bearer token for validation by the upstream MCP server, strips any configured
@@ -10,6 +14,18 @@ import policypkg "mcp-runtime/pkg/policy"
 // (all set by earlier stages) and must not mutate them. It always returns Respond
 // so the pipeline halts and stage 6 (audit) runs from the orchestrator.
 func (s *gatewayServer) upstreamFilter(ex *Exchange) Result {
+	outcome := &upstreamOutcome{}
+	ex.R = ex.R.WithContext(context.WithValue(ex.R.Context(), upstreamOutcomeKey{}, outcome))
+	defer func() {
+		outcome.mu.Lock()
+		defer outcome.mu.Unlock()
+		if outcome.reason != "" {
+			ex.Decision.Reason, ex.Decision.Status = outcome.reason, outcome.status
+			if outcome.reject {
+				ex.Decision.Allowed = false
+			}
+		}
+	}()
 	// The verified SPIFFE header is an ingress-to-gateway assertion; the MCP
 	// server must never see it, forged or not.
 	ex.R.Header.Del(s.verifiedSPIFFEHeaderName())

@@ -30,6 +30,17 @@ type PlatformClient struct {
 	apiPrefix string
 }
 
+// NewCredentialClient binds a client to one explicitly selected identity. Unlike
+// NewPlatformClient it never reads or changes process-wide login selection.
+func NewCredentialClient(baseURL, token string) (*PlatformClient, error) {
+	u, err := url.Parse(baseURL)
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || strings.TrimSpace(token) == "" {
+		return nil, fmt.Errorf("an HTTPS platform URL and saved login are required")
+	}
+	return &PlatformClient{baseURL: NormalizeBaseURL(baseURL), token: token,
+		http: &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, apiPrefix: "/api/v1"}, nil
+}
+
 // NewPlatformClient returns a client when platform credentials and API base URL are configured.
 // If the user is not logged in, returns [authfile.ErrNotFound].
 func NewPlatformClient() (*PlatformClient, error) {

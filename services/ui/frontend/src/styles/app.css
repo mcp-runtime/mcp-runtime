@@ -206,7 +206,7 @@
   border-radius: 999px; background: var(--surface-raised); color: var(--text); cursor: pointer;
 }
 .account-trigger:hover, .account-trigger[aria-expanded="true"] { border-color: var(--accent-line); background: var(--surface-hover); }
-.account-avatar, .account-server-icon {
+.account-avatar {
   display: grid; place-items: center; flex: none; width: 28px; height: 28px;
   border-radius: 50%; background: var(--accent-soft); color: var(--accent);
 }
@@ -219,28 +219,13 @@
   box-shadow: var(--elevation-2);
 }
 .account-popover-heading { padding-bottom: var(--space-3); border-bottom: 1px solid var(--border); }
-.account-popover-eyebrow, .account-server-heading p { display: block; color: var(--text-secondary); font-size: var(--fs-meta); }
+.account-popover-eyebrow { display: block; color: var(--text-secondary); font-size: var(--fs-meta); }
 .account-identity { display: block; overflow-wrap: anywhere; margin-top: 3px; font-size: var(--fs-body); }
 .account-badges { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-2); }
-.account-role-badge, .account-method { padding: 3px 8px; border-radius: 999px; background: var(--surface-hover); color: var(--text-secondary); font-size: 11px; }
+.account-role-badge { padding: 3px 8px; border-radius: 999px; background: var(--surface-hover); color: var(--text-secondary); font-size: 11px; }
 .account-role-badge.is-admin { background: var(--accent-soft); color: var(--accent); }
 .account-access-scope { margin-top: var(--space-2); color: var(--text-secondary); font-size: var(--fs-meta); }
-.account-server-section { padding-top: var(--space-3); }
-.account-server-heading { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
-.account-server-heading h2, .account-signed-out h2 { font-size: var(--fs-body); }
-.account-server-count { display: grid; place-items: center; min-width: 26px; height: 26px; border-radius: 999px; background: var(--surface-hover); font-size: var(--fs-meta); }
-.account-server-list { list-style: none; margin: 0 0 var(--space-3); padding: 0; }
-.account-server-item { display: flex; align-items: center; gap: var(--space-2); min-width: 0; padding: 8px 0; border-bottom: 1px solid var(--border); }
-.account-server-icon { width: 25px; height: 25px; border-radius: var(--radius-sm); }
-.account-server-copy { display: flex; flex: 1; flex-direction: column; min-width: 0; }
-.account-server-copy strong, .account-server-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.account-server-copy strong { font-size: var(--fs-meta); }
-.account-server-copy span, .account-server-status, .account-server-state, .account-server-more { color: var(--text-secondary); font-size: 11px; }
-.account-server-status { flex: none; }
-.account-server-error { display: flex; justify-content: space-between; gap: var(--space-2); color: var(--danger); font-size: var(--fs-meta); }
-.account-server-error button { color: var(--link); background: none; border: 0; cursor: pointer; }
-.account-server-state { padding: var(--space-2) 0; }
-.account-server-more { margin: -5px 0 var(--space-2); }
+.account-signed-out h2 { font-size: var(--fs-body); }
 .account-popover-footer { margin-top: var(--space-3); padding-top: var(--space-2); border-top: 1px solid var(--border); }
 .account-signed-out { text-align: center; padding: var(--space-2) 0; }
 .account-avatar-large { width: 42px; height: 42px; margin: 0 auto var(--space-3); }
@@ -463,6 +448,20 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+}
+
+.server-card-metrics {
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  color: var(--text-secondary);
+  font-size: var(--fs-meta);
+}
+
+.server-card-metrics b {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
 }
 
 .server-card-actions {
@@ -1112,3 +1111,9 @@
   margin-left: auto;
   color: var(--danger);
 }
+/* Resource overviews keep each independent read and long resource name usable. */
+.overview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: var(--space-4); padding: 0; list-style: none; }
+.overview-card { padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); overflow-wrap: anywhere; min-width: 0; }
+.overview-card h3 { margin-top: 0; }
+.overview-card dd { margin: var(--space-2) 0 0; font-size: 1.6rem; font-weight: 650; }
+.overview-resource-list { overflow-wrap: anywhere; }

@@ -63,6 +63,7 @@ var pathBasedPlatformIngresses = []struct {
 	{"mcp-platform-gateway-adapter-session", "runtime-api"},
 	{"mcp-platform-gateway-api", "platform-api"},
 	{"mcp-platform-gateway-observability", "grafana"},
+	{"mcp-platform-gateway-observability", "ui"},
 	{"mcp-platform-gateway-analytics", "analytics-api"},
 	{"mcp-platform-gateway-ingest", "ingest"},
 }
@@ -500,7 +501,7 @@ func setupPlatformWithDeps(logger *zap.Logger, plan setupplan.Plan, deps SetupDe
 
 	core.Info("Team publishing uses --scope tenant with a team-scoped image repository.")
 	fmt.Println("For a new team: mcp-runtime team create first-team")
-	fmt.Println("Then: mcp-runtime team user add first-team <user-id> --role owner (existing user), or mcp-runtime team user create first-team --email <email> --password <password> --role owner (new user).")
+	fmt.Println("Then: mcp-runtime team user add first-team <user-id> --role owner (existing user), or mcp-runtime team user create first-team --email <email> --role owner (new user; prompts for a hidden password).")
 	fmt.Println("Signed-in users can also publish with --scope org; public mode additionally allows --scope public.")
 	core.Success("Platform setup complete")
 	fmt.Println(core.Green("\nPlatform is ready. Use 'mcp-runtime status' to check everything."))

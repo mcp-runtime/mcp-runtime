@@ -67,6 +67,7 @@ func main() {
 		},
 		events: analytics.NewHandler(&clickhousepkg.Client{Conn: conn, DBName: dbName}),
 		authentic: platformauth.Authenticator{
+			Principals:     &platformauth.HTTPUserKeyResolver{BaseURL: platformAPIURL, Token: internalToken},
 			Secret:         jwtSecret,
 			Audience:       platformauth.AudienceAnalytics,
 			ServiceAPIKeys: serviceAPIKeysFromEnv(),
