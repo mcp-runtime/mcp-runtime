@@ -324,6 +324,7 @@ export type ServerRef = {
 };
 
 export type GrantSummary = {
+  mode?: "enforce" | "monitor";
   name: string;
   namespace: string;
   serverRef?: ServerRef;

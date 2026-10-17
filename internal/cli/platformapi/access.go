@@ -38,6 +38,7 @@ type sessionGetResponse struct {
 }
 
 type grantAPIBody struct {
+	Mode               mcpaccess.GrantMode        `json:"mode,omitempty"`
 	Name               string                     `json:"name"`
 	Namespace          string                     `json:"namespace"`
 	ServerRef          mcpaccess.ServerReference  `json:"serverRef"`
@@ -321,6 +322,7 @@ func grantFromV1(g *mcpv1alpha1.MCPAccessGrant) grantAPIBody {
 	}
 	dis := g.Spec.Disabled
 	return grantAPIBody{
+		Mode:               mcpaccess.GrantMode(g.Spec.Mode),
 		Name:               g.Name,
 		Namespace:          ns,
 		ServerRef:          mcpaccess.ServerReference{Name: mcpaccess.ServerName(g.Spec.ServerRef.Name), Namespace: mcpaccess.Namespace(g.Spec.ServerRef.Namespace)},

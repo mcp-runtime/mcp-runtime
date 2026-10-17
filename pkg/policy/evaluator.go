@@ -80,8 +80,53 @@ func Allow(reason, policyVersion string) Decision {
 
 // Authorize evaluates a rendered gateway policy document for a single MCP RPC request.
 func Authorize(policy *Document, request Request, now time.Time) Decision {
-	decision := authorize(policy, request, now)
-	return applyGrantMonitor(policy, request, now, decision)
+	if policy == nil || UsesDelegatedHeaders(policy) || policyModeObserve(policy) || !IsToolCallMethod(request.RPCMethod) {
+		return authorize(policy, request, now)
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	var enforcing, monitoring []Grant
+	var activeEnforcing, activeMonitoring bool
+	for _, grant := range policy.Grants {
+		active := subjectMatchesTeam(grant.HumanID, grant.AgentID, grant.TeamID, request.Identity) && !grant.Disabled && !isExpiredAt(grant.ExpiresAt, now)
+		if strings.EqualFold(strings.TrimSpace(grant.Mode), "monitor") {
+			monitoring = append(monitoring, grant)
+			activeMonitoring = activeMonitoring || active
+		} else {
+			enforcing = append(enforcing, grant)
+			activeEnforcing = activeEnforcing || active
+		}
+	}
+	if !activeMonitoring {
+		return authorize(policy, request, now)
+	}
+	if _, sideEffect, _ := resolveToolMetadata(policy.Tools, request.ToolName); sideEffect == "" {
+		// Missing server metadata is not a restriction attributable to a grant.
+		return authorize(policy, request, now)
+	}
+	// Monitor grants cannot contribute permissions or restrictions to the
+	// enforcing policy. Evaluate both groups independently with the same identity
+	// and session gates, preserving existing aggregation within each group.
+	monitored := *policy
+	monitored.Grants = monitoring
+	shadow := authorize(&monitored, request, now)
+	decision := shadow
+	if activeEnforcing {
+		enforced := *policy
+		enforced.Grants = enforcing
+		decision = authorize(&enforced, request, now)
+		if !decision.Allowed {
+			return decision
+		}
+	}
+	if monitorableGrantDenial(shadow.Reason) {
+		decision.Allowed = true
+		decision.Status = http.StatusOK
+		decision.WouldDeny = true
+		decision.WouldDenyReason = shadow.Reason
+	}
+	return decision
 }
 
 func authorize(policy *Document, request Request, now time.Time) Decision {
@@ -250,70 +295,6 @@ func authorize(policy *Document, request Request, now time.Time) Decision {
 		MatchedSession:          matchedSession,
 		MatchedSessionNamespace: matchedSessionNamespace,
 	}
-}
-
-// applyGrantMonitor turns a denial attributable to a matching monitor grant
-// into an allowed decision, retaining the original reason for audit. Identity,
-// session, expiry and policy-availability failures remain fail-closed. When an
-// unattributed tool denial could come from multiple grants, shadow it only if
-// every active matching grant is in monitor mode, so an enforce grant cannot
-// be bypassed.
-func applyGrantMonitor(policy *Document, request Request, now time.Time, decision Decision) Decision {
-	if policy == nil || !monitorableGrantDenial(decision.Reason) {
-		return decision
-	}
-	if now.IsZero() {
-		now = time.Now()
-	}
-	var monitorMatch, enforceMatch bool
-	for _, grant := range policy.Grants {
-		if !subjectMatchesTeam(grant.HumanID, grant.AgentID, grant.TeamID, request.Identity) || grant.Disabled || isExpiredAt(grant.ExpiresAt, now) {
-			continue
-		}
-		isMonitor := strings.EqualFold(strings.TrimSpace(grant.Mode), "monitor")
-		if !isMonitor {
-			enforceMatch = true
-		}
-		if decision.MatchedGrant != "" && grant.Name == decision.MatchedGrant && string(grant.Namespace) == decision.MatchedGrantNamespace && isMonitor {
-			monitorMatch = true
-		}
-		if decision.MatchedGrant == "" && isMonitor {
-			monitorMatch = true
-		}
-	}
-	if !monitorMatch || decision.MatchedGrant == "" && enforceMatch {
-		return decision
-	}
-	wouldDenyReason := decision.Reason
-	if decision.Allowed {
-		// A default-allow policy can already pass a request that a monitor grant
-		// would deny. Preserve the allow while making that shadow result visible.
-		decision.WouldDeny = true
-		decision.WouldDenyReason = wouldDenyReason
-		return decision
-	}
-	if enforceMatch && decision.MatchedGrant != "" {
-		// Evaluate enforcing grants on their own when an explicit monitor grant
-		// produced a deny. An enforce grant's denial must retain precedence; an
-		// enforcing allow may still pass while recording the monitor observation.
-		enforced := *policy
-		enforced.Grants = make([]Grant, 0, len(policy.Grants))
-		for _, grant := range policy.Grants {
-			if !strings.EqualFold(strings.TrimSpace(grant.Mode), "monitor") {
-				enforced.Grants = append(enforced.Grants, grant)
-			}
-		}
-		enforceDecision := authorize(&enforced, request, now)
-		if !enforceDecision.Allowed {
-			return enforceDecision
-		}
-		decision = enforceDecision
-	}
-	decision.WouldDeny = true
-	decision.WouldDenyReason = wouldDenyReason
-	decision.Allowed = true
-	decision.Status = http.StatusOK
-	return decision
 }
 
 func monitorableGrantDenial(reason string) bool {

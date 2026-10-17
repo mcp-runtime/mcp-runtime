@@ -64,6 +64,7 @@ func (m *AccessManager) accessListQueryNamespace(namespace string, allNamespaces
 }
 
 type accessManifestInitOptions struct {
+	Mode               string
 	Kind               string
 	Name               string
 	Namespace          string
@@ -188,6 +189,12 @@ func buildAccessManifest(opts accessManifestInitOptions) ([]byte, error) {
 	}
 	switch opts.Kind {
 	case "MCPAccessGrant":
+		if opts.Mode != "" && opts.Mode != "enforce" && opts.Mode != "monitor" {
+			return nil, fmt.Errorf("--mode must be enforce or monitor")
+		}
+		if opts.Mode != "" {
+			spec["mode"] = opts.Mode
+		}
 		sideEffects, err := normalizeSideEffects(opts.SideEffects)
 		if err != nil {
 			return nil, err
@@ -421,9 +428,13 @@ func (m *AccessManager) listAccessPlatform(ctx context.Context, plat *platformap
 			return core.WrapWithBaseAndContext(nil, err, fmt.Sprintf("list grants: %v", err), map[string]any{"component": "access"})
 		}
 		tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		_, _ = fmt.Fprintln(tw, "NAME\tNAMESPACE\tSERVER\tDISABLED")
+		_, _ = fmt.Fprintln(tw, "NAME\tNAMESPACE\tSERVER\tMODE\tDISABLED")
 		for _, g := range grants {
-			_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%v\n", g.Name, g.Namespace, g.ServerRef.Name, g.Disabled)
+			mode := g.Mode
+			if mode == "" {
+				mode = "enforce"
+			}
+			_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%v\n", g.Name, g.Namespace, g.ServerRef.Name, mode, g.Disabled)
 		}
 		_ = tw.Flush()
 		return nil

@@ -10,6 +10,7 @@ Flags:
       --force                     Replace output file if it already exists
   -h, --help                      help for init
       --human-id string           Human subject ID
+      --mode string               Grant policy mode: enforce or monitor (default "enforce")
       --namespace string          Manifest namespace (default "mcp-servers")
       --output string             Output manifest path (default "grant.yaml")
       --policy-version string     Policy version (default "v1")
