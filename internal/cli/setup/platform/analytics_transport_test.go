@@ -316,3 +316,26 @@ func TestAnalyticsTLSPrivateVolumesReadableByNonRootWorkloads(t *testing.T) {
 		})
 	}
 }
+
+func TestAnalyticsTLSRewritesInlineClickHouseAddrOverrides(t *testing.T) {
+	// Inline container env wins over envFrom, so every workload that pins
+	// CLICKHOUSE_ADDR itself must be moved to the secure native port too;
+	// otherwise analytics-api readiness (ClickHouse ping) returns 503 forever.
+	for _, tc := range []struct{ file, key string }{
+		{"k8s/08-analytics-api.yaml", "Deployment/mcp-analytics-api"},
+		{"k8s/08-runtime-api.yaml", "Deployment/mcp-runtime-api"},
+	} {
+		rendered, err := renderAnalyticsTransportManifest(transportManifest(t, tc.file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		addr := transportEnv(transportContainer(t, transportObjects(t, rendered)[tc.key]))["CLICKHOUSE_ADDR"]
+		if !strings.HasSuffix(addr, ":9440") {
+			t.Fatalf("%s keeps plaintext ClickHouse address %q", tc.key, addr)
+		}
+		second, err := renderAnalyticsTransportManifest(rendered)
+		if err != nil || second != rendered {
+			t.Fatalf("%s rendering is not repeatable: %v", tc.key, err)
+		}
+	}
+}

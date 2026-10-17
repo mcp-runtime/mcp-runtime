@@ -128,6 +128,7 @@ func wireAnalyticsPodTLS(pod map[string]any, name string) error {
 		if usesCA {
 			addAnalyticsMount(container, "analytics-ca", analyticsTLSMount+"/ca")
 		}
+		secureAnalyticsClickHouseEnv(container)
 		switch name {
 		case "kafka":
 			setAnalyticsEnv(container, map[string]string{"KAFKA_LISTENERS": "SSL://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093", "KAFKA_LISTENER_SECURITY_PROTOCOL_MAP": "CONTROLLER:SSL,SSL:SSL", "KAFKA_INTER_BROKER_LISTENER_NAME": "SSL", "KAFKA_SSL_CLIENT_AUTH": "required", "KAFKA_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM": "https", "KAFKA_SSL_KEYSTORE_TYPE": "PKCS12", "KAFKA_SSL_TRUSTSTORE_TYPE": "PKCS12", "KAFKA_SSL_KEYSTORE_FILENAME": "keystore.p12", "KAFKA_SSL_TRUSTSTORE_FILENAME": "truststore.p12", "KAFKA_SSL_KEY_CREDENTIALS": "password", "KAFKA_SSL_KEYSTORE_CREDENTIALS": "password", "KAFKA_SSL_TRUSTSTORE_CREDENTIALS": "password"})
@@ -212,6 +213,25 @@ func addAnalyticsMount(container map[string]any, name, path string) {
 	}
 	_ = unstructured.SetNestedSlice(container, append(mounts, map[string]any{"name": name, "mountPath": path, "readOnly": true}), "volumeMounts")
 }
+
+// secureAnalyticsClickHouseEnv moves inline CLICKHOUSE_ADDR overrides to the
+// secure native port. Inline env takes precedence over envFrom, so the shared
+// ConfigMap rewrite alone leaves such workloads dialing the removed :9000.
+func secureAnalyticsClickHouseEnv(container map[string]any) {
+	variables, _, _ := unstructured.NestedSlice(container, "env")
+	changed := false
+	for _, raw := range variables {
+		variable := raw.(map[string]any)
+		if value, ok := variable["value"].(string); ok && variable["name"] == "CLICKHOUSE_ADDR" && strings.HasSuffix(value, ":9000") {
+			variable["value"] = strings.TrimSuffix(value, ":9000") + ":9440"
+			changed = true
+		}
+	}
+	if changed {
+		_ = unstructured.SetNestedSlice(container, variables, "env")
+	}
+}
+
 func setAnalyticsEnv(container map[string]any, values map[string]string) {
 	variables, _, _ := unstructured.NestedSlice(container, "env")
 	names := make([]string, 0, len(values))
