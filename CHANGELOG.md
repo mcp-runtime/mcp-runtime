@@ -9,6 +9,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Security
 
+- Encrypt non-test analytics traffic with Kafka mutual TLS, verified ClickHouse TLS and HTTPS ingest, preserving the infrastructure CA and using renewable service certificates. Existing plaintext Kafka installations require encrypted backups, fresh TLS setup and restore before image updates; explicit local test mode retains plaintext ([#110](https://github.com/mcp-runtime/mcp-runtime/issues/110)).
 - Setup outside test mode refuses to import or preserve existing platform credentials whose value is the `changeme` example placeholder, naming only the Secret and key. Replace the value with a unique secret and rerun setup; setup never rotates it silently, and test mode is unchanged ([#110](https://github.com/mcp-runtime/mcp-runtime/issues/110)).
 - Ingest binds audit attribution for projected ServiceAccount callers to the verified Pod and its UID-checked controller chain to the current MCPServer, rejecting unbound tokens and events whose server, namespace or UID disagree (`403 attribution_mismatch`). Service-key and OIDC callers are unchanged. Apply the release's `k8s/06-ingest.yaml` (rerun `setup`/`update`) so ingest can read the ownership chain; until then projected-token events are rejected ([#110](https://github.com/mcp-runtime/mcp-runtime/issues/110)).
 - The dashboard session proxy no longer lets a percent-encoded `?` or `#` in a path segment truncate the upstream path after the write allowlist approved it (for example turning a team-member removal into a team delete). The decoded path is now sent verbatim; runtime-api authorization still applies to every request.
@@ -52,6 +53,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 - `server init --from-server` and `server validate --from-server` now discover tools with MCP 2026-07-28 when the server advertises it, and fall back to the MCP 2025-11-25 initialize handshake only on an unrecognized HTTP 400 response. Modern protocol errors remain visible instead of triggering a silent downgrade ([#662](https://github.com/mcp-runtime/mcp-runtime/issues/662)).
 
 ### Fixed
+
+- Give non-root analytics clients and Kafka topic initialization the filesystem groups needed to read private TLS volumes without making key files world-readable.
 
 - Production workload identity requires a ready, dedicated enterprise issuer and rejects the shared bundled registry CA, aliased/copied signing keys, and unhealthy CA-backed issuers before TLS provisioning. Migrate by preserving registry trust and selecting an independently managed workload issuer; the bundled workload root remains available in test mode ([#535](https://github.com/mcp-runtime/mcp-runtime/issues/535)).
 - Gateways reload mounted client-CA trust during workload-root rollover, including overlapping roots and removal of retired roots from resumed TLS handshakes. Invalid replacement bundles retain the last validated trust state ([#535](https://github.com/mcp-runtime/mcp-runtime/issues/535)).

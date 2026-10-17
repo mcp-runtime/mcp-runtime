@@ -206,12 +206,46 @@ event trace and a `clickhouse.insert_batch` span for the batch operation. Batch
 spans include Kafka topic, partition, first/last offset, and per-partition
 offset ranges.
 
-The Kafka broker listener currently uses PLAINTEXT. `k8s/05-kafka-networkpolicy.yaml`
-limits broker ingress to the ingest, processor, topic-initialization Job, and
-Kafka peers; setup applies this policy before initializing topics. This narrows
-network reachability but does not encrypt Kafka traffic. Add any future
-in-cluster Kafka client to the policy deliberately, and use TLS/SASL when the
-deployment requires transport confidentiality or broker authentication.
+### Analytics transport security
+
+Non-test setup encrypts the bundled analytics path even when public ingress TLS
+is terminated elsewhere. Kafka broker, controller, inter-broker, ingest,
+processor and topic-initialization connections require mutual TLS. Native
+ClickHouse clients verify its TLS server on port 9440; its HTTPS health endpoint
+uses 8443 and plaintext 9000/8123 listeners are disabled. Gateway audit delivery
+uses HTTPS to ingest with verified internal trust. Traefik uses an explicit
+CA-verifying ServersTransport for the ingest backend. NetworkPolicies remain
+required to restrict which workloads can reach these services. Explicit
+`setup --test-mode` retains the local plaintext development path.
+
+Setup preserves the infrastructure signing CA in `cert-manager/mcp-runtime-ca`
+and publishes only public CA certificates in `mcp-analytics-ca` ConfigMaps.
+This infrastructure signer is separate from the dedicated production workload
+identity issuer. Six cert-manager leaf Certificates cover Kafka, ClickHouse,
+ingest HTTPS and the three Kafka client identities; `mcp-analytics-keystore`
+holds the PKCS12 password. Certificate approval policies must continue allowing
+these infrastructure requests as well as the dedicated workload issuer.
+Private keys stay in Secrets and never enter the public ConfigMaps.
+
+Keep encrypted off-cluster backups of the CA Secret, service certificate
+Secrets, keystore password and persistent data before changes. A missing CA
+behind an existing issuer, an unhealthy CA, or an existing plaintext Kafka
+quorum stops setup. There is no automatic in-place quorum conversion: back up,
+prepare a fresh TLS installation with the supported setup workflow, restore
+the data and verify recovery before retiring the previous installation.
+Release manifests require this transport wiring before ordinary image updates;
+the updater reads the installed configuration and refuses legacy plaintext
+wiring before making changes. Explicit test-mode installations are exempt.
+
+Leaves last 90 days and renew 15 days before expiry. Go clients and ingest HTTPS
+reload mounted leaf key pairs for new TLS connections. Restart Kafka and
+ClickHouse in a controlled rollout after leaf renewal so their Java/OpenSSL
+listeners use renewed material before expiry. Root rotation requires a planned
+overlap of public trust, leaf reissuance and client/server restarts; it is not
+automated. Preserve the previous encrypted trust material for rollback until
+old identities are retired. These settings encrypt the analytics path; other
+control-plane HTTP services still rely on their documented authentication and
+network boundaries.
 
 ### Gateway upstream bounds
 

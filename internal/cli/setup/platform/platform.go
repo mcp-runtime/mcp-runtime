@@ -41,7 +41,11 @@ func clusterServiceDNS(service, namespace string) string {
 }
 
 func defaultAnalyticsIngestURLForCluster() string {
-	return "http://" + clusterServiceDNS("mcp-ingest", core.ComponentNamespace("ingest")) + ":8081/events"
+	scheme := "http"
+	if core.DefaultCLIConfig.InternalAnalyticsTLS {
+		scheme = "https"
+	}
+	return scheme + "://" + clusterServiceDNS("mcp-ingest", core.ComponentNamespace("ingest")) + ":8081/events"
 }
 
 func defaultGatewayOTELExporterOTLPEndpointForCluster() string {

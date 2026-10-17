@@ -207,6 +207,11 @@ func BuildPlan(ctx context.Context, cs kubernetes.Interface, m *platformrelease.
 			return nil, err
 		}
 	}
+	if m.RequiresAnalyticsTLS {
+		if err := requireAnalyticsTLSMigration(ctx, cs); err != nil {
+			return nil, err
+		}
+	}
 	plan := &Plan{TargetVersion: m.Version, Preserved: append([]string(nil), preservedResources...)}
 	if m.CRDChange {
 		if len(sel.Only) > 0 {

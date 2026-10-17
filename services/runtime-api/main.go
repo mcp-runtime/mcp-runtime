@@ -41,11 +41,15 @@ func main() {
 		log.Fatal(err.Error())
 	}
 
-	conn, err := chdriver.Open(&chdriver.Options{
-		Addr:        []string{clickhouseAddr},
-		Auth:        chdriver.Auth{Database: dbName},
+	options, err := clickhousepkg.Options(clickhousepkg.Config{
+		Addr:        clickhouseAddr,
+		Database:    dbName,
 		DialTimeout: 5 * time.Second,
 	})
+	if err != nil {
+		log.Fatalf("configure ClickHouse transport: %v", err)
+	}
+	conn, err := chdriver.Open(options)
 	if err != nil {
 		log.Fatalf("failed to connect to clickhouse: %v", err)
 	}

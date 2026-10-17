@@ -9,6 +9,7 @@
 
 # Narrowed login tokens require setup-owned split ingress/exchange wiring.
 requiresAudienceExchange: true
+requiresAnalyticsTLS: true
 
 # ServiceAccount/RBAC and supported platform NetworkPolicy objects, as "<Kind>/<namespace>/<name>" (namespaced) or
 # "<Kind>/<name>" (cluster-scoped). Validated: no wildcard or escalating rules.

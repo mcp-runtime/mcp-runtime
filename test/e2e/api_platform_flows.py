@@ -35,7 +35,9 @@ def request(url, *, method="GET", headers=None, body=None):
         headers.setdefault("content-type", "application/json")
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        # Team provisioning has a 20-second server deadline. Allow the
+        # response to arrive before this client cancels the mutation.
+        with urllib.request.urlopen(req, timeout=30) as resp:
             return resp.status, dict(resp.headers.items()), resp.read().decode()
     except urllib.error.HTTPError as exc:
         return exc.code, dict(exc.headers.items()), exc.read().decode()

@@ -978,6 +978,12 @@ func renderAnalyticsManifest(content string, images AnalyticsImageSet, imagePull
 	for oldValue, newValue := range replacements {
 		rendered = strings.ReplaceAll(rendered, oldValue, newValue)
 	}
+	if core.DefaultCLIConfig.InternalAnalyticsTLS {
+		rendered, err = renderAnalyticsTransportManifest(rendered)
+		if err != nil {
+			return "", err
+		}
+	}
 	if strings.Contains(rendered, "GF_AUTH_PROXY_ENABLED") || strings.Contains(rendered, "name: mcp-platform-gateway-observability") {
 		supported, _ := scopedGrafanaPolicyCapability()
 		if supported && strings.Contains(rendered, "GF_AUTH_PROXY_ENABLED") {
@@ -1204,6 +1210,9 @@ func renderAnalyticsConfigManifestWithReaders(content, platformMode string, imag
 			out.WriteString("---\n")
 		}
 		out.Write(rendered)
+	}
+	if core.DefaultCLIConfig.InternalAnalyticsTLS {
+		return renderAnalyticsTransportManifest(out.String())
 	}
 	return out.String(), nil
 }

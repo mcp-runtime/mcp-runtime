@@ -224,7 +224,7 @@ func buildSetupSteps(ctx *SetupContext) []SetupStep {
 		With(clusterStep{}).
 		WithIf(ctx.Plan.DeployMCPAuthServer, mcpAuthPrerequisiteStep{}).
 		WithIf(catalogMode, catalogNamespaceStep{}).
-		WithIf(ctx.Plan.TLSEnabled, tlsStep{}).
+		WithIf(ctx.Plan.TLSEnabled || (ctx.Plan.DeployAnalytics && !ctx.Plan.TestMode), tlsStep{}).
 		WithIf(strings.TrimSpace(ctx.Plan.MTLSClusterIssuer) != "", workloadPKIStep{}).
 		With(registryStep{}).
 		WithIf(nativeRegistryAuthRequired(ctx.Plan, ctx.UsingExternalRegistry), registryBootstrapAuthStep{}).
@@ -240,6 +240,9 @@ func buildSetupSteps(ctx *SetupContext) []SetupStep {
 }
 
 func runSetupSteps(logger *zap.Logger, deps SetupDeps, ctx *SetupContext, steps []SetupStep) error {
+	previousTLS := core.DefaultCLIConfig.InternalAnalyticsTLS
+	core.DefaultCLIConfig.InternalAnalyticsTLS = ctx.Plan.DeployAnalytics && !ctx.Plan.TestMode
+	defer func() { core.DefaultCLIConfig.InternalAnalyticsTLS = previousTLS }()
 	for _, step := range steps {
 		if err := step.Run(logger, deps, ctx); err != nil {
 			wrappedErr := core.WrapWithBaseAndContext(

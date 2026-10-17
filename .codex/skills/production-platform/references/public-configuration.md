@@ -37,6 +37,14 @@ Default `MCPServer` ingress class: **`traefik`**.
 
 ## TLS setup
 
+Non-test analytics setup also provisions internal Kafka mutual TLS, verified
+ClickHouse TLS and ingest HTTPS independently of public TLS termination. Keep
+the infrastructure CA and keystore password backed up, retain its certificate
+approval policy, and use the fresh-install/restore procedure for a plaintext
+Kafka deployment. Leaf renewal needs controlled Kafka/ClickHouse restarts;
+root rotation needs planned trust overlap and client restarts. See
+[`docs/platform-services.md#analytics-transport-security`](../../../../docs/platform-services.md#analytics-transport-security).
+
 ```bash
 ./bin/mcp-runtime setup --with-tls --acme-email <addr>
 # staging: --acme-staging or MCP_ACME_STAGING=1
