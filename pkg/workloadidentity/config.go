@@ -77,7 +77,7 @@ func containerValue(ctx context.Context, namespace string, container *corev1.Con
 		}
 		ref := env.ValueFrom.ConfigMapKeyRef
 		if ref == nil {
-			return "", fmt.Errorf("Secret or unsupported environment source cannot be inspected")
+			return "", fmt.Errorf("secret or unsupported environment source cannot be inspected")
 		}
 		optional := ref.Optional != nil && *ref.Optional
 		value, found, err := configMapValue(ctx, namespace, ref.Name, ref.Key, optional, optional, get)
@@ -92,7 +92,7 @@ func containerValue(ctx context.Context, namespace string, container *corev1.Con
 			continue
 		}
 		if source.ConfigMapRef == nil {
-			return "", fmt.Errorf("Secret or unsupported envFrom source cannot be inspected")
+			return "", fmt.Errorf("secret or unsupported envFrom source cannot be inspected")
 		}
 		ref := source.ConfigMapRef
 		value, found, err := configMapValue(ctx, namespace, ref.Name, strings.TrimPrefix(key, source.Prefix), ref.Optional != nil && *ref.Optional, true, get)
