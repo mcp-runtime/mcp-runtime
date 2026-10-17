@@ -10,6 +10,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 ### Added
 
 - Per-user macOS adapter service controls, isolated owner-protected profiles and a native Dock companion expose local readiness, upstream authentication and bounded diagnostics. Source packaging supports Apple Silicon and Intel; signed/notarized release artifacts and real macOS lifecycle acceptance remain pending ([#656](https://github.com/mcp-runtime/mcp-runtime/issues/656)).
+- Access grants support monitor mode through the CLI and dashboard, recording would-deny tool, trust and side-effect decisions without bypassing identity, session or matching enforcing-grant checks. Monitor policies require schema-v5-capable gateways ([#307](https://github.com/mcp-runtime/mcp-runtime/issues/307)).
 
 - Ingest operations docs now include PromQL for Kafka readiness DNS/connect/total latency and bounded failure reasons, plus guidance for correlating slow checks with broker, node and DNS signals. This exposes investigation paths; reference-platform root-cause and under-one-second acceptance remain outstanding ([#624](https://github.com/mcp-runtime/mcp-runtime/issues/624)).
 - `mcp-runtime server get` now includes the runtime API's latest live MCP tool, prompt, and resource inventory alongside declared server metadata and safe authentication configuration, so operators can query observed server capabilities from the CLI ([#291](https://github.com/mcp-runtime/mcp-runtime/issues/291)).

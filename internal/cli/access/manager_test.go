@@ -43,6 +43,7 @@ func TestInitGrantManifest(t *testing.T) {
 		TeamID:      "team-globex",
 		AgentID:     "cursor",
 		Trust:       "medium",
+		Mode:        "monitor",
 		SideEffects: []string{"read", "write", "read"},
 		Tools:       []string{"list_invoices", "refund_invoice", "list_invoices"},
 		ToolRules:   []string{"delete_invoice:deny:high"},
@@ -64,6 +65,7 @@ func TestInitGrantManifest(t *testing.T) {
 		"teamID: team-globex",
 		"agentID: cursor",
 		"maxTrust: medium",
+		"mode: monitor",
 		"- read",
 		"- write",
 		"name: list_invoices",
@@ -80,6 +82,13 @@ func TestInitGrantManifest(t *testing.T) {
 	err = mgr.InitGrantManifest(accessManifestInitOptions{Name: "payments-globex-cursor", Namespace: "mcp-team-acme", Server: "payments", TeamID: "team-globex", Output: output})
 	if err == nil || !strings.Contains(err.Error(), "--force") {
 		t.Fatalf("duplicate output error = %v, want --force guidance", err)
+	}
+}
+
+func TestInitGrantManifestRejectsUnknownMode(t *testing.T) {
+	_, err := buildAccessManifest(accessManifestInitOptions{Kind: "MCPAccessGrant", Name: "grant", Namespace: "servers", Server: "demo", HumanID: "human", Trust: "low", Mode: "observe"})
+	if err == nil || !strings.Contains(err.Error(), "--mode must be enforce or monitor") {
+		t.Fatalf("unknown mode error=%v", err)
 	}
 }
 

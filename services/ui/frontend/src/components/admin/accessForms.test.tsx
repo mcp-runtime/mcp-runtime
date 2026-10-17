@@ -155,6 +155,19 @@ afterEach(() => {
 });
 
 describe("access subject pickers", () => {
+  it("defaults to enforce and preserves selected monitor mode in the submitted grant", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    stubIdentityApi();
+    render(<FormHarness onSubmit={onSubmit} />);
+    expect(screen.getByTestId("grant-mode")).toHaveValue("enforce");
+    await user.selectOptions(await screen.findByTestId("grant-subject-mode"), "team");
+    await user.selectOptions(await screen.findByTestId("grant-team-select"), "acme");
+    await user.selectOptions(screen.getByTestId("grant-mode"), "monitor");
+    await user.click(screen.getByTestId("grant-create-submit"));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ mode: "monitor", teamID: "team-acme" }));
+  });
+
   it("submits the selected team's canonical ID in team-only mode", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
