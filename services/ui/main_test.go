@@ -190,7 +190,7 @@ func TestHandleLoginWithOIDCToken(t *testing.T) {
 	if len(cookies) != 1 {
 		t.Fatalf("cookies = %d, want 1", len(cookies))
 	}
-	sess, ok := store.get(cookies[0].Value)
+	sess, ok := store.Get(cookies[0].Value)
 	if !ok {
 		t.Fatal("expected persisted session")
 	}
@@ -233,7 +233,7 @@ func TestHandleLoginWithOIDCTokenCapsSessionToTokenExpiry(t *testing.T) {
 	if cookies[0].MaxAge > int((33 * time.Minute).Seconds()) {
 		t.Fatalf("cookie MaxAge = %d, expected <= 33 minutes", cookies[0].MaxAge)
 	}
-	sess, ok := store.get(cookies[0].Value)
+	sess, ok := store.Get(cookies[0].Value)
 	if !ok {
 		t.Fatal("expected persisted session")
 	}
@@ -376,7 +376,7 @@ func TestHandleLoginWithPassword(t *testing.T) {
 	if len(cookies) != 1 {
 		t.Fatalf("cookies = %d, want 1", len(cookies))
 	}
-	sess, ok := store.get(cookies[0].Value)
+	sess, ok := store.Get(cookies[0].Value)
 	if !ok {
 		t.Fatal("password login did not store a session")
 	}
@@ -726,13 +726,13 @@ func TestHTTPSRedirectMiddlewarePassesThroughHTTPS(t *testing.T) {
 
 func TestHandleAdminCheck(t *testing.T) {
 	store := newUISessionStore(time.Now)
-	adminSess, err := store.createSession(context.Background(), uiSession{
+	adminSess, err := store.Create(context.Background(), uiSession{
 		Principal: sessionPrincipal{Role: "admin", Subject: "admin-1"},
 	})
 	if err != nil {
 		t.Fatalf("createSession admin: %v", err)
 	}
-	userSess, err := store.createSession(context.Background(), uiSession{
+	userSess, err := store.Create(context.Background(), uiSession{
 		Principal: sessionPrincipal{Role: "user", Subject: "user-1"},
 	})
 	if err != nil {

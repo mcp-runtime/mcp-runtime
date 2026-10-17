@@ -74,7 +74,7 @@ func TestGrafanaPlatformSessionAndOriginBoundary(t *testing.T) {
 			}
 		})
 	}
-	store.delete(sess.ID)
+	store.Delete(sess.ID)
 	r := httptest.NewRequest("GET", "/monitoring/", nil)
 	r.AddCookie(&http.Cookie{Name: sessionCookieName, Value: sess.ID})
 	w := httptest.NewRecorder()

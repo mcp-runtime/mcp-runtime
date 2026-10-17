@@ -12,14 +12,11 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"mcp-ui/internal/session"
 )
 
-type Principal struct {
-	Role     string `json:"role,omitempty"`
-	Subject  string `json:"subject,omitempty"`
-	Email    string `json:"email,omitempty"`
-	AuthType string `json:"auth_type,omitempty"`
-}
+type Principal = session.Principal
 
 // Client uses the transport selected by the console bootstrap. All calls retain
 // their bounded contexts and platform authentication/expiry semantics.

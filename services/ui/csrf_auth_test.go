@@ -52,7 +52,7 @@ func TestHandleLoginReturnsCSRFTokenMatchingSession(t *testing.T) {
 	if sessionID == "" {
 		t.Fatal("login did not set a session cookie")
 	}
-	sess, ok := store.get(sessionID)
+	sess, ok := store.Get(sessionID)
 	if !ok {
 		t.Fatal("session not stored")
 	}
@@ -67,7 +67,7 @@ func TestHandleLoginReturnsCSRFTokenMatchingSession(t *testing.T) {
 
 func TestHandleStatusReturnsCSRFTokenForAuthenticatedSession(t *testing.T) {
 	store := newUISessionStore(time.Now)
-	sess, err := store.createSession(context.Background(), uiSession{
+	sess, err := store.Create(context.Background(), uiSession{
 		Principal:          sessionPrincipal{Role: "user", Subject: "user-1"},
 		UpstreamAuthHeader: "Bearer t",
 	})
@@ -106,7 +106,7 @@ func TestHandleStatusOmitsCSRFTokenWhenSignedOut(t *testing.T) {
 
 func TestLogoutInvalidatesCSRFToken(t *testing.T) {
 	store := newUISessionStore(time.Now)
-	sess, err := store.createSession(context.Background(), uiSession{UpstreamAuthHeader: "Bearer t"})
+	sess, err := store.Create(context.Background(), uiSession{UpstreamAuthHeader: "Bearer t"})
 	if err != nil {
 		t.Fatalf("createSession() error = %v", err)
 	}
@@ -116,7 +116,7 @@ func TestLogoutInvalidatesCSRFToken(t *testing.T) {
 	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: sess.ID})
 	handleLogout(store).ServeHTTP(httptest.NewRecorder(), req)
 
-	if _, ok := store.get(sess.ID); ok {
+	if _, ok := store.Get(sess.ID); ok {
 		t.Fatal("logout must delete the session")
 	}
 

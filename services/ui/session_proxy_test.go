@@ -353,7 +353,7 @@ func TestSessionProxyUnauthorizedForExpiredSession(t *testing.T) {
 		t.Fatalf("parseRuntimeUpstream() error = %v", err)
 	}
 	proxy := newSessionProxyWithUpstreams(testExchangeBase(t), base, base, store)
-	sess, err := store.createSession(context.Background(), uiSession{
+	sess, err := store.Create(context.Background(), uiSession{
 		Principal:          sessionPrincipal{Role: "user"},
 		UpstreamAuthHeader: "Bearer session-token",
 		ExpiresAt:          now.Add(time.Minute),
@@ -460,7 +460,7 @@ func TestNewMuxSessionProxyUsesStore(t *testing.T) {
 		t.Fatalf("newMux() error = %v", err)
 	}
 	sess := createTestSession(t, sessions, uiSession{UpstreamAuthHeader: "Bearer mux-token"})
-	t.Cleanup(func() { sessions.delete(sess.ID) })
+	t.Cleanup(func() { sessions.Delete(sess.ID) })
 
 	req := httptest.NewRequest(http.MethodGet, "/api/ui/v1/runtime/tools", nil)
 	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: sess.ID})
@@ -485,7 +485,7 @@ func newTestSessionProxy(t *testing.T, upstreamURL string) *sessionProxy {
 
 func createTestSession(t *testing.T, store *uiSessionStore, session uiSession) uiSession {
 	t.Helper()
-	sess, err := store.createSession(context.Background(), session)
+	sess, err := store.Create(context.Background(), session)
 	if err != nil {
 		t.Fatalf("createSession() error = %v", err)
 	}

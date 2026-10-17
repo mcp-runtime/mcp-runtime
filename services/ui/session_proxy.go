@@ -229,7 +229,7 @@ func (p *sessionProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	sess, ok := p.store.sessionFromRequest(r)
+	sess, ok := p.store.FromRequest(r)
 	if !ok {
 		serviceutil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
