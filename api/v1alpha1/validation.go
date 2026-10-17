@@ -14,6 +14,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
+	"mcp-runtime/pkg/credentialbroker"
 	"mcp-runtime/pkg/credentialheaders"
 	"mcp-runtime/pkg/mcpdefaults"
 )
@@ -377,6 +378,21 @@ func (r *MCPServer) validate() error {
 	var allErrs field.ErrorList
 	specPath := field.NewPath("spec")
 	publicPathPrefix := strings.TrimSpace(r.Spec.PublicPathPrefix)
+	if len(r.Spec.CredentialBindings) > 0 {
+		if r.Spec.Gateway != nil && r.Spec.Gateway.UpstreamURL != "" && !credentialbroker.LocalUpstream(r.Spec.Gateway.UpstreamURL, int(r.Spec.Port)) {
+			allErrs = append(allErrs, field.Invalid(specPath.Child("gateway", "upstreamURL"), "[redacted endpoint]", "credential delivery requires the server's same-Pod loopback upstream"))
+		}
+		if len(r.Spec.CredentialBindings) > 16 || !gatewayEnabled(r.Spec) || AuthUsesHeaderMode(r.Spec.Auth) || r.Spec.Policy == nil || r.Spec.Policy.Mode != PolicyModeAllowList || r.Spec.Policy.DefaultDecision != PolicyDecisionDeny {
+			allErrs = append(allErrs, field.Invalid(specPath.Child("credentialBindings"), "[redacted metadata]", "credential bindings require an enabled gateway and explicit allow-list/deny policy"))
+		}
+		seen := map[string]bool{}
+		for _, name := range r.Spec.CredentialBindings {
+			if !credentialbroker.NameValid(name) || seen[name] {
+				allErrs = append(allErrs, field.Invalid(specPath.Child("credentialBindings"), "[redacted metadata]", "binding names must be unique namespace-local names"))
+			}
+			seen[name] = true
+		}
+	}
 	ingressPath := strings.TrimSpace(r.Spec.IngressPath)
 
 	if strings.TrimSpace(r.Spec.Image) == "" {

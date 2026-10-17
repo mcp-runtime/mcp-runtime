@@ -231,9 +231,9 @@ func TestSessionSyncServiceAndNetworkPolicyPorts(t *testing.T) {
 	}
 }
 
-func TestGatewayIdentityRBACReadsOnlyControllerChain(t *testing.T) {
+func TestGatewayIdentityRBACReadsOnlyControllerChainAndCurrentGrant(t *testing.T) {
 	var found bool
-	allowed := map[string]string{"pods": "", "replicasets": "apps", "deployments": "apps", "mcpservers": "mcpruntime.org", "tokenreviews": "authentication.k8s.io"}
+	allowed := map[string]string{"pods": "", "replicasets": "apps", "deployments": "apps", "mcpservers": "mcpruntime.org", "mcpaccessgrants":"mcpruntime.org", "tokenreviews": "authentication.k8s.io"}
 	for _, raw := range manifestObjects(t, "k8s/08-platform-api-rbac.yaml") {
 		var role rbacv1.ClusterRole
 		if err := json.Unmarshal(raw, &role); err != nil {

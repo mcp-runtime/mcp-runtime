@@ -675,6 +675,13 @@ func renderOperatorManagerManifest(operatorImage, gatewayProxyImage string, oper
 		existingGatewayOTLPEndpoint = existingEnvValue(gatewayOTELExporterOTLPEndpointEnv)
 	}
 	if envVars := operatorEnvOverrides(gatewayProxyImage, existingGatewayOTLPEndpoint); len(envVars) > 0 {
+		origin, err := preservedCredentialBrokerOrigin(existingEnvValue)
+		if err != nil {
+			return nil, err
+		}
+		if origin != "" {
+			envVars = append(envVars, operatorEnvVar{Name: credentialBrokerOriginEnv, Value: origin})
+		}
 		envMap := make(map[string]string, len(envVars))
 		for _, ev := range envVars {
 			envMap[ev.Name] = ev.Value
@@ -827,6 +834,13 @@ func deployOperatorManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap.
 	// Inject environment variables if provided.
 	existingGatewayOTLPEndpoint := existingOperatorEnvValue(kubectl, gatewayOTELExporterOTLPEndpointEnv)
 	if envVars := operatorEnvOverrides(gatewayProxyImage, existingGatewayOTLPEndpoint); len(envVars) > 0 {
+		origin, err := preservedCredentialBrokerOrigin(func(name string) string { return existingOperatorEnvValue(kubectl, name) })
+		if err != nil {
+			return err
+		}
+		if origin != "" {
+			envVars = append(envVars, operatorEnvVar{Name: credentialBrokerOriginEnv, Value: origin})
+		}
 		envMap := make(map[string]string, len(envVars))
 		for _, ev := range envVars {
 			envMap[ev.Name] = ev.Value

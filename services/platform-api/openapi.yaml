@@ -3,6 +3,115 @@ info:
   title: MCP Runtime Platform API
   version: 1.0.0
 paths:
+  /api/v1/credentials/{namespace}/{kind}:
+    x-audience: platform
+    parameters:
+      - {name: namespace, in: path, required: true, schema: {type: string}}
+      - {name: kind, in: path, required: true, schema: {type: string, enum: [sources, bindings]}}
+    get:
+      summary: List authorized metadata without credential values
+      security: [{PlatformBearer: []}, {UserAPIKey: []}]
+      responses:
+        "200":
+          description: Current namespace membership and source authorization apply. Secret values are never included.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  oneOf:
+                    - {$ref: '#/components/schemas/CredentialSource'}
+                    - {$ref: '#/components/schemas/CredentialBinding'}
+        "401": {description: Authentication required}
+        "403": {description: Namespace access denied}
+        "503": {description: Authoritative store unavailable}
+  /api/v1/credentials/{namespace}/{kind}/{name}:
+    x-audience: platform
+    parameters:
+      - {name: namespace, in: path, required: true, schema: {type: string}}
+      - {name: kind, in: path, required: true, schema: {type: string, enum: [sources, bindings]}}
+      - {name: name, in: path, required: true, schema: {type: string}}
+    get:
+      summary: Get authorized source or binding metadata
+      security: [{PlatformBearer: []}, {UserAPIKey: []}]
+      responses:
+        "200":
+          description: Metadata only; never provider credentials or resolved values.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - {$ref: '#/components/schemas/CredentialSource'}
+                  - {$ref: '#/components/schemas/CredentialBinding'}
+        "401": {description: Authentication required}
+        "403": {description: Namespace or source access denied}
+        "404": {description: Metadata not found}
+        "503": {description: Authoritative store unavailable}
+    put:
+      summary: Create at revision zero or update the exact current revision
+      description: Only administrators register provider sources. Binding writes require current namespace ownership, source authorization, an immutable live server reference and valid human/managed-agent/team subjects. All writes and their audit event commit atomically. Unknown fields, raw values and incomplete policy are rejected.
+      security: [{PlatformBearer: []}, {UserAPIKey: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - {$ref: '#/components/schemas/CredentialSource'}
+                - {$ref: '#/components/schemas/CredentialBinding'}
+      responses:
+        "200": {description: Committed metadata with incremented revision}
+        "400": {description: Invalid or unknown metadata fields}
+        "401": {description: Authentication required}
+        "403": {description: "Current ownership, source authority or live target denied"}
+        "404": {description: Approved source not found}
+        "409": {description: Revision conflict}
+        "503": {description: "Store, Kubernetes or atomic audit unavailable"}
+    delete:
+      summary: Delete exact-revision metadata; referenced sources cannot be deleted
+      security: [{PlatformBearer: []}, {UserAPIKey: []}]
+      parameters:
+        - {name: revision, in: query, required: true, schema: {type: integer, minimum: 1}}
+      responses:
+        "204": {description: Metadata and deletion audit committed}
+        "400": {description: Exact positive revision required}
+        "401": {description: Authentication required}
+        "403": {description: Current administrator or namespace owner required}
+        "409": {description: "Revision mismatch, absent item or source still referenced"}
+        "503": {description: Store or atomic audit unavailable}
+  /api/v1/credential-resolutions:
+    x-audience: server-gateway
+    x-listener-port: 8080
+    post:
+      summary: Privately resolve credentials for an authenticated server gateway
+      description: HTTPS only at the platform ingress. A dedicated mcp-runtime-credential-broker Pod-bound token is verified through TokenReview and live UID-checked workload ownership. Human JWTs, API keys and identity headers cannot select a workload. Current session, directory subjects, grant, server generation, explicit tool and binding/source constraints are checked before each provider read and rechecked before durable audit and release. This response belongs only to the authenticated gateway and is never a management/UI response.
+      security: [{CredentialBrokerToken: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [session, tool, bindings]
+              properties:
+                session: {type: string, description: Canonical namespace/name resolved from verified adapter identity}
+                tool: {type: string}
+                bindings: {type: array, minItems: 1, maxItems: 16, items: {type: string}}
+      responses:
+        "200":
+          description: Private per-call headers; no-store. Never exposed to human callers or persisted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [headers]
+                properties:
+                  headers: {type: object, additionalProperties: {type: string}}
+        "400": {description: Invalid request}
+        "403": {description: "Workload identity, current policy or binding denied"}
+        "404": {description: Approved credential metadata absent}
+        "503": {description: "Provider, store, Kubernetes or audit unavailable; no values returned"}
   /internal/operations/counts:
     get:
       description: Internal bearer-authenticated complete platform directory/session totals for the runtime administrator overview.
@@ -935,9 +1044,45 @@ paths:
       security: [{"GatewayToken": []}]
 components:
   securitySchemes:
+    PlatformBearer: {type: http, scheme: bearer, description: Current platform-audience human access token}
+    UserAPIKey: {type: apiKey, in: header, name: X-Api-Key}
+    CredentialBrokerToken: {type: http, scheme: bearer, description: Dedicated Pod-bound mcp-runtime-credential-broker audience; not a human token}
     ControlPlaneToken: {type: http, scheme: bearer, description: Shared internal token for trusted control-plane services}
     GatewayToken: {type: http, scheme: bearer, description: Pod-bound projected service-account token with mcp-runtime-gateway audience}
   schemas:
+    CredentialSource:
+      type: object
+      additionalProperties: false
+      required: [namespace, name, provider, resource]
+      properties:
+        namespace: {type: string}
+        name: {type: string}
+        provider: {type: string, enum: [kubernetes, gcp, aws, azure, vault]}
+        resource: {type: string, description: Exact provider reference; never a raw credential or credential-bearing URL}
+        key: {type: string, description: Kubernetes Secret data key or Vault KV v2 string field}
+        version: {type: string, description: "Optional GCP version/alias, AWS version stage, Azure version or Vault numeric version"}
+        user_id: {type: string, format: uuid, description: Exactly one user_id or team_id must authorize use}
+        team_id: {type: string, format: uuid}
+        disabled: {type: boolean}
+        revision: {type: integer, minimum: 0}
+    CredentialBinding:
+      type: object
+      additionalProperties: false
+      required: [namespace, name, source, server, server_uid, tools, human_id, agent_id, team_id, header]
+      properties:
+        namespace: {type: string}
+        name: {type: string}
+        source: {type: string, description: Approved source in this same namespace}
+        server: {type: string}
+        server_uid: {type: string, description: Immutable current MCPServer UID}
+        tools: {type: array, minItems: 1, maxItems: 64, items: {type: string}, description: "Explicit unique tool names; no wildcards"}
+        human_id: {type: string, format: uuid}
+        agent_id: {type: string, description: Current managed agent ID}
+        team_id: {type: string, format: uuid}
+        session_id: {type: string, description: Optional exact namespace/name session constraint}
+        header: {type: string, pattern: '^X-[Mm][Cc][Pp]-[Cc]redential-[A-Za-z0-9-]+$', description: Reserved header delivered only to the same-Pod server}
+        disabled: {type: boolean}
+        revision: {type: integer, minimum: 0}
     PersistedSession:
       type: "object"
       required: ["id", "namespace", "server_namespace", "server_name", "server_uid", "binding", "created_at"]

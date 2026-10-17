@@ -59,14 +59,20 @@ func controller(meta metav1.Object, kind, apiVersion string) (metav1.OwnerRefere
 // checked controller references. A tenant's shared service-account username or
 // caller-supplied server label is insufficient to select a server.
 func (k KubernetesIdentity) Authenticate(ctx context.Context, token string) (sessionstate.Server, error) {
+	return k.AuthenticateAudience(ctx, token, sessionstate.GatewayAudience)
+}
+
+// AuthenticateAudience retains live Pod/controller binding for independently
+// scoped workload protocols; human JWTs and unrelated projected tokens fail.
+func (k KubernetesIdentity) AuthenticateAudience(ctx context.Context, token, audience string) (sessionstate.Server, error) {
 	if k.Client == nil || token == "" {
 		return sessionstate.Server{}, fmt.Errorf("identity unavailable")
 	}
-	review := &authv1.TokenReview{Spec: authv1.TokenReviewSpec{Token: token, Audiences: []string{sessionstate.GatewayAudience}}}
+	review := &authv1.TokenReview{Spec: authv1.TokenReviewSpec{Token: token, Audiences: []string{audience}}}
 	if err := k.Client.Create(ctx, review); err != nil {
 		return sessionstate.Server{}, err
 	}
-	if !review.Status.Authenticated || review.Status.Error != "" || !slices.Contains(review.Status.Audiences, sessionstate.GatewayAudience) {
+	if !review.Status.Authenticated || review.Status.Error != "" || !slices.Contains(review.Status.Audiences, audience) {
 		return sessionstate.Server{}, fmt.Errorf("token audience rejected")
 	}
 	parts := strings.Split(review.Status.User.Username, ":")

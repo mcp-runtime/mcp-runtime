@@ -45,11 +45,14 @@ func preserveNativePlatformManifest(ctx context.Context, cs kubernetes.Interface
 					return "", err
 				}
 				preserveNativePlatformPod(&desired.Spec.Template.Spec, live.Spec.Template.Spec)
-				spec, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&desired.Spec.Template.Spec)
+				if err := preserveCredentialBrokerDeployment(&desired, live); err != nil {
+					return "", err
+				}
+				spec, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&desired.Spec.Template)
 				if err != nil {
 					return "", err
 				}
-				if err := unstructured.SetNestedMap(object, spec, "spec", "template", "spec"); err != nil {
+				if err := unstructured.SetNestedMap(object, spec, "spec", "template"); err != nil {
 					return "", err
 				}
 			}

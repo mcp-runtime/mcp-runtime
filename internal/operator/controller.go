@@ -75,6 +75,8 @@ type MCPServerReconciler struct {
 	GatewayOTLPEndpoint string
 	// GatewaySessionSyncURL overrides the internal platform session listener.
 	GatewaySessionSyncURL string
+	// GatewayCredentialBrokerURL must be an administrator-selected HTTPS origin.
+	GatewayCredentialBrokerURL string
 
 	// DefaultAnalyticsIngestURL is the default analytics ingest endpoint used when analytics is enabled.
 	DefaultAnalyticsIngestURL string

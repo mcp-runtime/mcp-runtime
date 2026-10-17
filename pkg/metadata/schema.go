@@ -65,6 +65,8 @@ const (
 
 // ServerMetadata defines the metadata for an MCP server.
 type ServerMetadata struct {
+	// CredentialBindings references namespace-scoped broker binding metadata.
+	CredentialBindings []string `yaml:"credentialBindings,omitempty" json:"credentialBindings,omitempty"`
 	// Name is the unique name of the MCP server.
 	Name string `yaml:"name" json:"name"`
 
