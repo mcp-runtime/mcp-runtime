@@ -98,6 +98,8 @@ func TestCLIHelpGoldens(t *testing.T) {
 		{name: "cluster_cert_status_help", args: []string{"cluster", "cert", "status", "--help"}, golden: "mcp-runtime_cluster_cert_status_help.golden"},
 		{name: "cluster_cert_apply_help", args: []string{"cluster", "cert", "apply", "--help"}, golden: "mcp-runtime_cluster_cert_apply_help.golden"},
 		{name: "cluster_cert_wait_help", args: []string{"cluster", "cert", "wait", "--help"}, golden: "mcp-runtime_cluster_cert_wait_help.golden"},
+		{name: "cluster_identity_help", args: []string{"cluster", "identity", "--help"}, golden: "mcp-runtime_cluster_identity_help.golden"},
+		{name: "cluster_identity_status_help", args: []string{"cluster", "identity", "status", "--help"}, golden: "mcp-runtime_cluster_identity_status_help.golden"},
 		{name: "cluster_doctor_help", args: []string{"cluster", "doctor", "--help"}, golden: "mcp-runtime_cluster_doctor_help.golden"},
 		{name: "cluster_diagnostics_help", args: []string{"cluster", "diagnostics", "--help"}, golden: "mcp-runtime_cluster_diagnostics_help.golden"},
 	}

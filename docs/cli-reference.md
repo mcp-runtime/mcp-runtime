@@ -22,6 +22,7 @@ with `mcp-runtime agent create <team-slug> --name <name>`.
 | Inspect a running server | `server list` · `server get` · `server policy inspect` |
 | View analytics logs | `ops status` · `ops logs api` |
 | Check setup readiness | `cluster doctor` |
+| Inspect workload adapter certificate health | `cluster identity status --server <namespace>/<name>` |
 | Diagnose an installed cluster | `cluster diagnostics` |
 | Check an OIDC provider before mcp-auth | `auth provider-check` |
 
@@ -1038,6 +1039,7 @@ mcp-runtime cluster cert apply
 mcp-runtime cluster cert wait --timeout 10m
 
 mcp-runtime cluster doctor                                   # pre-setup readiness
+mcp-runtime cluster identity status --server mcp-servers-public/example-server # workload issuer/route mTLS health
 KUBECONFIG=~/.kube/config mcp-runtime cluster diagnostics    # post-setup diagnostic
 
 # Repair operator RBAC from this release after an image-only update.
@@ -1049,6 +1051,20 @@ mcp-runtime cluster operator-rbac apply --kubeconfig /path/to/kubeconfig --conte
 bundled MCP Auth is installed, it also grants the operator `patch` on only the
 `mcp-platform/mcp-auth-server` Deployment. It does not change workload images,
 Secrets, or tenant namespace bindings.
+
+`cluster identity status` is a read-only check for a selected MCPServer. It
+compares the operator deployment's adapter-certificate, issuer, and trust-domain
+settings with the runtime API's configured values; checks workload
+`ClusterIssuer` readiness; and reports the selected route's client-certificate
+TLSOption, public CA subject, issuer, SHA-256 fingerprint, expiry, and trusted
+bundle fingerprint. Both deployments resolve the selected container's literal
+environment, ConfigMap key references and declared `envFrom` sources using
+Kubernetes precedence. Unreadable or Secret-backed configuration is a failed
+check; it is never reported as disabled. The check follows the route's actual
+TLSOption, including explicit overrides, and rejects plaintext routes or options
+that do not verify client certificates. Adapter certificates disabled in the operator are reported
+as off by choice. The command reads only the public `ca.crt`/`tls.ca` fields and
+never reads or prints Secret private keys or credentials.
 
 ## Further reading
 

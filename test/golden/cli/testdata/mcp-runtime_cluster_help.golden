@@ -8,6 +8,7 @@ Available Commands:
   config             Configure cluster settings
   diagnostics        Diagnose an installed MCP Runtime cluster
   doctor             Check whether a cluster is ready for MCP Runtime setup
+  identity           Inspect workload adapter identity health
   init               Initialize cluster configuration
   mcp-auth-connector Manage the bundled MCP Auth identity connector
   operator-rbac      Reconcile operator permissions from this release
