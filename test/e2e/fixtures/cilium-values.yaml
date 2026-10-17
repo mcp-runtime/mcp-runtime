@@ -1,0 +1,16 @@
+# Fixed disposable Kind security fixture, not a production CNI installer.
+ipam:
+  mode: kubernetes
+kubeProxyReplacement: false
+operator:
+  replicas: 1
+envoy:
+  enabled: false
+policyEnforcementMode: default
+k8sNetworkPolicy:
+  enabled: true
+# Existing API/kubelet egress rules select node IPs, not arbitrary pod labels.
+policyCIDRMatchMode: [nodes]
+extraArgs:
+  - --enable-policy=default
+  - --enable-k8s-networkpolicy=true

@@ -642,6 +642,13 @@ identity. Certificate identity requires an `https` runtime URL.
 
 See [Agent adapters](connect-clients.md#enterprise-mtls-and-spiffe) for gateway and Traefik certificate setup.
 
+On macOS, `adapter profile` and `adapter service` manage the per-user
+background adapter daemon. This CLI preview does not yet ship the planned
+native Dock app or signed/notarized distribution; desktop sleep/wake,
+two-profile isolation and full lifecycle acceptance remain open. See the
+[macOS service guide](connect-clients.md#macos-background-adapter-service-cli-preview)
+for profile authorization, client configuration and credential handling.
+
 ## agent
 
 Create and manage immutable, team-scoped agent identities used by access grants

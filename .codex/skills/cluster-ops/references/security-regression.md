@@ -1,6 +1,15 @@
 
 # Security Regression QA
 
+For scoped Grafana and persisted admin resource history, run the focused fresh
+Cilium fixture documented in
+[`local-kind.md`](../../../../docs/contributor/local-kind.md#enforcing-cilium-security-acceptance).
+It verifies the current Cilium generation, exact release policy, a working
+tenant probe, service/direct-Pod network denials and legitimate scoped queries.
+Kindnet accepts NetworkPolicy objects without enforcing them and is not live
+isolation evidence. The fixture's CNI/probe Kubernetes writes are confined to
+its guarded disposable cluster; product resources still use supported CLI setup.
+
 Prefer the deterministic script first:
 
 ```bash
@@ -18,8 +27,18 @@ root set. Test old-only, overlapping old+new, and new-only trust with fresh and
 resumed connections. Malformed/missing replacement files retain the last valid
 snapshot and emit bounded reload errors. Existing connections are not terminated
 by root removal; use supported session revocation for immediate access removal.
-Serving-certificate reload and client trust reload are separate checks. The
-bundled registry/workload root split and full rollover orchestration remain #535.
+Serving-certificate reload and client trust reload are separate checks. Production
+workload identity requires a dedicated enterprise-managed issuer; the shared
+bundled root is supported for workload identity only in test mode.
+
+Staging's `identity-diagnostics` stage exercises the supported read-only
+`cluster identity status` command against a healthy managed route, a foreign
+issuer/root bundle and a CA within its 30-day expiry warning window. Its unique
+diagnostic Secret/`.invalid` route are explicit test fixtures; active issuer,
+root, TLSOption and operator/API configuration are never changed. The stage
+requires the disposable marker and an explicitly selected local k3s API. Only
+public diagnostic output is retained; fixture private keys stay outside artifacts
+and are removed on exit. A skipped stage is not negative PKI acceptance.
 
 ## Overview
 
