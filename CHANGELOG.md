@@ -56,6 +56,12 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Fixed
 
+- Setup adds ready Kubernetes API EndpointSlice backends and their exact TCP ports to runtime-api egress, including when the installer connects through a loopback tunnel. Scoped Grafana rollout errors now identify the runtime-api deployment ([#809](https://github.com/mcp-runtime/mcp-runtime/issues/809)).
+
+- Performance probes close each HTTP response before reusing the connection, avoiding `ResponseNotReady` on supported Python versions ([#809](https://github.com/mcp-runtime/mcp-runtime/issues/809)).
+
+- Failed Kind setup retains bounded, redacted platform workload status and warning events before teardown, including scoped Cilium CI runs ([#809](https://github.com/mcp-runtime/mcp-runtime/issues/809)).
+
 - Production workload identity requires a ready, dedicated enterprise issuer and rejects the shared bundled registry CA, aliased/copied signing keys, and unhealthy CA-backed issuers before TLS provisioning. Migrate by preserving registry trust and selecting an independently managed workload issuer; the bundled workload root remains available in test mode ([#535](https://github.com/mcp-runtime/mcp-runtime/issues/535)).
 - Gateways reload mounted client-CA trust during workload-root rollover, including overlapping roots and removal of retired roots from resumed TLS handshakes. Invalid replacement bundles retain the last validated trust state ([#535](https://github.com/mcp-runtime/mcp-runtime/issues/535)).
 - CLI access manifest submission validates grant and session input through the same canonical rules as the runtime API before making a request, preserving existing admission and historical-session contracts ([#268](https://github.com/mcp-runtime/mcp-runtime/issues/268)).

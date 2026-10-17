@@ -37,6 +37,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -527,6 +528,31 @@ func ensureRuntimeKubernetesAPIEgressClientGo() error {
 	if service, getErr := clients.Clientset.CoreV1().Services("default").Get(ctx, "kubernetes", metav1.GetOptions{}); getErr == nil {
 		if ip := net.ParseIP(strings.TrimSpace(service.Spec.ClusterIP)); ip != nil {
 			addCIDR(networkHostCIDR(ip), 443)
+		}
+	}
+	// CNI policy may evaluate traffic after Service DNAT. The installer's
+	// kubeconfig can point at a loopback tunnel, so discover the actual API
+	// backends rather than treating that external client address as sufficient.
+	slices, err := clients.Clientset.DiscoveryV1().EndpointSlices("default").List(ctx, metav1.ListOptions{LabelSelector: discoveryv1.LabelServiceName + "=kubernetes"})
+	if err != nil {
+		return fmt.Errorf("discover Kubernetes API backends for runtime egress: %w", err)
+	}
+	for _, slice := range slices.Items {
+		for _, endpoint := range slice.Endpoints {
+			if (endpoint.Conditions.Ready != nil && !*endpoint.Conditions.Ready) || (endpoint.Conditions.Terminating != nil && *endpoint.Conditions.Terminating) {
+				continue
+			}
+			for _, address := range endpoint.Addresses {
+				ip := net.ParseIP(address)
+				if ip == nil {
+					continue
+				}
+				for _, port := range slice.Ports {
+					if port.Port != nil && *port.Port > 0 && *port.Port <= 65535 && (port.Protocol == nil || *port.Protocol == corev1.ProtocolTCP) {
+						addCIDR(networkHostCIDR(ip), *port.Port)
+					}
+				}
+			}
 		}
 	}
 	if clients.Config != nil {
