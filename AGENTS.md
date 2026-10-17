@@ -66,6 +66,15 @@ rollout order. Direct CSR tests do not count as CLI adapter enrollment acceptanc
 | Automation / release manifest | `hack/README.md`, `hack/release/platformmanifest/` |
 
 Platform namespaces come from `pkg/platforminventory`; see `docs/namespaces.md`.
+Admin resource history lives in `pkg/resourcehistory`; supported setup provisions
+public kubelet trust. Keep its exact projected-token audience/ServiceAccount
+boundary, node UID/address/TLS checks and missing-series semantics intact.
+PVC reservations and local `du` fallback must never become historical consumed
+bytes. See `docs/platform-services.md#resource-history-for-sizing`.
+The focused Cilium scope/resource-history security fixture has a fresh-cluster
+guard and pinned Helm/Cilium tools; see
+`docs/contributor/local-kind.md#enforcing-cilium-security-acceptance`. Keep its
+direct CNI/probe provisioning confined to that explicit disposable test.
 Sessions are managed through the platform CLI/UI and stored by platform-api;
 Kubernetes session writes do not change authorization. See
 `docs/contributor/gateway-session-sync.md` for the dedicated port, workload
@@ -85,6 +94,11 @@ The console's `#/workspace` shows actual personal memberships and scoped access;
 scopes separate when adding resource summaries. Ownership labels do not establish
 historical deployment attribution. Team owners manage memberships through
 `#/workspace/team?team=<slug>` using the same supported forms and APIs as admins.
+
+macOS companion source and packaging live in `desktop/macos/`. The dedicated
+workflow compiles both architectures without launching desktop software.
+Unsigned preview artifacts are distinct from `build.sh --sign` distribution;
+real macOS lifecycle and notarization evidence must be recorded before release.
 
 Use supported CLI and UI workflows for setup, teams/users, registry publishing,
 servers, grants, sessions, updates and cleanup. For servers, use `server init` →

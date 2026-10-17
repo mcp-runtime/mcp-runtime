@@ -1,6 +1,15 @@
 
 # Security Regression QA
 
+For scoped Grafana and persisted admin resource history, run the focused fresh
+Cilium fixture documented in
+[`local-kind.md`](../../../../docs/contributor/local-kind.md#enforcing-cilium-security-acceptance).
+It verifies the current Cilium generation, exact release policy, a working
+tenant probe, service/direct-Pod network denials and legitimate scoped queries.
+Kindnet accepts NetworkPolicy objects without enforcing them and is not live
+isolation evidence. The fixture's CNI/probe Kubernetes writes are confined to
+its guarded disposable cluster; product resources still use supported CLI setup.
+
 Prefer the deterministic script first:
 
 ```bash

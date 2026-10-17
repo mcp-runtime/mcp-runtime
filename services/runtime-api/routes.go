@@ -50,6 +50,9 @@ func (s *server) registerRoutes(mux *http.ServeMux) {
 	if s.runtime == nil {
 		return
 	}
+	// This route has its own exact Prometheus ServiceAccount/audience
+	// TokenReview boundary; platform sessions and API keys never authorize it.
+	mux.Handle("/internal/observability/resources/metrics", s.runtime.ResourceHistoryHandler())
 	routes := runtimeRoutes{
 		runtime:   s.runtime,
 		platform:  s.platform,
