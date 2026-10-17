@@ -94,6 +94,8 @@ recent operator logs under the run's `rollout-diagnostics` artifact directory.
 Collection uses only the explicit E2E kubeconfig after confirming its
 `kind-${CLUSTER_NAME}` context; failed or unauthorized reads produce explicit
 collection-gap files. The fake-tool regression
+Failed setup also captures redacted platform workload status and warning events before teardown, including in the scoped Cilium workflow.
+
 `bash test/e2e/rollout_diagnostics_test.sh` checks failure preservation,
 redaction, and collection before cleanup without contacting a cluster.
 

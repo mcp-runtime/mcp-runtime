@@ -574,6 +574,9 @@ cleanup() {
   if [[ "${BASH_SUBSHELL:-0}" -ne 0 ]]; then
     return 0
   fi
+  if [[ "${e2e_status}" -ne 0 ]]; then
+    e2e_collect_setup_diagnostics || true
+  fi
   if [[ -n "${RESOURCE_CAPTURE_PID}" ]]; then
     kill -TERM "${RESOURCE_CAPTURE_PID}" >/dev/null 2>&1 || true
     wait "${RESOURCE_CAPTURE_PID}" 2>/dev/null || true

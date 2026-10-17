@@ -79,6 +79,7 @@ jobs:
         with:
           name: scoped-observability-artifacts
           path: |
+            .e2e-artifacts/scoped-observability/rollout-diagnostics/
             .e2e-artifacts/scoped-observability/scoped-observability.json
             .e2e-artifacts/scoped-observability/scoped-network-evidence.json
             .e2e-artifacts/scoped-observability/resource-usage/summary.*

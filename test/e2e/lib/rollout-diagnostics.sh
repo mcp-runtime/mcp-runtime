@@ -203,6 +203,20 @@ e2e_collect_rollout_diagnostics() {
   printf '[debug] rollout diagnostics saved under %s\n' "${directory}"
 }
 
+# Setup failures happen before the named-server waits. Capture status/events
+# for the platform namespaces before cleanup; never serialize manifests/env.
+e2e_collect_setup_diagnostics() {
+  local directory namespace
+  directory="$(e2e_diag_dir)"
+  mkdir -p "${directory}"
+  for namespace in mcp-platform mcp-observability mcp-runtime; do
+    e2e_diag_capture "workloads" "${directory}/setup-${namespace}-workloads.json" \
+      get deployment,statefulset,daemonset,replicaset,pod -n "${namespace}" -o json
+    e2e_diag_capture "warning-events" "${directory}/setup-${namespace}-warning-events.json" \
+      get events -n "${namespace}" --field-selector "type=Warning" -o json
+  done
+}
+
 rollout_status_with_logs() {
   local namespace="$1"
   local kind="$2"
