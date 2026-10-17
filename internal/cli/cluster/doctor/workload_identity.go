@@ -1,18 +1,26 @@
 package doctor
 
 import (
+	"context"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"mcp-runtime/internal/cli/core"
+	"mcp-runtime/pkg/workloadidentity"
 )
 
 const workloadIdentityExpiryWarning = 30 * 24 * time.Hour
@@ -38,23 +46,14 @@ func CheckWorkloadIdentity(kubectl core.KubectlRunner, namespace, server string)
 
 	operatorNS := "mcp-runtime"
 	operatorDeployment := "mcp-runtime-operator-controller-manager"
-	apiNS := componentNamespace("platform-api")
-	operator := map[string]string{}
-	for _, key := range []string{"MCP_ADAPTER_CERTIFICATES", "MCP_MTLS_CLUSTER_ISSUER", "MCP_TRUST_DOMAIN", "MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE"} {
-		value, err := readKubectlOutput(kubectl, []string{"get", "deployment", operatorDeployment, "-n", operatorNS, "-o", "jsonpath={range .spec.template.spec.containers[*].env[?(@.name==\"" + key + "\")]}{.value}{end}"})
-		if err != nil {
-			return DoctorCheck{Name: name, OK: false, Detail: fmt.Sprintf("cannot read the operator's %s configuration: %v", key, err), Remedy: "check read access to the mcp-runtime-operator-controller-manager Deployment"}
-		}
-		operator[key] = strings.TrimSpace(value)
+	apiNS := componentNamespace("runtime-api")
+	operator, err := readIdentityDeploymentConfig(kubectl, operatorNS, operatorDeployment, "manager", []string{"MCP_ADAPTER_CERTIFICATES", "MCP_MTLS_CLUSTER_ISSUER", "MCP_TRUST_DOMAIN", "MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE"})
+	if err != nil {
+		return DoctorCheck{Name: name, OK: false, Detail: fmt.Sprintf("cannot read the operator's workload identity configuration: %v", err), Remedy: "check the operator Deployment and its declared ConfigMap sources"}
 	}
-
-	api := map[string]string{}
-	for _, key := range []string{"MCP_MTLS_CLUSTER_ISSUER", "MCP_TRUST_DOMAIN"} {
-		value, err := readRuntimeAPIConfig(kubectl, apiNS, key)
-		if err != nil {
-			return DoctorCheck{Name: name, OK: false, Detail: fmt.Sprintf("cannot read runtime API %s configuration: %v", key, err), Remedy: "check read access to mcp-platform/configmap/mcp-shared-config"}
-		}
-		api[key] = strings.TrimSpace(value)
+	api, err := readIdentityDeploymentConfig(kubectl, apiNS, "mcp-runtime-api", "runtime-api", []string{"MCP_MTLS_CLUSTER_ISSUER", "MCP_TRUST_DOMAIN"})
+	if err != nil {
+		return DoctorCheck{Name: name, OK: false, Detail: fmt.Sprintf("cannot read runtime API workload identity configuration: %v", err), Remedy: "check the runtime API Deployment and its declared ConfigMap sources"}
 	}
 
 	enabled, err := parseAdapterCertificatesEnabled(operator["MCP_ADAPTER_CERTIFICATES"])
@@ -94,25 +93,30 @@ func CheckWorkloadIdentity(kubectl core.KubectlRunner, namespace, server string)
 	}
 
 	optionNamespace := strings.TrimSpace(operator["MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE"])
-	optionName := "default"
 	bundleNamespace := optionNamespace
 	bundleName := "mcp-adapter-client-ca"
 	if optionNamespace == "" {
 		optionNamespace = namespace
-		optionName = server + "-mtls"
 		bundleNamespace = namespace
 		bundleName = server + "-mtls-ca"
 	}
-	routeName, err := readKubectlOutput(kubectl, []string{"get", "ingressroute.traefik.io", server, "-n", namespace, "-o", "jsonpath={.metadata.name}"})
-	if err != nil || strings.TrimSpace(routeName) != server {
+	route, err := readIdentityObject(kubectl, "ingressroute.traefik.io", namespace, server)
+	if err != nil || route.GetName() != server {
 		return DoctorCheck{Name: name, OK: false, Detail: configDetail + fmt.Sprintf("; selected server route %s/%s is not an active Traefik IngressRoute", namespace, server), Remedy: "check MCPServer reconciliation and its ingress route"}
 	}
-	clientAuthType, err := readKubectlOutput(kubectl, []string{"get", "tlsoption.traefik.io", optionName, "-n", optionNamespace, "-o", "jsonpath={.spec.clientAuth.clientAuthType}"})
-	if err != nil || !strings.Contains(clientAuthType, "VerifyClientCert") {
+	optionNamespace, optionName, err := workloadidentity.SelectedTLSOption(route, operator["MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE"])
+	if err != nil {
+		return DoctorCheck{Name: name, OK: false, Detail: configDetail + "; " + err.Error(), Remedy: "check the selected IngressRoute TLS configuration"}
+	}
+	option, err := readIdentityObject(kubectl, "tlsoption.traefik.io", optionNamespace, optionName)
+	if err != nil {
+		return DoctorCheck{Name: name, OK: false, Detail: configDetail + fmt.Sprintf("; route TLSOption %s/%s is unreadable", optionNamespace, optionName), Remedy: "check the selected route TLSOption and read access"}
+	}
+	trustedNames, err := workloadidentity.ClientAuthCASecrets(option)
+	if err != nil {
 		return DoctorCheck{Name: name, OK: false, Detail: configDetail + fmt.Sprintf("; route TLSOption %s/%s does not request a verifiable client certificate", optionNamespace, optionName), Remedy: "check the operator's adapter-certificate reconciliation and Traefik TLSOption"}
 	}
-	trustedNames, err := readKubectlOutput(kubectl, []string{"get", "tlsoption.traefik.io", optionName, "-n", optionNamespace, "-o", "jsonpath={.spec.clientAuth.secretNames[*]}"})
-	if err != nil || !containsName(trustedNames, bundleName) {
+	if optionNamespace != bundleNamespace || !containsName(strings.Join(trustedNames, " "), bundleName) {
 		return DoctorCheck{Name: name, OK: false, Detail: configDetail + fmt.Sprintf("; route TLSOption %s/%s does not trust the expected workload bundle %s/%s", optionNamespace, optionName, bundleNamespace, bundleName), Remedy: "reconcile the workload CA bundle and ensure the route TLSOption references it"}
 	}
 	trustedPEM, err := readSecretField(kubectl, bundleNamespace, bundleName, "tls.ca")
@@ -130,59 +134,47 @@ func CheckWorkloadIdentity(kubectl core.KubectlRunner, namespace, server string)
 		return DoctorCheck{Name: name, OK: false, Detail: configDetail + "; workload CA and selected route trust bundle fingerprints differ (CA: " + fingerprintList(caCerts) + "; bundle: " + fingerprintList(trustedCerts) + ")", Remedy: "reconcile the selected server's trusted CA bundle and verify the platform TLSOption references the same workload CA"}
 	}
 
-	return DoctorCheck{Name: name, OK: true, Detail: configDetail + fmt.Sprintf("; issuer %q Ready; route %s/%s requests optional client certificates; workload CA: %s; trusted bundle SHA-256: %s", issuer, optionNamespace, optionName, caDescription, bundleFingerprint(trustedPEM))}
+	return DoctorCheck{Name: name, OK: true, Detail: configDetail + fmt.Sprintf("; issuer %q Ready; route %s/%s verifies client certificates; workload CA: %s; trusted bundle SHA-256: %s", issuer, optionNamespace, optionName, caDescription, bundleFingerprint(trustedPEM))}
 }
 
-// readRuntimeAPIConfig applies the same precedence as the container
-// environment: explicit env entries override envFrom ConfigMaps. It reads only
-// the named key from the selected ConfigMap and refuses Secret-backed values.
-func readRuntimeAPIConfig(kubectl core.KubectlRunner, namespace, key string) (string, error) {
-	base := []string{"get", "deployment", "mcp-runtime-api", "-n", namespace, "-o"}
-	query := func(path string) (string, error) {
-		args := append(append([]string(nil), base...), "jsonpath="+path)
-		return readKubectlOutput(kubectl, args)
-	}
-
-	name, err := query("{range .spec.template.spec.containers[*].env[?(@.name==\"" + key + "\")]}{.name}{end}")
+func readIdentityObject(kubectl core.KubectlRunner, kind, namespace, name string) (*unstructured.Unstructured, error) {
+	raw, err := readKubectlOutput(kubectl, []string{"get", kind, name, "-n", namespace, "-o", "json"})
 	if err != nil {
-		return "", fmt.Errorf("read runtime API environment declaration: %w", err)
+		return nil, err
 	}
-	if strings.TrimSpace(name) != "" {
-		value, err := query("{range .spec.template.spec.containers[*].env[?(@.name==\"" + key + "\")]}{.value}{end}")
-		if err != nil {
-			return "", fmt.Errorf("read runtime API environment value: %w", err)
-		}
-		secretRef, err := query("{range .spec.template.spec.containers[*].env[?(@.name==\"" + key + "\")]}{.valueFrom.secretKeyRef.name}{end}")
-		if err != nil {
-			return "", fmt.Errorf("inspect runtime API environment source: %w", err)
-		}
-		if strings.TrimSpace(secretRef) != "" {
-			return "", fmt.Errorf("%s is Secret-backed; refusing to inspect it", key)
-		}
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value), nil
-		}
-		configMap, err := query("{range .spec.template.spec.containers[*].env[?(@.name==\"" + key + "\")]}{.valueFrom.configMapKeyRef.name}{end}")
-		if err != nil {
-			return "", fmt.Errorf("inspect runtime API ConfigMap source: %w", err)
-		}
-		configMapKey, err := query("{range .spec.template.spec.containers[*].env[?(@.name==\"" + key + "\")]}{.valueFrom.configMapKeyRef.key}{end}")
-		if err != nil {
-			return "", fmt.Errorf("inspect runtime API ConfigMap key: %w", err)
-		}
-		if strings.TrimSpace(configMap) != "" && strings.TrimSpace(configMapKey) != "" {
-			value, err = readKubectlOutput(kubectl, []string{"get", "configmap", strings.TrimSpace(configMap), "-n", namespace, "-o", "jsonpath={.data." + strings.TrimSpace(configMapKey) + "}"})
-			return strings.TrimSpace(value), err
-		}
-		// A declared literal empty value intentionally overrides envFrom.
-		return "", nil
+	var obj unstructured.Unstructured
+	if err := json.Unmarshal([]byte(raw), &obj); err != nil {
+		return nil, fmt.Errorf("cannot decode %s %s/%s", kind, namespace, name)
 	}
+	return &obj, nil
+}
 
-	// Current manifests supply these keys through mcp-shared-config's envFrom.
-	// RuntimeAPI containers are non-shell distroless images, so the deployment
-	// template and the referenced ConfigMap are the inspectable effective source.
-	value, err := readKubectlOutput(kubectl, []string{"get", "configmap", "mcp-shared-config", "-n", namespace, "-o", "jsonpath={.data." + key + "}"})
-	return strings.TrimSpace(value), err
+func readIdentityDeploymentConfig(kubectl core.KubectlRunner, namespace, deploymentName, container string, keys []string) (map[string]string, error) {
+	raw, err := readKubectlOutput(kubectl, []string{"get", "deployment", deploymentName, "-n", namespace, "-o", "json"})
+	if err != nil {
+		return nil, err
+	}
+	var deployment appsv1.Deployment
+	if err := json.Unmarshal([]byte(raw), &deployment); err != nil {
+		return nil, fmt.Errorf("cannot decode Deployment %s/%s", namespace, deploymentName)
+	}
+	if deployment.Generation > deployment.Status.ObservedGeneration {
+		return nil, fmt.Errorf("Deployment configuration is not yet observed")
+	}
+	return workloadidentity.DeploymentConfig(context.Background(), &deployment, container, keys, func(_ context.Context, namespace, name string) (*corev1.ConfigMap, error) {
+		raw, err := readKubectlOutput(kubectl, []string{"get", "configmap", name, "-n", namespace, "--ignore-not-found", "-o", "json"})
+		if err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(raw) == "" {
+			return nil, apierrors.NewNotFound(schema.GroupResource{Resource: "configmaps"}, name)
+		}
+		var cm corev1.ConfigMap
+		if err := json.Unmarshal([]byte(raw), &cm); err != nil {
+			return nil, fmt.Errorf("cannot decode ConfigMap %s/%s", namespace, name)
+		}
+		return &cm, nil
+	})
 }
 
 func readSecretField(kubectl core.KubectlRunner, namespace, name, key string) (string, error) {

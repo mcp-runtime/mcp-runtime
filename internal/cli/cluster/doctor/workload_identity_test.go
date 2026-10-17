@@ -7,12 +7,16 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
 	"math/big"
 	"strings"
 	"testing"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"mcp-runtime/internal/cli/core"
 )
 
@@ -24,37 +28,53 @@ func TestCheckWorkloadIdentity(t *testing.T) {
 	makeCheck := func(t *testing.T, fixture workloadIdentityFixture) (DoctorCheck, []string) {
 		t.Helper()
 		var calls []string
+		jsonOutput := func(v any) *core.MockCommand {
+			data, err := json.Marshal(v)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return &core.MockCommand{OutputData: data}
+		}
 		mock := &core.MockExecutor{CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
 			args := strings.Join(spec.Args, " ")
 			calls = append(calls, args)
 			switch {
 			case strings.Contains(args, "get deployment mcp-runtime-operator-controller-manager"):
-				switch {
-				case strings.Contains(args, "MCP_ADAPTER_CERTIFICATES"):
-					return &core.MockCommand{OutputData: []byte(fixture.enabled)}
-				case strings.Contains(args, "MCP_MTLS_CLUSTER_ISSUER"):
-					return &core.MockCommand{OutputData: []byte(fixture.operatorIssuer)}
-				case strings.Contains(args, "MCP_TRUST_DOMAIN"):
-					return &core.MockCommand{OutputData: []byte(fixture.operatorTrustDomain)}
-				case strings.Contains(args, "MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE"):
-					return &core.MockCommand{OutputData: []byte(fixture.tlsNamespace)}
+				enabled := corev1.EnvVar{Name: "MCP_ADAPTER_CERTIFICATES", Value: fixture.enabled}
+				if fixture.flagConfigMap {
+					enabled.Value = ""
+					enabled.ValueFrom = &corev1.EnvVarSource{ConfigMapKeyRef: &corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "identity-choice"}, Key: "enabled"}}
 				}
-			case strings.Contains(args, "get configmap mcp-shared-config"):
-				if strings.Contains(args, "MCP_MTLS_CLUSTER_ISSUER") {
-					return &core.MockCommand{OutputData: []byte(fixture.apiIssuer)}
+				if fixture.flagSecret {
+					enabled.Value = ""
+					enabled.ValueFrom = &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "private-choice"}, Key: "enabled"}}
 				}
-				return &core.MockCommand{OutputData: []byte(fixture.apiTrustDomain)}
+				return jsonOutput(appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "mcp-runtime"}, Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "manager", Env: []corev1.EnvVar{enabled, {Name: "MCP_MTLS_CLUSTER_ISSUER", Value: fixture.operatorIssuer}, {Name: "MCP_TRUST_DOMAIN", Value: fixture.operatorTrustDomain}, {Name: "MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE", Value: fixture.tlsNamespace}}}}}}}})
+			case strings.Contains(args, "get deployment mcp-runtime-api"):
+				return jsonOutput(appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "mcp-platform"}, Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "runtime-api", EnvFrom: []corev1.EnvFromSource{{ConfigMapRef: &corev1.ConfigMapEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: "actual-api-config"}}}}}}}}}})
+			case strings.Contains(args, "get configmap identity-choice"):
+				return jsonOutput(corev1.ConfigMap{Data: map[string]string{"enabled": fixture.enabled}})
+			case strings.Contains(args, "get configmap actual-api-config"):
+				return jsonOutput(corev1.ConfigMap{Data: map[string]string{"MCP_MTLS_CLUSTER_ISSUER": fixture.apiIssuer, "MCP_TRUST_DOMAIN": fixture.apiTrustDomain}})
 			case strings.Contains(args, "get clusterissuer"):
 				return &core.MockCommand{OutputData: []byte(fixture.issuerReady)}
 			case strings.Contains(args, "get secret workload-server-gateway-mtls"):
 				return &core.MockCommand{OutputData: []byte(base64.StdEncoding.EncodeToString([]byte(fixture.caPEM)))}
 			case strings.Contains(args, "get ingressroute.traefik.io workload-server"):
-				return &core.MockCommand{OutputData: []byte("workload-server")}
-			case strings.Contains(args, "get tlsoption.traefik.io default"):
-				if strings.Contains(args, "clientAuthType") {
-					return &core.MockCommand{OutputData: []byte("VerifyClientCertIfGiven")}
+				route := map[string]any{"apiVersion": "traefik.io/v1alpha1", "kind": "IngressRoute", "metadata": map[string]any{"name": "workload-server", "namespace": "mcp-servers"}, "spec": map[string]any{"tls": map[string]any{}}}
+				if fixture.explicitOption != "" {
+					route["spec"] = map[string]any{"tls": map[string]any{"options": map[string]any{"name": fixture.explicitOption, "namespace": "traefik"}}}
 				}
-				return &core.MockCommand{OutputData: []byte("mcp-adapter-client-ca")}
+				if fixture.plainRoute {
+					route["spec"] = map[string]any{}
+				}
+				return jsonOutput(route)
+			case strings.Contains(args, "get tlsoption.traefik.io"):
+				mode := "VerifyClientCertIfGiven"
+				if fixture.explicitOption == "no-client-auth" {
+					mode = "NoClientCert"
+				}
+				return jsonOutput(map[string]any{"apiVersion": "traefik.io/v1alpha1", "kind": "TLSOption", "spec": map[string]any{"clientAuth": map[string]any{"clientAuthType": mode, "secretNames": []string{"mcp-adapter-client-ca"}}}})
 			case strings.Contains(args, "get secret mcp-adapter-client-ca"):
 				return &core.MockCommand{OutputData: []byte(base64.StdEncoding.EncodeToString([]byte(fixture.bundlePEM)))}
 			default:
@@ -132,6 +152,56 @@ func TestCheckWorkloadIdentity(t *testing.T) {
 		}
 	})
 
+	t.Run("ConfigMap enabled flag proceeds into issuer validation", func(t *testing.T) {
+		fixture := base
+		fixture.flagConfigMap, fixture.issuerReady = true, "False"
+		check, calls := makeCheck(t, fixture)
+		if check.OK || !strings.Contains(check.Detail, "not Ready") {
+			t.Fatalf("ConfigMap-backed true flag skipped issuer: %+v (calls=%v)", check, calls)
+		}
+	})
+
+	t.Run("Secret backed flag is unreadable instead of disabled", func(t *testing.T) {
+		fixture := base
+		fixture.flagSecret = true
+		check, calls := makeCheck(t, fixture)
+		if check.OK || !strings.Contains(check.Detail, "cannot read") {
+			t.Fatalf("unreadable source reported off by choice: %+v", check)
+		}
+		for _, call := range calls {
+			if strings.Contains(call, "get secret") {
+				t.Fatalf("read a private source: %s", call)
+			}
+		}
+	})
+
+	t.Run("rejects actual route override disabling client auth", func(t *testing.T) {
+		fixture := base
+		fixture.explicitOption = "no-client-auth"
+		check, calls := makeCheck(t, fixture)
+		if check.OK || !strings.Contains(check.Detail, "traefik/no-client-auth") {
+			t.Fatalf("unsafe route reported healthy: %+v (calls=%v)", check, calls)
+		}
+	})
+
+	t.Run("rejects plaintext route despite healthy default TLSOption", func(t *testing.T) {
+		fixture := base
+		fixture.plainRoute = true
+		check, _ := makeCheck(t, fixture)
+		if check.OK || !strings.Contains(check.Detail, "no TLS") {
+			t.Fatalf("plaintext route reported healthy: %+v", check)
+		}
+	})
+
+	t.Run("follows valid explicit option", func(t *testing.T) {
+		fixture := base
+		fixture.explicitOption = "actual-client-auth"
+		check, _ := makeCheck(t, fixture)
+		if !check.OK || !strings.Contains(check.Detail, "traefik/actual-client-auth") {
+			t.Fatalf("actual route not verified: %+v", check)
+		}
+	})
+
 	t.Run("detects CA and trusted bundle mismatch", func(t *testing.T) {
 		fixture := base
 		fixture.bundlePEM = otherCAPEM
@@ -155,6 +225,8 @@ func TestCheckWorkloadIdentity(t *testing.T) {
 type workloadIdentityFixture struct {
 	enabled, operatorIssuer, apiIssuer, operatorTrustDomain, apiTrustDomain string
 	tlsNamespace, issuerReady, caPEM, bundlePEM                             string
+	flagConfigMap, flagSecret, plainRoute                                   bool
+	explicitOption                                                          string
 }
 
 func testIdentityCAPEM(t *testing.T, notBefore, notAfter time.Time, commonName string) string {
