@@ -247,7 +247,7 @@ func TestEnsureDefaultDenyNetworkPolicyAllowsSameNamespaceIngress(t *testing.T) 
 	if err := k8sprovision.EnsureDefaultDenyNetworkPolicy(context.Background(), client, "user-1"); err != nil {
 		t.Fatalf("k8sprovision.EnsureDefaultDenyNetworkPolicy() error = %v", err)
 	}
-	policy, err := client.NetworkingV1().NetworkPolicies("user-1").Get(context.Background(), "platform-default-deny", metav1.GetOptions{})
+	policy, err := client.NetworkingV1().NetworkPolicies("user-1").Get(context.Background(), "platform-generic-workload-ingress", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("get networkpolicy: %v", err)
 	}
@@ -300,7 +300,7 @@ func TestEnsureDefaultDenyNetworkPolicyAllowsConfiguredIngressNamespace(t *testi
 	if err := k8sprovision.EnsureDefaultDenyNetworkPolicy(context.Background(), client, "mcp-servers-public", "kube-system"); err != nil {
 		t.Fatalf("k8sprovision.EnsureDefaultDenyNetworkPolicy() error = %v", err)
 	}
-	policy, err := client.NetworkingV1().NetworkPolicies("mcp-servers-public").Get(context.Background(), "platform-default-deny", metav1.GetOptions{})
+	policy, err := client.NetworkingV1().NetworkPolicies("mcp-servers-public").Get(context.Background(), "platform-generic-workload-ingress", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("get networkpolicy: %v", err)
 	}
@@ -365,12 +365,12 @@ func TestManagedNamespaceHTTPSOnlyReachesConfiguredIngressController(t *testing.
 	}
 }
 
-func TestEnsureDefaultDenyNetworkPolicyAllowsPlatformAPILiveInventoryIngress(t *testing.T) {
+func TestGenericDeploymentPolicyPreservesPlatformIngress(t *testing.T) {
 	client := kubernetesfake.NewSimpleClientset()
 	if err := k8sprovision.EnsureDefaultDenyNetworkPolicy(context.Background(), client, "mcp-team-acme", "kube-system"); err != nil {
 		t.Fatalf("k8sprovision.EnsureDefaultDenyNetworkPolicy() error = %v", err)
 	}
-	policy, err := client.NetworkingV1().NetworkPolicies("mcp-team-acme").Get(context.Background(), "platform-default-deny", metav1.GetOptions{})
+	policy, err := client.NetworkingV1().NetworkPolicies("mcp-team-acme").Get(context.Background(), "platform-generic-workload-ingress", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("get networkpolicy: %v", err)
 	}
@@ -853,7 +853,7 @@ func TestEnsureTeamNamespaceConfiguresTraefikIngressWatch(t *testing.T) {
 	if len(binding.Subjects) != 1 || binding.Subjects[0].Kind != rbacv1.ServiceAccountKind || binding.Subjects[0].Namespace != "traefik" || binding.Subjects[0].Name != "traefik" {
 		t.Fatalf("traefik watch binding subjects = %#v", binding.Subjects)
 	}
-	policy, err := client.NetworkingV1().NetworkPolicies("mcp-team-acme").Get(context.Background(), "platform-default-deny", metav1.GetOptions{})
+	policy, err := client.NetworkingV1().NetworkPolicies("mcp-team-acme").Get(context.Background(), "platform-generic-workload-ingress", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("network policy missing: %v", err)
 	}
