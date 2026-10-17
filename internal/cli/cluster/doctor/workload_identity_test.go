@@ -80,7 +80,6 @@ func TestCheckWorkloadIdentity(t *testing.T) {
 			default:
 				return &core.MockCommand{}
 			}
-			return &core.MockCommand{}
 		}}
 		return CheckWorkloadIdentity(core.NewTestKubectlClient(mock), "mcp-servers", "workload-server"), calls
 	}
