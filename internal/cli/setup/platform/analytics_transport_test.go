@@ -284,3 +284,35 @@ func TestAnalyticsPKIRejectsPlaintextQuorumBeforeAnyWrites(t *testing.T) {
 		}
 	}
 }
+
+func TestAnalyticsTLSPrivateVolumesReadableByNonRootWorkloads(t *testing.T) {
+	for _, tc := range []struct {
+		manifest, key string
+		group         int64
+	}{
+		{"k8s/05-kafka-topic-init.yaml", "Job/kafka-topic-init", 1000},
+		{"k8s/06-ingest.yaml", "Deployment/mcp-ingest", 65532},
+		{"k8s/07-processor.yaml", "Deployment/mcp-processor", 65532},
+	} {
+		t.Run(tc.key, func(t *testing.T) {
+			rendered, err := renderAnalyticsTransportManifest(transportManifest(t, tc.manifest))
+			if err != nil {
+				t.Fatal(err)
+			}
+			pod := transportObjects(t, rendered)[tc.key]
+			group, found, err := unstructured.NestedInt64(pod.Object, "spec", "template", "spec", "securityContext", "fsGroup")
+			if err != nil || !found || group != tc.group {
+				t.Fatalf("0440 TLS keys/passwords are unreadable by the non-root workload: fsGroup=%d, found=%t, error=%v", group, found, err)
+			}
+			volumes, _, _ := unstructured.NestedSlice(pod.Object, "spec", "template", "spec", "volumes")
+			for _, raw := range volumes {
+				volume := raw.(map[string]any)
+				for _, source := range []string{"secret", "projected"} {
+					if mode, exists, _ := unstructured.NestedInt64(volume, source, "defaultMode"); exists && mode&0007 != 0 {
+						t.Fatal("private TLS files must not be world-readable")
+					}
+				}
+			}
+		})
+	}
+}
