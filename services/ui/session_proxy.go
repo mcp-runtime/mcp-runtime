@@ -216,7 +216,7 @@ func sessionProxyPathAllowed(requestPath string, prefixes []string) bool {
 
 func (p *sessionProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	write := unsafeHTTPMethod(r.Method)
-	base, upstreamPath, ok := sessionProxyRoute(r.URL.Path)
+	_, upstreamPath, ok := sessionProxyRoute(r.URL.Path)
 	if !ok {
 		serviceutil.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
 		return
@@ -252,13 +252,12 @@ func (p *sessionProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	targetAudience := platformauth.AudienceRuntime
+	base := p.runtimeBase
 	if strings.HasPrefix(upstreamPath, "/api/v1/events") ||
 		strings.HasPrefix(upstreamPath, "/api/v1/analytics/usage") ||
 		strings.HasPrefix(upstreamPath, "/api/v1/user/analytics/usage") {
 		base = p.analyticsBase
 		targetAudience = platformauth.AudienceAnalytics
-	} else {
-		base = p.runtimeBase
 	}
 	upstreamURL, err := resolveSessionProxyURL(base, upstreamPath, r.URL.RawQuery)
 	if err != nil {

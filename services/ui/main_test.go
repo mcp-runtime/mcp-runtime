@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"mcp-ui/internal/auth"
 )
 
 func TestConfigDoesNotExposeAPIKey(t *testing.T) {
@@ -284,7 +286,7 @@ func TestLoginOIDCSessionFallsBackToTokenVerificationWhenPlatformStoreUnavailabl
 	})}
 	t.Cleanup(func() { authHTTPClient = previousClient })
 
-	p, token, expiresAt, err := loginOIDCSession(context.Background(), "http://api.example", idToken)
+	p, token, expiresAt, err := (auth.Client{HTTP: authHTTPClient}).Session(context.Background(), "http://api.example", idToken)
 	if err != nil {
 		t.Fatalf("loginOIDCSession() error = %v", err)
 	}
