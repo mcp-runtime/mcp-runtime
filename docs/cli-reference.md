@@ -44,6 +44,14 @@ route. Gateway-enabled examples apply Runtime grants, sessions, policy, and
 gateway audit; standalone OAuth validates tokens in the MCP server itself.
 `--from-server http://localhost:8088` appends `/mcp` automatically.
 
+Tool discovery first probes MCP `2026-07-28` with [`server/discover` and the
+Streamable HTTP compatibility rules](https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning). If the
+endpoint returns an HTTP 400 without a recognized modern protocol error, the
+CLI falls back to the `2025-11-25` initialize handshake. Unsupported-version
+and header-mismatch errors are surfaced; they do not trigger a legacy retry.
+This compatibility applies to CLI tool discovery only and does not certify
+gateway, adapter, streaming, or extension support for either revision.
+
 ## Access model
 
 Three roles control what each command can do:

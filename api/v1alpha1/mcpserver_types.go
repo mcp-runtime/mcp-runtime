@@ -66,7 +66,7 @@ type MCPServerSpec struct {
 	// CredentialBindings names metadata-only broker bindings in this namespace.
 	// Values are delivered per authorized tool call, never mounted in the Pod.
 	// +kubebuilder:validation:MaxItems=16
-	// +kubebuilder:validation:items:Pattern=^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$
+	// +kubebuilder:validation:items:Pattern="^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"
 	// +listType=set
 	CredentialBindings []string `json:"credentialBindings,omitempty"`
 	// TeamID is the stable platform team identifier that owns this server.
