@@ -1,0 +1,36 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kafka-client-ingress
+  namespace: mcp-observability
+spec:
+  podSelector:
+    matchLabels:
+      app: kafka
+  policyTypes:
+    - Ingress
+  ingress:
+    # Kafka's PLAINTEXT listener is reachable only by known platform clients.
+    - from:
+        - podSelector:
+            matchLabels:
+              app: mcp-ingest
+        - podSelector:
+            matchLabels:
+              app: mcp-processor
+        - podSelector:
+            matchLabels:
+              app: kafka-topic-init
+      ports:
+        - protocol: TCP
+          port: 9092
+    # KRaft controller and inter-broker traffic is limited to broker peers.
+    - from:
+        - podSelector:
+            matchLabels:
+              app: kafka
+      ports:
+        - protocol: TCP
+          port: 9092
+        - protocol: TCP
+          port: 9093

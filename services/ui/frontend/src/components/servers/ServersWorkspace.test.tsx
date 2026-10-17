@@ -585,6 +585,15 @@ describe("ServersWorkspace connect config, protocol inventory, and observability
           ],
           resources: [{ name: "workspace-doc", uri: "file:///workspace/doc.md", mimeType: "text/markdown" }],
         },
+        runtimeStatus: {
+          transport: "streamable-http",
+          connectionState: "ready",
+          authSource: "oauth",
+          lastProbeTime: "2026-10-16T12:00:00Z",
+          lastError: { reason: "DeploymentNotReady", message: "The previous rollout failed.", observedAt: "2026-10-16T11:00:00Z" },
+          lastSession: { id: "session-7", namespace: "mcp-servers", usedAt: "2026-10-16T11:30:00Z", toolName: "search" },
+          lastSessionState: "observed",
+        },
         observability: {
           namespace: "mcp-servers",
           server: "workspace-assistant",
@@ -622,6 +631,8 @@ describe("ServersWorkspace connect config, protocol inventory, and observability
       } : RICH_SERVERS;
       const payload = url.includes("/runtime/namespaces")
         ? NAMESPACES
+        : url.includes("/runtime/servers/")
+          ? { server: { ...catalog.servers[0] } }
         : url.includes("/runtime/servers")
           ? catalog
           : url.includes("/runtime/observability/metrics")
@@ -779,6 +790,10 @@ describe("ServersWorkspace connect config, protocol inventory, and observability
     await screen.findByTestId("server-list");
     const [richCard] = screen.getAllByTestId("server-card");
     await user.click(within(richCard).getByTestId("server-card-details"));
+
+    const runtimeStatus = await screen.findByTestId("server-detail-runtime-status");
+    expect(runtimeStatus).toHaveTextContent("The previous rollout failed.");
+    expect(runtimeStatus).toHaveTextContent("session-7");
 
     const observability = await screen.findByTestId("server-detail-observability");
     expect(within(observability).getByText("Scoped to mcp-servers/workspace-assistant")).toBeInTheDocument();

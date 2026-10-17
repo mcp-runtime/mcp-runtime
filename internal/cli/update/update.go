@@ -101,7 +101,8 @@ When the release sets crdChange, the manifest embeds CustomResourceDefinition
 YAML (field "crds") so update applies only those CRD objects whose live spec
 differs, waits until each written CRD is Established, then rolls images. Pass
 --crds or use the release's platform-crds.yaml when the JSON omits the bundle.
-A release can also declare the ServiceAccounts and RBAC its workloads need
+A release can also declare the ServiceAccounts, RBAC and supported platform
+NetworkPolicies its workloads need
 (platformObjects) and per-component Deployment wiring (ServiceAccount, token
 mount, required env). update creates or corrects only those declared objects
 and fields, validates that they grant no wildcard or escalating access, applies
@@ -291,7 +292,7 @@ func run(ctx context.Context, out io.Writer, opts Options, d deps) error {
 					extra = fmt.Sprintf(" and %d CustomResourceDefinition(s)", len(plan.CRDNames))
 				}
 				if len(plan.objects) > 0 {
-					extra += fmt.Sprintf(" and %d platform ServiceAccount/RBAC object(s)", len(plan.objects))
+					extra += fmt.Sprintf(" and %d platform object(s)", len(plan.objects))
 				}
 				if len(plan.configToWrite) > 0 {
 					extra += fmt.Sprintf(" and %d ConfigMap(s)", len(plan.configToWrite))

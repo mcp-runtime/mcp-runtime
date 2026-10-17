@@ -14,37 +14,39 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
+	"mcp-runtime/pkg/controlplane"
 )
 
 // ServerListItem is one row from the platform API runtime servers list.
 type ServerListItem struct {
-	Name               string                      `json:"name"`
-	Namespace          string                      `json:"namespace"`
-	UID                string                      `json:"uid,omitempty"`
-	TeamID             string                      `json:"team_id,omitempty"`
-	Image              string                      `json:"image,omitempty"`
-	ImageTag           string                      `json:"imageTag,omitempty"`
-	Description        string                      `json:"description,omitempty"`
-	Ready              string                      `json:"ready"`
-	Status             string                      `json:"status"`
-	Message            string                      `json:"message,omitempty"`
-	Conditions         []metav1.Condition          `json:"conditions,omitempty"`
-	Generation         int64                       `json:"generation,omitempty"`
-	Labels             map[string]string           `json:"labels"`
-	Age                string                      `json:"age"`
-	Endpoint           string                      `json:"endpoint,omitempty"`
-	AuthMode           string                      `json:"authMode,omitempty"`
-	AuthHeaders        []string                    `json:"authHeaders,omitempty"`
-	CredentialPresence string                      `json:"credentialPresence,omitempty"`
-	GatewayEnabled     bool                        `json:"gatewayEnabled"`
-	ServicePort        int32                       `json:"servicePort,omitempty"`
-	Tools              []ToolConfig                `json:"tools,omitempty"`
-	Prompts            []mcpv1alpha1.InventoryItem `json:"prompts,omitempty"`
-	Resources          []mcpv1alpha1.InventoryItem `json:"resources,omitempty"`
-	Tasks              []mcpv1alpha1.InventoryItem `json:"tasks,omitempty"`
-	LiveInventory      *LiveInventory              `json:"liveInventory,omitempty"`
-	LiveInventoryError string                      `json:"liveInventoryError,omitempty"`
-	AccessJSON         map[string]any              `json:"access_json,omitempty"`
+	Name               string                           `json:"name"`
+	Namespace          string                           `json:"namespace"`
+	UID                string                           `json:"uid,omitempty"`
+	TeamID             string                           `json:"team_id,omitempty"`
+	Image              string                           `json:"image,omitempty"`
+	ImageTag           string                           `json:"imageTag,omitempty"`
+	Description        string                           `json:"description,omitempty"`
+	Ready              string                           `json:"ready"`
+	Status             string                           `json:"status"`
+	Message            string                           `json:"message,omitempty"`
+	Conditions         []metav1.Condition               `json:"conditions,omitempty"`
+	Generation         int64                            `json:"generation,omitempty"`
+	Labels             map[string]string                `json:"labels"`
+	Age                string                           `json:"age"`
+	Endpoint           string                           `json:"endpoint,omitempty"`
+	AuthMode           string                           `json:"authMode,omitempty"`
+	AuthHeaders        []string                         `json:"authHeaders,omitempty"`
+	CredentialPresence string                           `json:"credentialPresence,omitempty"`
+	GatewayEnabled     bool                             `json:"gatewayEnabled"`
+	ServicePort        int32                            `json:"servicePort,omitempty"`
+	Tools              []ToolConfig                     `json:"tools,omitempty"`
+	Prompts            []mcpv1alpha1.InventoryItem      `json:"prompts,omitempty"`
+	Resources          []mcpv1alpha1.InventoryItem      `json:"resources,omitempty"`
+	Tasks              []mcpv1alpha1.InventoryItem      `json:"tasks,omitempty"`
+	LiveInventory      *LiveInventory                   `json:"liveInventory,omitempty"`
+	LiveInventoryError string                           `json:"liveInventoryError,omitempty"`
+	AccessJSON         map[string]any                   `json:"access_json,omitempty"`
+	RuntimeStatus      controlplane.ServerRuntimeStatus `json:"runtimeStatus"`
 }
 
 type LivePromptArgument struct {
@@ -85,6 +87,10 @@ type LiveResource struct {
 
 type serverListResponse struct {
 	Servers []ServerListItem `json:"servers"`
+}
+
+type runtimeServerItemResponse struct {
+	Server ServerListItem `json:"server"`
 }
 
 type ToolConfig struct {
@@ -152,6 +158,29 @@ func (c *PlatformClient) ListRuntimeServers(ctx context.Context, namespace strin
 		return nil, err
 	}
 	return out.Servers, nil
+}
+
+// GetRuntimeServer returns one server with its runtime inventory and scoped
+// last-session observation when the caller may inspect server activity.
+func (c *PlatformClient) GetRuntimeServer(ctx context.Context, namespace, name string) (ServerListItem, error) {
+	p := fmt.Sprintf("/runtime/servers/%s/%s", url.PathEscape(strings.TrimSpace(namespace)), url.PathEscape(strings.TrimSpace(name)))
+	resp, err := c.do(ctx, http.MethodGet, p, "", nil)
+	if err != nil {
+		return ServerListItem{}, err
+	}
+	defer resp.Body.Close()
+	b, err := readBody(resp.Body)
+	if err != nil {
+		return ServerListItem{}, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return ServerListItem{}, httpAPIError(resp.StatusCode, b)
+	}
+	var out runtimeServerItemResponse
+	if err := json.Unmarshal(b, &out); err != nil {
+		return ServerListItem{}, err
+	}
+	return out.Server, nil
 }
 
 func (c *PlatformClient) ListRuntimeTools(ctx context.Context, filters map[string]string) ([]RuntimeToolRow, error) {

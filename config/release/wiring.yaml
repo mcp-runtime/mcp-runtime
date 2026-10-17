@@ -1,4 +1,4 @@
-# Non-image Deployment configuration, ServiceAccounts/RBAC and ConfigMaps a
+# Non-image Deployment configuration, ServiceAccounts/RBAC, NetworkPolicies and ConfigMaps a
 # release requires, embedded in platform-manifest.json so `mcp-runtime update`
 # can apply them without a full setup. Everything here must match the
 # corresponding object in k8s/ or config/rbac/; tests enforce that.
@@ -7,12 +7,13 @@
 # env, flags and ConfigMap keys are untouched. Releases opt objects in
 # explicitly: list one here when the release changes it.
 
-# ServiceAccount/RBAC objects, as "<Kind>/<namespace>/<name>" (namespaced) or
+# ServiceAccount/RBAC and supported platform NetworkPolicy objects, as "<Kind>/<namespace>/<name>" (namespaced) or
 # "<Kind>/<name>" (cluster-scoped). Validated: no wildcard or escalating rules.
 platformObjects:
   # The updater refuses these policies until supported setup migrated Grafana.
   - NetworkPolicy/mcp-observability/mcp-scoped-observability-ingress
   - NetworkPolicy/mcp-platform/mcp-runtime-api-grafana-egress
+  - NetworkPolicy/mcp-observability/kafka-client-ingress
   - ServiceAccount/mcp-runtime/mcp-runtime-operator-controller-manager
   - ClusterRole/mcp-runtime-operator-role
   - ClusterRole/mcp-runtime-operator-managed-secrets

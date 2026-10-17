@@ -371,9 +371,12 @@ exclusive.
 `server get <name>` prints a JSON detail record from the platform API. Alongside
 readiness, endpoint, authentication configuration, and declared tools, it
 includes the most recently probed live tools, prompts, and resources when a
-probe has completed. `liveInventoryError` explains why a live inventory is not
-available; it can be empty while the first probe is still running. Credential
-values are never included.
+probe has completed. `runtimeStatus` reports transport, connection readiness,
+authentication source, the last observed error, and the most recent probe time.
+For viewers allowed to inspect server activity, it also reports the latest
+observed session and tool call. `liveInventoryError` explains why a live
+inventory is not available; it can be empty while the first probe is still
+running. Credential values and request payloads are never included.
 
 In explicit direct Kubernetes mode, use
 `server list --use-kube --namespace mcp-team-acme`. This requires operator
@@ -897,7 +900,8 @@ With `--only`, CRD apply is skipped so a scoped image update cannot mutate
 cluster schemas; re-run without `--only` to apply schema changes. `--dry-run`
 prints the plan only and does not apply CRDs or roll images.
 
-A release can also declare the ServiceAccounts and RBAC its workloads need
+A release can also declare the ServiceAccounts, RBAC and supported platform
+NetworkPolicies its workloads need
 (`platformObjects`) and per-component Deployment wiring (ServiceAccount, token
 mount and required env). update creates or corrects only those declared objects
 and fields before rolling images, so a release such as v0.7.2 (gateway-to-ingest

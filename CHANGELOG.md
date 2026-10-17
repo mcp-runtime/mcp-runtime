@@ -11,6 +11,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 - Ingest operations docs now include PromQL for Kafka readiness DNS/connect/total latency and bounded failure reasons, plus guidance for correlating slow checks with broker, node and DNS signals. This exposes investigation paths; reference-platform root-cause and under-one-second acceptance remain outstanding ([#624](https://github.com/mcp-runtime/mcp-runtime/issues/624)).
 - `mcp-runtime server get` now includes the runtime API's latest live MCP tool, prompt, and resource inventory alongside declared server metadata and safe authentication configuration, so operators can query observed server capabilities from the CLI ([#291](https://github.com/mcp-runtime/mcp-runtime/issues/291)).
+- Server detail responses include bounded rollout errors, transport and readiness state, probe time, and the latest observed session for authorized viewers; CLI and platform UI expose this runtime status without storing platform-owned session data in the Kubernetes status subresource ([#291](https://github.com/mcp-runtime/mcp-runtime/issues/291)).
 - Server observability queries select the live MCPServer UID carried by workload, Prometheus and Loki labels, preventing a recreated server from exposing its predecessor's logs or metrics. Unlabelled historical telemetry is excluded; deploy the matching operator and collector configuration together ([#761](https://github.com/mcp-runtime/mcp-runtime/pull/761)).
 - Authorized server detail views include recent workload logs from the fixed, server-scoped Loki query API. After a complete setup migration, the same eligible viewers use platform-session Grafana through a fixed-query authorization boundary ([#441](https://github.com/mcp-runtime/mcp-runtime/issues/441)).
 - Authorized server details show a fixed one-hour summary of tools/call rate and p95, allowed-call HTTP 5xx rate, policy denies, and the slowest tool name after five current-UID ClickHouse tools/call rows ([#699](https://github.com/mcp-runtime/mcp-runtime/issues/699)).
@@ -24,6 +25,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Fixed
 
+- Failed QA E2E rollout and MCPServer readiness waits now attach bounded, redacted operator logs, server conditions, workload readiness, and Warning Events to artifacts. Collection is guarded by the explicit disposable Kind context and reports missing access as a collection gap ([#763](https://github.com/mcp-runtime/mcp-runtime/issues/763)).
 - Deployment warning Events are read through a bounded, uncached namespace request, preventing diagnostics from blocking all reconciles on an unauthorized cluster-wide Event informer. Event attribution uses pod UIDs when available ([#757](https://github.com/mcp-runtime/mcp-runtime/pull/757)).
 - `server deploy` now reports the newest unready workload pod's container failure and recent warning event when a rollout times out, while readiness continues to require replicas from the current Deployment revision ([#636](https://github.com/mcp-runtime/mcp-runtime/issues/636)).
 - The CI reconciliation benchmark registers the grant target-server index on its fake Kubernetes client, restoring benchmark runs after indexed policy lookups were introduced ([#657](https://github.com/mcp-runtime/mcp-runtime/issues/657)).
@@ -31,6 +33,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 - `update` now bundles and reconciles operator RBAC from the target release before image rollouts, previews drift, and stops on permission-apply failure. Doctor verifies effective bundled permissions and flags forbidden informer errors; hosted deployment gates on these checks ([#633](https://github.com/mcp-runtime/mcp-runtime/issues/633)).
 
 - `server list` help now explains visible-server defaults, admin scope, team slug filtering, and catalog/personal namespace selectors. A team lookup without a namespace now fails instead of silently listing all visible servers ([#612](https://github.com/mcp-runtime/mcp-runtime/issues/612)).
+
+### Security
+
+- Restrict bundled Kafka ingress to ingest, processor, topic initialization and broker peers. Unscoped platform updates apply this release-declared policy to existing installs as well as fresh setup ([#775](https://github.com/mcp-runtime/mcp-runtime/pull/775), [#110](https://github.com/mcp-runtime/mcp-runtime/issues/110)).
 
 ## [0.10.0] - 2026-10-15
 

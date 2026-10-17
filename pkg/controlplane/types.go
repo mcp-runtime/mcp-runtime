@@ -39,6 +39,29 @@ type ServerInfo struct {
 	Prompts            []mcpv1alpha1.InventoryItem `json:"prompts"`
 	Resources          []mcpv1alpha1.InventoryItem `json:"resources"`
 	Tasks              []mcpv1alpha1.InventoryItem `json:"tasks"`
+	RuntimeStatus      ServerRuntimeStatus         `json:"runtimeStatus"`
+}
+
+// ServerRuntimeStatus combines operator-owned rollout state with observations
+// available from the runtime API. Session details are populated only for
+// callers allowed to inspect server activity.
+type ServerRuntimeStatus struct {
+	Transport        string                           `json:"transport,omitempty"`
+	ConnectionState  string                           `json:"connectionState,omitempty"`
+	AuthSource       string                           `json:"authSource,omitempty"`
+	LastError        *mcpv1alpha1.MCPServerErrorEvent `json:"lastError,omitempty"`
+	LastProbeTime    string                           `json:"lastProbeTime,omitempty"`
+	LastSession      *ServerLastSession               `json:"lastSession,omitempty"`
+	LastSessionState string                           `json:"lastSessionState,omitempty"`
+}
+
+// ServerLastSession identifies the latest observed gateway call using an MCP
+// session. It deliberately omits caller identity and request payloads.
+type ServerLastSession struct {
+	ID        string `json:"id"`
+	Namespace string `json:"namespace,omitempty"`
+	UsedAt    string `json:"usedAt"`
+	ToolName  string `json:"toolName,omitempty"`
 }
 
 // ServerDeploymentStatus summarizes readiness for the Deployment that backs an
