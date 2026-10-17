@@ -19,7 +19,7 @@
 - `Makefile.operator` builds operator manifests, docker image, and runs controller-gen tools; used by setup/build scripts.
 
 ## Dockerfiles
-- `Dockerfile.operator` builds the operator image with Go build steps and copies manifests.
+- `Dockerfile.operator` and first-party Go service Dockerfiles build Linux executables with `-trimpath -ldflags="-s -w"`; see [service iteration](../contributor/service-iteration.md#go-service-image-binaries) for the measurement method and debugger caveat.
 - `examples/oauth-example-go-2025-11-25/Dockerfile` builds the Go OAuth-capable sample container.
 - `test/e2e/Dockerfile` builds images for end-to-end tests.
 
