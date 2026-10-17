@@ -69,6 +69,7 @@ func TestValidateRejects(t *testing.T) {
 		{"empty tool name", func(d *Document) { d.Tools = []Tool{{Name: ""}} }, true, "name is required"},
 		{"duplicate grant", func(d *Document) { d.Grants = []Grant{{Name: "g"}, {Name: "g"}} }, true, "duplicate grant"},
 		{"invalid grant trust", func(d *Document) { d.Grants = []Grant{{Name: "g", MaxTrust: "extreme"}} }, true, "max_trust"},
+		{"invalid grant mode", func(d *Document) { d.Grants = []Grant{{Name: "g", Mode: "shadow-ish"}} }, true, "invalid mode"},
 		{"invalid allowed side effect", func(d *Document) {
 			d.Grants = []Grant{{Name: "g", AllowedSideEffects: []string{"boom"}}}
 		}, true, "allowed side effect"},
@@ -107,6 +108,28 @@ func TestValidateRejects(t *testing.T) {
 				t.Fatalf("Validate() error = %q, want substring %q", err.Error(), tc.wantSub)
 			}
 		})
+	}
+}
+
+func TestStampRequiresMonitorGrantSchemaVersion(t *testing.T) {
+	doc := &Document{Server: Server{Name: "demo"}, Grants: []Grant{{Name: "g", Mode: "monitor", HumanID: "user"}}}
+	if err := Stamp(doc, ""); err != nil {
+		t.Fatalf("Stamp() error = %v", err)
+	}
+	if doc.SchemaVersion != SchemaVersionGrantMonitor {
+		t.Fatalf("SchemaVersion = %q, want %q", doc.SchemaVersion, SchemaVersionGrantMonitor)
+	}
+	if err := Validate(doc); err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	doc.SchemaVersion = SchemaVersionSessionSync
+	revision, err := ComputeRevision(doc)
+	if err != nil {
+		t.Fatalf("ComputeRevision() with old schema error = %v", err)
+	}
+	doc.Revision = revision
+	if err := Validate(doc); err == nil || !strings.Contains(err.Error(), "requires schema version") {
+		t.Fatalf("Validate() error = %v, want schema compatibility rejection", err)
 	}
 }
 
