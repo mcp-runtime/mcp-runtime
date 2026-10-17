@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	mcpv1 "mcp-runtime/api/v1alpha1"
+	cb "mcp-runtime/pkg/credentialbroker"
 	"mcp-runtime/pkg/sessionstate"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -18,17 +19,43 @@ import (
 
 type reviewClient struct {
 	client.Client
-	status authv1.TokenReviewStatus
-	t      *testing.T
+	status   authv1.TokenReviewStatus
+	t        *testing.T
+	audience string
 }
 
 func (c reviewClient) Create(_ context.Context, obj client.Object, _ ...client.CreateOption) error {
 	review := obj.(*authv1.TokenReview)
-	if len(review.Spec.Audiences) != 1 || review.Spec.Audiences[0] != sessionstate.GatewayAudience {
+	audience := c.audience
+	if audience == "" {
+		audience = sessionstate.GatewayAudience
+	}
+	if len(review.Spec.Audiences) != 1 || review.Spec.Audiences[0] != audience {
 		c.t.Fatal("TokenReview audience not scoped")
 	}
 	review.Status = c.status
 	return nil
+}
+
+func TestBrokerIdentityRequiresItsOwnAudienceAndLivePodBinding(t *testing.T) {
+	for _, accepted := range []bool{true, false} {
+		objects, status := identityObjects()
+		if accepted {
+			status.Audiences = []string{cb.Audience}
+		}
+		scheme := runtime.NewScheme()
+		_ = corev1.AddToScheme(scheme)
+		_ = appsv1.AddToScheme(scheme)
+		_ = mcpv1.AddToScheme(scheme)
+		kube := reviewClient{Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build(), status: status, t: t, audience: cb.Audience}
+		identity, err := (KubernetesIdentity{Client: kube}).AuthenticateAudience(t.Context(), "projected-broker-token", cb.Audience)
+		if (err == nil) != accepted {
+			t.Fatalf("dedicated audience accepted=%v err=%v", accepted, err)
+		}
+		if accepted && identity.UID != "server-uid" {
+			t.Fatal("wrong live server generation")
+		}
+	}
 }
 func owner(name, kind, version, uid string) metav1.OwnerReference {
 	yes := true

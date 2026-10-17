@@ -171,6 +171,7 @@ func renderPolicyConfigMapData(existing string, doc *policy.Document) (string, e
 func (r *MCPServerReconciler) renderGatewayPolicy(ctx context.Context, mcpServer *mcpv1alpha1.MCPServer) (*policy.Document, error) {
 	serverTeamID := strings.TrimSpace(mcpServer.Spec.TeamID)
 	doc := &policy.Document{
+		CredentialBindings: append([]string(nil), mcpServer.Spec.CredentialBindings...),
 		Server: policy.Server{
 			UID:       string(mcpServer.UID),
 			Name:      policy.ServerName(mcpServer.Name),
@@ -304,6 +305,9 @@ func (r *MCPServerReconciler) renderGatewayPolicy(ctx context.Context, mcpServer
 			doc.Session = &policy.Session{}
 		}
 		doc.Session.Store = "platform"
+		if len(doc.CredentialBindings) > 0 {
+			doc.Session.Required = true
+		}
 	}
 	if mcpv1alpha1.AuthUsesHeaderMode(mcpServer.Spec.Auth) && (len(doc.Grants) > 0 || doc.Session != nil) {
 		return nil, fmt.Errorf("header auth on %s/%s cannot use grants, sessions, or session identity", mcpServer.Namespace, mcpServer.Name)

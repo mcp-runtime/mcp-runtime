@@ -11,6 +11,8 @@ type APIPath struct {
 // PlatformAPIPaths returns platform-namespace ingress rules, most-specific first.
 func PlatformAPIPaths() []APIPath {
 	return []APIPath{
+		{Path: "/api/v1/credentials", PathType: "Prefix", Service: "mcp-platform-api", Port: 8080},
+		{Path: "/api/v1/credential-resolutions", PathType: "Exact", Service: "mcp-platform-api", Port: 8080},
 		{Path: "/api/v1/runtime/registry/push", PathType: "Exact", Service: "mcp-runtime-api", Port: 8084},
 		{Path: "/api/v1/admin/namespaces", PathType: "Prefix", Service: "mcp-platform-api", Port: 8080},
 		{Path: "/api/v1/admin/audit", PathType: "Prefix", Service: "mcp-platform-api", Port: 8080},

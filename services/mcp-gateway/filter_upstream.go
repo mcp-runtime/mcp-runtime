@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"net/http"
 
 	policypkg "mcp-runtime/pkg/policy"
 )
@@ -14,6 +15,11 @@ import (
 // (all set by earlier stages) and must not mutate them. It always returns Respond
 // so the pipeline halts and stage 6 (audit) runs from the orchestrator.
 func (s *gatewayServer) upstreamFilter(ex *Exchange) Result {
+	if !s.injectCredentials(ex) {
+		ex.Decision = policypkg.Deny(http.StatusServiceUnavailable, "credential_unavailable", ex.Decision.PolicyVersion)
+		http.Error(ex.W, "credential unavailable", http.StatusServiceUnavailable)
+		return Respond
+	}
 	outcome := &upstreamOutcome{}
 	ex.R = ex.R.WithContext(context.WithValue(ex.R.Context(), upstreamOutcomeKey{}, outcome))
 	defer func() {

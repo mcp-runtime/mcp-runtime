@@ -43,7 +43,7 @@ func NewForTest(jwtSecret []byte) *Store {
 }
 
 func (s *Store) migrate(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, platformSchemaSQL)
+	_, err := s.db.ExecContext(ctx, platformSchemaSQL+credentialSchemaSQL)
 	return err
 }
 

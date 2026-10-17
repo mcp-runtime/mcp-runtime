@@ -3050,7 +3050,7 @@ func TestDeployOperatorManifestsWithKubectlPreservesExistingGatewayOTLPEndpoint(
 	mock := &core.MockExecutor{
 		CommandFunc: func(spec core.ExecSpec) *core.MockCommand {
 			cmd := &core.MockCommand{Args: spec.Args}
-			if commandHasArgs(spec, "get", "deployment/"+core.OperatorDeploymentName, "-n", core.NamespaceMCPRuntime) {
+			if commandHasArgs(spec, "get", "deployment/"+core.OperatorDeploymentName, "-n", core.NamespaceMCPRuntime) && strings.Contains(strings.Join(spec.Args, " "), gatewayOTELExporterOTLPEndpointEnv) {
 				cmd.OutputData = []byte(customEndpoint)
 			}
 			if isOperatorManagerApplyArgs(spec.Args) {
