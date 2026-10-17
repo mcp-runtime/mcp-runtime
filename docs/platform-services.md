@@ -44,6 +44,42 @@ controllers, the runtime operator, and log collectors that need it. For services
 that do not call Kubernetes, disable service account token automounting and
 isolate them with NetworkPolicies where the cluster supports them.
 
+### MCP workload ingress isolation
+
+The operator installs an ingress policy before creating each MCPServer's
+serving workload. Gateway-fronted pods expose only their named gateway listener
+to the configured ingress controller; their raw upstream listener has no
+cross-pod ingress allowance. Non-adapter gateways also allow the exact runtime
+API peer to use that public listener for read-only live inventory, with normal
+authentication still enforced. Adapter mTLS gateways retain the authenticated
+ingress path. The gateway's named metrics listener accepts only Prometheus in
+`mcp-observability`. Standalone MCPServers retain their named HTTP listener for
+the configured ingress controller, same-namespace callers and runtime inventory.
+
+Namespace isolation is additive with those policies. `platform-default-deny`
+keeps all-pod ingress denied and retains the existing explicit egress rules.
+`platform-generic-workload-ingress` preserves the generic Deployment API's
+existing ingress contract only for its explicit platform-managed marker and
+absence of an MCPServer UID. An unmarked or predecessor-UID MCP pod does not
+inherit that exception. The per-server selector includes the live server UID,
+and named listeners follow each retained/candidate pod's actual port during
+rollouts. Arbitrary additional administrator policies can broaden this union
+and must be reviewed separately.
+
+Existing installations need matching runtime API and operator rollouts through
+the supported update/setup workflow. Runtime API startup reconciles the
+canonical base and generic policies in all platform-managed workload namespaces;
+the API replica remains unhealthy if that bounded startup reconciliation fails.
+Operator reconciliation installs per-server rules before new serving pods.
+Do not consider the boundary active until the old broad base policy has been
+replaced and current UID-labelled pods/policies are reconciled. Installations
+whose old namespaces lack the platform-managed marker need a supported setup
+refresh preserving their existing host, TLS, registry, storage and authentication
+options. These controls require an enforcing CNI; source/unit coverage does not
+establish a live datapath result. A non-enforcing provider such as Kindnet does
+not isolate raw listener traffic. External custom upstream endpoints must also
+enforce their own network/authentication boundary.
+
 When public TLS terminates on a reverse proxy and cluster Traefik stays HTTP,
 pass `UI_REQUIRE_HTTPS=false` and `UI_FORCE_SECURE_COOKIE=true` through
 `setup --env-file`; setup propagates and preserves these UI settings.

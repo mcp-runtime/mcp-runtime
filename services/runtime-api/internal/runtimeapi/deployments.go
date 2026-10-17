@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"regexp"
@@ -34,7 +33,7 @@ import (
 )
 
 const (
-	platformManagedLabel    = "platform.mcpruntime.org/managed"
+	platformManagedLabel    = kubeworkload.PlatformManagedLabel
 	platformUserIDLabel     = "platform.mcpruntime.org/user-id"
 	platformTeamIDLabel     = "mcpruntime.org/team-id"
 	platformTeamSlugLabel   = "mcpruntime.org/team-slug"
@@ -954,28 +953,33 @@ func intstrFromInt32(v int32) intstr.IntOrString {
 	return intstr.FromInt(int(v))
 }
 
-// ReconcileTeamNamespaceNetworkPolicies refreshes default-deny NetworkPolicies for
-// existing team namespaces so ingress controller namespace changes take effect
-// without recreating teams.
-func (s *DeploymentService) ReconcileTeamNamespaceNetworkPolicies(ctx context.Context) {
+// ReconcileTeamNamespaceNetworkPolicies refreshes the policies for every
+// platform-managed workload namespace, including existing org/public/user
+// catalogs. The historical method name is retained for callers. Ordinary API
+// rollouts must replace old broad base policies as well as creating exceptions.
+func (s *DeploymentService) ReconcileTeamNamespaceNetworkPolicies(ctx context.Context) error {
 	if s == nil || s.k8sClients == nil || s.k8sClients.Clientset == nil {
-		return
+		return nil
 	}
 	cfg := platformTeamTraefikWatchConfig()
 	ingress := teamIngressAllowNamespaces(cfg)
 	list, err := s.k8sClients.Clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{
-		LabelSelector: platformScopeLabel + "=" + namespaceScopeTeam,
+		LabelSelector: platformManagedLabel + "=true",
 	})
 	if err != nil {
-		log.Printf("reconcile team namespace network policies: list namespaces: %v", err)
-		return
+		return fmt.Errorf("list managed namespaces for network policy reconciliation: %w", err)
 	}
+	var failures []error
 	for _, ns := range list.Items {
+		if kubeworkload.OperatorSecretNamespaceProtected(ns.Name) {
+			continue
+		}
 		if err := k8sprovision.EnsureDefaultDenyNetworkPolicy(ctx, s.k8sClients.Clientset, ns.Name, ingress...); err != nil {
-			log.Printf("reconcile team namespace network policies: namespace %q: %v", ns.Name, err)
+			failures = append(failures, fmt.Errorf("namespace %q network policies: %w", ns.Name, err))
 		}
 	}
 	s.purgeExpiredRegistryPushTransfers(ctx)
+	return errors.Join(failures...)
 }
 
 func (cfg teamTraefikWatchConfig) provisioningConfig() k8sprovision.TraefikWatchConfig {
