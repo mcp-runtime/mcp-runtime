@@ -154,6 +154,14 @@ from request submission to first successful analytics visibility; it includes
 request latency and polling/query delay. It is a polling upper bound, not
 independent timing of each ingest/Kafka/processor/ClickHouse stage.
 
+S5 gates both total gateway p95/p99 latency and the recorded gateway-minus-direct
+p95/p99 differences against `PERF_REGRESSION_PCT`. A faster direct upstream must
+not hide increased gateway overhead. The overhead baseline must be positive:
+zero/negative differences have no meaningful relative denominator, so comparison
+fails explicitly and requires deliberate recapture of a stable positive baseline.
+Raw noisy measurements remain evidence; a negative candidate difference is a
+valid reduction against a positive baseline, not a negative request duration.
+
 Every 2xx MCP result must be valid JSON-RPC with the exact response ID and no
 RPC/tool error. Responses and tool arguments are bounded; timeouts, missing
 counts, non-finite values, inconsistent percentiles, unrelated events and

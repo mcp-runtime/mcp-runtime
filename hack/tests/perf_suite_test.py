@@ -112,6 +112,22 @@ class PerfTests(unittest.TestCase):
         with patch.dict(os.environ, {"PERF_API_KEY": "synthetic"}):
             perf.validate_measurement(perf.analytics_latency(self.url, 2))
 
+    def test_overhead_regression_is_not_hidden_by_faster_direct_upstream(self):
+        def paired(gateway, direct):
+            gateway_stats, direct_stats = perf.distribution([gateway] * 3), perf.distribution([direct] * 3)
+            return {"scenario": "S5", "errors": 0, "compatibility": "same", **gateway_stats,
+                    "gateway": gateway_stats, "direct": direct_stats,
+                    "samples_ms": {"gateway": [gateway] * 3, "direct": [direct] * 3},
+                    "added_latency_ms": {key: gateway - direct for key in ("p50", "p95", "p99")}}
+        baseline = paired(2., 1.)
+        failed, lines = perf.compare(paired(1.5, .1), baseline, 25)
+        self.assertTrue(failed)
+        self.assertTrue(any("added_latency_ms.p95" in line and "REGRESSION" in line for line in lines))
+        self.assertFalse(perf.compare(paired(.5, 1.), baseline, 25)[0])
+        for gateway in (1., .5):
+            with self.assertRaisesRegex(ValueError, "zero/negative"):
+                perf.compare(baseline, paired(gateway, 1.), 25)
+
     def test_trace_lag_requires_exact_trace_namespace_and_live_uid(self):
         target = {"name": "server", "namespace": "team", "uid": "current"}
         with patch.dict(os.environ, {"PERF_API_KEY": "synthetic", "PERF_LAG_SAMPLES": "1"}):

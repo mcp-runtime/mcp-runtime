@@ -454,6 +454,16 @@ def compare(current, baseline, threshold):
             comparisons.append(f"{name} concurrency={candidate.get('concurrency', 1)}: {before:.3f} -> {after:.3f} ({delta:+.1f}%)" + (" REGRESSION" if worse else ""))
     if not comparisons:
         raise ValueError("No comparable performance metrics")
+    if current["scenario"] == "S5":
+        for name in ("p95", "p99"):
+            before = baseline["added_latency_ms"][name]
+            after = current["added_latency_ms"][name]
+            if before <= 0:
+                raise ValueError("S5 baseline " + name + " overhead is zero/negative; timing noise has no relative denominator. Retain raw evidence and deliberately recapture a stable positive-overhead baseline")
+            delta = (after / before - 1) * 100
+            worse = delta > threshold
+            failed |= worse
+            comparisons.append(f"added_latency_ms.{name}: {before:.3f} -> {after:.3f} ({delta:+.1f}%)" + (" REGRESSION" if worse else ""))
     return failed, comparisons
 
 
