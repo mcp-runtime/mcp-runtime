@@ -135,14 +135,17 @@ func wireAnalyticsPodTLS(pod map[string]any, name string) error {
 			addAnalyticsVolume(pod, analyticsKeystoreVolume("mcp-analytics-kafka"))
 			addAnalyticsMount(container, "analytics-keystore", "/etc/kafka/secrets")
 		case "mcp-ingest", "mcp-processor":
+			// #nosec G101 -- Kubernetes Secret object name, not credential material.
 			secret := "mcp-analytics-ingest-kafka"
 			if name == "mcp-processor" {
+				// #nosec G101 -- Kubernetes Secret object name, not credential material.
 				secret = "mcp-analytics-processor-kafka"
 			}
 			addAnalyticsVolume(pod, map[string]any{"name": "analytics-kafka-client", "secret": map[string]any{"secretName": secret, "defaultMode": int64(0440)}})
 			addAnalyticsMount(container, "analytics-kafka-client", analyticsTLSMount+"/kafka")
 			if name == "mcp-ingest" {
 				setAnalyticsEnv(container, map[string]string{"HTTP_TLS_CERT_FILE": analyticsTLSMount + "/server/tls.crt", "HTTP_TLS_KEY_FILE": analyticsTLSMount + "/server/tls.key"})
+				// #nosec G101 -- Kubernetes Secret object name, not credential material.
 				addAnalyticsVolume(pod, map[string]any{"name": "analytics-server-tls", "secret": map[string]any{"secretName": "mcp-analytics-ingest", "defaultMode": int64(0440)}})
 				addAnalyticsMount(container, "analytics-server-tls", analyticsTLSMount+"/server")
 				setAnalyticsHTTPSProbes(container)
@@ -152,7 +155,7 @@ func wireAnalyticsPodTLS(pod map[string]any, name string) error {
 			addAnalyticsMount(container, "analytics-keystore", "/etc/kafka/secrets")
 			command, _, _ := unstructured.NestedStringSlice(container, "command")
 			if len(command) == 0 {
-				return fmt.Errorf("Kafka topic initialization command is missing")
+				return fmt.Errorf("kafka topic initialization command is missing")
 			}
 			if !strings.Contains(command[len(command)-1], "/tmp/kafka-client.properties") {
 				rewriteAnalyticsCommand(container, "kafka-topics ", "kafka-topics --command-config /tmp/kafka-client.properties ")
@@ -161,6 +164,7 @@ func wireAnalyticsPodTLS(pod map[string]any, name string) error {
 			}
 			_ = unstructured.SetNestedStringSlice(container, command, "command")
 		case "clickhouse":
+			// #nosec G101 -- Kubernetes Secret object name, not credential material.
 			addAnalyticsVolume(pod, map[string]any{"name": "analytics-server-tls", "secret": map[string]any{"secretName": "mcp-analytics-clickhouse", "defaultMode": int64(0440)}})
 			addAnalyticsMount(container, "analytics-server-tls", analyticsTLSMount+"/server")
 			mounts, _, _ := unstructured.NestedSlice(container, "volumeMounts")
