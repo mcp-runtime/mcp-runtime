@@ -12,6 +12,15 @@ bash hack/qa/security-regression.sh
 Use this reference for adapter-bound suites (B/C/D), judgment, or when the
 script is blocked.
 
+For workload-root rollover, gateway client trust reloads from its mounted public
+CA file every minute and validates resumed TLS connections against the current
+root set. Test old-only, overlapping old+new, and new-only trust with fresh and
+resumed connections. Malformed/missing replacement files retain the last valid
+snapshot and emit bounded reload errors. Existing connections are not terminated
+by root removal; use supported session revocation for immediate access removal.
+Serving-certificate reload and client trust reload are separate checks. The
+bundled registry/workload root split and full rollover orchestration remain #535.
+
 ## Overview
 
 `security-audit` and `security-audit` are **static** reviews — diff,

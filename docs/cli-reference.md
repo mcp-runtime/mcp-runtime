@@ -848,6 +848,18 @@ inside its validity window. Setup never prints key material.
 - The bundled registry/internal TLS still shares this root. Splitting the
   workload and registry signing roots is tracked under #535 and is not yet done.
 
+Gateways reload their mounted client-CA bundle every minute, independently of
+serving-certificate changes. Publish old and new public CAs during the overlap;
+after leaf migration, removing the retired root takes effect for new TLS
+handshakes, including TLS session resumption, once the updated mount is observed.
+An unreadable, malformed, private-key-bearing or oversized replacement is rejected
+and the last validated trust remains active. Reload failures appear in gateway
+logs without file contents or key material. Existing TLS connections retain their
+connection lifetime; root retirement does not revoke an existing agent session.
+Use the supported session-revocation workflow when immediate access revocation
+is required. This trust reload does not automate root creation, issuer cutover,
+leaf reissuance or registry/workload root separation.
+
 ### Local and single-node clusters
 
 ```bash
