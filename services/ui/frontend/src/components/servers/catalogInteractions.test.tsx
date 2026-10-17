@@ -86,7 +86,9 @@ function stubCatalog() {
     const url = String(input);
     const payload = url.includes("/runtime/namespaces")
       ? NAMESPACES
-      : url.includes("/runtime/servers")
+      : url.includes("/runtime/servers/")
+        ? { server: { ...SERVERS.servers.find((server) => url.endsWith(`/${server.namespace}/${server.name}`)), runtimeStatus: { transport: "streamable-http", connectionState: "ready", authSource: "oauth", lastProbeTime: "2026-10-16T12:00:00Z", lastError: { reason: "DeploymentNotReady", message: "A previous rollout failed.", observedAt: "2026-10-16T11:00:00Z" }, lastSession: { id: "session-7", namespace: "mcp-servers", usedAt: "2026-10-16T11:30:00Z", toolName: "lookup" }, lastSessionState: "observed" } } }
+        : url.includes("/runtime/servers")
         ? SERVERS
         : MANY_TOOLS;
     return { ok: true, status: 200, json: async () => payload } as unknown as Response;
@@ -309,6 +311,10 @@ describe("server inspector", () => {
 
     await user.click(within(oauthCard as HTMLElement).getByTestId("server-card-details"));
     expect(await screen.findByTestId("server-detail-auth")).toHaveTextContent("session-bound certificate");
+    const runtimeStatus = await screen.findByTestId("server-detail-runtime-status");
+    expect(runtimeStatus).toHaveTextContent("streamable-http");
+    expect(runtimeStatus).toHaveTextContent("A previous rollout failed.");
+    expect(runtimeStatus).toHaveTextContent("session-7");
   });
 
   it("offers the full MCP client config, selectable and copyable", async () => {

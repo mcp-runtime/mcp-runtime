@@ -86,16 +86,15 @@ port_transition_capture_route() {
   mkdir -p "${directory}"
   kubectl get service "${SERVER_NAME}" -n mcp-servers -o json >"${directory}/service.json" || true
   kubectl get endpointslice -n mcp-servers -l "kubernetes.io/service-name=${SERVER_NAME}" -o json >"${directory}/endpointslices.json" || true
-  kubectl get pods -n mcp-servers -l "app=${SERVER_NAME}" -o json | jq \
-    '{items: [.items[] | {metadata: {name: .metadata.name, labels: .metadata.labels, deletionTimestamp: .metadata.deletionTimestamp}, ports: [.spec.containers[] | {name, ports}], status}]}' \
-    >"${directory}/pods.json" || true
+  e2e_diag_capture "workloads" "${directory}/pods.json" \
+    get deployment,replicaset,pod -n mcp-servers -l "app=${SERVER_NAME}" -o json
   kubectl get networkpolicy "${SERVER_NAME}-mtls-gateway" -n mcp-servers -o json >"${directory}/networkpolicy.json" || true
   kubectl get networkpolicy -n traefik -l "mcpruntime.org/component=traefik-egress,mcpruntime.org/server=${SERVER_NAME},mcpruntime.org/server-namespace=mcp-servers" -o json \
     >"${directory}/traefik-egress-networkpolicy.json" || true
-  kubectl logs -n mcp-servers -l "app=${SERVER_NAME}" -c mcp-gateway --prefix --tail=100 \
-    >"${directory}/gateway.log" 2>&1 || true
-  kubectl logs -n mcp-runtime deployment/mcp-runtime-operator-controller-manager --tail=100 \
-    >"${directory}/operator.log" 2>&1 || true
+  e2e_diag_capture "gateway-logs" "${directory}/gateway.log" \
+    logs -n mcp-servers -l "app=${SERVER_NAME}" -c mcp-gateway --prefix --since=10m --tail=100
+  e2e_diag_capture "operator-logs" "${directory}/operator.log" \
+    logs -n mcp-runtime deployment/mcp-runtime-operator-controller-manager --since=10m --tail=100
 }
 
 port_transition_assert_old_route() {
