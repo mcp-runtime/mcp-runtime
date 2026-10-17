@@ -25,6 +25,7 @@ func scopedTelemetryPolicySource() (*networkingv1.NetworkPolicy, error) {
 	if err != nil {
 		return nil, err
 	}
+	// #nosec G304 -- filename is resolved solely from the fixed release asset path above, never request input.
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, err
