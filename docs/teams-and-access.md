@@ -307,6 +307,16 @@ email-like strings, case-sensitive uppercase email identifiers, or values that
 appear to encode `mcp-team-*` namespace names. The warnings never block the
 apply.
 
+Grants default to enforcement. Add `--mode monitor` when initializing a grant,
+or choose **Monitor** in the dashboard, to observe tool, trust and side-effect
+denials before enforcing them. Audit events include `would_deny` and
+`would_deny_reason`. Identity and required-session checks still block, and a
+monitor grant cannot override a matching enforcing grant's denial. Disabled
+and expired grants cannot shadow denials. After reviewing the observations,
+switch the grant to **Enforce** in the dashboard or set `spec.mode: enforce`
+in the manifest and apply it through the CLI. Deploy gateways supporting policy
+schema v5 before enabling monitor mode.
+
 ## Audit And Reporting
 
 Gateway analytics events carry target `team_id` from `MCPServer.spec.teamID`

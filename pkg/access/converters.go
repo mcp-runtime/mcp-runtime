@@ -101,6 +101,7 @@ func convertToSessionList(obj interface{}) (*MCPAgentSessionList, error) {
 
 // GrantSummary provides a simplified view of a grant for UI display.
 type GrantSummary struct {
+	Mode               GrantMode        `json:"mode,omitempty"`
 	Name               string           `json:"name"`
 	Namespace          string           `json:"namespace"`
 	ServerRef          ServerReference  `json:"serverRef"`
@@ -115,6 +116,7 @@ type GrantSummary struct {
 // ToGrantSummary converts an MCPAccessGrant to a GrantSummary.
 func ToGrantSummary(grant MCPAccessGrant) GrantSummary {
 	return GrantSummary{
+		Mode:               grant.Spec.Mode,
 		Name:               grant.Name,
 		Namespace:          grant.Namespace,
 		ServerRef:          grant.Spec.ServerRef,

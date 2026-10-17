@@ -67,3 +67,25 @@ func TestGatewayExportsCommonMCPRequestMetrics(t *testing.T) {
 		}
 	}
 }
+
+func TestGatewayExportsMonitorWouldDenyMetric(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	metrics := newGatewayMetrics(registry)
+	metrics.recordPolicyDecision(gatewayMetricScope{Namespace: "mcp-team-a", Server: "demo", Cluster: "test"}, "tools/call", policypkg.Decision{
+		Allowed:         true,
+		Reason:          "trust_too_low",
+		WouldDeny:       true,
+		WouldDenyReason: "trust_too_low",
+	})
+	body := gatherMetricsText(t, registry)
+	for _, want := range []string{
+		"mcp_gateway_policy_would_deny_total",
+		`namespace="mcp-team-a"`,
+		`server="demo"`,
+		`reason="trust_too_low"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("metrics output missing %q", want)
+		}
+	}
+}
