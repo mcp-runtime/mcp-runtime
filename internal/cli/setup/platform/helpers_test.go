@@ -2273,6 +2273,7 @@ func TestDeployAnalyticsManifestsWithKubectl_RecreatesInitializationJobs(t *test
 		"03-clickhouse.yaml",
 		"04-clickhouse-init.yaml",
 		"05-kafka.yaml",
+		"05-kafka-networkpolicy.yaml",
 		"05-kafka-topic-init.yaml",
 		"06-ingest.yaml",
 		"07-processor.yaml",
@@ -2425,6 +2426,16 @@ func TestGrafanaProvisioningContract(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("analyticsServiceManifests missing %s", want)
+		}
+	}
+}
+
+func TestAnalyticsMessagingManifestsInstallKafkaPolicyBeforeClients(t *testing.T) {
+	for _, kafkaManifest := range []string{"k8s/05-kafka.yaml", "k8s/05-kafka-hostpath.yaml"} {
+		got := analyticsMessagingManifests(kafkaManifest)
+		want := []string{"k8s/05-kafka-networkpolicy.yaml", kafkaManifest}
+		if !slices.Equal(got, want) {
+			t.Errorf("analyticsMessagingManifests(%q) = %v, want %v", kafkaManifest, got, want)
 		}
 	}
 }
@@ -2589,6 +2600,7 @@ func TestDeployAnalyticsManifestsReturnsRolloutFailures(t *testing.T) {
 		"04-clickhouse-init.yaml",
 		"05-kafka.yaml",
 		"05-kafka-hostpath.yaml",
+		"05-kafka-networkpolicy.yaml",
 		"05-kafka-topic-init.yaml",
 		"06-ingest.yaml",
 		"07-processor.yaml",
@@ -2761,6 +2773,7 @@ func TestDeployAnalyticsManifestsWithKubectl_WaitsForPostgresStatefulSet(t *test
 		"03-clickhouse.yaml",
 		"04-clickhouse-init.yaml",
 		"05-kafka.yaml",
+		"05-kafka-networkpolicy.yaml",
 		"05-kafka-topic-init.yaml",
 		"06-ingest.yaml",
 		"07-processor.yaml",
