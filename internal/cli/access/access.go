@@ -92,6 +92,7 @@ func newGrantInitCmd(mgr *AccessManager) *cobra.Command {
 		},
 	}
 	bindAccessInitCommonFlags(cmd, &opts)
+	cmd.Flags().StringVar(&opts.Mode, "mode", "enforce", "Grant policy mode: enforce or monitor")
 	cmd.Flags().StringArrayVar(&opts.SideEffects, "side-effect", []string{"read"}, "Allowed side effect class: read, write, or destructive; repeat for multiple")
 	cmd.Flags().StringArrayVar(&opts.Tools, "tool", nil, "Tool name to allow; repeat for multiple tools")
 	cmd.Flags().StringArrayVar(&opts.ToolRules, "tool-rule", nil, "Tool rule as name:allow|deny:low|medium|high; repeat for mixed trust or deny rules")

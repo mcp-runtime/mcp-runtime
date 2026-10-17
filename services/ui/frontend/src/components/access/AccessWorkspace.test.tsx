@@ -177,6 +177,7 @@ describe("AccessWorkspace gating", () => {
     expect(screen.queryByTestId("grant-create-toggle")).not.toBeInTheDocument();
     expect(screen.queryByTestId("session-create-toggle")).not.toBeInTheDocument();
     expect(screen.queryByTestId("grant-toggle")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("grant-mode-toggle")).not.toBeInTheDocument();
     expect(screen.queryByTestId("session-toggle")).not.toBeInTheDocument();
     expect(fetchMock.mock.calls.filter((call) => (call[1] as RequestInit)?.method)).toHaveLength(0);
   });
@@ -279,6 +280,22 @@ describe("AccessWorkspace reads", () => {
 });
 
 describe("AccessWorkspace mutations", () => {
+  it("switches mode through a narrow patch without replacing grant rules", async () => {
+    const user = userEvent.setup();
+    const fetchMock = stubAccessApi();
+    renderAccess(ADMIN);
+    await screen.findByTestId("grants-table");
+    await user.click(screen.getAllByTestId("grant-mode-toggle")[0]);
+    expect(await screen.findByTestId("access-confirm")).toHaveTextContent('Set grant "acme-readonly" to monitor?');
+    expect(fetchMock.mock.calls.filter((call) => (call[1] as RequestInit)?.method)).toHaveLength(0);
+    await user.click(screen.getByTestId("access-confirm-yes"));
+    await waitFor(() => {
+      const write = fetchMock.mock.calls.find((call) => (call[1] as RequestInit)?.method === "PATCH");
+      expect(write?.[0]).toContain("/runtime/grants/mcp-servers/acme-readonly");
+      expect(JSON.parse((write?.[1] as RequestInit).body as string)).toEqual({ mode: "monitor" });
+    });
+  });
+
   it("writes only after an explicit confirmation", async () => {
     const user = userEvent.setup();
     const fetchMock = stubAccessApi();

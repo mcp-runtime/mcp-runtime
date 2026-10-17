@@ -59,6 +59,7 @@ type gatewayMetrics struct {
 	toolCallsTotal         *prometheus.CounterVec
 	toolDurationSeconds    *prometheus.HistogramVec
 	policyDecisionsTotal   *prometheus.CounterVec
+	policyWouldDenyTotal   *prometheus.CounterVec
 	analyticsDropsTotal    prometheus.Counter
 	analyticsEmitFailures  *prometheus.CounterVec
 	oauthOutcomesTotal     *prometheus.CounterVec
@@ -95,6 +96,10 @@ func newGatewayMetrics(registerer prometheus.Registerer) *gatewayMetrics {
 			Name: "mcp_gateway_policy_decisions_total",
 			Help: "Total policy decisions made by MCP gateway sidecars.",
 		}, []string{"namespace", "server", "cluster", "team_id", "decision", "reason", "rpc_method"}),
+		policyWouldDenyTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "mcp_gateway_policy_would_deny_total",
+			Help: "Total requests allowed by monitor-mode grants that their grant restrictions would deny.",
+		}, []string{"namespace", "server", "cluster", "team_id", "reason", "rpc_method"}),
 		analyticsDropsTotal: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "mcp_gateway_analytics_drop_total",
 			Help: "Total analytics events dropped by MCP gateway sidecars.",
@@ -140,6 +145,7 @@ func newGatewayMetrics(registerer prometheus.Registerer) *gatewayMetrics {
 			m.toolCallsTotal,
 			m.toolDurationSeconds,
 			m.policyDecisionsTotal,
+			m.policyWouldDenyTotal,
 			m.analyticsDropsTotal,
 			m.analyticsEmitFailures,
 			m.oauthOutcomesTotal,
@@ -263,6 +269,16 @@ func (m *gatewayMetrics) recordPolicyDecision(scope gatewayMetricScope, rpcMetho
 		metricReason(decision),
 		metricRPCMethod(rpcMethod),
 	).Inc()
+	if decision.WouldDeny {
+		m.policyWouldDenyTotal.WithLabelValues(
+			scope.Namespace,
+			scope.Server,
+			scope.Cluster,
+			scope.TeamID,
+			metricReason(policypkg.Decision{Reason: decision.WouldDenyReason}),
+			metricRPCMethod(rpcMethod),
+		).Inc()
+	}
 }
 
 func (m *gatewayMetrics) recordPolicyReload(scope gatewayMetricScope, err error) {

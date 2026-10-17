@@ -90,6 +90,7 @@ export async function setSessionRevoked(
 }
 
 export async function createGrant(input: {
+  mode?: "enforce" | "monitor";
   name: string;
   namespace: string;
   serverRef: { name: string; namespace?: string };
@@ -99,6 +100,14 @@ export async function createGrant(input: {
   expiresAt?: string;
 }): Promise<void> {
   await fetchJSON("/runtime/grants", jsonBody({ ...input, policyVersion: "", toolRules: [] }));
+}
+
+export async function setGrantMode(namespace: string, name: string, mode: "enforce" | "monitor"): Promise<void> {
+  await fetchJSON(`/runtime/grants/${segment(namespace)}/${segment(name)}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ mode }),
+  });
 }
 
 export async function createSession(input: {

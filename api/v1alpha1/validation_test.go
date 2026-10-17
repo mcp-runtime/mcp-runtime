@@ -48,6 +48,13 @@ func TestMCPAccessGrantValidateRejectsInvalidAllowedSideEffect(t *testing.T) {
 	}
 }
 
+func TestMCPAccessGrantValidateRejectsUnknownMode(t *testing.T) {
+	grant := &MCPAccessGrant{ObjectMeta: metav1.ObjectMeta{Name: "grant"}, Spec: MCPAccessGrantSpec{ServerRef: ServerReference{Name: "payments"}, Mode: "shadow"}}
+	if err := grant.validate(); err == nil || !strings.Contains(err.Error(), "spec.mode") {
+		t.Fatalf("validate() error = %v, want spec.mode enum rejection", err)
+	}
+}
+
 func TestMCPAccessGrantValidateAllowsTeamOnlySubject(t *testing.T) {
 	grant := &MCPAccessGrant{
 		ObjectMeta: metav1.ObjectMeta{Name: "grant"},

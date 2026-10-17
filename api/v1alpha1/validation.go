@@ -585,6 +585,9 @@ func (r *MCPAccessGrant) validate() error {
 	if err := validateTeamIDField(specPath.Child("subject", "teamID"), r.Spec.Subject.TeamID); err != nil {
 		allErrs = append(allErrs, err)
 	}
+	if r.Spec.Mode != "" && r.Spec.Mode != GrantModeEnforce && r.Spec.Mode != GrantModeMonitor {
+		allErrs = append(allErrs, field.NotSupported(specPath.Child("mode"), r.Spec.Mode, []string{string(GrantModeEnforce), string(GrantModeMonitor)}))
+	}
 
 	sideEffects := make(map[ToolSideEffect]struct{}, len(r.Spec.AllowedSideEffects))
 	for i, sideEffect := range r.Spec.AllowedSideEffects {

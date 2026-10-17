@@ -8,7 +8,9 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -25,7 +27,7 @@ const (
 	ObjectActionSkipped = "skipped"
 )
 
-// ObjectResult reports one platform ServiceAccount/RBAC object.
+// ObjectResult reports one release-declared platform object.
 type ObjectResult struct {
 	Key    string `json:"key"`
 	Action string `json:"action,omitempty"`
@@ -84,6 +86,21 @@ func serviceAccountPlanned(objs []platformrelease.PlatformObject, namespace, nam
 
 func objectAction(ctx context.Context, cs kubernetes.Interface, obj platformrelease.PlatformObject) (string, error) {
 	switch obj.Kind {
+	case "NetworkPolicy":
+		want := &networkingv1.NetworkPolicy{}
+		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, want); err != nil {
+			return "", err
+		}
+		live, err := cs.NetworkingV1().NetworkPolicies(obj.Namespace).Get(ctx, obj.Name, metav1.GetOptions{})
+		if apierrors.IsNotFound(err) {
+			return ObjectActionCreate, nil
+		}
+		if err != nil {
+			return "", err
+		}
+		if !apiequality.Semantic.DeepEqual(want.Spec, live.Spec) {
+			return ObjectActionUpdate, nil
+		}
 	case "ServiceAccount":
 		want := &corev1.ServiceAccount{}
 		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, want); err != nil {
@@ -180,7 +197,7 @@ func subjectsEqual(a, b []rbacv1.Subject) bool {
 }
 
 // applyPlatformObjects creates or corrects the planned objects. They are
-// additive identity/permission grants and are not rolled back with images.
+// identity, permissions and network restrictions are not rolled back with images.
 func applyPlatformObjects(ctx context.Context, cs kubernetes.Interface, plan *Plan, progress func(string)) ([]ObjectResult, error) {
 	var results []ObjectResult
 	for _, obj := range plan.objects {
@@ -210,6 +227,23 @@ func writeObject(ctx context.Context, cs kubernetes.Interface, obj platformrelea
 	create := metav1.CreateOptions{FieldManager: objectFieldManager}
 	update := metav1.UpdateOptions{FieldManager: objectFieldManager}
 	switch obj.Kind {
+	case "NetworkPolicy":
+		want := &networkingv1.NetworkPolicy{}
+		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, want); err != nil {
+			return err
+		}
+		api := cs.NetworkingV1().NetworkPolicies(obj.Namespace)
+		if action == ObjectActionCreate {
+			_, err := api.Create(ctx, want, create)
+			return err
+		}
+		live, err := api.Get(ctx, obj.Name, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+		live.Spec = want.Spec
+		_, err = api.Update(ctx, live, update)
+		return err
 	case "ServiceAccount":
 		want := &corev1.ServiceAccount{}
 		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, want); err != nil {
@@ -318,7 +352,7 @@ func writeObject(ctx context.Context, cs kubernetes.Interface, obj platformrelea
 // Operator resources are also owned by setup. Keep one SSA field manager so
 // upgrades remove obsolete rules and never introduce a client-side apply owner.
 func operatorReleaseObject(obj platformrelease.PlatformObject) bool {
-	return strings.HasPrefix(obj.Name, "mcp-runtime-operator-")
+	return obj.Kind != "NetworkPolicy" && strings.HasPrefix(obj.Name, "mcp-runtime-operator-")
 }
 
 func applyOperatorObject(ctx context.Context, cs kubernetes.Interface, obj platformrelease.PlatformObject) error {

@@ -216,6 +216,11 @@ func validateGrants(grants []Grant) error {
 			return fmt.Errorf("policy: duplicate grant name %q", grant.Name)
 		}
 		seen[grant.Name] = struct{}{}
+		switch strings.ToLower(strings.TrimSpace(grant.Mode)) {
+		case "", "enforce", "monitor":
+		default:
+			return fmt.Errorf("policy: grant %q has invalid mode %q", grant.Name, grant.Mode)
+		}
 		if !validTrust(grant.MaxTrust) {
 			return fmt.Errorf("policy: grant %q has invalid max_trust %q", grant.Name, grant.MaxTrust)
 		}

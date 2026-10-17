@@ -913,7 +913,8 @@ With `--only`, CRD apply is skipped so a scoped image update cannot mutate
 cluster schemas; re-run without `--only` to apply schema changes. `--dry-run`
 prints the plan only and does not apply CRDs or roll images.
 
-A release can also declare the ServiceAccounts and RBAC its workloads need
+A release can also declare the ServiceAccounts, RBAC and supported platform
+NetworkPolicies its workloads need
 (`platformObjects`) and per-component Deployment wiring (ServiceAccount, token
 mount and required env). update creates or corrects only those declared objects
 and fields before rolling images, so a release such as v0.7.2 (gateway-to-ingest

@@ -10,6 +10,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 ### Added
 
 - `adapter enroll` checks the operator's adapter-certificate configuration, matching workload issuer/trust domain, issuer readiness, and the selected route's actual client-certificate TLSOption before creating a session. Enrollment completion preserves concurrent revocation, and failure cleanup conditionally removes only the caller's pending session. `update` installs the required read-only preflight permissions while preserving the operator's existing on/off choice ([#539](https://github.com/mcp-runtime/mcp-runtime/issues/539)).
+- Access grants support monitor mode through the CLI and dashboard, recording would-deny tool, trust and side-effect decisions without bypassing identity, session or matching enforcing-grant checks. Monitor policies require schema-v5-capable gateways ([#307](https://github.com/mcp-runtime/mcp-runtime/issues/307)).
+
 - Ingest operations docs now include PromQL for Kafka readiness DNS/connect/total latency and bounded failure reasons, plus guidance for correlating slow checks with broker, node and DNS signals. This exposes investigation paths; reference-platform root-cause and under-one-second acceptance remain outstanding ([#624](https://github.com/mcp-runtime/mcp-runtime/issues/624)).
 - `mcp-runtime cluster identity status --server <namespace>/<name>` resolves deployed workload issuer/trust-domain configuration and checks cert-manager readiness, the route's actual TLSOption, and public CA fingerprints/expiry without exposing private Secret fields. Unreadable configuration and client-auth overrides fail the check ([#537](https://github.com/mcp-runtime/mcp-runtime/issues/537)).
 - `mcp-runtime server get` now includes the runtime API's latest live MCP tool, prompt, and resource inventory alongside declared server metadata and safe authentication configuration, so operators can query observed server capabilities from the CLI ([#291](https://github.com/mcp-runtime/mcp-runtime/issues/291)).
@@ -32,6 +34,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 - `update` now bundles and reconciles operator RBAC from the target release before image rollouts, previews drift, and stops on permission-apply failure. Doctor verifies effective bundled permissions and flags forbidden informer errors; hosted deployment gates on these checks ([#633](https://github.com/mcp-runtime/mcp-runtime/issues/633)).
 
 - `server list` help now explains visible-server defaults, admin scope, team slug filtering, and catalog/personal namespace selectors. A team lookup without a namespace now fails instead of silently listing all visible servers ([#612](https://github.com/mcp-runtime/mcp-runtime/issues/612)).
+
+### Security
+
+- Restrict bundled Kafka ingress to ingest, processor, topic initialization and broker peers. Unscoped platform updates apply this release-declared policy to existing installs as well as fresh setup ([#775](https://github.com/mcp-runtime/mcp-runtime/pull/775), [#110](https://github.com/mcp-runtime/mcp-runtime/issues/110)).
 
 ## [0.10.0] - 2026-10-15
 
