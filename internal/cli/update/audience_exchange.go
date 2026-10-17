@@ -45,7 +45,7 @@ func requireAudienceExchangeMigration(ctx context.Context, cs kubernetes.Interfa
 				}
 				for _, route := range rule.HTTP.Paths {
 					required, canonical := expectedByPath[route.Path]
-					if canonical && (route.Backend.Service == nil || route.Backend.Service.Name != required.Service || route.Backend.Service.Port.Number != int32(required.Port) || route.PathType == nil || string(*route.PathType) != required.PathType) {
+					if canonical && (route.Backend.Service == nil || route.Backend.Service.Name != required.Service || int(route.Backend.Service.Port.Number) != required.Port || route.PathType == nil || string(*route.PathType) != required.PathType) {
 						return audienceMigrationRequired("an API route has the wrong backend, port or match type")
 					}
 					if route.Backend.Service == nil {

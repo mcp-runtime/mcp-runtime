@@ -483,7 +483,11 @@ deactivation_acceptance_case() (
   staging_stage_status() { printf passed; }
   staging_mt_read_agents() { return 0; }
   sleep() { SECONDS=$((SECONDS + 10)); }
-  staging_http_code() { if [[ "${scenario}" == live-token ]]; then printf 200; else printf 401; fi; }
+  staging_http_code() {
+    if [[ "${*: -1}" != "${PLATFORM_URL}/api/v1/auth/me" || "${scenario}" == unknown-route ]]; then printf 404
+    elif [[ "${scenario}" == live-token ]]; then printf 200
+    else printf 401; fi
+  }
   staging_monitor_post() {
     if [[ ! -f "${flag}" ]]; then
       printf '{"jsonrpc":"2.0","id":536,"result":{"content":[{"type":"text","text":"12"}]}}' >"$1/response.json"; printf 200
@@ -505,6 +509,7 @@ deactivation_acceptance_case() (
 expect_ok "deactivation verifies saved token, existing session and idempotent CLI cleanup" deactivation_acceptance_case revoked
 expect_fail "deactivation cannot pass on unrelated tool denial" deactivation_acceptance_case wrong-denial
 expect_fail "deactivation cannot pass while saved token remains valid" deactivation_acceptance_case live-token
+expect_fail "deactivation cannot mistake an unknown token-probe route for revocation" deactivation_acceptance_case unknown-route
 
 if [[ "${FAILURES}" -ne 0 ]]; then
   echo "${FAILURES} staging lib test(s) failed" >&2
