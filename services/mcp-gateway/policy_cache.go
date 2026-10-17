@@ -144,7 +144,7 @@ func (s *gatewayServer) loadPolicy() (*policypkg.Document, error) {
 			return nil, err
 		}
 	}
-	return doc, nil
+	return policypkg.Compile(doc)
 }
 
 // applyPolicyDefaults fills server identity and auth/policy defaults on a
