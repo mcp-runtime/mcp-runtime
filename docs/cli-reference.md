@@ -667,14 +667,22 @@ MCP_PLATFORM_API_PROFILE=admin mcp-runtime team list
 MCP_PLATFORM_API_PROFILE=admin mcp-runtime team create acme --name "Acme Corp"
 
 MCP_PLATFORM_API_PROFILE=admin mcp-runtime team user create acme \
-  --email alice@acme.com --password '...' --role owner
+  --email alice@acme.com --role owner
 
 # Add an existing platform user to a team or update their team role. Use their
 # immutable user ID; their password stays unchanged.
 MCP_PLATFORM_API_PROFILE=admin mcp-runtime team user add acme <user-id> --role member
 
+MCP_PLATFORM_API_PROFILE=admin mcp-runtime team user remove acme <user-id>
+
 MCP_PLATFORM_API_PROFILE=admin mcp-runtime team user list acme
 ```
+
+`team user create` prompts twice for a hidden password. For automation, pass it
+through stdin with `--password-stdin`; the command line does not accept a
+password value. Removing a team's only owner requires `--confirm-last-owner`.
+Membership removal does not delete the platform account or revoke account-wide
+API keys and sessions.
 
 A saved login token keeps the membership from the moment it was issued. Run
 `mcp-runtime auth login` again before `server build`, `server push`, or

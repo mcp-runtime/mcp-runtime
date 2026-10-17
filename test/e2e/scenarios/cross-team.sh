@@ -68,9 +68,9 @@ run_e2e_cross_team_scenario() (
   for team in "${team_a}" "${team_b}" "${team_c}"; do
     cross_team_cli "${admin_token}" team create "${team}" --name "Cross-team ${team}" >/dev/null
   done
-  cross_team_cli "${admin_token}" team user create "${team_a}" --email "${email_a}" --password "${password}" --role owner >/dev/null
-  cross_team_cli "${admin_token}" team user create "${team_b}" --email "${email_b}" --password "${password}" --role member >/dev/null
-  cross_team_cli "${admin_token}" team user create "${team_c}" --email "${email_c}" --password "${password}" --role member >/dev/null
+  printf '%s\n' "${password}" | cross_team_cli "${admin_token}" team user create "${team_a}" --email "${email_a}" --password-stdin --role owner >/dev/null
+  printf '%s\n' "${password}" | cross_team_cli "${admin_token}" team user create "${team_b}" --email "${email_b}" --password-stdin --role member >/dev/null
+  printf '%s\n' "${password}" | cross_team_cli "${admin_token}" team user create "${team_c}" --email "${email_c}" --password-stdin --role member >/dev/null
   token_a="$(cross_team_login "${email_a}" "${password}")"
   token_b="$(cross_team_login "${email_b}" "${password}")"
   token_c="$(cross_team_login "${email_c}" "${password}")"
