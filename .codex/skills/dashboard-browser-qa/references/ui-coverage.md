@@ -150,7 +150,9 @@ Tenant user only:
   foreign-owner, foreign-team, old-UID, edited, mixed-batch and other datasource
   queries; query/plugin/resource/proxy/Live/snapshot routes must fail closed.
   Confirm platform logout revokes Grafana too. Network isolation additionally
-  requires a NetworkPolicy-enforcing cluster; ordinary Kind kindnet is insufficient.
+  requires the supported ready/enforcing Cilium capability. Ordinary Kind
+  kindnet and unknown providers must retain admin-only Grafana and disable its
+  auth proxy; test that fallback separately rather than claiming tenant access.
 - Tenant negative checks: the same user receives an intentional 403/404 when
   requesting observability links or Prometheus queries for a shared or foreign
   namespace/server.

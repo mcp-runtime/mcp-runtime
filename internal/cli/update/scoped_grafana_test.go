@@ -59,3 +59,23 @@ func TestScopedGrafanaUpdateRequiresSupportedSetupMigration(t *testing.T) {
 		t.Fatalf("component-only update should preserve existing admin-only access: %v", err)
 	}
 }
+
+func TestAdminOnlyUpdatePreservesGrafanaWithoutPartialPolicyMigration(t *testing.T) {
+	cs := fake.NewSimpleClientset(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "mcp-shared-config", Namespace: "mcp-platform"}, Data: map[string]string{"GRAFANA_SCOPED_USER_ACCESS": "false"}})
+	plan := &Plan{allObjects: []platformrelease.PlatformObject{
+		{Kind: "NetworkPolicy", Namespace: "mcp-observability", Name: "mcp-scoped-observability-ingress"},
+		{Kind: "NetworkPolicy", Namespace: "mcp-platform", Name: "mcp-runtime-api-grafana-egress"},
+		{Kind: "NetworkPolicy", Namespace: "mcp-observability", Name: "kafka-client-ingress"},
+	}, Rows: []Row{{Component: "runtime-api"}, {Component: "grafana"}}}
+	if err := gateScopedGrafanaPolicies(context.Background(), cs, plan); err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.allObjects) != 1 || plan.allObjects[0].Name != "kafka-client-ingress" || len(plan.Rows[0].Notes) != 1 || len(plan.Rows[1].Notes) != 1 {
+		t.Fatalf("admin-only update applied partial Grafana migration or suppressed unrelated policies: %+v %+v", plan.allObjects, plan.Rows)
+	}
+	for _, action := range cs.Actions() {
+		if action.GetVerb() != "get" {
+			t.Fatalf("admin-only plan changed feature state: %v", action)
+		}
+	}
+}

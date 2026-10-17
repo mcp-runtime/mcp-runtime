@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
@@ -12,6 +13,49 @@ import (
 	"mcp-runtime/internal/platformrelease"
 	"mcp-runtime/pkg/platforminventory"
 )
+
+func scopedGrafanaPolicy(obj platformrelease.PlatformObject) bool {
+	return obj.Kind == "NetworkPolicy" && (obj.Name == "mcp-scoped-observability-ingress" || obj.Name == "mcp-runtime-api-grafana-egress")
+}
+
+// Image/config updates must remain usable on existing admin-only clusters,
+// including ordinary Kind. Only a completed supported setup opts in to the
+// scoped Grafana policies; update never enables the auth proxy or feature flag.
+func gateScopedGrafanaPolicies(ctx context.Context, cs kubernetes.Interface, plan *Plan) error {
+	needed := false
+	namespace := core.ComponentNamespace("ui")
+	for _, obj := range plan.allObjects {
+		if scopedGrafanaPolicy(obj) {
+			needed = true
+			if obj.Name == "mcp-runtime-api-grafana-egress" {
+				namespace = obj.Namespace
+			}
+		}
+	}
+	if !needed {
+		return nil
+	}
+	config, err := cs.CoreV1().ConfigMaps(namespace).Get(ctx, platforminventory.SharedConfigName, metav1.GetOptions{})
+	if err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("verify scoped Grafana setup state before update: %w", err)
+	}
+	if err == nil && strings.EqualFold(config.Data["GRAFANA_SCOPED_USER_ACCESS"], "true") {
+		return requireScopedGrafanaMigration(ctx, cs, plan.allObjects)
+	}
+	kept := make([]platformrelease.PlatformObject, 0, len(plan.allObjects))
+	for _, obj := range plan.allObjects {
+		if !scopedGrafanaPolicy(obj) {
+			kept = append(kept, obj)
+		}
+	}
+	plan.allObjects = kept
+	for i := range plan.Rows {
+		if plan.Rows[i].Component == "runtime-api" || plan.Rows[i].Component == "grafana" {
+			plan.Rows[i].Notes = append(plan.Rows[i].Notes, "Scoped Grafana remains admin-only; its two isolation policies are skipped until setup verifies supported Cilium enforcement and migrates the session route (docs/platform-services.md#scoped-grafana-migration).")
+		}
+	}
+	return nil
+}
 
 // Applying the new ingress policy to the old direct Traefik -> Grafana route
 // would cut off administrators. setup owns this small ingress migration;

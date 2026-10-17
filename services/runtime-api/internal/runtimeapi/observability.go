@@ -269,6 +269,7 @@ func (s *RuntimeServer) slowestObservedTool(ctx context.Context, namespace, serv
 		WHERE namespace = ? AND server = ? AND JSONExtractString(payload, 'server_uid') = ?
 		AND timestamp >= now() - INTERVAL 1 HOUR AND timestamp <= now()
 		AND JSONExtractString(payload, 'rpc_method') = 'tools/call'
+		AND event_type = 'mcp.request'
 		AND decision = 'allow' AND tool_name != '' AND JSONHas(payload, 'latency_ms')
 		GROUP BY tool_name HAVING count() >= 5
 		ORDER BY quantileExact(0.95)(JSONExtractInt(payload, 'latency_ms')) DESC, tool_name ASC LIMIT 1`

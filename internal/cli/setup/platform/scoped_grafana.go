@@ -18,6 +18,13 @@ import (
 // ingress, datasource isolation policies, and auth-proxy configuration. Update
 // deliberately does not turn the feature on for unmigrated installations.
 func enableScopedGrafanaClientGo() error {
+	if supported, reason := scopedGrafanaPolicyCapability(); !supported {
+		core.Warn("Scoped Grafana remains disabled: " + reason + ". Admin-only Grafana is retained; install the supported enforcing Cilium configuration and rerun setup (docs/platform-services.md#scoped-grafana-migration).")
+		return nil
+	}
+	if err := verifyScopedTelemetryPolicy(); err != nil {
+		return err
+	}
 	clients, err := platformKubernetesClients()
 	if err != nil {
 		return err

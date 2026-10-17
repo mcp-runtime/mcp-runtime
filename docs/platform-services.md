@@ -179,7 +179,9 @@ For local `setup --test-mode` clusters, setup seeds two email/password logins:
 
 ### Grafana access
 
-After a complete setup, the platform session signs the user into Grafana.
+After a complete setup with supported Cilium enforcement, the platform session
+signs the user into Grafana. Other providers retain admin-only Grafana with its
+existing login and admin forward-auth gate; its auth proxy stays disabled.
 Administration → Usage analytics opens `/grafana/explore`; admins retain access
 to Prometheus, Loki, and Tempo without tenant filters. Server cards link eligible
 viewers to the provisioned **MCP Server** dashboard. Panels 2–5 show one-hour
@@ -227,15 +229,41 @@ manual ingress, Secret, or database edits.
 
 Setup keeps `GRAFANA_SCOPED_USER_ACCESS=false` while applying the new session
 route, Grafana auth proxy, and `23-scoped-observability-networkpolicy.yaml`.
-It removes the old direct Grafana ingresses, waits for workload readiness, then
+With verified policy capability it removes the old direct Grafana ingresses,
+waits for workload readiness, then
 enables the flag and rolls runtime-api. A partial setup leaves tenant access
-disabled. Full `update` refuses this release's Grafana policies before any
-mutation until it verifies that supported migration; component-only updates
-preserve the current flag and do not enable tenant access.
+disabled. `update` skips just the two scoped Grafana policies on an admin-only
+installation and includes the reason in its plan; unrelated updates continue.
+For an installation claiming the scoped feature is enabled, update refuses
+policy apply before any mutation if the auth-proxy/session-route migration is
+incomplete. Update never enables the flag or auth proxy.
 
-The cluster must enforce Kubernetes NetworkPolicy (for example the supported
-k3s policy controller or an enforcing CNI). Standard Kind kindnet does not
-enforce these policies; a Kind-only API test cannot prove the network boundary.
+The initial supported capability is a fully current, ready and available
+`kube-system/cilium` DaemonSet with a `cilium-agent` container and
+`kube-system/cilium-config` explicitly setting `enable-k8s-networkpolicy=true`
+and `enable-policy=default` or `always`, without disabling argument/environment
+overrides. The current agent revision must run `cilium-agent` with explicit
+`--enable-policy=default` (or `always`) and `--enable-k8s-networkpolicy=true`;
+configuration intent alone is insufficient because config sources can be stale
+or overridden. Setup checks those live capabilities before enabling proxy auth;
+there is no boolean bypass. [Cilium policy enforcement modes](https://docs.cilium.io/en/stable/security/policy/intro/)
+and [agent readiness checks](https://docs.cilium.io/en/stable/network/kubernetes/troubleshooting/)
+describe the underlying capability. This check establishes supported configured
+capability; live traffic tests still verify the deployed network boundary.
+The option keys, environment names, and argument binding were checked against
+[Cilium v1.20.3 option source](https://github.com/cilium/cilium/blob/v1.20.3/pkg/option/config.go)
+and [agent flags](https://github.com/cilium/cilium/blob/v1.20.3/daemon/cmd/daemon_main.go)
+on 2026-10-17. Setup also refuses other ingress policies that could select the
+telemetry backends and existing native Cilium policy resources. Clusters using
+those policy extensions remain admin-only until their query boundary has a
+supported isolation review; setup does not remove or weaken their policies.
+Before proxy auth starts and again before tenant activation, the installed
+telemetry policy must exactly match this release's source.
+
+Standard Kind kindnet does not enforce these policies. Kindnet, unknown
+providers, and unready/disabled Cilium keep both tenant access and Grafana auth
+proxy off, retain the admin-gated route, and print migration guidance. Setup
+does not install a CNI. A Kind-only API test cannot prove the network boundary.
 Only runtime-api may reach Grafana's auth-proxy listener. Shared Prometheus,
 Loki, and Tempo endpoints admit only the declared platform, collector, and
 scraper peers. Tenant workloads and ingress controllers cannot reach those
@@ -256,7 +284,7 @@ The API checks the live `MCPServer` before returning links or querying
 Prometheus. Normal users are limited to their team namespaces or explicitly
 caller-owned catalog servers. Their server detail page also shows recent Loki
 logs scoped to the authorized server namespace, workload label, and object UID.
-After the setup migration, the same principals receive bounded Grafana links.
+After the supported setup migration, the same principals receive bounded Grafana links.
 Authorization happens at the datasource request boundary, never in a dashboard
 variable or caller-supplied header.
 
@@ -304,12 +332,12 @@ The numeric summary uses
 the endpoint applies the same owner/team authorization and fixed-query policy.
 
 The bundled dashboard is provisioned at `/grafana/d/mcp-server/mcp-server` and
-is available directly to admins. To use another admin dashboard, set
+uses the scoped session path after a supported setup migration. To use another
+admin dashboard on an unmigrated admin-only installation, set
 `GRAFANA_SERVER_DASHBOARD_URL` to a URL template containing `{namespace}` and
-`{server}`. Its first four panel IDs must correspond to the four metric links
-above. Tenant-safe Grafana SSO requires a separate integration that enforces
-server scope at the data-source boundary; this runtime does not grant that
-access through `GRAFANA_SCOPED_USER_ACCESS`.
+`{server}`. Tenant access always uses the bundled fixed-query dashboard rather
+than an arbitrary template. Its panels 2–5 correspond to the fixed metric links
+above; dashboard variables alone never authorize a datasource request.
 
 The bundled Prometheus uses read-only Kubernetes discovery for annotated
 MCPServer Services and scrapes the gateway sidecar `/metrics` endpoint.
@@ -635,7 +663,7 @@ mcp-runtime ops port-forward grafana
 mcp-runtime ops restart gateway
 mcp-runtime ops restart --all
 
-# Grafana admin credential drift (see Admin Grafana access)
+# Grafana admin credential drift (see Grafana access)
 mcp-runtime ops grafana check
 mcp-runtime ops grafana reset-admin-password --yes
 ```

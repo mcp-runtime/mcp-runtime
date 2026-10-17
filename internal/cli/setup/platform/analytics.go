@@ -246,6 +246,11 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 
 	core.Info("Applying analytics services")
 	for _, manifest := range analyticsServiceManifests(postgresManifest) {
+		if manifest == "k8s/23-scoped-observability-networkpolicy.yaml" {
+			if supported, _ := scopedGrafanaPolicyCapability(); !supported {
+				continue
+			}
+		}
 		if err := applyRenderedManifestClientGo(manifest, images, imagePullSecretName, platformMode); err != nil {
 			return err
 		}
@@ -400,6 +405,11 @@ func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap
 
 	core.Info("Applying analytics services")
 	for _, manifest := range analyticsServiceManifests(postgresManifest) {
+		if manifest == "k8s/23-scoped-observability-networkpolicy.yaml" {
+			if supported, _ := scopedGrafanaPolicyCapability(); !supported {
+				continue
+			}
+		}
 		if err := applyRenderedManifest(kubectl, manifest, images, imagePullSecretName, platformMode); err != nil {
 			return err
 		}
@@ -843,6 +853,13 @@ func applyPlatformIngressIfConfigured() error {
 	issuerName := core.GetRegistryClusterIssuerName()
 	platformNamespace := core.ComponentNamespace("ui")
 	manifest := ingressmanifest.RenderPlatformUIIngress(host, issuerName, issuerName != "" || core.GetProvidedTLSSecrets(), platformNamespace, core.ComponentNamespace("grafana"), core.DefaultCLIConfig.PublicRoutes)
+	if supported, _ := scopedGrafanaPolicyCapability(); !supported {
+		var err error
+		manifest, err = renderGrafanaIngressAccess(manifest, false)
+		if err != nil {
+			return err
+		}
+	}
 	core.Info(fmt.Sprintf("Applying platform UI ingress for %s", host))
 	if err := applyManifestYAML(manifest, "", os.Stdout); err != nil {
 		return core.WrapWithBase(core.ErrSetupApplyPlatformUIIngressFailed, err, fmt.Sprintf("apply platform UI ingress: %v", err))
@@ -953,6 +970,19 @@ func renderAnalyticsManifest(content string, images AnalyticsImageSet, imagePull
 	}
 	for oldValue, newValue := range replacements {
 		rendered = strings.ReplaceAll(rendered, oldValue, newValue)
+	}
+	if strings.Contains(rendered, "GF_AUTH_PROXY_ENABLED") || strings.Contains(rendered, "name: mcp-platform-gateway-observability") {
+		supported, _ := scopedGrafanaPolicyCapability()
+		if supported && strings.Contains(rendered, "GF_AUTH_PROXY_ENABLED") {
+			if err := verifyScopedTelemetryPolicy(); err != nil {
+				return "", err
+			}
+		}
+		rendered = renderGrafanaDeploymentAccess(rendered, supported)
+		rendered, err = renderGrafanaIngressAccess(rendered, supported)
+		if err != nil {
+			return "", err
+		}
 	}
 	// Test-mode setup republishes these services under :latest. An existing
 	// Kind node may already cache that tag, so those workloads must pull it

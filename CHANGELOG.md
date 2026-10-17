@@ -19,12 +19,13 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Changed
 
-- Scoped Grafana requires a supported setup refresh to move ingress behind the UI/runtime authorization boundary and install enforced telemetry NetworkPolicies. Full update refuses the policy migration before any mutation until that setup completes. Preserve the installation’s host, TLS, storage, registry and mcp-auth options; see [migration guidance](docs/platform-services.md#scoped-grafana-migration) ([#699](https://github.com/mcp-runtime/mcp-runtime/issues/699)).
+- Scoped Grafana requires a supported setup refresh with verified Cilium policy capability to move ingress behind the UI/runtime authorization boundary and install telemetry isolation. Kindnet and unknown providers retain admin-only access with Grafana auth proxy disabled. Update skips the scoped policies until migration and refuses incomplete enabled wiring before mutation. Preserve the installation’s host, TLS, storage, registry and mcp-auth options; see [migration guidance](docs/platform-services.md#scoped-grafana-migration) ([#699](https://github.com/mcp-runtime/mcp-runtime/issues/699)).
 
 - Operator policy reconciliation looks up grants by their effective target server using a cache index, avoiding copies and scans of unrelated grants while preserving cross-namespace references. Runtime sessions remain platform-owned ([#657](https://github.com/mcp-runtime/mcp-runtime/issues/657)).
 
 ### Fixed
 
+- Runtime server details select latest-session metadata by the live MCPServer UID, excluding sessions and tool names from a deleted predecessor or unlabelled historical rows ([#291](https://github.com/mcp-runtime/mcp-runtime/issues/291)).
 - Failed QA E2E rollout and MCPServer readiness waits now attach bounded, redacted operator logs, server conditions, workload readiness, and Warning Events to artifacts. Collection is guarded by the explicit disposable Kind context and reports missing access as a collection gap ([#763](https://github.com/mcp-runtime/mcp-runtime/issues/763)).
 - Deployment warning Events are read through a bounded, uncached namespace request, preventing diagnostics from blocking all reconciles on an unauthorized cluster-wide Event informer. Event attribution uses pod UIDs when available ([#757](https://github.com/mcp-runtime/mcp-runtime/pull/757)).
 - `server deploy` now reports the newest unready workload pod's container failure and recent warning event when a rollout times out, while readiness continues to require replicas from the current Deployment revision ([#636](https://github.com/mcp-runtime/mcp-runtime/issues/636)).

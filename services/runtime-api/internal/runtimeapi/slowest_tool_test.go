@@ -57,7 +57,7 @@ func TestSlowestToolRequiresScopedActualCallEvidence(t *testing.T) {
 		if !reflect.DeepEqual(conn.args, []any{"mcp-servers", "demo", "current-uid"}) {
 			t.Fatalf("scope was not parameterized with current UID: %v", conn.args)
 		}
-		for _, required := range []string{"namespace = ?", "server = ?", "JSONExtractString(payload, 'server_uid') = ?", "INTERVAL 1 HOUR", "timestamp <= now()", "'tools/call'", "decision = 'allow'", "HAVING count() >= 5", "quantileExact(0.95)"} {
+		for _, required := range []string{"namespace = ?", "server = ?", "JSONExtractString(payload, 'server_uid') = ?", "INTERVAL 1 HOUR", "timestamp <= now()", "'tools/call'", "event_type = 'mcp.request'", "decision = 'allow'", "HAVING count() >= 5", "quantileExact(0.95)"} {
 			if !strings.Contains(conn.query, required) {
 				t.Errorf("missing actual tools/call evidence constraint: %s", required)
 			}
