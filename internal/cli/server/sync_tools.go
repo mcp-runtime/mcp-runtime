@@ -1,9 +1,9 @@
 package server
 
 // discoverToolsFromServer calls tools/list on a running MCP server and returns
-// the discovered tool names. It performs a minimal initialize →
-// notifications/initialized → tools/list handshake so any MCP-compliant server
-// will respond correctly.
+// the discovered tool names. It probes the modern stateless protocol first,
+// then uses the legacy initialize handshake only when the endpoint responds
+// with an unrecognized HTTP 400 (the Streamable HTTP compatibility signal).
 
 import (
 	"bytes"
@@ -62,14 +62,28 @@ type mcpRequest struct {
 	Params  any    `json:"params,omitempty"`
 }
 
+const (
+	modernProtocolVersion = "2026-07-28"
+	legacyProtocolVersion = "2025-11-25"
+)
+
 type mcpResponse struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      any             `json:"id"`
 	Result  json.RawMessage `json:"result"`
 	Error   *struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
+		Code    int             `json:"code"`
+		Message string          `json:"message"`
+		Data    json.RawMessage `json:"data"`
 	} `json:"error"`
+}
+
+type mcpInitializeResult struct {
+	ProtocolVersion string `json:"protocolVersion"`
+}
+
+type mcpDiscoverResult struct {
+	SupportedVersions []string `json:"supportedVersions"`
 }
 
 type mcpToolsListResult struct {
@@ -103,94 +117,109 @@ func normalizeMCPURL(raw string) (string, error) {
 // If the URL has no explicit path, /mcp is appended automatically (the default
 // MCP endpoint path used by the go-sdk).
 func DiscoverToolsFromServer(serverURL string) ([]string, error) {
+	return discoverToolsFromServer(serverURL, &http.Client{Timeout: 10 * time.Second})
+}
+
+func discoverToolsFromServer(serverURL string, client *http.Client) ([]string, error) {
 	endpoint, err := normalizeMCPURL(serverURL)
 	if err != nil {
 		return nil, err
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	post := func(req mcpRequest) (*mcpResponse, string, error) {
+	post := func(req mcpRequest, protocolVersion string, methodHeader bool, sessionID string) (*mcpResponse, int, string, error) {
 		body, _ := json.Marshal(req)
 		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 		if err != nil {
-			return nil, "", err
+			return nil, 0, "", err
 		}
 		httpReq.Header.Set("Content-Type", "application/json")
 		// MCP 2025-06-18 requires both application/json and text/event-stream.
 		httpReq.Header.Set("Accept", "application/json, text/event-stream")
-		resp, err := client.Do(httpReq)
-		if err != nil {
-			return nil, "", fmt.Errorf("request to %s failed: %w", endpoint, err)
+		if protocolVersion != "" {
+			httpReq.Header.Set("MCP-Protocol-Version", protocolVersion)
 		}
-		defer resp.Body.Close()
-		sessionID := resp.Header.Get("Mcp-Session-Id")
-		mcpResp, err := decodeMCPResponse(resp)
-		if err != nil {
-			return nil, sessionID, fmt.Errorf("decode response: %w", err)
+		if methodHeader {
+			httpReq.Header.Set("Mcp-Method", req.Method)
 		}
-		return mcpResp, sessionID, nil
-	}
-
-	postWithSession := func(sessionID string, req mcpRequest) (*mcpResponse, error) {
-		body, _ := json.Marshal(req)
-		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
-		if err != nil {
-			return nil, err
-		}
-		httpReq.Header.Set("Content-Type", "application/json")
-		httpReq.Header.Set("Accept", "application/json, text/event-stream")
 		if sessionID != "" {
 			httpReq.Header.Set("Mcp-Session-Id", sessionID)
 		}
 		resp, err := client.Do(httpReq)
 		if err != nil {
-			return nil, fmt.Errorf("request to %s failed: %w", endpoint, err)
+			return nil, 0, "", fmt.Errorf("request to %s failed: %w", endpoint, err)
 		}
 		defer resp.Body.Close()
-		return decodeMCPResponse(resp)
+		responseSessionID := resp.Header.Get("Mcp-Session-Id")
+		mcpResp, err := decodeMCPResponse(resp)
+		if err != nil {
+			return nil, resp.StatusCode, responseSessionID, fmt.Errorf("decode response: %w", err)
+		}
+		return mcpResp, resp.StatusCode, responseSessionID, nil
 	}
 
-	// Step 1: initialize
-	initResp, sessionID, err := post(mcpRequest{
-		JSONRPC: "2.0",
-		ID:      1,
-		Method:  "initialize",
-		Params: map[string]any{
-			"protocolVersion": "2025-06-18",
-			"capabilities":    map[string]any{},
-			"clientInfo":      map[string]any{"name": "mcp-runtime-discover", "version": "1.0"},
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("initialize: %w", err)
+	modernMeta := func() map[string]any {
+		return map[string]any{
+			"io.modelcontextprotocol/protocolVersion":    modernProtocolVersion,
+			"io.modelcontextprotocol/clientInfo":         map[string]any{"name": "mcp-runtime-discover", "version": "1.0"},
+			"io.modelcontextprotocol/clientCapabilities": map[string]any{},
+		}
 	}
-	if initResp.Error != nil {
-		return nil, fmt.Errorf("initialize error: %s", initResp.Error.Message)
+	modernRequest := func(id int, method string) mcpRequest {
+		return mcpRequest{JSONRPC: "2.0", ID: id, Method: method, Params: map[string]any{"_meta": modernMeta()}}
 	}
 
-	// Step 2: notifications/initialized (no response body expected)
-	_, _ = postWithSession(sessionID, mcpRequest{ //nolint:errcheck
-		JSONRPC: "2.0",
-		Method:  "notifications/initialized",
-	})
-
-	// Step 3: tools/list
-	toolsResp, err := postWithSession(sessionID, mcpRequest{
-		JSONRPC: "2.0",
-		ID:      2,
-		Method:  "tools/list",
-		Params:  map[string]any{},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("tools/list: %w", err)
+	// MCP 2026-07-28 is stateless: every request carries per-request metadata
+	// and the matching transport headers. A conforming modern server advertises
+	// the versions it supports in server/discover.
+	discoverResp, discoverStatus, _, discoverErr := post(modernRequest(1, "server/discover"), modernProtocolVersion, true, "")
+	modern := false
+	if discoverErr == nil && discoverStatus >= 200 && discoverStatus < 300 && discoverResp.Error == nil {
+		var discovered mcpDiscoverResult
+		if err := json.Unmarshal(discoverResp.Result, &discovered); err != nil {
+			return nil, fmt.Errorf("server/discover result: %w", err)
+		}
+		for _, version := range discovered.SupportedVersions {
+			if version == modernProtocolVersion {
+				modern = true
+				break
+			}
+		}
+		if !modern {
+			return nil, fmt.Errorf("server/discover did not advertise supported protocol version %s", modernProtocolVersion)
+		}
+	} else if discoverStatus != http.StatusBadRequest || hasRecognizedModernProtocolError(discoverResp) {
+		if discoverErr != nil {
+			return nil, fmt.Errorf("server/discover: %w", discoverErr)
+		}
+		if discoverResp != nil && discoverResp.Error != nil {
+			return nil, fmt.Errorf("server/discover error: %s", discoverResp.Error.Message)
+		}
+		return nil, fmt.Errorf("server/discover returned HTTP %d", discoverStatus)
 	}
+
+	var toolsResp *mcpResponse
+	if modern {
+		var status int
+		toolsResp, status, _, err = post(modernRequest(2, "tools/list"), modernProtocolVersion, true, "")
+		if err != nil {
+			return nil, fmt.Errorf("tools/list: %w", err)
+		}
+		if status < 200 || status >= 300 {
+			return nil, fmt.Errorf("tools/list returned HTTP %d", status)
+		}
+	} else {
+		toolsResp, err = discoverLegacyTools(post)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	if toolsResp.Error != nil {
 		return nil, fmt.Errorf("tools/list error: %s", toolsResp.Error.Message)
 	}
-
 	var result mcpToolsListResult
 	if err := json.Unmarshal(toolsResp.Result, &result); err != nil {
 		return nil, fmt.Errorf("parse tools/list result: %w", err)
@@ -210,4 +239,67 @@ func DiscoverToolsFromServer(serverURL string) ([]string, error) {
 		names = append(names, name)
 	}
 	return names, nil
+}
+
+func hasRecognizedModernProtocolError(resp *mcpResponse) bool {
+	if resp == nil || resp.Error == nil {
+		return false
+	}
+	return resp.Error.Code == -32020 || resp.Error.Code == -32022
+}
+
+type mcpPostFunc func(mcpRequest, string, bool, string) (*mcpResponse, int, string, error)
+
+func discoverLegacyTools(post mcpPostFunc) (*mcpResponse, error) {
+	initResp, status, sessionID, err := post(mcpRequest{
+		JSONRPC: "2.0",
+		ID:      1,
+		Method:  "initialize",
+		Params: map[string]any{
+			"protocolVersion": legacyProtocolVersion,
+			"capabilities":    map[string]any{},
+			"clientInfo":      map[string]any{"name": "mcp-runtime-discover", "version": "1.0"},
+		},
+	}, legacyProtocolVersion, false, "")
+	if err != nil {
+		return nil, fmt.Errorf("initialize: %w", err)
+	}
+	if status < 200 || status >= 300 {
+		return nil, fmt.Errorf("initialize returned HTTP %d", status)
+	}
+	if initResp.Error != nil {
+		return nil, fmt.Errorf("initialize error: %s", initResp.Error.Message)
+	}
+	var initialized mcpInitializeResult
+	if err := json.Unmarshal(initResp.Result, &initialized); err != nil {
+		return nil, fmt.Errorf("parse initialize result: %w", err)
+	}
+	protocolVersion := initialized.ProtocolVersion
+	if protocolVersion == "" {
+		protocolVersion = legacyProtocolVersion
+	}
+
+	// Step 2: notifications/initialized (no response body expected)
+	_, _, _, _ = post(mcpRequest{ //nolint:errcheck
+		JSONRPC: "2.0",
+		Method:  "notifications/initialized",
+	}, protocolVersion, false, sessionID)
+
+	// Step 3: tools/list
+	toolsResp, status, _, err := post(mcpRequest{
+		JSONRPC: "2.0",
+		ID:      2,
+		Method:  "tools/list",
+		Params:  map[string]any{},
+	}, protocolVersion, false, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("tools/list: %w", err)
+	}
+	if status < 200 || status >= 300 {
+		return nil, fmt.Errorf("tools/list returned HTTP %d", status)
+	}
+	if toolsResp.Error != nil {
+		return nil, fmt.Errorf("tools/list error: %s", toolsResp.Error.Message)
+	}
+	return toolsResp, nil
 }
