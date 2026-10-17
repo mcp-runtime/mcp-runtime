@@ -13,7 +13,7 @@ COPY services/analytics-api/ ./services/analytics-api/
 ARG TARGETOS
 ARG TARGETARCH
 RUN cd services/analytics-api && \
-    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /out/analytics-api .
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" -o /out/analytics-api .
 
 FROM gcr.io/distroless/base-debian12
 WORKDIR /app

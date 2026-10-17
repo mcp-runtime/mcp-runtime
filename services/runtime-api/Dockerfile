@@ -13,7 +13,7 @@ COPY services/runtime-api/ ./services/runtime-api/
 ARG TARGETOS
 ARG TARGETARCH
 RUN cd services/runtime-api && \
-    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /out/runtime-api .
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" -o /out/runtime-api .
 
 FROM gcr.io/distroless/base-debian12
 WORKDIR /app
