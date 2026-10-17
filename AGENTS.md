@@ -94,6 +94,14 @@ explicitly requested or when a test targets that path; record that limitation,
 and do not count it as CLI/UI validation.
 
 Account creation with `team user create` / UI is atomic with membership creation.
+
+Account cleanup uses `user deactivate <user-id> --yes [--json]` as a platform
+administrator. It atomically tombstones the account/memberships and revokes
+stored keys and human sessions through the platform session change log, with
+durable audit. Preserve the session-state → users → memberships lock order and
+the existing auth principal lookup when changing lifecycle paths. Membership
+removal alone is not account deactivation; sole owners/admins must transfer
+authority before cleanup.
 For existing accounts use `team user add` / **Add existing user**, preserving
 passwords. Verify validation, conflicts and rollback when changing these paths.
 Adapters use issued sessions by default; `--auth-mode header` supplies local

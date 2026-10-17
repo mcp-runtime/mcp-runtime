@@ -30,6 +30,9 @@ func TestHumanAndTeamOnlySessionsDoNotRequireAgentDirectory(t *testing.T) {
 			mock.ExpectBegin()
 			expectStateLock(mock)
 			mock.ExpectQuery("SELECT EXISTS.*session_retired_servers").WithArgs(item.ServerUID, item.ID).WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+			if subject == "human" {
+				mock.ExpectQuery("SELECT EXISTS.*FROM users.*deleted_at IS NOT NULL").WithArgs("user").WillReturnRows(sqlmock.NewRows([]string{"inactive"}).AddRow(false))
+			}
 			mock.ExpectQuery("SELECT data FROM sessions WHERE id=").WithArgs(item.ID).WillReturnError(sql.ErrNoRows)
 			mock.ExpectExec("INSERT INTO sessions").WillReturnResult(sqlmock.NewResult(0, 1))
 			mock.ExpectQuery("UPDATE session_sync_state SET sequence=sequence\\+1").WillReturnRows(sqlmock.NewRows([]string{"sequence"}).AddRow(11))

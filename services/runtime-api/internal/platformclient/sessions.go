@@ -101,6 +101,29 @@ func (c *Client) DeleteSession(ctx context.Context, namespace, name string) erro
 	return c.DeleteSessionIfUID(ctx, namespace, name, "")
 }
 
+func (c *Client) CompleteSessionEnrollment(ctx context.Context, namespace, name, uid string) error {
+	if !c.Configured() {
+		return ErrNotConfigured
+	}
+	status, err := c.requestJSON(ctx, http.MethodPatch, sessionPath(namespace, name)+"/enrollment", sessionstate.EnrollmentRequest{UID: uid}, nil, true)
+	if err != nil || status != http.StatusNoContent {
+		return sessionError(status, err)
+	}
+	return nil
+}
+
+func (c *Client) DeletePendingSession(ctx context.Context, namespace, name, uid, humanID string) error {
+	if !c.Configured() {
+		return ErrNotConfigured
+	}
+	query := url.Values{"uid": {uid}, "human_id": {humanID}}
+	status, err := c.requestJSON(ctx, http.MethodDelete, sessionPath(namespace, name)+"/enrollment?"+query.Encode(), nil, nil, true)
+	if err != nil || status != http.StatusNoContent {
+		return sessionError(status, err)
+	}
+	return nil
+}
+
 func (c *Client) DeleteSessionIfUID(ctx context.Context, namespace, name, uid string) error {
 	if !c.Configured() {
 		return ErrNotConfigured

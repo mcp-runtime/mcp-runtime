@@ -591,6 +591,18 @@ identity headers are not supported.
 
 The platform issues certificates only when an enabled `MCPAccessGrant` matches the server, signed-in user, and agent. Apply the grant first with `access grant apply`.
 
+Before creating a session, `adapter enroll` checks the operator's existing
+adapter-certificate choice, matching operator/API issuer and trust domain, issuer
+readiness, and the selected route's actual client-certificate TLSOption and
+workload CA bundle reference. Configuration drift, unreadable configuration and
+routes without client-certificate verification fail with the current readiness
+state. `update` installs the required read-only permissions without enabling
+certificates on an installation where the operator has them off. The API repeats
+these checks before session and certificate issuance. A later failure removes
+only the newly created, caller-owned session while it is still pending;
+reused and completed sessions survive, including concurrent enrollment cleanup.
+Completing enrollment cannot undo an administrator's concurrent revocation.
+
 `--platform-url` takes scheme and host only, with no `/api` path. It defaults to the URL saved by `auth login` or `$MCP_PLATFORM_API_URL`.
 
 ```bash
@@ -663,6 +675,16 @@ team. The API rejects unknown, malformed, inactive, and wrong-team agent IDs.
 
 ## team
 
+For account-wide cleanup, `mcp-runtime user deactivate <user-id> --yes --json`
+permanently disables a platform account and returns non-secret committed cleanup
+counts. This administrator-only command removes memberships and revokes stored
+API keys, registry credentials, refresh tokens and human MCP sessions, retaining
+audit history and the identity tombstone. Repeating cleanup is idempotent.
+The signed-in administrator, last active administrator and sole active team
+owners are protected; transfer authority first. This differs from membership-only
+`team user remove`. See [Teams and access](teams-and-access.md) for the disposable
+test-identity workflow and gateway sync/registry bearer expiry limits.
+
 Platform admins create teams. A team owner can add users to their own team
 or update their team role.
 
@@ -691,9 +713,9 @@ password value. Removing a team's only owner requires `--confirm-last-owner`.
 Membership removal does not delete the platform account or revoke account-wide
 API keys and sessions.
 
-A saved login token keeps the membership from the moment it was issued. Run
-`mcp-runtime auth login` again before `server build`, `server push`, or
-`server deploy` for that team.
+After validating a saved login token, the APIs resolve current account and
+membership state. Role and membership changes take effect on the next request;
+directory outages deny access rather than relying on stale token claims.
 
 Team users log in with:
 

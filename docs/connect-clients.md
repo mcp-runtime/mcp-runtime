@@ -384,6 +384,18 @@ the platform's SPIFFE trust domain. Production must configure both
 `MCP_TRUST_DOMAIN` and `MCP_SETUP_MTLS_CLUSTER_ISSUER`; test mode defaults the
 issuer to `mcp-runtime-ca`.
 
+Enrollment checks this deployed operator choice before creating a session. The
+operator and runtime API must use the same workload issuer and trust domain,
+and the selected IngressRoute must request and verify client certificates using
+the configured workload CA bundle. Preflight reads deployment/ConfigMap, issuer,
+route and TLSOption metadata; it never reads certificate private keys. Secret-backed
+operator configuration is reported as unavailable. Normal `mcp-runtime update`
+installs these read-only permissions and preserves the existing on/off choice.
+If certificate issuance later fails, the CLI conditionally deletes only its new
+pending enrollment, with a bounded cleanup attempt even after cancellation.
+Completion and cleanup check current session state under the same store lock as
+revocation, so cleanup cannot remove a completed session or reactivate a revoke.
+
 **Approval gate.** The runtime API creates the session certificate as a
 cert-manager `CertificateRequest` against the workload issuer, and cert-manager
 auto-approves requests to built-in issuers by default. Any other principal able
