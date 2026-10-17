@@ -26,6 +26,16 @@ class ResourceUsageTests(unittest.TestCase):
         self.assertEqual(report["e2e_exit_status"], 1)
         self.assertEqual(report["error_samples"], 1)
 
+    def test_partial_node_fields_and_disk_sources_stay_distinct(self):
+        sample = {"time": 1, "nodes": [{"usage": {"cpu": {"usageNanoCores": 0}}, "pods": []}],
+                  "node_disks": [{"data_volumes": {"team/data": 42}}], "errors": []}
+        report = summarize([sample], "single", "smoke-auth", 0)
+        self.assertEqual(report["peak_node_cpu_cores"], 0)
+        self.assertIsNone(report["peak_node_memory_bytes"])
+        self.assertIsNone(report["peak_node_filesystem_used_bytes"])
+        self.assertEqual(report["volume_peak_used_bytes"], {})
+        self.assertEqual(report["local_du_volume_peak_used_bytes"], {"team/data": 42})
+
     def test_host_and_vm_peaks_before_cluster_exists(self):
         samples = [{"time": 1, "host": {"cpu_used_cores": 7, "swap_used_bytes": 100},
                     "colima_memory": "Mem: 6000 5000 1000", "errors": []},

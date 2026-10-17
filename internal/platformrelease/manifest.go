@@ -141,6 +141,9 @@ func (m *Manifest) Validate() error {
 			errs = append(errs, fmt.Errorf("%s: unknown component; known components: %s", where, strings.Join(ComponentNames(), ", ")))
 		}
 		errs = append(errs, c.Wiring.validate(where)...)
+		if c.Wiring != nil && c.Wiring.ResourceHistoryToken && (c.Name != "prometheus" || c.Wiring.ServiceAccountName != "" && c.Wiring.ServiceAccountName != "prometheus") {
+			errs = append(errs, fmt.Errorf("%s: resourceHistoryToken is fixed to the prometheus component and ServiceAccount", where))
+		}
 		if seen[c.Name] {
 			errs = append(errs, fmt.Errorf("%s: duplicate component", where))
 		}

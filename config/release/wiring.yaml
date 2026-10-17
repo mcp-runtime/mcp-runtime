@@ -11,6 +11,10 @@
 # "<Kind>/<name>" (cluster-scoped). Validated: no wildcard or escalating rules.
 platformObjects:
   - NetworkPolicy/mcp-observability/kafka-client-ingress
+  - NetworkPolicy/mcp-platform/mcp-runtime-api-resource-history-egress
+  - ServiceAccount/mcp-observability/prometheus
+  - ClusterRole/mcp-prometheus-discovery
+  - ClusterRoleBinding/mcp-prometheus-discovery
   - ServiceAccount/mcp-runtime/mcp-runtime-operator-controller-manager
   - ClusterRole/mcp-runtime-operator-role
   - ClusterRole/mcp-runtime-operator-managed-secrets
@@ -24,6 +28,8 @@ platformObjects:
   - ClusterRole/mcp-ingest-tokenreview
   - ClusterRoleBinding/mcp-ingest-tokenreview
   - ClusterRole/mcp-runtime-api-team-secrets
+  - ClusterRole/mcp-runtime-resource-history
+  - ClusterRoleBinding/mcp-runtime-resource-history
   - ClusterRole/mcp-platform-gateway-ingressclass
   - Role/mcp-platform/mcp-platform-gateway
   - Role/mcp-observability/mcp-platform-gateway
@@ -62,6 +68,9 @@ components:
       - --accesslog.format=json
       - --accesslog.fields.headers.defaultmode=drop
   prometheus:
+    serviceAccountName: prometheus
+    automountServiceAccountToken: true
+    resourceHistoryToken: true
     args:
       - --enable-feature=exemplar-storage
   platform-api:

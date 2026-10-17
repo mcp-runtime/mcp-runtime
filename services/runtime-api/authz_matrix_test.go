@@ -70,6 +70,7 @@ func TestAuthzMatrixCoversRegisteredRoutes(t *testing.T) {
 
 	required := []string{
 		"/health",
+		"/internal/observability/resources/metrics",
 		"/api/v1/dashboard/summary",
 		"/api/v1/runtime/servers",
 		"/api/v1/runtime/tools",

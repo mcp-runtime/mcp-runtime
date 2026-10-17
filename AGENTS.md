@@ -59,6 +59,11 @@ Scripts compose supported CLI workflows. Shared `hack/lib/` and deployment
 | Automation / release manifest | `hack/README.md`, `hack/release/platformmanifest/` |
 
 Platform namespaces come from `pkg/platforminventory`; see `docs/namespaces.md`.
+Admin resource history lives in `pkg/resourcehistory`; supported setup provisions
+public kubelet trust. Keep its exact projected-token audience/ServiceAccount
+boundary, node UID/address/TLS checks and missing-series semantics intact.
+PVC reservations and local `du` fallback must never become historical consumed
+bytes. See `docs/platform-services.md#resource-history-for-sizing`.
 Sessions are managed through the platform CLI/UI and stored by platform-api;
 Kubernetes session writes do not change authorization. See
 `docs/contributor/gateway-session-sync.md` for the dedicated port, workload

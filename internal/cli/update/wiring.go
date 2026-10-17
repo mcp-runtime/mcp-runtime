@@ -23,8 +23,9 @@ const configHashAnnotationPrefix = "mcpruntime.org/config-hash."
 // wiringChange is the planned non-image Deployment change for a component,
 // plus the values to restore on rollback.
 type wiringChange struct {
-	serviceAccount string // target; "" means unchanged
-	prevSA         string
+	resourceHistoryToken *resourceHistoryTokenChange
+	serviceAccount       string // target; "" means unchanged
+	prevSA               string
 
 	automount     *bool // target; nil means unchanged
 	setAutomount  bool
@@ -165,6 +166,12 @@ func planWiring(deploy *appsv1.Deployment, container *corev1.Container, want *pl
 	spec := deploy.Spec.Template.Spec
 
 	if want != nil {
+		if want.ResourceHistoryToken {
+			change.resourceHistoryToken = planResourceHistoryToken(spec, container)
+			if change.resourceHistoryToken != nil {
+				drift = append(drift, "fixed Prometheus resource-history projected token corrected")
+			}
+		}
 		if want.ServiceAccountName != "" && spec.ServiceAccountName != want.ServiceAccountName {
 			change.serviceAccount = want.ServiceAccountName
 			change.prevSA = spec.ServiceAccountName
@@ -286,6 +293,9 @@ func wiringSatisfied(deploy *appsv1.Deployment, container *corev1.Container, cha
 		return true
 	}
 	spec := deploy.Spec.Template.Spec
+	if change.resourceHistoryToken != nil && !resourceHistoryTokenSatisfied(spec, container) {
+		return false
+	}
 	if change.serviceAccount != "" && spec.ServiceAccountName != change.serviceAccount {
 		return false
 	}
@@ -336,6 +346,9 @@ func (c *wiringChange) apply(parts *patchParts, rollback bool) (env []map[string
 		return nil, nil, false
 	}
 	podSpec := parts.podSpec
+	if c.resourceHistoryToken != nil {
+		podSpec["volumes"] = []map[string]any{c.resourceHistoryToken.volumePatch(rollback)}
+	}
 	if c.serviceAccount != "" {
 		if rollback {
 			podSpec["serviceAccountName"] = c.prevSA

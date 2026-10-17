@@ -40,6 +40,9 @@ func GenerateReleaseManifest(opts ReleaseOptions) (*Manifest, error) {
 		}
 	}
 	dir := strings.TrimSpace(opts.K8sDir)
+	if err := validateResourceHistoryTokenSource(dir, release); err != nil {
+		return nil, err
+	}
 	var rbacDirs []string
 	if strings.TrimSpace(opts.WiringPath) != "" {
 		rbacDirs = append(rbacDirs, filepath.Join(filepath.Dir(opts.WiringPath), "../rbac"))

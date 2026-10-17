@@ -33,6 +33,9 @@ type ComponentWiring struct {
 	Args []string `json:"args,omitempty"`
 	// DNSOptions are pod resolver options (for example ndots) that must be set.
 	DNSOptions []DNSOption `json:"dnsOptions,omitempty"`
+	// ResourceHistoryToken installs one fixed projected token in Prometheus.
+	// It is not a general volume/mount declaration.
+	ResourceHistoryToken bool `json:"resourceHistoryToken,omitempty"`
 }
 
 // DNSOption is one pod dnsConfig option.
@@ -44,7 +47,7 @@ type DNSOption struct {
 // IsZero reports whether the wiring asks for nothing.
 func (w *ComponentWiring) IsZero() bool {
 	return w == nil || (w.ServiceAccountName == "" && w.AutomountServiceAccountToken == nil &&
-		len(w.Env) == 0 && len(w.Args) == 0 && len(w.DNSOptions) == 0)
+		len(w.Env) == 0 && len(w.Args) == 0 && len(w.DNSOptions) == 0 && !w.ResourceHistoryToken)
 }
 
 // RepeatableFlags are flags that may legitimately appear more than once, so
@@ -105,9 +108,10 @@ var platformObjectKinds = map[string]bool{
 // Keep network changes limited to the platform policies explicitly supported
 // by setup and update. Tenant and operator-created policies remain untouched.
 var platformNetworkPolicies = map[string]bool{
-	"mcp-observability/kafka-client-ingress":             true,
-	"mcp-observability/mcp-scoped-observability-ingress": true,
-	"mcp-platform/mcp-runtime-api-grafana-egress":        true,
+	"mcp-observability/kafka-client-ingress":               true,
+	"mcp-observability/mcp-scoped-observability-ingress":   true,
+	"mcp-platform/mcp-runtime-api-grafana-egress":          true,
+	"mcp-platform/mcp-runtime-api-resource-history-egress": true,
 }
 
 // PlatformObject identifies one object in a release's platform bundle.

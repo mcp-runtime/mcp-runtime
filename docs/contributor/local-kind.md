@@ -225,9 +225,15 @@ samples and partial disk coverage are reported, not counted as zero.
 `grafana.json` and `grafana.md` capture Prometheus time series through Grafana
 for the same test window: scrape health, application CPU/RSS/goroutines,
 gateway requests/latency, and container/network/volume metrics where collected.
-The bundled scrape configuration currently exposes application metrics, but
-container, kube-state, and volume queries can have no series. Capture records
-those gaps explicitly; Metrics Server does not populate Prometheus history.
+Fresh named Docker Kind test-mode setup provisions verified kubelet resource
+history every 30 seconds. Capture includes node/container CPU and working
+memory, actual filesystem/network data, requests, reservations, collection
+wall time and per-node success. Comparison tables use the sampler's exact
+start/end window; different sample times can produce different observed peaks.
+PVC consumption needs driver statistics and can remain missing on local-path
+volumes. `pvc_volume_coverage` preserves each missing PVC separately from its
+`local_du_fallback_peak_used_bytes`; reservations never supply actual bytes.
+Capture records gaps explicitly; Metrics Server does not populate Prometheus history.
 Grafana credentials are read privately from the local Secret and are never
 written to the reports.
 
@@ -467,7 +473,8 @@ bundled registry is reachable through the in-cluster publisher; Docker on the
 host cannot resolve its Kubernetes Service address. Use `--image-platform
 linux/arm64` on ARM64 Kind nodes.
 
-Prometheus currently lacks some container, node filesystem and volume history
-series in the bundled stack; [#680](https://github.com/mcp-runtime/mcp-runtime/issues/680)
-tracks collection coverage. The E2E report distinguishes missing Grafana series
-from zero usage and retains kubelet/host samples as separate observations.
+Resource history needs supported setup trust and projected-token wiring; see
+[resource history for sizing](../platform-services.md#resource-history-for-sizing).
+The E2E report distinguishes missing series from zero usage and retains local
+kubelet/host/volume observations separately. Verify clean named Kind setup and
+same-window coverage before interpreting the report as sizing evidence.

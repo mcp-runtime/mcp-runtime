@@ -111,6 +111,110 @@ data:
       "editable": false,
       "panels": [
         {
+          "id": 112,
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 78},
+          "fieldConfig": {"defaults": {"noValue": "Unavailable", "min": 0, "max": 1}},
+          "targets": [{"expr": "mcp_resource_collection_success", "legendFormat": "All sources collected", "refId": "A"}, {"expr": "mcp_resource_node_collection_success", "legendFormat": "{{node}}", "refId": "B"}],
+          "title": "Resource collection success (missing differs from zero)", "type": "timeseries"
+        },
+        {
+          "id": 100,
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 30},
+          "fieldConfig": {"defaults": {"noValue": "Unavailable", "unit": "short"}},
+          "targets": [{"expr": "mcp_resource_node_cpu_cores", "legendFormat": "{{node}}", "refId": "A"}],
+          "title": "Measured node CPU (cores)", "type": "timeseries"
+        },
+        {
+          "id": 101,
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 30},
+          "fieldConfig": {"defaults": {"noValue": "Unavailable", "unit": "bytes"}},
+          "targets": [{"expr": "mcp_resource_node_working_set_bytes", "legendFormat": "{{node}}", "refId": "A"}],
+          "title": "Measured node working memory", "type": "timeseries"
+        },
+        {
+          "id": 102,
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 38},
+          "fieldConfig": {"defaults": {"noValue": "Unavailable", "unit": "short"}},
+          "targets": [{"expr": "sum by(namespace,pod)(mcp_resource_container_cpu_cores)", "legendFormat": "{{namespace}}/{{pod}}", "refId": "A"}],
+          "title": "Measured container CPU by pod", "type": "timeseries"
+        },
+        {
+          "id": 103,
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 38},
+          "fieldConfig": {"defaults": {"noValue": "Unavailable", "unit": "bytes"}},
+          "targets": [{"expr": "sum by(namespace,pod)(mcp_resource_container_working_set_bytes)", "legendFormat": "{{namespace}}/{{pod}}", "refId": "A"}],
+          "title": "Measured container working memory", "type": "timeseries"
+        },
+        {
+          "id": 104,
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 46},
+          "fieldConfig": {"defaults": {"noValue": "Unavailable", "unit": "bytes"}},
+          "targets": [{"expr": "mcp_resource_node_filesystem_used_bytes", "legendFormat": "{{node}} consumed", "refId": "A"}, {"expr": "mcp_resource_node_filesystem_capacity_bytes", "legendFormat": "{{node}} filesystem capacity", "refId": "B"}],
+          "title": "Actual node filesystem bytes", "type": "timeseries"
+        },
+        {
+          "id": 105,
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 46},
+          "fieldConfig": {"defaults": {"noValue": "Unavailable", "unit": "bytes"}},
+          "targets": [{"expr": "mcp_resource_volume_used_bytes", "legendFormat": "{{namespace}}/{{persistentvolumeclaim}}", "refId": "A"}],
+          "title": "Actual PVC bytes (driver statistics required)", "type": "timeseries"
+        },
+        {
+          "id": 106,
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 54},
+          "fieldConfig": {"defaults": {"noValue": "Unavailable", "unit": "short"}},
+          "targets": [{"expr": "sum(mcp_resource_pod_cpu_requests_cores)", "legendFormat": "Requested cores (not consumption)", "refId": "A"}, {"expr": "sum(mcp_resource_container_cpu_cores)", "legendFormat": "Measured container cores", "refId": "B"}],
+          "title": "CPU requests and measured usage", "type": "timeseries"
+        },
+        {
+          "id": 107,
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 54},
+          "fieldConfig": {"defaults": {"noValue": "Unavailable", "unit": "bytes"}},
+          "targets": [{"expr": "mcp_resource_pvc_requested_bytes", "legendFormat": "{{namespace}}/{{persistentvolumeclaim}} requested", "refId": "A"}, {"expr": "mcp_resource_pvc_capacity_bytes", "legendFormat": "{{namespace}}/{{persistentvolumeclaim}} provisioned", "refId": "B"}],
+          "title": "PVC reservations and capacity (not consumed bytes)", "type": "timeseries"
+        },
+        {
+          "id": 108,
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 62},
+          "fieldConfig": {"defaults": {"noValue": "Unavailable", "unit": "short"}},
+          "targets": [{"expr": "max_over_time(mcp_resource_node_cpu_cores[$__range])", "legendFormat": "{{node}}", "refId": "A", "instant": true}],
+          "title": "Selected-window CPU peaks (startup/load samples)", "type": "stat"
+        },
+        {
+          "id": 109,
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 62},
+          "fieldConfig": {"defaults": {"noValue": "Unavailable", "unit": "bytes"}},
+          "targets": [{"expr": "max_over_time(mcp_resource_node_working_set_bytes[$__range])", "legendFormat": "{{node}}", "refId": "A", "instant": true}],
+          "title": "Selected-window working-memory peaks", "type": "stat"
+        },
+        {
+          "id": 110,
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 70},
+          "fieldConfig": {"defaults": {"noValue": "Unavailable", "unit": "Bps"}},
+          "targets": [{"expr": "rate(mcp_resource_node_network_receive_bytes_total[2m])", "legendFormat": "{{node}} received", "refId": "A"}, {"expr": "rate(mcp_resource_node_network_transmit_bytes_total[2m])", "legendFormat": "{{node}} transmitted", "refId": "B"}],
+          "title": "Measured node network throughput", "type": "timeseries"
+        },
+        {
+          "id": 111,
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 70},
+          "fieldConfig": {"defaults": {"noValue": "Unavailable", "unit": "s"}},
+          "targets": [{"expr": "mcp_resource_collection_duration_seconds", "legendFormat": "Collection wall time", "refId": "A"}],
+          "title": "Resource collection overhead (30-second cadence)", "type": "timeseries"
+        },
+        {
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"

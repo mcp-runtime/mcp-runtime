@@ -81,6 +81,81 @@ flowchart LR
 
 ## Storage and observability
 
+### Resource history for sizing
+
+The **Scrape Coverage** admin dashboard also shows node/container CPU, working
+memory, filesystem consumption, network throughput, requested resources and
+volume bytes. Selected-window peak panels retain startup/load observations
+after collection starts. Missing data displays as **Unavailable**, never zero.
+Infrastructure queries stay admin-only; tenant dashboards and bounded Explore
+do not accept them.
+
+Collection activates only after scoped-observability setup verifies supported
+enforcing Cilium and installs the shared telemetry ingress boundary
+(`GRAFANA_SCOPED_USER_ACCESS=true`). Standard Kind kindnet and unknown CNI keep
+collection off: authenticating a scrape does not protect data later copied into
+an anonymously reachable shared Prometheus. Those installs retain the local
+sampler. Clean Kind history acceptance therefore needs the enforcing-CNI setup;
+an ordinary kindnet run must report missing historical series honestly.
+
+Every 30 seconds Prometheus calls runtime-api's dedicated
+`/internal/observability/resources/metrics` handler with a projected token for
+the exact `mcp-observability/prometheus` ServiceAccount and
+`mcp-resource-history` audience. Platform sessions, user/admin API keys, other
+ServiceAccounts and caller identity headers cannot authorize it. The token is
+short lived and never appears in datasource metadata or the frontend. Resource
+history does not use the unauthenticated process-metrics listener.
+
+Runtime-api reads `/stats/summary` directly from current nodes over verified
+HTTPS with read-only `nodes/stats` permission. Collection grants no
+`nodes/proxy`, host mount or execution access. Before sending a credential it
+checks the live node UID/InternalIP, setup-provisioned certificate trust and
+hostname; redirects are refused. Only numeric resource fields and Kubernetes
+identity are exported, without pod configuration, environment, logs or tool
+payloads. Pod requests and PVC reservations come from separate API fields.
+
+Install or refresh with supported `mcp-runtime setup`, retaining existing host,
+TLS, storage, registry and auth options:
+
+- Named Docker Kind `setup --test-mode` pins public kubelet serving certificates.
+  It also verifies the selected Kubernetes public CA against the Docker node,
+  plus Kind provider ID, cluster label and node IP, to reject same-name clusters
+  in another Docker context.
+- Other clusters supply a trusted **public** serving CA bundle through
+  `MCP_KUBELET_METRICS_CA_FILE=/path/to/kubelet-serving-ca.pem` in setup's
+  environment. Serving certificates must cover each node's InternalIP and
+  kubelets must enable webhook bearer authentication/authorization. Mixed or
+  private PEM bundles are rejected; the API CA is not assumed to sign kubelets.
+
+Setup saves public trust in `mcp-platform/mcp-kubelet-resource-trust`. Refresh
+setup when nodes are added/recreated or serving trust changes; unmatched nodes
+fail closed and their samples remain absent. Ordinary update preserves this
+trust and delivers the fixed projected Prometheus token mount, scrape config,
+RBAC and kubelet egress policy, correcting drift without changing unrelated
+volumes or mounts. It cannot invent serving trust: installations without it
+need the supported setup refresh before resource samples appear. There is no
+insecure TLS fallback.
+
+Collection is bounded to eight seconds, four concurrent node requests, three
+seconds and 4 MiB per kubelet response, 64 nodes and 5,000 pods/PVCs.
+`mcp_resource_collection_success` and per-node success distinguish failure from
+measured zero; `mcp_resource_collection_duration_seconds` records wall time.
+Compare that duration and runtime-api process CPU/RSS when sizing overhead;
+the latter include concurrent API work and are not wholly collection costs.
+
+PVC reservations and provisioned capacity are **not consumed bytes**. Actual
+volume history requires driver-supplied kubelet statistics. HostPath/local-path
+and some CSI drivers can omit them; reports preserve that gap and retain the
+read-only local `du` sampler separately. Node filesystem totals overlap image,
+container and volume consumption; do not add overlapping categories.
+
+The collector follows the [Kubernetes Summary API](https://kubernetes.io/docs/reference/instrumentation/node-metrics/)
+and [kubelet stats authorization](https://kubernetes.io/docs/reference/access-authn-authz/kubelet-authn-authz/).
+Serving-certificate behavior and provider IDs were checked against
+[Kubernetes v1.35.0](https://github.com/kubernetes/kubernetes/blob/v1.35.0/cmd/kubelet/app/server.go)
+and [Kind v0.31.0](https://github.com/kubernetes-sigs/kind/blob/v0.31.0/pkg/cluster/internal/kubeadm/config.go)
+on 2026-10-17. No new collector image or host exporter is installed.
+
 | Component | Role |
 |---|---|
 | **ClickHouse** | Stores the event stream with trace IDs plus materialized fields: server, namespace, team ID, cluster, human, agent, session, decision, tool name. |
