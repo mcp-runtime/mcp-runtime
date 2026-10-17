@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -96,6 +97,32 @@ func resourceHistoryKindCluster() string {
 	return cluster
 }
 
+// Only local administrator configuration selects this source: the setup CA
+// environment option or the explicitly selected kubeconfig's public CA file.
+// No cluster resource, API request or caller-supplied URL controls this path.
+func readResourceHistoryPublicCA(path string) ([]byte, error) {
+	const maxBytes = 256 << 10
+	// #nosec G304 G703 -- intentionally administrator-selected local public trust file, never remote/request input; bounded regular-file and certificate-only checks follow.
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() || info.Size() > maxBytes {
+		return nil, fmt.Errorf("public CA must be a regular file of at most %d bytes", maxBytes)
+	}
+	data, err := io.ReadAll(io.LimitReader(file, maxBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	// Also rejects a file grown after Stat, mixed PEM and private key material.
+	return resourcehistory.PublicCertificates(data)
+}
+
 func provisionResourceHistoryTrust() error {
 	caPath := strings.TrimSpace(os.Getenv("MCP_KUBELET_METRICS_CA_FILE"))
 	cluster := resourceHistoryKindCluster()
@@ -111,13 +138,9 @@ func provisionResourceHistoryTrust() error {
 	defer cancel()
 	var ca []byte
 	if caPath != "" {
-		ca, err = os.ReadFile(caPath)
+		ca, err = readResourceHistoryPublicCA(caPath)
 		if err != nil {
 			return fmt.Errorf("read kubelet serving CA: %w", err)
-		}
-		ca, err = resourcehistory.PublicCertificates(ca)
-		if err != nil {
-			return fmt.Errorf("kubelet serving CA: %w", err)
 		}
 	}
 	var selectedCA []byte
@@ -127,7 +150,7 @@ func provisionResourceHistoryTrust() error {
 		}
 		selectedCA = clients.Config.CAData
 		if len(selectedCA) == 0 && clients.Config.CAFile != "" {
-			selectedCA, err = os.ReadFile(clients.Config.CAFile)
+			selectedCA, err = readResourceHistoryPublicCA(clients.Config.CAFile)
 			if err != nil {
 				return fmt.Errorf("read selected Kubernetes public CA")
 			}

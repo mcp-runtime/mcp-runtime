@@ -5,7 +5,7 @@ import corev1 "k8s.io/api/core/v1"
 const (
 	ScrapeAudience  = "mcp-resource-history"
 	TokenVolumeName = "resource-history-token"
-	TokenMountPath  = "/var/run/secrets/mcp-resource-history"
+	TokenMountPath  = "/var/run/secrets/mcp-resource-history" // #nosec G101 -- fixed mount directory; contains no credential value.
 )
 
 // PrometheusTokenVolume and PrometheusTokenMount are the only token mount a

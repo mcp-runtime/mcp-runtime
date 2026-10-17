@@ -1,10 +1,13 @@
 package platform
 
 import (
+	"bytes"
 	"context"
 	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -15,6 +18,39 @@ import (
 	"mcp-runtime/internal/cli/core"
 	"mcp-runtime/pkg/resourcehistory"
 )
+
+func TestResourceHistoryPublicCAFileIsBoundedAndCertificateOnly(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer server.Close()
+	certificate := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw})
+	for _, tc := range []struct {
+		name  string
+		data  []byte
+		valid bool
+	}{
+		{"public", certificate, true},
+		{"oversized", bytes.Repeat([]byte("x"), (256<<10)+1), false},
+		{"mixed-private", append(append([]byte{}, certificate...), pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: []byte("synthetic-test-only")})...), false},
+		{"empty", nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "public-ca.pem")
+			if err := os.WriteFile(path, tc.data, 0600); err != nil {
+				t.Fatal(err)
+			}
+			got, err := readResourceHistoryPublicCA(path)
+			if (err == nil) != tc.valid || tc.valid && !bytes.Equal(got, certificate) {
+				t.Fatalf("valid=%v, result=%q, error=%v", tc.valid, got, err)
+			}
+		})
+	}
+	if _, err := readResourceHistoryPublicCA(t.TempDir()); err == nil {
+		t.Fatal("directory accepted as public CA")
+	}
+	if _, err := readResourceHistoryPublicCA(filepath.Join(t.TempDir(), "missing")); err == nil {
+		t.Fatal("missing public CA accepted")
+	}
+}
 
 func TestResourceHistorySetupTrustBindsCurrentNode(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
