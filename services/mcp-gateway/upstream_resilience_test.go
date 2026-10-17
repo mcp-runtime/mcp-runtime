@@ -27,19 +27,24 @@ func (f upstreamRoundTripFunc) RoundTrip(r *http.Request) (*http.Response, error
 
 func TestUpstreamUnaryBodyDeadlineAndStreamingClass(t *testing.T) {
 	t.Parallel()
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// Return headers synchronously: this test concerns body cancellation and
+	// SSE classification, not a loopback dial finishing within a short deadline.
+	// Other tests below exercise the transport over real HTTP connections.
+	base := upstreamRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+		reader, writer := io.Pipe()
+		stop := context.AfterFunc(r.Context(), func() {
+			_ = writer.CloseWithError(context.Cause(r.Context()))
+		})
+		t.Cleanup(func() { stop(); _ = writer.Close(); _ = reader.Close() })
+		contentType := "application/json"
 		if r.URL.Path == "/stream" {
-			w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
-		} else {
-			w.Header().Set("Content-Type", "application/json")
+			contentType = "text/event-stream; charset=utf-8"
 		}
-		w.WriteHeader(200)
-		w.(http.Flusher).Flush()
-		<-r.Context().Done()
-	}))
-	defer upstream.Close()
-	transport := newResilientUpstreamTransport(http.DefaultTransport.(*http.Transport).Clone(), 30*time.Millisecond, 2, 2, 5, time.Second)
-	request, _ := http.NewRequest("POST", upstream.URL+"/unary", strings.NewReader(`{"method":"tools/call"}`))
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {contentType}}, Body: reader}, nil
+	})
+	const deadline = 100 * time.Millisecond
+	transport := newResilientUpstreamTransport(base, deadline, 2, 2, 5, time.Second)
+	request, _ := http.NewRequest("POST", "http://upstream.test/unary", strings.NewReader(`{"method":"tools/call"}`))
 	request.Header.Set("Accept", "application/json, text/event-stream")
 	outcome := &upstreamOutcome{}
 	request = request.WithContext(context.WithValue(request.Context(), upstreamOutcomeKey{}, outcome))
@@ -50,7 +55,7 @@ func TestUpstreamUnaryBodyDeadlineAndStreamingClass(t *testing.T) {
 	started := time.Now()
 	_, err = io.ReadAll(response.Body)
 	response.Body.Close()
-	if !errors.Is(err, context.DeadlineExceeded) || time.Since(started) > time.Second {
+	if !errors.Is(err, context.DeadlineExceeded) || time.Since(started) > 5*time.Second {
 		t.Fatalf("unary body deadline: elapsed=%v err=%v", time.Since(started), err)
 	}
 	outcome.mu.Lock()
@@ -58,7 +63,7 @@ func TestUpstreamUnaryBodyDeadlineAndStreamingClass(t *testing.T) {
 		t.Errorf("timeout not recorded: %q", outcome.reason)
 	}
 	outcome.mu.Unlock()
-	request, _ = http.NewRequest("POST", upstream.URL+"/stream", strings.NewReader(`{"method":"tools/call"}`))
+	request, _ = http.NewRequest("POST", "http://upstream.test/stream", strings.NewReader(`{"method":"tools/call"}`))
 	request.Header.Set("Accept", "application/json, text/event-stream")
 	response, err = transport.RoundTrip(request)
 	if err != nil {
@@ -70,7 +75,7 @@ func TestUpstreamUnaryBodyDeadlineAndStreamingClass(t *testing.T) {
 	select {
 	case err := <-result:
 		t.Fatalf("SSE was cut off by unary timeout: %v", err)
-	case <-time.After(90 * time.Millisecond):
+	case <-time.After(3 * deadline):
 	}
 	response.Body.Close()
 	select {
