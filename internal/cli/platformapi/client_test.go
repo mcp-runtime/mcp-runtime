@@ -116,6 +116,31 @@ spec:
 	}
 }
 
+func TestGetRuntimeServer(t *testing.T) {
+	client := &PlatformClient{
+		baseURL:   "https://platform.example.com",
+		token:     "token-1",
+		apiPrefix: "/api/v1",
+		http: &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			if r.Method != http.MethodGet || r.URL.Path != "/api/v1/runtime/servers/mcp-team-acme/demo" {
+				t.Fatalf("request = %s %s, want GET runtime server detail", r.Method, r.URL.Path)
+			}
+			if r.Header.Get("x-api-key") != "token-1" {
+				t.Fatalf("x-api-key = %q, want token-1", r.Header.Get("x-api-key"))
+			}
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"server":{"name":"demo","namespace":"mcp-team-acme","runtimeStatus":{"connectionState":"ready","lastSessionState":"none"}}}`))}, nil
+		})},
+	}
+
+	server, err := client.GetRuntimeServer(context.Background(), "mcp-team-acme", "demo")
+	if err != nil {
+		t.Fatalf("GetRuntimeServer() error = %v", err)
+	}
+	if server.Name != "demo" || server.RuntimeStatus.ConnectionState != "ready" || server.RuntimeStatus.LastSessionState != "none" {
+		t.Fatalf("server = %#v, want runtime status decoded", server)
+	}
+}
+
 func TestRecordImagePublish(t *testing.T) {
 	var seenBody string
 	client := &PlatformClient{
