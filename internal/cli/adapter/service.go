@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"os"
@@ -266,8 +267,16 @@ func renewProfileCertificate(ctx context.Context, p adapterservice.Profile) (ada
 		return adapterservice.Credential{}, err
 	}
 	expected := "spiffe://" + p.TrustDomain + "/ns/" + p.Namespace + "/session/" + p.Session
-	if len(leaf.URIs) != 1 || leaf.URIs[0].String() != expected || issued.SPIFFEID != expected || !leaf.NotAfter.Equal(issued.ExpiresAt) || leaf.NotAfter.After(p.SessionExpires) {
+	now := time.Now()
+	if issued.SPIFFEID != expected || !issued.ExpiresAt.After(now) || issued.ExpiresAt.After(p.SessionExpires) || leaf.NotAfter.After(issued.ExpiresAt) || leaf.NotAfter.After(p.SessionExpires) || !leaf.NotAfter.After(now) || leaf.NotBefore.After(now) {
 		return adapterservice.Credential{}, errors.New("certificate identity or lifetime mismatch")
+	}
+	block, _ := pem.Decode(csr)
+	if block == nil {
+		return adapterservice.Credential{}, errors.New("invalid generated certificate request")
+	}
+	if err := certauth.ValidateIssuedCertificatePEM(issued.Certificate, block.Bytes, expected, p.SessionExpires.Sub(now), now); err != nil {
+		return adapterservice.Credential{}, errors.New("issued certificate does not match the authorized session")
 	}
 	roots, err := x509.SystemCertPool()
 	if err != nil {
