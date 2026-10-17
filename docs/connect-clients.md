@@ -347,7 +347,7 @@ issued certificate whose URI, key, usages, or lifetime differ from the submitted
 CSR, and its ClusterRole only grants `create` and `get` on `CertificateRequests`.
 
 **Approval policies for production.** `config/cert-manager/approval-policies.yaml`
-holds a tested policy set. Turning off cert-manager's default approver is
+holds the hosted policy set. Turning off cert-manager's default approver is
 cluster-wide, so every request the platform makes needs a policy:
 
 | Policy | Requester | Issuer | Allows |
@@ -368,17 +368,35 @@ cluster and kubeconfig, and asserts approval, denial and renewal):
 hack/qa/approval-policy-rehearsal.sh
 ```
 
+The rehearsal pins cert-manager **v1.21.2**, approver-policy **v0.28.0** and a
+digest-pinned Kubernetes **1.36.4** Kind node (reviewed 2026-10-17). It refuses an
+existing cluster name and keeps Helm state inside its temporary directory.
+The node pin comes from [Kind v0.33.0](https://github.com/kubernetes-sigs/kind/releases/tag/v0.33.0);
+cert-manager's [support matrix](https://cert-manager.io/docs/releases/) covers
+Kubernetes 1.33–1.36 for the 1.21 series. The Workload Issuer Approval PR workflow
+runs this headless admission matrix on its own GitHub runner.
+These are admission tests using direct CertificateRequests, including hidden
+`otherName`/`directoryName` SANs; they do not replace the supported CLI adapter
+enrollment journey. The runtime API and adapter also inspect the complete SAN
+extension, because Go's parsed URI/DNS fields omit those additional name types.
+Approver-policy versions before v0.27.0 lack fixes for raw SAN and subject
+validation bypasses; use the reviewed pin rather than the former v0.17.0 example.
+See the [upstream security fixes](https://github.com/cert-manager/approver-policy/releases/tag/v0.27.0)
+and [v0.28.0 maintenance release](https://github.com/cert-manager/approver-policy/releases/tag/v0.28.0).
+
 Then, in this order, with the production kubeconfig passed explicitly:
 
-1. Install approver-policy for your cert-manager version (for cert-manager
-   v1.16: `helm install approver-policy jetstack/cert-manager-approver-policy
-   --version v0.17.0 -n cert-manager --wait`). It changes nothing yet.
+1. On cert-manager v1.21.2, install the reviewed approver:
+   `helm upgrade --install approver-policy oci://quay.io/jetstack/charts/cert-manager-approver-policy
+   --version v0.28.0 -n cert-manager --wait`. Confirm its Deployment is ready.
+   It changes no approval decisions while the default approver is still enabled.
 2. `kubectl apply -f config/cert-manager/approval-policies.yaml` and confirm all
    three policies report `Ready=True`.
 3. Add `--controllers=*,-certificaterequests-approver` to the `cert-manager`
    Deployment arguments. Keep a copy of the Deployment YAML first.
 4. Verify a gateway certificate and a session certificate still issue, and that
-   no `CertificateRequest` is left pending.
+   legitimate `CertificateRequest` is left pending. Negative requests must
+   remain denied or unapproved with no issued certificate.
 5. Only then set `MCP_WORKLOAD_ISSUER_APPROVAL_ACK=true` for setup and enable
    `MCP_ADAPTER_CERTIFICATES=true` on the operator.
 

@@ -34,6 +34,12 @@ platform-store mutations, never a full session upsert that could undo revocation
   team ownership first. Repeated cleanup is idempotent. Existing gateway sync
   and stale-cache limits still apply; verify denied calls after sync rather
   than equating a committed revocation count with every gateway's acknowledgement.
+- Workload issuer admission: `hack/qa/approval-policy-rehearsal.sh` uses a private,
+  disposable Kind cluster; it refuses existing names and tests requester RBAC,
+  exact session identities, hidden SAN types, public/internal TLS and reissue.
+  Reviewed pins (2026-10-17): cert-manager v1.21.2, approver-policy v0.28.0,
+  Kubernetes 1.36.4. Follow `docs/connect-clients.md` rollout/rollback order;
+  passing direct CSR tests does not prove supported CLI enrollment.
 
 - One namespace per team; `MCPServer.spec.teamID` and `SubjectRef.teamID` must match gateway identity fields exactly when set.
 - Platform API rejects cross-namespace `serverRef` and shared-catalog writes for non-admins.

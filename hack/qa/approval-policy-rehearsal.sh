@@ -13,14 +13,18 @@
 #
 #   hack/qa/approval-policy-rehearsal.sh
 #
-# Inputs: CERT_MANAGER_VERSION (default v1.16.2), APPROVER_POLICY_VERSION
-# (default v0.17.0), CLUSTER_NAME (default mcp-approval-rehearsal).
+# Inputs: CERT_MANAGER_VERSION (default v1.21.2), APPROVER_POLICY_VERSION
+# (default v0.28.0), CLUSTER_NAME (default mcp-approval-rehearsal),
+# KIND_NODE_IMAGE (pinned Kubernetes 1.36.4, supported by cert-manager 1.21).
 # Verification: exits 0 and prints "ALL REHEARSAL CHECKS PASSED".
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CERT_MANAGER_VERSION="${CERT_MANAGER_VERSION:-v1.16.2}"
-APPROVER_POLICY_VERSION="${APPROVER_POLICY_VERSION:-v0.17.0}"
+# shellcheck source=hack/qa/approvalpolicy/outcomes.sh
+source "$ROOT/hack/qa/approvalpolicy/outcomes.sh"
+CERT_MANAGER_VERSION="${CERT_MANAGER_VERSION:-v1.21.2}"
+APPROVER_POLICY_VERSION="${APPROVER_POLICY_VERSION:-v0.28.0}"
+KIND_NODE_IMAGE="${KIND_NODE_IMAGE:-kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed}"
 CLUSTER_NAME="${CLUSTER_NAME:-mcp-approval-rehearsal}"
 POLICIES="$ROOT/config/cert-manager/approval-policies.yaml"
 
@@ -31,15 +35,19 @@ done
 
 WORK="$(mktemp -d)"
 export KUBECONFIG="$WORK/kubeconfig"
+export HELM_CACHE_HOME="$WORK/helm/cache" HELM_CONFIG_HOME="$WORK/helm/config" HELM_DATA_HOME="$WORK/helm/data"
 FAILED=0
+CLUSTER_CREATED=0
 
 # shellcheck disable=SC2317,SC2329  # invoked by the EXIT trap
 cleanup() {
-  if [[ "${KEEP_CLUSTER:-0}" == 1 ]]; then
+  if [[ "${KEEP_CLUSTER:-0}" == 1 && "$CLUSTER_CREATED" == 1 ]]; then
     echo "keeping cluster $CLUSTER_NAME; KUBECONFIG=$KUBECONFIG"
     return
   fi
-  kind delete cluster --name "$CLUSTER_NAME" --kubeconfig "$KUBECONFIG" >/dev/null 2>&1 || true
+  if [[ "$CLUSTER_CREATED" == 1 ]]; then
+    kind delete cluster --name "$CLUSTER_NAME" --kubeconfig "$KUBECONFIG" >/dev/null 2>&1 || true
+  fi
   rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -47,8 +55,14 @@ trap cleanup EXIT
 step() { echo; echo "== $*"; }
 
 setup_cluster() {
+  local clusters existing
+  clusters="$(kind get clusters)" || { echo "cannot inventory existing Kind clusters" >&2; return 1; }
+  while IFS= read -r existing; do
+    [[ "$existing" != "$CLUSTER_NAME" ]] || { echo "refusing to reuse or delete existing cluster $CLUSTER_NAME" >&2; return 1; }
+  done <<< "$clusters"
   step "creating Kind cluster $CLUSTER_NAME"
-  kind create cluster --name "$CLUSTER_NAME" --kubeconfig "$KUBECONFIG" --wait 180s >/dev/null || return 1
+  kind create cluster --name "$CLUSTER_NAME" --image "$KIND_NODE_IMAGE" --kubeconfig "$KUBECONFIG" --wait 180s >/dev/null || return 1
+  CLUSTER_CREATED=1
   # The rehearsal must only ever run against the cluster it just created.
   [[ "$(kubectl config current-context)" == "kind-$CLUSTER_NAME" ]] || { echo "unexpected context" >&2; return 1; }
 
@@ -107,11 +121,12 @@ subjects:
 EOF
 
   step "installing approver-policy $APPROVER_POLICY_VERSION and the policies"
-  helm repo add jetstack https://charts.jetstack.io >/dev/null || return 1
-  helm repo update >/dev/null || return 1
-  helm upgrade --install approver-policy jetstack/cert-manager-approver-policy --version "$APPROVER_POLICY_VERSION" \
+  helm upgrade --install approver-policy oci://quay.io/jetstack/charts/cert-manager-approver-policy --version "$APPROVER_POLICY_VERSION" \
     -n cert-manager --wait --timeout 10m >/dev/null || return 1
   kubectl apply -f "$POLICIES" >/dev/null || return 1
+  for policy in mcp-session-certificates mcp-workload-tls mcp-public-acme; do
+    kubectl wait "certificaterequestpolicy/$policy" --for=condition=Ready --timeout=120s >/dev/null || return 1
+  done
 
   step "disabling cert-manager's default approver (only now, as on a real install)"
   kubectl -n cert-manager patch deploy cert-manager --type=json \
@@ -121,8 +136,8 @@ EOF
 
 # cr <name> <as-sa> <issuer> <usages-json> <uri> <dns> [isCA]; prints the outcome.
 cr() {
-  local name="$1" as="$2" issuer="$3" usages="$4" uri="$5" dns="$6" isca="${7:-false}" req state
-  req="$(cd "$ROOT" && go run ./hack/qa/approvalpolicy/csrgen --uri "$uri" --dns "$dns")" || { echo "csr-failed"; return; }
+  local name="$1" as="$2" issuer="$3" usages="$4" uri="$5" dns="$6" isca="${7:-false}" extra_san="${8:-}" req state
+  req="$(cd "$ROOT" && go run ./hack/qa/approvalpolicy/csrgen --uri "$uri" --dns "$dns" --extra-san "$extra_san")" || { echo "csr-failed"; return; }
   if ! kubectl --as="$as" apply -f - >/dev/null 2>"$WORK/cr-err.txt" <<EOF
 apiVersion: cert-manager.io/v1
 kind: CertificateRequest
@@ -145,6 +160,12 @@ EOF
   done
   # A request no policy applies to is left unapproved: it never gets a certificate.
   [[ -n "$state" ]] || state="Pending(never approved, no certificate issued)"
+  local issued
+  issued="$(kubectl -n default get certificaterequest "$name" -o jsonpath='{.status.certificate}')" || { echo "read-failed"; return; }
+  if [[ "$state" == *Ready* && -z "$issued" ]] || [[ "$state" != *Ready* && -n "$issued" ]]; then
+    echo "certificate-state-mismatch"
+    return
+  fi
   echo "$state"
 }
 
@@ -175,7 +196,7 @@ EOF
 }
 
 check() { # name expected actual
-  if [[ "$3" == *"$2"* ]]; then echo "PASS  $1  ($3)"; else echo "FAIL  $1  expected '$2' got '$3'"; FAILED=1; fi
+  if approval_outcome_matches "$2" "$3"; then echo "PASS  $1  ($3)"; else echo "FAIL  $1  expected '$2' got '$3'"; FAILED=1; fi
 }
 
 run_matrix() {
@@ -204,6 +225,9 @@ run_matrix() {
   check "T14 the public issuer refuses foreign domains"         Denied  "$(cr t14 $CM letsencrypt-prod "$SERVER_USAGES" '' 'evil.example')"
   check "T15 runtime-api cannot use the public issuer"          Pending "$(cr t15 $RA letsencrypt-prod "$SERVER_USAGES" '' 'platform.mcpruntime.org')"
   check "T16 another principal cannot use the public issuer"    Pending "$(cr t16 $IN letsencrypt-prod "$SERVER_USAGES" '' 'platform.mcpruntime.org')"
+  check "T23 session certs cannot hide a directoryName SAN"     Denied  "$(cr t23 $RA mcp-runtime-ca "$SESSION_USAGES" "$SESS" '' false directoryName)"
+  check "T24 session certs cannot hide an otherName SAN"         Denied  "$(cr t24 $RA mcp-runtime-ca "$SESSION_USAGES" "$SESS" '' false otherName)"
+  check "T25 a tenant cannot impersonate Traefik"                 Pending "$(cr t25 $IN mcp-runtime-ca '["digital signature","client auth"]' "$TRAEFIK" '')"
 
   step "Certificate resources, as the operator creates them"
   check "T17 gateway server certificate is issued"              Ready    "$(cert gw mcp-runtime-ca 'cully, cully.mcp-servers, cully.mcp-servers.svc, mcp.mcpruntime.org' '' '[digital signature, key encipherment, server auth]')"
