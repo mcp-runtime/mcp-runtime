@@ -642,6 +642,13 @@ identity. Certificate identity requires an `https` runtime URL.
 
 See [Agent adapters](connect-clients.md#enterprise-mtls-and-spiffe) for gateway and Traefik certificate setup.
 
+On macOS, `adapter profile` and `adapter service` manage the per-user
+background adapter daemon. This CLI preview does not yet ship the planned
+native Dock app or signed/notarized distribution; desktop sleep/wake,
+two-profile isolation and full lifecycle acceptance remain open. See the
+[macOS service guide](connect-clients.md#macos-background-adapter-service-cli-preview)
+for profile authorization, client configuration and credential handling.
+
 ## agent
 
 Create and manage immutable, team-scoped agent identities used by access grants
@@ -668,6 +675,16 @@ team. The API rejects unknown, malformed, inactive, and wrong-team agent IDs.
 
 ## team
 
+For account-wide cleanup, `mcp-runtime user deactivate <user-id> --yes --json`
+permanently disables a platform account and returns non-secret committed cleanup
+counts. This administrator-only command removes memberships and revokes stored
+API keys, registry credentials, refresh tokens and human MCP sessions, retaining
+audit history and the identity tombstone. Repeating cleanup is idempotent.
+The signed-in administrator, last active administrator and sole active team
+owners are protected; transfer authority first. This differs from membership-only
+`team user remove`. See [Teams and access](teams-and-access.md) for the disposable
+test-identity workflow and gateway sync/registry bearer expiry limits.
+
 Platform admins create teams. A team owner can add users to their own team
 or update their team role.
 
@@ -679,18 +696,26 @@ MCP_PLATFORM_API_PROFILE=admin mcp-runtime team list
 MCP_PLATFORM_API_PROFILE=admin mcp-runtime team create acme --name "Acme Corp"
 
 MCP_PLATFORM_API_PROFILE=admin mcp-runtime team user create acme \
-  --email alice@acme.com --password '...' --role owner
+  --email alice@acme.com --role owner
 
 # Add an existing platform user to a team or update their team role. Use their
 # immutable user ID; their password stays unchanged.
 MCP_PLATFORM_API_PROFILE=admin mcp-runtime team user add acme <user-id> --role member
 
+MCP_PLATFORM_API_PROFILE=admin mcp-runtime team user remove acme <user-id>
+
 MCP_PLATFORM_API_PROFILE=admin mcp-runtime team user list acme
 ```
 
-A saved login token keeps the membership from the moment it was issued. Run
-`mcp-runtime auth login` again before `server build`, `server push`, or
-`server deploy` for that team.
+`team user create` prompts twice for a hidden password. For automation, pass it
+through stdin with `--password-stdin`; the command line does not accept a
+password value. Removing a team's only owner requires `--confirm-last-owner`.
+Membership removal does not delete the platform account or revoke account-wide
+API keys and sessions.
+
+After validating a saved login token, the APIs resolve current account and
+membership state. Role and membership changes take effect on the next request;
+directory outages deny access rather than relying on stale token claims.
 
 Team users log in with:
 

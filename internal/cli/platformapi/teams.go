@@ -240,6 +240,23 @@ func (c *PlatformClient) UpsertTeamMember(ctx context.Context, slug, userID, rol
 	return out.Membership, nil
 }
 
+func (c *PlatformClient) DeleteTeamMember(ctx context.Context, slug, userID string) error {
+	rel := "/runtime/teams/" + url.PathEscape(strings.TrimSpace(slug)) + "/members/" + url.PathEscape(strings.TrimSpace(userID))
+	resp, err := c.do(ctx, http.MethodDelete, rel, "", nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, err := readBody(resp.Body)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return httpAPIError(resp.StatusCode, body)
+	}
+	return nil
+}
+
 func (c *PlatformClient) ListNamespaces(ctx context.Context) ([]namespaceListItem, error) {
 	resp, err := c.do(ctx, http.MethodGet, "/runtime/namespaces", "", nil)
 	if err != nil {

@@ -893,7 +893,7 @@ MCP_PLATFORM_API_URL=https://platform.mcpruntime.org MCP_PLATFORM_API_TOKEN="$AD
   ./bin/mcp-runtime team create myteam --name "My Team"
 MCP_PLATFORM_API_URL=https://platform.mcpruntime.org MCP_PLATFORM_API_TOKEN="$ADMIN_KEY" \
   ./bin/mcp-runtime team user create myteam \
-  --email member@example.com --password 'YourPassword123!' --role member
+  --email member@example.com --role member
 
 # Team member: login, build, push, deploy from metadata
 MCP_PLATFORM_API_URL=https://platform.mcpruntime.org \

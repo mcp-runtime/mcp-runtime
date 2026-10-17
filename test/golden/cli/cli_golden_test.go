@@ -25,6 +25,8 @@ func TestCLIHelpGoldens(t *testing.T) {
 		golden string
 	}{
 		{name: "root_help", args: []string{"--help"}, golden: "mcp-runtime_help.golden"},
+		{name: "user_help", args: []string{"user", "--help"}, golden: "mcp-runtime_user_help.golden"},
+		{name: "user_deactivate_help", args: []string{"user", "deactivate", "--help"}, golden: "mcp-runtime_user_deactivate_help.golden"},
 		{name: "access_help", args: []string{"access", "--help"}, golden: "mcp-runtime_access_help.golden"},
 		{name: "access_grant_help", args: []string{"access", "grant", "--help"}, golden: "mcp-runtime_access_grant_help.golden"},
 		{name: "access_grant_revoke_sessions_help", args: []string{"access", "grant", "revoke-sessions", "--help"}, golden: "mcp-runtime_access_grant_revoke_sessions_help.golden"},
@@ -42,6 +44,8 @@ func TestCLIHelpGoldens(t *testing.T) {
 		{name: "adapter_help", args: []string{"adapter", "--help"}, golden: "mcp-runtime_adapter_help.golden"},
 		{name: "adapter_enroll_help", args: []string{"adapter", "enroll", "--help"}, golden: "mcp-runtime_adapter_enroll_help.golden"},
 		{name: "adapter_proxy_help", args: []string{"adapter", "proxy", "--help"}, golden: "mcp-runtime_adapter_proxy_help.golden"},
+		{name: "adapter_service_help", args: []string{"adapter", "service", "--help"}, golden: "mcp-runtime_adapter_service_help.golden"},
+		{name: "adapter_profile_help", args: []string{"adapter", "profile", "--help"}, golden: "mcp-runtime_adapter_profile_help.golden"},
 		{name: "auth_help", args: []string{"auth", "--help"}, golden: "mcp-runtime_auth_help.golden"},
 		{name: "auth_login_help", args: []string{"auth", "login", "--help"}, golden: "mcp-runtime_auth_login_help.golden"},
 		{name: "auth_logout_help", args: []string{"auth", "logout", "--help"}, golden: "mcp-runtime_auth_logout_help.golden"},
@@ -49,6 +53,10 @@ func TestCLIHelpGoldens(t *testing.T) {
 		{name: "catalog_help", args: []string{"catalog", "--help"}, golden: "mcp-runtime_catalog_help.golden"},
 		{name: "catalog_tools_help", args: []string{"catalog", "tools", "--help"}, golden: "mcp-runtime_catalog_tools_help.golden"},
 		{name: "catalog_tool_help", args: []string{"catalog", "tool", "--help"}, golden: "mcp-runtime_catalog_tool_help.golden"},
+		{name: "team_help", args: []string{"team", "--help"}, golden: "mcp-runtime_team_help.golden"},
+		{name: "team_user_help", args: []string{"team", "user", "--help"}, golden: "mcp-runtime_team_user_help.golden"},
+		{name: "team_user_create_help", args: []string{"team", "user", "create", "--help"}, golden: "mcp-runtime_team_user_create_help.golden"},
+		{name: "team_user_remove_help", args: []string{"team", "user", "remove", "--help"}, golden: "mcp-runtime_team_user_remove_help.golden"},
 		{name: "status_help", args: []string{"status", "--help"}, golden: "mcp-runtime_status_help.golden"},
 		{name: "ops_help", args: []string{"ops", "--help"}, golden: "mcp-runtime_ops_help.golden"},
 		{name: "ops_logs_help", args: []string{"ops", "logs", "--help"}, golden: "mcp-runtime_ops_logs_help.golden"},

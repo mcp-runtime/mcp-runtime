@@ -523,8 +523,11 @@ mcp-runtime team create first-team
 # Add an existing account using its user ID:
 mcp-runtime team user add first-team <user-id> --role owner
 # Or create a new account and membership together:
-mcp-runtime team user create first-team --email <email> --password <password> --role owner
+mcp-runtime team user create first-team --email <email> --role owner
 ```
+
+The create command prompts for a hidden password twice. Use `--password-stdin`
+to provide it through stdin in non-interactive workflows.
 
 Then sign in as that team member before publishing or deploying. The Teams UI
 also supports **Add existing user**. Membership changes preserve an existing

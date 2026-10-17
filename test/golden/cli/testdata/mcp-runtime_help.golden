@@ -24,6 +24,7 @@ Available Commands:
   status      Show platform status
   team        Manage internal platform teams
   update      Update installed platform services to a release
+  user        Manage platform accounts as an administrator
 
 Flags:
       --debug     Enable debug mode with structured error logging

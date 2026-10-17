@@ -162,6 +162,9 @@ func (s *Store) PutSession(ctx context.Context, item sessionstate.Session) (sess
 	if retired {
 		return sessionstate.Session{}, sessionstate.ErrConflict
 	}
+	if err = checkSessionHuman(ctx, tx, item); err != nil {
+		return sessionstate.Session{}, err
+	}
 	if item.Binding.AgentID != "" {
 		if err = checkSessionAgent(ctx, tx, item); err != nil {
 			return sessionstate.Session{}, err
@@ -229,6 +232,7 @@ func sessionFilter(filter sessionstate.Filter) (string, []any) {
 	add("server_name", filter.ServerName)
 	add("server_uid", filter.ServerUID)
 	add("agent_id", filter.AgentID)
+	add("data->'binding'->>'human_id'", filter.HumanID)
 	add("grant_namespace", filter.GrantNamespace)
 	add("grant_name", filter.GrantName)
 	if filter.After != "" {
@@ -296,6 +300,9 @@ func (s *Store) SetSessionRevoked(ctx context.Context, namespace, name string, r
 		}
 		if retired {
 			return sessionstate.ErrConflict
+		}
+		if err = checkSessionHuman(ctx, tx, item); err != nil {
+			return err
 		}
 		if item.Binding.AgentID != "" {
 			if err = checkSessionAgent(ctx, tx, item); err != nil {

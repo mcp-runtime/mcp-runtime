@@ -75,6 +75,8 @@ func storeError(w http.ResponseWriter, err error) {
 		fail(w, 409, "session identity conflicts, was deleted, or belongs to a retired server; create a new session name")
 	case errors.Is(err, sessionstate.ErrInactiveAgent):
 		fail(w, 403, "session agent is not active in the subject team")
+	case errors.Is(err, sessionstate.ErrInactiveHuman):
+		fail(w, 403, "session human account is inactive")
 	default:
 		fail(w, 503, "session store unavailable")
 	}
