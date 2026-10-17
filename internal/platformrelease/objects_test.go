@@ -41,6 +41,28 @@ subjects:
 	}
 }
 
+func TestParsePlatformObjectsLimitsNetworkPolicies(t *testing.T) {
+	bundle, err := BundlePlatformObjects("../../k8s", []string{"NetworkPolicy/mcp-observability/kafka-client-ingress"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ParsePlatformObjects(bundle); err != nil {
+		t.Fatal(err)
+	}
+	for name, invalid := range map[string]string{
+		"foreign namespace": strings.ReplaceAll(bundle, "mcp-observability", "team-a"),
+		"unknown policy":    strings.ReplaceAll(bundle, "kafka-client-ingress", "arbitrary-policy"),
+		"unknown api":       strings.ReplaceAll(bundle, "networking.k8s.io/v1", "networking.k8s.io/v9"),
+		"missing direction": strings.ReplaceAll(bundle, "policyTypes:", "ignoredTypes:"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := ParsePlatformObjects(invalid); err == nil {
+				t.Fatal("unsafe network change accepted")
+			}
+		})
+	}
+}
+
 func TestParsePlatformObjectsRejectsUnsafeRequests(t *testing.T) {
 	binding := func(refName, subject string) string {
 		return goodRole + `

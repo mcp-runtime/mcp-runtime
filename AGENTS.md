@@ -159,7 +159,7 @@ deployment and this section is updated.
   backfill frameworks, or in-place upgrade paths just to support earlier
   releases of our own platform.
 - Ordinary releases are delivered with `mcp-runtime update` (images, CRDs and the
-  ServiceAccounts, RBAC, ConfigMaps and Deployment wiring a release declares in
+  ServiceAccounts, RBAC, supported platform NetworkPolicies, ConfigMaps and Deployment wiring a release declares in
   `config/release/wiring.yaml`). A breaking reset follows **backup → fresh setup
   → restore required data → verify** on the reference platform. Document that
   procedure instead of designing a general customer migration system.
