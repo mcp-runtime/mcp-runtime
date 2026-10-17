@@ -381,7 +381,7 @@ ensure_team_user() {
   else
     echo "creating team user ${email} in ${slug} as ${role}"
   fi
-  run_as "$ADMIN_PROFILE" team user create "$slug" --username "$email" --password "$password" --role "$role"
+  printf '%s\n' "$password" | run_as "$ADMIN_PROFILE" team user create "$slug" --username "$email" --password-stdin --role "$role"
 }
 
 init_metadata() {
