@@ -342,6 +342,7 @@ func TestClusterManager_ConfigureKubeconfig(t *testing.T) {
 	t.Run("uses default kubeconfig when empty path provided", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		t.Setenv("HOME", tmpDir)
+		t.Setenv("KUBECONFIG", "")
 		defaultPath := filepath.Join(tmpDir, ".kube", "config")
 		if err := os.MkdirAll(filepath.Dir(defaultPath), 0755); err != nil {
 			t.Fatalf("failed to create .kube dir: %v", err)
@@ -1314,6 +1315,7 @@ func TestConfigureKubeconfigFromProviderGKE(t *testing.T) {
 func TestResolveKubeconfigPath(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", tmpDir)
+	t.Setenv("KUBECONFIG", "")
 	defaultPath := filepath.Join(tmpDir, ".kube", "config")
 	const k3sPath = "/etc/rancher/k3s/k3s.yaml"
 
@@ -1382,6 +1384,89 @@ func TestResolveKubeconfigPath(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			if path != tt.want {
+				t.Fatalf("expected %q, got %q", tt.want, path)
+			}
+			if !slices.Equal(probes, tt.wantProbes) {
+				t.Fatalf("expected file probes %q, got %q", tt.wantProbes, probes)
+			}
+		})
+	}
+}
+
+func TestResolveKubeconfigPathExplicitEnv(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	defaultPath := filepath.Join(tmpDir, ".kube", "config")
+	envPath := filepath.Join(tmpDir, "env-kubeconfig")
+	listValue := envPath + string(os.PathListSeparator) + defaultPath
+
+	tests := []struct {
+		name       string
+		provided   string
+		env        string
+		statErr    map[string]error
+		want       string
+		wantErr    []string
+		wantProbes []string
+	}{
+		{
+			name:     "flag beats env without probing",
+			provided: "/flag/path",
+			env:      envPath,
+			want:     "/flag/path",
+		},
+		{
+			name:       "env honored before default discovery",
+			env:        envPath,
+			want:       envPath,
+			wantProbes: []string{envPath},
+		},
+		{
+			name:       "missing env path is an error and does not fall through",
+			env:        envPath,
+			statErr:    map[string]error{envPath: os.ErrNotExist},
+			wantErr:    []string{"KUBECONFIG", envPath},
+			wantProbes: []string{envPath},
+		},
+		{
+			name:       "unreadable env path is an error and does not fall through",
+			env:        envPath,
+			statErr:    map[string]error{envPath: os.ErrPermission},
+			wantErr:    []string{"KUBECONFIG", envPath},
+			wantProbes: []string{envPath},
+		},
+		{
+			name:    "env path list is rejected without probing",
+			env:     listValue,
+			wantErr: []string{"KUBECONFIG", "single", "--kubeconfig"},
+		},
+		{
+			name:       "empty env uses default discovery",
+			want:       defaultPath,
+			wantProbes: []string{defaultPath},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("KUBECONFIG", tt.env)
+			var probes []string
+			stat := func(path string) (os.FileInfo, error) {
+				probes = append(probes, path)
+				return nil, tt.statErr[path]
+			}
+			path, err := resolveKubeconfigPathWithStat(tt.provided, stat)
+			if len(tt.wantErr) > 0 {
+				if err == nil {
+					t.Fatalf("expected error, got path %q", path)
+				}
+				for _, sub := range tt.wantErr {
+					if !strings.Contains(err.Error(), sub) {
+						t.Fatalf("expected error to contain %q, got: %v", sub, err)
+					}
+				}
+			} else if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			} else if path != tt.want {
 				t.Fatalf("expected %q, got %q", tt.want, path)
 			}
 			if !slices.Equal(probes, tt.wantProbes) {

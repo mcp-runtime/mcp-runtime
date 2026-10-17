@@ -30,7 +30,7 @@ func NewWithManager(mgr *ClusterManager) *cobra.Command {
 			return mgr.InitCluster(kubeconfig, context)
 		},
 	}
-	initCmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "Path to kubeconfig file (default: ~/.kube/config; auto-detects /etc/rancher/k3s/k3s.yaml on k3s hosts)")
+	initCmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "Path to kubeconfig file (default: single-file $KUBECONFIG, else ~/.kube/config; auto-detects /etc/rancher/k3s/k3s.yaml on k3s hosts)")
 	initCmd.Flags().StringVar(&context, "context", "", "Kubernetes context to use")
 
 	statusCmd := &cobra.Command{
@@ -74,7 +74,7 @@ func NewWithManager(mgr *ClusterManager) *cobra.Command {
 	configCmd.Flags().StringVar(&ingressMode, "ingress", "traefik", "Ingress controller to install (traefik|none)")
 	configCmd.Flags().StringVar(&ingressManifest, "ingress-manifest", "config/ingress/overlays/prod", "Manifest to apply when installing the ingress controller")
 	configCmd.Flags().BoolVar(&forceIngressInstall, "force-ingress-install", false, "Force repo-managed ingress install when only an IngressClass exists; refuses active external Traefik")
-	configCmd.Flags().StringVar(&configKubeconfig, "kubeconfig", "", "Path to kubeconfig file (default: ~/.kube/config; auto-detects /etc/rancher/k3s/k3s.yaml on k3s hosts)")
+	configCmd.Flags().StringVar(&configKubeconfig, "kubeconfig", "", "Path to kubeconfig file (default: single-file $KUBECONFIG, else ~/.kube/config; auto-detects /etc/rancher/k3s/k3s.yaml on k3s hosts)")
 	configCmd.Flags().StringVar(&configContext, "context", "", "Kubernetes context to use")
 	configCmd.Flags().StringVar(&provider, "provider", "", "Cloud provider for kubeconfig (eks; aks/gke planned)")
 	configCmd.Flags().StringVar(&region, "region", "us-west-1", "Region for cloud provider kubeconfig")
