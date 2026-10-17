@@ -42,6 +42,32 @@ expect_eq() {
   if [[ "$2" == "$3" ]]; then pass "$1"; else failed "$1: got '$2', want '$3'"; fi
 }
 
+identity_diagnostic_case() (
+  local fixture_exit="$1" fixture_message="$2"
+  BIN=identity_fixture_cli
+  identity_fixture_cli() {
+    [[ "$*" == 'cluster identity status --server mcp-servers/fixture' ]] || return 97
+    printf '%s\n' "${fixture_message}" 'Remedy: reconcile workload trust'
+    return "${fixture_exit}"
+  }
+  staging_identity_expect_failure mcp-servers/fixture 'workload CA expires within 30 days' "${TMP}/identity-output"
+)
+identity_cleanup_case() (
+  local cleanup_status="$1" original_status="$2"
+  cleanup_identity_probe() { return "${cleanup_status}"; }
+  trap 'staging_identity_finish "$?"' EXIT
+  exit "${original_status}"
+)
+expect_ok 'identity cleanup retains successful acceptance' identity_cleanup_case 0 0
+expect_fail 'identity cleanup failure fails otherwise successful acceptance' identity_cleanup_case 1 0
+expect_fail 'identity successful cleanup preserves original diagnostic failure' identity_cleanup_case 0 2
+expect_ok 'identity diagnostic requires nonzero status and exact public reason' identity_diagnostic_case 1 'workload CA expires within 30 days'
+expect_fail 'identity diagnostic rejects a zero exit despite warning text' identity_diagnostic_case 0 'workload CA expires within 30 days'
+expect_fail 'identity diagnostic rejects an unrelated failure' identity_diagnostic_case 1 'connection refused'
+expect_fail 'identity diagnostic rejects private key output' identity_diagnostic_case 1 $'workload CA expires within 30 days\n-----BEGIN EC PRIVATE KEY-----'
+expect_fail 'identity diagnostic rejects unused Secret field output' identity_diagnostic_case 1 $'workload CA expires within 30 days\ne2e-private-field-sentinel'
+expect_fail 'identity diagnostic rejects full certificate output' identity_diagnostic_case 1 $'workload CA expires within 30 days\n-----BEGIN CERTIFICATE-----'
+
 registry_token_case() (
   WORK_DIR="${TMP}"
   PLATFORM_URL=https://platform.e2e.mcpruntime.org

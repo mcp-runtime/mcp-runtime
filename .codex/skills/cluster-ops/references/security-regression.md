@@ -12,6 +12,15 @@ bash hack/qa/security-regression.sh
 Use this reference for adapter-bound suites (B/C/D), judgment, or when the
 script is blocked.
 
+Staging's `identity-diagnostics` stage exercises the supported read-only
+`cluster identity status` command against a healthy managed route, a foreign
+issuer/root bundle and a CA within its 30-day expiry warning window. Its unique
+diagnostic Secret/`.invalid` route are explicit test fixtures; active issuer,
+root, TLSOption and operator/API configuration are never changed. The stage
+requires the disposable marker and an explicitly selected local k3s API. Only
+public diagnostic output is retained; fixture private keys stay outside artifacts
+and are removed on exit. A skipped stage is not negative PKI acceptance.
+
 ## Overview
 
 `security-audit` and `security-audit` are **static** reviews — diff,

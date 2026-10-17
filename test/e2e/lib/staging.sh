@@ -36,6 +36,8 @@ STAGING_SKIP_RC=77
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/adapter-certificates.sh"
 # shellcheck source=staging-grant-monitor.sh
 source "$(dirname "${BASH_SOURCE[0]}")/staging-grant-monitor.sh"
+# shellcheck source=staging-identity-diagnostics.sh
+source "$(dirname "${BASH_SOURCE[0]}")/staging-identity-diagnostics.sh"
 
 staging_log() { printf '[%s] %s\n' "${STAGING_LOG_PREFIX}" "$*"; }
 staging_warn() { printf '[%s] WARNING: %s\n' "${STAGING_LOG_PREFIX}" "$*" >&2; }
@@ -2085,6 +2087,7 @@ staging_run_platform_stages() {
   staging_run_stage oidc soft "mcp-auth discovery/JWKS or the Keycloak issuer is unreachable" staging_check_oidc
   staging_run_stage multitenancy soft "a tenant build/push/deploy, grant, adapter call, or event check failed; read multitenancy.log from the bottom" staging_check_multitenancy
   staging_run_stage adapter-enrollment soft "adapter HTTPS certificate enrollment failed: setup did not pass MCP_ADAPTER_CERTIFICATES/MCP_TRUST_DOMAIN/MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE to the operator, the cert-only IngressRoute/TLSOption/gateway certificate never converged (adapter-enrollment/operator.log, traefik-crs.yaml, certificates-describe.txt), the CertificateRequest was not signed or the session not owned (adapter-enrollment/runtime-api.log), the gateway rejected the SPIFFE identity, or (when E2E_MCP_OAUTH_ACCESS_TOKEN is set) the OAuth+cert cell failed" staging_check_adapter_enrollment
+  staging_run_stage identity-diagnostics soft "read-only workload identity diagnostics accepted an untrusted/expiring fixture root or exposed Secret material" staging_check_identity_diagnostics
   staging_run_stage governance soft "a grant/session deny path allowed traffic, or a granted agent was refused" staging_check_governance
   staging_run_stage grant-monitor soft "monitor/enforce CLI mode switching, identity denial, or trace-correlated would-deny audit failed" staging_check_grant_monitor
   staging_run_stage analytics soft "events did not reach the analytics API/ClickHouse (ingest -> kafka -> processor path)" staging_check_analytics
