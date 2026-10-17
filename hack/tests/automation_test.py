@@ -53,6 +53,7 @@ args=sys.argv[1:]
 with open(os.environ['COMMAND_LOG'],'a') as f:f.write(json.dumps(args)+'\\n')
 if 'current-context' in args: print(os.environ.get('FAKE_CONTEXT','kind-test'))
 elif 'nodes' in args: print(json.dumps({'items':[{'spec':{'providerID':os.environ.get('FAKE_PROVIDER','kind://docker/node')}}]}))
+elif 'deployments' in args and '-A' in args: print(json.dumps({'items':[]}))
 elif 'kube-system' in args: print(os.environ['FAKE_CLUSTER_UID'])
 elif 'mcp-auth-server' in args:
  if os.environ.get('FAKE_AUTH_READ_ERROR'): sys.exit(2)
@@ -211,9 +212,10 @@ assert 'explicit-kubeconfig' not in str(p)
 
     def test_missing_selected_perf_endpoint_fails(self):
         self.env.update(SCENARIOS='S3', BASE_URL='http://127.0.0.1:1', PERF_OUT_DIR=str(self.path / 'perf'),
-                        PERF_BASELINE_DIR=str(self.path / 'baseline'))
+                        PERF_BASELINE_DIR=str(self.path / 'baseline'), PERF_API_KEY='synthetic-test-key')
         result = self.run_script('hack/qa/perf-regression.sh')
         self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Connection refused', result.stderr)
         self.assertFalse((self.path / 'baseline/S3.json').exists())
 
     def test_unknown_perf_scenario_fails(self):

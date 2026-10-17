@@ -16,6 +16,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Added
 
+- Contributor performance checks add policy/rule, platform bearer, session/certificate and TLS microbenchmarks, plus bounded Kind-only gateway/direct overhead, concurrency plateau and exact-trace audit visibility measurements. Baselines require matching environment/traffic fingerprints; analytics scenarios now require an explicit admin test API key via `PERF_API_KEY`. Recorded live baselines and historical proxy comparisons remain pending ([#692](https://github.com/mcp-runtime/mcp-runtime/issues/692)).
+
 - Admin sizing dashboards and E2E reports collect authenticated kubelet node/container CPU, working memory, filesystem, network and driver-reported volume history, alongside separate requests/PVC reservations and collection overhead. Existing installs require supported setup refresh for public serving trust and the projected scrape token; missing volume statistics remain explicit and retain local sampling fallback ([#680](https://github.com/mcp-runtime/mcp-runtime/issues/680)).
 
 - The account menu links to My workspace, with actual team memberships, authorized management links, visible versus manageable servers, personal access and clearly scoped activity. Administrators have a separate Platform overview with complete directory totals, server failures, health and audit links; deployment attribution remains explicitly unavailable for historical servers ([#542](https://github.com/mcp-runtime/mcp-runtime/issues/542)).
@@ -44,6 +46,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Fixed
 
+- Production workload identity requires a ready, dedicated enterprise issuer and rejects the shared bundled registry CA, aliased/copied signing keys, and unhealthy CA-backed issuers before TLS provisioning. Migrate by preserving registry trust and selecting an independently managed workload issuer; the bundled workload root remains available in test mode ([#535](https://github.com/mcp-runtime/mcp-runtime/issues/535)).
+- Gateways reload mounted client-CA trust during workload-root rollover, including overlapping roots and removal of retired roots from resumed TLS handshakes. Invalid replacement bundles retain the last validated trust state ([#535](https://github.com/mcp-runtime/mcp-runtime/issues/535)).
 - CLI access manifest submission validates grant and session input through the same canonical rules as the runtime API before making a request, preserving existing admission and historical-session contracts ([#268](https://github.com/mcp-runtime/mcp-runtime/issues/268)).
 
 - Recent workspace activity stays in a labelled, keyboard-focusable scroll region on narrow screens instead of widening the page. Disposable Staging now checks member, owner and administrator workspace journeys in headless Chromium before teardown ([#542](https://github.com/mcp-runtime/mcp-runtime/issues/542)).
