@@ -11,7 +11,7 @@ COPY services/processor/*.go ./services/processor/
 ARG TARGETOS
 ARG TARGETARCH
 RUN cd services/processor && \
-    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /out/processor .
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" -o /out/processor .
 
 FROM gcr.io/distroless/base-debian12
 WORKDIR /app
