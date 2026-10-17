@@ -45,6 +45,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 - Operator policy reconciliation looks up grants by their effective target server using a cache index, avoiding copies and scans of unrelated grants while preserving cross-namespace references. Runtime sessions remain platform-owned ([#657](https://github.com/mcp-runtime/mcp-runtime/issues/657)).
 
+- `server init --from-server` and `server validate --from-server` now discover tools with MCP 2026-07-28 when the server advertises it, and fall back to the MCP 2025-11-25 initialize handshake only on an unrecognized HTTP 400 response. Modern protocol errors remain visible instead of triggering a silent downgrade ([#662](https://github.com/mcp-runtime/mcp-runtime/issues/662)).
+
 ### Fixed
 
 - Production workload identity requires a ready, dedicated enterprise issuer and rejects the shared bundled registry CA, aliased/copied signing keys, and unhealthy CA-backed issuers before TLS provisioning. Migrate by preserving registry trust and selecting an independently managed workload issuer; the bundled workload root remains available in test mode ([#535](https://github.com/mcp-runtime/mcp-runtime/issues/535)).
