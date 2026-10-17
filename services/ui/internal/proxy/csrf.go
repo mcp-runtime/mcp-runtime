@@ -1,10 +1,12 @@
-package main
+package proxy
 
 import (
 	"crypto/hmac"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"mcp-ui/internal/session"
 )
 
 // CSRF protection for the cookie-backed UI session proxy.
@@ -22,7 +24,7 @@ import (
 // token is handed to same-origin JavaScript in the /auth/login and /auth/status
 // bodies; the same-origin policy is what keeps a cross-origin page from reading
 // it.
-const csrfHeaderName = "X-CSRF-Token"
+const CSRFHeaderName = "X-CSRF-Token"
 
 // unsafeHTTPMethod reports whether a method may change server state and so
 // requires CSRF verification. Anything not explicitly known to be safe is
@@ -39,7 +41,7 @@ func unsafeHTTPMethod(method string) bool {
 // csrfTokenValid compares the presented token against the session token in
 // constant time. An empty session token can never be satisfied, so a session
 // minted before CSRF existed cannot be used to mutate state.
-func csrfTokenValid(sess uiSession, presented string) bool {
+func csrfTokenValid(sess session.Session, presented string) bool {
 	expected := strings.TrimSpace(sess.CSRFToken)
 	if expected == "" {
 		return false
@@ -71,14 +73,14 @@ func sameOriginRequest(r *http.Request) bool {
 // verifyCSRF returns the HTTP status to reject with, or 0 when the request may
 // proceed. Ordering matters: origin is cheap and unambiguous, so it is checked
 // before the token comparison.
-func verifyCSRF(r *http.Request, sess uiSession) int {
+func verifyCSRF(r *http.Request, sess session.Session) int {
 	if !unsafeHTTPMethod(r.Method) {
 		return 0
 	}
 	if !sameOriginRequest(r) {
 		return http.StatusForbidden
 	}
-	if !csrfTokenValid(sess, r.Header.Get(csrfHeaderName)) {
+	if !csrfTokenValid(sess, r.Header.Get(CSRFHeaderName)) {
 		return http.StatusForbidden
 	}
 	return 0
