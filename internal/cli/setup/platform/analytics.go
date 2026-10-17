@@ -1211,6 +1211,9 @@ func renderAnalyticsConfigManifestWithReaders(content, platformMode string, imag
 		}
 		out.Write(rendered)
 	}
+	if core.DefaultCLIConfig.InternalAnalyticsTLS {
+		return renderAnalyticsTransportManifest(out.String())
+	}
 	return out.String(), nil
 }
 

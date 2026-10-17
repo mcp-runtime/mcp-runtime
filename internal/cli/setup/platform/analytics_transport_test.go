@@ -21,6 +21,7 @@ import (
 	kubernetesfake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 
+	"mcp-runtime/internal/cli/core"
 	"mcp-runtime/pkg/k8sclient"
 )
 
@@ -150,6 +151,25 @@ func TestAnalyticsTLSUsesVerifiedClientsAndSecureClickHousePorts(t *testing.T) {
 	data, _, _ := unstructured.NestedStringMap(transportObjects(t, config)["ConfigMap/mcp-shared-config"].Object, "data")
 	if data["CLICKHOUSE_TLS_ENABLED"] != "true" || !strings.HasSuffix(data["CLICKHOUSE_ADDR"], ":9440") || !strings.HasPrefix(data["MCP_ANALYTICS_INGEST_URL"], "https://") {
 		t.Fatalf("clients lost secure transport settings: %v", data)
+	}
+}
+
+func TestAnalyticsTLSSetupConfigEntryPointUsesSecureEndpoints(t *testing.T) {
+	previous := core.DefaultCLIConfig.InternalAnalyticsTLS
+	core.DefaultCLIConfig.InternalAnalyticsTLS = true
+	t.Cleanup(func() { core.DefaultCLIConfig.InternalAnalyticsTLS = previous })
+	rendered, err := renderAnalyticsConfigManifestWithReaders(transportManifest(t, "k8s/01-config.yaml"), "org", AnalyticsImageSet{}, func(string, string) (map[string]string, error) { return nil, nil }, func() string { return "traefik" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, object := range transportObjects(t, rendered) {
+		if object.GetKind() != "ConfigMap" || object.GetName() != "mcp-shared-config" {
+			continue
+		}
+		data, _, _ := unstructured.NestedStringMap(object.Object, "data")
+		if data["CLICKHOUSE_TLS_ENABLED"] != "true" || data["KAFKA_TLS_ENABLED"] != "true" || !strings.HasSuffix(data["CLICKHOUSE_ADDR"], ":9440") || !strings.HasPrefix(data["MCP_ANALYTICS_INGEST_URL"], "https://") {
+			t.Fatalf("setup config entrypoint left plaintext endpoints in %s: %v", name, data)
+		}
 	}
 }
 

@@ -105,7 +105,7 @@ func renderAnalyticsTransportManifest(content string) (string, error) {
 		result.WriteByte('\n')
 	}
 	if ingestNamespace != "" && !hasIngestTransport {
-		transport := map[string]any{"apiVersion": "traefik.io/v1alpha1", "kind": "ServersTransport", "metadata": map[string]any{"name": "mcp-analytics-ingest", "namespace": ingestNamespace}, "spec": map[string]any{"serverName": "mcp-ingest." + ingestNamespace + ".svc.cluster.local", "rootCAsSecrets": []string{"mcp-analytics-ingest"}}}
+		transport := map[string]any{"apiVersion": "traefik.io/v1alpha1", "kind": "ServersTransport", "metadata": map[string]any{"name": "mcp-analytics-ingest", "namespace": ingestNamespace}, "spec": map[string]any{"serverName": clusterServiceDNS("mcp-ingest", ingestNamespace), "rootCAsSecrets": []string{"mcp-analytics-ingest"}}}
 		data, err := json.Marshal(transport)
 		if err != nil {
 			return "", err
