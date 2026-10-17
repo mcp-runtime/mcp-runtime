@@ -228,6 +228,14 @@ func TestAnalyticsPKIPreservesSigningRootAndPublishesOnlyPublicMaterial(t *testi
 	}
 }
 
+func TestAnalyticsTLSClientCertificatesHaveSANWithoutCommonName(t *testing.T) {
+	for _, certificate := range analyticsTransportCertificates() {
+		if certificate.client && len(certificate.dns) == 0 {
+			t.Fatalf("Java TLS client certificate %s has neither subject nor SAN", certificate.name)
+		}
+	}
+}
+
 func TestAnalyticsPKICannotReplaceMissingOrUnhealthyExistingRoot(t *testing.T) {
 	for _, name := range []string{"missing", "expired", "near-expiry", "mismatched-key"} {
 		t.Run(name, func(t *testing.T) {

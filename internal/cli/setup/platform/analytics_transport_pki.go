@@ -180,9 +180,11 @@ func analyticsTransportCertificates() []analyticsCertificate {
 		{name: "mcp-analytics-kafka", dns: []string{"kafka", "kafka." + ns, "kafka." + ns + ".svc", clusterServiceDNS("kafka", ns), "*.kafka-headless." + ns + ".svc", "*." + clusterServiceDNS("kafka-headless", ns)}, client: true, server: true, pkcs12: true},
 		{name: "mcp-analytics-clickhouse", dns: []string{"clickhouse", "clickhouse." + ns, "clickhouse." + ns + ".svc", clusterServiceDNS("clickhouse", ns)}, server: true},
 		{name: "mcp-analytics-ingest", dns: []string{"mcp-ingest", "mcp-ingest." + ns, "mcp-ingest." + ns + ".svc", clusterServiceDNS("mcp-ingest", ns)}, server: true},
-		{name: "mcp-analytics-ingest-kafka", client: true},
-		{name: "mcp-analytics-processor-kafka", client: true},
-		{name: "mcp-analytics-topic-init", client: true, pkcs12: true},
+		// An empty subject needs a SAN for Java's X.509 parser. Keep commonName
+		// absent, as required by the infrastructure approval policy.
+		{name: "mcp-analytics-ingest-kafka", dns: []string{clusterServiceDNS("mcp-ingest", ns)}, client: true},
+		{name: "mcp-analytics-processor-kafka", dns: []string{clusterServiceDNS("mcp-processor", ns)}, client: true},
+		{name: "mcp-analytics-topic-init", dns: []string{clusterServiceDNS("kafka-topic-init", ns)}, client: true, pkcs12: true},
 	}
 }
 
