@@ -260,6 +260,9 @@ func (r *MCPServerReconciler) buildDeploymentContainers(mcpServer *mcpv1alpha1.M
 			}})
 		}
 		if r.analyticsEnabled(mcpServer) {
+			if r.AnalyticsCAConfigMap != "" {
+				volumes = append(volumes, corev1.Volume{Name: "analytics-ca", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: analyticsCAName(mcpServer)}}}})
+			}
 			expiry := analyticsTokenExpirySeconds
 			volumes = append(volumes, corev1.Volume{
 				Name: analyticsTokenVolumeName,
@@ -615,6 +618,9 @@ func (r *MCPServerReconciler) buildGatewayContainer(mcpServer *mcpv1alpha1.MCPSe
 		if ingestURL == "" {
 			ingestURL = strings.TrimSpace(r.DefaultAnalyticsIngestURL)
 		}
+		if r.AnalyticsCAConfigMap != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: "ANALYTICS_TLS_CA_FILE", Value: "/var/run/mcp-runtime/analytics-ca/ca.crt"})
+		}
 		envVars = append(envVars,
 			corev1.EnvVar{Name: "ANALYTICS_INGEST_URL", Value: ingestURL},
 			corev1.EnvVar{Name: "ANALYTICS_SOURCE", Value: source},
@@ -684,6 +690,9 @@ func (r *MCPServerReconciler) buildGatewayContainer(mcpServer *mcpv1alpha1.MCPSe
 		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{Name: "gateway-credential-token", MountPath: "/var/run/mcp-runtime/credential-broker", ReadOnly: true})
 	}
 	if r.analyticsEnabled(mcpServer) {
+		if r.AnalyticsCAConfigMap != "" {
+			container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{Name: "analytics-ca", MountPath: "/var/run/mcp-runtime/analytics-ca", ReadOnly: true})
+		}
 		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
 			Name:      analyticsTokenVolumeName,
 			MountPath: analyticsTokenMountDir,

@@ -79,6 +79,7 @@ func main() {
 		GatewayProxyImage:                gatewayProxyImageFromEnv(os.Getenv),
 		GatewayOTLPEndpoint:              gatewayOTLPEndpointFromEnv(os.Getenv),
 		DefaultAnalyticsIngestURL:        analyticsIngestURLFromEnv(os.Getenv),
+		AnalyticsCAConfigMap:             strings.TrimSpace(os.Getenv("MCP_ANALYTICS_CA_CONFIGMAP")),
 		ClusterName:                      clusterNameFromEnv(os.Getenv),
 		OAuthInternalIssuerURL:           strings.TrimSpace(os.Getenv("OAUTH_INTERNAL_ISSUER_URL")),
 		GatewaySessionSyncURL:            strings.TrimSpace(os.Getenv("MCP_GATEWAY_SESSION_SYNC_URL")),

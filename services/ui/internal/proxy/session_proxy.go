@@ -304,12 +304,17 @@ func (p *SessionProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := client.Do(req)
 	if err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			serviceutil.WriteJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "request_too_large"})
+			return
+		}
 		// #nosec G706 -- path-only telemetry; upstream URL and credentials are omitted.
 		log.Printf("ui session proxy upstream error path=%q", r.URL.Path)
 		serviceutil.WriteJSON(w, http.StatusBadGateway, map[string]string{"error": "upstream_error"})
 		return
 	}
-	copySessionProxyResponse(w, resp)
+	copySessionProxyResponse(w, resp, true)
 }
 
 func sessionUpstreamCredential(sess session.Session) (authHeader, apiKey string, ok bool) {
@@ -326,17 +331,18 @@ func resolveSessionProxyURL(base *url.URL, upstreamPath, rawQuery string) (*url.
 	if base == nil {
 		return nil, errors.New("runtime upstream is empty")
 	}
-	ref, err := url.Parse(upstreamPath)
-	if err != nil {
-		return nil, err
+	if !strings.HasPrefix(upstreamPath, "/") || strings.HasPrefix(upstreamPath, "//") {
+		return nil, errors.New("runtime upstream path must be absolute")
 	}
-	resolved := base.ResolveReference(ref)
-	if resolved.Scheme != base.Scheme || resolved.Host != base.Host {
-		return nil, errors.New("runtime upstream redirected off host")
-	}
+	// upstreamPath is already decoded. Assign it as a path instead of parsing it
+	// as a URL, otherwise a decoded '?' or '#' would split off a query or
+	// fragment and silently truncate the path the allowlist approved.
+	resolved := *base
+	resolved.Path = upstreamPath
+	resolved.RawPath = ""
 	resolved.RawQuery = rawQuery
 	resolved.Fragment = ""
-	return resolved, nil
+	return &resolved, nil
 }
 
 // copySessionProxyOriginHeaders preserves the public origin used by the
@@ -350,16 +356,29 @@ func copySessionProxyOriginHeaders(dst, src *http.Request) {
 	}
 }
 
-func copySessionProxyResponse(w http.ResponseWriter, resp *http.Response) {
+// copySessionProxyResponse relays an upstream response. With noStore, the
+// proxied body is credential-adjacent (API keys, sessions, tenant data), so the
+// upstream's own caching validators are dropped and the response is pinned to
+// no-store rather than appended to whatever the upstream asked for.
+func copySessionProxyResponse(w http.ResponseWriter, resp *http.Response, noStore bool) {
 	defer drainAndClose(resp.Body)
 	dst := w.Header()
 	for key, values := range resp.Header {
 		if skipSessionProxyResponseHeader(key) {
 			continue
 		}
+		if noStore {
+			switch http.CanonicalHeaderKey(key) {
+			case "Cache-Control", "Expires", "Pragma", "Etag", "Last-Modified", "Age":
+				continue
+			}
+		}
 		for _, value := range values {
 			dst.Add(key, value)
 		}
+	}
+	if noStore {
+		dst.Set("Cache-Control", "no-store")
 	}
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
