@@ -29,7 +29,7 @@ func TestMonitorCannotSupplyEnforcingPermissions(t *testing.T) {
 					enforce.ToolRules = []ToolAccess{{Name: "upper", Decision: "deny"}}
 				}
 				doc.Grants = []Grant{enforce, monitor}
-				decision := Authorize(doc, Request{Identity: Identity{HumanID: "human-1", AgentID: "agent-1"}, RPCMethod: "tools/call", ToolName: "upper"}, time.Time{})
+				decision := authorizeMonitorSnapshot(t, doc, Request{Identity: Identity{HumanID: "human-1", AgentID: "agent-1"}, RPCMethod: "tools/call", ToolName: "upper"}, time.Time{})
 				if decision.Allowed || decision.WouldDeny || decision.Reason != reason {
 					t.Fatalf("decision = %#v, want enforcing %s", decision, reason)
 				}
@@ -55,7 +55,7 @@ func TestMonitorObservesRestrictionsIndependentlyOfEnforcingAllow(t *testing.T) 
 				monitor.ToolRules = []ToolAccess{{Name: "upper", Decision: "deny"}}
 			}
 			doc.Grants = append(doc.Grants, monitor)
-			decision := Authorize(doc, Request{Identity: Identity{HumanID: "human-1", AgentID: "agent-1"}, RPCMethod: "tools/call", ToolName: "upper"}, time.Time{})
+			decision := authorizeMonitorSnapshot(t, doc, Request{Identity: Identity{HumanID: "human-1", AgentID: "agent-1"}, RPCMethod: "tools/call", ToolName: "upper"}, time.Time{})
 			if !decision.Allowed || !decision.WouldDeny || decision.WouldDenyReason != reason || decision.MatchedGrant != "grant-1" {
 				t.Fatalf("decision = %#v, want enforcing allow and monitor %s", decision, reason)
 			}
@@ -97,10 +97,26 @@ func TestMonitorPreservesFailClosedGates(t *testing.T) {
 			doc.Grants[0].Mode = "monitor"
 			req := Request{Identity: Identity{HumanID: "human-1", AgentID: "agent-1"}, RPCMethod: "tools/call", ToolName: "upper"}
 			tc.modify(doc, &req)
-			decision := Authorize(doc, req, now)
+			decision := authorizeMonitorSnapshot(t, doc, req, now)
 			if decision.Allowed || decision.WouldDeny || decision.Reason != tc.want {
 				t.Fatalf("decision = %#v, want fail-closed %s", decision, tc.want)
 			}
 		})
 	}
+}
+
+func authorizeMonitorSnapshot(t *testing.T, doc *Document, request Request, now time.Time) Decision {
+	t.Helper()
+	if now.IsZero() {
+		now = time.Now()
+	}
+	linear := Authorize(doc, request, now)
+	compiled, err := Compile(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if indexed := Authorize(compiled, request, now); indexed != linear {
+		t.Fatalf("monitor snapshot changed decision: indexed=%+v linear=%+v", indexed, linear)
+	}
+	return linear
 }

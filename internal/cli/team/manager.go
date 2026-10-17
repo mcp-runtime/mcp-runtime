@@ -139,6 +139,45 @@ func (m *Manager) AddTeamUser(slug, userID, role string) error {
 	return nil
 }
 
+func (m *Manager) RemoveTeamUser(slug, userID string, confirmLastOwner bool) error {
+	slug = strings.TrimSpace(slug)
+	userID = strings.TrimSpace(userID)
+	if slug == "" || userID == "" {
+		return errors.New("team slug and user ID are required")
+	}
+	client, err := platformapi.NewPlatformClient()
+	if err != nil {
+		return err
+	}
+	members, err := client.ListTeamMembers(context.Background(), slug)
+	if err != nil {
+		return err
+	}
+	if isLastTeamOwner(members, userID) && !confirmLastOwner {
+		return errors.New("this user is the team's only owner; rerun with --confirm-last-owner to confirm removal")
+	}
+	if err := client.DeleteTeamMember(context.Background(), slug, userID); err != nil {
+		return err
+	}
+	core.Success(fmt.Sprintf("Removed user %s from team %s", userID, slug))
+	return nil
+}
+
+func isLastTeamOwner(members []platformapi.TeamMembership, userID string) bool {
+	owners := 0
+	targetIsOwner := false
+	for _, member := range members {
+		if member.Role != "owner" {
+			continue
+		}
+		owners++
+		if strings.TrimSpace(member.UserID) == strings.TrimSpace(userID) {
+			targetIsOwner = true
+		}
+	}
+	return targetIsOwner && owners == 1
+}
+
 func (m *Manager) InitTeam(opts InitOptions) error {
 	return core.NewWithBase(
 		nil,

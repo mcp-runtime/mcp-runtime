@@ -43,6 +43,12 @@ QA E2E evidence for the exact commit; add judgment or focused checks where neede
 Scripts compose supported CLI workflows. Shared `hack/lib/` and deployment
 `lib/` files are internal helpers, not independent commands.
 
+Issuer admission changes: run `hack/qa/approval-policy-rehearsal.sh` on its own
+disposable Kind cluster before disabling cert-manager's default approver. The
+rehearsal pins cert-manager v1.21.2, approver-policy v0.28.0 and Kubernetes 1.36.4
+(reviewed 2026-10-17); `docs/connect-clients.md` records upstream sources and
+rollout order. Direct CSR tests do not count as CLI adapter enrollment acceptance.
+
 ## Repository map
 
 | Surface | Source |
@@ -72,6 +78,11 @@ Public paths are validated by `pkg/publicroutes`; see `docs/self-hosting.md` and
 dashboard asset/session and MCP Auth discovery routes when changing prefixes.
 
 ## Product management paths
+
+macOS companion source and packaging live in `desktop/macos/`. The dedicated
+workflow compiles both architectures without launching desktop software.
+Unsigned preview artifacts are distinct from `build.sh --sign` distribution;
+real macOS lifecycle and notarization evidence must be recorded before release.
 
 Use supported CLI and UI workflows for setup, teams/users, registry publishing,
 servers, grants, sessions, updates and cleanup. For servers, use `server init` →
