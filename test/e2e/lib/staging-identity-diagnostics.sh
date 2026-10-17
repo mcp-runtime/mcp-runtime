@@ -50,14 +50,16 @@ staging_check_identity_diagnostics() (
   cleanup_identity_probe() {
     local current failed=0
     if [[ -n "${route_uid}" ]]; then
-      current="$(kubectl -n "${ns}" get ingressroute.traefik.io "${probe}" -o jsonpath='{.metadata.uid}' 2>/dev/null || true)"
-      if [[ "${current}" == "${route_uid}" ]]; then
+      if ! current="$(kubectl -n "${ns}" get ingressroute.traefik.io "${probe}" -o jsonpath='{.metadata.uid}' 2>/dev/null)"; then
+        failed=1
+      elif [[ "${current}" == "${route_uid}" ]]; then
         kubectl -n "${ns}" delete ingressroute.traefik.io "${probe}" --wait=false >/dev/null || failed=1
       fi
     fi
     if [[ -n "${secret_uid}" ]]; then
-      current="$(kubectl -n "${ns}" get secret "${probe}-gateway-mtls" -o jsonpath='{.metadata.uid}' 2>/dev/null || true)"
-      if [[ "${current}" == "${secret_uid}" ]]; then
+      if ! current="$(kubectl -n "${ns}" get secret "${probe}-gateway-mtls" -o jsonpath='{.metadata.uid}' 2>/dev/null)"; then
+        failed=1
+      elif [[ "${current}" == "${secret_uid}" ]]; then
         kubectl -n "${ns}" delete secret "${probe}-gateway-mtls" --wait=false >/dev/null || failed=1
       fi
     fi
