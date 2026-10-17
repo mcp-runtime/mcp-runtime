@@ -28,7 +28,11 @@ func isKnownPlaceholder(value string) bool {
 }
 
 func holdsKnownPlaceholder(key, value string) bool {
-	switch placeholderCheckedKeys[key] {
+	kind, checked := placeholderCheckedKeys[key]
+	if !checked {
+		return false
+	}
+	switch kind {
 	case "csv":
 		for _, part := range strings.Split(value, ",") {
 			if isKnownPlaceholder(part) {
