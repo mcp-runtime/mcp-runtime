@@ -16,6 +16,17 @@ runs next to k3s. The assertions, the target guard, and the stage runner live
 in `test/e2e/lib/staging.sh`. The workflow holds one concurrency group so only
 one run drives the VM at a time.
 
+The critical `audience-isolation` stage logs in through the real platform
+gateway, checks direct runtime/analytics rejection via temporary read-only
+port-forwards, verifies single-audience exchange and replay denial, and uses
+the same source token through the CLI and password-backed UI session proxy.
+It needs the configured admin email/password and stops every temporary
+port-forward. Token values are kept out of its logs and artifacts. For OAuth
+acceptance, dispatch with `with-mcp-auth=true` to enable `E2E_WITH_MCP_AUTH`
+after sourcing the preserved VM environment. The default inherits that
+environment and neither choice rewrites provider credentials/backups. A skipped OIDC stage is not
+evidence that OAuth login works.
+
 Adapter fixtures rotate their own server namespace pull credential using
 `registry enable-auth --pull-namespace` after the fixture deployments exist,
 so the broker grants their exact repositories. They never reuse another

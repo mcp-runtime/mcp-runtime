@@ -98,9 +98,11 @@ func TestRenderPlatformUIIngressApiBeforeRoot(t *testing.T) {
 	if pushIdx < 0 || authIdx < 0 || rootIdx < 0 {
 		t.Fatalf("missing registry push, /api/v1/auth, or / paths:\n%s", got)
 	}
-	if pushIdx > authIdx || authIdx > rootIdx {
-		t.Fatalf("/api/v1/runtime/registry/push must be listed before /api/v1/auth and / catch-all:\n%s", got)
+	if authIdx > rootIdx {
+		t.Fatalf("platform API must precede the UI catch-all:\n%s", got)
 	}
+	// Runtime paths live in a separate middleware-bearing Ingress. Across
+	// resources, Traefik selects their longer path rule over the UI catch-all.
 }
 
 func TestRenderPlatformUIIngressWithTLS(t *testing.T) {

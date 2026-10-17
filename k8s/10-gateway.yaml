@@ -14,6 +14,28 @@ data:
   dynamic.yml: |
     http:
       middlewares:
+        runtime-token-exchange:
+          forwardAuth:
+            address: http://mcp-platform-api.mcp-platform.svc.cluster.local:8080/internal/auth/exchange/runtime
+            trustForwardHeader: false
+            forwardBody: false
+            authRequestHeaders:
+              - Authorization
+              - X-Api-Key
+            authResponseHeaders:
+              - Authorization
+              - X-Api-Key
+        analytics-token-exchange:
+          forwardAuth:
+            address: http://mcp-platform-api.mcp-platform.svc.cluster.local:8080/internal/auth/exchange/analytics
+            trustForwardHeader: false
+            forwardBody: false
+            authRequestHeaders:
+              - Authorization
+              - X-Api-Key
+            authResponseHeaders:
+              - Authorization
+              - X-Api-Key
         pii-redactor:
           plugin:
             pii-redactor:
@@ -630,6 +652,8 @@ kind: Ingress
 metadata:
   name: mcp-platform-gateway-adapter-session
   namespace: mcp-platform
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: runtime-token-exchange@file
 spec:
   ingressClassName: traefik
   rules:
@@ -653,13 +677,6 @@ spec:
   rules:
     - http:
         paths:
-          - path: /api/v1/runtime/registry/push
-            pathType: Exact
-            backend:
-              service:
-                name: mcp-runtime-api
-                port:
-                  number: 8084
           - path: /api/v1/admin/namespaces
             pathType: Prefix
             backend:
@@ -723,6 +740,26 @@ spec:
                 name: mcp-platform-api
                 port:
                   number: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mcp-platform-gateway-runtime
+  namespace: mcp-platform
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: runtime-token-exchange@file
+spec:
+  ingressClassName: traefik
+  rules:
+    - http:
+        paths:
+          - path: /api/v1/runtime/registry/push
+            pathType: Exact
+            backend:
+              service:
+                name: mcp-runtime-api
+                port:
+                  number: 8084
           - path: /api/v1/admin/deployments
             pathType: Prefix
             backend:
@@ -771,6 +808,8 @@ kind: Ingress
 metadata:
   name: mcp-platform-gateway-analytics
   namespace: mcp-observability
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: analytics-token-exchange@file
 spec:
   ingressClassName: traefik
   rules:

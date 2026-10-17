@@ -214,6 +214,8 @@ assert "concurrency:\n      group: staging-e2e-disposable-vm\n      cancel-in-pr
 )
 assert "RUN_MULTITENANCY: ${{ inputs.run-multitenancy }}" in workflow
 assert "FRESH_CERTIFICATE: ${{ inputs.fresh-certificate }}" in workflow
+assert "WITH_MCP_AUTH: ${{ inputs.with-mcp-auth }}" in workflow
+assert "E2E_WITH_MCP_AUTH_OVERRIDE=" in workflow
 prerelease = pathlib.Path(sys.argv[1]).with_name("pre-release-regression.yaml").read_text(encoding="utf-8")
 assert "uses: ./.github/workflows/staging-e2e.yaml" in prerelease, "Pre-release Regression must run Staging E2E"
 assert "\n  qa-e2e:\n" not in prerelease, "pre-release must not duplicate PR Kind QA"

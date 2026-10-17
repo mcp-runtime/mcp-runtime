@@ -97,6 +97,8 @@ func ApplyRole(req *http.Request, role string, keys map[string]string) {
 			req.Header.Set("x-api-key", key)
 		}
 	default:
-		return
+		if token := strings.TrimSpace(keys[role]); token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
 	}
 }

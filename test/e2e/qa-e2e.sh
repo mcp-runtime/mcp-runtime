@@ -150,6 +150,8 @@ PLATFORM_PORT="${PLATFORM_PORT:-18083}"
 TEMPO_PORT="${TEMPO_PORT:-13200}"
 LOKI_PORT="${LOKI_PORT:-13100}"
 API_SERVICE_PORT="${API_SERVICE_PORT:-18091}"
+RUNTIME_API_SERVICE_PORT="${RUNTIME_API_SERVICE_PORT:-18109}"
+ANALYTICS_API_SERVICE_PORT="${ANALYTICS_API_SERVICE_PORT:-18110}"
 UI_SERVICE_PORT="${UI_SERVICE_PORT:-18092}"
 INGEST_SERVICE_PORT="${INGEST_SERVICE_PORT:-18093}"
 SERVER_PROXY_PORT="${SERVER_PROXY_PORT:-18094}"
@@ -2816,6 +2818,16 @@ run_api_platform_http_flows() {
   log_line policy "validating targeted platform API request paths"
   ensure_api_port_forward
   ensure_gateway_port_forward
+  port_forward_bg mcp-platform mcp-runtime-api "${RUNTIME_API_SERVICE_PORT}" 8084 "${WORKDIR}/audience-runtime-port-forward.log"
+  port_forward_bg mcp-observability mcp-analytics-api "${ANALYTICS_API_SERVICE_PORT}" 8085 "${WORKDIR}/audience-analytics-port-forward.log"
+  PLATFORM_URL="http://127.0.0.1:${PLATFORM_PORT}" \
+  DIRECT_PLATFORM_URL="http://127.0.0.1:${API_SERVICE_PORT}" \
+  DIRECT_RUNTIME_URL="http://127.0.0.1:${RUNTIME_API_SERVICE_PORT}" \
+  DIRECT_ANALYTICS_URL="http://127.0.0.1:${ANALYTICS_API_SERVICE_PORT}" \
+  PLATFORM_ADMIN_EMAIL="${PLATFORM_ADMIN_EMAIL}" \
+  PLATFORM_ADMIN_PASSWORD="${PLATFORM_ADMIN_PASSWORD}" \
+  BIN="${PROJECT_ROOT}/bin/mcp-runtime" \
+  python3 test/e2e/audience_isolation.py
   API_BASE="http://127.0.0.1:${PLATFORM_PORT}/api/v1" \
   GATEWAY_API_BASE="http://127.0.0.1:${PLATFORM_PORT}/api/v1" \
   API_KEY="${API_KEY}" \

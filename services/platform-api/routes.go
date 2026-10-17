@@ -16,6 +16,9 @@ import (
 func (s *apiServer) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/ready", s.handleReady)
+	for _, target := range []string{platformauth.AudienceRuntime, platformauth.AudienceAnalytics} {
+		mux.Handle(platformauth.ExchangePath(target), platformauth.ExchangeHandler{Auth: s.authentic, Target: target})
+	}
 
 	platforminternal.Handler{
 		Store:               s.platform,

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -268,7 +269,7 @@ func TestSessionProxyRoutesAnalyticsToAnalyticsUpstream(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	proxy := newSessionProxyWithUpstreams(runtimeBase, analyticsBase, newUISessionStore(time.Now))
+	proxy := newSessionProxyWithUpstreams(testExchangeBase(t), runtimeBase, analyticsBase, newUISessionStore(time.Now))
 	sess := createTestSession(t, proxy.store, uiSession{UpstreamAuthHeader: "Bearer analytics-token"})
 	req := httptest.NewRequest(http.MethodGet, "/api/ui/v1/events?limit=20", nil)
 	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: sess.ID})
@@ -351,7 +352,7 @@ func TestSessionProxyUnauthorizedForExpiredSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseRuntimeUpstream() error = %v", err)
 	}
-	proxy := newSessionProxy(base, store)
+	proxy := newSessionProxyWithUpstreams(testExchangeBase(t), base, base, store)
 	sess, err := store.createSession(context.Background(), uiSession{
 		Principal:          sessionPrincipal{Role: "user"},
 		UpstreamAuthHeader: "Bearer session-token",
@@ -454,7 +455,7 @@ func TestNewMuxSessionProxyUsesStore(t *testing.T) {
 	t.Cleanup(upstream.Close)
 	t.Setenv("RUNTIME_UPSTREAM", upstream.URL)
 
-	mux, err := newMux("/api/v1", "http://127.0.0.1:1", "secret", "api-secret", "")
+	mux, err := newMux("/api/v1", testExchangeBase(t).String(), "secret", "api-secret", "")
 	if err != nil {
 		t.Fatalf("newMux() error = %v", err)
 	}
@@ -479,7 +480,7 @@ func newTestSessionProxy(t *testing.T, upstreamURL string) *sessionProxy {
 	if err != nil {
 		t.Fatalf("parseRuntimeUpstream() error = %v", err)
 	}
-	return newSessionProxy(base, newUISessionStore(time.Now))
+	return newSessionProxyWithUpstreams(testExchangeBase(t), base, base, newUISessionStore(time.Now))
 }
 
 func createTestSession(t *testing.T, store *uiSessionStore, session uiSession) uiSession {
@@ -489,4 +490,19 @@ func createTestSession(t *testing.T, store *uiSessionStore, session uiSession) u
 		t.Fatalf("createSession() error = %v", err)
 	}
 	return sess
+}
+
+// Existing proxy-routing tests use opaque fixture credentials. Exchange security
+// is tested separately with signed JWTs and the real exchange handler.
+func testExchangeBase(t *testing.T) *url.URL {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Authorization", r.Header.Get("Authorization"))
+	}))
+	t.Cleanup(server.Close)
+	u, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return u
 }

@@ -32,8 +32,11 @@ func Verify(secret []byte, token, expectedAudience string) (Claims, error) {
 	if claims.Issuer != Issuer {
 		return Claims{}, errors.New("invalid JWT issuer")
 	}
-	if !audienceMatches([]string(claims.Audience), expectedAudience) {
+	if len(claims.Audience) != 1 || claims.Audience[0] != expectedAudience {
 		return Claims{}, errors.New("invalid JWT audience")
+	}
+	if claims.ExpiresAt == nil {
+		return Claims{}, errors.New("JWT expiration is required")
 	}
 	if strings.TrimSpace(claims.Subject) == "" {
 		return Claims{}, errors.New("JWT subject is required")

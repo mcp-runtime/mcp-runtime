@@ -29,6 +29,7 @@ Tests and scripts that fall back to the current kube context have written to a p
 | Live security / performance / posture | `hack/qa/` | `cluster-ops` skill; traffic/load probes require Kind identity |
 | Multi-team demo | `hack/qa/multitenancy-test.sh` | `hack/qa/README.md`; loopback or disposable staging only |
 | Grants / sessions / MCP calls | `access-governance` skill | `docs/teams-and-access.md` |
+| Platform token audience isolation | `pkg/platformauth`, split Ingress routes and UI session proxy | `test/e2e/audience_isolation.py`; coordinated rollout in `docs/platform-services.md` |
 | Browser / platform UI QA | `dashboard-browser-qa` skill | Role gating, browser errors and real user workflows |
 | Cluster failure diagnosis | `cluster-ops` skill, mode `troubleshoot` | Structured diagnosis before ad-hoc commands |
 | Reference update / setup / recovery | `mcp-runtime update` / `setup`; recovery scripts in `hack/deploy/reference/` | `production-platform` skill, `docs/reference-deployment.md` |

@@ -408,7 +408,7 @@ histogram_quantile(0.99, sum by (le, service, operation) (rate(mcp_request_durat
 | **platform-api** | `/health` and `/ready` are open (`/ready` returns `503` when Postgres is unreachable). Authenticated `/api/v1/*` identity, admin, and registry routes accept `x-api-key`, user-generated API keys, platform JWT bearer tokens (audience `platform-api`), or OIDC JWT bearer tokens when OIDC is configured. Only keys listed in `ADMIN_API_KEYS` get admin role. Registry forward-auth (`/api/v1/registry/authz`) keeps admin credentials global and allows normal user credentials only on repository paths scoped to the caller's team slug or team namespace. Token-gated `/internal/*` serves runtime-api and analytics-api. |
 | **runtime-api** | `/health` and `/ready` are open (`/ready` returns `503` until the Kubernetes client is available). `/api/v1/runtime/*`, `/api/v1/deployments`, and admin operations routes accept platform JWTs (audience `runtime-api`) or scoped API keys via `pkg/platformauth`. `/api/v1/dashboard/summary`, `/api/v1/runtime/components`, `/api/v1/runtime/actions/restart`, and the `/api/v1/admin/*` routes require the admin role. |
 | **analytics-api** | `/health` and `/ready` are open (`/ready` returns `503` when ClickHouse is unreachable). `/api/v1/events`, `/api/v1/stats`, `/api/v1/sources`, `/api/v1/event-types`, and `/api/v1/analytics/usage` require the admin role because they return unscoped cluster-wide data. `/api/v1/user/analytics/usage` is the non-admin path and is scoped to the caller's team namespaces. Both accept platform JWTs (audience `analytics-api`) or scoped API keys. |
-| **ui** | `/auth/login` creates an HttpOnly UI session from `api_key`, `id_token`, or `email`/`password`. Authenticated dashboard reads use same-origin allowlisted `GET /api/ui/v1/*`; the UI injects the stored bearer token or upstream API key and never returns that credential to the browser. All other `/api/v1/*` calls go through Traefik ingress to the owning API service. `/auth/admin-check` accepts admin UI sessions or keys from `ADMIN_API_KEYS`; it falls back to `API_KEYS` only when the explicit legacy dev/test fallback is enabled. Mutating cookie-backed BFF routes are not exposed yet; they will need CSRF protection when added. |
+| **ui** | `/auth/login` creates an HttpOnly UI session from `api_key`, `id_token`, or `email`/`password`. Authenticated dashboard requests use same-origin allowlisted `/api/ui/v1/*` routes; the UI exchanges its stored platform bearer for the fixed destination audience or injects the stored API key, and never returns credentials to the browser. All other `/api/v1/*` calls go through Traefik ingress to the owning API service. `/auth/admin-check` accepts admin UI sessions or keys from `ADMIN_API_KEYS`; it falls back to `API_KEYS` only when the explicit legacy dev/test fallback is enabled. Allowlisted cookie-backed writes require the session CSRF token and origin validation before exchange. |
 | **ingest** | `/live`, `/ready`, and `/health` are open. `/events` accepts `x-api-key` from `INGEST_API_KEYS`, legacy `API_KEYS`, or a configured OIDC bearer token. If no API keys and no JWKS are configured, intake auth is bypassed. |
 | **processor** | No data API. It exposes metrics and a simple health check on the metrics port. |
 | **mcp-gateway** | No admin API. It authenticates MCP requests according to the rendered server policy and exposes Prometheus metrics at `/metrics`. |
@@ -427,7 +427,45 @@ stable error envelopes.
 | **analytics-api** | `mcp-analytics-api` | 8085 / 9095 | ClickHouse events, stats, usage analytics |
 
 JWT `aud` values: `platform-api`, `runtime-api`, `analytics-api` (`pkg/platformauth`).
-Login at `POST /api/v1/auth/login` issues tokens accepted by all three services.
+Password and OIDC login issue a token with only `aud: ["platform-api"]`.
+Clients keep sending that one token to the platform gateway. On runtime and
+analytics routes, Traefik calls a fixed-target platform exchange handler and
+replaces the upstream bearer with a single-audience token valid for at most
+60 seconds, capped by the source token's expiry. Direct runtime/analytics API
+calls reject the login token. Each API rejects expired or multi-audience JWTs;
+an exchanged token cannot authenticate to another API or be exchanged again.
+
+The internal `/internal/auth/exchange/runtime` and
+`/internal/auth/exchange/analytics` handlers authenticate the platform user
+bearer and refresh the current account/memberships before minting. Their target
+never comes from forwarded headers, a query, or a caller-selected URL. Public
+ingress does not publish these paths. Unlike other `/internal/*` APIs, exchange
+uses the source bearer rather than `INTERNAL_AUTH_TOKEN`; the gateway and UI
+do not receive that broad service secret. API keys retain the destination
+API's existing service/user-key rules and never become human JWTs. Anonymous
+requests retain the backend's public-catalog policy.
+
+The UI's server-side session proxy calls the same fixed-target exchange before
+reaching the APIs through their internal Service DNS. Tokens stay in the
+server-side session/proxy, and cookie-backed writes still require CSRF checks
+before exchange. The CLI needs no audience selection. Its legacy duplicate
+credential headers are normalized at the exchange boundary: a verified human
+bearer is removed from `X-Api-Key`, and only the scoped bearer reaches the
+destination; static keys retain only their API-key header.
+
+Upgrade the platform, runtime, analytics and UI images together with the
+matching Traefik dynamic configuration and split Ingress routes. Existing
+multi-audience login sessions must sign in again. Existing installs should
+refresh the platform with supported `setup` using their original configuration
+before resuming traffic. Release bundles advertise `requiresAudienceExchange`;
+ordinary `update` then checks real split routes, their middleware ordering,
+and each active Traefik controller's mounted exchange configuration before any
+cluster write. It refuses an unmigrated install with the supported setup
+refresh instruction. A configuration flag alone cannot satisfy this check;
+an image-only update never migrates Ingress rules.
+Run the `audience-isolation` Staging stage or the Kind `api-platform` request
+flow to verify real gateway replacement, direct-service rejection and the
+password-backed CLI/UI paths before accepting the rollout.
 
 Route tables and request bodies live in [API reference](api-reference.md). Per-service
 OpenAPI specs: `services/platform-api/openapi.yaml`,

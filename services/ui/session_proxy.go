@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"mcp-runtime/pkg/platformauth"
 	"mcp-runtime/pkg/serviceutil"
 )
 
@@ -144,6 +145,7 @@ var sessionProxyHTTPClient = &http.Client{
 }
 
 type sessionProxy struct {
+	platformBase  *url.URL
 	runtimeBase   *url.URL
 	analyticsBase *url.URL
 	store         *uiSessionStore
@@ -173,12 +175,9 @@ func parseRuntimeUpstream(raw string) (*url.URL, error) {
 	return u, nil
 }
 
-func newSessionProxy(runtimeBase *url.URL, store *uiSessionStore) *sessionProxy {
-	return newSessionProxyWithUpstreams(runtimeBase, runtimeBase, store)
-}
-
-func newSessionProxyWithUpstreams(runtimeBase, analyticsBase *url.URL, store *uiSessionStore) *sessionProxy {
+func newSessionProxyWithUpstreams(platformBase, runtimeBase, analyticsBase *url.URL, store *uiSessionStore) *sessionProxy {
 	return &sessionProxy{
+		platformBase:  platformBase,
 		runtimeBase:   runtimeBase,
 		analyticsBase: analyticsBase,
 		store:         store,
@@ -252,10 +251,12 @@ func (p *sessionProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		body = http.MaxBytesReader(w, r.Body, sessionProxyMaxWriteBody)
 	}
 
+	targetAudience := platformauth.AudienceRuntime
 	if strings.HasPrefix(upstreamPath, "/api/v1/events") ||
 		strings.HasPrefix(upstreamPath, "/api/v1/analytics/usage") ||
 		strings.HasPrefix(upstreamPath, "/api/v1/user/analytics/usage") {
 		base = p.analyticsBase
+		targetAudience = platformauth.AudienceAnalytics
 	} else {
 		base = p.runtimeBase
 	}
@@ -283,16 +284,25 @@ func (p *sessionProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	copySessionProxyOriginHeaders(req, r)
 	req.Header.Set("x-mcp-source", "ui")
+	client := p.client
+	if client == nil {
+		client = sessionProxyHTTPClient
+	}
 	if authHeader != "" {
+		authHeader, err = platformauth.ExchangeBearer(r.Context(), client, p.platformBase, authHeader, targetAudience)
+		if err != nil {
+			status := http.StatusBadGateway
+			if errors.Is(err, platformauth.ErrExchangeUnauthorized) {
+				status = http.StatusUnauthorized
+			}
+			serviceutil.WriteJSON(w, status, map[string]string{"error": "token_exchange_failed"})
+			return
+		}
 		req.Header.Set("authorization", authHeader)
 	} else {
 		req.Header.Set("x-api-key", apiKey)
 	}
 
-	client := p.client
-	if client == nil {
-		client = sessionProxyHTTPClient
-	}
 	resp, err := client.Do(req)
 	if err != nil {
 		// #nosec G706 -- path-only telemetry; upstream URL and credentials are omitted.
