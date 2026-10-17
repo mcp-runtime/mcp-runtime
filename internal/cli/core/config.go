@@ -41,7 +41,10 @@ type CLIConfig struct {
 	RegistryClusterIssuerName string
 	// ProvidedTLSSecrets selects operator-managed TLS Secrets in place of
 	// cert-manager-issued Certificates.
-	ProvidedTLSSecrets   bool
+	ProvidedTLSSecrets bool
+	// InternalAnalyticsTLS is derived from the active setup plan, never from a
+	// tenant or an unchecked environment override.
+	InternalAnalyticsTLS bool
 	SkopeoImage          string
 	OperatorImage        string // Override for operator image
 	GatewayProxyImage    string // Optional default image for the MCP gateway sidecar

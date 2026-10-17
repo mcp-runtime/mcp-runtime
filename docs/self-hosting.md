@@ -263,6 +263,14 @@ both replaces it. With neither configured nor saved, setup warns that no
 password-admin account will be seeded and omits the empty Secret keys. Dev
 login remains off outside test mode. Keep passwords in a private env file.
 
+Outside test mode, setup also refuses to import or preserve an existing
+platform credential (API/ingest/admin keys, JWT and internal tokens, session
+key, Grafana/Postgres/admin passwords, or the password inside a database URL)
+whose value is the `changeme` placeholder from `k8s/02-secrets.yaml.example`.
+The error names the Secret and key but never the value, and setup does not
+rotate it for you: put a unique value in that Secret key and rerun. Test mode
+keeps working with such values for local clusters.
+
 For TLS termination on an external proxy with HTTP Traefik, put both
 `UI_REQUIRE_HTTPS=false` and `UI_FORCE_SECURE_COOKIE=true` in the file passed
 to `setup --env-file`. Setup forwards these settings to the UI and preserves

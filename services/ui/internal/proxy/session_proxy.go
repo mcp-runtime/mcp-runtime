@@ -331,17 +331,18 @@ func resolveSessionProxyURL(base *url.URL, upstreamPath, rawQuery string) (*url.
 	if base == nil {
 		return nil, errors.New("runtime upstream is empty")
 	}
-	ref, err := url.Parse(upstreamPath)
-	if err != nil {
-		return nil, err
+	if !strings.HasPrefix(upstreamPath, "/") || strings.HasPrefix(upstreamPath, "//") {
+		return nil, errors.New("runtime upstream path must be absolute")
 	}
-	resolved := base.ResolveReference(ref)
-	if resolved.Scheme != base.Scheme || resolved.Host != base.Host {
-		return nil, errors.New("runtime upstream redirected off host")
-	}
+	// upstreamPath is already decoded. Assign it as a path instead of parsing it
+	// as a URL, otherwise a decoded '?' or '#' would split off a query or
+	// fragment and silently truncate the path the allowlist approved.
+	resolved := *base
+	resolved.Path = upstreamPath
+	resolved.RawPath = ""
 	resolved.RawQuery = rawQuery
 	resolved.Fragment = ""
-	return resolved, nil
+	return &resolved, nil
 }
 
 // copySessionProxyOriginHeaders preserves the public origin used by the

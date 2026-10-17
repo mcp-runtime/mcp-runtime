@@ -393,6 +393,7 @@ func BundlePlatformObjects(dir string, keys []string, extraDirs ...string) (stri
 // the format of config/release/wiring.yaml.
 type ReleaseWiring struct {
 	RequiresAudienceExchange bool `json:"requiresAudienceExchange"`
+	RequiresAnalyticsTLS     bool `json:"requiresAnalyticsTLS"`
 	// PlatformObjects are keys of the k8s/ objects update manages.
 	PlatformObjects []string                    `json:"platformObjects"`
 	ConfigMaps      []ConfigMapSpec             `json:"configMaps"`
@@ -421,6 +422,7 @@ func LoadWiring(path string) (ReleaseWiring, error) {
 // ReleaseExtras is everything a release declares beyond images.
 type ReleaseExtras struct {
 	RequiresAudienceExchange bool
+	RequiresAnalyticsTLS     bool
 	PlatformObjects          string
 	ConfigMaps               []ManifestConfigMap
 	Wiring                   map[string]*ComponentWiring
@@ -431,6 +433,7 @@ type ReleaseExtras struct {
 // wiring in a generated manifest and re-validates it.
 func (m *Manifest) ApplyReleaseExtras(extras ReleaseExtras) error {
 	m.RequiresAudienceExchange = extras.RequiresAudienceExchange
+	m.RequiresAnalyticsTLS = extras.RequiresAnalyticsTLS
 	m.PlatformObjects = strings.TrimSpace(extras.PlatformObjects)
 	m.ConfigMaps = extras.ConfigMaps
 	for _, name := range extras.ConfigOnly {
