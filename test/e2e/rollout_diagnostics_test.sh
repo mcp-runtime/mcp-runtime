@@ -53,6 +53,9 @@ elif args[:2] == ["get", "events"]:
         raise SystemExit(1)
     print(json.dumps({"items":[{"type":"Warning","reason":"FailedScheduling","message":"insufficient memory",
       "count":2,"involvedObject":{"kind":"Pod","name":"demo-abc"}}]}))
+elif args[:1] == ["logs"] and "-l" in args:
+    print('[pod/runtime-api/container] 2026/10/17 14:00:00 workload network policy reconciliation failed: Get "https://user:never-upload-password@10.96.0.1:443/api/v1/namespaces": context deadline exceeded')
+    print('unrelated request payload: never-upload-payload')
 elif args[:1] == ["logs"]:
     print('{"level":"error","msg":"reconcile failed","authorization":"Bearer never-upload-token","error":"forbidden to list MCPServers","tool_payload":{"argument":"never-upload-payload"}}')
 else:
@@ -117,6 +120,7 @@ for namespace in mcp-platform mcp-observability mcp-runtime; do
   [[ -s "${diag_dir}/setup-${namespace}-warning-events.json" ]]
 done
 grep -F 'ImagePullBackOff' "${diag_dir}/setup-mcp-platform-workloads.json" >/dev/null
+grep -F 'context deadline exceeded' "${diag_dir}/setup-runtime-init.log" >/dev/null
 if grep -R -E 'never-upload|Bearer never-upload' "${diag_dir}"; then
   echo '[fail] setup diagnostics leaked credentials or pod environment' >&2
   exit 1

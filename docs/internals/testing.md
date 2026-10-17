@@ -95,7 +95,8 @@ Collection uses only the explicit E2E kubeconfig after confirming its
 `kind-${CLUSTER_NAME}` context; failed or unauthorized reads produce explicit
 collection-gap files. Failed setup also captures redacted platform workload
 status and warning events before teardown, including in the scoped Cilium
-workflow. The fake-tool regression
+workflow. It also retains only allowlisted runtime initialization error lines,
+with credentials redacted. The fake-tool regression
 `bash test/e2e/rollout_diagnostics_test.sh` checks failure preservation,
 redaction, and collection before cleanup without contacting a cluster.
 

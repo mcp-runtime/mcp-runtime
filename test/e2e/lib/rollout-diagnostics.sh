@@ -26,6 +26,7 @@ import re, sys
 limit = int(sys.argv[1])
 text = sys.stdin.read()
 text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
+text = re.sub(r"(?i)(https?://)[^/@\s]+:[^/@\s]+@", r"\1[REDACTED]@", text)
 text = re.sub(r"(?i)\b(Bearer|Basic)\s+[A-Za-z0-9+/=._~-]+", r"\1 [REDACTED]", text)
 text = re.sub(r"(?i)([\"\x27]?(?:authorization|proxy-authorization|access[_-]?token|refresh[_-]?token|id[_-]?token|password|passwd|secret|api[_-]?key|client[_-]?secret|private[_-]?key)[\"\x27]?\s*[:=]\s*[\"\x27]?)[^\s,\"\x27}]+", r"\1[REDACTED]", text)
 text = re.sub(r"(?i)\beyJ[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b", "[REDACTED_JWT]", text)
@@ -77,8 +78,17 @@ e2e_diag_capture() {
 e2e_diag_format() {
   local label="$1"
   python3 -c '
-import json, sys
+import json, re, sys
 label = sys.argv[1]
+if label == "runtime-init-logs":
+    rows = []
+    for line in sys.stdin:
+        message = re.sub(r"^\[pod/[^]]+\]\s*", "", line)
+        message = re.sub(r"^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}\s+", "", message)
+        if message.startswith(("[WARN] Kubernetes client initialization failed:", "workload network policy reconciliation failed:")):
+            rows.append(message.rstrip())
+    print("\n".join(rows) if rows else "collection_gap: no runtime initialization failure was logged")
+    raise SystemExit(0)
 if label in ("operator-logs", "gateway-logs"):
     allowed = ("ts", "time", "timestamp", "level", "logger", "msg", "error", "name", "namespace", "controller", "reconcileID", "generation", "port")
     rows, skipped = [], 0
@@ -215,6 +225,8 @@ e2e_collect_setup_diagnostics() {
     e2e_diag_capture "warning-events" "${directory}/setup-${namespace}-warning-events.json" \
       get events -n "${namespace}" --field-selector "type=Warning" -o json
   done
+  e2e_diag_capture "runtime-init-logs" "${directory}/setup-runtime-init.log" \
+    logs -n mcp-platform -l app=mcp-runtime-api --all-containers=true --prefix=true --since=10m --tail=80
 }
 
 rollout_status_with_logs() {

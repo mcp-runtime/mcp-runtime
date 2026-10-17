@@ -9,6 +9,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Security
 
+- Ingest binds audit attribution for projected ServiceAccount callers to the verified Pod and its UID-checked controller chain to the current MCPServer, rejecting unbound tokens and events whose server, namespace or UID disagree (`403 attribution_mismatch`). Service-key and OIDC callers are unchanged. Apply the release's `k8s/06-ingest.yaml` (rerun `setup`/`update`) so ingest can read the ownership chain; until then projected-token events are rejected ([#110](https://github.com/mcp-runtime/mcp-runtime/issues/110)).
 - The dashboard session proxy no longer lets a percent-encoded `?` or `#` in a path segment truncate the upstream path after the write allowlist approved it (for example turning a team-member removal into a team delete). The decoded path is now sent verbatim; runtime-api authorization still applies to every request.
 - MCPServer ingress policies isolate raw upstream listeners for adapter and non-adapter gateways and restrict gateway metrics to Prometheus. Namespace generic Deployment allowances no longer broaden stamped MCPServer pods; deploy the matching runtime API/operator and complete policy/workload reconciliation on an enforcing CNI before relying on the boundary ([#110](https://github.com/mcp-runtime/mcp-runtime/issues/110)).
 - Ingest refuses startup without an authentication source and denies unconfigured intake. Public runtime probes omit initialization details. Login rate limits and audit IPs use the socket peer unless `MCP_TRUSTED_PROXY_CIDRS` explicitly identifies trusted forwarding proxies; configure precise proxy CIDRs to retain client attribution behind ingress ([#110](https://github.com/mcp-runtime/mcp-runtime/issues/110)).
@@ -40,6 +41,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Changed
 
+- First-party Go service image executables use `-trimpath` and omit linker symbol and DWARF sections. At source revision `576353d1`, with Go 1.26.9, Linux/amd64 and CGO disabled, the `platform-api` executable shrank from 70,601,998 to 49,479,842 bytes (29.9%). This executable-only measurement does not establish image, memory, startup, build-time or request-latency savings. Keep an unstripped local build for external debugger or symbol-table analysis ([#701](https://github.com/mcp-runtime/mcp-runtime/issues/701)).
 - Scoped Grafana requires a supported setup refresh with verified Cilium policy capability to move ingress behind the UI/runtime authorization boundary and install telemetry isolation. Kindnet and unknown providers retain admin-only access with Grafana auth proxy disabled. Update skips the scoped policies until migration and refuses incomplete enabled wiring before mutation. Preserve the installation’s host, TLS, storage, registry and mcp-auth options; see [migration guidance](docs/platform-services.md#scoped-grafana-migration) ([#699](https://github.com/mcp-runtime/mcp-runtime/issues/699)).
 - Gateways compile immutable tool, session and subject-grant indexes when activating a validated policy, keeping lookups independent of unrelated policy entries and retaining the last valid snapshot after a failed reload ([#319](https://github.com/mcp-runtime/mcp-runtime/issues/319)).
 - Gateway upstream requests use bounded RPC/session-stream capacity and a circuit breaker, with complete unary deadlines and preserved SSE response lifetimes. Operational rejections have distinct audit reasons while policy counters retain the authorization result ([#311](https://github.com/mcp-runtime/mcp-runtime/issues/311)).
@@ -49,6 +51,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 - `server init --from-server` and `server validate --from-server` now discover tools with MCP 2026-07-28 when the server advertises it, and fall back to the MCP 2025-11-25 initialize handshake only on an unrecognized HTTP 400 response. Modern protocol errors remain visible instead of triggering a silent downgrade ([#662](https://github.com/mcp-runtime/mcp-runtime/issues/662)).
 
 ### Fixed
+
+- Setup adds ready Kubernetes API EndpointSlice backends and their exact TCP ports to runtime-api egress, including when the installer connects through a loopback tunnel. Scoped Grafana rollout errors now identify the runtime-api deployment ([#809](https://github.com/mcp-runtime/mcp-runtime/issues/809)).
 
 - Performance probes close each HTTP response before reusing the connection, avoiding `ResponseNotReady` on supported Python versions ([#809](https://github.com/mcp-runtime/mcp-runtime/issues/809)).
 

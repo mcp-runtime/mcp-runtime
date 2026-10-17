@@ -221,6 +221,19 @@ func (s *ingestServer) handleEvents(w http.ResponseWriter, r *http.Request) {
 		serviceutil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "missing_fields"})
 		return
 	}
+	if id, ok := r.Context().Value(workloadIdentityKey{}).(workloadIdentity); ok {
+		bound, err := bindAttribution(payload.Payload, id)
+		switch {
+		case errors.Is(err, errAttributionMismatch):
+			log.Printf("rejected event: attribution does not match the authenticated workload (namespace=%q server=%q)", id.Namespace, id.Server)
+			serviceutil.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "attribution_mismatch"})
+			return
+		case err != nil:
+			serviceutil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_payload"})
+			return
+		}
+		payload.Payload = bound
+	}
 	payload.EnsureTimestamp(time.Now().UTC())
 
 	spanOpts := []trace.SpanStartOption{trace.WithSpanKind(trace.SpanKindProducer)}
@@ -269,9 +282,11 @@ func (s *ingestServer) auth(next http.Handler) http.Handler {
 		}
 
 		token := serviceutil.ExtractBearer(r.Header.Get("authorization"))
-		if token != "" && s.saAuth != nil && s.saAuth.Authenticate(r.Context(), token) {
-			next.ServeHTTP(w, r)
-			return
+		if token != "" && s.saAuth != nil {
+			if id, ok := s.saAuth.Authenticate(r.Context(), token); ok {
+				next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), workloadIdentityKey{}, id)))
+				return
+			}
 		}
 		if token != "" && s.jwks != nil {
 			parser := jwt.NewParser(jwt.WithValidMethods([]string{"RS256", "RS384", "RS512", "ES256", "ES384", "ES512"}))
@@ -305,6 +320,32 @@ func (s *ingestServer) auth(next http.Handler) http.Handler {
 
 		serviceutil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 	})
+}
+
+// workloadIdentityKey carries the verified workload identity of a projected
+// service account caller. Service-key and OIDC callers have none.
+type workloadIdentityKey struct{}
+
+var errAttributionMismatch = errors.New("attribution mismatch")
+
+// bindAttribution makes the verified workload authoritative for the audit
+// attribution fields. Absent fields are filled from the verified identity; a
+// field the caller supplies that disagrees with it rejects the event.
+func bindAttribution(raw json.RawMessage, id workloadIdentity) (json.RawMessage, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil || fields == nil {
+		return nil, errors.New("payload must be a JSON object")
+	}
+	for key, want := range map[string]string{"namespace": id.Namespace, "server": id.Server, "server_uid": id.UID} {
+		if have, ok := fields[key]; ok {
+			var got string
+			if err := json.Unmarshal(have, &got); err != nil || (got != "" && got != want) {
+				return nil, errAttributionMismatch
+			}
+		}
+		fields[key], _ = json.Marshal(want)
+	}
+	return json.Marshal(fields)
 }
 
 func validateIngestAuthentication(keys map[string]struct{}, jwks *keyfunc.JWKS, serviceAccount *serviceAccountAuthenticator) error {
