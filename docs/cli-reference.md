@@ -1060,7 +1060,12 @@ compares the operator deployment's adapter-certificate, issuer, and trust-domain
 settings with the runtime API's configured values; checks workload
 `ClusterIssuer` readiness; and reports the selected route's client-certificate
 TLSOption, public CA subject, issuer, SHA-256 fingerprint, expiry, and trusted
-bundle fingerprint. Adapter certificates disabled in the operator are reported
+bundle fingerprint. Both deployments resolve the selected container's literal
+environment, ConfigMap key references and declared `envFrom` sources using
+Kubernetes precedence. Unreadable or Secret-backed configuration is a failed
+check; it is never reported as disabled. The check follows the route's actual
+TLSOption, including explicit overrides, and rejects plaintext routes or options
+that do not verify client certificates. Adapter certificates disabled in the operator are reported
 as off by choice. The command reads only the public `ca.crt`/`tls.ca` fields and
 never reads or prints Secret private keys or credentials.
 
