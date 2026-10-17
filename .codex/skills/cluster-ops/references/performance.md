@@ -1,5 +1,14 @@
 # Performance regression QA
 
+For sizing reports, use `E2E_CAPTURE_RESOURCES=1` with an explicit named Kind
+target and a fresh supported test-mode setup. Resource history uses an exact
+projected Prometheus identity and verified kubelet Summary API trust. Inspect
+`resource_collection_success`, same-window kubelet comparisons, collection wall
+time and per-PVC missing coverage in `grafana.json`. Missing driver statistics
+and local `du` fallback remain separate; PVC capacity is never consumption.
+Refresh setup for new nodes or trust changes. See
+`docs/platform-services.md#resource-history-for-sizing`.
+
 Use the maintained Kind-only script. Select an explicit contributor kubeconfig;
 the harness checks both context and actual node provider IDs.
 

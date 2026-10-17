@@ -17,6 +17,10 @@ platformObjects:
   - NetworkPolicy/mcp-observability/mcp-scoped-observability-ingress
   - NetworkPolicy/mcp-platform/mcp-runtime-api-grafana-egress
   - NetworkPolicy/mcp-observability/kafka-client-ingress
+  - NetworkPolicy/mcp-platform/mcp-runtime-api-resource-history-egress
+  - ServiceAccount/mcp-observability/prometheus
+  - ClusterRole/mcp-prometheus-discovery
+  - ClusterRoleBinding/mcp-prometheus-discovery
   - ServiceAccount/mcp-runtime/mcp-runtime-operator-controller-manager
   - ClusterRole/mcp-runtime-operator-role
   - ClusterRole/mcp-runtime-operator-managed-secrets
@@ -30,6 +34,8 @@ platformObjects:
   - ClusterRole/mcp-ingest-tokenreview
   - ClusterRoleBinding/mcp-ingest-tokenreview
   - ClusterRole/mcp-runtime-api-team-secrets
+  - ClusterRole/mcp-runtime-resource-history
+  - ClusterRoleBinding/mcp-runtime-resource-history
   - ClusterRole/mcp-runtime-api-adapter-preflight
   - ClusterRoleBinding/mcp-runtime-api-adapter-preflight
   - Role/mcp-runtime/mcp-runtime-api-adapter-operator
@@ -72,6 +78,9 @@ components:
       - --accesslog.format=json
       - --accesslog.fields.headers.defaultmode=drop
   prometheus:
+    serviceAccountName: prometheus
+    automountServiceAccountToken: true
+    resourceHistoryToken: true
     args:
       - --enable-feature=exemplar-storage
   platform-api:
