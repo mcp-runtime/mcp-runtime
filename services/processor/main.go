@@ -77,7 +77,12 @@ func main() {
 	}
 	defer clickhouseClient.Close()
 
+	kafkaTLS, err := serviceutil.ClientTLSFromEnv("KAFKA")
+	if err != nil {
+		log.Fatalf("configure Kafka TLS: %v", err)
+	}
 	reader := kafka.NewReader(kafka.ReaderConfig{
+		Dialer:   &kafka.Dialer{Timeout: 10 * time.Second, DualStack: true, TLS: kafkaTLS},
 		Brokers:  brokers,
 		Topic:    topic,
 		GroupID:  groupID,

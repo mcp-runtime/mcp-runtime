@@ -97,7 +97,7 @@ func NewGrafanaProxy(platformBase, runtimeBase *url.URL, store *session.Store, p
 			}
 			w.Header().Del("Content-Security-Policy")
 		}
-		copySessionProxyResponse(w, resp)
+		copySessionProxyResponse(w, resp, false)
 	})
 }
 
