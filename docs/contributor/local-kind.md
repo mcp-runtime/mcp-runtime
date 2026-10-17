@@ -501,6 +501,13 @@ Linux AMD64 version is **3.22.1**, downloaded from
 directory and add that directory to this command's `PATH`; no global tool
 upgrade is required.
 
+The CI job retains the existing QA tool pins, kubectl **1.34.1** and Kind
+**0.30.0**, and verifies their downloaded Linux AMD64 binaries against the
+[official kubectl checksum](https://dl.k8s.io/release/v1.34.1/bin/linux/amd64/kubectl.sha256)
+and [Kind release checksum](https://github.com/kubernetes-sigs/kind/releases/download/v0.30.0/kind-linux-amd64.sha256sum)
+(reviewed 2026-10-17). Their fixed download/check commands are in
+`.github/workflows/scoped-observability-e2e.yaml`.
+
 Run only with a new cluster and unused cluster-named registry:
 
 ```bash

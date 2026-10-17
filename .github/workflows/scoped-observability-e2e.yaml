@@ -44,7 +44,9 @@ jobs:
       - name: Install pinned Linux tools
         run: |
           curl --retry 5 --retry-all-errors -fsSL -o kubectl https://dl.k8s.io/release/v1.34.1/bin/linux/amd64/kubectl
+          echo '7721f265e18709862655affba5343e85e1980639395d5754473dafaadcaa69e3  kubectl' | sha256sum -c -
           curl --retry 5 --retry-all-errors -fsSL -o kind https://github.com/kubernetes-sigs/kind/releases/download/v0.30.0/kind-linux-amd64
+          echo '517ab7fc89ddeed5fa65abf71530d90648d9638ef0c4cde22c2c11f8097b8889  kind' | sha256sum -c -
           curl --retry 5 --retry-all-errors -fsSL -o helm.tar.gz https://get.helm.sh/helm-v3.22.1-linux-amd64.tar.gz
           echo '896cf63684a42a723d61c980369d6e588330927deb13676ca0d85006dd6da0ea  helm.tar.gz' | sha256sum -c -
           tar -xzf helm.tar.gz linux-amd64/helm
