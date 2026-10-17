@@ -15,6 +15,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Added
 
+- Contributor performance checks add policy/rule, platform bearer, session/certificate and TLS microbenchmarks, plus bounded Kind-only gateway/direct overhead, concurrency plateau and exact-trace audit visibility measurements. Baselines require matching environment/traffic fingerprints; analytics scenarios now require an explicit admin test API key via `PERF_API_KEY`. Recorded live baselines and historical proxy comparisons remain pending ([#692](https://github.com/mcp-runtime/mcp-runtime/issues/692)).
+
 - Admin sizing dashboards and E2E reports collect authenticated kubelet node/container CPU, working memory, filesystem, network and driver-reported volume history, alongside separate requests/PVC reservations and collection overhead. Existing installs require supported setup refresh for public serving trust and the projected scrape token; missing volume statistics remain explicit and retain local sampling fallback ([#680](https://github.com/mcp-runtime/mcp-runtime/issues/680)).
 
 - The account menu links to My workspace, with actual team memberships, authorized management links, visible versus manageable servers, personal access and clearly scoped activity. Administrators have a separate Platform overview with complete directory totals, server failures, health and audit links; deployment attribution remains explicitly unavailable for historical servers ([#542](https://github.com/mcp-runtime/mcp-runtime/issues/542)).

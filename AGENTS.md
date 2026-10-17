@@ -44,6 +44,12 @@ QA E2E evidence for the exact commit; add judgment or focused checks where neede
 Scripts compose supported CLI workflows. Shared `hack/lib/` and deployment
 `lib/` files are internal helpers, not independent commands.
 
+Performance source and offline contracts live in `hack/qa/perf_suite.py` and
+`hack/tests/perf_suite_test.py`; Go hot-path benchmarks live beside policy,
+platform auth, certificate and gateway session code. Preserve strict success,
+sample-count, environment and baseline checks. Recorded Kind/staging capacity
+must never be inferred from synthetic unit fixtures or a microbenchmark.
+
 Issuer admission changes: run `hack/qa/approval-policy-rehearsal.sh` on its own
 disposable Kind cluster before disabling cert-manager's default approver. The
 rehearsal pins cert-manager v1.21.2, approver-policy v0.28.0 and Kubernetes 1.36.4
