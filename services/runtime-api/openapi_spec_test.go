@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"mcp-runtime-api/internal/platforminternal"
@@ -34,6 +35,22 @@ func TestHealthResponseMatchesOpenAPISpec(t *testing.T) {
 	}
 	if err := openapi.ValidateResponse(doc, http.MethodGet, "/health", rec.Code, rec.Body.Bytes(), "application/json"); err != nil {
 		t.Fatalf("ValidateResponse(/health) error = %v", err)
+	}
+}
+
+func TestPublicProbesDoNotExposeInitializationErrors(t *testing.T) {
+	const detail = "internal cluster path and credential diagnostic"
+	for _, path := range []string{"/health", "/ready"} {
+		mux := http.NewServeMux()
+		(&server{runtimeInit: detail}).registerRoutes(mux)
+		response := httptest.NewRecorder()
+		mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusServiceUnavailable {
+			t.Fatalf("%s status=%d", path, response.Code)
+		}
+		if body := response.Body.String(); strings.Contains(body, detail) || strings.Contains(body, "runtime_error") || strings.Contains(body, "runtime_initialized") {
+			t.Fatalf("%s exposed initialization details: %s", path, body)
+		}
 	}
 }
 
