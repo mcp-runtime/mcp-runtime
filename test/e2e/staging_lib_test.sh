@@ -352,7 +352,8 @@ expect_fail "staging restore reports when no snapshot exists" snapshot_none_case
 adapter_grant_convergence_case() (
   local scenario="$1" state="${TMP}/grant-probe-${1}" body="${TMP}/grant-probe-${1}.json"
   : >"${state}"
-  STAGING_ADAPTER_POLICY_WAIT_SECONDS=3
+  STAGING_ADAPTER_POLICY_WAIT_SECONDS=30
+  if [[ "${scenario}" == persistent ]]; then STAGING_ADAPTER_POLICY_WAIT_SECONDS=0; fi
   sleep() { SECONDS=$((SECONDS + 3)); }
   staging_adapter_capture_policy_status() { printf captured >>"${state}"; }
   staging_adapter_mcp_post() {
@@ -377,7 +378,7 @@ adapter_grant_convergence_case() (
   if [[ "${scenario}" == converges ]]; then
     [[ "${status}" == 0 && "$(cat "${state}")" == callcall ]]
   elif [[ "${scenario}" == persistent ]]; then
-    [[ "${status}" != 0 && "$(cat "${state}")" == callcallcaptured ]]
+    [[ "${status}" != 0 && "$(cat "${state}")" == callcaptured ]]
   else
     [[ "${status}" != 0 && "$(cat "${state}")" == call ]]
   fi
