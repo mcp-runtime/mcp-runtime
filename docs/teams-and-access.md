@@ -111,14 +111,43 @@ then enter that user ID and select a role. **Create account in this team** is fo
 new accounts and requires a temporary password of at least eight characters.
 Validation failures appear in the form; an existing email offers the membership
 form rather than resetting the account password. Platform admins and team owners can manage members in their teams.
-A saved login token keeps the membership from the moment it was issued, so
-run `mcp-runtime auth login` again before `server build`, `server push`, or
-`server deploy` for that team.
+The APIs resolve the current account and membership after validating a saved
+login token. Membership changes take effect on the next API request; directory
+lookup failures deny access rather than trusting a stale token's roles.
 
 Remove membership with `mcp-runtime team user remove <team-slug> <user-id>`;
 removing the only owner requires `--confirm-last-owner`. This removes access to
 that team, but does not delete the account or revoke its account-wide API keys
 and sessions.
+
+For a disposable test identity, first create a regular team member with the
+hidden password prompt, record its user ID with `team user list`, sign in as
+that user, and enroll the adapter through the normal session/certificate path.
+The static administrator service key has no human identity and cannot replace
+that user's login for enrollment. After the test, sign back in as an
+administrator and run:
+
+```bash
+mcp-runtime user deactivate <user-id> --yes --json
+```
+
+`user deactivate` permanently disables a platform account, removes its team
+memberships, and revokes its stored API keys, registry credentials, refresh
+tokens and MCP sessions. Audit history and the identity tombstone remain;
+there is no reactivation or hard-delete command. Repeating the command returns
+`already_deactivated: true` with the cleanup counts, so interrupted cleanup can
+be retried. The transaction rolls back if any revocation or audit write fails.
+The signed-in administrator, the last active administrator and a team's last
+active owner cannot be deactivated; transfer ownership or create another
+administrator first. Server resources and team-owned agents remain in place
+for the surviving administrators.
+
+Bearer/API-key requests revalidate current account state. MCP session
+revocations use the existing gateway sync contract (normally a 500ms poll;
+disconnected caches deny after the documented maximum stale window), rather
+than an acknowledgement from every gateway. Previously issued registry bearer
+tokens retain their normal expiry; revoked stored credentials cannot mint new
+tokens. Account cleanup counts report committed platform state.
 
 `team init` is **deprecated** and rejects at runtime. Use `team create` above
 for the normal platform-backed flow. The managed namespace shape that

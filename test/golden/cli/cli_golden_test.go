@@ -25,6 +25,8 @@ func TestCLIHelpGoldens(t *testing.T) {
 		golden string
 	}{
 		{name: "root_help", args: []string{"--help"}, golden: "mcp-runtime_help.golden"},
+		{name: "user_help", args: []string{"user", "--help"}, golden: "mcp-runtime_user_help.golden"},
+		{name: "user_deactivate_help", args: []string{"user", "deactivate", "--help"}, golden: "mcp-runtime_user_deactivate_help.golden"},
 		{name: "access_help", args: []string{"access", "--help"}, golden: "mcp-runtime_access_help.golden"},
 		{name: "access_grant_help", args: []string{"access", "grant", "--help"}, golden: "mcp-runtime_access_grant_help.golden"},
 		{name: "access_grant_revoke_sessions_help", args: []string{"access", "grant", "revoke-sessions", "--help"}, golden: "mcp-runtime_access_grant_revoke_sessions_help.golden"},

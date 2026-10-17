@@ -71,10 +71,16 @@ func (s *Store) CreateUserAPIKey(ctx context.Context, userID, name string) (APIK
 		return APIKeySummary{}, "", err
 	}
 	rec := APIKeySummary{ID: "uk_" + uuid.NewString(), Name: name, Prefix: keyPrefix(rawKey), CreatedAt: time.Now().UTC()}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO api_keys (id,key_hash,user_id,name,prefix,created_at,revoked) VALUES ($1,$2,$3,$4,$5,$6,false)`,
+	insert, err := s.db.ExecContext(ctx, `WITH account AS (SELECT id FROM users WHERE id=$3 AND deleted_at IS NULL FOR SHARE)
+ INSERT INTO api_keys (id,key_hash,user_id,name,prefix,created_at,revoked) SELECT $1,$2,id,$4,$5,$6,false FROM account`,
 		rec.ID, hashAPIKey(rawKey), userID, rec.Name, rec.Prefix, rec.CreatedAt)
 	if err != nil {
 		return APIKeySummary{}, "", err
+	}
+	if count, err := insert.RowsAffected(); err != nil {
+		return APIKeySummary{}, "", err
+	} else if count == 0 {
+		return APIKeySummary{}, "", ErrAccountInactive
 	}
 	return rec, rawKey, nil
 }
@@ -127,10 +133,16 @@ func (s *Store) CreateRegistryCredential(ctx context.Context, userID, name strin
 	}
 	rawKey = "mcpr_" + rawKey
 	rec := APIKeySummary{ID: "rk_" + uuid.NewString(), Name: name, Prefix: keyPrefix(rawKey), CreatedAt: time.Now().UTC()}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO registry_credentials (id,key_hash,user_id,name,prefix,created_at,revoked) VALUES ($1,$2,$3,$4,$5,$6,false)`,
+	insert, err := s.db.ExecContext(ctx, `WITH account AS (SELECT id FROM users WHERE id=$3 AND deleted_at IS NULL FOR SHARE)
+ INSERT INTO registry_credentials (id,key_hash,user_id,name,prefix,created_at,revoked) SELECT $1,$2,id,$4,$5,$6,false FROM account`,
 		rec.ID, hashAPIKey(rawKey), userID, rec.Name, rec.Prefix, rec.CreatedAt)
 	if err != nil {
 		return APIKeySummary{}, "", err
+	}
+	if count, err := insert.RowsAffected(); err != nil {
+		return APIKeySummary{}, "", err
+	} else if count == 0 {
+		return APIKeySummary{}, "", ErrAccountInactive
 	}
 	return rec, rawKey, nil
 }

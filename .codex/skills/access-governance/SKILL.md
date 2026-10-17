@@ -19,6 +19,14 @@ Session apply via platform API is **admin-only**. Adapters usually skip manual s
 
 ## Rules (short)
 
+- For disposable human test identities, use secure `team user create`, enroll
+  as that user, then sign in as an admin and run `user deactivate <id> --yes
+  --json`. Cleanup removes memberships and revokes stored keys/human sessions
+  atomically with audit, while preserving an identity tombstone. Transfer sole
+  team ownership first. Repeated cleanup is idempotent. Existing gateway sync
+  and stale-cache limits still apply; verify denied calls after sync rather
+  than equating a committed revocation count with every gateway's acknowledgement.
+
 - One namespace per team; `MCPServer.spec.teamID` and `SubjectRef.teamID` must match gateway identity fields exactly when set.
 - Platform API rejects cross-namespace `serverRef` and shared-catalog writes for non-admins.
 - Each `MCPServer.spec.tools[]` needs `sideEffect: read|write|destructive`; grants need explicit `allowedSideEffects` (empty = deny all classes).
