@@ -190,6 +190,31 @@ func TestAuthRejectsJWKSOnlyBearerToken(t *testing.T) {
 	}
 }
 
+func TestUnconfiguredAuthenticationRefusesStartupAndIntake(t *testing.T) {
+	if err := validateIngestAuthentication(nil, nil, nil); err == nil {
+		t.Fatal("missing authentication must refuse startup")
+	}
+	for _, headers := range []map[string]string{nil, {"X-API-Key": "forged"}, {"Authorization": "Bearer forged"}} {
+		called := false
+		handler := (&ingestServer{}).auth(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { called = true }))
+		request := httptest.NewRequest(http.MethodPost, "/events", nil)
+		for key, value := range headers {
+			request.Header.Set(key, value)
+		}
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusUnauthorized || called {
+			t.Fatalf("unconfigured intake status=%d called=%v", response.Code, called)
+		}
+	}
+	if err := validateIngestAuthentication(map[string]struct{}{"test-only": {}}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateIngestAuthentication(nil, nil, &serviceAccountAuthenticator{}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 type recordingEventWriter struct {
 	messages []kafka.Message
 }

@@ -384,6 +384,7 @@ func TestHandleLoginWithPassword(t *testing.T) {
 }
 
 func TestLoginClientIDUsesForwardedFor(t *testing.T) {
+	t.Setenv("MCP_TRUSTED_PROXY_CIDRS", "10.0.0.2/32")
 	req := httptest.NewRequest(http.MethodPost, "/auth/login", nil)
 	req.RemoteAddr = "10.0.0.2:12345"
 	req.Header.Set("x-forwarded-for", "203.0.113.10, 10.0.0.2")
@@ -458,6 +459,29 @@ func TestHandleLoginSuccessResetsFailureCounter(t *testing.T) {
 	}
 }
 
+func TestForgedForwardedForDoesNotResetLoginLockout(t *testing.T) {
+	t.Setenv("MCP_TRUSTED_PROXY_CIDRS", "")
+	restore := useLoginAttemptTrackerForTest(t)
+	defer restore()
+	handler := handleLogin("secret", "api-secret", "http://api.example", newUISessionStore(time.Now))
+	for i := 0; i < loginFailureThreshold; i++ {
+		request := loginRequestFrom("198.51.100.10", `{"api_key":"wrong"}`)
+		request.Header.Set("X-Forwarded-For", fmt.Sprintf("203.0.113.%d", i+1))
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusUnauthorized {
+			t.Fatalf("failure %d status=%d", i, response.Code)
+		}
+	}
+	request := loginRequestFrom("198.51.100.10", `{"api_key":"secret"}`)
+	request.Header.Set("X-Forwarded-For", "192.0.2.254")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusTooManyRequests {
+		t.Fatalf("forged header bypassed lockout: status=%d", response.Code)
+	}
+}
+
 func TestLoginAttemptTrackerPrunesIdleClientsPeriodically(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	tracker := newLoginAttemptTracker(func() time.Time { return now })
@@ -527,8 +551,7 @@ func useLoginAttemptTrackerForTest(t *testing.T) func() {
 
 func loginRequestFrom(clientID, body string) *http.Request {
 	req := httptest.NewRequest(http.MethodPost, "/auth/login", strings.NewReader(body))
-	req.RemoteAddr = "10.0.0.2:12345"
-	req.Header.Set("x-forwarded-for", clientID)
+	req.RemoteAddr = clientID + ":12345"
 	return req
 }
 

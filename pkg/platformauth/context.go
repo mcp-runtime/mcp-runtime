@@ -2,7 +2,6 @@ package platformauth
 
 import (
 	"context"
-	"net"
 	"net/http"
 	"strings"
 )
@@ -18,24 +17,6 @@ func WithPrincipal(ctx context.Context, p Principal) context.Context {
 func FromContext(ctx context.Context) (Principal, bool) {
 	p, ok := ctx.Value(contextKey{}).(Principal)
 	return p, ok
-}
-
-func RequestIP(r *http.Request) string {
-	if xff := strings.TrimSpace(r.Header.Get("x-forwarded-for")); xff != "" {
-		for _, part := range strings.Split(xff, ",") {
-			if ip := strings.TrimSpace(part); ip != "" {
-				return ip
-			}
-		}
-	}
-	remote := strings.TrimSpace(r.RemoteAddr)
-	if host, _, err := net.SplitHostPort(remote); err == nil && strings.TrimSpace(host) != "" {
-		return strings.TrimSpace(host)
-	}
-	if remote != "" {
-		return remote
-	}
-	return UnknownRequestIP
 }
 
 func RequestSource(r *http.Request) string {
