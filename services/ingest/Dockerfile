@@ -11,7 +11,7 @@ COPY services/ingest/*.go ./services/ingest/
 ARG TARGETOS
 ARG TARGETARCH
 RUN cd services/ingest && \
-    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /out/ingest .
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" -o /out/ingest .
 
 FROM gcr.io/distroless/base-debian12
 WORKDIR /app

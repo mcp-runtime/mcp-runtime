@@ -39,6 +39,34 @@ git diff --check
 )
 ```
 
+## Go service image binaries
+
+The operator and first-party Go service Dockerfiles build Linux binaries with
+`-trimpath -ldflags="-s -w"`. `-trimpath` removes build-machine source paths;
+`-s -w` omits the linker symbol table and DWARF debug sections. Keep an
+unstripped local build when external debugger or symbol-table analysis is
+needed. Runtime behavior is unchanged, but binary size alone does not establish
+lower working memory, faster startup, or lower request latency.
+
+To compare the `platform-api` executable on a fixed source revision and
+architecture, build both variants from `services/platform-api` with the same
+Go toolchain and build environment. At revision `576353d1`, Go 1.26.9,
+Linux/amd64 and CGO disabled produced 70,601,998 bytes by default and
+49,479,842 bytes with the image flags (29.9% smaller):
+
+```bash
+export KUBECONFIG=$(mktemp)
+export GOOS=linux GOARCH=amd64 CGO_ENABLED=0
+go build -o /tmp/platform-api-default .
+go build -trimpath -ldflags='-s -w' -o /tmp/platform-api-trimmed .
+stat -f '%z %N' /tmp/platform-api-default /tmp/platform-api-trimmed # macOS
+stat -c '%s %n' /tmp/platform-api-default /tmp/platform-api-trimmed # Linux
+```
+
+Measure image layers separately with the project's image scan/build workflow;
+this executable comparison does not represent compressed image size or
+container startup/resource consumption.
+
 ## API and UI
 
 The following workload-image mutations are for a disposable contributor Kind
