@@ -3,6 +3,8 @@ package platformauth
 import (
 	"context"
 	"crypto/hmac"
+	"database/sql"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -19,6 +21,12 @@ type OIDCVerifier interface {
 	Verify(context.Context, string) (Principal, bool, error)
 }
 
+// PrincipalResolver refreshes current account and membership state after token
+// verification. A signed token cannot keep a deactivated account authorized.
+type PrincipalResolver interface {
+	PrincipalForUserID(context.Context, string) (Principal, error)
+}
+
 type Authenticator struct {
 	Secret          []byte
 	Audience        string
@@ -26,6 +34,7 @@ type Authenticator struct {
 	AdminAPIKeys    map[string]struct{}
 	UserKeyResolver UserKeyResolver
 	OIDC            OIDCVerifier
+	Principals      PrincipalResolver
 	PublicFallback  func(*http.Request) (Principal, bool)
 }
 
@@ -80,13 +89,39 @@ func (a Authenticator) AuthenticateRequest(r *http.Request) (Principal, bool, er
 	}
 	if len(a.Secret) > 0 {
 		if claims, err := Verify(a.Secret, token, a.Audience); err == nil {
-			return ToPrincipal(claims), true, nil
+			return a.currentPrincipal(r.Context(), ToPrincipal(claims))
 		}
 	}
 	if a.OIDC != nil {
-		return a.OIDC.Verify(r.Context(), token)
+		p, ok, err := a.OIDC.Verify(r.Context(), token)
+		if err != nil || !ok {
+			return p, ok, err
+		}
+		return a.currentPrincipal(r.Context(), p)
 	}
 	return Principal{}, false, nil
+}
+
+func (a Authenticator) currentPrincipal(ctx context.Context, p Principal) (Principal, bool, error) {
+	if a.Principals == nil || p.IsService {
+		return p, true, nil
+	}
+	if p.UserID() == "" {
+		return Principal{}, false, nil
+	}
+	current, err := a.Principals.PrincipalForUserID(ctx, p.UserID())
+	if errors.Is(err, sql.ErrNoRows) {
+		return Principal{}, false, nil
+	}
+	if err != nil {
+		return Principal{}, false, err
+	}
+	if current.UserID() != p.UserID() {
+		return Principal{}, false, errors.New("identity resolver subject mismatch")
+	}
+	current.AuthType = p.AuthType
+	current.APIKeyID = p.APIKeyID
+	return current, true, nil
 }
 
 func containsAPIKey(keys map[string]struct{}, apiKey string) bool {

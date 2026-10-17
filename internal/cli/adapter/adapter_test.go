@@ -12,7 +12,7 @@ import (
 	"mcp-runtime/pkg/certauth"
 )
 
-func TestAdapterCommandRegistersOnlyProxyAndEnroll(t *testing.T) {
+func TestAdapterCommandRegistersSupportedCommands(t *testing.T) {
 	t.Parallel()
 
 	cmd := New(core.NewRuntime(nil))
@@ -20,10 +20,10 @@ func TestAdapterCommandRegistersOnlyProxyAndEnroll(t *testing.T) {
 	for _, child := range cmd.Commands() {
 		subs[child.Use] = true
 	}
-	if len(subs) != 2 {
+	if len(subs) != 4 {
 		t.Fatalf("unexpected adapter commands: %v", subs)
 	}
-	for _, want := range []string{"proxy", "enroll"} {
+	for _, want := range []string{"proxy", "enroll", "service", "profile"} {
 		if !subs[want] {
 			t.Fatalf("adapter command missing %q subcommand; got %v", want, subs)
 		}

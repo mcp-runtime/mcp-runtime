@@ -1,0 +1,15 @@
+Manage platform accounts as an administrator
+
+Usage:
+  mcp-runtime user [command]
+
+Available Commands:
+  deactivate  Permanently deactivate an account and revoke its access
+
+Flags:
+  -h, --help   help for user
+
+Global Flags:
+      --debug   Enable debug mode with structured error logging
+
+Use "mcp-runtime user [command] --help" for more information about a command.

@@ -71,6 +71,7 @@ func main() {
 		runtime:  runtimeServer,
 		platform: platformClient,
 		authentic: platformauth.Authenticator{
+			Principals:     &platformauth.HTTPUserKeyResolver{BaseURL: platformAPIURL, Token: internalToken},
 			Secret:         jwtSecret,
 			Audience:       platformauth.AudienceRuntime,
 			ServiceAPIKeys: apiKeys,

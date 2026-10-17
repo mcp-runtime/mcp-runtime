@@ -63,6 +63,41 @@ func TestSessionClientPreservesUIDAndMetadata(t *testing.T) {
 	}
 }
 
+func TestSessionClientUsesConditionalEnrollmentMutations(t *testing.T) {
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.URL.Path != sessionstate.AccessPath+"/tenant/sess/enrollment" || r.Header.Get("Authorization") != "Bearer control-token" {
+			t.Errorf("unexpected enrollment request %s", r.URL)
+		}
+		switch r.Method {
+		case http.MethodPatch:
+			var request sessionstate.EnrollmentRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil || request.UID != "session-uid" {
+				t.Errorf("request=%+v error=%v", request, err)
+			}
+		case http.MethodDelete:
+			if r.URL.Query().Get("uid") != "session-uid" || r.URL.Query().Get("human_id") != "owner" {
+				t.Errorf("cleanup query=%s", r.URL.RawQuery)
+			}
+		default:
+			t.Errorf("unexpected method %s", r.Method)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	client := &Client{BaseURL: server.URL, Token: "control-token", HTTP: server.Client()}
+	if err := client.CompleteSessionEnrollment(context.Background(), "tenant", "sess", "session-uid"); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.DeletePendingSession(context.Background(), "tenant", "sess", "session-uid", "owner"); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 2 {
+		t.Fatalf("calls=%d", calls)
+	}
+}
+
 func TestSessionClientMapsErrorsAndNeverHidesStoreOutage(t *testing.T) {
 	for _, tt := range []struct {
 		status int
