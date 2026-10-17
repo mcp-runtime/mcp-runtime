@@ -313,6 +313,28 @@ func ServerInfoFromMCPServer(mcpServer mcpv1alpha1.MCPServer, deploymentStatus S
 		Prompts:            inventoryItemsOrEmpty(mcpServer.Spec.Prompts),
 		Resources:          inventoryItemsOrEmpty(mcpServer.Spec.MCPResources),
 		Tasks:              inventoryItemsOrEmpty(mcpServer.Spec.Tasks),
+		RuntimeStatus:      serverRuntimeStatus(mcpServer, status),
+	}
+}
+
+func serverRuntimeStatus(server mcpv1alpha1.MCPServer, status string) ServerRuntimeStatus {
+	connectionState := "not_ready"
+	if strings.EqualFold(strings.TrimSpace(status), "ready") {
+		connectionState = "ready"
+	}
+	authSource := serverAuthMode(server.Spec)
+	if authSource == "" {
+		authSource = "none"
+	}
+	transport := "streamable-http"
+	if strings.TrimSpace(PublicMCPEndpoint(server)) == "" {
+		transport = "unknown"
+	}
+	return ServerRuntimeStatus{
+		Transport:       transport,
+		ConnectionState: connectionState,
+		AuthSource:      authSource,
+		LastError:       server.Status.LastError,
 	}
 }
 
