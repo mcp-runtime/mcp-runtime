@@ -44,6 +44,8 @@ func TestCLIHelpGoldens(t *testing.T) {
 		{name: "adapter_help", args: []string{"adapter", "--help"}, golden: "mcp-runtime_adapter_help.golden"},
 		{name: "adapter_enroll_help", args: []string{"adapter", "enroll", "--help"}, golden: "mcp-runtime_adapter_enroll_help.golden"},
 		{name: "adapter_proxy_help", args: []string{"adapter", "proxy", "--help"}, golden: "mcp-runtime_adapter_proxy_help.golden"},
+		{name: "adapter_service_help", args: []string{"adapter", "service", "--help"}, golden: "mcp-runtime_adapter_service_help.golden"},
+		{name: "adapter_profile_help", args: []string{"adapter", "profile", "--help"}, golden: "mcp-runtime_adapter_profile_help.golden"},
 		{name: "auth_help", args: []string{"auth", "--help"}, golden: "mcp-runtime_auth_help.golden"},
 		{name: "auth_login_help", args: []string{"auth", "login", "--help"}, golden: "mcp-runtime_auth_login_help.golden"},
 		{name: "auth_logout_help", args: []string{"auth", "logout", "--help"}, golden: "mcp-runtime_auth_logout_help.golden"},
@@ -100,6 +102,8 @@ func TestCLIHelpGoldens(t *testing.T) {
 		{name: "cluster_cert_status_help", args: []string{"cluster", "cert", "status", "--help"}, golden: "mcp-runtime_cluster_cert_status_help.golden"},
 		{name: "cluster_cert_apply_help", args: []string{"cluster", "cert", "apply", "--help"}, golden: "mcp-runtime_cluster_cert_apply_help.golden"},
 		{name: "cluster_cert_wait_help", args: []string{"cluster", "cert", "wait", "--help"}, golden: "mcp-runtime_cluster_cert_wait_help.golden"},
+		{name: "cluster_identity_help", args: []string{"cluster", "identity", "--help"}, golden: "mcp-runtime_cluster_identity_help.golden"},
+		{name: "cluster_identity_status_help", args: []string{"cluster", "identity", "status", "--help"}, golden: "mcp-runtime_cluster_identity_status_help.golden"},
 		{name: "cluster_doctor_help", args: []string{"cluster", "doctor", "--help"}, golden: "mcp-runtime_cluster_doctor_help.golden"},
 		{name: "cluster_diagnostics_help", args: []string{"cluster", "diagnostics", "--help"}, golden: "mcp-runtime_cluster_diagnostics_help.golden"},
 	}

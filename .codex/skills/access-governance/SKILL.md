@@ -13,6 +13,7 @@ description: Apply and debug MCP Runtime access grants, agent sessions, gateway 
 | **CLI (default)** | `mcp-runtime auth login --api-url <url>` → `agent create|list|...` and `access grant init` / `access grant apply --file …` |
 | **Adapter (recommended for agents)** | `adapter proxy --server <name> --agent <id> [--auto-refresh]` → certificate-backed platform session; add OAuth only when the server configures it |
 | **Optional header adapter** | `adapter proxy --auth-mode header --runtime-url https://… --credential-header-env Name=ENV` injects client-local credential headers and does not enroll a certificate. Direct clients can send the same headers without the adapter. |
+| **macOS background adapter** | `adapter profile add` and `adapter service install` persist isolated, owner-protected profiles. The native companion uses the same versioned management API through its bundled CLI. Local client credentials stay separate from upstream OAuth; closing the app leaves the daemon running. |
 | **Explicit Kubernetes test/recovery** | `access … --use-kube` only when that path is explicitly requested; never bypass a failed CLI/UI flow |
 
 Session apply via platform API is **admin-only**. Adapters usually skip manual session apply.
@@ -41,6 +42,7 @@ Session apply via platform API is **admin-only**. Adapters usually skip manual s
 - CLI `server delete` and UI Retire disable grants and revoke sessions before removing exact server-reference authorization across namespaces. Cleanup failures require retry; `mcpruntime.org/retiring` blocks issuance/redeployment while recovery completes. Admins can repeat deletion for an absent server to clean orphaned access. Shared pull credentials and audit history remain.
 - New grants/sessions bind to `mcpruntime.org/server-uid`; policy rendering rejects a binding from an earlier same-name deployment. Explicit `server delete --use-kube` removes only the Kubernetes server object and does not perform platform access retirement.
 - OAuth is optional and is enabled by `MCPServer.spec.auth` without `mode: header`. Direct clients use a bearer only on OAuth-enabled servers. An adapter always presents its enrolled certificate and adds a bearer only when the target enables OAuth.
+- Diagnose PKI with `cluster identity status --server <namespace>/<name>`. Resolve the selected containers' declared ConfigMap sources and the selected route's actual TLSOption; unreadable configuration must fail rather than appear disabled. Read only public certificate fields from Secrets.
 - `auth.mode: header` forwards every configured credential header unchanged for the upstream server to authenticate. The gateway enforces allow-list tool rules and default deny, and it does not derive a Runtime identity from those headers. Grants, sessions, and observation mode are rejected on this path.
 - When an adapter calls an OAuth-enabled server, the gateway requires the token subject to equal the session human and forwards the validated bearer to the same logical MCP resource server.
 - The upstream MCP application validates the same issuer and audience and must never forward this token to a third-party API.

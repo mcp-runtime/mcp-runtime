@@ -54,7 +54,7 @@ func writePlanText(out io.Writer, plan *Plan) {
 		_ = tw.Flush()
 	}
 	if len(plan.PlatformObjects) > 0 {
-		fmt.Fprintln(out, "\nPlatform ServiceAccount/RBAC objects:")
+		fmt.Fprintln(out, "\nPlatform objects:")
 		tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 		fmt.Fprintln(tw, "OBJECT\tACTION")
 		for _, o := range plan.PlatformObjects {
@@ -105,7 +105,7 @@ func writeConfirmSummary(out io.Writer, plan *Plan, build bool) {
 		fmt.Fprintf(out, "This update will apply CustomResourceDefinitions (%s) before rolling images.\n", stringsJoin(plan.CRDNames))
 	}
 	if len(plan.objects) > 0 {
-		fmt.Fprintf(out, "This update will create or correct %d platform ServiceAccount/RBAC object(s) before rolling images.\n", len(plan.objects))
+		fmt.Fprintf(out, "This update will create or correct %d platform object(s) before rolling images.\n", len(plan.objects))
 	}
 	if len(plan.configToWrite) > 0 {
 		fmt.Fprintf(out, "This update will write %d ConfigMap(s) and restart the workloads that read them.\n", len(plan.configToWrite))

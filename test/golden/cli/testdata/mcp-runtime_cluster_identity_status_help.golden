@@ -1,0 +1,11 @@
+Report operator/runtime API configuration, workload ClusterIssuer readiness, CA expiry and fingerprints, and whether the selected server route requests client certificates. Secret private keys and credentials are never read or printed.
+
+Usage:
+  mcp-runtime cluster identity status [flags]
+
+Flags:
+  -h, --help            help for status
+      --server string   Selected MCPServer as <namespace>/<name>
+
+Global Flags:
+      --debug   Enable debug mode with structured error logging

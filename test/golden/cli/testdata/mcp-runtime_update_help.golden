@@ -12,7 +12,8 @@ When the release sets crdChange, the manifest embeds CustomResourceDefinition
 YAML (field "crds") so update applies only those CRD objects whose live spec
 differs, waits until each written CRD is Established, then rolls images. Pass
 --crds or use the release's platform-crds.yaml when the JSON omits the bundle.
-A release can also declare the ServiceAccounts and RBAC its workloads need
+A release can also declare the ServiceAccounts, RBAC and supported platform
+NetworkPolicies its workloads need
 (platformObjects) and per-component Deployment wiring (ServiceAccount, token
 mount, required env). update creates or corrects only those declared objects
 and fields, validates that they grant no wildcard or escalating access, applies

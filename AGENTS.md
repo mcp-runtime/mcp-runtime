@@ -73,6 +73,11 @@ dashboard asset/session and MCP Auth discovery routes when changing prefixes.
 
 ## Product management paths
 
+macOS companion source and packaging live in `desktop/macos/`. The dedicated
+workflow compiles both architectures without launching desktop software.
+Unsigned preview artifacts are distinct from `build.sh --sign` distribution;
+real macOS lifecycle and notarization evidence must be recorded before release.
+
 Use supported CLI and UI workflows for setup, teams/users, registry publishing,
 servers, grants, sessions, updates and cleanup. For servers, use `server init` →
 `server validate` → `server build` → `server push` → `server deploy`.
@@ -167,7 +172,7 @@ deployment and this section is updated.
   backfill frameworks, or in-place upgrade paths just to support earlier
   releases of our own platform.
 - Ordinary releases are delivered with `mcp-runtime update` (images, CRDs and the
-  ServiceAccounts, RBAC, ConfigMaps and Deployment wiring a release declares in
+  ServiceAccounts, RBAC, supported platform NetworkPolicies, ConfigMaps and Deployment wiring a release declares in
   `config/release/wiring.yaml`). A breaking reset follows **backup → fresh setup
   → restore required data → verify** on the reference platform. Document that
   procedure instead of designing a general customer migration system.
