@@ -1327,6 +1327,7 @@ func ownedCredential(key string) (namespace, name string, err error) {
 }
 
 func renderAnalyticsSecretManifestWithReader(readSecret analyticsSecretValueReader) (string, error) {
+	readSecret = guardPlaceholderCredentials(readSecret)
 	if err := validatePlatformAdminEnvironment(); err != nil {
 		return "", err
 	}
