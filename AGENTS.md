@@ -86,6 +86,11 @@ scopes separate when adding resource summaries. Ownership labels do not establis
 historical deployment attribution. Team owners manage memberships through
 `#/workspace/team?team=<slug>` using the same supported forms and APIs as admins.
 
+macOS companion source and packaging live in `desktop/macos/`. The dedicated
+workflow compiles both architectures without launching desktop software.
+Unsigned preview artifacts are distinct from `build.sh --sign` distribution;
+real macOS lifecycle and notarization evidence must be recorded before release.
+
 Use supported CLI and UI workflows for setup, teams/users, registry publishing,
 servers, grants, sessions, updates and cleanup. For servers, use `server init` →
 `server validate` → `server build` → `server push` → `server deploy`.

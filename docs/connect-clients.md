@@ -218,6 +218,75 @@ The CA bundle does not receive or sign the CSR itself. The platform certificate
 endpoint submits the validated request to the configured issuer and returns the
 issuer's chain as the bundle.
 
+## macOS background adapter and companion
+
+The macOS CLI can run isolated adapter profiles in a per-user background
+service. Each profile is explicitly authorized for one platform, team, human,
+agent, server and session; local MCP clients receive a separate owner-only
+credential. Session expiry still requires interactive authorization. The
+native companion is a normal Dock app with one status/control window. It uses
+the bundled CLI's protected management API, never reads credential storage,
+and leaves the daemon running when closed or quit. It reports local readiness
+separately from measured upstream authorization, profile identity, certificate
+expiry and redacted errors. Reconnect renews only the existing session; a new
+consent lifetime still requires interactive CLI authorization.
+
+```bash
+mcp-runtime adapter profile add work \
+  --runtime-url https://mcp.example.com/workspace-assistant/mcp \
+  --namespace mcp-team-acme \
+  --server workspace-assistant \
+  --agent agt_01arz3ndektsv4rrffq69g5fav
+mcp-runtime adapter service install
+mcp-runtime adapter profile client-config work --output ~/mcp-work.json
+mcp-runtime adapter service status
+```
+
+`profile add` uses the selected interactive platform login to authorize the
+session. `client-config` refuses to overwrite an existing file and writes the
+local credential with mode `0600`; protect that file as a credential. The
+daemon binds only to IPv4 loopback, rejects browser-origin requests, and
+requires the profile's local token. `service logs` and `service status` report
+fixed redacted events and measured state, not certificates, private keys,
+tokens or MCP payloads. `service uninstall` preserves profiles unless
+`--purge` is supplied. This daemon slice is for macOS and is not a substitute
+for the existing foreground `adapter proxy` workflow on other platforms.
+
+The companion targets macOS 13 or later on Apple Silicon and Intel. Its
+authoritative target and Swift 5 language mode are in `desktop/macos/build.sh`;
+use Xcode 14 or later from [Apple's Xcode distribution](https://developer.apple.com/xcode/)
+and select its command-line tools (`xcode-select --install` for the standalone
+tools). These requirements were reviewed on 2026-10-17; this change does not
+upgrade a developer's installed toolchain. Build each
+architecture on a Mac with those tools and the Go version in
+`go.mod`; these commands compile/package without opening the app or starting
+the daemon:
+
+```bash
+bash desktop/macos/build.sh arm64 dist
+bash desktop/macos/build.sh amd64 dist
+```
+
+PR build artifacts are explicitly **unsigned previews**. They are not the
+signed/notarized distribution. For distribution, configure a Developer ID
+Application identity and a `notarytool` profile in the build user's Keychain,
+then set `MCP_DESKTOP_SIGNING_IDENTITY` and `MCP_DESKTOP_NOTARY_PROFILE` to those
+names and add `--sign` to each build command. Signing runs inside-out with the
+hardened runtime, submits to Apple, staples the accepted ticket and verifies
+Gatekeeper before producing `*-notarized.zip`. See Apple's
+[notarization workflow](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution)
+and [Developer ID guidance](https://developer.apple.com/developer-id/).
+
+Install the app in Applications and use **Install and enable login startup**
+after configuring profiles. To update, replace the app and reinstall the
+service from it; the CLI copies a stable managed binary and preserves profiles.
+The app and daemon require management protocol version 1. To remove startup
+and stop the daemon, choose **Uninstall service**; deleting the app alone does
+not uninstall the daemon. Remove stored profiles only through the explicit CLI
+purge option. Signing/notarization and real macOS sleep/wake, install/update/
+uninstall and two-profile desktop acceptance still need release evidence;
+Linux/headless compilation checks cannot establish those results.
+
 ## Optional header mode
 
 Use header mode when the MCP server authenticates the caller with its own

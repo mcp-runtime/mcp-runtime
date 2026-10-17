@@ -358,7 +358,8 @@ expect_fail "staging restore reports when no snapshot exists" snapshot_none_case
 adapter_grant_convergence_case() (
   local scenario="$1" state="${TMP}/grant-probe-${1}" body="${TMP}/grant-probe-${1}.json"
   : >"${state}"
-  STAGING_ADAPTER_POLICY_WAIT_SECONDS=3
+  STAGING_ADAPTER_POLICY_WAIT_SECONDS=30
+  if [[ "${scenario}" == persistent ]]; then STAGING_ADAPTER_POLICY_WAIT_SECONDS=0; fi
   sleep() { SECONDS=$((SECONDS + 3)); }
   staging_adapter_capture_policy_status() { printf captured >>"${state}"; }
   staging_adapter_mcp_post() {
@@ -383,7 +384,7 @@ adapter_grant_convergence_case() (
   if [[ "${scenario}" == converges ]]; then
     [[ "${status}" == 0 && "$(cat "${state}")" == callcall ]]
   elif [[ "${scenario}" == persistent ]]; then
-    [[ "${status}" != 0 && "$(cat "${state}")" == callcallcaptured ]]
+    [[ "${status}" != 0 && "$(cat "${state}")" == callcaptured ]]
   else
     [[ "${status}" != 0 && "$(cat "${state}")" == call ]]
   fi
@@ -457,7 +458,11 @@ deactivation_acceptance_case() (
   staging_stage_status() { printf passed; }
   staging_mt_read_agents() { return 0; }
   sleep() { SECONDS=$((SECONDS + 10)); }
-  staging_http_code() { if [[ "${scenario}" == live-token ]]; then printf 200; else printf 401; fi; }
+  staging_http_code() {
+    if [[ "${*: -1}" != "${PLATFORM_URL}/api/v1/auth/me" || "${scenario}" == unknown-route ]]; then printf 404
+    elif [[ "${scenario}" == live-token ]]; then printf 200
+    else printf 401; fi
+  }
   staging_monitor_post() {
     if [[ ! -f "${flag}" ]]; then
       printf '{"jsonrpc":"2.0","id":536,"result":{"content":[{"type":"text","text":"12"}]}}' >"$1/response.json"; printf 200
@@ -479,6 +484,7 @@ deactivation_acceptance_case() (
 expect_ok "deactivation verifies saved token, existing session and idempotent CLI cleanup" deactivation_acceptance_case revoked
 expect_fail "deactivation cannot pass on unrelated tool denial" deactivation_acceptance_case wrong-denial
 expect_fail "deactivation cannot pass while saved token remains valid" deactivation_acceptance_case live-token
+expect_fail "deactivation cannot mistake an unknown token-probe route for revocation" deactivation_acceptance_case unknown-route
 
 if [[ "${FAILURES}" -ne 0 ]]; then
   echo "${FAILURES} staging lib test(s) failed" >&2

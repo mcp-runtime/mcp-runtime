@@ -242,7 +242,7 @@ staging_check_account_deactivation() (
   deadline=$((SECONDS + 5))
   jq -e --arg id "${STAGING_MONITOR_USER_ID}" '.user_id == $id and .status == "deactivated" and .revoked_sessions >= 1' "${evidence}/deactivation.json" >/dev/null || return 1
   human_token="$(jq -er --arg p "${MT_GLOBEX_PROFILE}" '.accounts[$p].token' "${MT_CONFIG}")" || return 1
-  code="$(staging_http_code --max-time 10 -H "authorization: Bearer ${human_token}" -H "x-api-key: ${human_token}" "${PLATFORM_URL}/api/v1/user/me")" || return 1
+  code="$(staging_http_code --max-time 10 -H "authorization: Bearer ${human_token}" -H "x-api-key: ${human_token}" "${PLATFORM_URL}/api/v1/auth/me")" || return 1
   [[ "${code}" == 401 || "${code}" == 403 ]] || { staging_err "deactivated user's token returned HTTP ${code}"; return 1; }
   while true; do
     code="$(staging_monitor_post "${dir}" "${STAGING_MONITOR_CREDENTIAL_DIR}" "${STAGING_MONITOR_MCP_SESSION}" '{"jsonrpc":"2.0","id":537,"method":"tools/call","params":{"name":"add","arguments":{"a":5,"b":7}}}')" || return 1
