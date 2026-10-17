@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	mcpaccess "mcp-runtime/pkg/access"
+	"mcp-runtime/pkg/access/specvalidation"
 	"mcp-runtime/pkg/mcpdefaults"
 )
 
@@ -31,29 +32,12 @@ func NormalizeSideEffect(sideEffect mcpaccess.ToolSideEffect) mcpaccess.ToolSide
 	return mcpaccess.ToolSideEffect(strings.TrimSpace(string(sideEffect)))
 }
 
-func ValidTrust(trust mcpaccess.TrustLevel) bool {
-	switch trust {
-	case "low", "medium", "high":
-		return true
-	default:
-		return false
-	}
-}
+func ValidTrust(trust mcpaccess.TrustLevel) bool { return specvalidation.ValidTrust(string(trust)) }
 
 func ValidSideEffect(sideEffect mcpaccess.ToolSideEffect) bool {
-	switch sideEffect {
-	case "read", "write", "destructive":
-		return true
-	default:
-		return false
-	}
+	return specvalidation.ValidSideEffect(string(sideEffect))
 }
 
 func ValidDecision(decision mcpaccess.PolicyDecision) bool {
-	switch decision {
-	case "allow", "deny":
-		return true
-	default:
-		return false
-	}
+	return specvalidation.ValidDecision(string(decision))
 }
