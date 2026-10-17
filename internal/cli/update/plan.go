@@ -33,7 +33,7 @@ var preservedResources = []string{
 	"Namespace contents and scope labels (catalog namespaces are additive; existing scopes cannot change)",
 	"cert-manager Issuers, ClusterIssuers, and Certificates",
 	"Existing MCP Runtime custom resources (MCPServer, grants, sessions)",
-	"Services, Ingresses, IngressRoutes, NetworkPolicies, and RBAC (except the platform ServiceAccount/RBAC objects a release declares)",
+	"Services, Ingresses, IngressRoutes, NetworkPolicies, and RBAC (except the platform ServiceAccount/RBAC/NetworkPolicy objects a release declares)",
 	"Deployment replicas, resources, probes, and env (except MCP_GATEWAY_PROXY_IMAGE and the ServiceAccount, token mount and env a release declares as wiring)",
 }
 
@@ -83,7 +83,7 @@ type Plan struct {
 	CRDPreview []CRDResult `json:"crdPreview,omitempty"`
 	// ImageBuilds lists unique Built images to build or reuse when --build is set.
 	ImageBuilds []ImageBuildAction `json:"imageBuilds,omitempty"`
-	// PlatformObjects previews the ServiceAccount/RBAC objects the release
+	// PlatformObjects previews the ServiceAccount/RBAC/NetworkPolicy objects the release
 	// manages: create, update, or skipped when they already match.
 	PlatformObjects []ObjectResult `json:"platformObjects,omitempty"`
 	// allObjects are the release's declared objects; objects are those that
@@ -227,7 +227,7 @@ func BuildPlan(ctx context.Context, cs kubernetes.Interface, m *platformrelease.
 	}
 	if strings.TrimSpace(m.PlatformObjects) != "" {
 		if len(sel.Only) > 0 {
-			plan.Warnings = append(plan.Warnings, fmt.Sprintf("release %s declares platform ServiceAccount/RBAC objects, but --only is set so they are skipped; re-run without --only to apply them", m.Version))
+			plan.Warnings = append(plan.Warnings, fmt.Sprintf("release %s declares platform objects, but --only is set so they are skipped; re-run without --only to apply them", m.Version))
 		} else {
 			objs, err := platformrelease.ParsePlatformObjects(m.PlatformObjects)
 			if err != nil {

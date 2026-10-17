@@ -1,0 +1,11 @@
+Remove a user's membership from a team
+
+Usage:
+  mcp-runtime team user remove [team-slug] [user-id] [flags]
+
+Flags:
+      --confirm-last-owner   Allow removing the team's only owner
+  -h, --help                 help for remove
+
+Global Flags:
+      --debug   Enable debug mode with structured error logging

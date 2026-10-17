@@ -10,6 +10,9 @@ import (
 	"sort"
 	"strings"
 
+	networkingv1 "k8s.io/api/networking/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/yaml"
 
@@ -96,6 +99,15 @@ var platformObjectKinds = map[string]bool{
 	"RoleBinding":        true,
 	"ClusterRole":        true,
 	"ClusterRoleBinding": true,
+	"NetworkPolicy":      true,
+}
+
+// Keep network changes limited to the platform policies explicitly supported
+// by setup and update. Tenant and operator-created policies remain untouched.
+var platformNetworkPolicies = map[string]bool{
+	"mcp-observability/kafka-client-ingress":             true,
+	"mcp-observability/mcp-scoped-observability-ingress": true,
+	"mcp-platform/mcp-runtime-api-grafana-egress":        true,
 }
 
 // PlatformObject identifies one object in a release's platform bundle.
@@ -126,7 +138,8 @@ func platformNamespaces() map[string]bool {
 }
 
 // ParsePlatformObjects decodes a release's platform bundle and enforces what a
-// remote manifest may ask of the cluster: RBAC and ServiceAccount kinds only,
+// remote manifest may ask of the cluster: RBAC, ServiceAccounts and explicitly
+// supported platform NetworkPolicies only,
 // platform-owned names and namespaces, no wildcard or privilege-escalating
 // rules, and bindings only to roles defined in the same bundle and subjects
 // that are platform ServiceAccounts. A release can therefore never bind an
@@ -151,7 +164,7 @@ func ParsePlatformObjects(bundle string) ([]PlatformObject, error) {
 		}
 		kind, _ := raw["kind"].(string)
 		if !platformObjectKinds[kind] {
-			return nil, fmt.Errorf("platform objects may only contain ServiceAccount, Role, RoleBinding, ClusterRole or ClusterRoleBinding; found %q", kind)
+			return nil, fmt.Errorf("platform objects may only contain ServiceAccount, Role, RoleBinding, ClusterRole, ClusterRoleBinding or NetworkPolicy; found %q", kind)
 		}
 		meta, _ := raw["metadata"].(map[string]any)
 		name, _ := meta["name"].(string)
@@ -191,6 +204,8 @@ func validatePlatformObjects(objs []PlatformObject) error {
 			errs = append(errs, fmt.Errorf("%s: namespace %q is not a platform namespace", key, o.Namespace))
 		}
 		switch o.Kind {
+		case "NetworkPolicy":
+			errs = append(errs, validateNetworkPolicy(o)...)
 		case "Role", "ClusterRole":
 			errs = append(errs, validateRules(key, o.Object)...)
 		case "RoleBinding", "ClusterRoleBinding":
@@ -198,6 +213,34 @@ func validatePlatformObjects(objs []PlatformObject) error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func validateNetworkPolicy(o PlatformObject) []error {
+	if !platformNetworkPolicies[o.Namespace+"/"+o.Name] {
+		return []error{fmt.Errorf("%s: not a supported platform NetworkPolicy", o.Key())}
+	}
+	if o.Object["apiVersion"] != "networking.k8s.io/v1" {
+		return []error{fmt.Errorf("%s: NetworkPolicy must use networking.k8s.io/v1", o.Key())}
+	}
+	if _, ok := o.Object["spec"].(map[string]any); !ok {
+		return []error{fmt.Errorf("%s: NetworkPolicy is missing spec", o.Key())}
+	}
+	var policy networkingv1.NetworkPolicy
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(o.Object, &policy); err != nil {
+		return []error{fmt.Errorf("%s: invalid NetworkPolicy: %w", o.Key(), err)}
+	}
+	if _, err := metav1.LabelSelectorAsSelector(&policy.Spec.PodSelector); err != nil {
+		return []error{fmt.Errorf("%s: invalid pod selector: %w", o.Key(), err)}
+	}
+	if len(policy.Spec.PolicyTypes) == 0 {
+		return []error{fmt.Errorf("%s: NetworkPolicy must explicitly declare policyTypes", o.Key())}
+	}
+	for _, kind := range policy.Spec.PolicyTypes {
+		if kind != networkingv1.PolicyTypeIngress && kind != networkingv1.PolicyTypeEgress {
+			return []error{fmt.Errorf("%s: invalid policyType %q", o.Key(), kind)}
+		}
+	}
+	return nil
 }
 
 func validateRules(key string, obj map[string]any) []error {

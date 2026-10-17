@@ -95,6 +95,13 @@ event trace and a `clickhouse.insert_batch` span for the batch operation. Batch
 spans include Kafka topic, partition, first/last offset, and per-partition
 offset ranges.
 
+The Kafka broker listener currently uses PLAINTEXT. `k8s/05-kafka-networkpolicy.yaml`
+limits broker ingress to the ingest, processor, topic-initialization Job, and
+Kafka peers; setup applies this policy before initializing topics. This narrows
+network reachability but does not encrypt Kafka traffic. Add any future
+in-cluster Kafka client to the policy deliberately, and use TLS/SASL when the
+deployment requires transport confidentiality or broker authentication.
+
 ### Gateway upstream bounds
 
 Each gateway has a dedicated upstream connection pool (128 idle connections,
@@ -608,7 +615,7 @@ source subject preserved, never on the other server.
 
 | Group | Files |
 |---|---|
-| **Core app** | `00-namespace`, `00-priority-classes`, `01-config`, `02-secrets`, `03-clickhouse`, `04-clickhouse-init`, `05-kafka`, `06-ingest`, `07-processor`, `08-platform-api`, `08-runtime-api`, `08-analytics-api`, `09-ui`, `10-gateway`, `20-postgres`, `21-platform-admin-bootstrap-job`, `22-split-api-networkpolicy` |
+| **Core app** | `00-namespace`, `00-priority-classes`, `01-config`, `02-secrets`, `03-clickhouse`, `04-clickhouse-init`, `05-kafka`, `05-kafka-networkpolicy`, `06-ingest`, `07-processor`, `08-platform-api`, `08-runtime-api`, `08-analytics-api`, `09-ui`, `10-gateway`, `20-postgres`, `21-platform-admin-bootstrap-job`, `22-split-api-networkpolicy` |
 | **Observability** | `11-prometheus`, `12-grafana`, `15-otel-collector`, `16-tempo`, `17-loki`, `18-promtail`, `19-grafana-datasources`, `21-grafana-dashboards` |
 | **Example wiring** | `13-mcp-example`, `14-mcp-gateway-sidecar` |
 

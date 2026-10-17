@@ -7,11 +7,18 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Security
+
+- Session CSR and issued-certificate validation reject hidden SAN identity types and unknown extended key usages. The disposable issuer-approval rehearsal now uses the reviewed cert-manager/approver versions and refuses existing cluster names ([#538](https://github.com/mcp-runtime/mcp-runtime/issues/538)).
+
 ### Added
 
+- Per-user macOS adapter service controls, isolated owner-protected profiles and a native Dock companion expose local readiness, upstream authentication and bounded diagnostics. Source packaging supports Apple Silicon and Intel; signed/notarized release artifacts and real macOS lifecycle acceptance remain pending ([#656](https://github.com/mcp-runtime/mcp-runtime/issues/656)).
+- Team user creation no longer accepts passwords as command-line arguments; it prompts for a hidden, confirmed password or accepts it through stdin. The CLI can remove team memberships with explicit confirmation before removing a team's only owner. Account deactivation and account-wide credential revocation remain separate lifecycle work ([#536](https://github.com/mcp-runtime/mcp-runtime/issues/536)).
 - Access grants support monitor mode through the CLI and dashboard, recording would-deny tool, trust and side-effect decisions without bypassing identity, session or matching enforcing-grant checks. Monitor policies require schema-v5-capable gateways ([#307](https://github.com/mcp-runtime/mcp-runtime/issues/307)).
 
 - Ingest operations docs now include PromQL for Kafka readiness DNS/connect/total latency and bounded failure reasons, plus guidance for correlating slow checks with broker, node and DNS signals. This exposes investigation paths; reference-platform root-cause and under-one-second acceptance remain outstanding ([#624](https://github.com/mcp-runtime/mcp-runtime/issues/624)).
+- `mcp-runtime cluster identity status --server <namespace>/<name>` resolves deployed workload issuer/trust-domain configuration and checks cert-manager readiness, the route's actual TLSOption, and public CA fingerprints/expiry without exposing private Secret fields. Unreadable configuration and client-auth overrides fail the check ([#537](https://github.com/mcp-runtime/mcp-runtime/issues/537)).
 - `mcp-runtime server get` now includes the runtime API's latest live MCP tool, prompt, and resource inventory alongside declared server metadata and safe authentication configuration, so operators can query observed server capabilities from the CLI ([#291](https://github.com/mcp-runtime/mcp-runtime/issues/291)).
 - Server detail responses include bounded rollout errors, transport and readiness state, probe time, and the latest observed session for authorized viewers; CLI and platform UI expose this runtime status without storing platform-owned session data in the Kubernetes status subresource ([#291](https://github.com/mcp-runtime/mcp-runtime/issues/291)).
 - Server observability queries select the live MCPServer UID carried by workload, Prometheus and Loki labels, preventing a recreated server from exposing its predecessor's logs or metrics. Unlabelled historical telemetry is excluded; deploy the matching operator and collector configuration together ([#761](https://github.com/mcp-runtime/mcp-runtime/pull/761)).
@@ -21,6 +28,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 ### Changed
 
 - Gateway upstream requests use bounded RPC/session-stream capacity and a circuit breaker, with complete unary deadlines and preserved SSE response lifetimes. Operational rejections have distinct audit reasons while policy counters retain the authorization result ([#311](https://github.com/mcp-runtime/mcp-runtime/issues/311)).
+- Gateways compile immutable tool, session and subject-grant indexes when activating a validated policy, keeping lookups independent of unrelated policy entries and retaining the last valid snapshot after a failed reload ([#319](https://github.com/mcp-runtime/mcp-runtime/issues/319)).
 
 - Operator policy reconciliation looks up grants by their effective target server using a cache index, avoiding copies and scans of unrelated grants while preserving cross-namespace references. Runtime sessions remain platform-owned ([#657](https://github.com/mcp-runtime/mcp-runtime/issues/657)).
 
@@ -34,6 +42,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 - `update` now bundles and reconciles operator RBAC from the target release before image rollouts, previews drift, and stops on permission-apply failure. Doctor verifies effective bundled permissions and flags forbidden informer errors; hosted deployment gates on these checks ([#633](https://github.com/mcp-runtime/mcp-runtime/issues/633)).
 
 - `server list` help now explains visible-server defaults, admin scope, team slug filtering, and catalog/personal namespace selectors. A team lookup without a namespace now fails instead of silently listing all visible servers ([#612](https://github.com/mcp-runtime/mcp-runtime/issues/612)).
+
+### Security
+
+- Restrict bundled Kafka ingress to ingest, processor, topic initialization and broker peers. Unscoped platform updates apply this release-declared policy to existing installs as well as fresh setup ([#775](https://github.com/mcp-runtime/mcp-runtime/pull/775), [#110](https://github.com/mcp-runtime/mcp-runtime/issues/110)).
 
 ## [0.10.0] - 2026-10-15
 
