@@ -30,8 +30,13 @@ type ToolRule struct {
 // MCPAccessGrantSpec defines who can use which MCP server and with what trust ceiling.
 // +kubebuilder:object:generate=true
 type MCPAccessGrantSpec struct {
-	ServerRef          ServerReference  `json:"serverRef"`
-	Subject            SubjectRef       `json:"subject"`
+	ServerRef ServerReference `json:"serverRef"`
+	Subject   SubjectRef      `json:"subject"`
+	// Mode controls whether this grant enforces its tool and trust restrictions.
+	// Empty and "enforce" retain normal authorization behavior; "monitor" records
+	// grant denials while allowing requests through after identity/session checks.
+	// +kubebuilder:validation:Enum=enforce;monitor
+	Mode               GrantMode        `json:"mode,omitempty"`
 	MaxTrust           TrustLevel       `json:"maxTrust,omitempty"`
 	AllowedSideEffects []ToolSideEffect `json:"allowedSideEffects,omitempty"`
 	PolicyVersion      string           `json:"policyVersion,omitempty"`
@@ -39,6 +44,14 @@ type MCPAccessGrantSpec struct {
 	ExpiresAt          *metav1.Time     `json:"expiresAt,omitempty"`
 	ToolRules          []ToolRule       `json:"toolRules,omitempty"`
 }
+
+// GrantMode defines whether access restrictions are enforced or only observed.
+type GrantMode string
+
+const (
+	GrantModeEnforce GrantMode = "enforce"
+	GrantModeMonitor GrantMode = "monitor"
+)
 
 // MCPAccessGrantStatus captures observed grant state.
 // +kubebuilder:object:generate=true

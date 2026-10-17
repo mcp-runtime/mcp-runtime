@@ -273,6 +273,7 @@ func (r *MCPServerReconciler) renderGatewayPolicy(ctx context.Context, mcpServer
 		subjectTeamID := subjectTeamIDForServer(serverTeamID, grant.Spec.Subject.TeamID)
 		rendered := policy.Grant{
 			Name:          grant.Name,
+			Mode:          string(grant.Spec.Mode),
 			Namespace:     policy.Namespace(grant.Namespace),
 			HumanID:       policy.HumanID(grant.Spec.Subject.HumanID),
 			AgentID:       policy.AgentID(grant.Spec.Subject.AgentID),

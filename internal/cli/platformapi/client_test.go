@@ -38,6 +38,9 @@ func TestApplyAccessFromYAMLFile_MultiDocument(t *testing.T) {
 				if payload.Subject.TeamID != "team-acme" {
 					t.Fatalf("grant subject teamID = %q, want team-acme", payload.Subject.TeamID)
 				}
+				if payload.Mode != "monitor" {
+					t.Fatalf("grant mode = %q, want monitor", payload.Mode)
+				}
 				if payload.ExpiresAt == nil || payload.ExpiresAt.UTC().Format(time.RFC3339) != "2099-01-01T00:00:00Z" {
 					t.Fatalf("grant expiresAt = %v, want 2099-01-01T00:00:00Z", payload.ExpiresAt)
 				}
@@ -69,6 +72,7 @@ metadata:
   name: grant-a
   namespace: mcp-servers
 spec:
+  mode: monitor
   serverRef:
     name: demo
   subject:

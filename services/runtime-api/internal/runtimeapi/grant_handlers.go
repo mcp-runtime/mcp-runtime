@@ -17,6 +17,9 @@ import (
 )
 
 func validateGrantRequest(req *accessGrantRequest) error {
+	if req.Mode != nil && *req.Mode != mcpaccess.GrantModeEnforce && *req.Mode != mcpaccess.GrantModeMonitor {
+		return errors.New("mode must be enforce or monitor")
+	}
 	req.Name = strings.TrimSpace(req.Name)
 	req.Namespace = runtimeaccess.DefaultAccessNamespace(req.Namespace)
 	req.ServerRef.Name = mcpaccess.ServerName(strings.TrimSpace(string(req.ServerRef.Name)))
@@ -201,6 +204,12 @@ func (s *AccessService) handleRuntimeGrantApply(w http.ResponseWriter, r *http.R
 		writeAPIError(w, http.StatusInternalServerError, "failed to inspect existing grant")
 		return
 	}
+	mode := mcpaccess.GrantMode("")
+	if req.Mode != nil {
+		mode = *req.Mode
+	} else if existingGrant != nil {
+		mode = existingGrant.Spec.Mode
+	}
 
 	grant := &mcpaccess.MCPAccessGrant{
 		ObjectMeta: metav1.ObjectMeta{
@@ -209,6 +218,7 @@ func (s *AccessService) handleRuntimeGrantApply(w http.ResponseWriter, r *http.R
 			Annotations: map[string]string{mcpaccess.ServerUIDAnnotation: string(targetServer.UID)},
 		},
 		Spec: mcpaccess.MCPAccessGrantSpec{
+			Mode:               mode,
 			ServerRef:          req.ServerRef,
 			Subject:            req.Subject,
 			MaxTrust:           req.MaxTrust,
