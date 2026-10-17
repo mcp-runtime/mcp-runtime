@@ -133,6 +133,13 @@ local-key CSR.
 
 ## Build and validation
 
+Follow test-driven development for behavior changes and bug fixes: first add a
+focused regression test and confirm it fails for the intended reason, then
+implement the smallest fix and make the focused tests pass before pushing or
+merging. Test observable behavior and boundaries, not copies of implementation
+details. For behavior-preserving documentation/configuration edits and mechanical
+moves, use appropriate existing checks instead of adding redundant mirror tests.
+
 Use the Go version in `go.mod`. Go builds/tests require available dependencies.
 From the repository root, on an isolated non-production runner:
 
@@ -282,15 +289,6 @@ against the installed version and record the reviewed source/date in contributor
 notes. Do not upgrade it during documentation work unless requested. When
 changing another development tool, keep its authoritative source/version and
 installation guidance in the focused guide or this file.
-
-<!-- cully:codex:start -->
-## Cully
-
-- Use the shared project skill at `.cully/skills/cully/SKILL.md` for Cully session controls.
-- In Codex, use /prompts:cully (or type /cully and select the saved cully prompt) for the in-session cully command.
-- For each substantive task, find relevant prior work with Cully MCP and save one concise work summary before finishing. Follow the Cully skill for project identity, owner section, and private-data rules.
-- Use the configured Cully MCP tools for shared personal and project memory.
-<!-- cully:codex:end -->
 
 Scoped Grafana changes require the datasource-boundary and migration checks in
 `docs/platform-services.md#scoped-grafana-migration`: keep tenant access disabled

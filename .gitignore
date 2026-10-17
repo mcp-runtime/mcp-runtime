@@ -29,6 +29,8 @@ r.go
 tags
 
 # Local/generated artifacts
+/.cully/
+/.cursor/commands/
 /.playwright-mcp/
 /services/ui/mcp-ui
 /services/ui/frontend/node_modules/
