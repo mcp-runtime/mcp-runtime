@@ -6812,7 +6812,7 @@ check(
     "grafana Prometheus datasource includes route prefix",
     f"grafana Prometheus datasource URL is missing /prometheus route prefix: {prometheus_datasource}",
 )
-# Server-card deep links (/grafana/d/mcp-server/mcp-server?viewPanel=1..4)
+# Server-card deep links (/grafana/d/mcp-server/mcp-server?viewPanel=2..5)
 # need the provisioned dashboard and the datasource uid its panels pin (#543).
 check(
     prometheus_uid == "prometheus",
@@ -6827,12 +6827,20 @@ grafana_server_dashboard = wait_for_json(
     delay=2,
     description="grafana mcp-server dashboard",
 )
-grafana_server_panel_ids = {panel.get("id") for panel in grafana_server_dashboard["dashboard"].get("panels", [])}
-check(
-    {1, 2, 3, 4} <= grafana_server_panel_ids,
-    "grafana mcp-server dashboard has the server-card panels",
-    f"grafana mcp-server dashboard panels {sorted(grafana_server_panel_ids)} miss server-card viewPanel ids 1-4",
-)
+grafana_server_panels = {panel.get("id"): panel for panel in grafana_server_dashboard["dashboard"].get("panels", [])}
+server_card_panel_mapping = {
+    "request_rate": (2, "tools/call rate · 1h"),
+    "deny_rate": (3, "Policy denies · 1h"),
+    "latency_p95": (4, "tools/call p95 · 1h"),
+    "upstream_5xx_rate": (5, "Upstream 5xx rate · 1h"),
+}
+for metric, (panel_id, title) in server_card_panel_mapping.items():
+    panel = grafana_server_panels.get(panel_id, {})
+    check(
+        panel.get("title") == title and panel.get("datasource", {}).get("uid") == "prometheus",
+        f"grafana {metric} deep link targets panel {panel_id}: {title}",
+        f"grafana {metric} panel {panel_id} has wrong title/datasource or is missing: {panel}",
+    )
 
 grafana_gateway_counts = {}
 grafana_gateway_services = set()
