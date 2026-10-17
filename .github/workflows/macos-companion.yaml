@@ -1,0 +1,42 @@
+name: macOS Companion Build
+
+on:
+  pull_request:
+    paths:
+      - desktop/macos/**
+      - internal/adapterservice/**
+      - internal/cli/adapter/**
+      - .github/workflows/macos-companion.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-companion-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Compile companion (${{ matrix.arch }})
+    runs-on: macos-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, amd64]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Compile and package without launching desktop software
+        env:
+          DESKTOP_ARCH: ${{ matrix.arch }}
+        run: bash desktop/macos/build.sh "$DESKTOP_ARCH" dist
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: macos-companion-${{ matrix.arch }}-unsigned-preview
+          path: dist/*-unsigned-preview.zip
+          if-no-files-found: error
+          retention-days: 7

@@ -13,6 +13,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Added
 
+- Per-user macOS adapter service controls, isolated owner-protected profiles and a native Dock companion expose local readiness, upstream authentication and bounded diagnostics. Source packaging supports Apple Silicon and Intel; signed/notarized release artifacts and real macOS lifecycle acceptance remain pending ([#656](https://github.com/mcp-runtime/mcp-runtime/issues/656)).
 - Team user creation no longer accepts passwords as command-line arguments; it prompts for a hidden, confirmed password or accepts it through stdin. The CLI can remove team memberships with explicit confirmation before removing a team's only owner. Account deactivation and account-wide credential revocation remain separate lifecycle work ([#536](https://github.com/mcp-runtime/mcp-runtime/issues/536)).
 - Access grants support monitor mode through the CLI and dashboard, recording would-deny tool, trust and side-effect decisions without bypassing identity, session or matching enforcing-grant checks. Monitor policies require schema-v5-capable gateways ([#307](https://github.com/mcp-runtime/mcp-runtime/issues/307)).
 

@@ -79,6 +79,11 @@ dashboard asset/session and MCP Auth discovery routes when changing prefixes.
 
 ## Product management paths
 
+macOS companion source and packaging live in `desktop/macos/`. The dedicated
+workflow compiles both architectures without launching desktop software.
+Unsigned preview artifacts are distinct from `build.sh --sign` distribution;
+real macOS lifecycle and notarization evidence must be recorded before release.
+
 Use supported CLI and UI workflows for setup, teams/users, registry publishing,
 servers, grants, sessions, updates and cleanup. For servers, use `server init` →
 `server validate` → `server build` → `server push` → `server deploy`.
