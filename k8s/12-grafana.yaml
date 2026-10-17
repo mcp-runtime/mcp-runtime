@@ -59,6 +59,33 @@ spec:
             - name: grafana-storage
               mountPath: /var/lib/grafana
           env:
+            # Authentication is supplied only by the scoped runtime proxy.
+            - name: GF_AUTH_PROXY_ENABLED
+              value: "true"
+            - name: GF_AUTH_PROXY_HEADER_NAME
+              value: "X-WEBAUTH-USER"
+            - name: GF_AUTH_PROXY_HEADERS
+              value: "Role:X-WEBAUTH-ROLE"
+            - name: GF_AUTH_PROXY_SYNC_TTL
+              value: "0"
+            - name: GF_AUTH_PROXY_ENABLE_LOGIN_TOKEN
+              value: "false"
+            - name: GF_AUTH_DISABLE_LOGIN_FORM
+              value: "true"
+            - name: GF_AUTH_DISABLE_SIGNOUT_MENU
+              value: "true"
+            - name: GF_AUTH_BASIC_ENABLED
+              # Keep pod-local ops/doctor credential recovery available. The
+              # browser proxy discards Basic auth; NetworkPolicy blocks bypass.
+              value: "true"
+            - name: GF_USERS_AUTO_ASSIGN_ORG_ROLE
+              value: "Viewer"
+            # Grafana 10.2 permits read-only Explore for viewers with this flag.
+            # The runtime boundary still rejects ad-hoc and cross-scope queries.
+            - name: GF_USERS_VIEWERS_CAN_EDIT
+              value: "true"
+            - name: GF_SECURITY_CONTENT_SECURITY_POLICY
+              value: "true"
             - name: GF_SECURITY_ADMIN_USER
               valueFrom:
                 secretKeyRef:
