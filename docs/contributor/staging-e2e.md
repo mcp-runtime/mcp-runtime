@@ -121,6 +121,14 @@ OAuth + certificate on a second pair of servers. Set
 `E2E_ADAPTER_CERTIFICATES=0`, or `E2E_MTLS_CLUSTER_ISSUER` to an empty value,
 to skip the adapter-enrollment stage.
 
+The granted-tool probe waits up to `STAGING_ADAPTER_POLICY_WAIT_SECONDS`
+(default 240 seconds) for projected policy updates and the gateway's 5–7 second
+reload interval. Only HTTP 403 `no_matching_grant` is retried; success requires
+an HTTP 200 MCP `pong` result. Identity errors and explicit tool denials fail
+immediately. Timeout diagnostics include the rendered revision and an attempted
+TLS-verified read of the active gateway `/config/status` through a local
+read-only port-forward.
+
 The connector name is only an E2E configuration choice. MCP Runtime's auth
 server is provider-agnostic; Keycloak gives the test an isolated OIDC issuer
 and test user.
@@ -191,6 +199,8 @@ request or include token values in that reason.
 | `adapter-enrollment` | On a cert-only gateway MCPServer (omit `spec.auth`) and a grant, `adapter enroll` issues a session-bound SPIFFE certificate; HTTPS calls through `https://mcp.e2e.mcpruntime.org/<server>/mcp` with that client certificate reach the granted tool, while an ungranted tool (403), tools/call without a certificate (401), and the same certificate on another server (401 `session_not_found`) are refused. When `E2E_MCP_OAUTH_ACCESS_TOKEN` is set for the managed Globex member and MCP resource, a second OAuth+cert pair also proves bearer requirement, wrong-audience/`session_not_found` denial, and the same grant/deny matrix. Ungranted agents are refused a session. Skipped when the ref has no `adapter enroll`, no mTLS issuer, or the operator lacks `MCP_ADAPTER_CERTIFICATES=true`. On failure, `adapter-enrollment/` holds the redacted routing, certificate, policy, and service diagnostics. |
 | `multitenancy` | `hack/qa/multitenancy-test.sh`: teams/users, `server build image` -> `server push` -> `server deploy`, pull-secret checks, grants, adapter tool calls, direct-call denial, server events |
 | `governance` | Granted agent session allowed; ungranted agent and forged-session tool calls denied |
+| `grant-monitor` | Supported CLI grant mode changes on the CLI-created tenant fixture: a restrictive monitor grant allows `add` and records `would_deny`; the identical enforcing grant returns 403. Audit evidence must match the actual response trace, platform session, agent, server and tool. Missing identity still returns 401. Temporary grants are removed. |
+| `account-deactivation` | After other tenant checks, the supported administrator CLI deactivates the enrolled fixture user. Its saved API token is refused and its existing certificate/session is denied within five seconds; repeated cleanup returns zero counts. Skipped when this ref has no `user deactivate`. The fixture session is removed before teardown. |
 | `analytics` | Analytics API stats/events and ClickHouse rows for the tenant server |
 | `collect-diagnostics`, `snapshot`, `teardown` | Diagnostics, TLS snapshot refresh (kept only when complete), VM wipe confirmed |
 
