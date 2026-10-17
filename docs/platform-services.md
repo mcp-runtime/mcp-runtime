@@ -177,6 +177,39 @@ network reachability but does not encrypt Kafka traffic. Add any future
 in-cluster Kafka client to the policy deliberately, and use TLS/SASL when the
 deployment requires transport confidentiality or broker authentication.
 
+### Gateway upstream bounds
+
+Each gateway has a dedicated upstream connection pool (128 idle connections,
+90-second idle expiry and a five-second TLS handshake timeout). Admission is
+immediate: at most 128 active RPCs and 32 GET session streams/HTTP upgrades.
+Excess requests receive HTTP 429 with `upstream_backpressure` before dispatch;
+the gateway never rejects an already-executed tool merely because its response
+uses SSE. A streaming POST remains an active RPC within that budget. Long-lived
+GET streams cannot consume the RPC budget or force RPCs to wait for a connection
+slot. These are per-gateway bounds, not a cluster-wide rate limiter.
+
+Upstream headers have a 30-second bound. Unary responses also have a 30-second
+total deadline through their body. Since MCP clients advertise both JSON and SSE
+in Accept, the actual response Content-Type selects the body behavior: SSE and
+upgrades have no body deadline and remain tied to client cancellation. If a
+timeout happens after headers were sent, the gateway aborts the partial HTTP
+response; it cannot rewrite its status to 504. Audit retains `upstream_timeout`
+and the actual response status, and finalizes even on that abort.
+
+Five consecutive connection/timeout or 502/503/504 failures open the upstream
+circuit for five seconds. Requests then fail before dispatch with HTTP 503 and
+`upstream_unavailable`. After the cooldown exactly one probe is allowed; success
+restores traffic and failure reopens the circuit. Old in-flight completions
+cannot close a newer open circuit. Client cancellations do not count as failures.
+Both capacity and circuit rejections are audited with distinct reasons. Policy
+decision counters still describe authorization, so these operational failures
+do not become grant-denial counts.
+
+Headless regression coverage uses real local HTTP servers: stalled unary bodies,
+SSE lifetimes, eight held-open GET streams alongside 100 RPCs, capacity rejection,
+half-open recovery, stale completion and abort/audit handling. This is bounded
+functional concurrency coverage, not a staging load test or production sizing.
+
 ### Follow one MCP request
 
 The synchronous path is **Traefik → MCP gateway → MCP server → external API**.
@@ -776,8 +809,28 @@ Services live in `services/`, manifests in `k8s/`, and shared libraries in `pkg/
 ## Console navigation
 
 The console keeps workspace navigation in one left sidebar. Runtime and
-Workspace links appear alongside the admin-only Organization links (Teams and
-Operations) and Platform links (Platform health and Usage analytics). Selecting
+Workspace links include **My workspace** (`#/workspace`), also reachable from
+the compact account menu. Opening that menu reads no server directory. My
+workspace lists actual memberships, team-owned agents with explicit management
+permissions, accessible versus manageable servers, personal and team grants,
+and the current human's sessions. The API derives these scopes from the
+resolved principal; administrator authority does not invent memberships or
+deployment history. **Deployed by me** remains unavailable because ownership
+labels are authorization metadata rather than immutable deployment actors.
+Each section loads independently, so an analytics outage does not hide teams.
+Recent activity is explicitly namespace-wide, rather than attributed to the
+signed-in user. Team owners can follow **Manage members** to
+`#/workspace/team?team=<slug>`; member accounts cannot manage memberships.
+
+Admin-only Organization links include **Platform overview** (`#/admin/overview`),
+Teams and Operations; Platform links include Platform health and Usage analytics. The
+overview uses complete database counts for non-deleted users/teams, agents of
+current teams, and unrevoked, unexpired sessions excluding retired servers and
+inactive agents. Server totals come from the complete MCPServer list, not a
+partial operations page. Directory counts, server failures, component health
+and recent administrative audit records load independently and link to their
+existing management pages. Both overview APIs enforce administrator authority.
+Unknown data stays unavailable rather than displaying a misleading zero. Selecting
 a page changes the main content without opening a second sidebar. Filtering
 includes individual page names and section headings; the active page is marked
 in the sidebar. On compact screens, the navigation menu contains the same

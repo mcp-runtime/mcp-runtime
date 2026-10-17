@@ -3,6 +3,83 @@ info:
   title: MCP Runtime Control API
   version: 1.0.0
 paths:
+  /api/v1/runtime/workspace/teams:
+    get:
+      description: Actual memberships of the resolved signed-in principal, including administrators. No user or namespace override is accepted.
+      responses:
+        "200":
+          description: Personal team memberships with id, slug, name, namespace and member/owner role.
+          content:
+            application/json:
+              schema: {type: object, required: [teams], properties: {teams: {type: array, items: {type: object}}}}
+        "401": {description: Unauthorized}
+  /api/v1/runtime/workspace/servers:
+    get:
+      description: Server catalog visibility and management authority are separate. Administrator visibility is platform-wide and does not establish personal ownership or deployment attribution.
+      responses:
+        "200":
+          description: Complete visible server summaries. can_manage is derived by the server from management authorization. Historical deployment attribution is unavailable; ownership labels never supply a deployment actor.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [servers, deployment_attribution]
+                properties:
+                  deployment_attribution: {type: string, enum: [unavailable]}
+                  servers:
+                    type: array
+                    items:
+                      type: object
+                      required: [name, namespace, status, can_manage]
+                      properties:
+                        name: {type: string}
+                        namespace: {type: string}
+                        status: {type: string}
+                        can_manage: {type: boolean}
+        "401": {description: Unauthorized}
+        "503": {description: Catalog unavailable; never reported as an empty successful read.}
+  /api/v1/runtime/workspace/access:
+    get:
+      description: Grants for the current human or their actual team memberships, excluding agent-specific grants; sessions must name the current human. Administrator authority does not expand this personal view. Unknown or historical deployment actors are never inferred.
+      responses:
+        "200":
+          description: Scoped grants and sessions, including disabled/revoked status and expiry.
+          content:
+            application/json:
+              schema: {type: object, required: [grants, sessions], properties: {grants: {type: array, items: {type: object}}, sessions: {type: array, items: {type: object}}}}
+        "401": {description: Unauthorized}
+        "503": {description: Access state unavailable}
+  /api/v1/admin/overview/directory:
+    get:
+      description: Administrator-only complete platform counts from a single database snapshot. Counts exclude deleted teams/users; agents include current teams; active sessions exclude revoked, expired, retired-server and inactive-agent sessions.
+      responses:
+        "200":
+          description: Authoritative platform totals, independent of operations pagination.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [teams, users, agents, active_sessions]
+                properties:
+                  teams: {type: integer, minimum: 0}
+                  users: {type: integer, minimum: 0}
+                  agents: {type: integer, minimum: 0}
+                  active_sessions: {type: integer, minimum: 0}
+        "401": {description: Unauthorized}
+        "403": {description: Administrator role required}
+        "503": {description: Counts unavailable; unknown values are not zero.}
+  /api/v1/admin/overview/servers:
+    get:
+      description: Administrator-only complete MCPServer count and deployment failures. Missing Kubernetes/CRD access fails the request rather than returning partial totals.
+      responses:
+        "200":
+          description: Platform server totals and failed deployment references.
+          content:
+            application/json:
+              schema: {type: object, required: [servers, failures], properties: {servers: {type: integer, minimum: 0}, failures: {type: array, items: {type: object}}}}
+        "401": {description: Unauthorized}
+        "403": {description: Administrator role required}
+        "503": {description: Server counts unavailable}
   /api/v1/runtime/observability/grafana/{path}:
     parameters:
       - name: path

@@ -88,6 +88,12 @@ dashboard asset/session and MCP Auth discovery routes when changing prefixes.
 
 ## Product management paths
 
+The console's `#/workspace` shows actual personal memberships and scoped access;
+`#/admin/overview` uses administrator-only complete platform counts. Keep those
+scopes separate when adding resource summaries. Ownership labels do not establish
+historical deployment attribution. Team owners manage memberships through
+`#/workspace/team?team=<slug>` using the same supported forms and APIs as admins.
+
 macOS companion source and packaging live in `desktop/macos/`. The dedicated
 workflow compiles both architectures without launching desktop software.
 Unsigned preview artifacts are distinct from `build.sh --sign` distribution;

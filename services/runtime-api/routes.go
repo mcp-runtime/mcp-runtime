@@ -78,6 +78,11 @@ func (rr runtimeRoutes) registerRoutes(mux *http.ServeMux) {
 	accessService := runtimeServer.Access()
 	inventoryService := runtimeServer.Inventory()
 	registryPushService := runtimeServer.RegistryPush()
+	rr.mount("/runtime/workspace/teams", rr.auth(http.HandlerFunc(runtimeServer.HandleWorkspaceTeams)))
+	rr.mount("/runtime/workspace/servers", rr.auth(http.HandlerFunc(runtimeServer.HandleWorkspaceServers)))
+	rr.mount("/runtime/workspace/access", rr.auth(http.HandlerFunc(runtimeServer.HandleWorkspaceAccess)))
+	rr.mount("/admin/overview/directory", rr.adminOnly(http.HandlerFunc(runtimeServer.HandleOverviewDirectory)))
+	rr.mount("/admin/overview/servers", rr.adminOnly(http.HandlerFunc(runtimeServer.HandleOverviewServers)))
 
 	rr.mount("/dashboard/summary", rr.adminOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		runtimehandlers.HandleDashboardSummary(runtimeServer, w, r)
