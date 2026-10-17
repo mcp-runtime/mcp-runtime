@@ -1402,9 +1402,9 @@ staging_configure_adapter_certificates() {
     return 0
   fi
   export MCP_ADAPTER_CERTIFICATES=true
-  # The staging VM is disposable and uses the bundled mcp-runtime-ca without
-  # approver-policy; acknowledge that so the setup approval gate passes.
-  export MCP_WORKLOAD_ISSUER_APPROVAL_ACK="${MCP_WORKLOAD_ISSUER_APPROVAL_ACK:-true}"
+  # The fixture sets the approval acknowledgement only after live allow/deny
+  # probes succeed; an inherited acknowledgement cannot substitute for them.
+  unset MCP_WORKLOAD_ISSUER_APPROVAL_ACK
   export MCP_TRUST_DOMAIN="${MCP_TRUST_DOMAIN:-$(staging_adapter_trust_domain)}"
   export MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE="${MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE:-${STAGING_ADAPTER_TLS_NAMESPACE_DEFAULT}}"
 }

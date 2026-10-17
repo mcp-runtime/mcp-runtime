@@ -56,6 +56,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Fixed
 
+- Provision an independent workload CA and verify CertificateRequest approval on the disposable staging VM before strict setup; retain the previous TLS snapshot when certificate APIs are absent.
+
 - Setup adds ready Kubernetes API EndpointSlice backends and their exact TCP ports to runtime-api egress, including when the installer connects through a loopback tunnel. Scoped Grafana rollout errors now identify the runtime-api deployment ([#809](https://github.com/mcp-runtime/mcp-runtime/issues/809)).
 
 - Performance probes close each HTTP response before reusing the connection, avoiding `ResponseNotReady` on supported Python versions ([#809](https://github.com/mcp-runtime/mcp-runtime/issues/809)).
