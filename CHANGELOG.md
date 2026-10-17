@@ -9,6 +9,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Security
 
+- Dashboard session-proxy responses are always `Cache-Control: no-store` (upstream cache headers and validators are dropped), and oversized write bodies return `413 request_too_large` instead of a generic `502 upstream_error`.
 - MCPServer ingress policies isolate raw upstream listeners for adapter and non-adapter gateways and restrict gateway metrics to Prometheus. Namespace generic Deployment allowances no longer broaden stamped MCPServer pods; deploy the matching runtime API/operator and complete policy/workload reconciliation on an enforcing CNI before relying on the boundary ([#110](https://github.com/mcp-runtime/mcp-runtime/issues/110)).
 - Ingest refuses startup without an authentication source and denies unconfigured intake. Public runtime probes omit initialization details. Login rate limits and audit IPs use the socket peer unless `MCP_TRUSTED_PROXY_CIDRS` explicitly identifies trusted forwarding proxies; configure precise proxy CIDRs to retain client attribution behind ingress ([#110](https://github.com/mcp-runtime/mcp-runtime/issues/110)).
 - Session CSR and issued-certificate validation reject hidden SAN identity types and unknown extended key usages. The disposable issuer-approval rehearsal now uses the reviewed cert-manager/approver versions and refuses existing cluster names ([#538](https://github.com/mcp-runtime/mcp-runtime/issues/538)).
