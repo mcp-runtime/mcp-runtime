@@ -166,8 +166,7 @@ func (s *AccessService) HandleAdapterCertificate(w http.ResponseWriter, r *http.
 		return
 	}
 	if latest.Annotations[adapterEnrollmentPendingAnnotation] == "true" {
-		delete(latest.Annotations, adapterEnrollmentPendingAnnotation)
-		if _, err := s.accessMgr.ApplySession(r.Context(), latest); err != nil {
+		if err := s.accessMgr.CompleteSessionEnrollment(r.Context(), latest.Name, latest.Namespace, string(latest.UID)); err != nil {
 			writeAPIError(w, http.StatusServiceUnavailable, "complete adapter enrollment", err)
 			return
 		}

@@ -612,6 +612,47 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
       security: [{"ControlPlaneToken": []}]
+  /internal/access/sessions/{namespace}/{name}/enrollment:
+    x-audience: "runtime-api"
+    x-listener-port: 8080
+    parameters:
+      - {name: namespace, in: path, required: true, schema: {type: string}}
+      - {name: name, in: path, required: true, schema: {type: string}}
+    patch:
+      summary: Complete enrollment without replacing session authorization
+      description: Checks immutable UID, current expiry, active agent and revocation under the session-state lock; removes only pending metadata.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [uid]
+              additionalProperties: false
+              properties:
+                uid: {type: string, minLength: 1}
+      responses:
+        "204": {description: Enrollment completed or already complete}
+        "400": {description: Invalid request}
+        "401": {description: Control-plane authentication required}
+        "403": {description: Session agent is inactive}
+        "404": {description: Session not found}
+        "409": {description: Session UID changed or session is revoked or expired}
+        "503": {description: Session store unavailable}
+      security: [{"ControlPlaneToken": []}]
+    delete:
+      summary: Delete only a still-pending enrollment with matching owner and UID
+      parameters:
+        - {name: uid, in: query, required: true, schema: {type: string, minLength: 1}}
+        - {name: human_id, in: query, required: true, schema: {type: string, minLength: 1}}
+      responses:
+        "204": {description: Pending enrollment removed and tombstone published}
+        "400": {description: Invalid request}
+        "401": {description: Control-plane authentication required}
+        "404": {description: Session not found}
+        "409": {description: Session completed or owner or UID changed}
+        "503": {description: Session store unavailable}
+      security: [{"ControlPlaneToken": []}]
   /internal/access/sessions/revoke:
     x-audience: "runtime-api"
     x-listener-port: 8080

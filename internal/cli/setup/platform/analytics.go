@@ -1059,7 +1059,6 @@ func renderAnalyticsConfigManifestWithReaders(content, platformMode string, imag
 		"PLATFORM_TEAM_TRAEFIK_WATCH",
 		"MCP_MTLS_CLUSTER_ISSUER",
 		"MCP_TRUST_DOMAIN",
-		"MCP_ADAPTER_CERTIFICATES",
 		"UI_REQUIRE_HTTPS",
 		"UI_FORCE_SECURE_COOKIE",
 	} {

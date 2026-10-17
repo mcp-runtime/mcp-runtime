@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"mcp-runtime/pkg/sessionstate"
 	"net/http"
 	"os"
 	"sort"
@@ -35,7 +36,7 @@ const (
 	adapterSessionRequestMaxBytes      = 16 << 10
 	adapterGrantNameAnnotation         = "mcpruntime.org/access-grant-name"
 	adapterGrantNamespaceAnnotation    = "mcpruntime.org/access-grant-namespace"
-	adapterEnrollmentPendingAnnotation = "mcpruntime.org/adapter-enrollment-pending"
+	adapterEnrollmentPendingAnnotation = sessionstate.AdapterEnrollmentPendingAnnotation
 )
 
 // adapterSessionRequest is the input contract for POST /api/runtime/adapter/sessions.

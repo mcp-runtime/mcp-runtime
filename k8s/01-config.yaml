@@ -18,7 +18,6 @@ data:
   # Setup fills this from --mtls-cluster-issuer.
   MCP_MTLS_CLUSTER_ISSUER: ""
   MCP_TRUST_DOMAIN: ""
-  MCP_ADAPTER_CERTIFICATES: ""
   PLATFORM_ORG_NAMESPACE: "mcp-servers-org"
   PLATFORM_PUBLIC_NAMESPACE: "mcp-servers-public"
   PLATFORM_MCP_ACTIVE_SERVER_LIMIT: "5"

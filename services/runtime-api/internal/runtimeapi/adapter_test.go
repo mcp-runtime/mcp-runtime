@@ -18,6 +18,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 )
 
@@ -43,7 +44,7 @@ func newAdapterTestFixture(t *testing.T, grants ...mcpv1alpha1.MCPAccessGrant) a
 	}
 	objects := []runtime.Object{
 		&mcpv1alpha1.MCPServer{
-			ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "mcp-team-acme"},
+			ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "mcp-team-acme", UID: "server-uid"},
 			Spec:       mcpv1alpha1.MCPServerSpec{Gateway: &mcpv1alpha1.GatewayConfig{}},
 			Status:     mcpv1alpha1.MCPServerStatus{IngressReady: true},
 		},
@@ -57,6 +58,27 @@ func newAdapterTestFixture(t *testing.T, grants ...mcpv1alpha1.MCPAccessGrant) a
 		"status":   map[string]any{"conditions": []any{map[string]any{"type": "Ready", "status": "True"}}},
 	}}
 	objects = append(objects, issuer)
+	objects = append(objects,
+		&unstructured.Unstructured{Object: map[string]any{
+			"apiVersion": "apps/v1", "kind": "Deployment",
+			"metadata": map[string]any{"name": "mcp-runtime-operator-controller-manager", "namespace": "mcp-runtime"},
+			"spec": map[string]any{"template": map[string]any{"spec": map[string]any{"containers": []any{map[string]any{"name": "manager", "env": []any{
+				map[string]any{"name": "MCP_ADAPTER_CERTIFICATES", "value": "true"},
+				map[string]any{"name": "MCP_MTLS_CLUSTER_ISSUER", "value": "mcp-runtime-ca"},
+				map[string]any{"name": "MCP_TRUST_DOMAIN", "value": "example.org"},
+			}}}}}},
+		}},
+		&unstructured.Unstructured{Object: map[string]any{
+			"apiVersion": "traefik.io/v1alpha1", "kind": "IngressRoute",
+			"metadata": map[string]any{"name": "demo", "namespace": "mcp-team-acme", "ownerReferences": []any{map[string]any{"apiVersion": "mcpruntime.org/v1alpha1", "kind": "MCPServer", "name": "demo", "uid": "server-uid", "controller": true}}},
+			"spec":     map[string]any{"tls": map[string]any{"options": map[string]any{"name": "demo-mtls"}}},
+		}},
+		&unstructured.Unstructured{Object: map[string]any{
+			"apiVersion": "traefik.io/v1alpha1", "kind": "TLSOption",
+			"metadata": map[string]any{"name": "demo-mtls", "namespace": "mcp-team-acme"},
+			"spec":     map[string]any{"clientAuth": map[string]any{"clientAuthType": "VerifyClientCertIfGiven", "secretNames": []any{"demo-mtls-ca"}}},
+		}},
+	)
 	dynamic := dynamicfake.NewSimpleDynamicClient(scheme, objects...)
 	mgr := mcpaccess.NewManager(dynamic, nil)
 	agentTeamID := "team-acme"
@@ -189,7 +211,17 @@ func TestAdapterPreflightReportsReadyWithoutCreatingSession(t *testing.T) {
 
 func TestAdapterSessionRejectsDisabledPKIBeforeCreatingSession(t *testing.T) {
 	fx := newAdapterTestFixture(t, adapterTestGrant())
-	t.Setenv("MCP_ADAPTER_CERTIFICATES", "false")
+	operatorResource := fx.server.k8sClients.Dynamic.Resource(schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}).Namespace("mcp-runtime")
+	operator, err := operatorResource.Get(t.Context(), "mcp-runtime-operator-controller-manager", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	containers, _, _ := unstructured.NestedSlice(operator.Object, "spec", "template", "spec", "containers")
+	containers[0].(map[string]any)["env"].([]any)[0].(map[string]any)["value"] = "false"
+	_ = unstructured.SetNestedSlice(operator.Object, containers, "spec", "template", "spec", "containers")
+	if _, err := operatorResource.Update(t.Context(), operator, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
 	req := adapterRequest(t, adapterSessionRequest{ServerName: "demo", Namespace: "mcp-team-acme", AgentID: "agt_01arz3ndektsv4rrffq69g5fav"})
 	req = req.WithContext(withPrincipal(req.Context(), fx.principal))
 	w := httptest.NewRecorder()

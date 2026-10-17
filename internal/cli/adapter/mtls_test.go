@@ -10,6 +10,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"io"
 	"math/big"
 	"net/http"
@@ -187,6 +188,30 @@ func TestAdapterEnrollmentCleansOnlyNewPendingSessionOnIssueFailure(t *testing.T
 	}
 	if got := atomic.LoadInt32(&cleanups); got != 1 {
 		t.Fatalf("cleanup calls = %d, want 1 newly-created pending session cleanup", got)
+	}
+}
+
+func TestFailedEnrollmentCleanupSurvivesCallerCancellation(t *testing.T) {
+	var calls int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete || r.URL.Path != "/api/v1/runtime/adapter/sessions/team/new-session" {
+			t.Errorf("unexpected cleanup %s %s", r.Method, r.URL.Path)
+		}
+		atomic.AddInt32(&calls, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	t.Setenv("MCP_PLATFORM_API_URL", server.URL)
+	t.Setenv("MCP_PLATFORM_API_TOKEN", "test-token")
+	client, err := platformapi.NewPlatformClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err = cleanupFailedEnrollment(ctx, client, platformapi.AdapterSession{Name: "new-session", Namespace: "team"}, context.Canceled)
+	if !errors.Is(err, context.Canceled) || atomic.LoadInt32(&calls) != 1 {
+		t.Fatalf("error=%v cleanup calls=%d", err, calls)
 	}
 }
 

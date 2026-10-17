@@ -91,7 +91,9 @@ func issueAdapterCredential(ctx context.Context, client *platformapi.PlatformCli
 
 func cleanupFailedEnrollment(ctx context.Context, client *platformapi.PlatformClient, session platformapi.AdapterSession, cause error) error {
 	if !session.Reused {
-		if err := client.CleanupAdapterSession(ctx, session.Namespace, session.Name); err != nil {
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		if err := client.CleanupAdapterSession(cleanupCtx, session.Namespace, session.Name); err != nil {
 			return fmt.Errorf("%w (also failed to remove the newly created pending session: %v)", cause, err)
 		}
 	}
