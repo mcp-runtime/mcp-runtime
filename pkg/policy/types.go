@@ -106,6 +106,7 @@ type ToolName string
 
 // Document is the root gateway policy document that contains all policy configuration.
 type Document struct {
+	compiled *compiledIndex
 	// SchemaVersion identifies the compatibility of the rendered JSON contract.
 	SchemaVersion string `json:"schema_version"`
 	// Revision is a deterministic SHA-256 digest of the canonical rendered
@@ -233,6 +234,13 @@ type ToolAccess struct {
 
 func ToolRiskLevel(policy *Document, toolName string) string {
 	if policy == nil || toolName == "" {
+		return ""
+	}
+	if policy.compiled != nil {
+		if index, ok := policy.compiled.tools[ToolName(toolName)]; ok {
+			tool := policy.Tools[index]
+			return NormalizeRiskLevel(tool.RiskLevel, tool.RequiredTrust, tool.SideEffect)
+		}
 		return ""
 	}
 	for _, tool := range policy.Tools {

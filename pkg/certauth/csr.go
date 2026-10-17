@@ -8,6 +8,8 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/pem"
 	"fmt"
 	"net/url"
@@ -70,6 +72,9 @@ func ValidateCSRPEM(raw, expectedSPIFFEID string) ([]byte, error) {
 	if len(csr.DNSNames) != 0 || len(csr.EmailAddresses) != 0 || len(csr.IPAddresses) != 0 {
 		return nil, fmt.Errorf("csr may not contain DNS, email, or IP subject alternative names")
 	}
+	if err := validateSessionSAN(csr.Extensions, expectedSPIFFEID); err != nil {
+		return nil, fmt.Errorf("csr: %w", err)
+	}
 	return block.Bytes, nil
 }
 
@@ -98,10 +103,13 @@ func ValidateIssuedCertificatePEM(certPEM string, csrDER []byte, expectedSPIFFEI
 	if len(cert.DNSNames) != 0 || len(cert.EmailAddresses) != 0 || len(cert.IPAddresses) != 0 {
 		return fmt.Errorf("issued certificate carries unexpected subject alternative names")
 	}
+	if err := validateSessionSAN(cert.Extensions, expectedSPIFFEID); err != nil {
+		return fmt.Errorf("issued certificate: %w", err)
+	}
 	if cert.IsCA {
 		return fmt.Errorf("issued certificate is a CA certificate")
 	}
-	if len(cert.ExtKeyUsage) != 1 || cert.ExtKeyUsage[0] != x509.ExtKeyUsageClientAuth {
+	if len(cert.ExtKeyUsage) != 1 || cert.ExtKeyUsage[0] != x509.ExtKeyUsageClientAuth || len(cert.UnknownExtKeyUsage) != 0 {
 		return fmt.Errorf("issued certificate must be restricted to client authentication")
 	}
 	if !publicKeysEqual(csr.PublicKey, cert.PublicKey) {
@@ -114,6 +122,32 @@ func ValidateIssuedCertificatePEM(certPEM string, csrDER []byte, expectedSPIFFEI
 }
 
 const certExpirySkew = 5 * time.Minute
+
+// crypto/x509 intentionally ignores GeneralName types such as otherName and
+// directoryName in its convenience SAN fields. Check the signed extension so
+// an apparently single-URI identity cannot carry an additional hidden identity.
+func validateSessionSAN(extensions []pkix.Extension, expected string) error {
+	var count int
+	for _, extension := range extensions {
+		if !extension.Id.Equal(asn1.ObjectIdentifier{2, 5, 29, 17}) {
+			continue
+		}
+		count++
+		var names []asn1.RawValue
+		rest, err := asn1.Unmarshal(extension.Value, &names)
+		if err != nil || len(rest) != 0 || len(names) != 1 {
+			return fmt.Errorf("subject alternative names must contain only the session URI")
+		}
+		name := names[0]
+		if name.Class != asn1.ClassContextSpecific || name.Tag != 6 || name.IsCompound || string(name.Bytes) != expected {
+			return fmt.Errorf("subject alternative names must contain only the session URI")
+		}
+	}
+	if count != 1 {
+		return fmt.Errorf("exactly one session subject alternative name extension required")
+	}
+	return nil
+}
 
 func publicKeysEqual(a, b any) bool {
 	type equaler interface{ Equal(crypto.PublicKey) bool }

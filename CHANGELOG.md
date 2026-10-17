@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Security
+
+- Session CSR and issued-certificate validation reject hidden SAN identity types and unknown extended key usages. The disposable issuer-approval rehearsal now uses the reviewed cert-manager/approver versions and refuses existing cluster names ([#538](https://github.com/mcp-runtime/mcp-runtime/issues/538)).
+
 ### Added
 
 - Team user creation no longer accepts passwords as command-line arguments; it prompts for a hidden, confirmed password or accepts it through stdin. The CLI can remove team memberships with explicit confirmation before removing a team's only owner. Administrators can permanently deactivate disposable accounts with `user deactivate <id> --yes`, atomically revoking stored credentials and human sessions, removing memberships and recording audit while protecting sole owners/admins. Bearer requests now resolve current account and membership state through platform identity; deploy the platform, runtime and analytics APIs together, and retain their internal identity connectivity ([#536](https://github.com/mcp-runtime/mcp-runtime/issues/536)).
@@ -23,6 +27,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 - Authorized server details show a fixed one-hour summary of tools/call rate and p95, allowed-call HTTP 5xx rate, policy denies, and the slowest tool p95 after five calls. Tenant Grafana SSO and Explore isolation remain unresolved ([#699](https://github.com/mcp-runtime/mcp-runtime/issues/699)).
 
 ### Changed
+
+- Gateways compile immutable tool, session and subject-grant indexes when activating a validated policy, keeping lookups independent of unrelated policy entries and retaining the last valid snapshot after a failed reload ([#319](https://github.com/mcp-runtime/mcp-runtime/issues/319)).
 
 - Operator policy reconciliation looks up grants by their effective target server using a cache index, avoiding copies and scans of unrelated grants while preserving cross-namespace references. Runtime sessions remain platform-owned ([#657](https://github.com/mcp-runtime/mcp-runtime/issues/657)).
 
