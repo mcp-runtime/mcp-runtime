@@ -83,12 +83,15 @@ func Authorize(policy *Document, request Request, now time.Time) Decision {
 	if policy == nil || UsesDelegatedHeaders(policy) || policyModeObserve(policy) || !IsToolCallMethod(request.RPCMethod) {
 		return authorize(policy, request, now)
 	}
+	if policy.compiled != nil && !policy.compiled.hasMonitor {
+		return authorize(policy, request, now)
+	}
 	if now.IsZero() {
 		now = time.Now()
 	}
 	var enforcing, monitoring []Grant
 	var activeEnforcing, activeMonitoring bool
-	for _, grant := range policy.Grants {
+	for _, grant := range matchingPolicyGrants(policy, request.Identity) {
 		active := subjectMatchesTeam(grant.HumanID, grant.AgentID, grant.TeamID, request.Identity) && !grant.Disabled && !isExpiredAt(grant.ExpiresAt, now)
 		if strings.EqualFold(strings.TrimSpace(grant.Mode), "monitor") {
 			monitoring = append(monitoring, grant)
@@ -101,21 +104,17 @@ func Authorize(policy *Document, request Request, now time.Time) Decision {
 	if !activeMonitoring {
 		return authorize(policy, request, now)
 	}
-	if _, sideEffect, _ := resolveToolMetadata(policy.Tools, request.ToolName); sideEffect == "" {
+	if _, sideEffect, _ := resolvePolicyToolMetadata(policy, request.ToolName); sideEffect == "" {
 		// Missing server metadata is not a restriction attributable to a grant.
 		return authorize(policy, request, now)
 	}
 	// Monitor grants cannot contribute permissions or restrictions to the
 	// enforcing policy. Evaluate both groups independently with the same identity
 	// and session gates, preserving existing aggregation within each group.
-	monitored := *policy
-	monitored.Grants = monitoring
-	shadow := authorize(&monitored, request, now)
+	shadow := authorize(policyWithGrants(policy, monitoring), request, now)
 	decision := shadow
 	if activeEnforcing {
-		enforced := *policy
-		enforced.Grants = enforcing
-		decision = authorize(&enforced, request, now)
+		decision = authorize(policyWithGrants(policy, enforcing), request, now)
 		if !decision.Allowed {
 			return decision
 		}
@@ -142,7 +141,7 @@ func authorize(policy *Document, request Request, now time.Time) Decision {
 	if !IsToolCallMethod(request.RPCMethod) {
 		return decision
 	}
-	_, _, decision.RiskLevel = resolveToolMetadata(policyTools(policy), request.ToolName)
+	_, _, decision.RiskLevel = resolvePolicyToolMetadata(policy, request.ToolName)
 	if policyModeObserve(policy) {
 		return decision
 	}
@@ -158,13 +157,7 @@ func authorize(policy *Document, request Request, now time.Time) Decision {
 		now = time.Now()
 	}
 
-	sessions, tools, grants := policySlices(policy)
-	if request.Session != nil {
-		sessions = []Binding{*request.Session}
-	} else if policy != nil && policy.Session != nil && policy.Session.Store == "platform" {
-		sessions = nil
-	}
-	session, sessionFound := findSession(sessions, identity)
+	session, sessionFound := findPolicySession(policy, request)
 	if sessionRequired(policy) {
 		if !sessionFound {
 			return Deny(http.StatusUnauthorized, "session_not_found", policyVersionOrDefault(policy, ""))
@@ -191,8 +184,8 @@ func authorize(policy *Document, request Request, now time.Time) Decision {
 		matchedSessionNamespace = string(session.Namespace)
 	}
 
-	requiredTrust, requiredSideEffect, riskLevel := resolveToolMetadata(tools, request.ToolName)
-	matchingGrants := matchingGrants(grants, identity)
+	requiredTrust, requiredSideEffect, riskLevel := resolvePolicyToolMetadata(policy, request.ToolName)
+	matchingGrants := matchingPolicyGrants(policy, identity)
 	if len(matchingGrants) == 0 {
 		denied := decideByDefault(policy, "no_matching_grant")
 		denied.MatchedSession = matchedSession
@@ -306,13 +299,6 @@ func monitorableGrantDenial(reason string) bool {
 	}
 }
 
-func policyTools(policy *Document) []Tool {
-	if policy == nil {
-		return nil
-	}
-	return policy.Tools
-}
-
 type grantSelection struct {
 	toolAllowed       bool
 	sideEffectAllowed bool
@@ -404,13 +390,6 @@ func bestGrantFor(grants []Grant, toolName ToolName, requiredTrust, requiredSide
 		}
 	}
 	return selection
-}
-
-func policySlices(policy *Document) ([]Binding, []Tool, []Grant) {
-	if policy == nil {
-		return nil, nil, nil
-	}
-	return policy.Sessions, policy.Tools, policy.Grants
 }
 
 func decideByDefault(policy *Document, reason string) Decision {

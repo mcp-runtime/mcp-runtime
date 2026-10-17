@@ -1525,9 +1525,9 @@ print(json.dumps({"email": os.environ["PLATFORM_ADMIN_EMAIL"], "password": os.en
   )
   env "${platform_env[@]}" ./bin/mcp-runtime team create "${team_slug}" \
     --name "E2E adapter ${team_slug}" >/dev/null
-  env "${platform_env[@]}" ./bin/mcp-runtime team user create "${team_slug}" \
+  printf '%s\n' "${member_password}" | env "${platform_env[@]}" ./bin/mcp-runtime team user create "${team_slug}" \
     --email "${member_email}" \
-    --password "${member_password}" \
+    --password-stdin \
     --role member >/dev/null
 
   ADAPTER_TEAM_SLUG="${team_slug}"
@@ -4668,9 +4668,9 @@ print(json.dumps({"email": os.environ["PLATFORM_ADMIN_EMAIL"], "password": os.en
     env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime auth status >/dev/null
     env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team list >/dev/null
     env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team create "${DEEP_CLI_TEAM_SLUG}" --name "E2E CLI ${DEEP_CLI_TEAM_SLUG}" >/dev/null
-    env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team user create "${DEEP_CLI_TEAM_SLUG}" \
+    printf '%s\n' "test-password-123" | env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team user create "${DEEP_CLI_TEAM_SLUG}" \
       --email "${DEEP_CLI_USER_EMAIL}" \
-      --password "test-password-123" \
+      --password-stdin \
       --role member >/dev/null
     env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team user list "${DEEP_CLI_TEAM_SLUG}" >/dev/null
     env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime server list --namespace mcp-servers >/dev/null
@@ -5877,9 +5877,9 @@ print(json.dumps({"email": os.environ["PLATFORM_ADMIN_EMAIL"], "password": os.en
   env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime auth status >/dev/null
   env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team list >/dev/null
   env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team create "${DEEP_CLI_TEAM_SLUG}" --name "E2E CLI ${DEEP_CLI_TEAM_SLUG}" >/dev/null
-  env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team user create "${DEEP_CLI_TEAM_SLUG}" \
+  printf '%s\n' "test-password-123" | env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team user create "${DEEP_CLI_TEAM_SLUG}" \
     --email "${DEEP_CLI_USER_EMAIL}" \
-    --password "test-password-123" \
+    --password-stdin \
     --role member >/dev/null
   env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team user list "${DEEP_CLI_TEAM_SLUG}" >/dev/null
   env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime server list --namespace mcp-servers >/dev/null
@@ -6790,7 +6790,7 @@ check(
     "grafana Prometheus datasource includes route prefix",
     f"grafana Prometheus datasource URL is missing /prometheus route prefix: {prometheus_datasource}",
 )
-# Server-card deep links (/grafana/d/mcp-server/mcp-server?viewPanel=1..4)
+# Server-card deep links (/grafana/d/mcp-server/mcp-server?viewPanel=2..5)
 # need the provisioned dashboard and the datasource uid its panels pin (#543).
 check(
     prometheus_uid == "prometheus",
@@ -6805,12 +6805,20 @@ grafana_server_dashboard = wait_for_json(
     delay=2,
     description="grafana mcp-server dashboard",
 )
-grafana_server_panel_ids = {panel.get("id") for panel in grafana_server_dashboard["dashboard"].get("panels", [])}
-check(
-    {1, 2, 3, 4} <= grafana_server_panel_ids,
-    "grafana mcp-server dashboard has the server-card panels",
-    f"grafana mcp-server dashboard panels {sorted(grafana_server_panel_ids)} miss server-card viewPanel ids 1-4",
-)
+grafana_server_panels = {panel.get("id"): panel for panel in grafana_server_dashboard["dashboard"].get("panels", [])}
+server_card_panel_mapping = {
+    "request_rate": (2, "tools/call rate · 1h"),
+    "deny_rate": (3, "Policy denies · 1h"),
+    "latency_p95": (4, "tools/call p95 · 1h"),
+    "upstream_5xx_rate": (5, "Upstream 5xx rate · 1h"),
+}
+for metric, (panel_id, title) in server_card_panel_mapping.items():
+    panel = grafana_server_panels.get(panel_id, {})
+    check(
+        panel.get("title") == title and panel.get("datasource", {}).get("uid") == "prometheus",
+        f"grafana {metric} deep link targets panel {panel_id}: {title}",
+        f"grafana {metric} panel {panel_id} has wrong title/datasource or is missing: {panel}",
+    )
 
 grafana_gateway_counts = {}
 grafana_gateway_services = set()

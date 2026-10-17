@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"mcp-runtime/pkg/publicroutes"
+	"mcp-runtime/pkg/serviceutil"
 )
 
 func configuredPublicRoutes() publicroutes.Routes {
@@ -21,6 +22,13 @@ func mountPublicUI(inner *http.ServeMux, routes publicroutes.Routes) *http.Serve
 	outer := http.NewServeMux()
 	outer.Handle("/health", inner)
 	outer.Handle("/auth/admin-check", inner)
+	// Grafana has its own public prefix even when the console uses /console.
+	runtimeBase, err := parseRuntimeUpstream(serviceutil.EnvOr("RUNTIME_UPSTREAM", defaultRuntimeUpstream))
+	if err == nil {
+		grafana := grafanaSessionProxy(runtimeBase, sessions, routes.Grafana)
+		outer.Handle(routes.Grafana, grafana)
+		outer.Handle(routes.Grafana+"/", grafana)
+	}
 	redirect := func(route, target string) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != http.MethodGet && r.Method != http.MethodHead {

@@ -12,10 +12,13 @@ import (
 	"mcp-runtime-api/internal/platformclient"
 	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
 	mcpaccess "mcp-runtime/pkg/access"
+	"mcp-runtime/pkg/k8sclient"
 	"mcp-runtime/pkg/platformauth"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 )
 
@@ -32,19 +35,52 @@ type adapterTestFixture struct {
 
 func newAdapterTestFixture(t *testing.T, grants ...mcpv1alpha1.MCPAccessGrant) adapterTestFixture {
 	t.Helper()
+	t.Setenv("MCP_ADAPTER_CERTIFICATES", "true")
+	t.Setenv("MCP_MTLS_CLUSTER_ISSUER", "mcp-runtime-ca")
+	t.Setenv("MCP_TRUST_DOMAIN", "example.org")
 	scheme := runtime.NewScheme()
 	if err := mcpv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("AddToScheme: %v", err)
 	}
 	objects := []runtime.Object{
 		&mcpv1alpha1.MCPServer{
-			ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "mcp-team-acme"},
+			ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "mcp-team-acme", UID: "server-uid"},
+			Spec:       mcpv1alpha1.MCPServerSpec{Gateway: &mcpv1alpha1.GatewayConfig{}},
+			Status:     mcpv1alpha1.MCPServerStatus{IngressReady: true},
 		},
 	}
 	for i := range grants {
 		objects = append(objects, &grants[i])
 	}
-	mgr := mcpaccess.NewManager(dynamicfake.NewSimpleDynamicClient(scheme, objects...), nil)
+	issuer := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "cert-manager.io/v1", "kind": "ClusterIssuer",
+		"metadata": map[string]any{"name": "mcp-runtime-ca"},
+		"status":   map[string]any{"conditions": []any{map[string]any{"type": "Ready", "status": "True"}}},
+	}}
+	objects = append(objects, issuer)
+	objects = append(objects,
+		&unstructured.Unstructured{Object: map[string]any{
+			"apiVersion": "apps/v1", "kind": "Deployment",
+			"metadata": map[string]any{"name": "mcp-runtime-operator-controller-manager", "namespace": "mcp-runtime"},
+			"spec": map[string]any{"template": map[string]any{"spec": map[string]any{"containers": []any{map[string]any{"name": "manager", "env": []any{
+				map[string]any{"name": "MCP_ADAPTER_CERTIFICATES", "value": "true"},
+				map[string]any{"name": "MCP_MTLS_CLUSTER_ISSUER", "value": "mcp-runtime-ca"},
+				map[string]any{"name": "MCP_TRUST_DOMAIN", "value": "example.org"},
+			}}}}}},
+		}},
+		&unstructured.Unstructured{Object: map[string]any{
+			"apiVersion": "traefik.io/v1alpha1", "kind": "IngressRoute",
+			"metadata": map[string]any{"name": "demo", "namespace": "mcp-team-acme", "ownerReferences": []any{map[string]any{"apiVersion": "mcpruntime.org/v1alpha1", "kind": "MCPServer", "name": "demo", "uid": "server-uid", "controller": true}}},
+			"spec":     map[string]any{"tls": map[string]any{"options": map[string]any{"name": "demo-mtls"}}},
+		}},
+		&unstructured.Unstructured{Object: map[string]any{
+			"apiVersion": "traefik.io/v1alpha1", "kind": "TLSOption",
+			"metadata": map[string]any{"name": "demo-mtls", "namespace": "mcp-team-acme"},
+			"spec":     map[string]any{"clientAuth": map[string]any{"clientAuthType": "VerifyClientCertIfGiven", "secretNames": []any{"demo-mtls-ca"}}},
+		}},
+	)
+	dynamic := dynamicfake.NewSimpleDynamicClient(scheme, objects...)
+	mgr := mcpaccess.NewManager(dynamic, nil)
 	agentTeamID := "team-acme"
 	agentStatus := "active"
 	identityHTTP := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -57,7 +93,7 @@ func newAdapterTestFixture(t *testing.T, grants ...mcpv1alpha1.MCPAccessGrant) a
 	t.Cleanup(identityHTTP.Close)
 	identity := &platformclient.Client{BaseURL: identityHTTP.URL, Token: "test-token", HTTP: identityHTTP.Client()}
 	return adapterTestFixture{
-		server: &RuntimeServer{accessMgr: mgr, identity: identity},
+		server: &RuntimeServer{accessMgr: mgr, identity: identity, k8sClients: &k8sclient.Clients{Dynamic: dynamic}},
 		principal: principal{
 			Subject:   "user-123",
 			Email:     "user@example.org",
@@ -136,6 +172,88 @@ func TestAdapterSessionIssuesNewSessionFromMatchingGrant(t *testing.T) {
 	}
 	if got.ExpiresAt.Before(time.Now()) {
 		t.Fatalf("expiresAt = %v, must be in the future", got.ExpiresAt)
+	}
+}
+
+func adapterTestGrant() mcpv1alpha1.MCPAccessGrant {
+	return mcpv1alpha1.MCPAccessGrant{
+		ObjectMeta: metav1.ObjectMeta{Name: "g1", Namespace: "mcp-team-acme", CreationTimestamp: metav1.NewTime(time.Now().Add(-time.Hour))},
+		Spec: mcpv1alpha1.MCPAccessGrantSpec{
+			ServerRef: mcpv1alpha1.ServerReference{Name: "demo", Namespace: "mcp-team-acme"},
+			Subject:   mcpv1alpha1.SubjectRef{HumanID: "user-123", AgentID: "agt_01arz3ndektsv4rrffq69g5fav", TeamID: "team-acme"},
+			MaxTrust:  "high", PolicyVersion: "v3",
+		},
+	}
+}
+
+func TestAdapterPreflightReportsReadyWithoutCreatingSession(t *testing.T) {
+	fx := newAdapterTestFixture(t, adapterTestGrant())
+	body, _ := json.Marshal(adapterPreflightRequest{ServerName: "demo", Namespace: "mcp-team-acme", AgentID: "agt_01arz3ndektsv4rrffq69g5fav"})
+	req := httptest.NewRequest(http.MethodPost, "/api/runtime/adapter/preflight", bytes.NewReader(body))
+	req = req.WithContext(withPrincipal(req.Context(), fx.principal))
+	w := httptest.NewRecorder()
+	fx.server.Access().HandleAdapterPreflight(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	var state adapterPreflightResponse
+	if err := json.NewDecoder(w.Body).Decode(&state); err != nil {
+		t.Fatal(err)
+	}
+	if !state.Ready || !state.IssuerReady || !state.RouteEligible || !state.RouteReady {
+		t.Fatalf("preflight = %#v, want ready issuer and route", state)
+	}
+	sessions, err := fx.server.accessMgr.ListSessions(t.Context(), "mcp-team-acme")
+	if err != nil || len(sessions.Items) != 0 {
+		t.Fatalf("preflight sessions = %v, err = %v; want no session created", sessions, err)
+	}
+}
+
+func TestAdapterSessionRejectsDisabledPKIBeforeCreatingSession(t *testing.T) {
+	fx := newAdapterTestFixture(t, adapterTestGrant())
+	operatorResource := fx.server.k8sClients.Dynamic.Resource(schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}).Namespace("mcp-runtime")
+	operator, err := operatorResource.Get(t.Context(), "mcp-runtime-operator-controller-manager", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	containers, _, _ := unstructured.NestedSlice(operator.Object, "spec", "template", "spec", "containers")
+	containers[0].(map[string]any)["env"].([]any)[0].(map[string]any)["value"] = "false"
+	_ = unstructured.SetNestedSlice(operator.Object, containers, "spec", "template", "spec", "containers")
+	if _, err := operatorResource.Update(t.Context(), operator, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	req := adapterRequest(t, adapterSessionRequest{ServerName: "demo", Namespace: "mcp-team-acme", AgentID: "agt_01arz3ndektsv4rrffq69g5fav"})
+	req = req.WithContext(withPrincipal(req.Context(), fx.principal))
+	w := httptest.NewRecorder()
+	fx.server.Access().HandleAdapterSession(w, req)
+	if w.Code != http.StatusServiceUnavailable || !strings.Contains(w.Body.String(), "disabled") {
+		t.Fatalf("status/body = %d/%s, want disabled PKI error", w.Code, w.Body.String())
+	}
+	sessions, err := fx.server.accessMgr.ListSessions(t.Context(), "mcp-team-acme")
+	if err != nil || len(sessions.Items) != 0 {
+		t.Fatalf("sessions = %v, err = %v; want no orphan session", sessions, err)
+	}
+}
+
+func TestPendingAdapterSessionCleanupIsOwnerScoped(t *testing.T) {
+	fx := newAdapterTestFixture(t, adapterTestGrant())
+	req := adapterRequest(t, adapterSessionRequest{ServerName: "demo", Namespace: "mcp-team-acme", AgentID: "agt_01arz3ndektsv4rrffq69g5fav"})
+	req = req.WithContext(withPrincipal(req.Context(), fx.principal))
+	w := httptest.NewRecorder()
+	fx.server.Access().HandleAdapterSession(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("create status = %d, body = %s", w.Code, w.Body.String())
+	}
+	created := decodeAdapterResponse(t, w)
+	cleanup := httptest.NewRequest(http.MethodDelete, "/api/v1/runtime/adapter/sessions/"+created.Namespace+"/"+created.Name, nil)
+	cleanup = cleanup.WithContext(withPrincipal(cleanup.Context(), fx.principal))
+	w = httptest.NewRecorder()
+	fx.server.Access().HandleAdapterSessionItemPath(w, cleanup)
+	if w.Code != http.StatusOK {
+		t.Fatalf("cleanup status = %d, body = %s", w.Code, w.Body.String())
+	}
+	if _, err := fx.server.accessMgr.GetSession(t.Context(), created.Name, created.Namespace); err == nil {
+		t.Fatal("pending session remains after cleanup")
 	}
 }
 

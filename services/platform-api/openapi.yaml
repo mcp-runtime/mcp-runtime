@@ -21,6 +21,35 @@ paths:
                   active_sessions: {type: integer, minimum: 0}
         "401": {description: Internal bearer authentication required}
         "503": {description: Directory or session data unavailable}
+  /api/v1/users/{user_id}/deactivate:
+    post:
+      summary: Administrator permanently deactivates an account and revokes stored access
+      description: Atomically tombstones the account and memberships, revokes API keys, registry credentials, refresh tokens and human MCP sessions, and saves an audit record. Identity/audit history and deployed resources remain. Repeated requests are idempotent. Self-deactivation, the last active administrator and a team's last active owner are protected. Session changes follow the existing gateway sync/stale-window contract; issued registry bearers retain their normal expiry. Any cleanup/audit failure rolls back all changes.
+      parameters:
+        - {name: user_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Committed non-secret cleanup result; zero counters on an already-clean account.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user_id, status, already_deactivated, revoked_api_keys, revoked_registry_credentials, revoked_refresh_tokens, revoked_sessions, removed_memberships]
+                properties:
+                  user_id: {type: string, format: uuid}
+                  status: {type: string, const: deactivated}
+                  already_deactivated: {type: boolean}
+                  revoked_api_keys: {type: integer, minimum: 0}
+                  revoked_registry_credentials: {type: integer, minimum: 0}
+                  revoked_refresh_tokens: {type: integer, minimum: 0}
+                  revoked_sessions: {type: integer, minimum: 0}
+                  removed_memberships: {type: integer, minimum: 0}
+        "400": {description: Invalid user ID}
+        "401": {description: Authentication required}
+        "403": {description: Active administrator required}
+        "404": {description: User not found}
+        "409": {description: Transfer ownership or administrator authority before cleanup}
+        "500": {description: Cleanup was not confirmed; retry idempotently to resolve an uncertain commit outcome.}
   /api/v1/registry/token:
     get:
       summary: Exchange registry credentials for a five-minute scoped bearer
@@ -629,6 +658,47 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
+      security: [{"ControlPlaneToken": []}]
+  /internal/access/sessions/{namespace}/{name}/enrollment:
+    x-audience: "runtime-api"
+    x-listener-port: 8080
+    parameters:
+      - {name: namespace, in: path, required: true, schema: {type: string}}
+      - {name: name, in: path, required: true, schema: {type: string}}
+    patch:
+      summary: Complete enrollment without replacing session authorization
+      description: Checks immutable UID, current expiry, active agent and revocation under the session-state lock; removes only pending metadata.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [uid]
+              additionalProperties: false
+              properties:
+                uid: {type: string, minLength: 1}
+      responses:
+        "204": {description: Enrollment completed or already complete}
+        "400": {description: Invalid request}
+        "401": {description: Control-plane authentication required}
+        "403": {description: Session agent is inactive}
+        "404": {description: Session not found}
+        "409": {description: Session UID changed or session is revoked or expired}
+        "503": {description: Session store unavailable}
+      security: [{"ControlPlaneToken": []}]
+    delete:
+      summary: Delete only a still-pending enrollment with matching owner and UID
+      parameters:
+        - {name: uid, in: query, required: true, schema: {type: string, minLength: 1}}
+        - {name: human_id, in: query, required: true, schema: {type: string, minLength: 1}}
+      responses:
+        "204": {description: Pending enrollment removed and tombstone published}
+        "400": {description: Invalid request}
+        "401": {description: Control-plane authentication required}
+        "404": {description: Session not found}
+        "409": {description: Session completed or owner or UID changed}
+        "503": {description: Session store unavailable}
       security: [{"ControlPlaneToken": []}]
   /internal/access/sessions/revoke:
     x-audience: "runtime-api"

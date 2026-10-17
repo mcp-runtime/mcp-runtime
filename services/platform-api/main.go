@@ -145,6 +145,7 @@ func main() {
 		userResolver = runtimeControlUserKeyResolver()
 	}
 	server.authentic = platformauth.Authenticator{
+		Principals:      storeAPIKeyResolver{store: store},
 		Secret:          jwtSecret,
 		Audience:        platformauth.AudiencePlatform,
 		ServiceAPIKeys:  apiKeys,
@@ -205,6 +206,13 @@ func (r storeAPIKeyResolver) ResolveAPIKey(ctx context.Context, rawKey string) (
 	}
 	p, ok, err := r.store.AuthenticateUserAPIKey(ctx, rawKey)
 	return platformauth.Principal(p), ok, err
+}
+
+func (r storeAPIKeyResolver) PrincipalForUserID(ctx context.Context, userID string) (platformauth.Principal, error) {
+	if r.store == nil {
+		return platformauth.Principal{}, fmt.Errorf("platform identity database unavailable")
+	}
+	return r.store.PrincipalForUserID(ctx, userID)
 }
 
 func runtimeControlUserKeyResolver() platformauth.UserKeyResolver {

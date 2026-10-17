@@ -2248,7 +2248,11 @@ func TestDeployAnalyticsManifestsWithKubectl_RecreatesInitializationJobs(t *test
 		core.DefaultCLIConfig = orig
 	})
 	core.DefaultCLIConfig = &core.CLIConfig{}
-	swapKubernetesClientsForTest(t, newPlatformKubernetesTestClients(nil, nil))
+	one := int32(1)
+	swapKubernetesClientsForTest(t, newPlatformKubernetesTestClients([]runtime.Object{
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "mcp-shared-config", Namespace: "mcp-platform"}},
+		&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "mcp-runtime-api", Namespace: "mcp-platform"}, Spec: appsv1.DeploymentSpec{Replicas: &one}, Status: appsv1.DeploymentStatus{Replicas: 1, UpdatedReplicas: 1, AvailableReplicas: 1, ReadyReplicas: 1}},
+	}, nil))
 
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -2273,6 +2277,7 @@ func TestDeployAnalyticsManifestsWithKubectl_RecreatesInitializationJobs(t *test
 		"03-clickhouse.yaml",
 		"04-clickhouse-init.yaml",
 		"05-kafka.yaml",
+		"05-kafka-networkpolicy.yaml",
 		"05-kafka-topic-init.yaml",
 		"06-ingest.yaml",
 		"07-processor.yaml",
@@ -2282,6 +2287,7 @@ func TestDeployAnalyticsManifestsWithKubectl_RecreatesInitializationJobs(t *test
 		"08-runtime-api-rbac.yaml",
 		"08-analytics-api.yaml",
 		"22-split-api-networkpolicy.yaml",
+		"23-scoped-observability-networkpolicy.yaml",
 		"09-ui.yaml",
 		"10-gateway.yaml",
 		"11-prometheus.yaml",
@@ -2425,6 +2431,16 @@ func TestGrafanaProvisioningContract(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("analyticsServiceManifests missing %s", want)
+		}
+	}
+}
+
+func TestAnalyticsMessagingManifestsInstallKafkaPolicyBeforeClients(t *testing.T) {
+	for _, kafkaManifest := range []string{"k8s/05-kafka.yaml", "k8s/05-kafka-hostpath.yaml"} {
+		got := analyticsMessagingManifests(kafkaManifest)
+		want := []string{"k8s/05-kafka-networkpolicy.yaml", kafkaManifest}
+		if !slices.Equal(got, want) {
+			t.Errorf("analyticsMessagingManifests(%q) = %v, want %v", kafkaManifest, got, want)
 		}
 	}
 }
@@ -2589,6 +2605,7 @@ func TestDeployAnalyticsManifestsReturnsRolloutFailures(t *testing.T) {
 		"04-clickhouse-init.yaml",
 		"05-kafka.yaml",
 		"05-kafka-hostpath.yaml",
+		"05-kafka-networkpolicy.yaml",
 		"05-kafka-topic-init.yaml",
 		"06-ingest.yaml",
 		"07-processor.yaml",
@@ -2598,6 +2615,7 @@ func TestDeployAnalyticsManifestsReturnsRolloutFailures(t *testing.T) {
 		"08-runtime-api-rbac.yaml",
 		"08-analytics-api.yaml",
 		"22-split-api-networkpolicy.yaml",
+		"23-scoped-observability-networkpolicy.yaml",
 		"09-ui.yaml",
 		"10-gateway.yaml",
 		"11-prometheus.yaml",
@@ -2761,6 +2779,7 @@ func TestDeployAnalyticsManifestsWithKubectl_WaitsForPostgresStatefulSet(t *test
 		"03-clickhouse.yaml",
 		"04-clickhouse-init.yaml",
 		"05-kafka.yaml",
+		"05-kafka-networkpolicy.yaml",
 		"05-kafka-topic-init.yaml",
 		"06-ingest.yaml",
 		"07-processor.yaml",
@@ -2770,6 +2789,7 @@ func TestDeployAnalyticsManifestsWithKubectl_WaitsForPostgresStatefulSet(t *test
 		"08-runtime-api-rbac.yaml",
 		"08-analytics-api.yaml",
 		"22-split-api-networkpolicy.yaml",
+		"23-scoped-observability-networkpolicy.yaml",
 		"09-ui.yaml",
 		"10-gateway.yaml",
 		"11-prometheus.yaml",

@@ -80,6 +80,49 @@ paths:
         "401": {description: Unauthorized}
         "403": {description: Administrator role required}
         "503": {description: Server counts unavailable}
+  /api/v1/runtime/observability/grafana/{path}:
+    parameters:
+      - name: path
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Grafana subpath reached through the platform UI session proxy.
+    get:
+      summary: Read Grafana through the authenticated runtime boundary
+      description: >-
+        Every request reauthenticates the platform principal. Tenant access
+        requires completed scoped Grafana setup and admits only the provisioned
+        MCP Server dashboard, frontend assets and selected read metadata.
+        Datasource proxy/resource, Live, snapshots, rendering and unknown routes
+        are denied. Admins retain unfiltered access.
+      responses:
+        '200':
+          description: Grafana content for an allowed route
+        '401':
+          description: Authentication required
+        '403':
+          description: Route not available or scoped setup incomplete
+    post:
+      summary: Execute fixed authorized Grafana queries
+      description: >-
+        Tenants may POST only to the api/ds/query subpath, with at most twenty
+        Prometheus query models. Every expression must exactly match one of
+        runtime-api's fixed queries for a currently observable MCPServer and
+        its current immutable UID. All batch targets are reauthorized before
+        any shared datasource request. Arbitrary PromQL and other datasource
+        models are denied. The cookie-backed UI path additionally requires an
+        exact configured public Origin; direct API callers use bearer/API-key
+        authentication. Admins retain unfiltered query access.
+      responses:
+        '200':
+          description: Grafana query results
+        '400':
+          description: Invalid query body
+        '401':
+          description: Authentication required
+        '403':
+          description: Query or server scope not allowed
   /health:
     get:
       responses:

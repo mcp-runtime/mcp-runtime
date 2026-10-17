@@ -27,6 +27,7 @@ import (
 	"mcp-runtime-api/internal/platformclient"
 	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
 	mcpaccess "mcp-runtime/pkg/access"
+	chpkg "mcp-runtime/pkg/clickhouse"
 	"mcp-runtime/pkg/controlplane"
 	"mcp-runtime/pkg/k8sclient"
 	"mcp-runtime/pkg/platformstack"
@@ -811,11 +812,9 @@ func TestRuntimeObservabilityLinksAllowOwnedNamespace(t *testing.T) {
 	}
 }
 
-func TestRuntimeObservabilityLinksKeepGrafanaAdminOnly(t *testing.T) {
+func TestRuntimeObservabilityLinksUseScopedGrafanaForTeamMembers(t *testing.T) {
 	t.Setenv(envGrafanaServerDashboardURL, "/grafana/d/server/mcp-server?var-namespace={namespace}&var-server={server}")
-	// This legacy flag only changes link visibility; it does not constrain
-	// Grafana's Prometheus and Loki datasources, so it must never grant tenants
-	// direct access to the shared Grafana instance.
+	// Hardened setup routes Grafana through the authenticated fixed-query proxy.
 	t.Setenv("GRAFANA_SCOPED_USER_ACCESS", "true")
 	server := newRuntimeServerWithMCPServers(t, &mcpv1alpha1.MCPServer{
 		ObjectMeta: metav1.ObjectMeta{
@@ -856,12 +855,12 @@ func TestRuntimeObservabilityLinksKeepGrafanaAdminOnly(t *testing.T) {
 	if err := json.NewDecoder(recorder.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if payload.Grafana.Available || !payload.Grafana.DirectAdminOnly || payload.Grafana.URL != "" {
-		t.Fatalf("tenant Grafana access must remain disabled: %#v", payload.Grafana)
+	if !payload.Grafana.Available || payload.Grafana.DirectAdminOnly || !strings.Contains(payload.Grafana.URL, "var-server_uid=team-demo-uid") {
+		t.Fatalf("tenant Grafana must use the current immutable server scope: %#v", payload.Grafana)
 	}
 	for _, query := range payload.Prometheus.Queries {
-		if query.GrafanaURL != "" {
-			t.Fatalf("tenant query %q included an unrestricted Grafana URL %q", query.ID, query.GrafanaURL)
+		if !strings.Contains(query.GrafanaURL, "var-server_uid=team-demo-uid") {
+			t.Fatalf("tenant query %q omitted current immutable identity: %q", query.ID, query.GrafanaURL)
 		}
 	}
 }
@@ -946,7 +945,7 @@ func TestRuntimeObservabilityPrometheusProxyScopesQuery(t *testing.T) {
 	if gotPath != "/prometheus/api/v1/query" {
 		t.Fatalf("prometheus path = %q, want /prometheus/api/v1/query", gotPath)
 	}
-	wantQuery := `sum(rate(mcp_gateway_requests_total{namespace="user-1",server="demo",server_uid="user-1-demo-uid"}[5m]))`
+	wantQuery := `sum(rate(mcp_gateway_requests_total{namespace="user-1",server="demo",server_uid="user-1-demo-uid",rpc_method="tools/call"}[1h]))`
 	if gotQuery != wantQuery {
 		t.Fatalf("prometheus query = %q, want %q", gotQuery, wantQuery)
 	}
@@ -1029,6 +1028,7 @@ func TestRuntimeObservabilityMetricsReturnsScopedFixedSummary(t *testing.T) {
 
 	server := newRuntimeServerWithMCPServers(t, ownedTestMCPServer("demo", "user-1", "user-1"))
 	request := httptest.NewRequest(http.MethodGet, "/api/runtime/observability/metrics?namespace=user-1&server=demo", nil)
+	server.db = &chpkg.Client{DBName: "mcp", Conn: &observedToolConn{rows: &observedToolRows{tool: "search"}}}
 	request = request.WithContext(withPrincipal(request.Context(), principal{
 		Role: roleUser, Subject: "user-1", Namespace: "user-1", AllowedNamespaces: []string{"user-1"},
 	}))
@@ -1046,8 +1046,8 @@ func TestRuntimeObservabilityMetricsReturnsScopedFixedSummary(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if len(queries) != 5 {
-		t.Fatalf("got %d Prometheus queries, want five fixed queries: %#v", len(queries), queries)
+	if len(queries) != 4 {
+		t.Fatalf("got %d Prometheus queries, want four fixed queries and separate ClickHouse evidence: %#v", len(queries), queries)
 	}
 	for _, query := range queries {
 		if !strings.Contains(query, `namespace="user-1",server="demo",server_uid="user-1-demo-uid"`) {

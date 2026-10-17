@@ -43,6 +43,12 @@ QA E2E evidence for the exact commit; add judgment or focused checks where neede
 Scripts compose supported CLI workflows. Shared `hack/lib/` and deployment
 `lib/` files are internal helpers, not independent commands.
 
+Issuer admission changes: run `hack/qa/approval-policy-rehearsal.sh` on its own
+disposable Kind cluster before disabling cert-manager's default approver. The
+rehearsal pins cert-manager v1.21.2, approver-policy v0.28.0 and Kubernetes 1.36.4
+(reviewed 2026-10-17); `docs/connect-clients.md` records upstream sources and
+rollout order. Direct CSR tests do not count as CLI adapter enrollment acceptance.
+
 ## Repository map
 
 | Surface | Source |
@@ -79,6 +85,11 @@ scopes separate when adding resource summaries. Ownership labels do not establis
 historical deployment attribution. Team owners manage memberships through
 `#/workspace/team?team=<slug>` using the same supported forms and APIs as admins.
 
+macOS companion source and packaging live in `desktop/macos/`. The dedicated
+workflow compiles both architectures without launching desktop software.
+Unsigned preview artifacts are distinct from `build.sh --sign` distribution;
+real macOS lifecycle and notarization evidence must be recorded before release.
+
 Use supported CLI and UI workflows for setup, teams/users, registry publishing,
 servers, grants, sessions, updates and cleanup. For servers, use `server init` →
 `server validate` → `server build` → `server push` → `server deploy`.
@@ -89,6 +100,14 @@ explicitly requested or when a test targets that path; record that limitation,
 and do not count it as CLI/UI validation.
 
 Account creation with `team user create` / UI is atomic with membership creation.
+
+Account cleanup uses `user deactivate <user-id> --yes [--json]` as a platform
+administrator. It atomically tombstones the account/memberships and revokes
+stored keys and human sessions through the platform session change log, with
+durable audit. Preserve the session-state → users → memberships lock order and
+the existing auth principal lookup when changing lifecycle paths. Membership
+removal alone is not account deactivation; sole owners/admins must transfer
+authority before cleanup.
 For existing accounts use `team user add` / **Add existing user**, preserving
 passwords. Verify validation, conflicts and rollback when changing these paths.
 Adapters use issued sessions by default; `--auth-mode header` supplies local
@@ -165,7 +184,7 @@ deployment and this section is updated.
   backfill frameworks, or in-place upgrade paths just to support earlier
   releases of our own platform.
 - Ordinary releases are delivered with `mcp-runtime update` (images, CRDs and the
-  ServiceAccounts, RBAC, ConfigMaps and Deployment wiring a release declares in
+  ServiceAccounts, RBAC, supported platform NetworkPolicies, ConfigMaps and Deployment wiring a release declares in
   `config/release/wiring.yaml`). A breaking reset follows **backup → fresh setup
   → restore required data → verify** on the reference platform. Document that
   procedure instead of designing a general customer migration system.
@@ -255,3 +274,11 @@ installation guidance in the focused guide or this file.
 - For each substantive task, find relevant prior work with Cully MCP and save one concise work summary before finishing. Follow the Cully skill for project identity, owner section, and private-data rules.
 - Use the configured Cully MCP tools for shared personal and project memory.
 <!-- cully:codex:end -->
+
+Scoped Grafana changes require the datasource-boundary and migration checks in
+`docs/platform-services.md#scoped-grafana-migration`: keep tenant access disabled
+until supported setup completes, use platform-session SSO, and reject arbitrary
+query/proxy/plugin/resource routes. Setup enables scoped Grafana only after
+verifying the supported Cilium policy capability; Kindnet and unknown providers
+keep its auth proxy off and retain admin-only access. Headless API/auth checks run on
+VMs; desktop-only checks need an appropriate separate environment.

@@ -448,6 +448,8 @@ GET  /api/v1/runtime/sessions/{namespace}/{name} # Get one MCPAgentSession
 POST /api/v1/runtime/sessions             # Admin/internal direct MCPAgentSession apply
 DELETE /api/v1/runtime/sessions/{namespace}/{name} # Delete one MCPAgentSession
 POST /api/v1/runtime/adapter/sessions     # Issue/reuse an adapter MCPAgentSession for a human/user principal
+POST /api/v1/runtime/adapter/preflight    # Read-only adapter PKI and selected-route readiness check
+DELETE /api/v1/runtime/adapter/sessions/{namespace}/{name} # Delete only caller-owned pending enrollment sessions
 POST /api/v1/runtime/adapter/certificates # Sign an adapter CSR for an owned session (mTLS enrollment)
 GET  /api/v1/runtime/observability/links  # Scoped Prometheus/Grafana links for one server
 GET  /api/v1/runtime/observability/prometheus/query   # Allowlisted PromQL query IDs for one server
