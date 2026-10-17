@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"mcp-runtime-api/internal/runtimeapi/k8sprovision"
 	"net/http"
 	"strings"
 	"time"
@@ -93,7 +94,7 @@ func (s *RuntimeServer) handleRuntimeTeamDelete(w http.ResponseWriter, r *http.R
 	// namespace delete cannot stall the CRD provider (IngressRoute 404s).
 	if deployments := s.Deployments(); deployments != nil && deployments.k8sClients != nil {
 		cfg := platformTeamTraefikWatchConfig()
-		if err := removeTraefikDeploymentWatchesNamespace(ctx, deployments.k8sClients.Clientset, team.Namespace, cfg); err != nil {
+		if err := k8sprovision.RemoveTraefikDeploymentWatchesNamespace(ctx, deployments.k8sClients.Clientset, team.Namespace, cfg.provisioningConfig()); err != nil {
 			log.Printf("remove Traefik watch for deleted team %s namespace %s: %v", teamSlug, team.Namespace, err)
 		}
 	}

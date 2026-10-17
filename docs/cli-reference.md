@@ -829,32 +829,81 @@ mcp-runtime setup \
 `--strict-prod` requires TLS, rejects dev-only registry assumptions such as
 `registry.local`, and forces a stable production-style registry endpoint.
 `--mtls-cluster-issuer` names the cert-manager `ClusterIssuer` for workload
-certificates; name your enterprise issuer, or use a pre-provisioned bundled
-`mcp-runtime-ca` in production. Only `--test-mode` generates a missing bundled
-CA and defaults the workload issuer to `mcp-runtime-ca`. Full
+certificates. Production requires a dedicated enterprise-managed workload issuer
+with an independent signing root. The shared bundled `mcp-runtime-ca` is accepted
+for workload identity only in `--test-mode`, which also generates a missing CA.
+Full
 flow: [Agent adapters](connect-clients.md#enterprise-mtls-and-spiffe).
 
 #### Bundled workload CA lifecycle
 
-When `--mtls-cluster-issuer mcp-runtime-ca` is selected, setup validates the
-`cert-manager/mcp-runtime-ca` Secret before accepting it: the certificate and
-key must match, the certificate must be a CA with `keyCertSign`, and it must be
-inside its validity window. Setup never prints key material.
+**Production:** setup rejects `--mtls-cluster-issuer=mcp-runtime-ca` before TLS
+provisioning. Renaming the issuer or copying its root to another Secret does not
+make it independent: CA-backed issuers must use a separate signing key from the
+bundled registry/internal-TLS CA. A workload issuer also cannot be the issuer
+selected for internal registry TLS. This release supports enterprise-owned
+workload PKI; it does not offer a production bundled-workload-CA lifecycle.
 
-- **Production** setup fails if the Secret is missing (it will not mint a new
-  root silently), invalid, expired, or has under 180 days remaining. Prefer an
-  enterprise issuer for production.
-- **Test mode** generates a missing CA, still fails on invalid or expired CAs,
-  and only warns when the root is near expiry.
-- cert-manager does not rotate a CA Secret or reissue leaves when it changes.
-  Rotate with overlap: back up the current Secret to encrypted off-host storage
-  first; create the new root and publish a trust bundle containing both roots;
-  switch the issuer to the new root and reissue leaf certificates
-  (adapter, gateway/Traefik, registry); remove the old root only after every
-  leaf is reissued. Restore a lost Secret from the encrypted backup, then re-run
-  setup to re-validate. Limit access to the Secret in `cert-manager`.
-- The bundled registry/internal TLS still shares this root. Splitting the
-  workload and registry signing roots is tracked under #535 and is not yet done.
+Before setup, the PKI administrator must provision a dedicated workload
+`ClusterIssuer` and retain ownership of its signing keys. Setup requires its
+current generation to be Ready. For a CA-backed issuer, the certificate/key must
+match, the certificate must have CA constraints and `keyCertSign`, be currently
+valid, and have at least 180 days remaining. Missing, unreadable and invalid
+Secrets fail closed. The public CA chain must be complete, ordered from the
+signing CA to its self-signed root, and verifiable: an intermediate signed by
+the registry root is still shared trust and is rejected. The final root also
+needs at least 180 days remaining. No CA signing key anywhere in the workload
+chain may be reused in the registry chain, including an intermediate key
+reissued under a different root. Vault/Venafi-backed issuers retain their provider's health,
+backup and key-custody responsibilities. ACME and self-signed issuers are not
+workload signing roots. Setup never prints private material.
+
+To migrate an existing shared-root installation, preserve the registry CA,
+registry leaf and node registry trust. Have the PKI administrator provision the
+independent workload issuer, distribute its public trust to the adapter clients,
+and select it with `--with-tls --mtls-cluster-issuer=<dedicated-issuer>`. Do not
+delete or replace the registry CA to initialize workload identity. Existing
+workload identities need the overlap procedure below before issuer migration.
+
+**Test mode:** the bundled root may still serve both local registry and workload
+certificates. Setup generates it only when absent, rejects invalid/expired
+material, and warns below 180 days remaining. A failed API read is not treated
+as an absent Secret and never triggers root generation.
+
+The production PKI owner must maintain an encrypted, access-controlled off-host
+backup of signing material, issuer configuration and public trust, or the external
+provider's equivalent disaster-recovery mechanism. Restrict Secret/key access to
+that owner and the signer. Practice restore on a disposable target: recover the
+same root/key, validate its fingerprint and certificate/key match, restore issuer
+readiness and public trust, then re-run setup and the read-only identity health
+command. A new root is a rotation, not recovery of a lost root. Never place
+plaintext key exports in logs, shell history or support artifacts.
+
+For an enterprise-managed rollover, record the old root fingerprint and expiry,
+verify the encrypted backup, publish old+new public trust to every adapter and
+gateway/Traefik trust consumer **before** issuer cutover, and verify both chains.
+The PKI owner then changes the issuer, explicitly renews gateway/Traefik leaves
+and renews/re-enrolls adapters through supported adapter workflows. cert-manager
+does not automatically reissue leaves when a CA Secret changes. Keep overlapping
+trust until all old leaves and maximum adapter certificate lifetimes have drained;
+only then remove old trust. Registry/public-TLS issuers and certificates stay
+outside this workload rotation. During rollback, restore the old issuer but retain
+both roots until any newly issued leaves have also migrated or expired. Confirm
+root and leaf expiry with `cluster identity status` and monitor signer readiness;
+a successful setup is not continuous expiry monitoring.
+
+Gateways reload their mounted client-CA bundle every minute, independently of
+serving-certificate changes. Publish old and new public CAs during the overlap;
+after leaf migration, removing the retired root takes effect for new TLS
+handshakes, including TLS session resumption, once the updated mount is observed.
+An unreadable, malformed, private-key-bearing or oversized replacement is rejected
+and the last validated trust remains active. Reload failures appear in gateway
+logs without file contents or key material. Existing TLS connections retain their
+connection lifetime; root retirement does not revoke an existing agent session.
+Use the supported session-revocation workflow when immediate access revocation
+is required. The enterprise PKI owner performs root creation, trust distribution,
+issuer cutover, backup/recovery and leaf reissuance; the gateway trust reload
+handles a valid updated mount without requiring a gateway restart.
 
 ### Local and single-node clusters
 

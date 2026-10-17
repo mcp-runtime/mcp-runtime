@@ -17,74 +17,7 @@ import (
 )
 
 func validateGrantRequest(req *accessGrantRequest) error {
-	if req.Mode != nil && *req.Mode != mcpaccess.GrantModeEnforce && *req.Mode != mcpaccess.GrantModeMonitor {
-		return errors.New("mode must be enforce or monitor")
-	}
-	req.Name = strings.TrimSpace(req.Name)
-	req.Namespace = runtimeaccess.DefaultAccessNamespace(req.Namespace)
-	req.ServerRef.Name = mcpaccess.ServerName(strings.TrimSpace(string(req.ServerRef.Name)))
-	req.ServerRef.Namespace = mcpaccess.Namespace(strings.TrimSpace(string(req.ServerRef.Namespace)))
-	req.Subject.HumanID = mcpaccess.HumanID(strings.TrimSpace(string(req.Subject.HumanID)))
-	req.Subject.AgentID = mcpaccess.AgentID(strings.TrimSpace(string(req.Subject.AgentID)))
-	req.Subject.TeamID = mcpaccess.TeamID(strings.TrimSpace(string(req.Subject.TeamID)))
-	req.PolicyVersion = runtimeaccess.DefaultPolicyVersion(req.PolicyVersion)
-	req.MaxTrust = runtimeaccess.NormalizeTrust(req.MaxTrust)
-	if err := mcpaccess.ValidateResourceName("name", req.Name); err != nil {
-		return err
-	}
-	if err := mcpaccess.ValidateResourceName("namespace", req.Namespace); err != nil {
-		return err
-	}
-	if err := mcpaccess.ValidateResourceName("serverRef.name", string(req.ServerRef.Name)); err != nil {
-		return err
-	}
-	if err := mcpaccess.ValidateOptionalResourceName("serverRef.namespace", string(req.ServerRef.Namespace)); err != nil {
-		return err
-	}
-	if req.Subject.HumanID == "" && req.Subject.AgentID == "" && req.Subject.TeamID == "" {
-		return errors.New("one of subject.humanID, subject.agentID, or subject.teamID is required")
-	}
-	if err := runtimeaccess.ValidateTeamIDValue("subject.teamID", string(req.Subject.TeamID)); err != nil {
-		return err
-	}
-	if req.MaxTrust != "" && !runtimeaccess.ValidTrust(req.MaxTrust) {
-		return errors.New("maxTrust must be low, medium, or high")
-	}
-	if req.ExpiresAt != nil && !req.ExpiresAt.After(time.Now()) {
-		return errors.New("expiresAt must be in the future")
-	}
-	if len(req.AllowedSideEffects) == 0 {
-		return errors.New("at least one allowed side effect is required")
-	}
-	seenSideEffects := map[mcpaccess.ToolSideEffect]struct{}{}
-	for i := range req.AllowedSideEffects {
-		req.AllowedSideEffects[i] = runtimeaccess.NormalizeSideEffect(req.AllowedSideEffects[i])
-		if req.AllowedSideEffects[i] == "" {
-			return fmt.Errorf("allowedSideEffects[%d] is required", i)
-		}
-		if !runtimeaccess.ValidSideEffect(req.AllowedSideEffects[i]) {
-			return fmt.Errorf("allowedSideEffects[%d] must be read, write, or destructive", i)
-		}
-		if _, ok := seenSideEffects[req.AllowedSideEffects[i]]; ok {
-			return fmt.Errorf("allowedSideEffects[%d] is a duplicate", i)
-		}
-		seenSideEffects[req.AllowedSideEffects[i]] = struct{}{}
-	}
-	for i := range req.ToolRules {
-		req.ToolRules[i].Name = strings.TrimSpace(req.ToolRules[i].Name)
-		req.ToolRules[i].Decision = mcpaccess.PolicyDecision(strings.TrimSpace(string(req.ToolRules[i].Decision)))
-		req.ToolRules[i].RequiredTrust = runtimeaccess.NormalizeTrust(req.ToolRules[i].RequiredTrust)
-		if req.ToolRules[i].Name == "" {
-			return fmt.Errorf("toolRules[%d].name is required", i)
-		}
-		if !runtimeaccess.ValidDecision(req.ToolRules[i].Decision) {
-			return fmt.Errorf("toolRules[%d].decision must be allow or deny", i)
-		}
-		if req.ToolRules[i].RequiredTrust != "" && !runtimeaccess.ValidTrust(req.ToolRules[i].RequiredTrust) {
-			return fmt.Errorf("toolRules[%d].requiredTrust must be low, medium, or high", i)
-		}
-	}
-	return nil
+	return mcpaccess.ValidateGrantApplyRequest(req, time.Now())
 }
 
 func (s *AccessService) handleRuntimeGrantList(w http.ResponseWriter, r *http.Request) {

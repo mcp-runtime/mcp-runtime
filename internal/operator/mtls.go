@@ -13,12 +13,12 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
+	"mcp-runtime/pkg/kubeworkload"
 	"mcp-runtime/pkg/oauthresource"
 )
 
@@ -334,12 +334,9 @@ func mtlsNetworkPolicyName(mcpServer *mcpv1alpha1.MCPServer) string {
 	return mcpServer.Name + "-mtls-gateway"
 }
 
-// reconcileMTLSNetworkPolicy restricts ingress to the gateway port so the
-// verified-identity header can only originate from the TLS-terminating ingress.
-// Without it, any pod could connect directly to the gateway and forge the
-// header. It is defense-in-depth on top of the gateway's own requirement that
-// the connection be a verified mTLS hop (see authenticateMTLS). The gateway
-// metrics port stays open so Prometheus scraping is unaffected.
+// The existing policy name is retained for updates, but isolation now covers
+// every MCPServer. Namespace generic ingress excludes these pods, and gateway
+// metrics allow only the Prometheus peer. Authentication still runs normally.
 func (r *MCPServerReconciler) reconcileMTLSNetworkPolicy(ctx context.Context, mcpServer *mcpv1alpha1.MCPServer) error {
 	policy := &networkingv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{
@@ -347,45 +344,9 @@ func (r *MCPServerReconciler) reconcileMTLSNetworkPolicy(ctx context.Context, mc
 			Namespace: mcpServer.Namespace,
 		},
 	}
-	if !r.usesAdapterCertificates(mcpServer) {
-		if err := r.Delete(ctx, policy); err != nil && !apierrors.IsNotFound(err) {
-			return err
-		}
-		return nil
-	}
-
-	metricsPort := int32(DefaultGatewayMetricsPort)
-	tcp := corev1.ProtocolTCP
-
 	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, policy, func() error {
-		// Resolve the listener on each selected pod. During a port transition,
-		// the retained pod and the candidate use different numeric ports.
-		gatewayTarget := intstr.FromString("gateway")
-		metricsTarget := intstr.FromInt32(metricsPort)
-		policy.Spec = networkingv1.NetworkPolicySpec{
-			PodSelector: metav1.LabelSelector{
-				MatchLabels: map[string]string{"app": mcpServer.Name},
-			},
-			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeIngress},
-			Ingress: []networkingv1.NetworkPolicyIngressRule{
-				{
-					// Only the ingress controller may reach the gateway port.
-					From: []networkingv1.NetworkPolicyPeer{{
-						NamespaceSelector: &metav1.LabelSelector{
-							MatchLabels: map[string]string{"kubernetes.io/metadata.name": r.ingressControllerNamespace()},
-						},
-						PodSelector: &metav1.LabelSelector{
-							MatchLabels: r.ingressControllerPodLabels(),
-						},
-					}},
-					Ports: []networkingv1.NetworkPolicyPort{{Protocol: &tcp, Port: &gatewayTarget}},
-				},
-				{
-					// Metrics scraping is allowed from any source.
-					Ports: []networkingv1.NetworkPolicyPort{{Protocol: &tcp, Port: &metricsTarget}},
-				},
-			},
-		}
+		policy.Spec = kubeworkload.ServerIngressPolicy(mcpServer.Namespace, mcpServer.Name, string(mcpServer.UID),
+			gatewayEnabled(mcpServer), r.usesAdapterCertificates(mcpServer), r.ingressControllerNamespace(), r.ingressControllerPodLabels())
 		return ctrl.SetControllerReference(mcpServer, policy, r.Scheme)
 	})
 	return err

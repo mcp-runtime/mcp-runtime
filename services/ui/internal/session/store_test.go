@@ -1,0 +1,385 @@
+package session
+
+import (
+	"bytes"
+	"context"
+	"database/sql"
+	"database/sql/driver"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/lib/pq"
+)
+
+// fakeSessionDB is an in-process stand-in for the ui_sessions table. It is a
+// database/sql driver that understands exactly the statements the Postgres
+// session backend issues.
+type fakeSessionDB struct {
+	mu          sync.Mutex
+	rows        map[string]fakeSessionRow
+	failAll     bool
+	failConnect int
+	failSchema  int
+}
+
+type fakeSessionRow struct {
+	expires time.Time
+	payload []byte
+}
+
+var fakeDriverSeq atomic.Int64
+
+func openFakeSessionDB(t *testing.T) (*sql.DB, *fakeSessionDB) {
+	t.Helper()
+	fake := &fakeSessionDB{rows: map[string]fakeSessionRow{}}
+	name := fmt.Sprintf("fake-session-db-%d", fakeDriverSeq.Add(1))
+	sql.Register(name, fakeDriver{fake})
+	db, err := sql.Open(name, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	return db, fake
+}
+
+type fakeDriver struct{ db *fakeSessionDB }
+
+func (d fakeDriver) Open(string) (driver.Conn, error) { return fakeConn(d), nil }
+
+type fakeConn struct{ db *fakeSessionDB }
+
+func (c fakeConn) Prepare(q string) (driver.Stmt, error) { return &fakeStmt{c.db, q}, nil }
+func (c fakeConn) Close() error                          { return nil }
+func (c fakeConn) Begin() (driver.Tx, error)             { return nil, errors.New("tx unsupported") }
+
+type fakeStmt struct {
+	db *fakeSessionDB
+	q  string
+}
+
+func (s *fakeStmt) Close() error  { return nil }
+func (s *fakeStmt) NumInput() int { return -1 }
+
+func (s *fakeStmt) Exec(args []driver.Value) (driver.Result, error) {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	if s.db.failConnect > 0 && (strings.HasPrefix(s.q, "CREATE TABLE") || strings.HasPrefix(s.q, "CREATE INDEX")) {
+		s.db.failConnect--
+		return nil, &net.DNSError{Err: "no such host", Name: "mcp-postgres.mcp-platform.svc.cluster.local", IsNotFound: true}
+	}
+	if s.db.failAll {
+		return nil, errors.New("database unavailable")
+	}
+	if s.db.failSchema > 0 && (strings.HasPrefix(s.q, "CREATE TABLE") || strings.HasPrefix(s.q, "CREATE INDEX")) {
+		s.db.failSchema--
+		return nil, &pq.Error{Code: "23505", Constraint: "pg_type_typname_nsp_index"}
+	}
+	switch {
+	case strings.HasPrefix(s.q, "CREATE TABLE"), strings.HasPrefix(s.q, "CREATE INDEX"):
+		return driver.RowsAffected(0), nil
+	case strings.HasPrefix(s.q, "DELETE FROM ui_sessions WHERE expires_at"):
+		now := args[0].(time.Time)
+		var n int64
+		for id, row := range s.db.rows {
+			if !row.expires.After(now) {
+				delete(s.db.rows, id)
+				n++
+			}
+		}
+		return driver.RowsAffected(n), nil
+	case strings.HasPrefix(s.q, "DELETE FROM ui_sessions WHERE id"):
+		delete(s.db.rows, args[0].(string))
+		return driver.RowsAffected(1), nil
+	case strings.HasPrefix(s.q, "INSERT INTO ui_sessions"):
+		id := args[0].(string)
+		if _, dup := s.db.rows[id]; dup {
+			return nil, errors.New("duplicate key")
+		}
+		s.db.rows[id] = fakeSessionRow{expires: args[1].(time.Time), payload: append([]byte(nil), args[2].([]byte)...)}
+		return driver.RowsAffected(1), nil
+	}
+	return nil, fmt.Errorf("unexpected exec %q", s.q)
+}
+
+func (s *fakeStmt) Query(args []driver.Value) (driver.Rows, error) {
+	s.db.mu.Lock()
+	defer s.db.mu.Unlock()
+	if s.db.failAll {
+		return nil, errors.New("database unavailable")
+	}
+	if !strings.HasPrefix(s.q, "SELECT payload FROM ui_sessions") {
+		return nil, fmt.Errorf("unexpected query %q", s.q)
+	}
+	row, ok := s.db.rows[args[0].(string)]
+	if !ok || !row.expires.After(args[1].(time.Time)) {
+		return &fakeRows{}, nil
+	}
+	return &fakeRows{data: [][]driver.Value{{row.payload}}}, nil
+}
+
+type fakeRows struct {
+	data [][]driver.Value
+	i    int
+}
+
+func (r *fakeRows) Columns() []string { return []string{"payload"} }
+func (r *fakeRows) Close() error      { return nil }
+func (r *fakeRows) Next(dest []driver.Value) error {
+	if r.i >= len(r.data) {
+		return io.EOF
+	}
+	copy(dest, r.data[r.i])
+	r.i++
+	return nil
+}
+
+// Built at runtime so no secret-shaped literal lives in source.
+var testSessionKey = strings.Repeat("0123456789abcdef", 2)
+
+func newSharedStores(t *testing.T, now func() time.Time) (a, b *Store, fake *fakeSessionDB) {
+	t.Helper()
+	db, fake := openFakeSessionDB(t)
+	mk := func() *Store {
+		backend, err := newPostgresSessionBackend(context.Background(), db, testSessionKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return NewStoreWithBackend(backend, now)
+	}
+	return mk(), mk(), fake
+}
+
+func cookieRequest(sess Session) *http.Request {
+	r := httptest.NewRequest(http.MethodGet, "/auth/status", nil)
+	r.AddCookie(&http.Cookie{Name: CookieName, Value: sess.ID})
+	return r
+}
+
+func TestSharedSessionVisibleAcrossReplicas(t *testing.T) {
+	now := time.Now()
+	podA, podB, _ := newSharedStores(t, func() time.Time { return now })
+
+	sess, err := podA.Create(context.Background(), Session{
+		Principal:      Principal{Role: "admin", Subject: "alice"},
+		UpstreamAPIKey: "upstream-secret",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if visible, ok := podB.FromRequest(cookieRequest(sess)); !ok || visible.CSRFToken != sess.CSRFToken || visible.Principal.Role != "admin" {
+		t.Fatal("shared session cookie, principal or CSRF token not visible")
+	}
+	got, ok := podB.Get(sess.ID)
+	if !ok || got.UpstreamAPIKey != "upstream-secret" || got.Principal.Subject != "alice" {
+		t.Fatalf("replica B session = %+v ok=%v", got, ok)
+	}
+
+	// logout on replica B revokes it everywhere.
+	podB.Delete(sess.ID)
+	if _, ok := podA.Get(sess.ID); ok {
+		t.Fatal("session still valid on replica A after logout on B")
+	}
+}
+
+func TestSharedSessionExpiryAndPurge(t *testing.T) {
+	now := time.Now()
+	clock := &now
+	podA, podB, fake := newSharedStores(t, func() time.Time { return *clock })
+	sess, err := podA.Create(context.Background(), Session{ExpiresAt: now.Add(time.Minute)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := podB.Get(sess.ID); !ok {
+		t.Fatal("expected live session")
+	}
+	later := now.Add(2 * time.Minute)
+	clock = &later
+	if _, ok := podB.Get(sess.ID); ok {
+		t.Fatal("expired session accepted")
+	}
+	if _, err := podA.Create(context.Background(), Session{ExpiresAt: later.Add(time.Minute)}); err != nil {
+		t.Fatal(err)
+	}
+	fake.mu.Lock()
+	n := len(fake.rows)
+	fake.mu.Unlock()
+	if n != 1 {
+		t.Fatalf("expired row not purged on create, rows=%d", n)
+	}
+}
+
+func TestSharedSessionPayloadEncryptedAndBoundToID(t *testing.T) {
+	now := time.Now()
+	podA, podB, fake := newSharedStores(t, func() time.Time { return now })
+	s1, err := podA.Create(context.Background(), Session{UpstreamAPIKey: "upstream-secret", UpstreamAuthHeader: "Bearer tok"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s2, err := podA.Create(context.Background(), Session{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake.mu.Lock()
+	for _, row := range fake.rows {
+		if bytes.Contains(row.payload, []byte("upstream-secret")) || bytes.Contains(row.payload, []byte("Bearer tok")) {
+			t.Fatal("payload stored in plaintext")
+		}
+	}
+	// Move s1's payload under s2's ID: must be rejected.
+	row1 := fake.rows[s1.ID]
+	row2 := fake.rows[s2.ID]
+	row2.payload = row1.payload
+	fake.rows[s2.ID] = row2
+	fake.mu.Unlock()
+	if _, ok := podB.Get(s2.ID); ok {
+		t.Fatal("swapped payload accepted")
+	}
+}
+
+func TestSharedSessionWrongKeyRejected(t *testing.T) {
+	now := time.Now()
+	db, _ := openFakeSessionDB(t)
+	good, err := newPostgresSessionBackend(context.Background(), db, testSessionKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bad, err := newPostgresSessionBackend(context.Background(), db, strings.Repeat("z", 40))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := NewStoreWithBackend(good, func() time.Time { return now }).Create(context.Background(), Session{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := NewStoreWithBackend(bad, func() time.Time { return now }).Get(sess.ID); ok {
+		t.Fatal("session decrypted with wrong key")
+	}
+}
+
+func TestSharedSessionBackendOutageFailsClosed(t *testing.T) {
+	now := time.Now()
+	podA, podB, fake := newSharedStores(t, func() time.Time { return now })
+	sess, err := podA.Create(context.Background(), Session{Principal: Principal{Role: "admin"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake.mu.Lock()
+	fake.failAll = true
+	fake.mu.Unlock()
+	if _, ok := podB.Get(sess.ID); ok {
+		t.Fatal("session accepted while backend down")
+	}
+	if _, err := podA.Create(context.Background(), Session{}); err == nil {
+		t.Fatal("create should fail while backend down")
+	}
+}
+
+func TestMemoryBackendIsPerStore(t *testing.T) {
+	now := time.Now()
+	a := NewStore(func() time.Time { return now })
+	b := NewStore(func() time.Time { return now })
+	sess, err := a.Create(context.Background(), Session{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := a.Get(sess.ID); !ok {
+		t.Fatal("memory store lost session")
+	}
+	if _, ok := b.Get(sess.ID); ok {
+		t.Fatal("memory stores must not share sessions")
+	}
+}
+
+func TestBuildSessionBackendConfig(t *testing.T) {
+	ctx := context.Background()
+	for _, kind := range []string{"", "memory", " MEMORY "} {
+		b, err := NewBackend(ctx, kind, "", "")
+		if err != nil {
+			t.Fatalf("%q: %v", kind, err)
+		}
+		if _, ok := b.(*memorySessionBackend); !ok {
+			t.Fatalf("%q: backend = %T", kind, b)
+		}
+	}
+	if _, err := NewBackend(ctx, "postgres", "", testSessionKey); err == nil {
+		t.Fatal("postgres without DSN must fail")
+	}
+	if _, err := NewBackend(ctx, "redis", "", ""); err == nil {
+		t.Fatal("unknown backend must fail")
+	}
+	db, _ := openFakeSessionDB(t)
+	if _, err := newPostgresSessionBackend(ctx, db, "short"); err == nil {
+		t.Fatal("short encryption key must fail")
+	}
+}
+
+func TestConcurrentSchemaRace(t *testing.T) {
+	if !concurrentSchemaRace(&pq.Error{Code: "23505"}) {
+		t.Fatal("unique violation should be retried")
+	}
+	if concurrentSchemaRace(&pq.Error{Code: "42P01"}) {
+		t.Fatal("a missing relation should not be retried")
+	}
+	if concurrentSchemaRace(errors.New("dial failed")) {
+		t.Fatal("a generic error should not be retried")
+	}
+}
+
+func TestEnsureSessionSchemaWaitsForPostgresDNS(t *testing.T) {
+	db, fake := openFakeSessionDB(t)
+	fake.failConnect = 2
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := ensureSessionSchema(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	if fake.failConnect != 0 {
+		t.Fatalf("connect failures left = %d", fake.failConnect)
+	}
+}
+
+func TestEnsureSessionSchemaRetriesRaceAfterPostgresWait(t *testing.T) {
+	db, fake := openFakeSessionDB(t)
+	fake.failConnect = 4
+	fake.failSchema = 1
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := ensureSessionSchema(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	if fake.failConnect != 0 || fake.failSchema != 0 {
+		t.Fatalf("failures left: connect=%d schema=%d", fake.failConnect, fake.failSchema)
+	}
+}
+
+func TestEnsureSessionSchemaBoundsSchemaRetries(t *testing.T) {
+	db, fake := openFakeSessionDB(t)
+	fake.failSchema = 6
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := ensureSessionSchema(ctx, db); !concurrentSchemaRace(err) {
+		t.Fatalf("expected schema race error, got %v", err)
+	}
+	if fake.failSchema != 1 {
+		t.Fatalf("expected five attempts, failures left=%d", fake.failSchema)
+	}
+}
+
+func TestTransientSessionConnect(t *testing.T) {
+	if !transientSessionConnect(&net.DNSError{Err: "no such host", IsNotFound: true}) {
+		t.Fatal("missing postgres DNS should be retried")
+	}
+	if transientSessionConnect(errors.New("database unavailable")) {
+		t.Fatal("a statement error should not be retried")
+	}
+}

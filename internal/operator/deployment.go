@@ -60,7 +60,7 @@ func (r *MCPServerReconciler) reconcileDeployment(ctx context.Context, mcpServer
 			"mcpruntime.org/rollout-track": "stable",
 		}
 		templateLabels := map[string]string{
-			"mcpruntime.org/server-uid":    string(mcpServer.UID),
+			kubeworkload.ServerUIDLabel:    string(mcpServer.UID),
 			servingPortLabel:               strconv.Itoa(int(servingPort(mcpServer))),
 			"app":                          mcpServer.Name,
 			"app.kubernetes.io/managed-by": "mcp-runtime",
@@ -167,7 +167,7 @@ func (r *MCPServerReconciler) reconcileCanaryDeployment(ctx context.Context, mcp
 			Strategy: strategy,
 		}
 		deployment.Spec.Template.ObjectMeta.Labels = map[string]string{
-			"mcpruntime.org/server-uid":    string(mcpServer.UID),
+			kubeworkload.ServerUIDLabel:    string(mcpServer.UID),
 			servingPortLabel:               strconv.Itoa(int(servingPort(mcpServer))),
 			"app":                          mcpServer.Name,
 			"app.kubernetes.io/managed-by": "mcp-runtime",

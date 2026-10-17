@@ -140,6 +140,18 @@ traffic — run it with the explicit contributor kubeconfig, for example
 `KUBECONFIG="$HOME/.kube/test-mcp-runtime-config" E2E_SCENARIOS=governance,trust,adapter-proxy bash test/e2e/qa-e2e.sh`.
 See `test/e2e/qa-e2e.sh` and `test/e2e/select_pr_scenarios.sh` for scenario names.
 
+## Validation ownership
+
+`pkg/access/specvalidation` owns grant/session structural rules. The CRD webhook
+adapts persisted specs; `pkg/access` owns normalized platform apply requests used
+by runtime-api and CLI submission. Keep the explicit boundary contracts:
+admission retains legacy wildcard grants and deny-all empty side effects;
+platform apply requires a subject and explicit effects, and new grants must
+expire in the future. Historical session import/revocation remains valid.
+Directory membership, server ownership and live grant/session authorization stay
+in runtime-api; structural validation must never replace those checks. Preserve
+Kubernetes field causes and platform error text when changing these boundaries.
+
 ## Code map
 
 - CRDs: `api/v1alpha1/`, `config/crd/bases/`

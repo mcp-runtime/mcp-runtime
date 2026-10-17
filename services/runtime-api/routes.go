@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
@@ -53,6 +55,15 @@ func (s *server) registerRoutes(mux *http.ServeMux) {
 	// This route has its own exact Prometheus ServiceAccount/audience
 	// TokenReview boundary; platform sessions and API keys never authorize it.
 	mux.Handle("/internal/observability/resources/metrics", s.runtime.ResourceHistoryHandler())
+	// Complete the canonical old-policy replacement before this API replica
+	// becomes ready. A partial/failed migration must never report healthy.
+	policyContext, cancelPolicies := context.WithTimeout(context.Background(), 30*time.Second)
+	policyErr := s.runtime.Deployments().ReconcileTeamNamespaceNetworkPolicies(policyContext)
+	cancelPolicies()
+	if policyErr != nil {
+		log.Printf("workload network policy reconciliation failed: %v", policyErr)
+		s.runtimeInit = "workload network policies unavailable"
+	}
 	routes := runtimeRoutes{
 		runtime:   s.runtime,
 		platform:  s.platform,
@@ -158,7 +169,6 @@ func (rr runtimeRoutes) registerRoutes(mux *http.ServeMux) {
 		runtimehandlers.HandleRuntimeRegistryPush(registryPushService, w, r)
 	})))
 	mux.HandleFunc("/internal/registry-push/tar", registryPushService.HandleRegistryPushTransfer)
-	go deploymentService.ReconcileTeamNamespaceNetworkPolicies(context.Background())
 	rr.mount("/runtime/components", rr.adminOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		runtimehandlers.HandleRuntimeComponents(runtimeServer, w, r)
 	})))
@@ -180,22 +190,15 @@ func (rr runtimeRoutes) registerRoutes(mux *http.ServeMux) {
 
 func (s *server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	if s.runtimeInit != "" {
-		apihttp.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{
-			"ok":                  false,
-			"runtime_initialized": false,
-			"runtime_error":       s.runtimeInit,
-		})
+		apihttp.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false})
 		return
 	}
-	apihttp.WriteJSON(w, http.StatusOK, map[string]any{
-		"ok":                  true,
-		"runtime_initialized": true,
-	})
+	apihttp.WriteJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 func (s *server) handleReady(w http.ResponseWriter, _ *http.Request) {
 	if s.runtimeInit != "" {
-		apihttp.WriteEnvelope(w, http.StatusServiceUnavailable, apihttp.CodeServiceUnavailable, s.runtimeInit)
+		apihttp.WriteEnvelope(w, http.StatusServiceUnavailable, apihttp.CodeServiceUnavailable, "runtime unavailable")
 		return
 	}
 	if s.runtime == nil || !s.runtime.KubernetesAvailable() {
