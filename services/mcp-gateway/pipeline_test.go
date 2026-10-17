@@ -570,6 +570,39 @@ func TestAuthzFilterRejectsDeniedToolCall(t *testing.T) {
 	}
 }
 
+func TestAuthzFilterMonitorVsEnforceGrant(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		mode       string
+		wantResult Result
+		wantAllow  bool
+		wantShadow bool
+	}{
+		{name: "monitor", mode: "monitor", wantResult: Continue, wantAllow: true, wantShadow: true},
+		{name: "default enforce", wantResult: Reject},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := minimalServer()
+			ex := newTestExchange(http.MethodPost, "/mcp", `{"method":"tools/call","params":{"name":"echo"}}`, map[string]string{"Content-Type": "application/json"})
+			s.inspectFilter(ex)
+			ex.Identity = identityContext{HumanID: "human-1"}
+			ex.Policy = &policypkg.Document{
+				Policy: &policypkg.Config{Mode: "allow-list", DefaultDecision: "deny"},
+				Tools:  []policypkg.Tool{{Name: "echo", RequiredTrust: "high", SideEffect: "write"}},
+				Grants: []policypkg.Grant{{Name: "g1", Mode: tc.mode, HumanID: "human-1", MaxTrust: "low", AllowedSideEffects: []string{"read"}, ToolRules: []policypkg.ToolAccess{{Name: "echo", Decision: "allow"}}}},
+			}
+
+			if got := s.authzFilter(ex); got != tc.wantResult {
+				t.Fatalf("authzFilter result = %v, want %v (decision=%#v)", got, tc.wantResult, ex.Decision)
+			}
+			if ex.Decision.Allowed != tc.wantAllow || ex.Decision.WouldDeny != tc.wantShadow {
+				t.Fatalf("decision = %#v, want allowed=%v would_deny=%v", ex.Decision, tc.wantAllow, tc.wantShadow)
+			}
+		})
+	}
+}
+
 func TestAuthzFilterAuthorizationInputsUnchangedAfterDecision(t *testing.T) {
 	t.Parallel()
 	// Prove that upstreamFilter (stage 5) receives the same Policy and Identity
