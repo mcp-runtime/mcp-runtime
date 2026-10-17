@@ -424,7 +424,19 @@ jobs:
 
       - name: Run benchmarks
         run: |
-          go test -run=^$ -bench=. -benchmem -count=1 ./test/benchmark/...
+          set -euo pipefail
+          export KUBECONFIG="$(mktemp)" GOMAXPROCS=4 GOFLAGS=-p=4
+          hack/ci/go-test.sh . -run='^$' -bench='Benchmark(Reconcile|Authorize|SessionLookup|VerifyPlatformBearer|SessionCertificateChain|SessionMTLSTransport)' -benchmem -benchtime=100ms -count=3 ./test/benchmark/... ./pkg/policy ./pkg/platformauth ./pkg/certauth | tee benchmarks-root.txt
+          hack/ci/go-test.sh services/mcp-gateway -run='^$' -bench='Benchmark(SessionCertificateAuthorization|EmitAnalyticsEvent)' -benchmem -benchtime=100ms -count=3 ./... | tee benchmarks-gateway.txt
+
+      - name: Preserve raw microbenchmark samples
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: microbenchmark-samples
+          path: benchmarks-*.txt
+          if-no-files-found: ignore
+          retention-days: 7
 
   generated-drift:
     name: Generated File Drift

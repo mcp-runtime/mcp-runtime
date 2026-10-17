@@ -1,4 +1,4 @@
-package main
+package proxy
 
 import (
 	"errors"
@@ -8,6 +8,8 @@ import (
 	"path"
 	"strings"
 
+	"mcp-ui/internal/session"
+
 	"mcp-runtime/pkg/platformauth"
 	"mcp-runtime/pkg/serviceutil"
 )
@@ -15,11 +17,11 @@ import (
 // The platform session is the only browser credential accepted here. Every
 // request is reauthenticated by runtime-api, including admin requests, so a
 // stale UI role or a surviving Grafana cookie never grants data access.
-func grafanaSessionProxy(platformBase, runtimeBase *url.URL, store *uiSessionStore, prefix string) http.Handler {
+func NewGrafanaProxy(platformBase, runtimeBase *url.URL, store *session.Store, prefix string, httpClient *http.Client) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Frame-Options", "DENY")
-		sess, ok := store.sessionFromRequest(r)
+		sess, ok := store.FromRequest(r)
 		if !ok {
 			serviceutil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 			return
@@ -64,7 +66,7 @@ func grafanaSessionProxy(platformBase, runtimeBase *url.URL, store *uiSessionSto
 		req.Header.Set("Accept", r.Header.Get("Accept"))
 		req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
 		if auth != "" {
-			auth, err = platformauth.ExchangeBearer(r.Context(), sessionProxyHTTPClient, platformBase, auth, platformauth.AudienceRuntime)
+			auth, err = platformauth.ExchangeBearer(r.Context(), httpClient, platformBase, auth, platformauth.AudienceRuntime)
 			if err != nil {
 				status := http.StatusBadGateway
 				if errors.Is(err, platformauth.ErrExchangeUnauthorized) {
@@ -77,7 +79,7 @@ func grafanaSessionProxy(platformBase, runtimeBase *url.URL, store *uiSessionSto
 		} else {
 			req.Header.Set("X-API-Key", apiKey)
 		}
-		resp, err := sessionProxyHTTPClient.Do(req)
+		resp, err := httpClient.Do(req)
 		if err != nil {
 			serviceutil.WriteJSON(w, http.StatusBadGateway, map[string]string{"error": "upstream_error"})
 			return

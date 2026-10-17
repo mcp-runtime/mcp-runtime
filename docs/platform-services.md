@@ -35,7 +35,7 @@ use HTTP, Kafka, ClickHouse, Postgres, or local files.
 | **gateway** | Kubernetes-aware Traefik ingress controller. | Watches Ingress, Service, Endpoint, Secret, and IngressClass resources for the namespaces it serves. The shared ingress overlays watch `registry`, `mcp-platform`, `mcp-observability`, `mcp-log-collector`, `mcp-servers`, `mcp-servers-org`, and `mcp-servers-public`. | Keep watched namespaces explicit, avoid cluster-wide ingress watches unless required, route Grafana through the platform session and runtime query boundary, do not expose Prometheus directly on public hosts, and keep redaction middleware limited to routes that need it. |
 | **mcp-gateway** | Kubernetes-integrated but Kubernetes API-agnostic. It is injected into MCP server pods and reads operator-rendered policy from mounted files and env vars. | Does not need a Kubernetes client or API access. It forwards MCP traffic to the local server container and emits audit events to ingest, authenticating with a short-lived projected ServiceAccount token (audience `mcp-ingest`) that ingest validates via TokenReview. | Keep `automountServiceAccountToken: false`, read-only policy mounts, `readOnlyRootFilesystem`, dropped capabilities, and non-root execution. The projected token is only valid for ingest; ingest accepts it only from the `mcp-workload` ServiceAccount. An optional `ANALYTICS_API_KEY` is ingest-scoped, not an admin API key. |
 | **ui** | Kubernetes API-agnostic. | Serves the browser UI and proxies allowlisted read-only `GET /api/ui/v1/*` dashboard paths to runtime-api (`RUNTIME_UPSTREAM`) or analytics-api (`ANALYTICS_UPSTREAM`) using the server-held UI session credential. Login still uses `API_UPSTREAM` against platform-api. All other `/api/v1/*` traffic stays on Traefik split-API ingress. | Keep it behind TLS for public hosts, retain the security headers in `services/ui`, set `UI_REQUIRE_HTTPS=false` for deliberate local HTTP or a secured external TLS terminator, set `UI_FORCE_SECURE_COOKIE=true` when a TLS-terminating proxy does not send `X-Forwarded-Proto: https`, and do not grant it Kubernetes RBAC. The shipped Deployment runs two replicas with `UI_SESSION_STORE=postgres`. Session rows live in the shared `ui_sessions` table, encrypted with `UI_SESSION_ENCRYPTION_KEY` from `mcp-ui-credentials`. Rotating that key forces re-login. The gateway does not hold the cookie, so it can scale with the UI. |
-| **ingest** | Kubernetes API-agnostic. | Authenticates `/events`, validates request size and event shape, and writes to Kafka. | Require `INGEST_API_KEYS` or OIDC for real deployments, use ingest-only keys, restrict network access to proxy/gateway callers, and keep the public `/ingest` route off production hosts unless intentionally exposed. |
+| **ingest** | Uses the Kubernetes TokenReview API when projected-token authentication is configured. | Authenticates `/events`, validates request size and event shape, and writes to Kafka. | Require `INGEST_API_KEYS`, complete OIDC authentication, or `INGEST_SA_TOKEN_AUDIENCE`; startup refuses an unconfigured authentication boundary. Use ingest-only keys, restrict network access to proxy/gateway callers, and keep the public `/ingest` route off production hosts unless intentionally exposed. |
 | **processor** | Kubernetes API-agnostic. | Consumes Kafka and writes ClickHouse. It only exposes health and metrics. | Do not expose it through ingress. Restrict network access to Kafka, ClickHouse, metrics scraping, and tracing endpoints. |
 | **storage and observability** | Mixed. ClickHouse, Kafka, Postgres, Grafana, Prometheus, Tempo, Loki, and the OTel collector are Kubernetes API-agnostic in the bundled manifests; Promtail is Kubernetes-aware so it can discover pod logs. | Data stores and dashboards back audit, identity, metrics, traces, and logs. Promtail has pod read/watch RBAC. | Review persistence, retention, backups, and dashboard auth before production use. The generated Grafana route targets the UI session proxy; runtime-api enforces server ownership on each tenant datasource query. Preserve that route and the scoped observability NetworkPolicies when replacing Traefik, and review Promtail's cluster log visibility before enabling it on multi-tenant clusters. |
 
@@ -518,10 +518,32 @@ histogram_quantile(0.99, sum by (le, service, operation) (rate(mcp_request_durat
 | **runtime-api** | `/health` and `/ready` are open (`/ready` returns `503` until the Kubernetes client is available). `/api/v1/runtime/*`, `/api/v1/deployments`, and admin operations routes accept platform JWTs (audience `runtime-api`) or scoped API keys via `pkg/platformauth`. `/api/v1/dashboard/summary`, `/api/v1/runtime/components`, `/api/v1/runtime/actions/restart`, and the `/api/v1/admin/*` routes require the admin role. |
 | **analytics-api** | `/health` and `/ready` are open (`/ready` returns `503` when ClickHouse is unreachable). `/api/v1/events`, `/api/v1/stats`, `/api/v1/sources`, `/api/v1/event-types`, and `/api/v1/analytics/usage` require the admin role because they return unscoped cluster-wide data. `/api/v1/user/analytics/usage` is the non-admin path and is scoped to the caller's team namespaces. Both accept platform JWTs (audience `analytics-api`) or scoped API keys. |
 | **ui** | `/auth/login` creates an HttpOnly UI session from `api_key`, `id_token`, or `email`/`password`. Authenticated dashboard requests use same-origin allowlisted `/api/ui/v1/*` routes; the UI exchanges its stored platform bearer for the fixed destination audience or injects the stored API key, and never returns credentials to the browser. All other `/api/v1/*` calls go through Traefik ingress to the owning API service. `/auth/admin-check` accepts admin UI sessions or keys from `ADMIN_API_KEYS`; it falls back to `API_KEYS` only when the explicit legacy dev/test fallback is enabled. Allowlisted cookie-backed writes require the session CSRF token and origin validation before exchange. |
-| **ingest** | `/live`, `/ready`, and `/health` are open. `/events` accepts `x-api-key` from `INGEST_API_KEYS`, legacy `API_KEYS`, or a configured OIDC bearer token. If no API keys and no JWKS are configured, intake auth is bypassed. |
+| **ingest** | `/live`, `/ready`, and `/health` are open. `/events` accepts `x-api-key` from `INGEST_API_KEYS`, legacy `API_KEYS`, configured OIDC, or an approved projected ServiceAccount token. Missing authentication configuration refuses startup; the intake middleware also denies every request when unconfigured. |
 | **processor** | No data API. It exposes metrics and a simple health check on the metrics port. |
 | **mcp-gateway** | No admin API. It authenticates MCP requests according to the rendered server policy and exposes Prometheus metrics at `/metrics`. |
 | **mcp-auth-server (opt-in)** | OAuth metadata, authorization, registration, token, and JWKS endpoints are provided by the bundled authorization-server image. Runtime does not place governance decisions in this service. |
+
+Login lockout and audit IP attribution use the socket peer by default. To retain
+client IPs behind ingress, configure `MCP_TRUSTED_PROXY_CIDRS` on the UI and API
+services with comma-separated, precise ingress/proxy CIDRs (at most 32). Trust
+only proxies that append their actual peer or replace untrusted forwarding
+headers; do not trust whole tenant pod networks. The resolver walks
+`X-Forwarded-For` from right to left and stops at the first untrusted address,
+so a caller cannot choose a forged leftmost prefix. An untrusted socket peer,
+malformed chain/configuration, oversized chain, or trust-all `/0` configuration
+uses the socket peer. IPv4 and IPv6 are supported. With no configuration,
+clients behind one proxy share its rate-limit bucket; NAT clients likewise
+share their public address. No forwarding header alone establishes trust.
+Set this environment variable when running the supported `mcp-runtime setup`
+refresh with the installation's existing host/TLS/storage/authentication options;
+setup persists it in the shared ConfigMap and preserves it on reruns. Use
+`MCP_TRUSTED_PROXY_CIDRS=none` during setup to disable previously configured
+forwarding trust. Ordinary updates preserve the setting; there is no implicit
+trust for cluster pod ranges.
+
+Public runtime `/health` retains HTTP 200/503 and a boolean `ok` only; `/ready`
+returns generic availability messages. Initialization diagnostics remain in
+operator-controlled service logs rather than unauthenticated probe responses.
 
 ### API services
 

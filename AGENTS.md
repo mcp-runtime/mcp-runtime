@@ -16,6 +16,7 @@ Tests and scripts that fall back to the current kube context have written to a p
 - **QA E2E runs only against `kind-*` contexts.** Pass the Kind kubeconfig explicitly; never let `test/e2e/qa-e2e.sh` or any script default to the ambient context.
 - **Staging E2E never targets production.** The disposable-VM suites (`test/e2e/staging-*.sh`) must pass their target guard; never set the `E2E_GUARD_ALLOW_*` escape hatches.
 - **Production changes are deliberate.** Follow the `production-platform` non-negotiables: confirm the ref and the mcp-auth choice, snapshot state before mutating, preserve certificates, and prefer targeted rollouts. Don't run `setup`, `cluster doctor --fix`, `kubectl apply/patch/delete`, or cleanup scripts against production as a side effect of testing.
+- **Production workload PKI uses a dedicated issuer.** The shared bundled `mcp-runtime-ca` is test-only for workload identity. Production setup requires a current Ready enterprise issuer and an independent signing root; preserve registry trust during migration. Follow [CA lifecycle and migration](docs/cli-reference.md#bundled-workload-ca-lifecycle) for key custody, encrypted off-host recovery and overlapping trust.
 - **Verify prod after any suspected leak.** Check `kubectl get <kind> -o json --show-managed-fields` for recent `mcp-runtime`-manager updates (for example the registry Ingress host and the operator Deployment image), then roll back from the prior ReplicaSet or snapshot.
 
 ## Task routing
@@ -43,6 +44,12 @@ Read a relevant skill before applying its workflow. Prefer existing green CI /
 QA E2E evidence for the exact commit; add judgment or focused checks where needed.
 Scripts compose supported CLI workflows. Shared `hack/lib/` and deployment
 `lib/` files are internal helpers, not independent commands.
+
+Performance source and offline contracts live in `hack/qa/perf_suite.py` and
+`hack/tests/perf_suite_test.py`; Go hot-path benchmarks live beside policy,
+platform auth, certificate and gateway session code. Preserve strict success,
+sample-count, environment and baseline checks. Recorded Kind/staging capacity
+must never be inferred from synthetic unit fixtures or a microbenchmark.
 
 Issuer admission changes: run `hack/qa/approval-policy-rehearsal.sh` on its own
 disposable Kind cluster before disabling cert-manager's default approver. The
@@ -275,15 +282,6 @@ against the installed version and record the reviewed source/date in contributor
 notes. Do not upgrade it during documentation work unless requested. When
 changing another development tool, keep its authoritative source/version and
 installation guidance in the focused guide or this file.
-
-<!-- cully:codex:start -->
-## Cully
-
-- Use the shared project skill at `.cully/skills/cully/SKILL.md` for Cully session controls.
-- In Codex, use /prompts:cully (or type /cully and select the saved cully prompt) for the in-session cully command.
-- For each substantive task, find relevant prior work with Cully MCP and save one concise work summary before finishing. Follow the Cully skill for project identity, owner section, and private-data rules.
-- Use the configured Cully MCP tools for shared personal and project memory.
-<!-- cully:codex:end -->
 
 Scoped Grafana changes require the datasource-boundary and migration checks in
 `docs/platform-services.md#scoped-grafana-migration`: keep tenant access disabled

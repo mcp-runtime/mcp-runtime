@@ -96,6 +96,9 @@ func main() {
 			log.Fatalf("service account token authentication is configured but unavailable: %v", err)
 		}
 	}
+	if err := validateIngestAuthentication(apiKeys, jwks, saAuth); err != nil {
+		log.Fatal(err)
+	}
 
 	kafkaTLS, err := serviceutil.ClientTLSFromEnv("KAFKA")
 	if err != nil {
@@ -120,10 +123,6 @@ func main() {
 		oidcIssuer:   oidcIssuer,
 		oidcAudience: oidcAudience,
 		saAuth:       saAuth,
-	}
-
-	if len(apiKeys) == 0 && jwks == nil && saAuth == nil {
-		log.Printf("WARNING: ingest authentication is DISABLED — no INGEST_API_KEYS and no OIDC_JWKS_URL configured; /events will accept unauthenticated requests")
 	}
 
 	mux := http.NewServeMux()
@@ -266,14 +265,9 @@ func (s *ingestServer) handleEvents(w http.ResponseWriter, r *http.Request) {
 // auth is middleware that enforces API key authentication.
 // It checks for x-api-key from INGEST_API_KEYS (or legacy API_KEYS), a projected
 // Kubernetes service account token (TokenReview), or optional OIDC JWT validation.
-// If no API keys are configured, authentication is bypassed.
+// Missing authentication configuration always fails closed.
 func (s *ingestServer) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if len(s.apiKeys) == 0 && s.jwks == nil && s.saAuth == nil {
-			next.ServeHTTP(w, r)
-			return
-		}
-
 		if len(s.apiKeys) > 0 {
 			apiKey := strings.TrimSpace(r.Header.Get("x-api-key"))
 			if apiKey != "" {
@@ -321,4 +315,11 @@ func (s *ingestServer) auth(next http.Handler) http.Handler {
 
 		serviceutil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 	})
+}
+
+func validateIngestAuthentication(keys map[string]struct{}, jwks *keyfunc.JWKS, serviceAccount *serviceAccountAuthenticator) error {
+	if len(keys) == 0 && jwks == nil && serviceAccount == nil {
+		return errors.New("ingest requires INGEST_API_KEYS, configured OIDC authentication, or INGEST_SA_TOKEN_AUDIENCE; anonymous intake is disabled")
+	}
+	return nil
 }

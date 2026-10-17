@@ -180,22 +180,15 @@ func (rr runtimeRoutes) registerRoutes(mux *http.ServeMux) {
 
 func (s *server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	if s.runtimeInit != "" {
-		apihttp.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{
-			"ok":                  false,
-			"runtime_initialized": false,
-			"runtime_error":       s.runtimeInit,
-		})
+		apihttp.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false})
 		return
 	}
-	apihttp.WriteJSON(w, http.StatusOK, map[string]any{
-		"ok":                  true,
-		"runtime_initialized": true,
-	})
+	apihttp.WriteJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 func (s *server) handleReady(w http.ResponseWriter, _ *http.Request) {
 	if s.runtimeInit != "" {
-		apihttp.WriteEnvelope(w, http.StatusServiceUnavailable, apihttp.CodeServiceUnavailable, s.runtimeInit)
+		apihttp.WriteEnvelope(w, http.StatusServiceUnavailable, apihttp.CodeServiceUnavailable, "runtime unavailable")
 		return
 	}
 	if s.runtime == nil || !s.runtime.KubernetesAvailable() {

@@ -417,9 +417,11 @@ rerun, retain that size or increase it if the storage class supports expansion.
 
 To enable optional adapter client certificates on gateway server routes, add
 `--mtls-cluster-issuer <cluster-issuer>` alongside `--with-tls`. Name an
-enterprise cert-manager issuer. In test mode, setup provisions the bundled
-`mcp-runtime-ca` by default; outside test mode, that CA must already exist and
-pass setup validation. Production certificate issuance also requires an
+ready enterprise cert-manager issuer with a signing root separate from registry
+TLS. In test mode, setup provisions the bundled `mcp-runtime-ca` by default;
+production rejects that shared workload root, including renamed copies of its
+signing key. See [CA lifecycle and migration](cli-reference.md#bundled-workload-ca-lifecycle).
+Production certificate issuance also requires an
 approval policy; see the linked adapter guide. Set
 `MCP_ADAPTER_CERTIFICATES=true` to turn the feature on; production must also
 set `MCP_TRUST_DOMAIN` (for example `mcpruntime.org`). OAuth remains optional:

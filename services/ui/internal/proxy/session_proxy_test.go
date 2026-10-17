@@ -1,4 +1,4 @@
-package main
+package proxy
 
 import (
 	"bytes"
@@ -49,7 +49,7 @@ func TestSessionProxyRequiresCSRFForWritesAndForwardsBody(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod = r.Method
 		gotAuth = r.Header.Get("authorization")
-		gotCSRF = r.Header.Get(csrfHeaderName)
+		gotCSRF = r.Header.Get(CSRFHeaderName)
 		body, _ := io.ReadAll(r.Body)
 		gotBody = string(body)
 		w.Header().Set("content-type", "application/json")
@@ -71,7 +71,7 @@ func TestSessionProxyRequiresCSRFForWritesAndForwardsBody(t *testing.T) {
 	withToken := httptest.NewRequest(http.MethodPatch, "/api/ui/v1/runtime/grants/mcp-servers/demo", bytes.NewBufferString(`{"disabled":true}`))
 	withToken.Host = "ui.example.com"
 	withToken.Header.Set("origin", "http://ui.example.com")
-	withToken.Header.Set(csrfHeaderName, sess.CSRFToken)
+	withToken.Header.Set(CSRFHeaderName, sess.CSRFToken)
 	withToken.Header.Set("authorization", "Bearer attacker-token")
 	withToken.AddCookie(&http.Cookie{Name: sessionCookieName, Value: sess.ID})
 	rec = httptest.NewRecorder()
@@ -88,18 +88,18 @@ func TestSessionProxyRequiresCSRFForWritesAndForwardsBody(t *testing.T) {
 }
 
 func TestParseRuntimeUpstream(t *testing.T) {
-	if _, err := parseRuntimeUpstream(""); err == nil {
+	if _, err := ParseUpstream(""); err == nil {
 		t.Fatal("empty upstream should fail")
 	}
-	if _, err := parseRuntimeUpstream("ftp://runtime.example"); err == nil {
+	if _, err := ParseUpstream("ftp://runtime.example"); err == nil {
 		t.Fatal("non-http upstream should fail")
 	}
-	if _, err := parseRuntimeUpstream("http://user:pass@runtime.example"); err == nil {
+	if _, err := ParseUpstream("http://user:pass@runtime.example"); err == nil {
 		t.Fatal("userinfo upstream should fail")
 	}
-	got, err := parseRuntimeUpstream("http://mcp-runtime-api.mcp-platform.svc.cluster.local:8084")
+	got, err := ParseUpstream("http://mcp-runtime-api.mcp-platform.svc.cluster.local:8084")
 	if err != nil {
-		t.Fatalf("parseRuntimeUpstream() error = %v", err)
+		t.Fatalf("ParseUpstream() error = %v", err)
 	}
 	if got.Scheme != "http" || got.Host != "mcp-runtime-api.mcp-platform.svc.cluster.local:8084" {
 		t.Fatalf("parsed upstream = %s", got)
@@ -261,11 +261,11 @@ func TestSessionProxyRoutesAnalyticsToAnalyticsUpstream(t *testing.T) {
 		t.Fatalf("runtime upstream should not receive analytics request: %s", r.URL.Path)
 	}))
 	t.Cleanup(runtime.Close)
-	runtimeBase, err := parseRuntimeUpstream(runtime.URL)
+	runtimeBase, err := ParseUpstream(runtime.URL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	analyticsBase, err := parseRuntimeUpstream(analytics.URL)
+	analyticsBase, err := ParseUpstream(analytics.URL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -348,12 +348,12 @@ func TestSessionProxyUnauthorizedForExpiredSession(t *testing.T) {
 	now := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
 	current := now
 	store := newUISessionStore(func() time.Time { return current })
-	base, err := parseRuntimeUpstream(upstream.URL)
+	base, err := ParseUpstream(upstream.URL)
 	if err != nil {
-		t.Fatalf("parseRuntimeUpstream() error = %v", err)
+		t.Fatalf("ParseUpstream() error = %v", err)
 	}
 	proxy := newSessionProxyWithUpstreams(testExchangeBase(t), base, base, store)
-	sess, err := store.createSession(context.Background(), uiSession{
+	sess, err := store.Create(context.Background(), uiSession{
 		Principal:          sessionPrincipal{Role: "user"},
 		UpstreamAuthHeader: "Bearer session-token",
 		ExpiresAt:          now.Add(time.Minute),
@@ -431,61 +431,18 @@ func TestSessionProxyUpstreamError(t *testing.T) {
 	}
 }
 
-func TestNewMuxRejectsInvalidRuntimeUpstream(t *testing.T) {
-	t.Setenv("RUNTIME_UPSTREAM", "ftp://runtime.example")
-	if _, err := newMux("/api/v1", "http://127.0.0.1:1", "secret", "api-secret", ""); err == nil {
-		t.Fatal("newMux() should reject invalid RUNTIME_UPSTREAM")
-	}
-}
-
-func TestNewMuxRejectsInvalidAnalyticsUpstream(t *testing.T) {
-	t.Setenv("ANALYTICS_UPSTREAM", "ftp://analytics.example")
-	if _, err := newMux("/api/v1", "http://127.0.0.1:1", "secret", "api-secret", ""); err == nil {
-		t.Fatal("newMux() should reject invalid ANALYTICS_UPSTREAM")
-	}
-}
-
-func TestNewMuxSessionProxyUsesStore(t *testing.T) {
-	var gotAuth string
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAuth = r.Header.Get("authorization")
-		w.Header().Set("content-type", "application/json")
-		_, _ = io.WriteString(w, `{"tools":[]}`)
-	}))
-	t.Cleanup(upstream.Close)
-	t.Setenv("RUNTIME_UPSTREAM", upstream.URL)
-
-	mux, err := newMux("/api/v1", testExchangeBase(t).String(), "secret", "api-secret", "")
-	if err != nil {
-		t.Fatalf("newMux() error = %v", err)
-	}
-	sess := createTestSession(t, sessions, uiSession{UpstreamAuthHeader: "Bearer mux-token"})
-	t.Cleanup(func() { sessions.delete(sess.ID) })
-
-	req := httptest.NewRequest(http.MethodGet, "/api/ui/v1/runtime/tools", nil)
-	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: sess.ID})
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
-	}
-	if gotAuth != "Bearer mux-token" {
-		t.Fatalf("upstream authorization = %q", gotAuth)
-	}
-}
-
-func newTestSessionProxy(t *testing.T, upstreamURL string) *sessionProxy {
+func newTestSessionProxy(t *testing.T, upstreamURL string) *SessionProxy {
 	t.Helper()
-	base, err := parseRuntimeUpstream(upstreamURL)
+	base, err := ParseUpstream(upstreamURL)
 	if err != nil {
-		t.Fatalf("parseRuntimeUpstream() error = %v", err)
+		t.Fatalf("ParseUpstream() error = %v", err)
 	}
 	return newSessionProxyWithUpstreams(testExchangeBase(t), base, base, newUISessionStore(time.Now))
 }
 
 func createTestSession(t *testing.T, store *uiSessionStore, session uiSession) uiSession {
 	t.Helper()
-	sess, err := store.createSession(context.Background(), session)
+	sess, err := store.Create(context.Background(), session)
 	if err != nil {
 		t.Fatalf("createSession() error = %v", err)
 	}

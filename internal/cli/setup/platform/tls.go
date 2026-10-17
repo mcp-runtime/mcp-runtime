@@ -49,6 +49,9 @@ func ValidateTLSSetupCLIFlags(
 // Traefik terminates the caller's mTLS on the websecure (TLS) entrypoint; test
 // mode is exempt (it serves the bundled self-signed default certificate there).
 func ValidateMTLSSetupCLIFlags(testMode, tlsEnabled bool, mtlsClusterIssuer string) error {
+	if !testMode && strings.TrimSpace(mtlsClusterIssuer) == setupplan.DefaultTestMTLSClusterIssuer {
+		return core.NewWithBase(core.ErrFieldRequired, "the shared bundled mcp-runtime-ca is test-only for workload identity. Provision a dedicated enterprise-managed workload ClusterIssuer with a separate signing root, then use --with-tls --mtls-cluster-issuer=<issuer>; preserve the existing registry CA. See docs/cli-reference.md (Bundled workload CA lifecycle)")
+	}
 	if strings.TrimSpace(mtlsClusterIssuer) != "" && !tlsEnabled && !testMode {
 		return core.NewWithBase(core.ErrFieldRequired, "--mtls-cluster-issuer requires --with-tls: mTLS terminates at the ingress on the websecure (TLS) entrypoint")
 	}
@@ -56,6 +59,11 @@ func ValidateMTLSSetupCLIFlags(testMode, tlsEnabled bool, mtlsClusterIssuer stri
 }
 
 func setupTLSStep(logger *zap.Logger, plan setupplan.Plan, deps SetupDeps) error {
+	// Validate before registry TLS can create the bundled root. Otherwise a
+	// missing production workload root could be silently replaced by that step.
+	if err := validateProductionWorkloadIssuer(plan, time.Now()); err != nil {
+		return err
+	}
 	// Step 3: Configure TLS (if enabled)
 	core.Step("Step 3: Configure TLS")
 	if !plan.TLSEnabled && (plan.TestMode || !plan.DeployAnalytics) {
@@ -77,6 +85,9 @@ func setupWorkloadPKI(logger *zap.Logger, plan setupplan.Plan) error {
 	if issuer == "" {
 		return nil
 	}
+	if err := validateProductionWorkloadIssuer(plan, time.Now()); err != nil {
+		return err
+	}
 
 	core.Step("Configure workload mTLS PKI")
 	if plan.InstallCertManager {
@@ -87,9 +98,8 @@ func setupWorkloadPKI(logger *zap.Logger, plan setupplan.Plan) error {
 		return core.WrapWithBase(core.ErrCertManagerNotInstalled, err, "workload mTLS requires cert-manager; install it or omit --skip-cert-manager-install")
 	}
 
-	// Managed mode: provision the bundled mcp-runtime-ca workload issuer whenever
-	// it is the selected issuer (test mode defaults to it; prod can name it
-	// explicitly). Otherwise the issuer is enterprise-managed and must exist.
+	// Only test mode provisions the shared bundled root. Production requires a
+	// dedicated, already-ready enterprise workload issuer checked above.
 	if issuer == setupplan.DefaultTestMTLSClusterIssuer {
 		if err := ensureManagedWorkloadCA(plan, time.Now()); err != nil {
 			return err
@@ -606,7 +616,7 @@ func checkCASecretClientGo() error {
 		return err
 	}
 	if _, err := clients.Clientset.CoreV1().Secrets("cert-manager").Get(context.Background(), "mcp-runtime-ca", metav1.GetOptions{}); err != nil {
-		return core.ErrCASecretNotFound
+		return err
 	}
 	return nil
 }
@@ -614,6 +624,8 @@ func checkCASecretClientGo() error {
 func ensureCASecretClientGo() (bool, error) {
 	if err := checkCASecretClientGo(); err == nil {
 		return false, nil
+	} else if !apierrors.IsNotFound(err) {
+		return false, fmt.Errorf("read existing bundled CA: %w", err)
 	}
 	manifest, err := certmanager.RenderGeneratedCASecretManifest(time.Now())
 	if err != nil {

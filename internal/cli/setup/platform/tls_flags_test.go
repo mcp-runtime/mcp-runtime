@@ -60,6 +60,7 @@ func TestValidateMTLSSetupCLIFlags(t *testing.T) {
 		{name: "issuer alone needs tls", issuer: "corp-issuer", wantErr: true},
 		{name: "issuer + tls enables mtls", issuer: "corp-issuer", tls: true, wantErr: false},
 		{name: "issuer + test-mode is exempt from tls", issuer: "mcp-runtime-ca", testMode: true, wantErr: false},
+		{name: "shared root is test-only even with tls", issuer: " mcp-runtime-ca ", tls: true, wantErr: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

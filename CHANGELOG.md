@@ -11,11 +11,14 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 - Encrypt non-test analytics traffic with Kafka mutual TLS, verified ClickHouse TLS and HTTPS ingest, preserving the infrastructure CA and using renewable service certificates. Existing plaintext Kafka installations require encrypted backups, fresh TLS setup and restore before image updates; explicit local test mode retains plaintext ([#110](https://github.com/mcp-runtime/mcp-runtime/issues/110)).
 
+- Ingest refuses startup without an authentication source and denies unconfigured intake. Public runtime probes omit initialization details. Login rate limits and audit IPs use the socket peer unless `MCP_TRUSTED_PROXY_CIDRS` explicitly identifies trusted forwarding proxies; configure precise proxy CIDRs to retain client attribution behind ingress ([#110](https://github.com/mcp-runtime/mcp-runtime/issues/110)).
 - Session CSR and issued-certificate validation reject hidden SAN identity types and unknown extended key usages. The disposable issuer-approval rehearsal now uses the reviewed cert-manager/approver versions and refuses existing cluster names ([#538](https://github.com/mcp-runtime/mcp-runtime/issues/538)).
 - Restrict bundled Kafka ingress to ingest, processor, topic initialization and broker peers. Unscoped platform updates apply this release-declared policy to existing installs as well as fresh setup ([#775](https://github.com/mcp-runtime/mcp-runtime/pull/775), [#110](https://github.com/mcp-runtime/mcp-runtime/issues/110)).
 - Platform login tokens now authorize only platform-api. Gateway and UI proxies exchange them for runtime/analytics tokens with one audience and a maximum 60-second lifetime; direct cross-service and multi-audience bearer replay is rejected. Deploy the matching APIs, UI, Traefik configuration and split Ingress rules together through `setup`, then sign in again; image-only updates do not migrate existing ingress routes ([#325](https://github.com/mcp-runtime/mcp-runtime/issues/325)).
 
 ### Added
+
+- Contributor performance checks add policy/rule, platform bearer, session/certificate and TLS microbenchmarks, plus bounded Kind-only gateway/direct overhead, concurrency plateau and exact-trace audit visibility measurements. Baselines require matching environment/traffic fingerprints; analytics scenarios now require an explicit admin test API key via `PERF_API_KEY`. Recorded live baselines and historical proxy comparisons remain pending ([#692](https://github.com/mcp-runtime/mcp-runtime/issues/692)).
 
 - Admin sizing dashboards and E2E reports collect authenticated kubelet node/container CPU, working memory, filesystem, network and driver-reported volume history, alongside separate requests/PVC reservations and collection overhead. Existing installs require supported setup refresh for public serving trust and the projected scrape token; missing volume statistics remain explicit and retain local sampling fallback ([#680](https://github.com/mcp-runtime/mcp-runtime/issues/680)).
 
@@ -45,6 +48,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Fixed
 
+- Production workload identity requires a ready, dedicated enterprise issuer and rejects the shared bundled registry CA, aliased/copied signing keys, and unhealthy CA-backed issuers before TLS provisioning. Migrate by preserving registry trust and selecting an independently managed workload issuer; the bundled workload root remains available in test mode ([#535](https://github.com/mcp-runtime/mcp-runtime/issues/535)).
+- Gateways reload mounted client-CA trust during workload-root rollover, including overlapping roots and removal of retired roots from resumed TLS handshakes. Invalid replacement bundles retain the last validated trust state ([#535](https://github.com/mcp-runtime/mcp-runtime/issues/535)).
 - CLI access manifest submission validates grant and session input through the same canonical rules as the runtime API before making a request, preserving existing admission and historical-session contracts ([#268](https://github.com/mcp-runtime/mcp-runtime/issues/268)).
 
 - Recent workspace activity stays in a labelled, keyboard-focusable scroll region on narrow screens instead of widening the page. Disposable Staging now checks member, owner and administrator workspace journeys in headless Chromium before teardown ([#542](https://github.com/mcp-runtime/mcp-runtime/issues/542)).

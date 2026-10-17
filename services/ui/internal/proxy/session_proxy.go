@@ -1,4 +1,4 @@
-package main
+package proxy
 
 import (
 	"errors"
@@ -10,14 +10,16 @@ import (
 	"strings"
 	"time"
 
+	"mcp-ui/internal/session"
+
 	"mcp-runtime/pkg/platformauth"
 	"mcp-runtime/pkg/serviceutil"
 )
 
 const (
-	defaultRuntimeUpstream   = "http://mcp-runtime-api.mcp-platform.svc.cluster.local:8084"
-	defaultAnalyticsUpstream = "http://mcp-analytics-api.mcp-observability.svc.cluster.local:8085"
-	uiSessionAPIPrefix       = "/api/ui/v1"
+	DefaultRuntimeUpstream   = "http://mcp-runtime-api.mcp-platform.svc.cluster.local:8084"
+	DefaultAnalyticsUpstream = "http://mcp-analytics-api.mcp-observability.svc.cluster.local:8085"
+	SessionAPIPrefix         = "/api/ui/v1"
 	sessionProxyTimeout      = 15 * time.Second
 )
 
@@ -137,22 +139,20 @@ func sessionProxyAllowHeader(requestPath string) string {
 
 const sessionProxyMaxWriteBody = 32 * 1024
 
-var sessionProxyHTTPClient = &http.Client{
-	Timeout: sessionProxyTimeout,
-	CheckRedirect: func(*http.Request, []*http.Request) error {
-		return http.ErrUseLastResponse
-	},
+// NewHTTPClient retains the browser proxy's bounded, non-redirecting transport.
+func NewHTTPClient() *http.Client {
+	return &http.Client{Timeout: sessionProxyTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 }
 
-type sessionProxy struct {
+type SessionProxy struct {
 	platformBase  *url.URL
 	runtimeBase   *url.URL
 	analyticsBase *url.URL
-	store         *uiSessionStore
+	store         *session.Store
 	client        *http.Client
 }
 
-func parseRuntimeUpstream(raw string) (*url.URL, error) {
+func ParseUpstream(raw string) (*url.URL, error) {
 	base := strings.TrimSpace(raw)
 	if base == "" {
 		return nil, errors.New("runtime upstream is empty")
@@ -175,13 +175,13 @@ func parseRuntimeUpstream(raw string) (*url.URL, error) {
 	return u, nil
 }
 
-func newSessionProxyWithUpstreams(platformBase, runtimeBase, analyticsBase *url.URL, store *uiSessionStore) *sessionProxy {
-	return &sessionProxy{
+func NewSessionProxy(platformBase, runtimeBase, analyticsBase *url.URL, store *session.Store, httpClient *http.Client) *SessionProxy {
+	return &SessionProxy{
 		platformBase:  platformBase,
 		runtimeBase:   runtimeBase,
 		analyticsBase: analyticsBase,
 		store:         store,
-		client:        sessionProxyHTTPClient,
+		client:        httpClient,
 	}
 }
 
@@ -192,7 +192,7 @@ func sessionProxyUpstreamPath(requestPath string) (string, bool) {
 
 func sessionProxyRoute(requestPath string) (*url.URL, string, bool) {
 	cleaned := path.Clean("/" + strings.TrimPrefix(strings.TrimSpace(requestPath), "/"))
-	suffix, ok := strings.CutPrefix(cleaned, uiSessionAPIPrefix)
+	suffix, ok := strings.CutPrefix(cleaned, SessionAPIPrefix)
 	if !ok || suffix == "" {
 		return nil, "", false
 	}
@@ -214,9 +214,9 @@ func sessionProxyPathAllowed(requestPath string, prefixes []string) bool {
 	return false
 }
 
-func (p *sessionProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (p *SessionProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	write := unsafeHTTPMethod(r.Method)
-	base, upstreamPath, ok := sessionProxyRoute(r.URL.Path)
+	_, upstreamPath, ok := sessionProxyRoute(r.URL.Path)
 	if !ok {
 		serviceutil.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
 		return
@@ -229,7 +229,7 @@ func (p *sessionProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	sess, ok := p.store.sessionFromRequest(r)
+	sess, ok := p.store.FromRequest(r)
 	if !ok {
 		serviceutil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
@@ -252,13 +252,12 @@ func (p *sessionProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	targetAudience := platformauth.AudienceRuntime
+	base := p.runtimeBase
 	if strings.HasPrefix(upstreamPath, "/api/v1/events") ||
 		strings.HasPrefix(upstreamPath, "/api/v1/analytics/usage") ||
 		strings.HasPrefix(upstreamPath, "/api/v1/user/analytics/usage") {
 		base = p.analyticsBase
 		targetAudience = platformauth.AudienceAnalytics
-	} else {
-		base = p.runtimeBase
 	}
 	upstreamURL, err := resolveSessionProxyURL(base, upstreamPath, r.URL.RawQuery)
 	if err != nil {
@@ -286,7 +285,7 @@ func (p *sessionProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	req.Header.Set("x-mcp-source", "ui")
 	client := p.client
 	if client == nil {
-		client = sessionProxyHTTPClient
+		client = NewHTTPClient()
 	}
 	if authHeader != "" {
 		authHeader, err = platformauth.ExchangeBearer(r.Context(), client, p.platformBase, authHeader, targetAudience)
@@ -313,7 +312,7 @@ func (p *sessionProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	copySessionProxyResponse(w, resp)
 }
 
-func sessionUpstreamCredential(sess uiSession) (authHeader, apiKey string, ok bool) {
+func sessionUpstreamCredential(sess session.Session) (authHeader, apiKey string, ok bool) {
 	if header := strings.TrimSpace(sess.UpstreamAuthHeader); header != "" {
 		return header, "", true
 	}

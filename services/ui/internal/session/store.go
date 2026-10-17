@@ -1,4 +1,4 @@
-package main
+package session
 
 import (
 	"context"
@@ -7,13 +7,13 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -27,84 +27,84 @@ const (
 	minSessionKeyLen     = 32
 )
 
-// sessionBackend persists UI sessions. The default in-memory backend keeps
+// Backend persists UI sessions. The default in-memory backend keeps
 // the single-replica behavior (sessions are lost on restart); a shared backend
 // lets several UI replicas validate the same session cookie.
-type sessionBackend interface {
-	// put stores a session until its ExpiresAt. It may also drop expired rows.
-	put(ctx context.Context, sess uiSession, now time.Time) error
-	// get returns a live session. A missing or expired session is (_, false, nil).
-	get(ctx context.Context, id string, now time.Time) (uiSession, bool, error)
-	delete(ctx context.Context, id string) error
+type Backend interface {
+	// Put stores a session until its ExpiresAt. It may also drop expired rows.
+	Put(ctx context.Context, sess Session, now time.Time) error
+	// Get returns a live session. A missing or expired session is (_, false, nil).
+	Get(ctx context.Context, id string, now time.Time) (Session, bool, error)
+	Delete(ctx context.Context, id string) error
 }
 
-// uiSessionStore issues, looks up and revokes UI sessions on top of a backend.
-type uiSessionStore struct {
-	backend sessionBackend
+// Store issues, looks up and revokes UI sessions on top of a backend.
+type Store struct {
+	backend Backend
 	now     func() time.Time
 }
 
-func newUISessionStore(now func() time.Time) *uiSessionStore {
-	return newUISessionStoreWithBackend(newMemorySessionBackend(), now)
+func NewStore(now func() time.Time) *Store {
+	return NewStoreWithBackend(newMemorySessionBackend(), now)
 }
 
-func newUISessionStoreWithBackend(backend sessionBackend, now func() time.Time) *uiSessionStore {
-	return &uiSessionStore{backend: backend, now: now}
+func NewStoreWithBackend(backend Backend, now func() time.Time) *Store {
+	return &Store{backend: backend, now: now}
 }
 
-func (s *uiSessionStore) createSession(ctx context.Context, session uiSession) (uiSession, error) {
+func (s *Store) Create(ctx context.Context, session Session) (Session, error) {
 	id, err := randomURLToken(24)
 	if err != nil {
-		return uiSession{}, err
+		return Session{}, err
 	}
 	session.ID = id
 	csrfToken, err := randomURLToken(24)
 	if err != nil {
-		return uiSession{}, err
+		return Session{}, err
 	}
 	session.CSRFToken = csrfToken
 	now := s.now()
-	maxExpiry := now.Add(sessionDuration)
+	maxExpiry := now.Add(Duration)
 	if session.ExpiresAt.IsZero() || session.ExpiresAt.After(maxExpiry) {
 		session.ExpiresAt = maxExpiry
 	}
 	if !session.ExpiresAt.After(now) {
-		return uiSession{}, errors.New("session expiry is in the past")
+		return Session{}, errors.New("session expiry is in the past")
 	}
-	if err := s.backend.put(ctx, session, now); err != nil {
-		return uiSession{}, err
+	if err := s.backend.Put(ctx, session, now); err != nil {
+		return Session{}, err
 	}
 	return session, nil
 }
 
-func (s *uiSessionStore) sessionFromRequest(r *http.Request) (uiSession, bool) {
-	cookie, err := r.Cookie(sessionCookieName)
+func (s *Store) FromRequest(r *http.Request) (Session, bool) {
+	cookie, err := r.Cookie(CookieName)
 	if err != nil {
-		return uiSession{}, false
+		return Session{}, false
 	}
 	sessionID := strings.TrimSpace(cookie.Value)
 	if sessionID == "" {
-		return uiSession{}, false
+		return Session{}, false
 	}
-	return s.getContext(r.Context(), sessionID)
+	return s.GetContext(r.Context(), sessionID)
 }
 
-func (s *uiSessionStore) get(id string) (uiSession, bool) {
-	return s.getContext(context.Background(), id)
+func (s *Store) Get(id string) (Session, bool) {
+	return s.GetContext(context.Background(), id)
 }
 
-// getContext fails closed: a backend error is treated as "no session".
-func (s *uiSessionStore) getContext(ctx context.Context, id string) (uiSession, bool) {
-	sess, ok, err := s.backend.get(ctx, id, s.now())
+// GetContext fails closed: a backend error is treated as "no session".
+func (s *Store) GetContext(ctx context.Context, id string) (Session, bool) {
+	sess, ok, err := s.backend.Get(ctx, id, s.now())
 	if err != nil {
 		log.Printf("ui session lookup failed: %v", err)
-		return uiSession{}, false
+		return Session{}, false
 	}
 	return sess, ok
 }
 
-func (s *uiSessionStore) delete(id string) {
-	if err := s.backend.delete(context.Background(), id); err != nil {
+func (s *Store) Delete(id string) {
+	if err := s.backend.Delete(context.Background(), id); err != nil {
 		log.Printf("ui session delete failed: %v", err)
 	}
 }
@@ -113,14 +113,14 @@ func (s *uiSessionStore) delete(id string) {
 // are not visible to other replicas.
 type memorySessionBackend struct {
 	mu       sync.Mutex
-	sessions map[string]uiSession
+	sessions map[string]Session
 }
 
 func newMemorySessionBackend() *memorySessionBackend {
-	return &memorySessionBackend{sessions: map[string]uiSession{}}
+	return &memorySessionBackend{sessions: map[string]Session{}}
 }
 
-func (m *memorySessionBackend) put(_ context.Context, sess uiSession, now time.Time) error {
+func (m *memorySessionBackend) Put(_ context.Context, sess Session, now time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.purgeExpiredLocked(now)
@@ -128,7 +128,7 @@ func (m *memorySessionBackend) put(_ context.Context, sess uiSession, now time.T
 	return nil
 }
 
-func (m *memorySessionBackend) get(_ context.Context, id string, now time.Time) (uiSession, bool, error) {
+func (m *memorySessionBackend) Get(_ context.Context, id string, now time.Time) (Session, bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.purgeExpiredLocked(now)
@@ -136,7 +136,7 @@ func (m *memorySessionBackend) get(_ context.Context, id string, now time.Time) 
 	return sess, ok, nil
 }
 
-func (m *memorySessionBackend) delete(_ context.Context, id string) error {
+func (m *memorySessionBackend) Delete(_ context.Context, id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.sessions, id)
@@ -271,7 +271,7 @@ func concurrentSchemaRace(err error) bool {
 	return errors.As(err, &pqErr) && string(pqErr.Code) == "23505"
 }
 
-func (p *postgresSessionBackend) seal(sess uiSession) ([]byte, error) {
+func (p *postgresSessionBackend) seal(sess Session) ([]byte, error) {
 	plain, err := json.Marshal(sess)
 	if err != nil {
 		return nil, err
@@ -283,26 +283,26 @@ func (p *postgresSessionBackend) seal(sess uiSession) ([]byte, error) {
 	return p.aead.Seal(nonce, nonce, plain, []byte(sess.ID)), nil
 }
 
-func (p *postgresSessionBackend) open(id string, blob []byte) (uiSession, error) {
+func (p *postgresSessionBackend) open(id string, blob []byte) (Session, error) {
 	n := p.aead.NonceSize()
 	if len(blob) < n {
-		return uiSession{}, errors.New("session payload too short")
+		return Session{}, errors.New("session payload too short")
 	}
 	plain, err := p.aead.Open(nil, blob[:n], blob[n:], []byte(id))
 	if err != nil {
-		return uiSession{}, errors.New("session payload cannot be decrypted")
+		return Session{}, errors.New("session payload cannot be decrypted")
 	}
-	var sess uiSession
+	var sess Session
 	if err := json.Unmarshal(plain, &sess); err != nil {
-		return uiSession{}, err
+		return Session{}, err
 	}
 	if sess.ID != id {
-		return uiSession{}, errors.New("session payload id mismatch")
+		return Session{}, errors.New("session payload id mismatch")
 	}
 	return sess, nil
 }
 
-func (p *postgresSessionBackend) put(ctx context.Context, sess uiSession, now time.Time) error {
+func (p *postgresSessionBackend) Put(ctx context.Context, sess Session, now time.Time) error {
 	blob, err := p.seal(sess)
 	if err != nil {
 		return err
@@ -317,31 +317,31 @@ func (p *postgresSessionBackend) put(ctx context.Context, sess uiSession, now ti
 	return err
 }
 
-func (p *postgresSessionBackend) get(ctx context.Context, id string, now time.Time) (uiSession, bool, error) {
+func (p *postgresSessionBackend) Get(ctx context.Context, id string, now time.Time) (Session, bool, error) {
 	var blob []byte
 	err := p.db.QueryRowContext(ctx,
 		`SELECT payload FROM ui_sessions WHERE id = $1 AND expires_at > $2`, id, now).Scan(&blob)
 	if errors.Is(err, sql.ErrNoRows) {
-		return uiSession{}, false, nil
+		return Session{}, false, nil
 	}
 	if err != nil {
-		return uiSession{}, false, err
+		return Session{}, false, err
 	}
 	sess, err := p.open(id, blob)
 	if err != nil {
-		return uiSession{}, false, err
+		return Session{}, false, err
 	}
 	return sess, true, nil
 }
 
-func (p *postgresSessionBackend) delete(ctx context.Context, id string) error {
+func (p *postgresSessionBackend) Delete(ctx context.Context, id string) error {
 	_, err := p.db.ExecContext(ctx, `DELETE FROM ui_sessions WHERE id = $1`, id)
 	return err
 }
 
-// buildSessionBackend selects a backend from UI_SESSION_STORE
+// NewBackend selects a backend from UI_SESSION_STORE
 // (memory|postgres; default memory).
-func buildSessionBackend(ctx context.Context, kind, dsn, key string) (sessionBackend, error) {
+func NewBackend(ctx context.Context, kind, dsn, key string) (Backend, error) {
 	switch strings.ToLower(strings.TrimSpace(kind)) {
 	case "", sessionStoreMemory:
 		return newMemorySessionBackend(), nil
@@ -368,15 +368,10 @@ func buildSessionBackend(ctx context.Context, kind, dsn, key string) (sessionBac
 	}
 }
 
-// configureSessionStore installs the configured backend into the package store.
-func configureSessionStore(ctx context.Context) error {
-	backend, err := buildSessionBackend(ctx,
-		os.Getenv("UI_SESSION_STORE"),
-		os.Getenv("UI_SESSION_DATABASE_URL"),
-		os.Getenv("UI_SESSION_ENCRYPTION_KEY"))
-	if err != nil {
-		return err
+func randomURLToken(rawBytes int) (string, error) {
+	b := make([]byte, rawBytes)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
 	}
-	sessions.backend = backend
-	return nil
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }
