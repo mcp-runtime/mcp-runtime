@@ -4,6 +4,7 @@ import { OperationsPanel } from "./OperationsPanel";
 import { PlatformHealthPanel } from "./PlatformHealthPanel";
 import { TeamsPanel } from "./TeamsPanel";
 import { UsageAnalyticsPanel } from "./UsageAnalyticsPanel";
+import { PlatformOverview } from "./PlatformOverview";
 import type { AuthStatus } from "../../api/types";
 
 export type { AdminSectionId };
@@ -16,10 +17,11 @@ type AdminWorkspaceProps = {
 };
 
 export function AdminWorkspace({ auth, onSignIn, section }: AdminWorkspaceProps) {
-  const active = section ?? "teams";
+  const active = section ?? "overview";
   return (
     <AdminGuard auth={auth} onSignIn={onSignIn}>
-      {active === "teams" ? <TeamsPanel onSignIn={onSignIn} /> :
+      {active === "overview" ? <PlatformOverview onSignIn={onSignIn} /> :
+        active === "teams" ? <TeamsPanel onSignIn={onSignIn} /> :
         active === "operations" ? <OperationsPanel onSignIn={onSignIn} /> :
         active === "analytics" ? <UsageAnalyticsPanel onSignIn={onSignIn} /> :
         <PlatformHealthPanel onSignIn={onSignIn} />}

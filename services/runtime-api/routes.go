@@ -75,6 +75,11 @@ func (rr runtimeRoutes) registerRoutes(mux *http.ServeMux) {
 	accessService := runtimeServer.Access()
 	inventoryService := runtimeServer.Inventory()
 	registryPushService := runtimeServer.RegistryPush()
+	rr.mount("/runtime/workspace/teams", rr.auth(http.HandlerFunc(runtimeServer.HandleWorkspaceTeams)))
+	rr.mount("/runtime/workspace/servers", rr.auth(http.HandlerFunc(runtimeServer.HandleWorkspaceServers)))
+	rr.mount("/runtime/workspace/access", rr.auth(http.HandlerFunc(runtimeServer.HandleWorkspaceAccess)))
+	rr.mount("/admin/overview/directory", rr.adminOnly(http.HandlerFunc(runtimeServer.HandleOverviewDirectory)))
+	rr.mount("/admin/overview/servers", rr.adminOnly(http.HandlerFunc(runtimeServer.HandleOverviewServers)))
 
 	rr.mount("/dashboard/summary", rr.adminOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		runtimehandlers.HandleDashboardSummary(runtimeServer, w, r)
@@ -95,6 +100,7 @@ func (rr runtimeRoutes) registerRoutes(mux *http.ServeMux) {
 	rr.mount("/runtime/observability/prometheus/query", rr.auth(http.HandlerFunc(runtimeServer.HandleRuntimeObservabilityPrometheusQuery)))
 	rr.mount("/runtime/observability/metrics", rr.auth(http.HandlerFunc(runtimeServer.HandleRuntimeObservabilityMetrics)))
 	rr.mount("/runtime/observability/logs/query", rr.auth(http.HandlerFunc(runtimeServer.HandleRuntimeObservabilityLogs)))
+	rr.mount("/runtime/observability/grafana/", rr.auth(http.HandlerFunc(runtimeServer.HandleRuntimeGrafana)))
 	rr.mount("/runtime/teams", rr.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		runtimehandlers.HandleRuntimeTeams(runtimeServer, w, r)
 	})))
@@ -135,6 +141,12 @@ func (rr runtimeRoutes) registerRoutes(mux *http.ServeMux) {
 	})))
 	rr.mount("/runtime/adapter/sessions", rr.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		runtimehandlers.HandleAdapterSession(accessService, w, r)
+	})))
+	rr.mount("/runtime/adapter/sessions/", rr.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		runtimehandlers.HandleAdapterSessionItemPath(accessService, w, r)
+	})))
+	rr.mount("/runtime/adapter/preflight", rr.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		runtimehandlers.HandleAdapterPreflight(accessService, w, r)
 	})))
 	rr.mount("/runtime/adapter/certificates", rr.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		runtimehandlers.HandleAdapterCertificate(accessService, w, r)

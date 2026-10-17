@@ -75,6 +75,7 @@ func main() {
 		policyFile:             strings.TrimSpace(os.Getenv("POLICY_FILE")),
 		serverName:             strings.TrimSpace(os.Getenv("MCP_SERVER_NAME")),
 		serverNamespace:        strings.TrimSpace(os.Getenv("MCP_SERVER_NAMESPACE")),
+		serverUID:              strings.TrimSpace(os.Getenv("MCP_SERVER_UID")),
 		clusterName:            strings.TrimSpace(os.Getenv("MCP_CLUSTER_NAME")),
 		verifiedSPIFFEHeader:   serviceutil.EnvOr("VERIFIED_SPIFFE_HEADER", defaultVerifiedSPIFFEHeader),
 		trustedProxySPIFFE:     strings.TrimSpace(os.Getenv("TRUSTED_PROXY_SPIFFE_ID")),

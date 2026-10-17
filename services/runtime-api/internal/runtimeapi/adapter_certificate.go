@@ -124,6 +124,11 @@ func (s *AccessService) HandleAdapterCertificate(w http.ResponseWriter, r *http.
 		writeAPIError(w, http.StatusForbidden, "target server is retiring")
 		return
 	}
+	readiness := s.adapterCertificateReadiness(r.Context(), serverNamespace, serverName)
+	if !readiness.Ready {
+		writeAPIError(w, http.StatusServiceUnavailable, readiness.Reason)
+		return
+	}
 	trustDomain := strings.TrimSpace(os.Getenv("MCP_TRUST_DOMAIN"))
 	if trustDomain == "" {
 		writeAPIError(w, http.StatusServiceUnavailable, "platform SPIFFE trust domain is not configured")
@@ -159,6 +164,12 @@ func (s *AccessService) HandleAdapterCertificate(w http.ResponseWriter, r *http.
 	if err != nil || latest == nil || latest.Spec.Revoked || latest.UID != session.UID || latest.Annotations[sessionServerUIDAnnotation] != session.Annotations[sessionServerUIDAnnotation] {
 		writeAPIError(w, http.StatusForbidden, "adapter session was revoked during certificate enrollment")
 		return
+	}
+	if latest.Annotations[adapterEnrollmentPendingAnnotation] == "true" {
+		if err := s.accessMgr.CompleteSessionEnrollment(r.Context(), latest.Name, latest.Namespace, string(latest.UID)); err != nil {
+			writeAPIError(w, http.StatusServiceUnavailable, "complete adapter enrollment", err)
+			return
+		}
 	}
 	writeJSON(w, http.StatusCreated, adapterCertificateResponse{
 		Certificate: certificate,

@@ -336,6 +336,7 @@ func (s *gatewayServer) auditPayload(
 		"bytes_out":        bytesOut,
 		"server":           policypkg.FirstNonEmpty(policypkg.PolicyServerName(policy), s.serverName),
 		"namespace":        policypkg.FirstNonEmpty(policypkg.PolicyServerNamespace(policy), s.serverNamespace),
+		"server_uid":       s.serverUID,
 		"team_id":          policypkg.PolicyServerTeamID(policy),
 		"resource_team_id": policypkg.PolicyServerTeamID(policy),
 		"cluster":          policypkg.FirstNonEmpty(policypkg.PolicyServerCluster(policy), s.clusterName),

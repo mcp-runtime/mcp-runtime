@@ -16,6 +16,13 @@ export type WorkspaceTab = {
 
 export const WORKSPACE_TABS: WorkspaceTab[] = [
   {
+    id: "workspace",
+    label: "My workspace",
+    description: "Your memberships, resources, and management responsibilities.",
+    icon: "user",
+    visible: (auth) => auth.authenticated,
+  },
+  {
     id: "servers",
     label: "Servers",
     description: "Deployed MCP servers and their governed tool catalog.",

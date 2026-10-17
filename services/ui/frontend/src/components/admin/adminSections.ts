@@ -1,4 +1,4 @@
-export type AdminSectionId = "teams" | "operations" | "platform" | "analytics";
+export type AdminSectionId = "overview" | "teams" | "operations" | "platform" | "analytics";
 
 export type AdminSection = {
   id: AdminSectionId;
@@ -12,6 +12,12 @@ export type AdminSection = {
 // /runtime/grants and /runtime/sessions to any authenticated principal, so it
 // is a top-level workspace rather than an admin section.
 export const ADMIN_SECTIONS: AdminSection[] = [
+  {
+    id: "overview",
+    label: "Platform overview",
+    group: "Organization",
+    description: "Platform-wide totals, health, deployment failures and audit changes.",
+  },
   {
     id: "teams",
     label: "Teams",

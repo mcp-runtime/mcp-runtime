@@ -198,6 +198,9 @@ func run(ctx context.Context, out io.Writer, opts Options, d deps) error {
 	}
 	plan.Cluster = kh.Cluster
 	plan.ManifestSource = source
+	if err := gateScopedGrafanaPolicies(ctx, kh.Clientset, plan); err != nil {
+		return err
+	}
 
 	if plan.ApplyCRDs && kh.Clients != nil {
 		preview, err := refineCRDPlan(ctx, kh.Clients, plan)

@@ -1,0 +1,77 @@
+# The auth-proxy header is authoritative only inside this network boundary.
+# Tenant pods and ingress controllers must never reach Grafana or the shared
+# telemetry HTTP APIs directly. Platform users enter through UI -> runtime-api.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mcp-scoped-observability-ingress
+  namespace: mcp-observability
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: [grafana, prometheus, loki, tempo]
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: mcp-platform
+          podSelector:
+            matchLabels:
+              app: mcp-runtime-api
+      ports:
+        - {protocol: TCP, port: 3000}
+        - {protocol: TCP, port: 9090}
+        - {protocol: TCP, port: 3100}
+    - from:
+        - podSelector:
+            matchLabels:
+              app: grafana
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - {protocol: TCP, port: 9090}
+        - {protocol: TCP, port: 3100}
+        - {protocol: TCP, port: 3200}
+    - from:
+        - podSelector:
+            matchLabels:
+              app: otel-collector
+      ports:
+        - {protocol: TCP, port: 3100}
+        - {protocol: TCP, port: 4317}
+        - {protocol: TCP, port: 4318}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: mcp-log-collector
+          podSelector:
+            matchLabels:
+              app: promtail
+      ports:
+        - {protocol: TCP, port: 3100}
+---
+# Runtime-api already has a restrictive egress policy. This adds only Grafana.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mcp-runtime-api-grafana-egress
+  namespace: mcp-platform
+spec:
+  podSelector:
+    matchLabels:
+      app: mcp-runtime-api
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: mcp-observability
+          podSelector:
+            matchLabels:
+              app: grafana
+      ports:
+        - {protocol: TCP, port: 3000}

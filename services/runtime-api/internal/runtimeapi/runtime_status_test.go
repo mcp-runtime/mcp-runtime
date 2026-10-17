@@ -19,9 +19,9 @@ import (
 
 func TestLatestServerSessionFromEvents(t *testing.T) {
 	usedAt := time.Date(2026, 10, 16, 12, 30, 0, 0, time.UTC)
-	got, state := latestServerSessionFromEvents("team-a", []clickhouse.EventRow{
-		{Timestamp: usedAt, SessionID: "session-new", ToolName: "lookup"},
-		{Timestamp: usedAt.Add(-time.Minute), SessionID: "session-old", ToolName: "search"},
+	got, state := latestServerSessionFromEvents("team-a", "current-uid", []clickhouse.EventRow{
+		{Timestamp: usedAt, SessionID: "session-new", ToolName: "lookup", Payload: json.RawMessage(`{"server_uid":"current-uid"}`)},
+		{Timestamp: usedAt.Add(-time.Minute), SessionID: "session-old", ToolName: "search", Payload: json.RawMessage(`{"server_uid":"current-uid"}`)},
 	})
 	if state != "observed" || got == nil {
 		t.Fatalf("latestServerSessionFromEvents() = (%#v, %q), want observed session", got, state)
@@ -29,8 +29,26 @@ func TestLatestServerSessionFromEvents(t *testing.T) {
 	if got.ID != "session-new" || got.Namespace != "team-a" || got.ToolName != "lookup" || got.UsedAt != usedAt.Format(time.RFC3339Nano) {
 		t.Fatalf("last session = %#v, want newest event summary", got)
 	}
-	if session, state := latestServerSessionFromEvents("team-a", []clickhouse.EventRow{{Timestamp: usedAt}}); session != nil || state != "none" {
+	if session, state := latestServerSessionFromEvents("team-a", "current-uid", []clickhouse.EventRow{{Timestamp: usedAt}}); session != nil || state != "none" {
 		t.Fatalf("empty session history = (%#v, %q), want no session", session, state)
+	}
+}
+
+func TestLatestServerSessionExcludesPreviousServerInstance(t *testing.T) {
+	rows := []clickhouse.EventRow{
+		{Server: "same-name", Namespace: "mcp-servers", SessionID: "previous-owner-private-session", ToolName: "private-tool", Payload: json.RawMessage(`{"server_uid":"deleted-uid"}`)},
+		{Server: "same-name", Namespace: "mcp-servers", SessionID: "unlabelled-private-session", ToolName: "old-tool", Payload: json.RawMessage(`{}`)},
+		{Server: "same-name", Namespace: "mcp-servers", SessionID: "new-session", ToolName: "lookup", Payload: json.RawMessage(`{"server_uid":"replacement-uid"}`)},
+	}
+	latest, state := latestServerSessionFromEvents("mcp-servers", "replacement-uid", rows)
+	if state != "observed" || latest == nil || latest.ID != "new-session" || latest.ToolName != "lookup" {
+		t.Fatalf("replacement exposed predecessor metadata: %#v %s", latest, state)
+	}
+	if latest, state := latestServerSessionFromEvents("mcp-servers", "replacement-uid", rows[:2]); latest != nil || state != "none" {
+		t.Fatalf("historical rows supplied new instance metadata: %#v %s", latest, state)
+	}
+	if latest, state := latestServerSessionFromEvents("mcp-servers", "", rows); latest != nil || state != "unavailable" {
+		t.Fatalf("missing UID fell back to names: %#v %s", latest, state)
 	}
 }
 

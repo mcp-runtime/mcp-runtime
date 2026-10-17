@@ -126,10 +126,28 @@ export function ActivityWorkspace({ auth, onSignIn }: ActivityWorkspaceProps) {
     />
   );
 
+  const membershipSection = (<>
+    {teamsQuery.isPending ? (
+        <LoadingState label="Loading your teams…" testId="teams-loading" />
+      ) : teamsQuery.error instanceof UnauthorizedError ? (
+        <ErrorState title="Your session expired." detail="Sign in again to see team memberships." onRetry={onSignIn} retryLabel="Sign in" testId="teams-unauthorized" />
+      ) : teamsQuery.error ? (
+        <ErrorState
+          title="Your team membership could not be loaded."
+          detail={teamsQuery.error instanceof Error ? teamsQuery.error.message : ""}
+          onRetry={() => void teamsQuery.refetch()}
+          testId="teams-error"
+        />
+      ) : (
+        <TeamMembershipPanel teams={teamsQuery.data ?? []} />
+      )}
+  </>);
+
   if (usageQuery.isPending) {
     return (
       <>
         {header}
+        {membershipSection}
         <LoadingState label="Loading your activity…" testId="activity-loading" />
       </>
     );
@@ -139,6 +157,7 @@ export function ActivityWorkspace({ auth, onSignIn }: ActivityWorkspaceProps) {
     return (
       <>
         {header}
+        {membershipSection}
         <ErrorState
           title="Your session expired."
           detail="Sign in again to see your activity."
@@ -154,6 +173,7 @@ export function ActivityWorkspace({ auth, onSignIn }: ActivityWorkspaceProps) {
     return (
       <>
         {header}
+        {membershipSection}
         <ErrorState
           title="Activity is unavailable."
           detail={
@@ -232,20 +252,7 @@ export function ActivityWorkspace({ auth, onSignIn }: ActivityWorkspaceProps) {
         <RecentActivityTable rows={usage?.recent ?? []} />
       </section>
 
-      {/* Team membership is an independent read: a usage outage must not hide it,
-          and a membership outage must not hide usage. */}
-      {teamsQuery.isPending ? (
-        <LoadingState label="Loading your teams…" testId="teams-loading" />
-      ) : teamsQuery.error ? (
-        <ErrorState
-          title="Your team membership could not be loaded."
-          detail={teamsQuery.error instanceof Error ? teamsQuery.error.message : ""}
-          onRetry={() => void teamsQuery.refetch()}
-          testId="teams-error"
-        />
-      ) : (
-        <TeamMembershipPanel teams={teamsQuery.data ?? []} />
-      )}
+      {membershipSection}
     </>
   );
 }

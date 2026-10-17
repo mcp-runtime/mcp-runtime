@@ -26,8 +26,8 @@ func TestSingleHostnameCustomRoutes(t *testing.T) {
 			t.Errorf("unexpected default/catch-all route %s", route)
 		}
 	}
-	if !strings.Contains(got, "router.middlewares: platform-admin-auth@file") {
-		t.Fatal("custom Grafana path lost admin authorization")
+	if strings.Contains(got, "name: grafana\n") {
+		t.Fatal("Grafana must route through the session-aware UI")
 	}
 	if strings.Count(got, "- path: /console\n") != 2 {
 		t.Fatal("HTTPS and HTTP UI routes do not share the configured prefix")
@@ -56,7 +56,6 @@ func TestRenderPlatformUIIngressNoTLS(t *testing.T) {
 		"namespace: " + testPlatformNS,
 		"namespace: " + testObservabilityNS,
 		"traefik.ingress.kubernetes.io/router.entrypoints: web",
-		"traefik.ingress.kubernetes.io/router.middlewares: platform-admin-auth@file",
 		`- host: "platform.example.com"`,
 		"- path: /api/v1/auth\n",
 		"- path: /api/v1/stats\n",
@@ -66,9 +65,9 @@ func TestRenderPlatformUIIngressNoTLS(t *testing.T) {
 		"name: mcp-analytics-api",
 		"name: mcp-runtime-api",
 		"name: mcp-ui",
-		"name: grafana",
+		"name: mcp-ui",
 		"number: 8082",
-		"number: 3000",
+		"number: 8082",
 	}
 	for _, want := range mustContain {
 		if !strings.Contains(got, want) {
@@ -137,13 +136,12 @@ func TestRenderPlatformObservabilityIngressShape(t *testing.T) {
 	}
 	tail := got[idx:]
 	mustContain := []string{
-		"namespace: " + testObservabilityNS,
+		"namespace: " + testPlatformNS,
 		"traefik.ingress.kubernetes.io/router.entrypoints: web",
-		"traefik.ingress.kubernetes.io/router.middlewares: platform-admin-auth@file",
 		`- host: "platform.example.com"`,
 		"- path: /grafana\n",
-		"name: grafana",
-		"number: 3000",
+		"name: mcp-ui",
+		"number: 8082",
 	}
 	for _, want := range mustContain {
 		if !strings.Contains(tail, want) {
@@ -165,7 +163,7 @@ func TestRenderPlatformObservabilityIngressWithTLS(t *testing.T) {
 	}
 	mustContain := []string{
 		"- path: /grafana\n",
-		"name: grafana",
+		"name: mcp-ui",
 	}
 	for _, want := range mustContain {
 		if !strings.Contains(tail, want) {

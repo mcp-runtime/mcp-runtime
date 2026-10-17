@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"mcp-runtime/pkg/sessionstate"
 	"net/http"
 	"os"
 	"sort"
@@ -31,10 +32,11 @@ const (
 	// adapterSessionRefreshBuffer is the minimum remaining lifetime an existing
 	// session must have to be reused. Anything under this triggers a fresh
 	// session so the caller does not race expiry mid-conversation.
-	adapterSessionRefreshBuffer     = 30 * time.Second
-	adapterSessionRequestMaxBytes   = 16 << 10
-	adapterGrantNameAnnotation      = "mcpruntime.org/access-grant-name"
-	adapterGrantNamespaceAnnotation = "mcpruntime.org/access-grant-namespace"
+	adapterSessionRefreshBuffer        = 30 * time.Second
+	adapterSessionRequestMaxBytes      = 16 << 10
+	adapterGrantNameAnnotation         = "mcpruntime.org/access-grant-name"
+	adapterGrantNamespaceAnnotation    = "mcpruntime.org/access-grant-namespace"
+	adapterEnrollmentPendingAnnotation = sessionstate.AdapterEnrollmentPendingAnnotation
 )
 
 // adapterSessionRequest is the input contract for POST /api/runtime/adapter/sessions.
@@ -169,6 +171,11 @@ func (s *AccessService) HandleAdapterSession(w http.ResponseWriter, r *http.Requ
 		writeAgentDirectoryError(w, err)
 		return
 	}
+	readiness := s.adapterCertificateReadiness(ctx, req.Namespace, req.ServerName)
+	if !readiness.Ready {
+		writeAPIError(w, http.StatusServiceUnavailable, readiness.Reason)
+		return
+	}
 
 	consentedTrust := capTrust(requestedTrust, grant.Spec.MaxTrust)
 	policyVersion := runtimeaccess.DefaultPolicyVersion(grant.Spec.PolicyVersion)
@@ -244,9 +251,10 @@ func (s *AccessService) HandleAdapterSession(w http.ResponseWriter, r *http.Requ
 			Name:      sessionName,
 			Namespace: runtimeaccess.DefaultAccessNamespace(req.Namespace),
 			Annotations: map[string]string{
-				adapterGrantNameAnnotation:      grant.Name,
-				adapterGrantNamespaceAnnotation: grant.Namespace,
-				mcpaccess.ServerUIDAnnotation:   grant.Annotations[mcpaccess.ServerUIDAnnotation],
+				adapterGrantNameAnnotation:         grant.Name,
+				adapterGrantNamespaceAnnotation:    grant.Namespace,
+				mcpaccess.ServerUIDAnnotation:      grant.Annotations[mcpaccess.ServerUIDAnnotation],
+				adapterEnrollmentPendingAnnotation: "true",
 			},
 		},
 		Spec: mcpaccess.MCPAgentSessionSpec{

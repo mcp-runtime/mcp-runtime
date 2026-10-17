@@ -22,6 +22,11 @@ const (
 
 var sessionProxyRuntimePrefixes = []string{
 	"/dashboard/summary",
+	"/runtime/workspace/teams",
+	"/runtime/workspace/servers",
+	"/runtime/workspace/access",
+	"/admin/overview/directory",
+	"/admin/overview/servers",
 	"/runtime/namespaces",
 	"/runtime/servers",
 	"/runtime/tools",

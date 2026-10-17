@@ -18,8 +18,23 @@ description: Apply and debug MCP Runtime access grants, agent sessions, gateway 
 
 Session apply via platform API is **admin-only**. Adapters usually skip manual session apply.
 
+Adapter enrollment preflight reads the deployed operator's on/off choice and
+ConfigMap-backed configuration, compares runtime issuer/trust domain, and follows
+the selected route's actual TLSOption. Unreadable/Secret-backed configuration,
+stale route ownership/readiness and missing client-certificate verification fail
+closed. `update` carries read-only preflight RBAC; do not enable certificates by
+hardcoding a runtime flag. Enrollment completion and pending cleanup use conditional
+platform-store mutations, never a full session upsert that could undo revocation.
+
 ## Rules (short)
 
+- For disposable human test identities, use secure `team user create`, enroll
+  as that user, then sign in as an admin and run `user deactivate <id> --yes
+  --json`. Cleanup removes memberships and revokes stored keys/human sessions
+  atomically with audit, while preserving an identity tombstone. Transfer sole
+  team ownership first. Repeated cleanup is idempotent. Existing gateway sync
+  and stale-cache limits still apply; verify denied calls after sync rather
+  than equating a committed revocation count with every gateway's acknowledgement.
 - Workload issuer admission: `hack/qa/approval-policy-rehearsal.sh` uses a private,
   disposable Kind cluster; it refuses existing names and tests requester RBAC,
   exact session identities, hidden SAN types, public/internal TLS and reissue.
