@@ -10,26 +10,13 @@ import (
 	"strings"
 	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtimeaccess "mcp-runtime-api/internal/runtimeapi/access"
 	mcpaccess "mcp-runtime/pkg/access"
 	"mcp-runtime/pkg/k8sclient"
 	"mcp-runtime/pkg/serviceutil"
 )
 
-type accessGrantRequest struct {
-	Mode               *mcpaccess.GrantMode       `json:"mode,omitempty"`
-	Name               string                     `json:"name"`
-	Namespace          string                     `json:"namespace"`
-	ServerRef          mcpaccess.ServerReference  `json:"serverRef"`
-	Subject            mcpaccess.SubjectRef       `json:"subject"`
-	MaxTrust           mcpaccess.TrustLevel       `json:"maxTrust"`
-	AllowedSideEffects []mcpaccess.ToolSideEffect `json:"allowedSideEffects"`
-	PolicyVersion      string                     `json:"policyVersion"`
-	Disabled           *bool                      `json:"disabled,omitempty"`
-	ExpiresAt          *metav1.Time               `json:"expiresAt,omitempty"`
-	ToolRules          []mcpaccess.ToolRule       `json:"toolRules"`
-}
+type accessGrantRequest = mcpaccess.GrantApplyRequest
 
 type accessGrantPatchRequest struct {
 	Disabled *bool                `json:"disabled,omitempty"`

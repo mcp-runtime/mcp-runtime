@@ -16,37 +16,7 @@ import (
 )
 
 func validateSessionRequest(req *accessSessionRequest) error {
-	req.Name = strings.TrimSpace(req.Name)
-	req.Namespace = runtimeaccess.DefaultAccessNamespace(req.Namespace)
-	req.ServerRef.Name = mcpaccess.ServerName(strings.TrimSpace(string(req.ServerRef.Name)))
-	req.ServerRef.Namespace = mcpaccess.Namespace(strings.TrimSpace(string(req.ServerRef.Namespace)))
-	req.Subject.HumanID = mcpaccess.HumanID(strings.TrimSpace(string(req.Subject.HumanID)))
-	req.Subject.AgentID = mcpaccess.AgentID(strings.TrimSpace(string(req.Subject.AgentID)))
-	req.Subject.TeamID = mcpaccess.TeamID(strings.TrimSpace(string(req.Subject.TeamID)))
-	req.PolicyVersion = runtimeaccess.DefaultPolicyVersion(req.PolicyVersion)
-	req.ConsentedTrust = runtimeaccess.NormalizeTrust(req.ConsentedTrust)
-	if err := mcpaccess.ValidateResourceName("name", req.Name); err != nil {
-		return err
-	}
-	if err := mcpaccess.ValidateResourceName("namespace", req.Namespace); err != nil {
-		return err
-	}
-	if err := mcpaccess.ValidateResourceName("serverRef.name", string(req.ServerRef.Name)); err != nil {
-		return err
-	}
-	if err := mcpaccess.ValidateOptionalResourceName("serverRef.namespace", string(req.ServerRef.Namespace)); err != nil {
-		return err
-	}
-	if req.Subject.HumanID == "" && req.Subject.AgentID == "" && req.Subject.TeamID == "" {
-		return errors.New("one of subject.humanID, subject.agentID, or subject.teamID is required")
-	}
-	if err := runtimeaccess.ValidateTeamIDValue("subject.teamID", string(req.Subject.TeamID)); err != nil {
-		return err
-	}
-	if req.ConsentedTrust != "" && !runtimeaccess.ValidTrust(req.ConsentedTrust) {
-		return errors.New("consentedTrust must be low, medium, or high")
-	}
-	return nil
+	return mcpaccess.ValidateSessionApplyRequest(req)
 }
 
 func (s *AccessService) handleRuntimeSessionList(w http.ResponseWriter, r *http.Request) {
