@@ -1,13 +1,16 @@
 package main
 
 import (
+	"github.com/golang-jwt/jwt/v4"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"mcp-runtime/pkg/authzmatrix"
+	"mcp-runtime/pkg/platformauth"
 )
 
 func TestAuthzMatrixRows(t *testing.T) {
@@ -26,6 +29,7 @@ func TestAuthzMatrixRows(t *testing.T) {
 		adminAPIKeys: map[string]struct{}{"test-admin": {}},
 	}
 	testAuthenticator(srv)
+	srv.authentic.Secret = []byte("test-secret")
 
 	mux := http.NewServeMux()
 	srv.registerRoutes(mux)
@@ -34,6 +38,27 @@ func TestAuthzMatrixRows(t *testing.T) {
 		authzmatrix.RoleUserKey:   "test-user",
 		authzmatrix.RoleAdminKey:  "test-admin",
 		authzmatrix.RoleIngestKey: "test-ingest",
+	}
+
+	for role, audiences := range map[string][]string{
+		"platform-jwt":       {platformauth.AudiencePlatform},
+		"runtime-jwt":        {platformauth.AudienceRuntime},
+		"analytics-jwt":      {platformauth.AudienceAnalytics},
+		"multi-audience-jwt": {platformauth.AudiencePlatform, platformauth.AudienceRuntime, platformauth.AudienceAnalytics},
+	} {
+		token, err := platformauth.Sign([]byte("test-secret"), platformauth.Principal{Subject: "matrix-user", Role: platformauth.RoleAdmin}, time.Minute, audiences)
+		if err != nil {
+			t.Fatal(err)
+		}
+		keys[role] = token
+	}
+	expired := platformauth.ClaimsFromPrincipal(platformauth.Principal{Subject: "matrix-user", Role: platformauth.RoleAdmin})
+	expired.Issuer = platformauth.Issuer
+	expired.Audience = jwt.ClaimStrings{srv.authentic.Audience}
+	expired.ExpiresAt = jwt.NewNumericDate(time.Now().Add(-time.Minute))
+	keys["expired-jwt"], err = jwt.NewWithClaims(jwt.SigningMethodHS256, expired).SignedString([]byte("test-secret"))
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	for _, row := range rows {

@@ -27,6 +27,14 @@ platform-store mutations, never a full session upsert that could undo revocation
 
 ## Rules (short)
 
+- Platform login tokens have only `platform-api` audience. Call the supported
+  platform gateway URL from CLI/clients; runtime/analytics exchange happens
+  there. Direct API Service URLs reject the login bearer. The UI exchanges
+  server-side before its direct Service calls. A failed exchange must be fixed,
+  never bypassed with identity headers or multi-audience tokens. See
+  `docs/platform-services.md` for the coordinated setup/ingress rollout and
+  `test/e2e/audience_isolation.py` for headless acceptance.
+
 - For disposable human test identities, use secure `team user create`, enroll
   as that user, then sign in as an admin and run `user deactivate <id> --yes
   --json`. Cleanup removes memberships and revokes stored keys/human sessions

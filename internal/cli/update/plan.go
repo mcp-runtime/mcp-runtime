@@ -202,6 +202,11 @@ func BuildPlan(ctx context.Context, cs kubernetes.Interface, m *platformrelease.
 	if err := checkInstalled(ctx, cs); err != nil {
 		return nil, err
 	}
+	if m.RequiresAudienceExchange {
+		if err := requireAudienceExchangeMigration(ctx, cs); err != nil {
+			return nil, err
+		}
+	}
 	plan := &Plan{TargetVersion: m.Version, Preserved: append([]string(nil), preservedResources...)}
 	if m.CRDChange {
 		if len(sel.Only) > 0 {

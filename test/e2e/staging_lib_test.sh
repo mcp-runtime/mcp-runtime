@@ -185,6 +185,12 @@ expect_fail "local ips include production" staging_guard_local_ips 10.0.0.5 198.
 expect_eq "no IP literal is hardcoded for production" \
   "$(grep -cE '([0-9]{1,3}\.){3}[0-9]{1,3}' "${SCRIPT_DIR}/lib/staging.sh" || true)" 0
 
+# A per-run OAuth enable switch must override a disabled VM setting without
+# turning off a previously enabled provider or touching the preserved file.
+(E2E_WITH_MCP_AUTH=0; staging_enable_mcp_auth_for_run true; [[ "${E2E_WITH_MCP_AUTH}" == 1 ]]) && pass "run enables configured-off mcp-auth" || failed "run enables configured-off mcp-auth"
+(E2E_WITH_MCP_AUTH=1; staging_enable_mcp_auth_for_run false; [[ "${E2E_WITH_MCP_AUTH}" == 1 ]]) && pass "default preserves configured-on mcp-auth" || failed "default preserves configured-on mcp-auth"
+(E2E_WITH_MCP_AUTH=0; staging_enable_mcp_auth_for_run false; [[ "${E2E_WITH_MCP_AUTH}" == 0 ]]) && pass "default preserves configured-off mcp-auth" || failed "default preserves configured-off mcp-auth"
+
 # --- marker --------------------------------------------------------------------
 staging_marker_content vm-e2e-01 >"${TMP}/marker"
 expect_ok "marker valid" staging_marker_valid "${TMP}/marker" vm-e2e-01

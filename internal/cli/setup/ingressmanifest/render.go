@@ -15,6 +15,8 @@ const (
 	PlatformObservabilityIngressName = "mcp-platform-observability"
 	// PlatformAnalyticsIngressName is the public Ingress for analytics-api.
 	PlatformAnalyticsIngressName = "mcp-platform-analytics"
+	// PlatformRuntimeIngressName isolates runtime routes for token exchange.
+	PlatformRuntimeIngressName = "mcp-platform-runtime"
 	// PlatformHTTPRedirectIngressName is the HTTP-only redirect Ingress resource name.
 	PlatformHTTPRedirectIngressName = "mcp-platform-ui-http"
 	// PlatformTLSSecretName is the TLS secret name used when TLS is enabled.
@@ -87,7 +89,7 @@ func RenderPlatformUIIngress(host, issuerName string, tlsEnabled bool, platformN
 	b.WriteString("\n")
 	b.WriteString("      http:\n")
 	b.WriteString("        paths:\n")
-	writeAPIIngressPaths(&b, PlatformAPIPaths())
+	writeAPIIngressPaths(&b, APIPathsForService("mcp-platform-api"))
 	writeAPIIngressPaths(&b, []APIPath{{Path: routes.Docs, PathType: "Prefix", Service: "mcp-ui", Port: 8082}, {Path: routes.Registry, PathType: "Prefix", Service: "mcp-ui", Port: 8082}})
 	b.WriteString("          - path: " + routes.Platform + "\n")
 	b.WriteString("            pathType: Prefix\n")
@@ -97,6 +99,7 @@ func RenderPlatformUIIngress(host, issuerName string, tlsEnabled bool, platformN
 	b.WriteString("                port:\n")
 	b.WriteString("                  number: 8082\n")
 
+	writeRuntimeIngress(&b, host, platformNamespace, tlsEnabled)
 	b.WriteString("---\n")
 	b.WriteString("apiVersion: networking.k8s.io/v1\n")
 	b.WriteString("kind: Ingress\n")
@@ -146,6 +149,7 @@ func RenderPlatformUIIngress(host, issuerName string, tlsEnabled bool, platformN
 		b.WriteString("  annotations:\n")
 		b.WriteString("    traefik.ingress.kubernetes.io/router.entrypoints: web\n")
 	}
+	b.WriteString("    traefik.ingress.kubernetes.io/router.middlewares: analytics-token-exchange@file\n")
 	b.WriteString("spec:\n")
 	b.WriteString("  ingressClassName: traefik\n")
 	b.WriteString("  rules:\n")
@@ -191,6 +195,18 @@ func RenderPlatformUIIngress(host, issuerName string, tlsEnabled bool, platformN
 	}
 
 	return b.String()
+}
+
+func writeRuntimeIngress(b *strings.Builder, host, namespace string, tlsEnabled bool) {
+	b.WriteString("---\napiVersion: networking.k8s.io/v1\nkind: Ingress\nmetadata:\n  name: " + PlatformRuntimeIngressName + "\n  namespace: " + namespace + "\n  annotations:\n")
+	entrypoint := "web"
+	if tlsEnabled {
+		entrypoint = "websecure"
+	}
+	b.WriteString("    traefik.ingress.kubernetes.io/router.entrypoints: " + entrypoint + "\n")
+	b.WriteString("    traefik.ingress.kubernetes.io/router.middlewares: runtime-token-exchange@file\n")
+	b.WriteString("spec:\n  ingressClassName: traefik\n  rules:\n    - host: " + strconv.Quote(host) + "\n      http:\n        paths:\n")
+	writeAPIIngressPaths(b, APIPathsForService("mcp-runtime-api"))
 }
 
 func writeAPIIngressPaths(b *strings.Builder, routes []APIPath) {

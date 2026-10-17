@@ -232,7 +232,11 @@ func newMux(apiBase, apiUpstream, apiKey, apiKeys, adminAPIKeys string) (*http.S
 	if err != nil {
 		return nil, err
 	}
-	mux.Handle(uiSessionAPIPrefix+"/", newSessionProxyWithUpstreams(runtimeBase, analyticsBase, sessions))
+	platformBase, err := parseRuntimeUpstream(apiUpstream)
+	if err != nil {
+		return nil, err
+	}
+	mux.Handle(uiSessionAPIPrefix+"/", newSessionProxyWithUpstreams(platformBase, runtimeBase, analyticsBase, sessions))
 	mux.Handle(publicCatalogAPIPrefix+"/", newPublicCatalogProxy(runtimeBase, platformMode == "public"))
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -275,7 +279,7 @@ func newMux(apiBase, apiUpstream, apiKey, apiKeys, adminAPIKeys string) (*http.S
 		_, _ = w.Write(data)
 	})
 
-	return mountPublicUI(mux, routes), nil
+	return mountPublicUI(mux, routes, platformBase), nil
 }
 
 func handleLogin(apiKey, upstreamAPIKey, apiUpstream string, store *uiSessionStore) http.HandlerFunc {

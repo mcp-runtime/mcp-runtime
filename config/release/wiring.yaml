@@ -7,6 +7,9 @@
 # env, flags and ConfigMap keys are untouched. Releases opt objects in
 # explicitly: list one here when the release changes it.
 
+# Narrowed login tokens require setup-owned split ingress/exchange wiring.
+requiresAudienceExchange: true
+
 # ServiceAccount/RBAC and supported platform NetworkPolicy objects, as "<Kind>/<namespace>/<name>" (namespaced) or
 # "<Kind>/<name>" (cluster-scoped). Validated: no wildcard or escalating rules.
 platformObjects:

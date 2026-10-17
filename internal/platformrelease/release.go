@@ -61,10 +61,11 @@ func GenerateReleaseManifest(opts ReleaseOptions) (*Manifest, error) {
 		m.Components = append(m.Components, ManifestComponent{Name: name, Repository: repository, Tag: tag})
 	}
 	if err := m.ApplyReleaseExtras(ReleaseExtras{
-		PlatformObjects: objects,
-		ConfigMaps:      configMaps,
-		Wiring:          release.Components,
-		ConfigOnly:      release.ConfigOnly,
+		RequiresAudienceExchange: release.RequiresAudienceExchange,
+		PlatformObjects:          objects,
+		ConfigMaps:               configMaps,
+		Wiring:                   release.Components,
+		ConfigOnly:               release.ConfigOnly,
 	}); err != nil {
 		return nil, err
 	}

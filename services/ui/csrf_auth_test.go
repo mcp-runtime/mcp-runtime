@@ -129,7 +129,7 @@ func TestLogoutInvalidatesCSRFToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseRuntimeUpstream() error = %v", err)
 	}
-	proxy := newSessionProxy(base, store)
+	proxy := newSessionProxyWithUpstreams(testExchangeBase(t), base, base, store)
 
 	writeReq := httptest.NewRequest(http.MethodPost, "/api/ui/v1/user/api-keys", strings.NewReader(`{"name":"k"}`))
 	writeReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: sess.ID})

@@ -62,6 +62,7 @@ var pathBasedPlatformIngresses = []struct {
 	{"mcp-platform-gateway", "ui"},
 	{"mcp-platform-gateway-adapter-session", "runtime-api"},
 	{"mcp-platform-gateway-api", "platform-api"},
+	{"mcp-platform-gateway-runtime", "runtime-api"},
 	{"mcp-platform-gateway-observability", "grafana"},
 	{"mcp-platform-gateway-observability", "ui"},
 	{"mcp-platform-gateway-analytics", "analytics-api"},

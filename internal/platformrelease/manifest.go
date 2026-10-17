@@ -45,6 +45,9 @@ type Manifest struct {
 	// empty, relative repositories resolve against the registry host of the
 	// image currently running in the cluster.
 	Registry string `json:"registry,omitempty"`
+	// RequiresAudienceExchange blocks updates until supported setup installs
+	// split ingress routes and trusted token-exchange middleware.
+	RequiresAudienceExchange bool `json:"requiresAudienceExchange,omitempty"`
 	// CRDChange reports that this release changes CustomResourceDefinitions.
 	// When true, update applies CRDs from CRDs (or --crds / platform-crds.yaml)
 	// before patching component images.

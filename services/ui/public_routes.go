@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
@@ -18,14 +19,14 @@ func configuredPublicRoutes() publicroutes.Routes {
 
 // mountPublicUI keeps probes and the internal Grafana forward-auth endpoint
 // stable while moving all browser session, proxy, and asset routes together.
-func mountPublicUI(inner *http.ServeMux, routes publicroutes.Routes) *http.ServeMux {
+func mountPublicUI(inner *http.ServeMux, routes publicroutes.Routes, platformBase *url.URL) *http.ServeMux {
 	outer := http.NewServeMux()
 	outer.Handle("/health", inner)
 	outer.Handle("/auth/admin-check", inner)
 	// Grafana has its own public prefix even when the console uses /console.
 	runtimeBase, err := parseRuntimeUpstream(serviceutil.EnvOr("RUNTIME_UPSTREAM", defaultRuntimeUpstream))
 	if err == nil {
-		grafana := grafanaSessionProxy(runtimeBase, sessions, routes.Grafana)
+		grafana := grafanaSessionProxy(platformBase, runtimeBase, sessions, routes.Grafana)
 		outer.Handle(routes.Grafana, grafana)
 		outer.Handle(routes.Grafana+"/", grafana)
 	}

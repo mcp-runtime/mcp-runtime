@@ -1,19 +1,21 @@
 package main
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
 	"path"
 	"strings"
 
+	"mcp-runtime/pkg/platformauth"
 	"mcp-runtime/pkg/serviceutil"
 )
 
 // The platform session is the only browser credential accepted here. Every
 // request is reauthenticated by runtime-api, including admin requests, so a
 // stale UI role or a surviving Grafana cookie never grants data access.
-func grafanaSessionProxy(runtimeBase *url.URL, store *uiSessionStore, prefix string) http.Handler {
+func grafanaSessionProxy(platformBase, runtimeBase *url.URL, store *uiSessionStore, prefix string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Frame-Options", "DENY")
@@ -62,6 +64,15 @@ func grafanaSessionProxy(runtimeBase *url.URL, store *uiSessionStore, prefix str
 		req.Header.Set("Accept", r.Header.Get("Accept"))
 		req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
 		if auth != "" {
+			auth, err = platformauth.ExchangeBearer(r.Context(), sessionProxyHTTPClient, platformBase, auth, platformauth.AudienceRuntime)
+			if err != nil {
+				status := http.StatusBadGateway
+				if errors.Is(err, platformauth.ErrExchangeUnauthorized) {
+					status = http.StatusUnauthorized
+				}
+				serviceutil.WriteJSON(w, status, map[string]string{"error": "token_exchange_failed"})
+				return
+			}
 			req.Header.Set("Authorization", auth)
 		} else {
 			req.Header.Set("X-API-Key", apiKey)

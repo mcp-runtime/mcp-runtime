@@ -1255,6 +1255,42 @@ EOF
   [[ "${failed}" == "0" ]]
 }
 
+# Read-only direct-service port-forwards prove audience rejection independently
+# of ingress. The surrounding staging target guard already restricts this suite
+# to the disposable VM; every child is stopped on success or failure.
+staging_check_audience_isolation() (
+  local directory="${WORK_DIR}/audience-isolation" ns service remote name port entry pid=""
+  local -a audience_pids=()
+  trap 'for pid in "${audience_pids[@]}"; do kill "${pid}" 2>/dev/null || true; wait "${pid}" 2>/dev/null || true; done' EXIT
+  mkdir -p "${directory}"
+  for entry in platform:mcp-platform:mcp-platform-api:8080 runtime:mcp-platform:mcp-runtime-api:8084 analytics:mcp-observability:mcp-analytics-api:8085; do
+    IFS=: read -r name ns service remote <<<"${entry}"
+    kubectl -n "${ns}" port-forward --address localhost "svc/${service}" ":${remote}" >"${directory}/${name}-port-forward.log" 2>&1 &
+    audience_pids+=("$!")
+    port="$(python3 - "${directory}/${name}-port-forward.log" <<'PY'
+import pathlib, re, sys, time
+log = pathlib.Path(sys.argv[1])
+for _ in range(60):
+    match = re.search(r"Forwarding from 127\.0\.0\.1:(\d+) ->", log.read_text() if log.exists() else "")
+    if match:
+        print(match.group(1))
+        break
+    time.sleep(1)
+else:
+    raise SystemExit("audience service port-forward did not become ready")
+PY
+    )" || return 1
+    case "${name}" in
+      platform) export DIRECT_PLATFORM_URL="http://localhost:${port}" ;;
+      runtime) export DIRECT_RUNTIME_URL="http://localhost:${port}" ;;
+      analytics) export DIRECT_ANALYTICS_URL="http://localhost:${port}" ;;
+    esac
+  done
+  PLATFORM_ADMIN_EMAIL="${MCP_PLATFORM_ADMIN_EMAIL:?staging admin email required}" \
+    PLATFORM_ADMIN_PASSWORD="${MCP_PLATFORM_ADMIN_PASSWORD:?staging admin password required}" \
+    python3 "${ROOT_DIR}/test/e2e/audience_isolation.py"
+)
+
 staging_check_ui() {
   local headers="${STAGING_ARTIFACT_DIR}/ui-headers.txt" html="${STAGING_ARTIFACT_DIR}/ui-index.html" code platform_host
   code="$(curl --silent --show-error -D "${headers}" -o "${html}" --write-out '%{http_code}' "${PLATFORM_URL}/")"
@@ -1280,6 +1316,14 @@ staging_check_ui() {
   # it must be refused.
   staging_expect_code "anonymous UI-origin GET /api/v1/dashboard/summary" "401 403" \
     "${PLATFORM_URL}/api/v1/dashboard/summary"
+}
+
+# Run-scoped enablement happens after the preserved e2e.env is sourced. A false
+# override inherits that file, including an existing enabled provider.
+staging_enable_mcp_auth_for_run() {
+  if staging_flag_enabled "${1:-false}"; then
+    export E2E_WITH_MCP_AUTH=1
+  fi
 }
 
 staging_check_oidc() {
@@ -2033,6 +2077,7 @@ staging_run_platform_stages() {
   staging_run_stage fresh-certificate soft "HTTP-01 for the unique host failed (DNS, port 80 routing, or Let's Encrypt staging limits); see the stage log's order/challenge describe" staging_check_fresh_certificate
   staging_run_stage platform-login critical "the platform API is unreachable or rejected the admin key; check mcp-platform-api logs in diagnostics/" staging_check_platform_login
   staging_run_stage platform-api soft "an admin API call failed or an anonymous/bad-key request was not denied" staging_check_platform_api
+  staging_run_stage audience-isolation critical "login audiences, split-route exchange, direct-service replay denial, or cookie-backed UI/CLI authentication failed" staging_check_audience_isolation
   staging_run_stage registry-route soft "https://registry.<domain>/v2/ is not 401: the registry Ingress rule host no longer matches its TLS host (Traefik 404); run mcp-runtime cluster doctor" staging_check_registry_route
   staging_run_stage registry-auth soft "registry forward-auth is not enforcing (anonymous allowed) or rejects valid credentials; see traefik and mcp-platform-api logs" staging_check_registry_auth
   staging_run_stage image-pulls soft "a workload lacks mcp-runtime-registry-pull, or the node cannot pull from the public registry (x509/auth)" staging_check_image_pulls

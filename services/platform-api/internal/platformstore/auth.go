@@ -401,7 +401,7 @@ func (s *Store) CreateAccessToken(u User, ttl time.Duration) (string, error) {
 		p = resolved
 	}
 	p.AuthType = "platform_jwt"
-	return platformauth.Sign(s.jwtSecret, p, ttl, platformauth.RequiredAudiences())
+	return platformauth.Sign(s.jwtSecret, p, ttl, []string{platformauth.AudiencePlatform})
 }
 
 // AuthenticateJWT validates a platform JWT and resolves it to the current principal.

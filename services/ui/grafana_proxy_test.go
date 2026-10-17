@@ -31,7 +31,7 @@ func TestGrafanaPlatformSessionAndOriginBoundary(t *testing.T) {
 	base, _ := url.Parse(upstream.URL)
 	store := newUISessionStore(time.Now)
 	sess := createTestSession(t, store, uiSession{UpstreamAuthHeader: "Bearer platform-session"})
-	proxy := grafanaSessionProxy(base, store, "/monitoring")
+	proxy := grafanaSessionProxy(testExchangeBase(t), base, store, "/monitoring")
 	for _, tc := range []struct {
 		name, method, origin string
 		cookie               bool
@@ -96,7 +96,7 @@ func TestGrafanaUsesItsNoncePolicyWithoutWeakeningConsolePolicy(t *testing.T) {
 		base, _ := url.Parse(upstream.URL)
 		store := newUISessionStore(time.Now)
 		sess := createTestSession(t, store, uiSession{UpstreamAuthHeader: "Bearer platform-session"})
-		proxy := securityHeadersMiddleware(grafanaSessionProxy(base, store, "/grafana"))
+		proxy := securityHeadersMiddleware(grafanaSessionProxy(testExchangeBase(t), base, store, "/grafana"))
 		r := httptest.NewRequest("GET", "/grafana/", nil)
 		r.AddCookie(&http.Cookie{Name: sessionCookieName, Value: sess.ID})
 		w := httptest.NewRecorder()
