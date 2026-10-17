@@ -3,6 +3,24 @@ info:
   title: MCP Runtime Platform API
   version: 1.0.0
 paths:
+  /internal/operations/counts:
+    get:
+      description: Internal bearer-authenticated complete platform directory/session totals for the runtime administrator overview.
+      responses:
+        "200":
+          description: Counts from one database snapshot, independent of list pagination.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [teams, users, agents, active_sessions]
+                properties:
+                  teams: {type: integer, minimum: 0}
+                  users: {type: integer, minimum: 0}
+                  agents: {type: integer, minimum: 0}
+                  active_sessions: {type: integer, minimum: 0}
+        "401": {description: Internal bearer authentication required}
+        "503": {description: Directory or session data unavailable}
   /api/v1/users/{user_id}/deactivate:
     post:
       summary: Administrator permanently deactivates an account and revokes stored access

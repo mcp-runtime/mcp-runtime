@@ -15,16 +15,17 @@ import { createTeam, createTeamUser, removeTeamMember, setTeamMemberRole } from 
 import { APIRequestError } from "../../api/client";
 import type { TeamMembership, TeamRecord } from "../../api/types";
 
-type TeamsPanelProps = { onSignIn: () => void };
+type TeamsPanelProps = { onSignIn: () => void; managedTeams?: TeamRecord[]; initialTeam?: string };
 
 const SLUG_PATTERN = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
 
-export function TeamsPanel({ onSignIn }: TeamsPanelProps) {
+export function TeamsPanel({ onSignIn, managedTeams, initialTeam }: TeamsPanelProps) {
   const reload = useAdminReload();
   const teamsQuery = useTeams(true);
-  const teams = useMemo(() => teamsQuery.data ?? [], [teamsQuery.data]);
+  const teams = useMemo(() => managedTeams ?? teamsQuery.data ?? [], [managedTeams, teamsQuery.data]);
 
-  const [selectedSlug, setSelectedSlug] = useState("");
+  const [selectedSlug, setSelectedSlug] = useState(initialTeam ?? "");
+  useEffect(() => { if (initialTeam) setSelectedSlug(initialTeam); }, [initialTeam]);
   const [busyKey, setBusyKey] = useState("");
   const [error, setError] = useState("");
   const [userConflict, setUserConflict] = useState(false);
@@ -270,14 +271,14 @@ export function TeamsPanel({ onSignIn }: TeamsPanelProps) {
     <>
       <PageHeader
         title="Teams"
-        breadcrumb={[{ label: "Administration" }, { label: "Teams" }]}
+        breadcrumb={[{ label: managedTeams ? "My workspace" : "Administration" }, { label: "Teams" }]}
         description="Tenant teams, the namespace each one owns, and their membership."
         actions={
           <>
             <Button variant="secondary" icon="refresh" onClick={reload} data-testid="teams-refresh">
               Refresh
             </Button>
-            <Button
+            {!managedTeams ? <Button
               variant="primary"
               icon="plus"
               data-testid="team-create-toggle"
@@ -287,7 +288,7 @@ export function TeamsPanel({ onSignIn }: TeamsPanelProps) {
               }}
             >
               New team
-            </Button>
+            </Button> : null}
           </>
         }
       />

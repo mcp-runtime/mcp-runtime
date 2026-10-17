@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "./components/AppShell";
 import { ActivityWorkspace } from "./components/user/ActivityWorkspace";
 import { ApiKeysWorkspace } from "./components/user/ApiKeysWorkspace";
+import { MyWorkspace } from "./components/user/MyWorkspace";
 import { SignInPanel } from "./components/SignInPanel";
 import { ServersWorkspace } from "./components/servers/ServersWorkspace";
 import { AdminWorkspace } from "./components/admin/AdminWorkspace";
@@ -173,6 +174,8 @@ export function App() {
         section={adminSection(route.section).id}
       />
     );
+  } else if (route.workspace === "workspace") {
+    content = <MyWorkspace auth={auth} onSignIn={handleSignIn} section={route.section} team={route.params.team} />;
   } else if (route.workspace === "agents") {
     content = <AgentsPanel auth={auth} onSignIn={handleSignIn} initialTeam={route.params.team} initialAgent={route.params.agent} onTeamChange={(team) => setParams({ team })} onAgentChange={(agent) => setParams({ agent })} />;
   } else if (route.workspace === "access") {
