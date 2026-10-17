@@ -20,6 +20,13 @@ Session apply via platform API is **admin-only**. Adapters usually skip manual s
 
 ## Rules (short)
 
+- For disposable human test identities, use secure `team user create`, enroll
+  as that user, then sign in as an admin and run `user deactivate <id> --yes
+  --json`. Cleanup removes memberships and revokes stored keys/human sessions
+  atomically with audit, while preserving an identity tombstone. Transfer sole
+  team ownership first. Repeated cleanup is idempotent. Existing gateway sync
+  and stale-cache limits still apply; verify denied calls after sync rather
+  than equating a committed revocation count with every gateway's acknowledgement.
 - Workload issuer admission: `hack/qa/approval-policy-rehearsal.sh` uses a private,
   disposable Kind cluster; it refuses existing names and tests requester RBAC,
   exact session identities, hidden SAN types, public/internal TLS and reissue.

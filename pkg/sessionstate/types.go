@@ -24,6 +24,7 @@ var (
 	ErrNotFound       = errors.New("session not found")
 	ErrConflict       = errors.New("session already exists with different state")
 	ErrInactiveAgent  = errors.New("session agent is inactive or belongs to another team")
+	ErrInactiveHuman  = errors.New("session human account is inactive")
 	ErrInvalidSession = errors.New("invalid session")
 )
 
@@ -55,6 +56,7 @@ type Session struct {
 }
 
 type Filter struct {
+	HumanID        string `json:"human_id,omitempty"`
 	Namespace      string `json:"namespace,omitempty"`
 	ServerName     string `json:"server,omitempty"`
 	ServerUID      string `json:"server_uid,omitempty"`

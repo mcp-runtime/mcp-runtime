@@ -1,0 +1,12 @@
+Permanently disable a platform account, remove its team memberships, and revoke its API keys, registry credentials, refresh tokens and MCP sessions. Audit history and the identity tombstone remain. Transfer sole team ownership first. This differs from team user remove, which removes only one membership.
+
+Usage:
+  mcp-runtime user deactivate [user-id] [flags]
+
+Flags:
+  -h, --help   help for deactivate
+      --json   Print the non-secret cleanup result as JSON
+      --yes    Confirm permanent account deactivation
+
+Global Flags:
+      --debug   Enable debug mode with structured error logging
