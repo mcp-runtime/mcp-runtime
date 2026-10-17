@@ -1,0 +1,44 @@
+name: Workload Issuer Approval
+
+on:
+  pull_request:
+    paths:
+      - config/cert-manager/approval-policies.yaml
+      - hack/qa/approval-policy-rehearsal.sh
+      - hack/qa/approvalpolicy/**
+      - pkg/certauth/**
+      - .github/workflows/workload-issuer-approval.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workload-issuer-approval-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  admission:
+    name: Disposable Kind approval matrix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Prepare pinned Kind CLI
+        run: go install sigs.k8s.io/kind@v0.33.0
+      - name: Rehearse direct admission on an isolated cluster
+        env:
+          CLUSTER_NAME: mcp-approval-ci
+        run: |
+          set -euo pipefail
+          bash hack/qa/approval-policy-rehearsal.sh 2>&1 | tee approval-results.log
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: workload-issuer-approval-results
+          path: approval-results.log
+          if-no-files-found: warn
+          retention-days: 7

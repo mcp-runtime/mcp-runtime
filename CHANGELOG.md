@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Security
+
+- Session CSR and issued-certificate validation reject hidden SAN identity types and unknown extended key usages. The disposable issuer-approval rehearsal now uses the reviewed cert-manager/approver versions and refuses existing cluster names ([#538](https://github.com/mcp-runtime/mcp-runtime/issues/538)).
+
 ### Added
 
 - Team user creation no longer accepts passwords as command-line arguments; it prompts for a hidden, confirmed password or accepts it through stdin. The CLI can remove team memberships with explicit confirmation before removing a team's only owner. Account deactivation and account-wide credential revocation remain separate lifecycle work ([#536](https://github.com/mcp-runtime/mcp-runtime/issues/536)).
