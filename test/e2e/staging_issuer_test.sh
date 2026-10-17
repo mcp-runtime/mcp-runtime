@@ -3,6 +3,7 @@
 # the workload signing key separate from the bundled registry root.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT/test/e2e/lib/staging.sh"
 source "$ROOT/test/e2e/lib/staging-issuer.sh"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -24,4 +25,17 @@ if staging_issuer_policies >"$TMP/invalid"; then
   echo 'fixture accepted the registry issuer as workload issuer' >&2; exit 1
 fi
 [[ ! -s "$TMP/invalid" ]]
+# Exercise the actual stage boundary: dependency PATH exports disappear in the
+# subshell, and the verified acknowledgement must survive via private state.
+E2E_MTLS_CLUSTER_ISSUER=mcp-e2e-workload
+mkdir -p "$WORK_DIR/linux-amd64"
+printf '#!/usr/bin/env bash\nexit 0\n' >"$WORK_DIR/linux-amd64/helm"
+chmod +x "$WORK_DIR/linux-amd64/helm"
+kubectl() { if [[ "$*" == *'apply -f -'* ]]; then cat >/dev/null; fi; return 0; }
+staging_verify_workload_approval() { return 0; }
+staging_stages_init "$TMP/artifacts" "$TMP/private-state"
+unset MCP_WORKLOAD_ISSUER_APPROVAL_ACK
+staging_run_stage issuer critical fixture staging_prepare_workload_issuer
+[[ "$(staging_stage_status issuer)" == passed ]]
+[[ "${MCP_WORKLOAD_ISSUER_APPROVAL_ACK:-}" == true ]]
 echo 'staging issuer offline regressions passed'

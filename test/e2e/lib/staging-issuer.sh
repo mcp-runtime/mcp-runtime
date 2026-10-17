@@ -54,7 +54,7 @@ metadata: {name: ${E2E_MTLS_CLUSTER_ISSUER}}
 spec: {ca: {secretName: mcp-e2e-workload-root}}
 YAML
   kubectl wait "clusterissuer/$E2E_MTLS_CLUSTER_ISSUER" --for=condition=Ready --timeout=120s || return 1
-  helm upgrade --install approver-policy oci://quay.io/jetstack/charts/cert-manager-approver-policy \
+  "${WORK_DIR}/linux-amd64/helm" upgrade --install approver-policy oci://quay.io/jetstack/charts/cert-manager-approver-policy \
     --version v0.28.0 -n cert-manager --wait --timeout 10m >/dev/null || return 1
   kubectl apply -f "$fixture/policies.yaml" >/dev/null || return 1
   local policy
@@ -65,7 +65,7 @@ YAML
     -p '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--controllers=*,-certificaterequests-approver"}]' >/dev/null || return 1
   kubectl -n cert-manager rollout status deploy/cert-manager --timeout=240s || return 1
   staging_verify_workload_approval "$fixture" || return 1
-  export MCP_WORKLOAD_ISSUER_APPROVAL_ACK=true
+  staging_state_set MCP_WORKLOAD_ISSUER_APPROVAL_ACK true
 }
 
 staging_verify_workload_approval() {

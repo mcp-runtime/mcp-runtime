@@ -191,7 +191,6 @@ install_dependencies() {
   curl --retry 5 --retry-all-errors -fsSL https://get.helm.sh/helm-v3.22.1-linux-amd64.tar.gz -o "${WORK_DIR}/helm.tar.gz"
   (cd "${WORK_DIR}" && echo '896cf63684a42a723d61c980369d6e588330927deb13676ca0d85006dd6da0ea  helm.tar.gz' | sha256sum -c -)
   tar -xzf "${WORK_DIR}/helm.tar.gz" -C "${WORK_DIR}" linux-amd64/helm
-  export PATH="${WORK_DIR}/linux-amd64:${PATH}"
   docker info >/dev/null 2>&1 || fail "the Docker daemon is not running"
   docker version --format 'docker {{.Server.Version}}'
   docker buildx version || log "docker buildx is unavailable; setup falls back to docker build"
