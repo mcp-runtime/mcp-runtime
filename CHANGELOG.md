@@ -43,6 +43,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Fixed
 
+- Recent workspace activity stays in a labelled, keyboard-focusable scroll region on narrow screens instead of widening the page. Disposable Staging now checks member, owner and administrator workspace journeys in headless Chromium before teardown ([#542](https://github.com/mcp-runtime/mcp-runtime/issues/542)).
 - Runtime server details select latest-session metadata by the live MCPServer UID, excluding sessions and tool names from a deleted predecessor or unlabelled historical rows ([#291](https://github.com/mcp-runtime/mcp-runtime/issues/291)).
 - Failed QA E2E rollout and MCPServer readiness waits now attach bounded, redacted operator logs, server conditions, workload readiness, and Warning Events to artifacts. Collection is guarded by the explicit disposable Kind context and reports missing access as a collection gap ([#763](https://github.com/mcp-runtime/mcp-runtime/issues/763)).
 - Deployment warning Events are read through a bounded, uncached namespace request, preventing diagnostics from blocking all reconciles on an unauthorized cluster-wide Event informer. Event attribution uses pod UIDs when available ([#757](https://github.com/mcp-runtime/mcp-runtime/pull/757)).
