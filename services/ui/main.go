@@ -5,7 +5,6 @@ import (
 	"crypto/hmac"
 	"embed"
 	"encoding/json"
-	"io"
 	"log"
 	"net"
 	"net/http"
@@ -21,6 +20,7 @@ import (
 
 	"mcp-ui/internal/assets"
 	"mcp-ui/internal/auth"
+	uiproxy "mcp-ui/internal/proxy"
 	"mcp-ui/internal/session"
 
 	"mcp-runtime/pkg/mcpdefaults"
@@ -86,10 +86,11 @@ type loginClientState struct {
 }
 
 var (
-	loginAttempts  = newLoginAttemptTracker(time.Now)
-	sessions       = newUISessionStore(time.Now)
-	oidcLoginHook  func(context.Context, string, string) (sessionPrincipal, string, time.Time, error)
-	authHTTPClient = &http.Client{Timeout: 10 * time.Second}
+	loginAttempts          = newLoginAttemptTracker(time.Now)
+	sessions               = newUISessionStore(time.Now)
+	oidcLoginHook          func(context.Context, string, string) (sessionPrincipal, string, time.Time, error)
+	authHTTPClient         = &http.Client{Timeout: 10 * time.Second}
+	sessionProxyHTTPClient = uiproxy.NewHTTPClient()
 )
 
 // main initializes and starts the MCP Runtime UI server.
@@ -213,20 +214,20 @@ func newMux(apiBase, apiUpstream, apiKey, apiKeys, adminAPIKeys string) (*http.S
 	parsedAdminAPIKeys := parseAPIKeyList(adminAPIKeys)
 	mux.HandleFunc("/auth/admin-check", handleAdminCheck(sessions, parsedAPIKeys, parsedAdminAPIKeys, legacyAdminAPIKeyFallbackEnabled()))
 
-	runtimeBase, err := parseRuntimeUpstream(serviceutil.EnvOr("RUNTIME_UPSTREAM", defaultRuntimeUpstream))
+	runtimeBase, err := uiproxy.ParseUpstream(serviceutil.EnvOr("RUNTIME_UPSTREAM", uiproxy.DefaultRuntimeUpstream))
 	if err != nil {
 		return nil, err
 	}
-	analyticsBase, err := parseRuntimeUpstream(serviceutil.EnvOr("ANALYTICS_UPSTREAM", defaultAnalyticsUpstream))
+	analyticsBase, err := uiproxy.ParseUpstream(serviceutil.EnvOr("ANALYTICS_UPSTREAM", uiproxy.DefaultAnalyticsUpstream))
 	if err != nil {
 		return nil, err
 	}
-	platformBase, err := parseRuntimeUpstream(apiUpstream)
+	platformBase, err := uiproxy.ParseUpstream(apiUpstream)
 	if err != nil {
 		return nil, err
 	}
-	mux.Handle(uiSessionAPIPrefix+"/", newSessionProxyWithUpstreams(platformBase, runtimeBase, analyticsBase, sessions))
-	mux.Handle(publicCatalogAPIPrefix+"/", newPublicCatalogProxy(runtimeBase, platformMode == "public"))
+	mux.Handle(uiproxy.SessionAPIPrefix+"/", uiproxy.NewSessionProxy(platformBase, runtimeBase, analyticsBase, sessions, sessionProxyHTTPClient))
+	mux.Handle(uiproxy.PublicCatalogAPIPrefix+"/", uiproxy.NewPublicCatalogProxy(runtimeBase, platformMode == "public", sessionProxyHTTPClient))
 
 	mux.Handle("/", assets.Handler{Files: staticFS, RewriteHTML: func(data []byte) []byte { return prefixAssetHTML(data, routes.PlatformPrefix()) }})
 	return mountPublicUI(mux, routes, platformBase), nil
@@ -363,14 +364,6 @@ func handleLogin(apiKey, upstreamAPIKey, apiUpstream string, store *uiSessionSto
 			"csrf_token":    sess.CSRFToken,
 		})
 	}
-}
-
-func drainAndClose(body io.ReadCloser) {
-	if body == nil {
-		return
-	}
-	_, _ = io.Copy(io.Discard, body)
-	_ = body.Close()
 }
 
 const loginClientUnknownIP = platformauth.UnknownRequestIP

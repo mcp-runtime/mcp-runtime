@@ -1,4 +1,4 @@
-package main
+package proxy
 
 import (
 	"io"
@@ -52,7 +52,7 @@ func TestSessionProxyWriteRequiresCSRFToken(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/ui/v1/user/api-keys", strings.NewReader(`{"name":"k"}`))
 		req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: sess.ID})
 		if token != "" {
-			req.Header.Set(csrfHeaderName, token)
+			req.Header.Set(CSRFHeaderName, token)
 		}
 		rec := httptest.NewRecorder()
 		proxy.ServeHTTP(rec, req)
@@ -71,7 +71,7 @@ func TestSessionProxyWriteWithValidCSRFReachesUpstream(t *testing.T) {
 		gotMethod = r.Method
 		gotPath = r.URL.Path
 		gotAuth = r.Header.Get("authorization")
-		gotCSRF = r.Header.Get(csrfHeaderName)
+		gotCSRF = r.Header.Get(CSRFHeaderName)
 		gotContentType = r.Header.Get("content-type")
 		raw, _ := io.ReadAll(r.Body)
 		gotBody = string(raw)
@@ -85,7 +85,7 @@ func TestSessionProxyWriteWithValidCSRFReachesUpstream(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/ui/v1/user/api-keys", strings.NewReader(`{"name":"laptop"}`))
 	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: sess.ID})
-	req.Header.Set(csrfHeaderName, sess.CSRFToken)
+	req.Header.Set(CSRFHeaderName, sess.CSRFToken)
 	req.Header.Set("content-type", "application/json")
 	rec := httptest.NewRecorder()
 	proxy.ServeHTTP(rec, req)
@@ -126,7 +126,7 @@ func TestSessionProxyDeleteWithValidCSRF(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/ui/v1/user/api-keys/uk_abc", nil)
 	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: sess.ID})
-	req.Header.Set(csrfHeaderName, sess.CSRFToken)
+	req.Header.Set(CSRFHeaderName, sess.CSRFToken)
 	rec := httptest.NewRecorder()
 	proxy.ServeHTTP(rec, req)
 
@@ -149,7 +149,7 @@ func TestSessionProxyWriteRejectsCrossOrigin(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/ui/v1/user/api-keys", strings.NewReader(`{"name":"k"}`))
 	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: sess.ID})
 	// Even with the correct token, a foreign Origin is refused.
-	req.Header.Set(csrfHeaderName, sess.CSRFToken)
+	req.Header.Set(CSRFHeaderName, sess.CSRFToken)
 	req.Header.Set("origin", "https://evil.example")
 	rec := httptest.NewRecorder()
 	proxy.ServeHTTP(rec, req)
@@ -187,7 +187,7 @@ func TestSessionProxyWriteRejectsNonAllowlistedPath(t *testing.T) {
 	// A read-allowlisted path with a valid token still cannot be written.
 	req := httptest.NewRequest(http.MethodPost, "/api/ui/v1/admin/operations", strings.NewReader(`{}`))
 	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: sess.ID})
-	req.Header.Set(csrfHeaderName, sess.CSRFToken)
+	req.Header.Set(CSRFHeaderName, sess.CSRFToken)
 	rec := httptest.NewRecorder()
 	proxy.ServeHTTP(rec, req)
 
