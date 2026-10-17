@@ -18,6 +18,56 @@ type fakeSessionStore struct {
 	item       sessionstate.Session
 	changesErr error
 	calls      int
+	enrollment []string
+}
+
+func (s *fakeSessionStore) CompleteSessionEnrollment(_ context.Context, namespace, name, uid string) error {
+	s.calls++
+	s.enrollment = []string{"complete", namespace, name, uid}
+	return s.changesErr
+}
+
+func (s *fakeSessionStore) DeletePendingSession(_ context.Context, namespace, name, uid, humanID string) error {
+	s.calls++
+	s.enrollment = []string{"cleanup", namespace, name, uid, humanID}
+	return s.changesErr
+}
+
+func TestEnrollmentMutationsRequireControlAuthenticationAndImmutableIdentity(t *testing.T) {
+	for _, tc := range []struct {
+		method, path, body, token string
+		want                      int
+		operation                 string
+	}{
+		{"PATCH", "/tenant/sess/enrollment", `{"uid":"session-uid"}`, "", 401, ""},
+		{"PATCH", "/tenant/sess/enrollment", `{}`, "control", 400, ""},
+		{"PATCH", "/tenant/sess/enrollment", `{"uid":"session-uid","revoked":false}`, "control", 400, ""},
+		{"PATCH", "/tenant/sess/enrollment", `{"uid":"session-uid"}`, "control", 204, "complete"},
+		{"DELETE", "/tenant/sess/enrollment?uid=session-uid", "", "control", 400, ""},
+		{"DELETE", "/tenant/sess/enrollment?uid=session-uid&human_id=owner", "", "control", 204, "cleanup"},
+	} {
+		t.Run(tc.method+tc.path+tc.token+tc.body, func(t *testing.T) {
+			store := &fakeSessionStore{}
+			mux := http.NewServeMux()
+			Handler{Token: "control", Store: store}.RegisterAccess(mux)
+			req := httptest.NewRequest(tc.method, sessionstate.AccessPath+tc.path, strings.NewReader(tc.body))
+			if tc.token != "" {
+				req.Header.Set("Authorization", "Bearer "+tc.token)
+			}
+			out := httptest.NewRecorder()
+			mux.ServeHTTP(out, req)
+			if out.Code != tc.want {
+				t.Fatalf("status=%d body=%s", out.Code, out.Body.String())
+			}
+			if tc.operation == "" {
+				if store.calls != 0 {
+					t.Fatal("invalid mutation reached store")
+				}
+			} else if len(store.enrollment) < 4 || store.enrollment[0] != tc.operation || store.enrollment[3] != "session-uid" {
+				t.Fatalf("mutation=%v", store.enrollment)
+			}
+		})
+	}
 }
 
 func (s *fakeSessionStore) SessionSnapshot(_ context.Context, server sessionstate.Server) (sessionstate.Snapshot, error) {

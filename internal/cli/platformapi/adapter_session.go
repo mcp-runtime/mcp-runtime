@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -49,6 +51,69 @@ type AdapterCertificate struct {
 	CABundle    string    `json:"caBundle"`
 	SPIFFEID    string    `json:"spiffeID"`
 	ExpiresAt   time.Time `json:"expiresAt"`
+}
+
+// AdapterPreflightRequest asks whether the selected server is ready for
+// session-bound client-certificate enrollment. It has no side effects.
+type AdapterPreflightRequest struct {
+	ServerName string `json:"serverName"`
+	Namespace  string `json:"namespace,omitempty"`
+	AgentID    string `json:"agentID"`
+}
+
+type AdapterPreflight struct {
+	Ready               bool   `json:"ready"`
+	AdapterCertificates bool   `json:"adapterCertificatesEnabled"`
+	Issuer              string `json:"issuer,omitempty"`
+	IssuerReady         bool   `json:"issuerReady"`
+	TrustDomain         string `json:"trustDomain,omitempty"`
+	RouteEligible       bool   `json:"routeEligible"`
+	RouteReady          bool   `json:"routeReady"`
+	Reason              string `json:"reason,omitempty"`
+}
+
+func (c *PlatformClient) PreflightAdapter(ctx context.Context, req AdapterPreflightRequest) (AdapterPreflight, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return AdapterPreflight{}, fmt.Errorf("marshal request: %w", err)
+	}
+	resp, err := c.do(ctx, http.MethodPost, "/runtime/adapter/preflight", "", bytes.NewReader(body))
+	if err != nil {
+		return AdapterPreflight{}, err
+	}
+	defer resp.Body.Close()
+	respBody, err := readBody(io.LimitReader(resp.Body, maxAPIBodyRead))
+	if err != nil {
+		return AdapterPreflight{}, err
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return AdapterPreflight{}, httpAPIError(resp.StatusCode, respBody)
+	}
+	var result AdapterPreflight
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return AdapterPreflight{}, fmt.Errorf("decode adapter preflight: %w", err)
+	}
+	return result, nil
+}
+
+// CleanupAdapterSession deletes a newly-created, still-pending enrollment
+// session after certificate issuance fails. The server verifies ownership and
+// refuses to delete reused or completed sessions.
+func (c *PlatformClient) CleanupAdapterSession(ctx context.Context, namespace, session string) error {
+	path := "/runtime/adapter/sessions/" + url.PathEscape(strings.TrimSpace(namespace)) + "/" + url.PathEscape(strings.TrimSpace(session))
+	resp, err := c.do(ctx, http.MethodDelete, path, "", nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	respBody, err := readBody(io.LimitReader(resp.Body, maxAPIBodyRead))
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return httpAPIError(resp.StatusCode, respBody)
+	}
+	return nil
 }
 
 // CreateAdapterSession asks the platform to issue (or reuse) an MCPAgentSession

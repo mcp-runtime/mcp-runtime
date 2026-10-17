@@ -51,6 +51,8 @@
   {"service": "runtime-api", "path": "/api/v1/runtime/sessions", "method": "GET", "role": "anon", "expect": 401},
   {"service": "runtime-api", "path": "/api/v1/runtime/sessions/default/demo", "method": "GET", "role": "anon", "expect": 401},
   {"service": "runtime-api", "path": "/api/v1/runtime/adapter/sessions", "method": "POST", "role": "anon", "expect": 401},
+  {"service": "runtime-api", "path": "/api/v1/runtime/adapter/sessions/default/demo", "method": "DELETE", "role": "anon", "expect": 401},
+  {"service": "runtime-api", "path": "/api/v1/runtime/adapter/preflight", "method": "POST", "role": "anon", "expect": 401},
   {"service": "runtime-api", "path": "/api/v1/runtime/adapter/certificates", "method": "POST", "role": "anon", "expect": 401},
   {"service": "runtime-api", "path": "/api/v1/runtime/registry/push", "method": "POST", "role": "anon", "expect": 401},
   {"service": "runtime-api", "path": "/api/v1/dashboard/summary", "method": "GET", "role": "anon", "expect": 401},

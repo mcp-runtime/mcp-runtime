@@ -46,6 +46,28 @@ func (c *fakeSessionClient) DeleteSession(context.Context, string, string) error
 	return c.err
 }
 
+func (c *fakeSessionClient) CompleteSessionEnrollment(_ context.Context, namespace, name, uid string) error {
+	if c.row.Namespace != namespace || string(c.row.Binding.Name) != name {
+		return sessionstate.ErrNotFound
+	}
+	if c.row.UID != uid || c.row.Binding.Revoked {
+		return sessionstate.ErrConflict
+	}
+	delete(c.row.Annotations, sessionstate.AdapterEnrollmentPendingAnnotation)
+	return c.err
+}
+
+func (c *fakeSessionClient) DeletePendingSession(_ context.Context, namespace, name, uid, humanID string) error {
+	if c.row.Namespace != namespace || string(c.row.Binding.Name) != name {
+		return sessionstate.ErrNotFound
+	}
+	if c.row.UID != uid || string(c.row.Binding.HumanID) != humanID || c.row.Annotations[sessionstate.AdapterEnrollmentPendingAnnotation] != "true" {
+		return sessionstate.ErrConflict
+	}
+	c.row = sessionstate.Session{}
+	return c.err
+}
+
 func TestPlatformSessionBackendPersistsWithoutKubernetesState(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := mcpv1alpha1.AddToScheme(scheme); err != nil {

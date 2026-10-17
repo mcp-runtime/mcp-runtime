@@ -19,6 +19,15 @@ on their own listener, and the service's sync port has no ingress route. The
 platform NetworkPolicy permits tenant gateway pods only on `8085`; `8080`
 accepts platform peers and the ingress controller. Operator gateway egress
 and projected token mounting are delivered by the migration PR.
+
+The control listener also provides `PATCH/DELETE
+/internal/access/sessions/{namespace}/{name}/enrollment`. Completion checks the
+immutable session UID, expiry, active agent and current revocation under the
+session-state lock and removes only pending metadata. Cleanup additionally
+checks the owner and that enrollment is still pending before deleting and
+publishing its tombstone. Neither operation accepts replacement authorization
+fields. Runtime-api uses these mutations after signing or failed enrollment;
+using a full session upsert here would undo concurrent revocation.
 Ingress-controller access on `8080` matches the bundled Traefik's `app: traefik`
 label and Helm/k3s Traefik's `app.kubernetes.io/name: traefik` label, including
 controllers outside the `traefik` namespace. This permits public API routing

@@ -136,6 +136,12 @@ func (rr runtimeRoutes) registerRoutes(mux *http.ServeMux) {
 	rr.mount("/runtime/adapter/sessions", rr.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		runtimehandlers.HandleAdapterSession(accessService, w, r)
 	})))
+	rr.mount("/runtime/adapter/sessions/", rr.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		runtimehandlers.HandleAdapterSessionItemPath(accessService, w, r)
+	})))
+	rr.mount("/runtime/adapter/preflight", rr.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		runtimehandlers.HandleAdapterPreflight(accessService, w, r)
+	})))
 	rr.mount("/runtime/adapter/certificates", rr.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		runtimehandlers.HandleAdapterCertificate(accessService, w, r)
 	})))

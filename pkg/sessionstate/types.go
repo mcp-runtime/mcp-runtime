@@ -10,13 +10,14 @@ import (
 )
 
 const (
-	GatewayAudience    = "mcp-runtime-gateway"
-	GatewayPort        = 8085
-	GatewayPath        = "/internal/gateway/v1/sessions"
-	AccessPath         = "/internal/access/sessions"
-	DefaultStaleWindow = 10 * time.Minute
-	PollInterval       = 500 * time.Millisecond
-	ChangeLimit        = 1000
+	GatewayAudience                    = "mcp-runtime-gateway"
+	GatewayPort                        = 8085
+	GatewayPath                        = "/internal/gateway/v1/sessions"
+	AccessPath                         = "/internal/access/sessions"
+	DefaultStaleWindow                 = 10 * time.Minute
+	PollInterval                       = 500 * time.Millisecond
+	ChangeLimit                        = 1000
+	AdapterEnrollmentPendingAnnotation = "mcpruntime.org/adapter-enrollment-pending"
 )
 
 var (
@@ -98,6 +99,11 @@ type Changes struct {
 type RevokeRequest struct {
 	Revoked bool   `json:"revoked"`
 	Cause   string `json:"cause,omitempty"`
+}
+
+// EnrollmentRequest identifies the immutable session whose enrollment completes.
+type EnrollmentRequest struct {
+	UID string `json:"uid"`
 }
 
 type BulkRevokeRequest struct {
