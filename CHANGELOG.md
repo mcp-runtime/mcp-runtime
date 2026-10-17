@@ -43,6 +43,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Fixed
 
+- Production workload identity requires a ready, dedicated enterprise issuer and rejects the shared bundled registry CA, aliased/copied signing keys, and unhealthy CA-backed issuers before TLS provisioning. Migrate by preserving registry trust and selecting an independently managed workload issuer; the bundled workload root remains available in test mode ([#535](https://github.com/mcp-runtime/mcp-runtime/issues/535)).
 - Gateways reload mounted client-CA trust during workload-root rollover, including overlapping roots and removal of retired roots from resumed TLS handshakes. Invalid replacement bundles retain the last validated trust state ([#535](https://github.com/mcp-runtime/mcp-runtime/issues/535)).
 
 - Recent workspace activity stays in a labelled, keyboard-focusable scroll region on narrow screens instead of widening the page. Disposable Staging now checks member, owner and administrator workspace journeys in headless Chromium before teardown ([#542](https://github.com/mcp-runtime/mcp-runtime/issues/542)).

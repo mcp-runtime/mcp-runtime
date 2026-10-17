@@ -43,7 +43,8 @@ func readClientCATrust(file string) (*clientCATrust, error) {
 		return nil, errors.New("client CA bundle exceeds its read bound")
 	}
 	pool := x509.NewCertPool()
-	remaining, count := bytes.TrimSpace(data), 0
+	remaining, count, usable := bytes.TrimSpace(data), 0, 0
+	now := time.Now()
 	for len(remaining) > 0 {
 		if !bytes.HasPrefix(remaining, []byte("-----BEGIN CERTIFICATE-----")) {
 			return nil, errors.New("client CA bundle must contain only public certificates")
@@ -58,10 +59,16 @@ func readClientCATrust(file string) (*clientCATrust, error) {
 		}
 		pool.AddCert(cert)
 		count++
+		if !now.Before(cert.NotBefore) && now.Before(cert.NotAfter) {
+			usable++
+		}
 		remaining = bytes.TrimSpace(rest)
 	}
 	if count == 0 {
 		return nil, errors.New("client CA bundle contains no certificates")
+	}
+	if usable == 0 {
+		return nil, errors.New("client CA bundle contains no currently valid signing CA")
 	}
 	return &clientCATrust{pool: pool, hash: sha256.Sum256(data)}, nil
 }

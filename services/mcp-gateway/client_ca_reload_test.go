@@ -28,12 +28,16 @@ type rolloverCA struct {
 }
 
 func makeRolloverCA(t *testing.T, name string) rolloverCA {
+	return makeRolloverCAWithValidity(t, name, time.Now().Add(-time.Hour), time.Now().Add(time.Hour))
+}
+
+func makeRolloverCAWithValidity(t *testing.T, name string, notBefore, notAfter time.Time) rolloverCA {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
-	template := &x509.Certificate{SerialNumber: big.NewInt(time.Now().UnixNano()), Subject: pkix.Name{CommonName: name}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign}
+	template := &x509.Certificate{SerialNumber: big.NewInt(time.Now().UnixNano()), Subject: pkix.Name{CommonName: name}, NotBefore: notBefore, NotAfter: notAfter, IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign}
 	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
 	if err != nil {
 		t.Fatal(err)
@@ -154,7 +158,9 @@ func TestClientCATrustRejectsInvalidReplacementAndRetainsLastGood(t *testing.T) 
 		t.Fatal(err)
 	}
 	original := reloader.trust.Load()
-	for name, data := range map[string][]byte{"empty": nil, "garbage": []byte("not a certificate"), "private": append(append([]byte{}, ca.pem...), []byte("-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----\n")...), "prefix": append([]byte("unexpected private field\n"), ca.pem...), "oversized": []byte(strings.Repeat("x", (1<<20)+1))} {
+	expired := makeRolloverCAWithValidity(t, "expired", time.Now().Add(-2*time.Hour), time.Now().Add(-time.Hour))
+	future := makeRolloverCAWithValidity(t, "future", time.Now().Add(time.Hour), time.Now().Add(2*time.Hour))
+	for name, data := range map[string][]byte{"expired": expired.pem, "not-yet-valid": future.pem, "empty": nil, "garbage": []byte("not a certificate"), "private": append(append([]byte{}, ca.pem...), []byte("-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----\n")...), "prefix": append([]byte("unexpected private field\n"), ca.pem...), "oversized": []byte(strings.Repeat("x", (1<<20)+1))} {
 		t.Run(name, func(t *testing.T) {
 			writeRolloverTrust(t, file, data)
 			if err := reloader.reload(); err == nil {
@@ -165,6 +171,11 @@ func TestClientCATrustRejectsInvalidReplacementAndRetainsLastGood(t *testing.T) 
 			}
 		})
 	}
+	writeRolloverTrust(t, file, expired.pem, ca.pem)
+	if err := reloader.reload(); err != nil {
+		t.Fatalf("valid root overlapping an expired predecessor rejected: %v", err)
+	}
+	writeRolloverTrust(t, file, future.pem)
 	if _, _, err := gatewayTLSConfig(file); err == nil {
 		t.Fatal("invalid initial trust did not fail startup")
 	}
