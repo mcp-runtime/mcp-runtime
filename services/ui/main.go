@@ -3,9 +3,7 @@ package main
 import (
 	"context"
 	"crypto/hmac"
-	"crypto/rand"
 	"embed"
-	"encoding/base64"
 	"encoding/json"
 	"io"
 	"log"
@@ -23,6 +21,7 @@ import (
 
 	"mcp-ui/internal/assets"
 	"mcp-ui/internal/auth"
+	"mcp-ui/internal/session"
 
 	"mcp-runtime/pkg/mcpdefaults"
 	"mcp-runtime/pkg/platformauth"
@@ -35,8 +34,8 @@ import (
 var staticFS embed.FS
 
 const (
-	sessionCookieName = "mcp_ui_session"
-	sessionDuration   = 8 * time.Hour
+	sessionCookieName = session.CookieName
+	sessionDuration   = session.Duration
 
 	defaultLoginRateLimitCapacity = 10
 	defaultLoginRateLimitRefill   = time.Minute
@@ -61,18 +60,13 @@ var (
 	passwordLoginHook      func(context.Context, string, string, string) (sessionPrincipal, string, time.Time, error)
 )
 
-type sessionPrincipal = auth.Principal
+type sessionPrincipal = session.Principal
 
-type uiSession struct {
-	ID                 string
-	ExpiresAt          time.Time
-	Principal          sessionPrincipal
-	UpstreamAuthHeader string
-	UpstreamAPIKey     string
-	// CSRFToken is the session-bound synchroniser token. It is handed to
-	// same-origin JavaScript and required back on every state-changing
-	// request; see csrf.go.
-	CSRFToken string
+type uiSession = session.Session
+type uiSessionStore = session.Store
+
+func newUISessionStore(now func() time.Time) *uiSessionStore {
+	return session.NewStore(now)
 }
 
 type loginAttemptTracker struct {
@@ -299,7 +293,7 @@ func handleLogin(apiKey, upstreamAPIKey, apiUpstream string, store *uiSessionSto
 				serviceutil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 				return
 			}
-			sess, err = store.createSession(r.Context(), uiSession{
+			sess, err = store.Create(r.Context(), uiSession{
 				Principal:          p,
 				UpstreamAuthHeader: "Bearer " + token,
 				ExpiresAt:          expiresAt,
@@ -325,7 +319,7 @@ func handleLogin(apiKey, upstreamAPIKey, apiUpstream string, store *uiSessionSto
 				serviceutil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 				return
 			}
-			sess, err = store.createSession(r.Context(), uiSession{
+			sess, err = store.Create(r.Context(), uiSession{
 				Principal:          p,
 				UpstreamAuthHeader: "Bearer " + token,
 				ExpiresAt:          expiresAt,
@@ -344,7 +338,7 @@ func handleLogin(apiKey, upstreamAPIKey, apiUpstream string, store *uiSessionSto
 				serviceutil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 				return
 			}
-			sess, err = store.createSession(r.Context(), uiSession{
+			sess, err = store.Create(r.Context(), uiSession{
 				Principal: sessionPrincipal{
 					Role:     "admin",
 					AuthType: "ui_api_key",
@@ -529,7 +523,7 @@ func handleLogout(store *uiSessionStore) http.HandlerFunc {
 			return
 		}
 		if cookie, err := r.Cookie(sessionCookieName); err == nil {
-			store.delete(strings.TrimSpace(cookie.Value))
+			store.Delete(strings.TrimSpace(cookie.Value))
 		}
 		http.SetCookie(w, expiredSessionCookie(r))
 		serviceutil.WriteJSON(w, http.StatusOK, map[string]bool{"authenticated": false})
@@ -547,7 +541,7 @@ func handleAdminCheck(store *uiSessionStore, apiKeys, adminAPIKeys []string, leg
 		gateKeys = apiKeys
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
-		if sess, ok := store.sessionFromRequest(r); ok && strings.EqualFold(sess.Principal.Role, "admin") {
+		if sess, ok := store.FromRequest(r); ok && strings.EqualFold(sess.Principal.Role, "admin") {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
@@ -586,7 +580,7 @@ func parseAPIKeyList(s string) []string {
 
 func handleStatus(store *uiSessionStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		sess, ok := store.sessionFromRequest(r)
+		sess, ok := store.FromRequest(r)
 		if !ok {
 			serviceutil.WriteJSON(w, http.StatusOK, map[string]any{"authenticated": false})
 			return
@@ -627,14 +621,6 @@ func expiredSessionCookie(r *http.Request) *http.Cookie {
 		Secure:   secureCookie(r),
 		SameSite: http.SameSiteStrictMode,
 	}
-}
-
-func randomURLToken(rawBytes int) (string, error) {
-	b := make([]byte, rawBytes)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
 func validAPIKeyHeader(r *http.Request, keys []string) bool {
@@ -845,4 +831,15 @@ func legacyAdminAPIKeyFallbackEnabled() bool {
 		}
 	}
 	return strings.TrimSpace(os.Getenv("MCP_RUNTIME_TEST_MODE")) == "1"
+}
+
+// configureSessionStore installs the explicitly configured backend before mux
+// construction, so handlers share one store without package-owned process env.
+func configureSessionStore(ctx context.Context) error {
+	backend, err := session.NewBackend(ctx, os.Getenv("UI_SESSION_STORE"), os.Getenv("UI_SESSION_DATABASE_URL"), os.Getenv("UI_SESSION_ENCRYPTION_KEY"))
+	if err != nil {
+		return err
+	}
+	sessions = session.NewStoreWithBackend(backend, time.Now)
+	return nil
 }

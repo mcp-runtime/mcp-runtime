@@ -1,4 +1,4 @@
-package main
+package session
 
 import (
 	"bytes"
@@ -145,22 +145,22 @@ func (r *fakeRows) Next(dest []driver.Value) error {
 // Built at runtime so no secret-shaped literal lives in source.
 var testSessionKey = strings.Repeat("0123456789abcdef", 2)
 
-func newSharedStores(t *testing.T, now func() time.Time) (a, b *uiSessionStore, fake *fakeSessionDB) {
+func newSharedStores(t *testing.T, now func() time.Time) (a, b *Store, fake *fakeSessionDB) {
 	t.Helper()
 	db, fake := openFakeSessionDB(t)
-	mk := func() *uiSessionStore {
+	mk := func() *Store {
 		backend, err := newPostgresSessionBackend(context.Background(), db, testSessionKey)
 		if err != nil {
 			t.Fatal(err)
 		}
-		return newUISessionStoreWithBackend(backend, now)
+		return NewStoreWithBackend(backend, now)
 	}
 	return mk(), mk(), fake
 }
 
-func cookieRequest(sess uiSession) *http.Request {
+func cookieRequest(sess Session) *http.Request {
 	r := httptest.NewRequest(http.MethodGet, "/auth/status", nil)
-	r.AddCookie(&http.Cookie{Name: sessionCookieName, Value: sess.ID})
+	r.AddCookie(&http.Cookie{Name: CookieName, Value: sess.ID})
 	return r
 }
 
@@ -168,35 +168,25 @@ func TestSharedSessionVisibleAcrossReplicas(t *testing.T) {
 	now := time.Now()
 	podA, podB, _ := newSharedStores(t, func() time.Time { return now })
 
-	sess, err := podA.createSession(context.Background(), uiSession{
-		Principal:      sessionPrincipal{Role: "admin", Subject: "alice"},
+	sess, err := podA.Create(context.Background(), Session{
+		Principal:      Principal{Role: "admin", Subject: "alice"},
 		UpstreamAPIKey: "upstream-secret",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// status and admin-check served by a different replica than login.
-	rec := httptest.NewRecorder()
-	handleStatus(podB).ServeHTTP(rec, cookieRequest(sess))
-	if !strings.Contains(rec.Body.String(), `"authenticated":true`) || !strings.Contains(rec.Body.String(), sess.CSRFToken) {
-		t.Fatalf("replica B status = %s", rec.Body.String())
+	if visible, ok := podB.FromRequest(cookieRequest(sess)); !ok || visible.CSRFToken != sess.CSRFToken || visible.Principal.Role != "admin" {
+		t.Fatal("shared session cookie, principal or CSRF token not visible")
 	}
-	rec = httptest.NewRecorder()
-	handleAdminCheck(podB, nil, nil, false).ServeHTTP(rec, cookieRequest(sess))
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("replica B admin-check = %d", rec.Code)
-	}
-	got, ok := podB.get(sess.ID)
+	got, ok := podB.Get(sess.ID)
 	if !ok || got.UpstreamAPIKey != "upstream-secret" || got.Principal.Subject != "alice" {
 		t.Fatalf("replica B session = %+v ok=%v", got, ok)
 	}
 
 	// logout on replica B revokes it everywhere.
-	req := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
-	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: sess.ID})
-	handleLogout(podB).ServeHTTP(httptest.NewRecorder(), req)
-	if _, ok := podA.get(sess.ID); ok {
+	podB.Delete(sess.ID)
+	if _, ok := podA.Get(sess.ID); ok {
 		t.Fatal("session still valid on replica A after logout on B")
 	}
 }
@@ -205,19 +195,19 @@ func TestSharedSessionExpiryAndPurge(t *testing.T) {
 	now := time.Now()
 	clock := &now
 	podA, podB, fake := newSharedStores(t, func() time.Time { return *clock })
-	sess, err := podA.createSession(context.Background(), uiSession{ExpiresAt: now.Add(time.Minute)})
+	sess, err := podA.Create(context.Background(), Session{ExpiresAt: now.Add(time.Minute)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := podB.get(sess.ID); !ok {
+	if _, ok := podB.Get(sess.ID); !ok {
 		t.Fatal("expected live session")
 	}
 	later := now.Add(2 * time.Minute)
 	clock = &later
-	if _, ok := podB.get(sess.ID); ok {
+	if _, ok := podB.Get(sess.ID); ok {
 		t.Fatal("expired session accepted")
 	}
-	if _, err := podA.createSession(context.Background(), uiSession{ExpiresAt: later.Add(time.Minute)}); err != nil {
+	if _, err := podA.Create(context.Background(), Session{ExpiresAt: later.Add(time.Minute)}); err != nil {
 		t.Fatal(err)
 	}
 	fake.mu.Lock()
@@ -231,11 +221,11 @@ func TestSharedSessionExpiryAndPurge(t *testing.T) {
 func TestSharedSessionPayloadEncryptedAndBoundToID(t *testing.T) {
 	now := time.Now()
 	podA, podB, fake := newSharedStores(t, func() time.Time { return now })
-	s1, err := podA.createSession(context.Background(), uiSession{UpstreamAPIKey: "upstream-secret", UpstreamAuthHeader: "Bearer tok"})
+	s1, err := podA.Create(context.Background(), Session{UpstreamAPIKey: "upstream-secret", UpstreamAuthHeader: "Bearer tok"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	s2, err := podA.createSession(context.Background(), uiSession{})
+	s2, err := podA.Create(context.Background(), Session{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +241,7 @@ func TestSharedSessionPayloadEncryptedAndBoundToID(t *testing.T) {
 	row2.payload = row1.payload
 	fake.rows[s2.ID] = row2
 	fake.mu.Unlock()
-	if _, ok := podB.get(s2.ID); ok {
+	if _, ok := podB.Get(s2.ID); ok {
 		t.Fatal("swapped payload accepted")
 	}
 }
@@ -267,11 +257,11 @@ func TestSharedSessionWrongKeyRejected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sess, err := newUISessionStoreWithBackend(good, func() time.Time { return now }).createSession(context.Background(), uiSession{})
+	sess, err := NewStoreWithBackend(good, func() time.Time { return now }).Create(context.Background(), Session{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := newUISessionStoreWithBackend(bad, func() time.Time { return now }).get(sess.ID); ok {
+	if _, ok := NewStoreWithBackend(bad, func() time.Time { return now }).Get(sess.ID); ok {
 		t.Fatal("session decrypted with wrong key")
 	}
 }
@@ -279,33 +269,33 @@ func TestSharedSessionWrongKeyRejected(t *testing.T) {
 func TestSharedSessionBackendOutageFailsClosed(t *testing.T) {
 	now := time.Now()
 	podA, podB, fake := newSharedStores(t, func() time.Time { return now })
-	sess, err := podA.createSession(context.Background(), uiSession{Principal: sessionPrincipal{Role: "admin"}})
+	sess, err := podA.Create(context.Background(), Session{Principal: Principal{Role: "admin"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	fake.mu.Lock()
 	fake.failAll = true
 	fake.mu.Unlock()
-	if _, ok := podB.get(sess.ID); ok {
+	if _, ok := podB.Get(sess.ID); ok {
 		t.Fatal("session accepted while backend down")
 	}
-	if _, err := podA.createSession(context.Background(), uiSession{}); err == nil {
+	if _, err := podA.Create(context.Background(), Session{}); err == nil {
 		t.Fatal("create should fail while backend down")
 	}
 }
 
 func TestMemoryBackendIsPerStore(t *testing.T) {
 	now := time.Now()
-	a := newUISessionStore(func() time.Time { return now })
-	b := newUISessionStore(func() time.Time { return now })
-	sess, err := a.createSession(context.Background(), uiSession{})
+	a := NewStore(func() time.Time { return now })
+	b := NewStore(func() time.Time { return now })
+	sess, err := a.Create(context.Background(), Session{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := a.get(sess.ID); !ok {
+	if _, ok := a.Get(sess.ID); !ok {
 		t.Fatal("memory store lost session")
 	}
-	if _, ok := b.get(sess.ID); ok {
+	if _, ok := b.Get(sess.ID); ok {
 		t.Fatal("memory stores must not share sessions")
 	}
 }
@@ -313,7 +303,7 @@ func TestMemoryBackendIsPerStore(t *testing.T) {
 func TestBuildSessionBackendConfig(t *testing.T) {
 	ctx := context.Background()
 	for _, kind := range []string{"", "memory", " MEMORY "} {
-		b, err := buildSessionBackend(ctx, kind, "", "")
+		b, err := NewBackend(ctx, kind, "", "")
 		if err != nil {
 			t.Fatalf("%q: %v", kind, err)
 		}
@@ -321,10 +311,10 @@ func TestBuildSessionBackendConfig(t *testing.T) {
 			t.Fatalf("%q: backend = %T", kind, b)
 		}
 	}
-	if _, err := buildSessionBackend(ctx, "postgres", "", testSessionKey); err == nil {
+	if _, err := NewBackend(ctx, "postgres", "", testSessionKey); err == nil {
 		t.Fatal("postgres without DSN must fail")
 	}
-	if _, err := buildSessionBackend(ctx, "redis", "", ""); err == nil {
+	if _, err := NewBackend(ctx, "redis", "", ""); err == nil {
 		t.Fatal("unknown backend must fail")
 	}
 	db, _ := openFakeSessionDB(t)

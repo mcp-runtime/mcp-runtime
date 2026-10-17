@@ -19,7 +19,7 @@ func grafanaSessionProxy(platformBase, runtimeBase *url.URL, store *uiSessionSto
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Frame-Options", "DENY")
-		sess, ok := store.sessionFromRequest(r)
+		sess, ok := store.FromRequest(r)
 		if !ok {
 			serviceutil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 			return
