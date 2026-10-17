@@ -261,6 +261,10 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 		}
 	}
 
+	if err := ensureRuntimeKubernetesAPIEgressClientGo(); err != nil {
+		return err
+	}
+
 	if err := applyPlatformIngressIfConfigured(); err != nil {
 		return err
 	}
