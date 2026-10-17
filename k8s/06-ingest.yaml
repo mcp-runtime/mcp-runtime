@@ -97,6 +97,7 @@ spec:
           - name: ndots
             value: "3"
       securityContext:
+        fsGroup: 65532
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
