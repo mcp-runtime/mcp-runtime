@@ -20,6 +20,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Changed
 
+- Gateways compile immutable tool, session and subject-grant indexes when activating a validated policy, keeping lookups independent of unrelated policy entries and retaining the last valid snapshot after a failed reload ([#319](https://github.com/mcp-runtime/mcp-runtime/issues/319)).
+
 - Operator policy reconciliation looks up grants by their effective target server using a cache index, avoiding copies and scans of unrelated grants while preserving cross-namespace references. Runtime sessions remain platform-owned ([#657](https://github.com/mcp-runtime/mcp-runtime/issues/657)).
 
 ### Fixed
