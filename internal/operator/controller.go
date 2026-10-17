@@ -332,6 +332,15 @@ func (r *MCPServerReconciler) reconcileResources(ctx context.Context, mcpServer 
 		r.updateStatus(ctx, mcpServer, "Error", fmt.Sprintf("Failed to reconcile Traefik client Certificate: %v", err), resourceReadiness{})
 		return wrappedErr
 	}
+	// Establish the workload ingress boundary before creating any new serving
+	// pod or ingress route, including non-adapter and standalone servers.
+	if err := r.reconcileMTLSNetworkPolicy(ctx, mcpServer); err != nil {
+		contextMap["resource"] = "networkpolicy"
+		wrappedErr := wrapOperatorError(err, "Failed to reconcile workload ingress NetworkPolicy", contextMap)
+		logOperatorError(logger, wrappedErr, "Failed to reconcile workload ingress NetworkPolicy")
+		r.updateStatus(ctx, mcpServer, "Error", fmt.Sprintf("Failed to reconcile workload ingress NetworkPolicy: %v", err), resourceReadiness{})
+		return wrappedErr
+	}
 	if err := r.reconcileAnalyticsCA(ctx, mcpServer); err != nil {
 		return fmt.Errorf("reconcile analytics trust: %w", err)
 	}
@@ -377,13 +386,6 @@ func (r *MCPServerReconciler) reconcileResources(ctx context.Context, mcpServer 
 		wrappedErr := wrapOperatorError(err, "Failed to reconcile Ingress", contextMap)
 		logOperatorError(logger, wrappedErr, "Failed to reconcile Ingress")
 		r.updateStatus(ctx, mcpServer, "Error", fmt.Sprintf("Failed to reconcile Ingress: %v", err), resourceReadiness{})
-		return wrappedErr
-	}
-	if err := r.reconcileMTLSNetworkPolicy(ctx, mcpServer); err != nil {
-		contextMap["resource"] = "networkpolicy"
-		wrappedErr := wrapOperatorError(err, "Failed to reconcile mTLS NetworkPolicy", contextMap)
-		logOperatorError(logger, wrappedErr, "Failed to reconcile mTLS NetworkPolicy")
-		r.updateStatus(ctx, mcpServer, "Error", fmt.Sprintf("Failed to reconcile mTLS NetworkPolicy: %v", err), resourceReadiness{})
 		return wrappedErr
 	}
 	return nil

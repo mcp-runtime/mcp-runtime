@@ -6,7 +6,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -28,7 +27,7 @@ func TestReconcileMTLSNetworkPolicy(t *testing.T) {
 
 	newServer := func() *mcpv1alpha1.MCPServer {
 		return &mcpv1alpha1.MCPServer{
-			ObjectMeta: metav1.ObjectMeta{Name: "secure-server", Namespace: "mcp-servers"},
+			ObjectMeta: metav1.ObjectMeta{Name: "secure-server", Namespace: "mcp-servers", UID: "server-uid"},
 			Spec: mcpv1alpha1.MCPServerSpec{
 				Image:   "example.com/secure-server",
 				Gateway: &mcpv1alpha1.GatewayConfig{Enabled: mcpv1alpha1.BoolPtr(true), Port: 8091},
@@ -79,15 +78,15 @@ func TestReconcileMTLSNetworkPolicy(t *testing.T) {
 			t.Fatalf("port transition replaced per-pod listener with candidate port: %#v", got)
 		}
 		metrics := np.Spec.Ingress[1]
-		if len(metrics.From) != 0 {
-			t.Fatalf("metrics rule must be open (no From), got %#v", metrics.From)
+		if len(metrics.From) != 1 || metrics.From[0].NamespaceSelector.MatchLabels["kubernetes.io/metadata.name"] != "mcp-observability" || metrics.From[0].PodSelector.MatchLabels["app"] != "prometheus" {
+			t.Fatalf("metrics rule must select the Prometheus peer, got %#v", metrics.From)
 		}
-		if len(metrics.Ports) != 1 || metrics.Ports[0].Port.IntValue() != DefaultGatewayMetricsPort {
-			t.Fatalf("metrics port = %#v, want %d", metrics.Ports, DefaultGatewayMetricsPort)
+		if len(metrics.Ports) != 1 || *metrics.Ports[0].Port != intstr.FromString("metrics") {
+			t.Fatalf("metrics port = %#v, want named metrics", metrics.Ports)
 		}
 	})
 
-	t.Run("absent when adapter certificates are disabled", func(t *testing.T) {
+	t.Run("also isolates gateways without adapter certificates", func(t *testing.T) {
 		server := newServer()
 		client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(server).Build()
 		r := MCPServerReconciler{
@@ -97,8 +96,11 @@ func TestReconcileMTLSNetworkPolicy(t *testing.T) {
 			t.Fatalf("reconcile: %v", err)
 		}
 		var np networkingv1.NetworkPolicy
-		if err := client.Get(context.Background(), key, &np); !apierrors.IsNotFound(err) {
-			t.Fatalf("expected NotFound with adapter certificates disabled, got %v", err)
+		if err := client.Get(context.Background(), key, &np); err != nil {
+			t.Fatalf("expected gateway policy without adapter certificates, got %v", err)
+		}
+		if len(np.Spec.Ingress[0].From) != 2 || *np.Spec.Ingress[0].Ports[0].Port != intstr.FromString("gateway") {
+			t.Fatalf("ordinary gateway policy=%#v", np.Spec.Ingress)
 		}
 	})
 }

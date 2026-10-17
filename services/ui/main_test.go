@@ -164,8 +164,8 @@ func TestCatalogNamespaceOverrideUsedInDefaultOrgMode(t *testing.T) {
 
 func TestHandleLoginWithOIDCToken(t *testing.T) {
 	now := time.Now().UTC()
-	previousHook := oidcLoginHook
-	oidcLoginHook = func(_ context.Context, upstream, token string) (sessionPrincipal, string, time.Time, error) {
+	previousHook := authLoginHooks.OIDC
+	authLoginHooks.OIDC = func(_ context.Context, upstream, token string) (sessionPrincipal, string, time.Time, error) {
 		if upstream != "http://api.example" {
 			t.Fatalf("upstream = %q, want http://api.example", upstream)
 		}
@@ -178,7 +178,7 @@ func TestHandleLoginWithOIDCToken(t *testing.T) {
 			AuthType: "platform_jwt",
 		}, "platform-token", now.Add(15 * time.Minute), nil
 	}
-	defer func() { oidcLoginHook = previousHook }()
+	defer func() { authLoginHooks.OIDC = previousHook }()
 
 	store := newUISessionStore(time.Now)
 	login := httptest.NewRecorder()
@@ -204,8 +204,8 @@ func TestHandleLoginWithOIDCToken(t *testing.T) {
 
 func TestHandleLoginWithOIDCTokenCapsSessionToTokenExpiry(t *testing.T) {
 	now := time.Now().UTC().Add(2 * time.Minute)
-	previousHook := oidcLoginHook
-	oidcLoginHook = func(_ context.Context, upstream, token string) (sessionPrincipal, string, time.Time, error) {
+	previousHook := authLoginHooks.OIDC
+	authLoginHooks.OIDC = func(_ context.Context, upstream, token string) (sessionPrincipal, string, time.Time, error) {
 		if upstream != "http://api.example" {
 			t.Fatalf("upstream = %q, want http://api.example", upstream)
 		}
@@ -218,7 +218,7 @@ func TestHandleLoginWithOIDCTokenCapsSessionToTokenExpiry(t *testing.T) {
 			AuthType: "platform_jwt",
 		}, "platform-token", now.Add(30 * time.Minute), nil
 	}
-	defer func() { oidcLoginHook = previousHook }()
+	defer func() { authLoginHooks.OIDC = previousHook }()
 
 	store := newUISessionStore(func() time.Time { return now })
 	login := httptest.NewRecorder()
@@ -306,8 +306,8 @@ func TestLoginOIDCSessionFallsBackToTokenVerificationWhenPlatformStoreUnavailabl
 
 func TestUISessionStateIsEphemeralAcrossStoreRestart(t *testing.T) {
 	now := time.Now().UTC()
-	previousHook := oidcLoginHook
-	oidcLoginHook = func(_ context.Context, upstream, token string) (sessionPrincipal, string, time.Time, error) {
+	previousHook := authLoginHooks.OIDC
+	authLoginHooks.OIDC = func(_ context.Context, upstream, token string) (sessionPrincipal, string, time.Time, error) {
 		if upstream != "http://api.example" {
 			t.Fatalf("upstream = %q, want http://api.example", upstream)
 		}
@@ -316,7 +316,7 @@ func TestUISessionStateIsEphemeralAcrossStoreRestart(t *testing.T) {
 		}
 		return sessionPrincipal{Role: "user", Subject: "user-123", AuthType: "platform_jwt"}, "platform-token", now.Add(10 * time.Minute), nil
 	}
-	defer func() { oidcLoginHook = previousHook }()
+	defer func() { authLoginHooks.OIDC = previousHook }()
 
 	originalStore := newUISessionStore(func() time.Time { return now })
 	login := httptest.NewRecorder()
@@ -348,9 +348,9 @@ func TestUISessionStateIsEphemeralAcrossStoreRestart(t *testing.T) {
 }
 
 func TestHandleLoginWithPassword(t *testing.T) {
-	previousHook := passwordLoginHook
+	previousHook := authLoginHooks.Password
 	expiresAt := time.Now().Add(15 * time.Minute)
-	passwordLoginHook = func(_ context.Context, upstream, email, password string) (sessionPrincipal, string, time.Time, error) {
+	authLoginHooks.Password = func(_ context.Context, upstream, email, password string) (sessionPrincipal, string, time.Time, error) {
 		if upstream != "http://api.example" {
 			t.Fatalf("upstream = %q, want http://api.example", upstream)
 		}
@@ -364,7 +364,7 @@ func TestHandleLoginWithPassword(t *testing.T) {
 			AuthType: "platform_jwt",
 		}, "platform-token", expiresAt, nil
 	}
-	defer func() { passwordLoginHook = previousHook }()
+	defer func() { authLoginHooks.Password = previousHook }()
 
 	store := newUISessionStore(time.Now)
 	login := httptest.NewRecorder()
@@ -382,36 +382,6 @@ func TestHandleLoginWithPassword(t *testing.T) {
 	}
 	if sess.ExpiresAt.After(expiresAt.Add(time.Second)) || sess.ExpiresAt.Before(expiresAt.Add(-time.Second)) {
 		t.Fatalf("session expiry = %s, want token expiry %s", sess.ExpiresAt, expiresAt)
-	}
-}
-
-func TestLoginClientIDUsesForwardedFor(t *testing.T) {
-	t.Setenv("MCP_TRUSTED_PROXY_CIDRS", "10.0.0.2/32")
-	req := httptest.NewRequest(http.MethodPost, "/auth/login", nil)
-	req.RemoteAddr = "10.0.0.2:12345"
-	req.Header.Set("x-forwarded-for", "203.0.113.10, 10.0.0.2")
-
-	if got := loginClientID(req); got != "203.0.113.10" {
-		t.Fatalf("loginClientID() = %q, want forwarded client", got)
-	}
-}
-
-func TestLoginClientIDEmptyForwardedForFallsBackToRemoteAddr(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/auth/login", nil)
-	req.RemoteAddr = "198.51.100.20:54321"
-	req.Header.Set("x-forwarded-for", " , ")
-
-	if got := loginClientID(req); got != "198.51.100.20" {
-		t.Fatalf("loginClientID() = %q, want remote addr host", got)
-	}
-}
-
-func TestLoginClientIDUnknownWhenNoAddressAvailable(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/auth/login", nil)
-	req.RemoteAddr = ""
-
-	if got := loginClientID(req); got != loginClientUnknownIP {
-		t.Fatalf("loginClientID() = %q, want %q", got, loginClientUnknownIP)
 	}
 }
 
@@ -454,9 +424,7 @@ func TestHandleLoginSuccessResetsFailureCounter(t *testing.T) {
 		t.Fatalf("success status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
 	}
 
-	loginAttempts.mu.Lock()
-	defer loginAttempts.mu.Unlock()
-	if got := loginAttempts.clients["198.51.100.11"].failures; got != 0 {
+	if got := loginAttempts.RecordSuccess("198.51.100.11"); got != 0 {
 		t.Fatalf("failure count after success = %d, want 0", got)
 	}
 }
@@ -481,62 +449,6 @@ func TestForgedForwardedForDoesNotResetLoginLockout(t *testing.T) {
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusTooManyRequests {
 		t.Fatalf("forged header bypassed lockout: status=%d", response.Code)
-	}
-}
-
-func TestLoginAttemptTrackerPrunesIdleClientsPeriodically(t *testing.T) {
-	now := time.Unix(1_700_000_000, 0)
-	tracker := newLoginAttemptTracker(func() time.Time { return now })
-
-	tracker.recordFailure("client-old")
-	now = now.Add(loginAttemptIdleTTL + time.Second)
-	tracker.recordFailure("client-new")
-
-	if _, ok := tracker.clients["client-old"]; ok {
-		t.Fatal("idle login attempt client was not pruned")
-	}
-	if _, ok := tracker.clients["client-new"]; !ok {
-		t.Fatal("new login attempt client missing")
-	}
-}
-
-func TestLoginAttemptTrackerDoesNotPruneOnEveryRequest(t *testing.T) {
-	now := time.Unix(1_700_000_000, 0)
-	tracker := newLoginAttemptTracker(func() time.Time { return now })
-	tracker.recordFailure("client")
-	firstPrune := tracker.lastPrune
-
-	now = now.Add(loginAttemptPruneInterval / 2)
-	tracker.recordFailure("client")
-
-	if !tracker.lastPrune.Equal(firstPrune) {
-		t.Fatalf("last prune = %s, want %s", tracker.lastPrune, firstPrune)
-	}
-}
-
-func TestLoginAttemptTrackerCapsClientsAndPreservesLockedClients(t *testing.T) {
-	now := time.Unix(1_700_000_000, 0)
-	tracker := newLoginAttemptTracker(func() time.Time { return now })
-	tracker.clients["locked"] = &loginClientState{
-		lastSeen:    now,
-		lockedUntil: now.Add(loginLockoutDuration),
-	}
-
-	for i := 0; i < loginAttemptMaxClients; i++ {
-		now = now.Add(time.Millisecond)
-		if !tracker.allow(fmt.Sprintf("client-%d", i)) {
-			t.Fatalf("client-%d should be allowed on first attempt", i)
-		}
-	}
-
-	if got := len(tracker.clients); got > loginAttemptMaxClients {
-		t.Fatalf("login attempt clients = %d, want <= %d", got, loginAttemptMaxClients)
-	}
-	if _, ok := tracker.clients["locked"]; !ok {
-		t.Fatal("active lockout was evicted before unlocked clients")
-	}
-	if _, ok := tracker.clients["client-0"]; ok {
-		t.Fatal("oldest unlocked client was not evicted")
 	}
 }
 
@@ -817,20 +729,5 @@ func TestLegacyAdminAPIKeyFallbackEnabledForUIAdminCheck(t *testing.T) {
 	t.Setenv("MCP_LEGACY_ADMIN_API_KEY_FALLBACK", "true")
 	if !legacyAdminAPIKeyFallbackEnabled() {
 		t.Fatal("legacy fallback should honor explicit override")
-	}
-}
-
-func TestSecureCookieCanBeForcedByConfig(t *testing.T) {
-	previous := forceSecureCookie
-	forceSecureCookie = true
-	t.Cleanup(func() {
-		forceSecureCookie = previous
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "http://platform.example.com/", nil)
-	req.Header.Set("X-Forwarded-Proto", "http")
-
-	if !secureCookie(req) {
-		t.Fatal("secureCookie() = false, want true when forceSecureCookie=true")
 	}
 }

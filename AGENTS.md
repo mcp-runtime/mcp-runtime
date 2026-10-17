@@ -133,6 +133,13 @@ local-key CSR.
 
 ## Build and validation
 
+Follow test-driven development for behavior changes and bug fixes: first add a
+focused regression test and confirm it fails for the intended reason, then
+implement the smallest fix and make the focused tests pass before pushing or
+merging. Test observable behavior and boundaries, not copies of implementation
+details. For behavior-preserving documentation/configuration edits and mechanical
+moves, use appropriate existing checks instead of adding redundant mirror tests.
+
 Use the Go version in `go.mod`. Go builds/tests require available dependencies.
 From the repository root, on an isolated non-production runner:
 

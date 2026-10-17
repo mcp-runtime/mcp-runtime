@@ -143,6 +143,22 @@ or limits; **Low** for missing probes on jobs.
 
 ## Step 4 — NetworkPolicy audit
 
+Evaluate the **union** of every policy selecting the target pod. A narrow
+per-server rule cannot subtract a broad namespace allowance. The supported
+workload boundary uses an all-pod default-deny ingress base plus a generic
+Deployment exception requiring `platform.mcpruntime.org/managed=true` and no
+`mcpruntime.org/server-uid`. Operator MCPServer policies select the live UID,
+allow named public listeners from their exact peers, and scope gateway metrics
+to Prometheus. Inspect both canonical namespace policies and the server policy;
+missing/predecessor UID labels must not inherit the generic exception. Runtime
+API startup reconciles existing managed namespace policies before reporting
+healthy, and operator reconciliation installs policy before new workloads.
+
+NetworkPolicy isolates pods, not containers within one pod. A gateway-to-server
+loopback URL alone does not constrain an upstream process's listening address.
+Record the enforcing CNI, complete supported rollout/migration, additive
+administrator policies and actual datapath evidence separately from unit tests.
+
 ```sh
 kubectl get networkpolicy -A
 ```
@@ -152,10 +168,12 @@ For each namespace that holds workloads, confirm:
 - A default-deny ingress policy exists.
 - A default-deny egress policy exists or egress is explicitly allowed only
   to documented destinations (DNS, ingest service, k8s API).
-- The mcp-server gateway sidecar can reach the ingest endpoint, the k8s
-  API (for SAR/auth), and the user MCP container — and nothing else.
-- User MCP server containers cannot egress to `mcp-platform` or `mcp-observability` directly,
-  only via the sidecar.
+- Workload pod egress reaches only documented audiences, DNS, telemetry and
+  deliberate administrator destinations. The gateway uses projected audience
+  tokens for session sync and ingest; it does not require a Kubernetes API token.
+- Both containers share the pod's network policy. Privileged platform endpoints
+  must independently authenticate and authorize requests; network reachability
+  cannot prove the request came from a particular sidecar container.
 - The registry namespace egress is limited (no random outbound).
 
 The probe creates a temporary pod and sends traffic. Run it only in an

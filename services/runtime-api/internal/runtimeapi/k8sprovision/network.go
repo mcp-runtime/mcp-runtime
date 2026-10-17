@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/util/retry"
 
 	"mcp-runtime/pkg/egresscidrs"
+	"mcp-runtime/pkg/kubeworkload"
 	"mcp-runtime/pkg/platformstack"
 )
 
@@ -29,6 +30,16 @@ func EnsureDefaultDenyNetworkPolicy(ctx context.Context, client kubernetes.Inter
 	if err := applyConfiguredPodEgress(policy); err != nil {
 		return err
 	}
+	// Install the generic-workload exception before narrowing the old broad
+	// base rule, preserving existing supported Deployment traffic during update.
+	if err := ensureNetworkPolicy(ctx, client, GenericWorkloadIngressNetworkPolicy(ns, ingressFromNamespaces...)); err != nil {
+		return err
+	}
+	return ensureNetworkPolicy(ctx, client, policy)
+}
+
+func ensureNetworkPolicy(ctx context.Context, client kubernetes.Interface, policy *networkingv1.NetworkPolicy) error {
+	ns := policy.Namespace
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		current, err := client.NetworkingV1().NetworkPolicies(ns).Get(ctx, policy.Name, metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
@@ -47,9 +58,10 @@ func EnsureDefaultDenyNetworkPolicy(ctx context.Context, client kubernetes.Inter
 	})
 }
 
-func DefaultDenyNetworkPolicy(ns string, ingressFromNamespaces ...string) *networkingv1.NetworkPolicy {
-	udpProtocol := corev1.ProtocolUDP
-	tcpProtocol := corev1.ProtocolTCP
+// GenericWorkloadIngressNetworkPolicy retains the supported generic Deployment
+// API's ingress contract. Missing/legacy MCPServer UID labels alone never opt
+// a pod into this policy: the separate platform-managed marker is mandatory.
+func GenericWorkloadIngressNetworkPolicy(ns string, ingressFromNamespaces ...string) *networkingv1.NetworkPolicy {
 	ingress := make([]networkingv1.NetworkPolicyIngressRule, 0, 2)
 	ingress = append(ingress, networkingv1.NetworkPolicyIngressRule{
 		From: []networkingv1.NetworkPolicyPeer{
@@ -82,12 +94,26 @@ func DefaultDenyNetworkPolicy(ns string, ingressFromNamespaces ...string) *netwo
 			},
 		})
 	}
+	return &networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "platform-generic-workload-ingress", Namespace: ns},
+		Spec: networkingv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{
+				MatchLabels:      map[string]string{kubeworkload.PlatformManagedLabel: "true"},
+				MatchExpressions: []metav1.LabelSelectorRequirement{{Key: kubeworkload.ServerUIDLabel, Operator: metav1.LabelSelectorOpDoesNotExist}},
+			},
+			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeIngress}, Ingress: ingress,
+		},
+	}
+}
+
+func DefaultDenyNetworkPolicy(ns string, ingressFromNamespaces ...string) *networkingv1.NetworkPolicy {
+	udpProtocol := corev1.ProtocolUDP
+	tcpProtocol := corev1.ProtocolTCP
 	policy := &networkingv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: "platform-default-deny", Namespace: ns},
 		Spec: networkingv1.NetworkPolicySpec{
 			PodSelector: metav1.LabelSelector{},
 			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeIngress, networkingv1.PolicyTypeEgress},
-			Ingress:     ingress,
 			Egress: []networkingv1.NetworkPolicyEgressRule{
 				{
 					To: []networkingv1.NetworkPolicyPeer{{
