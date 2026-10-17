@@ -17,6 +17,7 @@ COPY services/ui/go.mod services/ui/go.sum ./services/ui/
 RUN cd services/ui && go mod download
 
 COPY services/ui/*.go ./services/ui/
+COPY services/ui/internal/ ./services/ui/internal/
 COPY --from=frontend /src/services/ui/static/ ./services/ui/static/
 ARG TARGETOS
 ARG TARGETARCH

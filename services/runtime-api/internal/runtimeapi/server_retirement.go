@@ -3,6 +3,7 @@ package runtimeapi
 import (
 	"context"
 	"fmt"
+	"mcp-runtime-api/internal/runtimeapi/k8sprovision"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -91,7 +92,7 @@ func (s *RuntimeServer) serverRetirementCredential(ctx context.Context, namespac
 	if !apierrors.IsForbidden(err) || kubeworkload.OperatorSecretNamespaceProtected(namespace) {
 		return secret, err
 	}
-	if err := ensureNamespacePlatformAPISecretAccess(ctx, s.k8sClients.Clientset, namespace); err != nil {
+	if err := k8sprovision.EnsurePlatformAPISecretAccess(ctx, s.k8sClients.Clientset, namespace); err != nil {
 		return nil, fmt.Errorf("ensure retirement credential access: %w", err)
 	}
 	// Kubernetes authorizer caches can lag a newly created RoleBinding. Retry

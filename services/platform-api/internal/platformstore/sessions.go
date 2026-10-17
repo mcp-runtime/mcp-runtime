@@ -162,6 +162,9 @@ func (s *Store) PutSession(ctx context.Context, item sessionstate.Session) (sess
 	if retired {
 		return sessionstate.Session{}, sessionstate.ErrConflict
 	}
+	if err = checkSessionHuman(ctx, tx, item); err != nil {
+		return sessionstate.Session{}, err
+	}
 	if item.Binding.AgentID != "" {
 		if err = checkSessionAgent(ctx, tx, item); err != nil {
 			return sessionstate.Session{}, err
@@ -229,6 +232,7 @@ func sessionFilter(filter sessionstate.Filter) (string, []any) {
 	add("server_name", filter.ServerName)
 	add("server_uid", filter.ServerUID)
 	add("agent_id", filter.AgentID)
+	add("data->'binding'->>'human_id'", filter.HumanID)
 	add("grant_namespace", filter.GrantNamespace)
 	add("grant_name", filter.GrantName)
 	if filter.After != "" {
@@ -297,6 +301,9 @@ func (s *Store) SetSessionRevoked(ctx context.Context, namespace, name string, r
 		if retired {
 			return sessionstate.ErrConflict
 		}
+		if err = checkSessionHuman(ctx, tx, item); err != nil {
+			return err
+		}
 		if item.Binding.AgentID != "" {
 			if err = checkSessionAgent(ctx, tx, item); err != nil {
 				return err
@@ -357,16 +364,24 @@ func (s *Store) DeleteSessionVersioned(ctx context.Context, namespace, name, uid
 	if uid != "" && item.UID != uid {
 		return sessionstate.ErrConflict
 	}
+	if err = deleteSessionTx(ctx, tx, item); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func deleteSessionTx(ctx context.Context, tx *sql.Tx, item sessionstate.Session) error {
+	var err error
 	if _, err = tx.ExecContext(ctx, `INSERT INTO session_deleted_identities(id) VALUES($1) ON CONFLICT DO NOTHING`, item.ID); err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM sessions WHERE namespace=$1 AND name=$2`, namespace, name); err != nil {
+	if _, err = tx.ExecContext(ctx, `DELETE FROM sessions WHERE namespace=$1 AND name=$2`, item.Namespace, string(item.Binding.Name)); err != nil {
 		return err
 	}
 	if err = appendSessionChange(ctx, tx, item, true); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return nil
 }
 
 func revokeSessionsTx(ctx context.Context, tx *sql.Tx, filter sessionstate.Filter, cause string) (int64, error) {

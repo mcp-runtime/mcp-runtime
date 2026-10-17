@@ -9,6 +9,7 @@ import { useTeamAgents, useTeamMembers, useTeams } from "../../hooks/useAdminDat
 import { DelegationRecipientFields } from "./DelegationRecipientFields";
 
 export type GrantDraft = {
+  mode?: "enforce" | "monitor";
   name: string;
   namespace: string;
   server: string;
@@ -513,6 +514,14 @@ export function GrantForm({
       <fieldset className="form-fieldset">
         <legend>Policy ceiling</legend>
         <div className="form-grid">
+          <SelectField
+            label="Policy mode"
+            value={draft.mode || "enforce"}
+            options={[{ value: "enforce", label: "Enforce" }, { value: "monitor", label: "Monitor" }]}
+            hint="Monitor records policy denials without blocking calls. Identity, sessions and matching enforcing grants still apply."
+            data-testid="grant-mode"
+            onChange={(event) => updateDraft({ ...draft, mode: event.target.value as "enforce" | "monitor" })}
+          />
           <SelectField
             label="Maximum trust"
             value={draft.maxTrust}

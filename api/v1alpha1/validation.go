@@ -14,6 +14,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
+	"mcp-runtime/pkg/access/specvalidation"
 	"mcp-runtime/pkg/credentialheaders"
 	"mcp-runtime/pkg/mcpdefaults"
 )
@@ -575,60 +576,6 @@ func (r *MCPAccessGrant) wildcardSubjectWarnings() admission.Warnings {
 	}
 }
 
-func (r *MCPAccessGrant) validate() error {
-	var allErrs field.ErrorList
-	specPath := field.NewPath("spec")
-
-	if strings.TrimSpace(r.Spec.ServerRef.Name) == "" {
-		allErrs = append(allErrs, field.Required(specPath.Child("serverRef", "name"), "serverRef.name is required"))
-	}
-	if err := validateTeamIDField(specPath.Child("subject", "teamID"), r.Spec.Subject.TeamID); err != nil {
-		allErrs = append(allErrs, err)
-	}
-
-	sideEffects := make(map[ToolSideEffect]struct{}, len(r.Spec.AllowedSideEffects))
-	for i, sideEffect := range r.Spec.AllowedSideEffects {
-		effectPath := specPath.Child("allowedSideEffects").Index(i)
-		if strings.TrimSpace(string(sideEffect)) == "" {
-			allErrs = append(allErrs, field.Required(effectPath, "allowed side effect is required"))
-			continue
-		}
-		if !validToolSideEffect(sideEffect) {
-			allErrs = append(allErrs, field.NotSupported(effectPath, sideEffect, []string{
-				string(ToolSideEffectRead),
-				string(ToolSideEffectWrite),
-				string(ToolSideEffectDestructive),
-			}))
-			continue
-		}
-		if _, exists := sideEffects[sideEffect]; exists {
-			allErrs = append(allErrs, field.Duplicate(effectPath, sideEffect))
-		}
-		sideEffects[sideEffect] = struct{}{}
-	}
-
-	toolNames := make(map[string]struct{}, len(r.Spec.ToolRules))
-	for i, rule := range r.Spec.ToolRules {
-		rulePath := specPath.Child("toolRules").Index(i)
-		if strings.TrimSpace(rule.Name) == "" {
-			allErrs = append(allErrs, field.Required(rulePath.Child("name"), "tool rule name is required"))
-			continue
-		}
-		if strings.TrimSpace(string(rule.Decision)) == "" {
-			allErrs = append(allErrs, field.Required(rulePath.Child("decision"), "tool rule decision is required"))
-		}
-		if _, exists := toolNames[rule.Name]; exists {
-			allErrs = append(allErrs, field.Duplicate(rulePath.Child("name"), rule.Name))
-		}
-		toolNames[rule.Name] = struct{}{}
-	}
-
-	if len(allErrs) == 0 {
-		return nil
-	}
-	return apierrors.NewInvalid(schema.GroupKind{Group: GroupVersion.Group, Kind: "MCPAccessGrant"}, r.Name, allErrs)
-}
-
 func (r *MCPAgentSession) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr, r).
 		WithValidator(mcpAgentSessionValidator{}).
@@ -661,55 +608,12 @@ func (r *MCPAgentSession) ValidateDelete() (admission.Warnings, error) {
 	return nil, nil
 }
 
-func (r *MCPAgentSession) validate() error {
-	var allErrs field.ErrorList
-	specPath := field.NewPath("spec")
-
-	if strings.TrimSpace(r.Spec.ServerRef.Name) == "" {
-		allErrs = append(allErrs, field.Required(specPath.Child("serverRef", "name"), "serverRef.name is required"))
-	}
-	if strings.TrimSpace(r.Spec.Subject.HumanID) == "" && strings.TrimSpace(r.Spec.Subject.AgentID) == "" && strings.TrimSpace(r.Spec.Subject.TeamID) == "" {
-		allErrs = append(allErrs, field.Required(specPath.Child("subject"), "one of subject.humanID, subject.agentID, or subject.teamID is required"))
-	}
-	if err := validateTeamIDField(specPath.Child("subject", "teamID"), r.Spec.Subject.TeamID); err != nil {
-		allErrs = append(allErrs, err)
-	}
-	if ref := r.Spec.UpstreamTokenSecretRef; ref != nil {
-		if strings.TrimSpace(ref.Name) == "" {
-			allErrs = append(allErrs, field.Required(specPath.Child("upstreamTokenSecretRef", "name"), "secret name is required"))
-		}
-		if strings.TrimSpace(ref.Key) == "" {
-			allErrs = append(allErrs, field.Required(specPath.Child("upstreamTokenSecretRef", "key"), "secret key is required"))
-		}
-	}
-
-	if len(allErrs) == 0 {
-		return nil
-	}
-	return apierrors.NewInvalid(schema.GroupKind{Group: GroupVersion.Group, Kind: "MCPAgentSession"}, r.Name, allErrs)
-}
-
 func validToolSideEffect(sideEffect ToolSideEffect) bool {
-	switch sideEffect {
-	case ToolSideEffectRead, ToolSideEffectWrite, ToolSideEffectDestructive:
-		return true
-	default:
-		return false
-	}
+	return specvalidation.ValidSideEffect(string(sideEffect))
 }
 
 func validateTeamIDField(path *field.Path, value string) *field.Error {
-	teamID := strings.TrimSpace(value)
-	if teamID == "" {
-		return nil
-	}
-	if teamID != value || strings.ContainsAny(teamID, " \t\r\n") {
-		return field.Invalid(path, value, "teamID must be a stable identifier without whitespace")
-	}
-	if len(teamID) > 128 {
-		return field.TooLong(path, value, 128)
-	}
-	return nil
+	return specvalidation.TeamIDField(path, value)
 }
 
 func (r *MCPServer) String() string {

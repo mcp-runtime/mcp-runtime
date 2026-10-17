@@ -18,7 +18,7 @@ import {
   type ServerSummary,
   type ToolRow,
 } from "../../api/types";
-import { getServerObservabilityMetrics, listServerEvents, listServerLogs } from "../../api/catalog";
+import { getRuntimeServer, getServerObservabilityMetrics, listServerEvents, listServerLogs } from "../../api/catalog";
 
 type ServerDetailProps = {
   server: ServerSummary;
@@ -138,6 +138,13 @@ export function ServerDetail({ server, tools, onClose, onShowTools, onSelectTool
     staleTime: 30_000,
   });
 
+  const runtimeStatusQuery = useQuery({
+    queryKey: ["runtime-server-detail", server.namespace, server.name],
+    queryFn: () => getRuntimeServer(server.namespace, server.name),
+    staleTime: 30_000,
+  });
+  const runtimeStatus = runtimeStatusQuery.data?.runtimeStatus ?? server.runtimeStatus;
+
   // Observability is included by the API only for principals authorized to
   // inspect this gateway-backed server. The logs endpoint repeats that check.
   const logsQuery = useQuery({
@@ -147,7 +154,7 @@ export function ServerDetail({ server, tools, onClose, onShowTools, onSelectTool
     staleTime: 15_000,
   });
   const metricsQuery = useQuery({
-    queryKey: ["server-metrics", server.namespace, server.name],
+    queryKey: ["server-metrics", server.namespace, server.name, server.uid || ""],
     queryFn: () => getServerObservabilityMetrics(server.namespace, server.name),
     enabled: !!server.observability,
     staleTime: 30_000,
@@ -287,6 +294,24 @@ export function ServerDetail({ server, tools, onClose, onShowTools, onSelectTool
           </div>
         ) : null}
       </dl>
+
+      <section className="protocol-inventory" data-testid="server-detail-runtime-status">
+        <div className="section-head">
+          <p className="detail-label">Runtime status</p>
+          <span className="section-note">Operator state and recent runtime observations</span>
+        </div>
+        {runtimeStatusQuery.error ? <p className="section-note">Some runtime details are unavailable.</p> : null}
+        <dl className="detail-rows">
+          <div><dt>Transport</dt><dd>{runtimeStatus?.transport || "Unknown"}</dd></div>
+          <div><dt>Connection</dt><dd>{runtimeStatus?.connectionState || server.status || "Unknown"}</dd></div>
+          <div><dt>Authentication source</dt><dd>{runtimeStatus?.authSource || auth.label || "Unknown"}</dd></div>
+          {runtimeStatus?.lastProbeTime ? <div><dt>Last inventory probe</dt><dd>{new Date(runtimeStatus.lastProbeTime).toLocaleString()}</dd></div> : null}
+          {runtimeStatus?.lastError ? <div><dt>Last error</dt><dd title={runtimeStatus.lastError.reason}>{runtimeStatus.lastError.message} · {new Date(runtimeStatus.lastError.observedAt).toLocaleString()}</dd></div> : null}
+          {runtimeStatus?.lastSession ? <div><dt>Last session</dt><dd title={runtimeStatus.lastSession.namespace || undefined}>{runtimeStatus.lastSession.id}{runtimeStatus.lastSession.toolName ? ` · ${runtimeStatus.lastSession.toolName}` : ""} · {new Date(runtimeStatus.lastSession.usedAt).toLocaleString()}</dd></div> : null}
+          {!runtimeStatus?.lastSession && runtimeStatus?.lastSessionState === "none" ? <div><dt>Last session</dt><dd>No session-backed call was recorded.</dd></div> : null}
+          {!runtimeStatus?.lastSession && runtimeStatus?.lastSessionState === "unavailable" ? <div><dt>Last session</dt><dd>Activity access or analytics is unavailable.</dd></div> : null}
+        </dl>
+      </section>
 
       <div>
         <div className="section-head">

@@ -6,11 +6,26 @@ python3 "$(dirname "$0")/ui_assets_test.py"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 python3 "${SCRIPT_DIR}/image_architecture_test.py"
 python3 "${SCRIPT_DIR}/resource_usage_test.py"
+python3 "${SCRIPT_DIR}/grafana_capture_test.py"
+python3 "${SCRIPT_DIR}/scoped_observability_test.py"
 python3 "${SCRIPT_DIR}/session_revocation_test.py"
 bash "${SCRIPT_DIR}/namespace_placement_test.sh"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 QA_E2E_SCRIPT="${PROJECT_ROOT}/test/e2e/qa-e2e.sh"
 SELECT_SCRIPT="${PROJECT_ROOT}/test/e2e/select_pr_scenarios.sh"
+bash "${SCRIPT_DIR}/rollout_diagnostics_test.sh"
+python3 - "${QA_E2E_SCRIPT}" "${SCRIPT_DIR}/scenarios/port-transition.sh" <<'PY'
+from pathlib import Path
+import sys
+qa = Path(sys.argv[1]).read_text(encoding="utf-8")
+scenario = Path(sys.argv[2]).read_text(encoding="utf-8")
+assert 'source "${PROJECT_ROOT}/test/e2e/scenarios/port-transition.sh"' in qa
+assert "run_e2e_port_transition_scenario" in qa
+assert "missing-port-transition-fixture" in scenario
+assert "port_transition_assert_old_route" in scenario
+assert "port-transition-retained" in scenario and "port-transition-promoted" in scenario
+print("[pass] #533 fault-injected route scenario remains wired to guarded Kind QA")
+PY
 
 run_valid() {
   local name="$1"
@@ -201,6 +216,8 @@ assert "concurrency:\n      group: staging-e2e-disposable-vm\n      cancel-in-pr
 )
 assert "RUN_MULTITENANCY: ${{ inputs.run-multitenancy }}" in workflow
 assert "FRESH_CERTIFICATE: ${{ inputs.fresh-certificate }}" in workflow
+assert "WITH_MCP_AUTH: ${{ inputs.with-mcp-auth }}" in workflow
+assert "E2E_WITH_MCP_AUTH_OVERRIDE=" in workflow
 prerelease = pathlib.Path(sys.argv[1]).with_name("pre-release-regression.yaml").read_text(encoding="utf-8")
 assert "uses: ./.github/workflows/staging-e2e.yaml" in prerelease, "Pre-release Regression must run Staging E2E"
 assert "\n  qa-e2e:\n" not in prerelease, "pre-release must not duplicate PR Kind QA"

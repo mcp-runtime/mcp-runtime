@@ -92,6 +92,8 @@ func analyticsServiceManifests(postgresManifest string) []string {
 		"k8s/08-runtime-api-rbac.yaml",
 		"k8s/08-analytics-api.yaml",
 		"k8s/22-split-api-networkpolicy.yaml",
+		"k8s/23-scoped-observability-networkpolicy.yaml",
+		"k8s/24-resource-history-networkpolicy.yaml",
 		"k8s/09-ui.yaml",
 		"k8s/10-gateway.yaml",
 		"k8s/11-prometheus.yaml",
@@ -104,6 +106,12 @@ func analyticsServiceManifests(postgresManifest string) []string {
 		"k8s/12-grafana.yaml",
 	}
 	return manifests
+}
+
+// analyticsMessagingManifests applies the broker policy before Kafka is
+// created, so the broker has no unfiltered startup window.
+func analyticsMessagingManifests(kafkaManifest string) []string {
+	return []string{"k8s/05-kafka-networkpolicy.yaml", kafkaManifest}
 }
 
 // pruneStalePlatformPodsClientGo removes Failed/Evicted/ContainerStatusUnknown
@@ -210,10 +218,7 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 	}
 
 	core.Info("Applying analytics storage and messaging components")
-	for _, manifest := range []string{
-		clickhouseManifest,
-		kafkaManifest,
-	} {
+	for _, manifest := range append([]string{clickhouseManifest}, analyticsMessagingManifests(kafkaManifest)...) {
 		if err := applyRenderedManifestClientGo(manifest, images, imagePullSecretName, platformMode); err != nil {
 			return err
 		}
@@ -241,7 +246,15 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 	}
 
 	core.Info("Applying analytics services")
+	if err := provisionResourceHistoryTrust(); err != nil {
+		return err
+	}
 	for _, manifest := range analyticsServiceManifests(postgresManifest) {
+		if manifest == "k8s/23-scoped-observability-networkpolicy.yaml" {
+			if supported, _ := scopedGrafanaPolicyCapability(); !supported {
+				continue
+			}
+		}
 		if err := applyRenderedManifestClientGo(manifest, images, imagePullSecretName, platformMode); err != nil {
 			return err
 		}
@@ -273,6 +286,9 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 	}
 	rolloutFailures, failedForDebug := waitForAnalyticsTargetsClientGo(targets, rolloutTimeoutDuration)
 	if len(rolloutFailures) == 0 {
+		if err := enableScopedGrafanaClientGo(); err != nil {
+			return err
+		}
 		core.Success("platform manifests deployed successfully")
 		return nil
 	}
@@ -281,6 +297,9 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 	} else if recovered {
 		rolloutFailures, failedForDebug = waitForAnalyticsTargetsClientGo(targets, rolloutTimeoutDuration)
 		if len(rolloutFailures) == 0 {
+			if err := enableScopedGrafanaClientGo(); err != nil {
+				return err
+			}
 			core.Success("platform manifests deployed successfully")
 			return nil
 		}
@@ -361,10 +380,7 @@ func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap
 	}
 
 	core.Info("Applying analytics storage and messaging components")
-	for _, manifest := range []string{
-		clickhouseManifest,
-		kafkaManifest,
-	} {
+	for _, manifest := range append([]string{clickhouseManifest}, analyticsMessagingManifests(kafkaManifest)...) {
 		if err := applyRenderedManifest(kubectl, manifest, images, imagePullSecretName, platformMode); err != nil {
 			return err
 		}
@@ -392,7 +408,15 @@ func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap
 	}
 
 	core.Info("Applying analytics services")
+	if err := provisionResourceHistoryTrust(); err != nil {
+		return err
+	}
 	for _, manifest := range analyticsServiceManifests(postgresManifest) {
+		if manifest == "k8s/23-scoped-observability-networkpolicy.yaml" {
+			if supported, _ := scopedGrafanaPolicyCapability(); !supported {
+				continue
+			}
+		}
 		if err := applyRenderedManifest(kubectl, manifest, images, imagePullSecretName, platformMode); err != nil {
 			return err
 		}
@@ -427,6 +451,9 @@ func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap
 	}
 	rolloutFailures, failedForDebug := waitForAnalyticsTargetsWithKubectl(kubectl, targets, rolloutTimeout)
 	if len(rolloutFailures) == 0 {
+		if err := enableScopedGrafanaClientGo(); err != nil {
+			return err
+		}
 		core.Success("platform manifests deployed successfully")
 		return nil
 	}
@@ -435,6 +462,9 @@ func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap
 	} else if recovered {
 		rolloutFailures, failedForDebug = waitForAnalyticsTargetsWithKubectl(kubectl, targets, rolloutTimeout)
 		if len(rolloutFailures) == 0 {
+			if err := enableScopedGrafanaClientGo(); err != nil {
+				return err
+			}
 			core.Success("platform manifests deployed successfully")
 			return nil
 		}
@@ -830,6 +860,13 @@ func applyPlatformIngressIfConfigured() error {
 	issuerName := core.GetRegistryClusterIssuerName()
 	platformNamespace := core.ComponentNamespace("ui")
 	manifest := ingressmanifest.RenderPlatformUIIngress(host, issuerName, issuerName != "" || core.GetProvidedTLSSecrets(), platformNamespace, core.ComponentNamespace("grafana"), core.DefaultCLIConfig.PublicRoutes)
+	if supported, _ := scopedGrafanaPolicyCapability(); !supported {
+		var err error
+		manifest, err = renderGrafanaIngressAccess(manifest, false)
+		if err != nil {
+			return err
+		}
+	}
 	core.Info(fmt.Sprintf("Applying platform UI ingress for %s", host))
 	if err := applyManifestYAML(manifest, "", os.Stdout); err != nil {
 		return core.WrapWithBase(core.ErrSetupApplyPlatformUIIngressFailed, err, fmt.Sprintf("apply platform UI ingress: %v", err))
@@ -940,6 +977,19 @@ func renderAnalyticsManifest(content string, images AnalyticsImageSet, imagePull
 	}
 	for oldValue, newValue := range replacements {
 		rendered = strings.ReplaceAll(rendered, oldValue, newValue)
+	}
+	if strings.Contains(rendered, "GF_AUTH_PROXY_ENABLED") || strings.Contains(rendered, "name: mcp-platform-gateway-observability") {
+		supported, _ := scopedGrafanaPolicyCapability()
+		if supported && strings.Contains(rendered, "GF_AUTH_PROXY_ENABLED") {
+			if err := verifyScopedTelemetryPolicy(); err != nil {
+				return "", err
+			}
+		}
+		rendered = renderGrafanaDeploymentAccess(rendered, supported)
+		rendered, err = renderGrafanaIngressAccess(rendered, supported)
+		if err != nil {
+			return "", err
+		}
 	}
 	// Test-mode setup republishes these services under :latest. An existing
 	// Kind node may already cache that tag, so those workloads must pull it
@@ -1059,8 +1109,10 @@ func renderAnalyticsConfigManifestWithReaders(content, platformMode string, imag
 		"PLATFORM_TEAM_TRAEFIK_WATCH",
 		"MCP_MTLS_CLUSTER_ISSUER",
 		"MCP_TRUST_DOMAIN",
+		"MCP_TRUSTED_PROXY_CIDRS",
 		"UI_REQUIRE_HTTPS",
 		"UI_FORCE_SECURE_COOKIE",
+		"UI_PUBLIC_ORIGIN",
 	} {
 		if envValue := setupAnalyticsConfigEnvValue(key); envValue != "" {
 			manifest.Data[key] = envValue
@@ -1084,6 +1136,16 @@ func renderAnalyticsConfigManifestWithReaders(content, platformMode string, imag
 	manifest.Data["UI_DOCS_PATH"] = routes.Docs
 	manifest.Data["UI_DOCS_URL"] = routes.DocsURL
 	manifest.Data["UI_REGISTRY_PATH"] = routes.Registry
+	// Never carry an early opt-in through the setup rollout. The final setup
+	// step enables tenant Grafana after ingress, policies, and workloads succeed.
+	manifest.Data["GRAFANA_SCOPED_USER_ACCESS"] = "false"
+	if host := strings.TrimSpace(core.GetPlatformIngressHost()); host != "" {
+		scheme := "http"
+		if core.GetRegistryClusterIssuerName() != "" || core.GetProvidedTLSSecrets() {
+			scheme = "https"
+		}
+		manifest.Data["UI_PUBLIC_ORIGIN"] = scheme + "://" + host
+	}
 	applyGoogleOIDCDefaults(manifest.Data)
 	if registryIngressHost := strings.TrimSpace(core.GetRegistryIngressHost()); registryIngressHost != "" && registryIngressHost != core.DefaultRegistryIngressHost {
 		manifest.Data["MCP_REGISTRY_ENDPOINT"] = registryIngressHost

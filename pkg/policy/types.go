@@ -28,11 +28,15 @@ var supportedSchemaVersions = map[string]struct{}{
 	SchemaVersionGrantExpiry:      {},
 	SchemaVersionDelegatedHeaders: {},
 	SchemaVersionSessionSync:      {},
+	SchemaVersionGrantMonitor:     {},
 }
 
 // SchemaVersionSessionSync requires externally synchronized sessions. Older
 // gateways reject it rather than activating a policy without session state.
 const SchemaVersionSessionSync = "v4"
+
+// SchemaVersionGrantMonitor requires consumers to honor per-grant monitor mode.
+const SchemaVersionGrantMonitor = "v5"
 
 // SchemaVersionDelegatedHeaders is required when auth.mode is header. Older
 // gateways reject the document instead of ignoring delegated header fields.
@@ -41,7 +45,13 @@ const SchemaVersionDelegatedHeaders = "v3"
 // RequiredSchemaVersion returns the lowest schema version that can carry doc.
 func RequiredSchemaVersion(doc *Document) string {
 	if doc != nil && doc.Session != nil && doc.Session.Store == "platform" {
+		if hasMonitorGrant(doc) {
+			return SchemaVersionGrantMonitor
+		}
 		return SchemaVersionSessionSync
+	}
+	if hasMonitorGrant(doc) {
+		return SchemaVersionGrantMonitor
 	}
 	if doc != nil && doc.Auth != nil && strings.EqualFold(strings.TrimSpace(doc.Auth.Mode), "header") {
 		return SchemaVersionDelegatedHeaders
@@ -66,6 +76,8 @@ func schemaRank(version string) int {
 		return 3
 	case SchemaVersionSessionSync:
 		return 4
+	case SchemaVersionGrantMonitor:
+		return 5
 	default:
 		return 0
 	}
@@ -94,6 +106,7 @@ type ToolName string
 
 // Document is the root gateway policy document that contains all policy configuration.
 type Document struct {
+	compiled *compiledIndex
 	// SchemaVersion identifies the compatibility of the rendered JSON contract.
 	SchemaVersion string `json:"schema_version"`
 	// Revision is a deterministic SHA-256 digest of the canonical rendered
@@ -173,6 +186,7 @@ type Tool struct {
 // Grant defines access grants for subjects (humans/agents).
 type Grant struct {
 	Name               string       `json:"name"`
+	Mode               string       `json:"mode,omitempty"`
 	Namespace          Namespace    `json:"namespace,omitempty"`
 	HumanID            HumanID      `json:"human_id,omitempty"`
 	AgentID            AgentID      `json:"agent_id,omitempty"`
@@ -183,6 +197,18 @@ type Grant struct {
 	Disabled           bool         `json:"disabled,omitempty"`
 	ExpiresAt          string       `json:"expires_at,omitempty"`
 	ToolRules          []ToolAccess `json:"tool_rules,omitempty"`
+}
+
+func hasMonitorGrant(doc *Document) bool {
+	if doc == nil {
+		return false
+	}
+	for _, grant := range doc.Grants {
+		if strings.EqualFold(strings.TrimSpace(grant.Mode), "monitor") {
+			return true
+		}
+	}
+	return false
 }
 
 // Binding represents an agent session binding.
@@ -208,6 +234,13 @@ type ToolAccess struct {
 
 func ToolRiskLevel(policy *Document, toolName string) string {
 	if policy == nil || toolName == "" {
+		return ""
+	}
+	if policy.compiled != nil {
+		if index, ok := policy.compiled.tools[ToolName(toolName)]; ok {
+			tool := policy.Tools[index]
+			return NormalizeRiskLevel(tool.RiskLevel, tool.RequiredTrust, tool.SideEffect)
+		}
 		return ""
 	}
 	for _, tool := range policy.Tools {

@@ -10,6 +10,9 @@ import (
 	"sort"
 	"strings"
 
+	networkingv1 "k8s.io/api/networking/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/yaml"
 
@@ -30,6 +33,9 @@ type ComponentWiring struct {
 	Args []string `json:"args,omitempty"`
 	// DNSOptions are pod resolver options (for example ndots) that must be set.
 	DNSOptions []DNSOption `json:"dnsOptions,omitempty"`
+	// ResourceHistoryToken installs one fixed projected token in Prometheus.
+	// It is not a general volume/mount declaration.
+	ResourceHistoryToken bool `json:"resourceHistoryToken,omitempty"`
 }
 
 // DNSOption is one pod dnsConfig option.
@@ -41,7 +47,7 @@ type DNSOption struct {
 // IsZero reports whether the wiring asks for nothing.
 func (w *ComponentWiring) IsZero() bool {
 	return w == nil || (w.ServiceAccountName == "" && w.AutomountServiceAccountToken == nil &&
-		len(w.Env) == 0 && len(w.Args) == 0 && len(w.DNSOptions) == 0)
+		len(w.Env) == 0 && len(w.Args) == 0 && len(w.DNSOptions) == 0 && !w.ResourceHistoryToken)
 }
 
 // RepeatableFlags are flags that may legitimately appear more than once, so
@@ -96,6 +102,16 @@ var platformObjectKinds = map[string]bool{
 	"RoleBinding":        true,
 	"ClusterRole":        true,
 	"ClusterRoleBinding": true,
+	"NetworkPolicy":      true,
+}
+
+// Keep network changes limited to the platform policies explicitly supported
+// by setup and update. Tenant and operator-created policies remain untouched.
+var platformNetworkPolicies = map[string]bool{
+	"mcp-observability/kafka-client-ingress":               true,
+	"mcp-observability/mcp-scoped-observability-ingress":   true,
+	"mcp-platform/mcp-runtime-api-grafana-egress":          true,
+	"mcp-platform/mcp-runtime-api-resource-history-egress": true,
 }
 
 // PlatformObject identifies one object in a release's platform bundle.
@@ -126,7 +142,8 @@ func platformNamespaces() map[string]bool {
 }
 
 // ParsePlatformObjects decodes a release's platform bundle and enforces what a
-// remote manifest may ask of the cluster: RBAC and ServiceAccount kinds only,
+// remote manifest may ask of the cluster: RBAC, ServiceAccounts and explicitly
+// supported platform NetworkPolicies only,
 // platform-owned names and namespaces, no wildcard or privilege-escalating
 // rules, and bindings only to roles defined in the same bundle and subjects
 // that are platform ServiceAccounts. A release can therefore never bind an
@@ -151,7 +168,7 @@ func ParsePlatformObjects(bundle string) ([]PlatformObject, error) {
 		}
 		kind, _ := raw["kind"].(string)
 		if !platformObjectKinds[kind] {
-			return nil, fmt.Errorf("platform objects may only contain ServiceAccount, Role, RoleBinding, ClusterRole or ClusterRoleBinding; found %q", kind)
+			return nil, fmt.Errorf("platform objects may only contain ServiceAccount, Role, RoleBinding, ClusterRole, ClusterRoleBinding or NetworkPolicy; found %q", kind)
 		}
 		meta, _ := raw["metadata"].(map[string]any)
 		name, _ := meta["name"].(string)
@@ -191,6 +208,8 @@ func validatePlatformObjects(objs []PlatformObject) error {
 			errs = append(errs, fmt.Errorf("%s: namespace %q is not a platform namespace", key, o.Namespace))
 		}
 		switch o.Kind {
+		case "NetworkPolicy":
+			errs = append(errs, validateNetworkPolicy(o)...)
 		case "Role", "ClusterRole":
 			errs = append(errs, validateRules(key, o.Object)...)
 		case "RoleBinding", "ClusterRoleBinding":
@@ -198,6 +217,34 @@ func validatePlatformObjects(objs []PlatformObject) error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func validateNetworkPolicy(o PlatformObject) []error {
+	if !platformNetworkPolicies[o.Namespace+"/"+o.Name] {
+		return []error{fmt.Errorf("%s: not a supported platform NetworkPolicy", o.Key())}
+	}
+	if o.Object["apiVersion"] != "networking.k8s.io/v1" {
+		return []error{fmt.Errorf("%s: NetworkPolicy must use networking.k8s.io/v1", o.Key())}
+	}
+	if _, ok := o.Object["spec"].(map[string]any); !ok {
+		return []error{fmt.Errorf("%s: NetworkPolicy is missing spec", o.Key())}
+	}
+	var policy networkingv1.NetworkPolicy
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(o.Object, &policy); err != nil {
+		return []error{fmt.Errorf("%s: invalid NetworkPolicy: %w", o.Key(), err)}
+	}
+	if _, err := metav1.LabelSelectorAsSelector(&policy.Spec.PodSelector); err != nil {
+		return []error{fmt.Errorf("%s: invalid pod selector: %w", o.Key(), err)}
+	}
+	if len(policy.Spec.PolicyTypes) == 0 {
+		return []error{fmt.Errorf("%s: NetworkPolicy must explicitly declare policyTypes", o.Key())}
+	}
+	for _, kind := range policy.Spec.PolicyTypes {
+		if kind != networkingv1.PolicyTypeIngress && kind != networkingv1.PolicyTypeEgress {
+			return []error{fmt.Errorf("%s: invalid policyType %q", o.Key(), kind)}
+		}
+	}
+	return nil
 }
 
 func validateRules(key string, obj map[string]any) []error {
@@ -345,6 +392,7 @@ func BundlePlatformObjects(dir string, keys []string, extraDirs ...string) (stri
 // ReleaseWiring is what a release asks update to apply beyond images; it is
 // the format of config/release/wiring.yaml.
 type ReleaseWiring struct {
+	RequiresAudienceExchange bool `json:"requiresAudienceExchange"`
 	// PlatformObjects are keys of the k8s/ objects update manages.
 	PlatformObjects []string                    `json:"platformObjects"`
 	ConfigMaps      []ConfigMapSpec             `json:"configMaps"`
@@ -372,15 +420,17 @@ func LoadWiring(path string) (ReleaseWiring, error) {
 
 // ReleaseExtras is everything a release declares beyond images.
 type ReleaseExtras struct {
-	PlatformObjects string
-	ConfigMaps      []ManifestConfigMap
-	Wiring          map[string]*ComponentWiring
-	ConfigOnly      []string
+	RequiresAudienceExchange bool
+	PlatformObjects          string
+	ConfigMaps               []ManifestConfigMap
+	Wiring                   map[string]*ComponentWiring
+	ConfigOnly               []string
 }
 
 // ApplyReleaseExtras embeds the platform bundle, ConfigMaps and per-component
 // wiring in a generated manifest and re-validates it.
 func (m *Manifest) ApplyReleaseExtras(extras ReleaseExtras) error {
+	m.RequiresAudienceExchange = extras.RequiresAudienceExchange
 	m.PlatformObjects = strings.TrimSpace(extras.PlatformObjects)
 	m.ConfigMaps = extras.ConfigMaps
 	for _, name := range extras.ConfigOnly {

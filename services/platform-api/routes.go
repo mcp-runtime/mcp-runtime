@@ -16,6 +16,9 @@ import (
 func (s *apiServer) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/ready", s.handleReady)
+	for _, target := range []string{platformauth.AudienceRuntime, platformauth.AudienceAnalytics} {
+		mux.Handle(platformauth.ExchangePath(target), platformauth.ExchangeHandler{Auth: s.authentic, Target: target})
+	}
 
 	platforminternal.Handler{
 		Store:               s.platform,
@@ -71,6 +74,13 @@ type platformRoutes struct {
 func (pr platformRoutes) register() {
 	pr.mount("/auth/signup", http.HandlerFunc(pr.handleSignup))
 	pr.mount("/users", pr.adminOnly(http.HandlerFunc(pr.handleUsers)))
+	pr.mount("/users/", pr.adminOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var store identity.UserLifecycleStore
+		if pr.platform != nil {
+			store = pr.platform
+		}
+		identity.HandleUserLifecycle(w, r, store)
+	})))
 	pr.mount("/auth/me", pr.auth(http.HandlerFunc(pr.handleAuthMe)))
 	pr.mount("/user/registry-credentials", pr.auth(http.HandlerFunc(pr.handleRegistryCredentials)))
 	pr.mount("/user/registry-credentials/", pr.auth(http.HandlerFunc(pr.handleRegistryCredentialItem)))

@@ -1,0 +1,22 @@
+# The collector sends a credential only after matching a live node UID and
+# InternalIP to setup-provisioned serving trust. Kubernetes NetworkPolicy cannot
+# select Node objects, so the L4 rule is limited to the kubelet TLS port.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mcp-runtime-api-resource-history-egress
+  namespace: mcp-platform
+spec:
+  podSelector:
+    matchLabels:
+      app: mcp-runtime-api
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+        - ipBlock:
+            cidr: ::/0
+      ports:
+        - protocol: TCP
+          port: 10250

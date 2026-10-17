@@ -82,6 +82,7 @@ func TestExternalTLSSettingsSurviveSetupAndRerun(t *testing.T) {
 	}
 	t.Setenv("UI_REQUIRE_HTTPS", "false")
 	t.Setenv("UI_FORCE_SECURE_COOKIE", "true")
+	t.Setenv("MCP_TRUSTED_PROXY_CIDRS", "10.0.0.2/32")
 	rendered, err := renderAnalyticsConfigManifestWithReaders(string(raw), setupplan.PlatformModeOrg, AnalyticsImageSet{}, func(string, string) (map[string]string, error) { return nil, nil }, func() string { return "traefik" })
 	if err != nil {
 		t.Fatal(err)
@@ -92,16 +93,20 @@ func TestExternalTLSSettingsSurviveSetupAndRerun(t *testing.T) {
 	if err := yaml.Unmarshal([]byte(rendered), &config); err != nil {
 		t.Fatal(err)
 	}
-	if config.Data["UI_REQUIRE_HTTPS"] != "false" || config.Data["UI_FORCE_SECURE_COOKIE"] != "true" {
+	if config.Data["UI_REQUIRE_HTTPS"] != "false" || config.Data["UI_FORCE_SECURE_COOKIE"] != "true" || config.Data["MCP_TRUSTED_PROXY_CIDRS"] != "10.0.0.2/32" {
 		t.Fatal("external TLS settings missing")
 	}
 	t.Setenv("UI_REQUIRE_HTTPS", "")
 	t.Setenv("UI_FORCE_SECURE_COOKIE", "")
+	t.Setenv("MCP_TRUSTED_PROXY_CIDRS", "")
 	rerendered, err := renderAnalyticsConfigManifestWithReaders(string(raw), setupplan.PlatformModeOrg, AnalyticsImageSet{}, func(string, string) (map[string]string, error) { return config.Data, nil }, func() string { return "traefik" })
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(rerendered, `UI_REQUIRE_HTTPS: "false"`) || !strings.Contains(rerendered, `UI_FORCE_SECURE_COOKIE: "true"`) {
 		t.Fatal("rerun dropped external TLS settings")
+	}
+	if !strings.Contains(rerendered, "MCP_TRUSTED_PROXY_CIDRS: 10.0.0.2/32") {
+		t.Fatal("rerun dropped precise proxy trust")
 	}
 }

@@ -379,19 +379,14 @@ func (m *ServerManager) GetServer(name, namespace string) error {
 		return err
 	}
 	if !useK {
-		items, err := plat.ListRuntimeServers(context.Background(), namespace)
+		item, err := plat.GetRuntimeServer(context.Background(), namespace, name)
 		if err != nil {
 			return err
 		}
-		for _, s := range items {
-			if s.Name == name && s.Namespace == namespace {
-				b, _ := json.MarshalIndent(s, "", "  ")
-				_, _ = os.Stdout.Write(append(b, '\n'))
-				_, _ = os.Stderr.WriteString("# For the full MCPServer YAML, use mcp-runtime server get --use-kube ... with kubectl.\n")
-				return nil
-			}
-		}
-		return core.NewWithBase(core.ErrGetMCPServerFailed, fmt.Sprintf("server %q not found in namespace %q (platform API)", name, namespace))
+		b, _ := json.MarshalIndent(item, "", "  ")
+		_, _ = os.Stdout.Write(append(b, '\n'))
+		_, _ = os.Stderr.WriteString("# For the full MCPServer YAML, use mcp-runtime server get --use-kube ... with kubectl.\n")
+		return nil
 	}
 
 	// #nosec G204 -- name/namespace validated via validateServerInput.

@@ -94,6 +94,12 @@ afterEach(() => {
 });
 
 describe("ActivityWorkspace", () => {
+  it("keeps membership available during an analytics outage", async () => {
+    stub({ usage: { status: 503, body: {} } });
+    render(<AppProviders><ActivityWorkspace auth={TENANT} onSignIn={vi.fn()} /></AppProviders>);
+    expect(await screen.findByTestId("activity-error")).toBeInTheDocument();
+    expect(screen.getByTestId("team-list")).toHaveTextContent("Acme");
+  });
   it("prompts signed-out users and fetches nothing", () => {
     const { fetchMock } = stub();
 

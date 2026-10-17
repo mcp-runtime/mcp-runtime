@@ -11,6 +11,11 @@ on:
   # hand. Pull requests never receive the long-lived disposable-VM credentials.
   workflow_call:
     inputs:
+      with-mcp-auth:
+        description: Enable bundled mcp-auth for this run; false preserves the VM configuration.
+        required: false
+        default: false
+        type: boolean
       run-multitenancy:
         description: Run the destructive multi-team CLI/API scenario suite.
         required: false
@@ -23,6 +28,11 @@ on:
         type: boolean
   workflow_dispatch:
     inputs:
+      with-mcp-auth:
+        description: Enable bundled mcp-auth for this run; false preserves the VM configuration.
+        required: false
+        default: false
+        type: boolean
       run-multitenancy:
         description: Run the destructive multi-team CLI/API scenario suite.
         required: true
@@ -56,6 +66,7 @@ jobs:
       E2E_RUN_ID: gh-${{ github.run_id }}-${{ github.run_attempt }}
       RUN_MULTITENANCY: ${{ inputs.run-multitenancy }}
       FRESH_CERTIFICATE: ${{ inputs.fresh-certificate }}
+      WITH_MCP_AUTH: ${{ inputs.with-mcp-auth }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -129,6 +140,9 @@ jobs:
           SSHPASS: ${{ secrets.E2E_VM_PASSWORD }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # The workflow ref can differ from the packaged checkout in callers.
+          # Record the exact public source identity used for browser evidence.
+          browser_candidate="$(git rev-parse HEAD)"
           # Setup has multi-minute silent stretches while it builds images, and
           # an idle SSH session that drops there fails the job with exit 255
           # while the remote run keeps going -- a false negative that also
@@ -137,7 +151,7 @@ jobs:
             -o UserKnownHostsFile="$HOME/.ssh/mcp-runtime-e2e-known-hosts" -o StrictHostKeyChecking=yes \
             -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -o TCPKeepAlive=yes \
             "${{ secrets.E2E_VM_USER }}@${{ secrets.E2E_VM_HOST }}" \
-            "set -eu; rm -rf /opt/mcp-runtime-e2e; mkdir -p /opt/mcp-runtime-e2e; tar -xzf /tmp/mcp-runtime-e2e.tgz -C /opt/mcp-runtime-e2e; E2E_GHCR_AUTH_STDIN=1 E2E_GHCR_USER='${{ github.actor }}' E2E_RUN_ID='${E2E_RUN_ID}' E2E_RUN_MULTITENANCY='${RUN_MULTITENANCY}' E2E_FRESH_CERTIFICATE='${FRESH_CERTIFICATE}' GITHUB_ACTIONS=true GITHUB_REF_NAME='${GITHUB_REF_NAME}' GITHUB_SHA='${GITHUB_SHA}' bash /opt/mcp-runtime-e2e/test/e2e/staging-vm.sh"
+            "set -eu; rm -rf /opt/mcp-runtime-e2e; mkdir -p /opt/mcp-runtime-e2e; tar -xzf /tmp/mcp-runtime-e2e.tgz -C /opt/mcp-runtime-e2e; E2E_GHCR_AUTH_STDIN=1 E2E_GHCR_USER='${{ github.actor }}' E2E_RUN_ID='${E2E_RUN_ID}' E2E_RUN_MULTITENANCY='${RUN_MULTITENANCY}' E2E_FRESH_CERTIFICATE='${FRESH_CERTIFICATE}' E2E_WITH_MCP_AUTH_OVERRIDE='${WITH_MCP_AUTH}' WORKSPACE_BROWSER_CANDIDATE='${browser_candidate}' GITHUB_ACTIONS=true GITHUB_REF_NAME='${GITHUB_REF_NAME}' GITHUB_SHA='${GITHUB_SHA}' bash /opt/mcp-runtime-e2e/test/e2e/staging-vm.sh"
 
       - name: Collect E2E artifacts
         if: always()

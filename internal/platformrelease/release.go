@@ -40,6 +40,9 @@ func GenerateReleaseManifest(opts ReleaseOptions) (*Manifest, error) {
 		}
 	}
 	dir := strings.TrimSpace(opts.K8sDir)
+	if err := validateResourceHistoryTokenSource(dir, release); err != nil {
+		return nil, err
+	}
 	var rbacDirs []string
 	if strings.TrimSpace(opts.WiringPath) != "" {
 		rbacDirs = append(rbacDirs, filepath.Join(filepath.Dir(opts.WiringPath), "../rbac"))
@@ -61,10 +64,11 @@ func GenerateReleaseManifest(opts ReleaseOptions) (*Manifest, error) {
 		m.Components = append(m.Components, ManifestComponent{Name: name, Repository: repository, Tag: tag})
 	}
 	if err := m.ApplyReleaseExtras(ReleaseExtras{
-		PlatformObjects: objects,
-		ConfigMaps:      configMaps,
-		Wiring:          release.Components,
-		ConfigOnly:      release.ConfigOnly,
+		RequiresAudienceExchange: release.RequiresAudienceExchange,
+		PlatformObjects:          objects,
+		ConfigMaps:               configMaps,
+		Wiring:                   release.Components,
+		ConfigOnly:               release.ConfigOnly,
 	}); err != nil {
 		return nil, err
 	}

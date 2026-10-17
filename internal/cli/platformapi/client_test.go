@@ -38,6 +38,9 @@ func TestApplyAccessFromYAMLFile_MultiDocument(t *testing.T) {
 				if payload.Subject.TeamID != "team-acme" {
 					t.Fatalf("grant subject teamID = %q, want team-acme", payload.Subject.TeamID)
 				}
+				if payload.Mode != "monitor" {
+					t.Fatalf("grant mode = %q, want monitor", payload.Mode)
+				}
 				if payload.ExpiresAt == nil || payload.ExpiresAt.UTC().Format(time.RFC3339) != "2099-01-01T00:00:00Z" {
 					t.Fatalf("grant expiresAt = %v, want 2099-01-01T00:00:00Z", payload.ExpiresAt)
 				}
@@ -69,6 +72,7 @@ metadata:
   name: grant-a
   namespace: mcp-servers
 spec:
+  mode: monitor
   serverRef:
     name: demo
   subject:
@@ -109,6 +113,31 @@ spec:
 	}
 	if grantCalls != 1 || sessionCalls != 1 {
 		t.Fatalf("calls = grant:%d session:%d, want 1/1", grantCalls, sessionCalls)
+	}
+}
+
+func TestGetRuntimeServer(t *testing.T) {
+	client := &PlatformClient{
+		baseURL:   "https://platform.example.com",
+		token:     "token-1",
+		apiPrefix: "/api/v1",
+		http: &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			if r.Method != http.MethodGet || r.URL.Path != "/api/v1/runtime/servers/mcp-team-acme/demo" {
+				t.Fatalf("request = %s %s, want GET runtime server detail", r.Method, r.URL.Path)
+			}
+			if r.Header.Get("x-api-key") != "token-1" {
+				t.Fatalf("x-api-key = %q, want token-1", r.Header.Get("x-api-key"))
+			}
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"server":{"name":"demo","namespace":"mcp-team-acme","runtimeStatus":{"connectionState":"ready","lastSessionState":"none"}}}`))}, nil
+		})},
+	}
+
+	server, err := client.GetRuntimeServer(context.Background(), "mcp-team-acme", "demo")
+	if err != nil {
+		t.Fatalf("GetRuntimeServer() error = %v", err)
+	}
+	if server.Name != "demo" || server.RuntimeStatus.ConnectionState != "ready" || server.RuntimeStatus.LastSessionState != "none" {
+		t.Fatalf("server = %#v, want runtime status decoded", server)
 	}
 }
 
@@ -344,6 +373,8 @@ func TestPlatformClientTeamAndServerRoutes(t *testing.T) {
 					StatusCode: http.StatusOK,
 					Body:       io.NopCloser(strings.NewReader(`{"membership":{"team_slug":"core","team_namespace":"mcp-team-core","user_id":"user-1","email":"member@example.com","role":"member"}}`)),
 				}, nil
+			case r.Method == http.MethodDelete && r.URL.Path == "/api/v1/runtime/teams/core/members/user-1":
+				return &http.Response{StatusCode: http.StatusNoContent, Body: io.NopCloser(strings.NewReader(""))}, nil
 			case r.Method == http.MethodGet && r.URL.Path == "/api/v1/runtime/servers":
 				if got := r.URL.Query().Get("namespace"); got != "" {
 					t.Fatalf("list runtime servers namespace query = %q, want empty", got)
@@ -417,6 +448,9 @@ func TestPlatformClientTeamAndServerRoutes(t *testing.T) {
 	}
 	if upserted.UserID != "user-1" || upserted.Role != "member" {
 		t.Fatalf("upserted membership = %#v", upserted)
+	}
+	if err := client.DeleteTeamMember(context.Background(), "core", "user-1"); err != nil {
+		t.Fatalf("DeleteTeamMember() error = %v", err)
 	}
 	servers, err := client.ListRuntimeServers(context.Background(), "")
 	if err != nil {

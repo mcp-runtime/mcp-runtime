@@ -2,10 +2,14 @@ package main
 
 import (
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
+	uiproxy "mcp-ui/internal/proxy"
+
 	"mcp-runtime/pkg/publicroutes"
+	"mcp-runtime/pkg/serviceutil"
 )
 
 func configuredPublicRoutes() publicroutes.Routes {
@@ -17,10 +21,17 @@ func configuredPublicRoutes() publicroutes.Routes {
 
 // mountPublicUI keeps probes and the internal Grafana forward-auth endpoint
 // stable while moving all browser session, proxy, and asset routes together.
-func mountPublicUI(inner *http.ServeMux, routes publicroutes.Routes) *http.ServeMux {
+func mountPublicUI(inner *http.ServeMux, routes publicroutes.Routes, platformBase *url.URL) *http.ServeMux {
 	outer := http.NewServeMux()
 	outer.Handle("/health", inner)
 	outer.Handle("/auth/admin-check", inner)
+	// Grafana has its own public prefix even when the console uses /console.
+	runtimeBase, err := uiproxy.ParseUpstream(serviceutil.EnvOr("RUNTIME_UPSTREAM", uiproxy.DefaultRuntimeUpstream))
+	if err == nil {
+		grafana := uiproxy.NewGrafanaProxy(platformBase, runtimeBase, sessions, routes.Grafana, sessionProxyHTTPClient)
+		outer.Handle(routes.Grafana, grafana)
+		outer.Handle(routes.Grafana+"/", grafana)
+	}
 	redirect := func(route, target string) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != http.MethodGet && r.Method != http.MethodHead {

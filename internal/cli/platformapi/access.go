@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
@@ -38,6 +39,7 @@ type sessionGetResponse struct {
 }
 
 type grantAPIBody struct {
+	Mode               mcpaccess.GrantMode        `json:"mode,omitempty"`
 	Name               string                     `json:"name"`
 	Namespace          string                     `json:"namespace"`
 	ServerRef          mcpaccess.ServerReference  `json:"serverRef"`
@@ -146,6 +148,16 @@ func (c *PlatformClient) GetSession(ctx context.Context, namespace, name string)
 }
 
 func (c *PlatformClient) postGrant(ctx context.Context, body grantAPIBody) error {
+	// Validate the same request contract as runtime-api without rewriting the
+	// manifest payload or changing omitted state-field semantics.
+	req := mcpaccess.GrantApplyRequest{Name: body.Name, Namespace: body.Namespace, ServerRef: body.ServerRef, Subject: body.Subject, MaxTrust: body.MaxTrust, ExpiresAt: body.ExpiresAt, AllowedSideEffects: append([]mcpaccess.ToolSideEffect(nil), body.AllowedSideEffects...), PolicyVersion: body.PolicyVersion, Disabled: body.Disabled, ToolRules: append([]mcpaccess.ToolRule(nil), body.ToolRules...)}
+	if body.Mode != "" {
+		mode := body.Mode
+		req.Mode = &mode
+	}
+	if err := mcpaccess.ValidateGrantApplyRequest(&req, time.Now()); err != nil {
+		return err
+	}
 	js, err := json.Marshal(body)
 	if err != nil {
 		return err
@@ -163,6 +175,10 @@ func (c *PlatformClient) postGrant(ctx context.Context, body grantAPIBody) error
 }
 
 func (c *PlatformClient) postSession(ctx context.Context, body sessionAPIBody) error {
+	req := mcpaccess.SessionApplyRequest{Name: body.Name, Namespace: body.Namespace, ServerRef: body.ServerRef, Subject: body.Subject, ConsentedTrust: body.ConsentedTrust, ExpiresAt: body.ExpiresAt, Revoked: body.Revoked, PolicyVersion: body.PolicyVersion, GrantName: body.GrantName, GrantNamespace: body.GrantNamespace}
+	if err := mcpaccess.ValidateSessionApplyRequest(&req); err != nil {
+		return err
+	}
 	js, err := json.Marshal(body)
 	if err != nil {
 		return err
@@ -321,6 +337,7 @@ func grantFromV1(g *mcpv1alpha1.MCPAccessGrant) grantAPIBody {
 	}
 	dis := g.Spec.Disabled
 	return grantAPIBody{
+		Mode:               mcpaccess.GrantMode(g.Spec.Mode),
 		Name:               g.Name,
 		Namespace:          ns,
 		ServerRef:          mcpaccess.ServerReference{Name: mcpaccess.ServerName(g.Spec.ServerRef.Name), Namespace: mcpaccess.Namespace(g.Spec.ServerRef.Namespace)},

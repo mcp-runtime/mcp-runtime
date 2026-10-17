@@ -18,86 +18,234 @@ data:
           path: /etc/grafana/dashboards
   mcp-server.json: |
     {
-      "annotations": {"list": []},
+      "annotations": {
+        "list": []
+      },
       "editable": false,
       "panels": [
         {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "fieldConfig": {
             "defaults": {
-              "color": {"mode": "thresholds"},
-              "mappings": [{"options": {"0": {"color": "red", "index": 1, "text": "Down"}, "1": {"color": "green", "index": 0, "text": "Up"}}, "type": "value"}],
-              "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]},
+              "color": {
+                "mode": "palette-classic"
+              },
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 0
+          },
+          "id": 2,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(rate(mcp_gateway_requests_total{namespace=\"$namespace\",server=\"$server\",server_uid=\"$server_uid\",rpc_method=\"tools/call\"}[1h]))",
+              "refId": "A",
+              "range": true
+            }
+          ],
+          "title": "tools/call rate \u00b7 1h",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
               "unit": "short"
             },
             "overrides": []
           },
-          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
-          "id": 1,
-          "options": {"colorMode": "value", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}},
-          "targets": [{"expr": "up{namespace=\"$namespace\",server=\"$server\"}", "refId": "A"}],
-          "title": "Target health",
-          "type": "stat"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "unit": "short"}, "overrides": []},
-          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
-          "id": 2,
-          "options": {"legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "single", "sort": "none"}},
-          "targets": [{"expr": "sum(rate(mcp_gateway_requests_total{namespace=\"$namespace\",server=\"$server\"}[5m]))", "legendFormat": "requests/sec", "refId": "A"}],
-          "title": "Request rate",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "unit": "short"}, "overrides": []},
-          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 0
+          },
           "id": 3,
-          "options": {"legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "single", "sort": "none"}},
-          "targets": [{"expr": "sum(rate(mcp_gateway_policy_decisions_total{namespace=\"$namespace\",server=\"$server\",decision=\"deny\"}[5m]))", "legendFormat": "denials/sec", "refId": "A"}],
-          "title": "Deny rate",
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(increase(mcp_gateway_policy_decisions_total{namespace=\"$namespace\",server=\"$server\",server_uid=\"$server_uid\",decision=\"deny\"}[1h]))",
+              "refId": "A",
+              "range": true
+            }
+          ],
+          "title": "Policy denies \u00b7 1h",
           "type": "timeseries"
         },
         {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}, "unit": "s"}, "overrides": []},
-          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 8
+          },
           "id": 4,
-          "options": {"legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "single", "sort": "none"}},
-          "targets": [{"expr": "histogram_quantile(0.95, sum(rate(mcp_gateway_request_duration_seconds_bucket{namespace=\"$namespace\",server=\"$server\"}[5m])) by (le))", "legendFormat": "p95", "refId": "A"}],
-          "title": "p95 latency",
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "histogram_quantile(0.95, sum by (le) (rate(mcp_gateway_request_duration_seconds_bucket{namespace=\"$namespace\",server=\"$server\",server_uid=\"$server_uid\",rpc_method=\"tools/call\"}[1h])))",
+              "refId": "A",
+              "range": true
+            }
+          ],
+          "title": "tools/call p95 \u00b7 1h",
           "type": "timeseries"
         },
         {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
-          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 8
+          },
           "id": 5,
-          "targets": [{"expr": "sum by (tool, decision) (rate(mcp_gateway_tool_call_total{namespace=\"$namespace\",server=\"$server\"}[5m]))", "legendFormat": "{{tool}} {{decision}}", "refId": "A"}],
-          "title": "Tool call rate and policy decisions",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
-          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
-          "id": 6,
-          "targets": [{"expr": "histogram_quantile(0.95, sum by (le, tool) (rate(mcp_gateway_tool_call_duration_seconds_bucket{namespace=\"$namespace\",server=\"$server\",decision=\"allow\"}[5m])))", "legendFormat": "{{tool}}", "exemplar": true, "refId": "A"}],
-          "title": "Tool p95 latency (allowed calls)",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(rate(mcp_gateway_requests_total{namespace=\"$namespace\",server=\"$server\",server_uid=\"$server_uid\",rpc_method=\"tools/call\",decision=\"allow\",status=~\"5..\"}[1h]))",
+              "refId": "A",
+              "range": true
+            }
+          ],
+          "title": "Upstream 5xx rate \u00b7 1h",
           "type": "timeseries"
         }
       ],
       "refresh": "30s",
       "schemaVersion": 39,
-      "tags": ["mcp-runtime"],
+      "tags": [
+        "mcp-runtime"
+      ],
       "templating": {
         "list": [
-          {"current": {"selected": true, "text": "", "value": ""}, "label": "Namespace", "name": "namespace", "options": [], "query": "", "type": "textbox"},
-          {"current": {"selected": true, "text": "", "value": ""}, "label": "Server", "name": "server", "options": [], "query": "", "type": "textbox"}
+          {
+            "current": {
+              "selected": true,
+              "text": "",
+              "value": ""
+            },
+            "label": "Namespace",
+            "name": "namespace",
+            "options": [],
+            "query": "",
+            "type": "textbox"
+          },
+          {
+            "current": {
+              "selected": true,
+              "text": "",
+              "value": ""
+            },
+            "label": "Server",
+            "name": "server",
+            "options": [],
+            "query": "",
+            "type": "textbox"
+          },
+          {
+            "current": {
+              "selected": true,
+              "text": "",
+              "value": ""
+            },
+            "hide": 2,
+            "name": "server_uid",
+            "options": [],
+            "query": "",
+            "type": "textbox"
+          }
         ]
       },
-      "time": {"from": "now-1h", "to": "now"},
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
       "timezone": "browser",
       "title": "MCP Server",
       "uid": "mcp-server",
@@ -110,6 +258,110 @@ data:
       },
       "editable": false,
       "panels": [
+        {
+          "id": 112,
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 78},
+          "fieldConfig": {"defaults": {"noValue": "Unavailable", "min": 0, "max": 1}},
+          "targets": [{"expr": "mcp_resource_collection_success", "legendFormat": "All sources collected", "refId": "A"}, {"expr": "mcp_resource_node_collection_success", "legendFormat": "{{node}}", "refId": "B"}],
+          "title": "Resource collection success (missing differs from zero)", "type": "timeseries"
+        },
+        {
+          "id": 100,
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 30},
+          "fieldConfig": {"defaults": {"noValue": "Unavailable", "unit": "short"}},
+          "targets": [{"expr": "mcp_resource_node_cpu_cores", "legendFormat": "{{node}}", "refId": "A"}],
+          "title": "Measured node CPU (cores)", "type": "timeseries"
+        },
+        {
+          "id": 101,
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 30},
+          "fieldConfig": {"defaults": {"noValue": "Unavailable", "unit": "bytes"}},
+          "targets": [{"expr": "mcp_resource_node_working_set_bytes", "legendFormat": "{{node}}", "refId": "A"}],
+          "title": "Measured node working memory", "type": "timeseries"
+        },
+        {
+          "id": 102,
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 38},
+          "fieldConfig": {"defaults": {"noValue": "Unavailable", "unit": "short"}},
+          "targets": [{"expr": "sum by(namespace,pod)(mcp_resource_container_cpu_cores)", "legendFormat": "{{namespace}}/{{pod}}", "refId": "A"}],
+          "title": "Measured container CPU by pod", "type": "timeseries"
+        },
+        {
+          "id": 103,
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 38},
+          "fieldConfig": {"defaults": {"noValue": "Unavailable", "unit": "bytes"}},
+          "targets": [{"expr": "sum by(namespace,pod)(mcp_resource_container_working_set_bytes)", "legendFormat": "{{namespace}}/{{pod}}", "refId": "A"}],
+          "title": "Measured container working memory", "type": "timeseries"
+        },
+        {
+          "id": 104,
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 46},
+          "fieldConfig": {"defaults": {"noValue": "Unavailable", "unit": "bytes"}},
+          "targets": [{"expr": "mcp_resource_node_filesystem_used_bytes", "legendFormat": "{{node}} consumed", "refId": "A"}, {"expr": "mcp_resource_node_filesystem_capacity_bytes", "legendFormat": "{{node}} filesystem capacity", "refId": "B"}],
+          "title": "Actual node filesystem bytes", "type": "timeseries"
+        },
+        {
+          "id": 105,
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 46},
+          "fieldConfig": {"defaults": {"noValue": "Unavailable", "unit": "bytes"}},
+          "targets": [{"expr": "mcp_resource_volume_used_bytes", "legendFormat": "{{namespace}}/{{persistentvolumeclaim}}", "refId": "A"}],
+          "title": "Actual PVC bytes (driver statistics required)", "type": "timeseries"
+        },
+        {
+          "id": 106,
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 54},
+          "fieldConfig": {"defaults": {"noValue": "Unavailable", "unit": "short"}},
+          "targets": [{"expr": "sum(mcp_resource_pod_cpu_requests_cores)", "legendFormat": "Requested cores (not consumption)", "refId": "A"}, {"expr": "sum(mcp_resource_container_cpu_cores)", "legendFormat": "Measured container cores", "refId": "B"}],
+          "title": "CPU requests and measured usage", "type": "timeseries"
+        },
+        {
+          "id": 107,
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 54},
+          "fieldConfig": {"defaults": {"noValue": "Unavailable", "unit": "bytes"}},
+          "targets": [{"expr": "mcp_resource_pvc_requested_bytes", "legendFormat": "{{namespace}}/{{persistentvolumeclaim}} requested", "refId": "A"}, {"expr": "mcp_resource_pvc_capacity_bytes", "legendFormat": "{{namespace}}/{{persistentvolumeclaim}} provisioned", "refId": "B"}],
+          "title": "PVC reservations and capacity (not consumed bytes)", "type": "timeseries"
+        },
+        {
+          "id": 108,
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 62},
+          "fieldConfig": {"defaults": {"noValue": "Unavailable", "unit": "short"}},
+          "targets": [{"expr": "max_over_time(mcp_resource_node_cpu_cores[$__range])", "legendFormat": "{{node}}", "refId": "A", "instant": true}],
+          "title": "Selected-window CPU peaks (startup/load samples)", "type": "stat"
+        },
+        {
+          "id": 109,
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 62},
+          "fieldConfig": {"defaults": {"noValue": "Unavailable", "unit": "bytes"}},
+          "targets": [{"expr": "max_over_time(mcp_resource_node_working_set_bytes[$__range])", "legendFormat": "{{node}}", "refId": "A", "instant": true}],
+          "title": "Selected-window working-memory peaks", "type": "stat"
+        },
+        {
+          "id": 110,
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 70},
+          "fieldConfig": {"defaults": {"noValue": "Unavailable", "unit": "Bps"}},
+          "targets": [{"expr": "rate(mcp_resource_node_network_receive_bytes_total[2m])", "legendFormat": "{{node}} received", "refId": "A"}, {"expr": "rate(mcp_resource_node_network_transmit_bytes_total[2m])", "legendFormat": "{{node}} transmitted", "refId": "B"}],
+          "title": "Measured node network throughput", "type": "timeseries"
+        },
+        {
+          "id": 111,
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 70},
+          "fieldConfig": {"defaults": {"noValue": "Unavailable", "unit": "s"}},
+          "targets": [{"expr": "mcp_resource_collection_duration_seconds", "legendFormat": "Collection wall time", "refId": "A"}],
+          "title": "Resource collection overhead (30-second cadence)", "type": "timeseries"
+        },
         {
           "datasource": {
             "type": "prometheus",

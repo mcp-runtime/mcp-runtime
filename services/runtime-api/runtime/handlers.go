@@ -66,6 +66,16 @@ func HandleAdapterSession(service *runtimeapi.AccessService, w http.ResponseWrit
 	service.HandleAdapterSession(w, r)
 }
 
+// HandleAdapterPreflight reports adapter PKI readiness without creating a session.
+func HandleAdapterPreflight(service *runtimeapi.AccessService, w http.ResponseWriter, r *http.Request) {
+	service.HandleAdapterPreflight(w, r)
+}
+
+// HandleAdapterSessionItemPath deletes a still-pending session owned by the caller.
+func HandleAdapterSessionItemPath(service *runtimeapi.AccessService, w http.ResponseWriter, r *http.Request) {
+	service.HandleAdapterSessionItemPath(w, r)
+}
+
 // HandleAdapterCertificate routes adapter CSR enrollment requests.
 func HandleAdapterCertificate(service *runtimeapi.AccessService, w http.ResponseWriter, r *http.Request) {
 	service.HandleAdapterCertificate(w, r)

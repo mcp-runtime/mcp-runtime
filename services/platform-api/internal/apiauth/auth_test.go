@@ -6,6 +6,7 @@ import (
 )
 
 func TestRequestIPUsesFirstNonEmptyForwardedForHop(t *testing.T) {
+	t.Setenv("MCP_TRUSTED_PROXY_CIDRS", "10.0.0.0/24")
 	req := httptest.NewRequest("GET", "/", nil)
 	req.RemoteAddr = "10.0.0.2:12345"
 	req.Header.Set("x-forwarded-for", "203.0.113.10, 10.0.0.2")

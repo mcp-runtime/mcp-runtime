@@ -151,6 +151,24 @@ matches every non-empty subject field exactly.
 
 ### MCPAccessGrant
 
+`spec.mode` accepts `enforce` or `monitor` and defaults to enforcement when
+omitted. A monitor grant lets calls through when that matched grant would deny
+for a tool rule, trust ceiling, or side-effect restriction, and records
+`would_deny` plus the original reason in gateway audit events and the
+`mcp_gateway_policy_would_deny_total` metric. Identity and required-session
+checks, disabled/expired grants, and denials from matching enforce-mode grants
+remain enforced. Monitor-mode policy documents require gateway policy schema
+v5, so older gateways reject them instead of silently enforcing or ignoring
+the mode.
+
+Pass `--mode monitor` to `mcp-runtime access grant init`, then use
+`mcp-runtime access grant apply --file grant.yaml`, or choose **Monitor**
+in the dashboard grant form. The grant table switches existing grants between
+Monitor and Enforce without replacing their restrictions. The runtime API
+accepts `mode` on grant apply and `PATCH /api/v1/runtime/grants/{namespace}/{name}`;
+omitting mode on apply preserves an existing grant's mode. A new grant defaults
+to enforcement. Patch mode and disabled state separately.
+
 For platform API and adapter flows, `agentID` must be an active ID from the
 platform agent directory. The sample ID below shows the format; use an ID from
 `mcp-runtime agent list <team-slug> --status active` in your own resources.
@@ -168,6 +186,7 @@ metadata:
   name: payments-ops-agent
   namespace: mcp-servers
 spec:
+  mode: enforce
   serverRef:
     name: payments
   subject:
@@ -429,6 +448,8 @@ GET  /api/v1/runtime/sessions/{namespace}/{name} # Get one MCPAgentSession
 POST /api/v1/runtime/sessions             # Admin/internal direct MCPAgentSession apply
 DELETE /api/v1/runtime/sessions/{namespace}/{name} # Delete one MCPAgentSession
 POST /api/v1/runtime/adapter/sessions     # Issue/reuse an adapter MCPAgentSession for a human/user principal
+POST /api/v1/runtime/adapter/preflight    # Read-only adapter PKI and selected-route readiness check
+DELETE /api/v1/runtime/adapter/sessions/{namespace}/{name} # Delete only caller-owned pending enrollment sessions
 POST /api/v1/runtime/adapter/certificates # Sign an adapter CSR for an owned session (mTLS enrollment)
 GET  /api/v1/runtime/observability/links  # Scoped Prometheus/Grafana links for one server
 GET  /api/v1/runtime/observability/prometheus/query   # Allowlisted PromQL query IDs for one server

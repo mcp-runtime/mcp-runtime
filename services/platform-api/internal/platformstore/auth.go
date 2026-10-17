@@ -274,16 +274,40 @@ func (s *Store) EnsureOIDCUser(ctx context.Context, provider, subject, email, ro
 	if subject == "" {
 		return User{}, errors.New("oidc subject required")
 	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return User{}, err
+	}
+	defer tx.Rollback()
+	// Serialize the whole identity decision with account deactivation. Doing
+	// only the tombstone read before this lock permits a changed email to bind
+	// the same OIDC subject to a new account after deactivation commits.
+	if _, err = tx.ExecContext(ctx, `LOCK TABLE users IN SHARE ROW EXCLUSIVE MODE`); err != nil {
+		return User{}, err
+	}
+	var inactive bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM auth_identities ai JOIN users u ON u.id=ai.user_id WHERE ai.provider=$1 AND ai.subject=$2 AND u.deleted_at IS NOT NULL)`, provider, subject).Scan(&inactive); err != nil {
+		return User{}, err
+	}
+	if inactive {
+		return User{}, ErrAccountInactive
+	}
 
 	var u User
-	err := s.db.QueryRowContext(ctx, `
+	err = tx.QueryRowContext(ctx, `
 SELECT u.id, u.email, u.role, ''
 FROM auth_identities ai
 JOIN users u ON u.id = ai.user_id AND u.deleted_at IS NULL
 WHERE ai.provider = $1 AND ai.subject = $2`, provider, subject).
 		Scan(&u.ID, &u.Email, &u.Role, &u.Namespace)
 	if err == nil {
-		return s.ensureOIDCUserRole(ctx, u, role)
+		if role == RoleAdmin && u.Role != RoleAdmin {
+			if _, err = tx.ExecContext(ctx, `UPDATE users SET role=$1 WHERE id=$2`, RoleAdmin, u.ID); err != nil {
+				return User{}, err
+			}
+			u.Role = RoleAdmin
+		}
+		return u, tx.Commit()
 	}
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return User{}, err
@@ -293,7 +317,7 @@ WHERE ai.provider = $1 AND ai.subject = $2`, provider, subject).
 	}
 
 	userExists := true
-	err = s.db.QueryRowContext(ctx, `
+	err = tx.QueryRowContext(ctx, `
 SELECT u.id, u.email, u.role, ''
 FROM users u
 WHERE u.email = $1 AND u.deleted_at IS NULL`, email).
@@ -304,16 +328,6 @@ WHERE u.email = $1 AND u.deleted_at IS NULL`, email).
 	} else if err != nil {
 		return User{}, err
 	}
-
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return User{}, err
-	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback()
-		}
-	}()
 
 	if !userExists {
 		if _, err = tx.ExecContext(ctx, `INSERT INTO users (id,email,role) VALUES ($1,$2,$3)`, u.ID, u.Email, u.Role); err != nil {
@@ -331,31 +345,6 @@ VALUES ($1, $2, $3)
 ON CONFLICT (provider, subject)
 DO UPDATE SET user_id = EXCLUDED.user_id`, u.ID, provider, subject); err != nil {
 		return User{}, err
-	}
-	if err = tx.Commit(); err != nil {
-		return User{}, err
-	}
-	return u, nil
-}
-
-func (s *Store) ensureOIDCUserRole(ctx context.Context, u User, role string) (User, error) {
-	if role != RoleAdmin {
-		return u, nil
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return User{}, err
-	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback()
-		}
-	}()
-	if role == RoleAdmin && u.Role != RoleAdmin {
-		if _, err = tx.ExecContext(ctx, `UPDATE users SET role = $1 WHERE id = $2`, RoleAdmin, u.ID); err != nil {
-			return User{}, err
-		}
-		u.Role = RoleAdmin
 	}
 	if err = tx.Commit(); err != nil {
 		return User{}, err
@@ -412,7 +401,7 @@ func (s *Store) CreateAccessToken(u User, ttl time.Duration) (string, error) {
 		p = resolved
 	}
 	p.AuthType = "platform_jwt"
-	return platformauth.Sign(s.jwtSecret, p, ttl, platformauth.RequiredAudiences())
+	return platformauth.Sign(s.jwtSecret, p, ttl, []string{platformauth.AudiencePlatform})
 }
 
 // AuthenticateJWT validates a platform JWT and resolves it to the current principal.

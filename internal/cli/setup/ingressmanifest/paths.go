@@ -30,6 +30,17 @@ func PlatformAPIPaths() []APIPath {
 	}
 }
 
+// APIPathsForService keeps auth middleware on the destination service's routes.
+func APIPathsForService(service string) []APIPath {
+	var paths []APIPath
+	for _, route := range PlatformAPIPaths() {
+		if route.Service == service {
+			paths = append(paths, route)
+		}
+	}
+	return paths
+}
+
 // ObservabilityAPIPaths returns observability-namespace ingress rules.
 func ObservabilityAPIPaths() []APIPath {
 	return []APIPath{

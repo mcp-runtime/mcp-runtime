@@ -1,5 +1,19 @@
 # Platform UI Coverage Checklist
 
+For `#/workspace` and `#/admin/overview`, verify member, owner and administrator
+roles separately. The account menu must make no server-list request. Personal
+memberships come from `/runtime/workspace/teams`, including for administrators;
+all-platform visibility is not personal membership or deployment attribution.
+Exercise `#/workspace/team?team=<slug>` as owner/member, including a direct
+membership-write denial for a member. Check accessible versus manageable server
+labels, explicit unavailable deployment attribution, grant/session expiry, and
+namespace-wide activity wording. Break analytics, directory counts or audit
+independently and confirm unaffected sections remain usable. Overview totals
+must come from `/admin/overview/{directory,servers}`, not paginated operations
+rows. Verify hash refresh/back/forward, keyboard links, long names and 390px
+layout. Headless DOM/API tests cover scope and partial errors; real-cluster
+browser acceptance remains required when a browser-capable target is available.
+
 For React Teams (`#/admin/teams`), check new-account password validation,
 inline API error messages, duplicate-email conflict recovery, and **Add existing
 user** by user ID. Existing-user submissions must send only membership role,
@@ -144,8 +158,17 @@ Tenant user only:
 - Scoped observability links: `/api/v1/runtime/observability/links` returns only
   queries for the authorized tenant server and does not expose arbitrary PromQL.
 - Grafana tenant action: clicking Grafana opens the default scoped platform
-  Grafana dashboard endpoint for that namespace/server. It must not open the raw
-  cluster-wide `/grafana` UI for tenant users.
+  Grafana dashboard endpoint for that namespace/server/current UID after the
+  supported setup migration. Verify the platform session signs in without a
+  Grafana cookie. Verify its nonce CSP permits native bootstrap while the
+  console keeps its own policy. Auxiliary metadata feeds must stay empty;
+  query-history and Live remain unavailable. In bounded Explore, replay a fixed allowed query and reject
+  foreign-owner, foreign-team, old-UID, edited, mixed-batch and other datasource
+  queries; query/plugin/resource/proxy/Live/snapshot routes must fail closed.
+  Confirm platform logout revokes Grafana too. Network isolation additionally
+  requires the supported ready/enforcing Cilium capability. Ordinary Kind
+  kindnet and unknown providers must retain admin-only Grafana and disable its
+  auth proxy; test that fallback separately rather than claiming tenant access.
 - Tenant negative checks: the same user receives an intentional 403/404 when
   requesting observability links or Prometheus queries for a shared or foreign
   namespace/server.

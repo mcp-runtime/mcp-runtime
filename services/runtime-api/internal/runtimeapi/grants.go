@@ -10,28 +10,17 @@ import (
 	"strings"
 	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtimeaccess "mcp-runtime-api/internal/runtimeapi/access"
 	mcpaccess "mcp-runtime/pkg/access"
 	"mcp-runtime/pkg/k8sclient"
 	"mcp-runtime/pkg/serviceutil"
 )
 
-type accessGrantRequest struct {
-	Name               string                     `json:"name"`
-	Namespace          string                     `json:"namespace"`
-	ServerRef          mcpaccess.ServerReference  `json:"serverRef"`
-	Subject            mcpaccess.SubjectRef       `json:"subject"`
-	MaxTrust           mcpaccess.TrustLevel       `json:"maxTrust"`
-	AllowedSideEffects []mcpaccess.ToolSideEffect `json:"allowedSideEffects"`
-	PolicyVersion      string                     `json:"policyVersion"`
-	Disabled           *bool                      `json:"disabled,omitempty"`
-	ExpiresAt          *metav1.Time               `json:"expiresAt,omitempty"`
-	ToolRules          []mcpaccess.ToolRule       `json:"toolRules"`
-}
+type accessGrantRequest = mcpaccess.GrantApplyRequest
 
 type accessGrantPatchRequest struct {
-	Disabled *bool `json:"disabled,omitempty"`
+	Disabled *bool                `json:"disabled,omitempty"`
+	Mode     *mcpaccess.GrantMode `json:"mode,omitempty"`
 }
 
 // HandleRuntimeGrants lists and applies MCPAccessGrant resources within the caller's allowed namespace scope.
@@ -266,8 +255,28 @@ func (s *AccessService) handleGrantPatch(w http.ResponseWriter, r *http.Request,
 		writeBodyDecodeError(w, err)
 		return
 	}
+	if req.Mode != nil {
+		if req.Disabled != nil {
+			writeAPIError(w, http.StatusBadRequest, "update mode or disabled separately")
+			return
+		}
+		if *req.Mode != mcpaccess.GrantModeEnforce && *req.Mode != mcpaccess.GrantModeMonitor {
+			writeAPIError(w, http.StatusBadRequest, "mode must be enforce or monitor")
+			return
+		}
+		if err := s.accessMgr.SetGrantMode(ctx, name, namespace, *req.Mode); err != nil {
+			writeAPIError(w, http.StatusInternalServerError, "failed to update grant mode")
+			return
+		}
+		if s.audit != nil {
+			p, _ := principalFromContext(r.Context())
+			s.audit.WriteAudit(ctx, auditEvent{UserID: p.Subject, Action: "grant.mode.updated", Resource: name, Namespace: namespace, Status: "success", Message: string(*req.Mode), AuthIdentity: auditIdentityLabel(p)})
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"name": name, "namespace": namespace, "mode": *req.Mode})
+		return
+	}
 	if req.Disabled == nil {
-		writeAPIError(w, http.StatusBadRequest, "disabled is required")
+		writeAPIError(w, http.StatusBadRequest, "disabled or mode is required")
 		return
 	}
 	s.handleGrantStateChange(w, ctx, namespace, name, *req.Disabled)

@@ -16,6 +16,7 @@ Tests and scripts that fall back to the current kube context have written to a p
 - **QA E2E runs only against `kind-*` contexts.** Pass the Kind kubeconfig explicitly; never let `test/e2e/qa-e2e.sh` or any script default to the ambient context.
 - **Staging E2E never targets production.** The disposable-VM suites (`test/e2e/staging-*.sh`) must pass their target guard; never set the `E2E_GUARD_ALLOW_*` escape hatches.
 - **Production changes are deliberate.** Follow the `production-platform` non-negotiables: confirm the ref and the mcp-auth choice, snapshot state before mutating, preserve certificates, and prefer targeted rollouts. Don't run `setup`, `cluster doctor --fix`, `kubectl apply/patch/delete`, or cleanup scripts against production as a side effect of testing.
+- **Production workload PKI uses a dedicated issuer.** The shared bundled `mcp-runtime-ca` is test-only for workload identity. Production setup requires a current Ready enterprise issuer and an independent signing root; preserve registry trust during migration. Follow [CA lifecycle and migration](docs/cli-reference.md#bundled-workload-ca-lifecycle) for key custody, encrypted off-host recovery and overlapping trust.
 - **Verify prod after any suspected leak.** Check `kubectl get <kind> -o json --show-managed-fields` for recent `mcp-runtime`-manager updates (for example the registry Ingress host and the operator Deployment image), then roll back from the prior ReplicaSet or snapshot.
 
 ## Task routing
@@ -29,6 +30,7 @@ Tests and scripts that fall back to the current kube context have written to a p
 | Live security / performance / posture | `hack/qa/` | `cluster-ops` skill; traffic/load probes require Kind identity |
 | Multi-team demo | `hack/qa/multitenancy-test.sh` | `hack/qa/README.md`; loopback or disposable staging only |
 | Grants / sessions / MCP calls | `access-governance` skill | `docs/teams-and-access.md` |
+| Platform token audience isolation | `pkg/platformauth`, split Ingress routes and UI session proxy | `test/e2e/audience_isolation.py`; coordinated rollout in `docs/platform-services.md` |
 | Browser / platform UI QA | `dashboard-browser-qa` skill | Role gating, browser errors and real user workflows |
 | Cluster failure diagnosis | `cluster-ops` skill, mode `troubleshoot` | Structured diagnosis before ad-hoc commands |
 | Reference update / setup / recovery | `mcp-runtime update` / `setup`; recovery scripts in `hack/deploy/reference/` | `production-platform` skill, `docs/reference-deployment.md` |
@@ -42,6 +44,18 @@ Read a relevant skill before applying its workflow. Prefer existing green CI /
 QA E2E evidence for the exact commit; add judgment or focused checks where needed.
 Scripts compose supported CLI workflows. Shared `hack/lib/` and deployment
 `lib/` files are internal helpers, not independent commands.
+
+Performance source and offline contracts live in `hack/qa/perf_suite.py` and
+`hack/tests/perf_suite_test.py`; Go hot-path benchmarks live beside policy,
+platform auth, certificate and gateway session code. Preserve strict success,
+sample-count, environment and baseline checks. Recorded Kind/staging capacity
+must never be inferred from synthetic unit fixtures or a microbenchmark.
+
+Issuer admission changes: run `hack/qa/approval-policy-rehearsal.sh` on its own
+disposable Kind cluster before disabling cert-manager's default approver. The
+rehearsal pins cert-manager v1.21.2, approver-policy v0.28.0 and Kubernetes 1.36.4
+(reviewed 2026-10-17); `docs/connect-clients.md` records upstream sources and
+rollout order. Direct CSR tests do not count as CLI adapter enrollment acceptance.
 
 ## Repository map
 
@@ -59,6 +73,15 @@ Scripts compose supported CLI workflows. Shared `hack/lib/` and deployment
 | Automation / release manifest | `hack/README.md`, `hack/release/platformmanifest/` |
 
 Platform namespaces come from `pkg/platforminventory`; see `docs/namespaces.md`.
+Admin resource history lives in `pkg/resourcehistory`; supported setup provisions
+public kubelet trust. Keep its exact projected-token audience/ServiceAccount
+boundary, node UID/address/TLS checks and missing-series semantics intact.
+PVC reservations and local `du` fallback must never become historical consumed
+bytes. See `docs/platform-services.md#resource-history-for-sizing`.
+The focused Cilium scope/resource-history security fixture has a fresh-cluster
+guard and pinned Helm/Cilium tools; see
+`docs/contributor/local-kind.md#enforcing-cilium-security-acceptance`. Keep its
+direct CNI/probe provisioning confined to that explicit disposable test.
 Sessions are managed through the platform CLI/UI and stored by platform-api;
 Kubernetes session writes do not change authorization. See
 `docs/contributor/gateway-session-sync.md` for the dedicated port, workload
@@ -73,6 +96,17 @@ dashboard asset/session and MCP Auth discovery routes when changing prefixes.
 
 ## Product management paths
 
+The console's `#/workspace` shows actual personal memberships and scoped access;
+`#/admin/overview` uses administrator-only complete platform counts. Keep those
+scopes separate when adding resource summaries. Ownership labels do not establish
+historical deployment attribution. Team owners manage memberships through
+`#/workspace/team?team=<slug>` using the same supported forms and APIs as admins.
+
+macOS companion source and packaging live in `desktop/macos/`. The dedicated
+workflow compiles both architectures without launching desktop software.
+Unsigned preview artifacts are distinct from `build.sh --sign` distribution;
+real macOS lifecycle and notarization evidence must be recorded before release.
+
 Use supported CLI and UI workflows for setup, teams/users, registry publishing,
 servers, grants, sessions, updates and cleanup. For servers, use `server init` →
 `server validate` → `server build` → `server push` → `server deploy`.
@@ -83,6 +117,14 @@ explicitly requested or when a test targets that path; record that limitation,
 and do not count it as CLI/UI validation.
 
 Account creation with `team user create` / UI is atomic with membership creation.
+
+Account cleanup uses `user deactivate <user-id> --yes [--json]` as a platform
+administrator. It atomically tombstones the account/memberships and revokes
+stored keys and human sessions through the platform session change log, with
+durable audit. Preserve the session-state → users → memberships lock order and
+the existing auth principal lookup when changing lifecycle paths. Membership
+removal alone is not account deactivation; sole owners/admins must transfer
+authority before cleanup.
 For existing accounts use `team user add` / **Add existing user**, preserving
 passwords. Verify validation, conflicts and rollback when changing these paths.
 Adapters use issued sessions by default; `--auth-mode header` supplies local
@@ -90,6 +132,13 @@ credentials without enrollment. Enterprise mTLS uses `adapter enroll` with a
 local-key CSR.
 
 ## Build and validation
+
+Follow test-driven development for behavior changes and bug fixes: first add a
+focused regression test and confirm it fails for the intended reason, then
+implement the smallest fix and make the focused tests pass before pushing or
+merging. Test observable behavior and boundaries, not copies of implementation
+details. For behavior-preserving documentation/configuration edits and mechanical
+moves, use appropriate existing checks instead of adding redundant mirror tests.
 
 Use the Go version in `go.mod`. Go builds/tests require available dependencies.
 From the repository root, on an isolated non-production runner:
@@ -159,7 +208,7 @@ deployment and this section is updated.
   backfill frameworks, or in-place upgrade paths just to support earlier
   releases of our own platform.
 - Ordinary releases are delivered with `mcp-runtime update` (images, CRDs and the
-  ServiceAccounts, RBAC, ConfigMaps and Deployment wiring a release declares in
+  ServiceAccounts, RBAC, supported platform NetworkPolicies, ConfigMaps and Deployment wiring a release declares in
   `config/release/wiring.yaml`). A breaking reset follows **backup → fresh setup
   → restore required data → verify** on the reference platform. Document that
   procedure instead of designing a general customer migration system.
@@ -241,11 +290,10 @@ notes. Do not upgrade it during documentation work unless requested. When
 changing another development tool, keep its authoritative source/version and
 installation guidance in the focused guide or this file.
 
-<!-- cully:codex:start -->
-## Cully
-
-- Use the shared project skill at `.cully/skills/cully/SKILL.md` for Cully session controls.
-- In Codex, use /prompts:cully (or type /cully and select the saved cully prompt) for the in-session cully command.
-- For each substantive task, find relevant prior work with Cully MCP and save one concise work summary before finishing. Follow the Cully skill for project identity, owner section, and private-data rules.
-- Use the configured Cully MCP tools for shared personal and project memory.
-<!-- cully:codex:end -->
+Scoped Grafana changes require the datasource-boundary and migration checks in
+`docs/platform-services.md#scoped-grafana-migration`: keep tenant access disabled
+until supported setup completes, use platform-session SSO, and reject arbitrary
+query/proxy/plugin/resource routes. Setup enables scoped Grafana only after
+verifying the supported Cilium policy capability; Kindnet and unknown providers
+keep its auth proxy off and retain admin-only access. Headless API/auth checks run on
+VMs; desktop-only checks need an appropriate separate environment.

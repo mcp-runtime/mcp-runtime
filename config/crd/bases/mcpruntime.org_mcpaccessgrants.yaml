@@ -84,6 +84,15 @@ spec:
                 - medium
                 - high
                 type: string
+              mode:
+                description: |-
+                  Mode controls whether this grant enforces its tool and trust restrictions.
+                  Empty and "enforce" retain normal authorization behavior; "monitor" records
+                  grant denials while allowing requests through after identity/session checks.
+                enum:
+                - enforce
+                - monitor
+                type: string
               policyVersion:
                 type: string
               serverRef:

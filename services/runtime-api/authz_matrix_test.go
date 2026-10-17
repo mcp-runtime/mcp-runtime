@@ -1,11 +1,13 @@
 package main
 
 import (
+	"github.com/golang-jwt/jwt/v4"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"mcp-runtime-api/internal/runtimeapi"
 	"mcp-runtime/pkg/authzmatrix"
@@ -40,6 +42,27 @@ func TestAuthzMatrixRows(t *testing.T) {
 		authzmatrix.RoleAdminKey: "test-admin",
 	}
 
+	for role, audiences := range map[string][]string{
+		"platform-jwt":       {platformauth.AudiencePlatform},
+		"runtime-jwt":        {platformauth.AudienceRuntime},
+		"analytics-jwt":      {platformauth.AudienceAnalytics},
+		"multi-audience-jwt": {platformauth.AudiencePlatform, platformauth.AudienceRuntime, platformauth.AudienceAnalytics},
+	} {
+		token, err := platformauth.Sign([]byte("test-secret"), platformauth.Principal{Subject: "matrix-user", Role: platformauth.RoleAdmin}, time.Minute, audiences)
+		if err != nil {
+			t.Fatal(err)
+		}
+		keys[role] = token
+	}
+	expired := platformauth.ClaimsFromPrincipal(platformauth.Principal{Subject: "matrix-user", Role: platformauth.RoleAdmin})
+	expired.Issuer = platformauth.Issuer
+	expired.Audience = jwt.ClaimStrings{srv.authentic.Audience}
+	expired.ExpiresAt = jwt.NewNumericDate(time.Now().Add(-time.Minute))
+	keys["expired-jwt"], err = jwt.NewWithClaims(jwt.SigningMethodHS256, expired).SignedString([]byte("test-secret"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	for _, row := range rows {
 		row := row
 		t.Run(row.Path+"_"+row.Role, func(t *testing.T) {
@@ -70,6 +93,7 @@ func TestAuthzMatrixCoversRegisteredRoutes(t *testing.T) {
 
 	required := []string{
 		"/health",
+		"/internal/observability/resources/metrics",
 		"/api/v1/dashboard/summary",
 		"/api/v1/runtime/servers",
 		"/api/v1/runtime/tools",
@@ -78,6 +102,7 @@ func TestAuthzMatrixCoversRegisteredRoutes(t *testing.T) {
 		"/api/v1/runtime/observability/links",
 		"/api/v1/runtime/observability/prometheus/query",
 		"/api/v1/runtime/observability/logs/query",
+		"/api/v1/runtime/observability/grafana/",
 		"/api/v1/runtime/teams",
 		"/api/v1/runtime/teams/",
 		"/api/v1/runtime/namespaces",
@@ -89,6 +114,8 @@ func TestAuthzMatrixCoversRegisteredRoutes(t *testing.T) {
 		"/api/v1/runtime/grants",
 		"/api/v1/runtime/sessions",
 		"/api/v1/runtime/adapter/sessions",
+		"/api/v1/runtime/adapter/sessions/",
+		"/api/v1/runtime/adapter/preflight",
 		"/api/v1/runtime/adapter/certificates",
 		"/api/v1/runtime/registry/push",
 		"/api/v1/runtime/components",

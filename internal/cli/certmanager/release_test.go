@@ -33,6 +33,7 @@ func TestCertManagerReleaseReferencesDoNotDrift(t *testing.T) {
 	patterns := []*regexp.Regexp{
 		regexp.MustCompile(`cert-manager/releases/download/(v\d+\.\d+\.\d+)/cert-manager\.yaml`),
 		regexp.MustCompile(`Installing cert-manager (v\d+\.\d+\.\d+)`),
+		regexp.MustCompile(`CERT_MANAGER_VERSION:-\s*(v\d+\.\d+\.\d+)`),
 	}
 	for _, dir := range []string{"docs", ".codex/skills", "internal", "cmd", "hack", "test/e2e"} {
 		base := filepath.Join(root, dir)

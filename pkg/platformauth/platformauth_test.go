@@ -8,7 +8,7 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 )
 
-func TestSignVerifyMultiAudience(t *testing.T) {
+func TestSignVerifySingleAudience(t *testing.T) {
 	secret := []byte("test-secret")
 	want := Principal{
 		Role:              RoleUser,
@@ -19,11 +19,11 @@ func TestSignVerifyMultiAudience(t *testing.T) {
 		Teams:             []PrincipalTeam{{ID: "team-1", Slug: "a", Name: "A", Namespace: "team-a", Role: "owner"}},
 		AuthType:          "platform_jwt",
 	}
-	token, err := Sign(secret, want, time.Minute, RequiredAudiences())
+	token, err := Sign(secret, want, time.Minute, []string{AudiencePlatform})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, audience := range RequiredAudiences() {
+	for _, audience := range []string{AudiencePlatform} {
 		claims, err := Verify(secret, token, audience)
 		if err != nil {
 			t.Fatalf("Verify(%q): %v", audience, err)

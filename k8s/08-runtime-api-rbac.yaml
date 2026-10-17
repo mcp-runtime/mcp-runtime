@@ -94,6 +94,61 @@ subjects:
     name: mcp-runtime-api
     namespace: mcp-platform
 ---
+# Enrollment preflight reads configuration and route metadata, never CA keys.
+# This separate role is also shipped by `mcp-runtime update`.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: mcp-runtime-api-adapter-preflight
+rules:
+  - apiGroups: ["cert-manager.io"]
+    resources: ["clusterissuers"]
+    verbs: ["get"]
+  - apiGroups: ["traefik.io"]
+    resources: ["ingressroutes", "tlsoptions"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: mcp-runtime-api-adapter-preflight
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: mcp-runtime-api-adapter-preflight
+subjects:
+  - kind: ServiceAccount
+    name: mcp-runtime-api
+    namespace: mcp-platform
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mcp-runtime-api-adapter-operator
+  namespace: mcp-runtime
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["mcp-runtime-operator-controller-manager"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mcp-runtime-api-adapter-operator
+  namespace: mcp-runtime
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: mcp-runtime-api-adapter-operator
+subjects:
+  - kind: ServiceAccount
+    name: mcp-runtime-api
+    namespace: mcp-platform
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -106,6 +161,36 @@ subjects:
   - kind: Group
     name: platform:role:admin
     apiGroup: rbac.authorization.k8s.io
+---
+# Resource history reads the narrow kubelet stats subresource directly over
+# verified TLS. Never grant nodes/proxy, which also exposes execution APIs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: mcp-runtime-resource-history
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "persistentvolumeclaims"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["nodes/stats"]
+    verbs: ["get"]
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: mcp-runtime-resource-history
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: mcp-runtime-resource-history
+subjects:
+  - kind: ServiceAccount
+    name: mcp-runtime-api
+    namespace: mcp-platform
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role

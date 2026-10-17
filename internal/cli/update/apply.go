@@ -264,6 +264,9 @@ func buildPatch(w *WorkloadResult, version string, rollback bool) ([]byte, error
 			order = append(order, c.Container)
 		}
 		envs, args, setArgs := ch.wiring.apply(parts, rollback)
+		if ch.wiring != nil && ch.wiring.resourceHistoryToken != nil {
+			entry["volumeMounts"] = ch.wiring.resourceHistoryToken.mountPatch(rollback)
+		}
 		if len(envs) > 0 {
 			list, _ := entry["env"].([]map[string]any)
 			entry["env"] = append(list, envs...)

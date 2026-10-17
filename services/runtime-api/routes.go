@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
@@ -50,6 +52,18 @@ func (s *server) registerRoutes(mux *http.ServeMux) {
 	if s.runtime == nil {
 		return
 	}
+	// This route has its own exact Prometheus ServiceAccount/audience
+	// TokenReview boundary; platform sessions and API keys never authorize it.
+	mux.Handle("/internal/observability/resources/metrics", s.runtime.ResourceHistoryHandler())
+	// Complete the canonical old-policy replacement before this API replica
+	// becomes ready. A partial/failed migration must never report healthy.
+	policyContext, cancelPolicies := context.WithTimeout(context.Background(), 30*time.Second)
+	policyErr := s.runtime.Deployments().ReconcileTeamNamespaceNetworkPolicies(policyContext)
+	cancelPolicies()
+	if policyErr != nil {
+		log.Printf("workload network policy reconciliation failed: %v", policyErr)
+		s.runtimeInit = "workload network policies unavailable"
+	}
 	routes := runtimeRoutes{
 		runtime:   s.runtime,
 		platform:  s.platform,
@@ -75,6 +89,11 @@ func (rr runtimeRoutes) registerRoutes(mux *http.ServeMux) {
 	accessService := runtimeServer.Access()
 	inventoryService := runtimeServer.Inventory()
 	registryPushService := runtimeServer.RegistryPush()
+	rr.mount("/runtime/workspace/teams", rr.auth(http.HandlerFunc(runtimeServer.HandleWorkspaceTeams)))
+	rr.mount("/runtime/workspace/servers", rr.auth(http.HandlerFunc(runtimeServer.HandleWorkspaceServers)))
+	rr.mount("/runtime/workspace/access", rr.auth(http.HandlerFunc(runtimeServer.HandleWorkspaceAccess)))
+	rr.mount("/admin/overview/directory", rr.adminOnly(http.HandlerFunc(runtimeServer.HandleOverviewDirectory)))
+	rr.mount("/admin/overview/servers", rr.adminOnly(http.HandlerFunc(runtimeServer.HandleOverviewServers)))
 
 	rr.mount("/dashboard/summary", rr.adminOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		runtimehandlers.HandleDashboardSummary(runtimeServer, w, r)
@@ -95,6 +114,7 @@ func (rr runtimeRoutes) registerRoutes(mux *http.ServeMux) {
 	rr.mount("/runtime/observability/prometheus/query", rr.auth(http.HandlerFunc(runtimeServer.HandleRuntimeObservabilityPrometheusQuery)))
 	rr.mount("/runtime/observability/metrics", rr.auth(http.HandlerFunc(runtimeServer.HandleRuntimeObservabilityMetrics)))
 	rr.mount("/runtime/observability/logs/query", rr.auth(http.HandlerFunc(runtimeServer.HandleRuntimeObservabilityLogs)))
+	rr.mount("/runtime/observability/grafana/", rr.auth(http.HandlerFunc(runtimeServer.HandleRuntimeGrafana)))
 	rr.mount("/runtime/teams", rr.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		runtimehandlers.HandleRuntimeTeams(runtimeServer, w, r)
 	})))
@@ -136,6 +156,12 @@ func (rr runtimeRoutes) registerRoutes(mux *http.ServeMux) {
 	rr.mount("/runtime/adapter/sessions", rr.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		runtimehandlers.HandleAdapterSession(accessService, w, r)
 	})))
+	rr.mount("/runtime/adapter/sessions/", rr.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		runtimehandlers.HandleAdapterSessionItemPath(accessService, w, r)
+	})))
+	rr.mount("/runtime/adapter/preflight", rr.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		runtimehandlers.HandleAdapterPreflight(accessService, w, r)
+	})))
 	rr.mount("/runtime/adapter/certificates", rr.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		runtimehandlers.HandleAdapterCertificate(accessService, w, r)
 	})))
@@ -143,7 +169,6 @@ func (rr runtimeRoutes) registerRoutes(mux *http.ServeMux) {
 		runtimehandlers.HandleRuntimeRegistryPush(registryPushService, w, r)
 	})))
 	mux.HandleFunc("/internal/registry-push/tar", registryPushService.HandleRegistryPushTransfer)
-	go deploymentService.ReconcileTeamNamespaceNetworkPolicies(context.Background())
 	rr.mount("/runtime/components", rr.adminOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		runtimehandlers.HandleRuntimeComponents(runtimeServer, w, r)
 	})))
@@ -165,22 +190,15 @@ func (rr runtimeRoutes) registerRoutes(mux *http.ServeMux) {
 
 func (s *server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	if s.runtimeInit != "" {
-		apihttp.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{
-			"ok":                  false,
-			"runtime_initialized": false,
-			"runtime_error":       s.runtimeInit,
-		})
+		apihttp.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false})
 		return
 	}
-	apihttp.WriteJSON(w, http.StatusOK, map[string]any{
-		"ok":                  true,
-		"runtime_initialized": true,
-	})
+	apihttp.WriteJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 func (s *server) handleReady(w http.ResponseWriter, _ *http.Request) {
 	if s.runtimeInit != "" {
-		apihttp.WriteEnvelope(w, http.StatusServiceUnavailable, apihttp.CodeServiceUnavailable, s.runtimeInit)
+		apihttp.WriteEnvelope(w, http.StatusServiceUnavailable, apihttp.CodeServiceUnavailable, "runtime unavailable")
 		return
 	}
 	if s.runtime == nil || !s.runtime.KubernetesAvailable() {

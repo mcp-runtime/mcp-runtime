@@ -7,6 +7,28 @@ data:
   dynamic.yml: |
     http:
       middlewares:
+        runtime-token-exchange:
+          forwardAuth:
+            address: http://mcp-platform-api.mcp-platform.svc.cluster.local:8080/internal/auth/exchange/runtime
+            trustForwardHeader: false
+            forwardBody: false
+            authRequestHeaders:
+              - Authorization
+              - X-Api-Key
+            authResponseHeaders:
+              - Authorization
+              - X-Api-Key
+        analytics-token-exchange:
+          forwardAuth:
+            address: http://mcp-platform-api.mcp-platform.svc.cluster.local:8080/internal/auth/exchange/analytics
+            trustForwardHeader: false
+            forwardBody: false
+            authRequestHeaders:
+              - Authorization
+              - X-Api-Key
+            authResponseHeaders:
+              - Authorization
+              - X-Api-Key
         registry-admin-auth:
           forwardAuth:
             # Post api-service-split cutover: mcp-platform-api.mcp-platform.svc.cluster.local:8080

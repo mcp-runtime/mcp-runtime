@@ -585,6 +585,15 @@ describe("ServersWorkspace connect config, protocol inventory, and observability
           ],
           resources: [{ name: "workspace-doc", uri: "file:///workspace/doc.md", mimeType: "text/markdown" }],
         },
+        runtimeStatus: {
+          transport: "streamable-http",
+          connectionState: "ready",
+          authSource: "oauth",
+          lastProbeTime: "2026-10-16T12:00:00Z",
+          lastError: { reason: "DeploymentNotReady", message: "The previous rollout failed.", observedAt: "2026-10-16T11:00:00Z" },
+          lastSession: { id: "session-7", namespace: "mcp-servers", usedAt: "2026-10-16T11:30:00Z", toolName: "search" },
+          lastSessionState: "observed",
+        },
         observability: {
           namespace: "mcp-servers",
           server: "workspace-assistant",
@@ -622,6 +631,8 @@ describe("ServersWorkspace connect config, protocol inventory, and observability
       } : RICH_SERVERS;
       const payload = url.includes("/runtime/namespaces")
         ? NAMESPACES
+        : url.includes("/runtime/servers/")
+          ? { server: { ...catalog.servers[0] } }
         : url.includes("/runtime/servers")
           ? catalog
           : url.includes("/runtime/observability/metrics")
@@ -761,13 +772,14 @@ describe("ServersWorkspace connect config, protocol inventory, and observability
     const observability = within(richCard).getByTestId("server-card-observability");
     const grafanaLink = within(observability).getByTestId("server-card-grafana-link");
     expect(grafanaLink).toHaveAttribute("href", dashboardURL);
-    for (const [name, panel] of [["Target health", 1], ["Request rate", 2], ["Deny rate", 3], ["p95 latency", 4]] as const) {
+    for (const [name, panel] of [["Request rate", 2], ["Deny rate", 3], ["p95 latency", 4]] as const) {
       const link = within(observability).getByRole("link", { name: new RegExp(name, "i") });
       expect(link).toHaveAttribute("href", `${dashboardURL}&viewPanel=${panel}`);
       expect(link).toHaveAttribute("target", "_blank");
       expect(link).toHaveAttribute("rel", "noreferrer");
     }
-    expect(within(observability).getAllByRole("link")).toHaveLength(5);
+    expect(within(observability).queryByRole("link", { name: /target health/i })).not.toBeInTheDocument();
+    expect(within(observability).getAllByRole("link")).toHaveLength(4);
     expect(observability.innerHTML).not.toContain("http://prom/query");
   });
 
@@ -778,6 +790,10 @@ describe("ServersWorkspace connect config, protocol inventory, and observability
     await screen.findByTestId("server-list");
     const [richCard] = screen.getAllByTestId("server-card");
     await user.click(within(richCard).getByTestId("server-card-details"));
+
+    const runtimeStatus = await screen.findByTestId("server-detail-runtime-status");
+    expect(runtimeStatus).toHaveTextContent("The previous rollout failed.");
+    expect(runtimeStatus).toHaveTextContent("session-7");
 
     const observability = await screen.findByTestId("server-detail-observability");
     expect(within(observability).getByText("Scoped to mcp-servers/workspace-assistant")).toBeInTheDocument();
@@ -803,7 +819,7 @@ describe("ServersWorkspace connect config, protocol inventory, and observability
 
     renderWorkspace({ authenticated: true });
     const [richCard] = await screen.findAllByTestId("server-card");
-    expect(within(richCard).queryByTestId("server-card-observability")).not.toBeInTheDocument();
+    expect(within(richCard).getByTestId("server-card-metric-summary")).toBeInTheDocument();
     expect(within(richCard).queryByRole("link", { name: /grafana|target health|request rate|deny rate|p95 latency/i })).not.toBeInTheDocument();
   });
 
@@ -819,7 +835,7 @@ describe("ServersWorkspace connect config, protocol inventory, and observability
 
     renderWorkspace({ authenticated: true, auth: { authenticated: true, principal: { role: "admin" } } });
     const [richCard] = await screen.findAllByTestId("server-card");
-    expect(within(richCard).queryByTestId("server-card-observability")).not.toBeInTheDocument();
+    expect(within(richCard).getByTestId("server-card-metric-summary")).toBeInTheDocument();
     expect(within(richCard).queryByRole("link", { name: /grafana|target health|request rate|deny rate|p95 latency/i })).not.toBeInTheDocument();
   });
   it("shows owner-scoped numeric metrics in server details without tenant Grafana access", async () => {
@@ -838,6 +854,22 @@ describe("ServersWorkspace connect config, protocol inventory, and observability
     expect(within(metrics).getByText("3")).toBeInTheDocument();
     expect(within(metrics).getByText("search")).toBeInTheDocument();
     expect(within(observability).queryByRole("link", { name: "Grafana dashboard" })).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/runtime/observability/metrics?namespace=mcp-servers&server=workspace-assistant"), expect.anything());
+  });
+
+  it("shows owner-scoped numeric metrics on the server card without exposing Grafana", async () => {
+    const fetchMock = stubRichCatalog(true);
+    renderWorkspace({ authenticated: true, auth: { authenticated: true, principal: { role: "user" } } });
+    await screen.findByTestId("server-list");
+    const [richCard] = screen.getAllByTestId("server-card");
+
+    const metrics = within(richCard).getByTestId("server-card-metric-summary");
+    expect(await within(metrics).findByText("0.25/s")).toBeInTheDocument();
+    expect(within(metrics).getByText("400 ms")).toBeInTheDocument();
+    expect(within(metrics).getByText("0.020/s")).toBeInTheDocument();
+    expect(within(metrics).getByText("3")).toBeInTheDocument();
+    expect(within(metrics).getByText("search")).toBeInTheDocument();
+    expect(within(richCard).queryByTestId("server-card-grafana-link")).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/runtime/observability/metrics?namespace=mcp-servers&server=workspace-assistant"), expect.anything());
   });
 });

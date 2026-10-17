@@ -2,28 +2,23 @@ package main
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/rand"
 	"embed"
-	"encoding/base64"
 	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
 	"log"
-	"mime"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
-	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	_ "go.uber.org/automaxprocs" // align GOMAXPROCS with container CPU quota
+
+	"mcp-ui/internal/assets"
+	"mcp-ui/internal/auth"
+	uiproxy "mcp-ui/internal/proxy"
+	"mcp-ui/internal/session"
 
 	"mcp-runtime/pkg/mcpdefaults"
 	"mcp-runtime/pkg/platformmode"
@@ -34,74 +29,29 @@ import (
 //go:embed static/*
 var staticFS embed.FS
 
-const (
-	sessionCookieName = "mcp_ui_session"
-	sessionDuration   = 8 * time.Hour
-
-	defaultLoginRateLimitCapacity = 10
-	defaultLoginRateLimitRefill   = time.Minute
-	defaultLoginFailureWindow     = 15 * time.Minute
-	defaultLoginFailureThreshold  = 5
-	defaultLoginLockoutDuration   = 5 * time.Minute
-	loginAttemptIdleTTL           = 30 * time.Minute
-	loginAttemptMaxClients        = 4096
-	loginAttemptPruneInterval     = time.Minute
-	loginAttemptEvictionBatch     = 256
-	loginFailureLogEvery          = 3
-	loginRequestMaxBytes          = 8 * 1024
-)
-
 var (
-	loginRateLimitCapacity = intEnvOr("UI_LOGIN_RATE_CAPACITY", defaultLoginRateLimitCapacity)
-	loginRateLimitRefill   = durationEnvOr("UI_LOGIN_RATE_REFILL", defaultLoginRateLimitRefill)
-	loginFailureWindow     = durationEnvOr("UI_LOGIN_FAILURE_WINDOW", defaultLoginFailureWindow)
-	loginFailureThreshold  = intEnvOr("UI_LOGIN_FAILURE_THRESHOLD", defaultLoginFailureThreshold)
-	loginLockoutDuration   = durationEnvOr("UI_LOGIN_LOCKOUT", defaultLoginLockoutDuration)
+	loginAttemptConfig     = configuredLoginAttempts()
+	loginAttempts          = auth.NewAttemptTracker(time.Now, loginAttemptConfig)
+	sessions               = session.NewStore(time.Now)
+	authLoginHooks         auth.Hooks
+	authHTTPClient         = &http.Client{Timeout: 10 * time.Second}
+	sessionProxyHTTPClient = uiproxy.NewHTTPClient()
 	forceSecureCookie      = boolEnvOr("UI_FORCE_SECURE_COOKIE", false)
-	passwordLoginHook      func(context.Context, string, string, string) (sessionPrincipal, string, time.Time, error)
 )
 
-type sessionPrincipal struct {
-	Role     string `json:"role,omitempty"`
-	Subject  string `json:"subject,omitempty"`
-	Email    string `json:"email,omitempty"`
-	AuthType string `json:"auth_type,omitempty"`
+func configuredLoginAttempts() auth.AttemptConfig {
+	config := auth.DefaultAttemptConfig()
+	config.Capacity = intEnvOr("UI_LOGIN_RATE_CAPACITY", config.Capacity)
+	config.Refill = durationEnvOr("UI_LOGIN_RATE_REFILL", config.Refill)
+	config.FailureWindow = durationEnvOr("UI_LOGIN_FAILURE_WINDOW", config.FailureWindow)
+	config.FailureThreshold = intEnvOr("UI_LOGIN_FAILURE_THRESHOLD", config.FailureThreshold)
+	config.LockoutDuration = durationEnvOr("UI_LOGIN_LOCKOUT", config.LockoutDuration)
+	return config
 }
 
-type uiSession struct {
-	ID                 string
-	ExpiresAt          time.Time
-	Principal          sessionPrincipal
-	UpstreamAuthHeader string
-	UpstreamAPIKey     string
-	// CSRFToken is the session-bound synchroniser token. It is handed to
-	// same-origin JavaScript and required back on every state-changing
-	// request; see csrf.go.
-	CSRFToken string
+func authServerForStore(store *session.Store) *auth.Server {
+	return &auth.Server{Store: store, Client: auth.Client{HTTP: authHTTPClient}, Attempts: loginAttempts, Hooks: &authLoginHooks, ForceSecureCookie: forceSecureCookie}
 }
-
-type loginAttemptTracker struct {
-	mu        sync.Mutex
-	clients   map[string]*loginClientState
-	now       func() time.Time
-	lastPrune time.Time
-}
-
-type loginClientState struct {
-	tokens         int
-	lastRefill     time.Time
-	lastSeen       time.Time
-	failures       int
-	failuresExpire time.Time
-	lockedUntil    time.Time
-}
-
-var (
-	loginAttempts  = newLoginAttemptTracker(time.Now)
-	sessions       = newUISessionStore(time.Now)
-	oidcLoginHook  func(context.Context, string, string) (sessionPrincipal, string, time.Time, error)
-	authHTTPClient = &http.Client{Timeout: 10 * time.Second}
-)
 
 // main initializes and starts the MCP Runtime UI server.
 // It serves static web assets and provides a dynamic /config.js endpoint
@@ -162,7 +112,7 @@ func newMux(apiBase, apiUpstream, apiKey, apiKeys, adminAPIKeys string) (*http.S
 		return nil, err
 	}
 	apiBase = normalizePathPrefix(apiBase)
-	upstreamAPIKey := firstAPIKey(apiKeys)
+	upstreamAPIKey := auth.FirstAPIKey(apiKeys)
 	if upstreamAPIKey == "" {
 		upstreamAPIKey = apiKey
 		apiKeys = apiKey
@@ -217,732 +167,31 @@ func newMux(apiBase, apiUpstream, apiKey, apiKeys, adminAPIKeys string) (*http.S
 		w.Header().Set("content-type", "application/javascript")
 		_, _ = w.Write([]byte(configJS))
 	})
-	mux.HandleFunc("/auth/login", handleLogin(apiKey, upstreamAPIKey, apiUpstream, sessions))
-	mux.HandleFunc("/auth/logout", handleLogout(sessions))
-	mux.HandleFunc("/auth/status", handleStatus(sessions))
-	parsedAPIKeys := parseAPIKeyList(apiKeys)
-	parsedAdminAPIKeys := parseAPIKeyList(adminAPIKeys)
-	mux.HandleFunc("/auth/admin-check", handleAdminCheck(sessions, parsedAPIKeys, parsedAdminAPIKeys, legacyAdminAPIKeyFallbackEnabled()))
+	authServer := authServerForStore(sessions)
+	mux.HandleFunc("/auth/login", authServer.Login(apiKey, upstreamAPIKey, apiUpstream))
+	mux.HandleFunc("/auth/logout", authServer.Logout())
+	mux.HandleFunc("/auth/status", authServer.Status())
+	parsedAPIKeys := auth.ParseAPIKeyList(apiKeys)
+	parsedAdminAPIKeys := auth.ParseAPIKeyList(adminAPIKeys)
+	mux.HandleFunc("/auth/admin-check", authServer.AdminCheck(parsedAPIKeys, parsedAdminAPIKeys, legacyAdminAPIKeyFallbackEnabled()))
 
-	runtimeBase, err := parseRuntimeUpstream(serviceutil.EnvOr("RUNTIME_UPSTREAM", defaultRuntimeUpstream))
+	runtimeBase, err := uiproxy.ParseUpstream(serviceutil.EnvOr("RUNTIME_UPSTREAM", uiproxy.DefaultRuntimeUpstream))
 	if err != nil {
 		return nil, err
 	}
-	analyticsBase, err := parseRuntimeUpstream(serviceutil.EnvOr("ANALYTICS_UPSTREAM", defaultAnalyticsUpstream))
+	analyticsBase, err := uiproxy.ParseUpstream(serviceutil.EnvOr("ANALYTICS_UPSTREAM", uiproxy.DefaultAnalyticsUpstream))
 	if err != nil {
 		return nil, err
 	}
-	mux.Handle(uiSessionAPIPrefix+"/", newSessionProxyWithUpstreams(runtimeBase, analyticsBase, sessions))
-	mux.Handle(publicCatalogAPIPrefix+"/", newPublicCatalogProxy(runtimeBase, platformMode == "public"))
-
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		path := strings.TrimPrefix(r.URL.Path, "/")
-		if path == "" {
-			path = "static/index.html"
-		} else {
-			path = filepath.ToSlash(filepath.Join("static", path))
-		}
-
-		data, err := staticFS.ReadFile(path)
-		if err != nil {
-			http.NotFound(w, r)
-			return
-		}
-
-		if ext := filepath.Ext(path); ext != "" {
-			if ct := mime.TypeByExtension(ext); ct != "" {
-				w.Header().Set("content-type", ct)
-			}
-		}
-
-		// HTML: always revalidate so browsers pick up new JS/CSS on deploy.
-		// JS/CSS: short max-age so updates land within a minute without hammering
-		// the server on every request.
-		switch filepath.Ext(path) {
-		case ".html":
-			w.Header().Set("cache-control", "no-cache")
-		case ".js", ".css":
-			w.Header().Set("cache-control", "max-age=60")
-		default:
-			w.Header().Set("cache-control", "max-age=300")
-		}
-
-		if filepath.Ext(path) == ".html" {
-			data = prefixAssetHTML(data, routes.PlatformPrefix())
-		}
-		w.WriteHeader(http.StatusOK)
-		// #nosec G705 -- assets are bundled from repository static/ at build time.
-		_, _ = w.Write(data)
-	})
-
-	return mountPublicUI(mux, routes), nil
-}
-
-func handleLogin(apiKey, upstreamAPIKey, apiUpstream string, store *uiSessionStore) http.HandlerFunc {
-	type loginRequest struct {
-		APIKey   string `json:"api_key"`
-		IDToken  string `json:"id_token"`
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			w.Header().Set("allow", http.MethodPost)
-			serviceutil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
-			return
-		}
-		clientID := loginClientID(r)
-		if !loginAttempts.allow(clientID) {
-			serviceutil.WriteJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too_many_requests"})
-			return
-		}
-
-		var req loginRequest
-		r.Body = http.MaxBytesReader(w, r.Body, loginRequestMaxBytes)
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			serviceutil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_request"})
-			return
-		}
-
-		presentedAPIKey := strings.TrimSpace(req.APIKey)
-		idToken := strings.TrimSpace(req.IDToken)
-		email := strings.TrimSpace(req.Email)
-		password := strings.TrimSpace(req.Password)
-		if presentedAPIKey == "" && idToken == "" && (email == "" || password == "") {
-			serviceutil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "missing_credentials"})
-			return
-		}
-
-		var (
-			sess uiSession
-			err  error
-		)
-
-		if email != "" || password != "" {
-			var (
-				p         sessionPrincipal
-				token     string
-				expiresAt time.Time
-				verifyErr error
-			)
-			if passwordLoginHook != nil {
-				p, token, expiresAt, verifyErr = passwordLoginHook(r.Context(), apiUpstream, email, password)
-			} else {
-				p, token, expiresAt, verifyErr = loginPasswordWithAPI(r.Context(), apiUpstream, email, password)
-			}
-			if verifyErr != nil {
-				failures := loginAttempts.recordFailure(clientID)
-				if failures >= loginFailureLogEvery {
-					// #nosec G706 -- authentication telemetry log with bounded fields.
-					log.Printf(`auth_login_failure client=%q timestamp=%q failure_count=%d mode=%q`, clientID, time.Now().UTC().Format(time.RFC3339), failures, "password")
-				}
-				serviceutil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-				return
-			}
-			sess, err = store.createSession(r.Context(), uiSession{
-				Principal:          p,
-				UpstreamAuthHeader: "Bearer " + token,
-				ExpiresAt:          expiresAt,
-			})
-		} else if idToken != "" {
-			var (
-				p         sessionPrincipal
-				token     string
-				expiresAt time.Time
-				verifyErr error
-			)
-			if oidcLoginHook != nil {
-				p, token, expiresAt, verifyErr = oidcLoginHook(r.Context(), apiUpstream, idToken)
-			} else {
-				p, token, expiresAt, verifyErr = loginOIDCSession(r.Context(), apiUpstream, idToken)
-			}
-			if verifyErr != nil {
-				failures := loginAttempts.recordFailure(clientID)
-				if failures >= loginFailureLogEvery {
-					// #nosec G706 -- authentication telemetry log with bounded fields.
-					log.Printf(`auth_login_failure client=%q timestamp=%q failure_count=%d mode=%q`, clientID, time.Now().UTC().Format(time.RFC3339), failures, "oidc")
-				}
-				serviceutil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-				return
-			}
-			sess, err = store.createSession(r.Context(), uiSession{
-				Principal:          p,
-				UpstreamAuthHeader: "Bearer " + token,
-				ExpiresAt:          expiresAt,
-			})
-		} else {
-			if apiKey == "" {
-				serviceutil.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "api_key_not_configured"})
-				return
-			}
-			if !hmac.Equal([]byte(presentedAPIKey), []byte(apiKey)) {
-				failures := loginAttempts.recordFailure(clientID)
-				if failures >= loginFailureLogEvery {
-					// #nosec G706 -- authentication telemetry log with bounded fields.
-					log.Printf(`auth_login_failure client=%q timestamp=%q failure_count=%d mode=%q`, clientID, time.Now().UTC().Format(time.RFC3339), failures, "api_key")
-				}
-				serviceutil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-				return
-			}
-			sess, err = store.createSession(r.Context(), uiSession{
-				Principal: sessionPrincipal{
-					Role:     "admin",
-					AuthType: "ui_api_key",
-				},
-				UpstreamAPIKey: upstreamAPIKey,
-			})
-		}
-		if err != nil {
-			serviceutil.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "session_create_failed"})
-			return
-		}
-
-		priorFailures := loginAttempts.recordSuccess(clientID)
-		if priorFailures > 0 {
-			// #nosec G706 -- authentication telemetry log with bounded fields.
-			log.Printf(`auth_login_success_after_failures timestamp=%q prior_failures=%d`, time.Now().UTC().Format(time.RFC3339), priorFailures)
-		}
-		http.SetCookie(w, newSessionCookie(r, sess.ID, sess.ExpiresAt))
-		serviceutil.WriteJSON(w, http.StatusOK, map[string]any{
-			"authenticated": true,
-			"principal":     sess.Principal,
-			"csrf_token":    sess.CSRFToken,
-		})
-	}
-}
-
-func loginOIDCSession(ctx context.Context, apiUpstream, idToken string) (sessionPrincipal, string, time.Time, error) {
-	p, token, expiresAt, err := loginOIDCWithAPI(ctx, apiUpstream, idToken)
-	if err == nil {
-		return p, token, expiresAt, nil
-	}
-	var statusErr *oidcLoginStatusError
-	if !errors.As(err, &statusErr) || statusErr.StatusCode != http.StatusServiceUnavailable {
-		return sessionPrincipal{}, "", time.Time{}, err
-	}
-	p, verifyErr := verifyOIDCTokenWithAPI(ctx, apiUpstream, idToken)
-	if verifyErr != nil {
-		return sessionPrincipal{}, "", time.Time{}, verifyErr
-	}
-	return p, idToken, idTokenExpiry(idToken), nil
-}
-
-func loginPasswordWithAPI(ctx context.Context, apiUpstream, email, password string) (sessionPrincipal, string, time.Time, error) {
-	loginURL, err := apiUpstreamURL(apiUpstream, "api", "v1", "auth", "login")
+	platformBase, err := uiproxy.ParseUpstream(apiUpstream)
 	if err != nil {
-		return sessionPrincipal{}, "", time.Time{}, err
+		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
+	mux.Handle(uiproxy.SessionAPIPrefix+"/", uiproxy.NewSessionProxy(platformBase, runtimeBase, analyticsBase, sessions, sessionProxyHTTPClient))
+	mux.Handle(uiproxy.PublicCatalogAPIPrefix+"/", uiproxy.NewPublicCatalogProxy(runtimeBase, platformMode == "public", sessionProxyHTTPClient))
 
-	body, err := json.Marshal(map[string]string{
-		"email":    email,
-		"password": password,
-	})
-	if err != nil {
-		return sessionPrincipal{}, "", time.Time{}, err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, loginURL, strings.NewReader(string(body)))
-	if err != nil {
-		return sessionPrincipal{}, "", time.Time{}, err
-	}
-	req.Header.Set("content-type", "application/json")
-	req.Header.Set("x-mcp-source", "ui")
-	resp, err := authHTTPClient.Do(req)
-	if err != nil {
-		return sessionPrincipal{}, "", time.Time{}, err
-	}
-	defer drainAndClose(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		return sessionPrincipal{}, "", time.Time{}, fmt.Errorf("password auth failed: status %d", resp.StatusCode)
-	}
-	var payload struct {
-		AccessToken string `json:"access_token"`
-		ExpiresIn   int    `json:"expires_in"`
-		User        struct {
-			ID        string `json:"id"`
-			Email     string `json:"email"`
-			Role      string `json:"role"`
-			Namespace string `json:"namespace"`
-		} `json:"user"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return sessionPrincipal{}, "", time.Time{}, err
-	}
-	if strings.TrimSpace(payload.AccessToken) == "" {
-		return sessionPrincipal{}, "", time.Time{}, errors.New("missing access token")
-	}
-	if payload.ExpiresIn <= 0 {
-		return sessionPrincipal{}, "", time.Time{}, errors.New("missing access token expiry")
-	}
-	role := strings.TrimSpace(payload.User.Role)
-	if role == "" {
-		role = "user"
-	}
-	expiresAt := time.Now().UTC().Add(time.Duration(payload.ExpiresIn) * time.Second)
-	return sessionPrincipal{
-		Role:     role,
-		Subject:  strings.TrimSpace(payload.User.ID),
-		Email:    strings.TrimSpace(payload.User.Email),
-		AuthType: "platform_jwt",
-	}, payload.AccessToken, expiresAt, nil
-}
-
-func idTokenExpiry(idToken string) time.Time {
-	parts := strings.Split(strings.TrimSpace(idToken), ".")
-	if len(parts) < 2 {
-		return time.Time{}
-	}
-	payloadBytes, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return time.Time{}
-	}
-	var claims struct {
-		Exp int64 `json:"exp"`
-	}
-	if err := json.Unmarshal(payloadBytes, &claims); err != nil {
-		return time.Time{}
-	}
-	if claims.Exp <= 0 {
-		return time.Time{}
-	}
-	return time.Unix(claims.Exp, 0).UTC()
-}
-
-type oidcLoginStatusError struct {
-	StatusCode int
-}
-
-func (e *oidcLoginStatusError) Error() string {
-	return fmt.Sprintf("oidc login failed: status %d", e.StatusCode)
-}
-
-func loginOIDCWithAPI(ctx context.Context, apiUpstream, idToken string) (sessionPrincipal, string, time.Time, error) {
-	oidcURL, err := apiUpstreamURL(apiUpstream, "api", "v1", "auth", "oidc")
-	if err != nil {
-		return sessionPrincipal{}, "", time.Time{}, err
-	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	body, err := json.Marshal(map[string]string{"id_token": idToken})
-	if err != nil {
-		return sessionPrincipal{}, "", time.Time{}, err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, oidcURL, strings.NewReader(string(body)))
-	if err != nil {
-		return sessionPrincipal{}, "", time.Time{}, err
-	}
-	req.Header.Set("content-type", "application/json")
-	req.Header.Set("x-mcp-source", "ui")
-
-	resp, err := authHTTPClient.Do(req)
-	if err != nil {
-		return sessionPrincipal{}, "", time.Time{}, err
-	}
-	defer drainAndClose(resp.Body)
-
-	if resp.StatusCode != http.StatusOK {
-		_, _ = io.Copy(io.Discard, resp.Body)
-		return sessionPrincipal{}, "", time.Time{}, &oidcLoginStatusError{StatusCode: resp.StatusCode}
-	}
-
-	var payload struct {
-		AccessToken string `json:"access_token"`
-		ExpiresIn   int    `json:"expires_in"`
-		User        struct {
-			ID    string `json:"id"`
-			Email string `json:"email"`
-			Role  string `json:"role"`
-		} `json:"user"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return sessionPrincipal{}, "", time.Time{}, err
-	}
-	if strings.TrimSpace(payload.AccessToken) == "" {
-		return sessionPrincipal{}, "", time.Time{}, errors.New("missing access token")
-	}
-	role := strings.TrimSpace(payload.User.Role)
-	if role == "" {
-		role = "user"
-	}
-	var expiresAt time.Time
-	if payload.ExpiresIn > 0 {
-		expiresAt = time.Now().UTC().Add(time.Duration(payload.ExpiresIn) * time.Second)
-	}
-	return sessionPrincipal{
-		Role:     role,
-		Subject:  strings.TrimSpace(payload.User.ID),
-		Email:    strings.TrimSpace(payload.User.Email),
-		AuthType: "platform_jwt",
-	}, strings.TrimSpace(payload.AccessToken), expiresAt, nil
-}
-
-func verifyOIDCTokenWithAPI(ctx context.Context, apiUpstream, idToken string) (sessionPrincipal, error) {
-	meURL, err := apiUpstreamURL(apiUpstream, "api", "v1", "auth", "me")
-	if err != nil {
-		return sessionPrincipal{}, err
-	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, meURL, nil)
-	if err != nil {
-		return sessionPrincipal{}, err
-	}
-	req.Header.Set("authorization", "Bearer "+idToken)
-
-	resp, err := authHTTPClient.Do(req)
-	if err != nil {
-		return sessionPrincipal{}, err
-	}
-	defer drainAndClose(resp.Body)
-
-	if resp.StatusCode != http.StatusOK {
-		_, _ = io.Copy(io.Discard, resp.Body)
-		return sessionPrincipal{}, fmt.Errorf("auth check failed: status %d", resp.StatusCode)
-	}
-
-	var payload struct {
-		Authenticated bool             `json:"authenticated"`
-		Principal     sessionPrincipal `json:"principal"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return sessionPrincipal{}, err
-	}
-	if !payload.Authenticated {
-		return sessionPrincipal{}, errors.New("not authenticated")
-	}
-	if strings.TrimSpace(payload.Principal.Role) == "" {
-		payload.Principal.Role = "user"
-	}
-	if payload.Principal.AuthType == "" {
-		payload.Principal.AuthType = "oidc_jwt"
-	}
-	return payload.Principal, nil
-}
-
-func apiUpstreamURL(apiUpstream string, parts ...string) (string, error) {
-	base := strings.TrimSpace(apiUpstream)
-	if base == "" {
-		return "", errors.New("api upstream is empty")
-	}
-	u, err := url.Parse(base)
-	if err != nil {
-		return "", err
-	}
-	if u.Scheme == "" || u.Host == "" {
-		return "", errors.New("api upstream must include scheme and host")
-	}
-	return url.JoinPath(base, parts...)
-}
-
-func drainAndClose(body io.ReadCloser) {
-	if body == nil {
-		return
-	}
-	_, _ = io.Copy(io.Discard, body)
-	_ = body.Close()
-}
-
-const loginClientUnknownIP = "unknown"
-
-func loginClientID(r *http.Request) string {
-	if forwardedFor := strings.TrimSpace(r.Header.Get("x-forwarded-for")); forwardedFor != "" {
-		if client := firstNonEmptyForwardedIP(forwardedFor); client != "" {
-			return client
-		}
-	}
-	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-		if host = strings.TrimSpace(host); host != "" {
-			return host
-		}
-	}
-	if remote := strings.TrimSpace(r.RemoteAddr); remote != "" {
-		return remote
-	}
-	return loginClientUnknownIP
-}
-
-func firstNonEmptyForwardedIP(xff string) string {
-	for _, part := range strings.Split(xff, ",") {
-		if ip := strings.TrimSpace(part); ip != "" {
-			return ip
-		}
-	}
-	return ""
-}
-
-func newLoginAttemptTracker(now func() time.Time) *loginAttemptTracker {
-	return &loginAttemptTracker{clients: map[string]*loginClientState{}, now: now}
-}
-
-func (t *loginAttemptTracker) allow(clientID string) bool {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	now := t.now()
-	t.pruneIfDueLocked(now)
-	state := t.stateForLocked(clientID, now)
-	state.lastSeen = now
-	refillLoginTokens(state, now)
-	if now.Before(state.lockedUntil) {
-		return false
-	}
-	if state.tokens <= 0 {
-		return false
-	}
-	state.tokens--
-	t.enforceMaxLocked(now)
-	return true
-}
-
-func (t *loginAttemptTracker) recordFailure(clientID string) int {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	now := t.now()
-	t.pruneIfDueLocked(now)
-	state := t.stateForLocked(clientID, now)
-	state.lastSeen = now
-	if now.After(state.failuresExpire) {
-		state.failures = 0
-	}
-	state.failures++
-	state.failuresExpire = now.Add(loginFailureWindow)
-	if state.failures >= loginFailureThreshold {
-		state.lockedUntil = now.Add(loginLockoutDuration)
-	}
-	t.enforceMaxLocked(now)
-	return state.failures
-}
-
-func (t *loginAttemptTracker) recordSuccess(clientID string) int {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	now := t.now()
-	t.pruneIfDueLocked(now)
-	state := t.clients[clientID]
-	if state == nil {
-		return 0
-	}
-	state.lastSeen = now
-	prior := state.failures
-	state.failures = 0
-	state.failuresExpire = time.Time{}
-	state.lockedUntil = time.Time{}
-	return prior
-}
-
-func (t *loginAttemptTracker) stateForLocked(clientID string, now time.Time) *loginClientState {
-	state := t.clients[clientID]
-	if state == nil {
-		state = &loginClientState{tokens: loginRateLimitCapacity, lastRefill: now, lastSeen: now}
-		t.clients[clientID] = state
-	}
-	return state
-}
-
-func (t *loginAttemptTracker) pruneIfDueLocked(now time.Time) {
-	if !t.lastPrune.IsZero() && now.Sub(t.lastPrune) < loginAttemptPruneInterval {
-		return
-	}
-	t.lastPrune = now
-	for clientID, state := range t.clients {
-		if now.Sub(state.lastSeen) > loginAttemptIdleTTL && !now.Before(state.lockedUntil) {
-			delete(t.clients, clientID)
-		}
-	}
-}
-
-func (t *loginAttemptTracker) enforceMaxLocked(now time.Time) {
-	if len(t.clients) <= loginAttemptMaxClients {
-		return
-	}
-	target := loginAttemptMaxClients - loginAttemptEvictionBatch
-	if target < 0 {
-		target = 0
-	}
-	type candidate struct {
-		clientID string
-		lastSeen time.Time
-		failures int
-		locked   bool
-	}
-	candidates := make([]candidate, 0, len(t.clients))
-	for clientID, state := range t.clients {
-		candidates = append(candidates, candidate{
-			clientID: clientID,
-			lastSeen: state.lastSeen,
-			failures: state.failures,
-			locked:   now.Before(state.lockedUntil),
-		})
-	}
-	sort.Slice(candidates, func(i, j int) bool {
-		if candidates[i].locked != candidates[j].locked {
-			return !candidates[i].locked
-		}
-		if (candidates[i].failures > 0) != (candidates[j].failures > 0) {
-			return candidates[i].failures == 0
-		}
-		return candidates[i].lastSeen.Before(candidates[j].lastSeen)
-	})
-	for _, entry := range candidates[:len(t.clients)-target] {
-		delete(t.clients, entry.clientID)
-	}
-}
-
-func refillLoginTokens(state *loginClientState, now time.Time) {
-	if state.lastRefill.IsZero() {
-		state.lastRefill = now
-	}
-	elapsed := now.Sub(state.lastRefill)
-	if elapsed < loginRateLimitRefill {
-		return
-	}
-	refill := int(elapsed / loginRateLimitRefill)
-	state.tokens += refill
-	if state.tokens > loginRateLimitCapacity {
-		state.tokens = loginRateLimitCapacity
-	}
-	state.lastRefill = state.lastRefill.Add(time.Duration(refill) * loginRateLimitRefill)
-}
-
-func handleLogout(store *uiSessionStore) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			w.Header().Set("allow", http.MethodPost)
-			serviceutil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
-			return
-		}
-		if cookie, err := r.Cookie(sessionCookieName); err == nil {
-			store.delete(strings.TrimSpace(cookie.Value))
-		}
-		http.SetCookie(w, expiredSessionCookie(r))
-		serviceutil.WriteJSON(w, http.StatusOK, map[string]bool{"authenticated": false})
-	}
-}
-
-// handleAdminCheck is the Traefik forwardAuth target for /grafana. It returns
-// 204 when the caller is an admin (logged-in UI session or admin API key) and
-// 401 otherwise. The original request body and path do not matter — Traefik
-// forwards only headers and consumes the status. The Cache-Control header is
-// set by securityHeadersMiddleware for /auth/.
-func handleAdminCheck(store *uiSessionStore, apiKeys, adminAPIKeys []string, legacyAdminKeys bool) http.HandlerFunc {
-	gateKeys := adminAPIKeys
-	if len(gateKeys) == 0 && legacyAdminKeys {
-		gateKeys = apiKeys
-	}
-	return func(w http.ResponseWriter, r *http.Request) {
-		if sess, ok := store.sessionFromRequest(r); ok && strings.EqualFold(sess.Principal.Role, "admin") {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		if validAPIKeyHeader(r, gateKeys) {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		serviceutil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-	}
-}
-
-func matchAPIKey(presented string, keys []string) bool {
-	for _, key := range keys {
-		if hmac.Equal([]byte(presented), []byte(key)) {
-			return true
-		}
-	}
-	return false
-}
-
-// parseAPIKeyList splits a comma-separated API-key list into a slice of
-// trimmed, non-empty entries, suitable for use as a per-process lookup.
-func parseAPIKeyList(s string) []string {
-	if strings.TrimSpace(s) == "" {
-		return nil
-	}
-	parts := strings.Split(s, ",")
-	out := make([]string, 0, len(parts))
-	for _, key := range parts {
-		if trimmed := strings.TrimSpace(key); trimmed != "" {
-			out = append(out, trimmed)
-		}
-	}
-	return out
-}
-
-func handleStatus(store *uiSessionStore) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		sess, ok := store.sessionFromRequest(r)
-		if !ok {
-			serviceutil.WriteJSON(w, http.StatusOK, map[string]any{"authenticated": false})
-			return
-		}
-		serviceutil.WriteJSON(w, http.StatusOK, map[string]any{
-			"authenticated": true,
-			"principal":     sess.Principal,
-			"csrf_token":    sess.CSRFToken,
-		})
-	}
-}
-
-func newSessionCookie(r *http.Request, sessionID string, expiresAt time.Time) *http.Cookie {
-	maxAge := int(time.Until(expiresAt).Seconds())
-	if maxAge < 1 {
-		maxAge = int(sessionDuration.Seconds())
-	}
-	// #nosec G124 -- Secure is enabled automatically for TLS / x-forwarded-proto=https; HttpOnly and SameSite are set.
-	return &http.Cookie{
-		Name:     sessionCookieName,
-		Value:    sessionID,
-		Path:     "/",
-		MaxAge:   maxAge,
-		HttpOnly: true,
-		Secure:   secureCookie(r),
-		SameSite: http.SameSiteStrictMode,
-	}
-}
-
-func expiredSessionCookie(r *http.Request) *http.Cookie {
-	// #nosec G124 -- Secure is enabled automatically for TLS / x-forwarded-proto=https; HttpOnly and SameSite are set.
-	return &http.Cookie{
-		Name:     sessionCookieName,
-		Value:    "",
-		Path:     "/",
-		MaxAge:   -1,
-		HttpOnly: true,
-		Secure:   secureCookie(r),
-		SameSite: http.SameSiteStrictMode,
-	}
-}
-
-func randomURLToken(rawBytes int) (string, error) {
-	b := make([]byte, rawBytes)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(b), nil
-}
-
-func validAPIKeyHeader(r *http.Request, keys []string) bool {
-	if len(keys) == 0 {
-		return false
-	}
-	presented := strings.TrimSpace(r.Header.Get("x-api-key"))
-	if presented == "" {
-		return false
-	}
-	return matchAPIKey(presented, keys)
-}
-
-func firstAPIKey(apiKeys string) string {
-	for _, key := range strings.Split(apiKeys, ",") {
-		if trimmed := strings.TrimSpace(key); trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
+	mux.Handle("/", assets.Handler{Files: staticFS, RewriteHTML: func(data []byte) []byte { return prefixAssetHTML(data, routes.PlatformPrefix()) }})
+	return mountPublicUI(mux, routes, platformBase), nil
 }
 
 func normalizedPlatformMode() string {
@@ -961,37 +210,6 @@ func catalogNamespacesForMode(mode string) []string {
 func defaultCatalogNamespaceForMode(mode string) string {
 	normalized, _ := platformmode.Normalize(mode)
 	return normalized.DefaultCatalogNamespace()
-}
-
-func defaultPublicCatalogNamespace() string {
-	namespaces := catalogNamespacesForMode("public")
-	if len(namespaces) == 0 {
-		return defaultCatalogNamespaceForMode("public")
-	}
-	return namespaces[0]
-}
-
-func isPublicCatalogNamespace(namespace string) bool {
-	namespace = strings.TrimSpace(namespace)
-	if namespace == "" {
-		return false
-	}
-	for _, candidate := range catalogNamespacesForMode("public") {
-		if candidate == namespace {
-			return true
-		}
-	}
-	return false
-}
-
-func secureCookie(r *http.Request) bool {
-	if forceSecureCookie {
-		return true
-	}
-	if r.TLS != nil {
-		return true
-	}
-	return strings.EqualFold(r.Header.Get("x-forwarded-proto"), "https")
 }
 
 func normalizePathPrefix(value string) string {
@@ -1154,4 +372,15 @@ func legacyAdminAPIKeyFallbackEnabled() bool {
 		}
 	}
 	return strings.TrimSpace(os.Getenv("MCP_RUNTIME_TEST_MODE")) == "1"
+}
+
+// configureSessionStore installs the explicitly configured backend before mux
+// construction, so handlers share one store without package-owned process env.
+func configureSessionStore(ctx context.Context) error {
+	backend, err := session.NewBackend(ctx, os.Getenv("UI_SESSION_STORE"), os.Getenv("UI_SESSION_DATABASE_URL"), os.Getenv("UI_SESSION_ENCRYPTION_KEY"))
+	if err != nil {
+		return err
+	}
+	sessions = session.NewStoreWithBackend(backend, time.Now)
+	return nil
 }

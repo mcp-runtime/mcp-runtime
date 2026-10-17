@@ -104,6 +104,83 @@ func TestAuthorizeExpiredGrantIsIgnored(t *testing.T) {
 	}
 }
 
+func TestAuthorizeMonitorGrantAuditsWouldDenyButAllows(t *testing.T) {
+	policy := testPolicyWithGrant()
+	policy.Grants[0].Mode = "monitor"
+	policy.Grants[0].MaxTrust = "low"
+	decision := Authorize(policy, Request{
+		Identity:  Identity{HumanID: "human-1", AgentID: "agent-1"},
+		RPCMethod: "tools/call",
+		ToolName:  "upper",
+	}, time.Time{})
+	if !decision.Allowed || !decision.WouldDeny || decision.WouldDenyReason != "trust_too_low" {
+		t.Fatalf("decision = %#v, want allow with trust_too_low shadow denial", decision)
+	}
+}
+
+func TestAuthorizeMonitorGrantPreservesEnforceDenyAndSessionGates(t *testing.T) {
+	t.Run("enforce grant deny takes precedence", func(t *testing.T) {
+		policy := testPolicyWithGrant()
+		policy.Grants[0].Name = "a-monitor"
+		policy.Grants[0].Mode = "monitor"
+		policy.Grants[0].ToolRules = []ToolAccess{{Name: "upper", Decision: "deny"}}
+		enforceGrant := policy.Grants[0]
+		enforceGrant.Name = "z-enforce"
+		enforceGrant.Mode = "enforce"
+		policy.Grants = append(policy.Grants, enforceGrant)
+		decision := Authorize(policy, Request{Identity: Identity{HumanID: "human-1", AgentID: "agent-1"}, RPCMethod: "tools/call", ToolName: "upper"}, time.Time{})
+		if decision.Allowed || decision.WouldDeny || decision.Reason != "tool_denied" {
+			t.Fatalf("decision = %#v, want enforcing tool denial", decision)
+		}
+	})
+
+	t.Run("enforce grant allow passes while monitor deny is audited", func(t *testing.T) {
+		policy := testPolicyWithGrant()
+		policy.Grants[0].Name = "a-monitor"
+		policy.Grants[0].Mode = "monitor"
+		policy.Grants[0].ToolRules = []ToolAccess{{Name: "upper", Decision: "deny"}}
+		enforceGrant := testPolicyWithGrant().Grants[0]
+		enforceGrant.Name = "z-enforce"
+		policy.Grants = append(policy.Grants, enforceGrant)
+		decision := Authorize(policy, Request{Identity: Identity{HumanID: "human-1", AgentID: "agent-1"}, RPCMethod: "tools/call", ToolName: "upper"}, time.Time{})
+		if !decision.Allowed || !decision.WouldDeny || decision.WouldDenyReason != "tool_denied" {
+			t.Fatalf("decision = %#v, want enforce allow with monitor would-deny audit", decision)
+		}
+	})
+
+	t.Run("required session denial remains fail closed", func(t *testing.T) {
+		policy := testPolicyWithGrant()
+		policy.Grants[0].Mode = "monitor"
+		policy.Session.Required = true
+		decision := Authorize(policy, Request{Identity: Identity{HumanID: "human-1", AgentID: "agent-1"}, RPCMethod: "tools/call", ToolName: "upper"}, time.Time{})
+		if decision.Allowed || decision.WouldDeny || decision.Reason != "missing_session" {
+			t.Fatalf("decision = %#v, want missing-session denial", decision)
+		}
+	})
+}
+
+func TestAuthorizeEnforceModeKeepsDenialAndMonitorModeRecordsDefaultAllow(t *testing.T) {
+	t.Run("default enforce keeps trust denial", func(t *testing.T) {
+		policy := testPolicyWithGrant()
+		policy.Grants[0].MaxTrust = "low"
+		decision := Authorize(policy, Request{Identity: Identity{HumanID: "human-1", AgentID: "agent-1"}, RPCMethod: "tools/call", ToolName: "upper"}, time.Time{})
+		if decision.Allowed || decision.WouldDeny || decision.Reason != "trust_too_low" {
+			t.Fatalf("decision = %#v, want unchanged enforce denial", decision)
+		}
+	})
+
+	t.Run("default allow still records monitor denial", func(t *testing.T) {
+		policy := testPolicyWithGrant()
+		policy.Policy.DefaultDecision = "allow"
+		policy.Grants[0].Mode = "monitor"
+		policy.Grants[0].ToolRules = []ToolAccess{{Name: "other", Decision: "allow"}}
+		decision := Authorize(policy, Request{Identity: Identity{HumanID: "human-1", AgentID: "agent-1"}, RPCMethod: "tools/call", ToolName: "upper"}, time.Time{})
+		if !decision.Allowed || !decision.WouldDeny || decision.WouldDenyReason != "tool_not_granted" {
+			t.Fatalf("decision = %#v, want default allow with monitor would-deny audit", decision)
+		}
+	})
+}
+
 func TestAuthorizeExpiredGrantNextToActiveGrantReportsToolNotGranted(t *testing.T) {
 	now := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
 	policy := testPolicyWithGrant()

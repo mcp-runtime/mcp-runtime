@@ -98,6 +98,7 @@ if [[ -f "${BACKUP_DIR}/e2e.env" ]]; then
   set +a
 fi
 export E2E_MTLS_CLUSTER_ISSUER="${E2E_MTLS_CLUSTER_ISSUER-mcp-runtime-ca}"
+staging_enable_mcp_auth_for_run "${E2E_WITH_MCP_AUTH_OVERRIDE:-false}"
 # Adapter certificates on gateway routes are an opt-in platform feature; setup
 # reads MCP_ADAPTER_CERTIFICATES, MCP_TRUST_DOMAIN and
 # MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE from the environment.

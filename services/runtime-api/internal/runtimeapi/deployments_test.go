@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"mcp-runtime-api/internal/runtimeapi/k8sprovision"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -111,8 +112,8 @@ func TestClientForPrincipalUsesKubernetesImpersonation(t *testing.T) {
 
 func TestEnsureDefaultDenyNetworkPolicyIncludesDNSEgress(t *testing.T) {
 	client := kubernetesfake.NewSimpleClientset()
-	if err := ensureDefaultDenyNetworkPolicy(context.Background(), client, "user-1"); err != nil {
-		t.Fatalf("ensureDefaultDenyNetworkPolicy() error = %v", err)
+	if err := k8sprovision.EnsureDefaultDenyNetworkPolicy(context.Background(), client, "user-1"); err != nil {
+		t.Fatalf("k8sprovision.EnsureDefaultDenyNetworkPolicy() error = %v", err)
 	}
 	policy, err := client.NetworkingV1().NetworkPolicies("user-1").Get(context.Background(), "platform-default-deny", metav1.GetOptions{})
 	if err != nil {
@@ -156,7 +157,7 @@ func TestEnsureDefaultDenyNetworkPolicyAllowsConfiguredEgressCIDR(t *testing.T) 
 	t.Setenv("MCP_POD_EGRESS_CIDRS", "10.0.0.0/8")
 	t.Setenv("MCP_POD_EGRESS_EXCEPT_CIDRS", "10.42.0.0/16,10.43.0.0/16")
 	client := kubernetesfake.NewSimpleClientset()
-	if err := ensureDefaultDenyNetworkPolicy(context.Background(), client, "mcp-team-tools"); err != nil {
+	if err := k8sprovision.EnsureDefaultDenyNetworkPolicy(context.Background(), client, "mcp-team-tools"); err != nil {
 		t.Fatal(err)
 	}
 	policy, err := client.NetworkingV1().NetworkPolicies("mcp-team-tools").Get(context.Background(), "platform-default-deny", metav1.GetOptions{})
@@ -188,7 +189,7 @@ func TestEnsureDefaultDenyNetworkPolicyRejectsPrivateEgressWithoutExcept(t *test
 	t.Setenv("MCP_POD_EGRESS_CIDRS", "10.0.0.0/8")
 	t.Setenv("MCP_POD_EGRESS_EXCEPT_CIDRS", "")
 	client := kubernetesfake.NewSimpleClientset()
-	if err := ensureDefaultDenyNetworkPolicy(context.Background(), client, "mcp-team-tools"); err == nil {
+	if err := k8sprovision.EnsureDefaultDenyNetworkPolicy(context.Background(), client, "mcp-team-tools"); err == nil {
 		t.Fatal("private egress without cluster exceptions was accepted")
 	}
 	if _, err := client.NetworkingV1().NetworkPolicies("mcp-team-tools").Get(context.Background(), "platform-default-deny", metav1.GetOptions{}); !apierrors.IsNotFound(err) {
@@ -198,8 +199,8 @@ func TestEnsureDefaultDenyNetworkPolicyRejectsPrivateEgressWithoutExcept(t *test
 
 func TestEnsureDefaultDenyNetworkPolicyAllowsPlatformEgress(t *testing.T) {
 	client := kubernetesfake.NewSimpleClientset()
-	if err := ensureDefaultDenyNetworkPolicy(context.Background(), client, "user-1"); err != nil {
-		t.Fatalf("ensureDefaultDenyNetworkPolicy() error = %v", err)
+	if err := k8sprovision.EnsureDefaultDenyNetworkPolicy(context.Background(), client, "user-1"); err != nil {
+		t.Fatalf("k8sprovision.EnsureDefaultDenyNetworkPolicy() error = %v", err)
 	}
 	policy, err := client.NetworkingV1().NetworkPolicies("user-1").Get(context.Background(), "platform-default-deny", metav1.GetOptions{})
 	if err != nil {
@@ -217,7 +218,7 @@ func TestEnsureDefaultDenyNetworkPolicyAllowsPlatformEgress(t *testing.T) {
 					seen[port.Port.IntVal] = true
 				}
 			}
-			if seen[platformIngestPort] && seen[platformOTLPPort] {
+			if seen[8081] && seen[4318] {
 				foundPlatform = true
 			}
 		}
@@ -229,8 +230,8 @@ func TestEnsureDefaultDenyNetworkPolicyAllowsPlatformEgress(t *testing.T) {
 
 func TestEnsureDefaultDenyNetworkPolicyAllowsRegistryEgress(t *testing.T) {
 	client := kubernetesfake.NewSimpleClientset()
-	if err := ensureDefaultDenyNetworkPolicy(context.Background(), client, "mcp-servers"); err != nil {
-		t.Fatalf("ensureDefaultDenyNetworkPolicy() error = %v", err)
+	if err := k8sprovision.EnsureDefaultDenyNetworkPolicy(context.Background(), client, "mcp-servers"); err != nil {
+		t.Fatalf("k8sprovision.EnsureDefaultDenyNetworkPolicy() error = %v", err)
 	}
 	policy, err := client.NetworkingV1().NetworkPolicies("mcp-servers").Get(context.Background(), "platform-default-deny", metav1.GetOptions{})
 	if err != nil {
@@ -243,10 +244,10 @@ func TestEnsureDefaultDenyNetworkPolicyAllowsRegistryEgress(t *testing.T) {
 
 func TestEnsureDefaultDenyNetworkPolicyAllowsSameNamespaceIngress(t *testing.T) {
 	client := kubernetesfake.NewSimpleClientset()
-	if err := ensureDefaultDenyNetworkPolicy(context.Background(), client, "user-1"); err != nil {
-		t.Fatalf("ensureDefaultDenyNetworkPolicy() error = %v", err)
+	if err := k8sprovision.EnsureDefaultDenyNetworkPolicy(context.Background(), client, "user-1"); err != nil {
+		t.Fatalf("k8sprovision.EnsureDefaultDenyNetworkPolicy() error = %v", err)
 	}
-	policy, err := client.NetworkingV1().NetworkPolicies("user-1").Get(context.Background(), "platform-default-deny", metav1.GetOptions{})
+	policy, err := client.NetworkingV1().NetworkPolicies("user-1").Get(context.Background(), "platform-generic-workload-ingress", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("get networkpolicy: %v", err)
 	}
@@ -257,8 +258,8 @@ func TestEnsureDefaultDenyNetworkPolicyAllowsSameNamespaceIngress(t *testing.T) 
 
 func TestEnsureDefaultDenyNetworkPolicyAllowsSameNamespaceEgress(t *testing.T) {
 	client := kubernetesfake.NewSimpleClientset()
-	if err := ensureDefaultDenyNetworkPolicy(context.Background(), client, "mcp-servers"); err != nil {
-		t.Fatalf("ensureDefaultDenyNetworkPolicy() error = %v", err)
+	if err := k8sprovision.EnsureDefaultDenyNetworkPolicy(context.Background(), client, "mcp-servers"); err != nil {
+		t.Fatalf("k8sprovision.EnsureDefaultDenyNetworkPolicy() error = %v", err)
 	}
 	policy, err := client.NetworkingV1().NetworkPolicies("mcp-servers").Get(context.Background(), "platform-default-deny", metav1.GetOptions{})
 	if err != nil {
@@ -271,8 +272,8 @@ func TestEnsureDefaultDenyNetworkPolicyAllowsSameNamespaceEgress(t *testing.T) {
 
 func TestEnsureDefaultDenyNetworkPolicyDoesNotAllowBroadHTTPEgress(t *testing.T) {
 	client := kubernetesfake.NewSimpleClientset()
-	if err := ensureDefaultDenyNetworkPolicy(context.Background(), client, "user-1"); err != nil {
-		t.Fatalf("ensureDefaultDenyNetworkPolicy() error = %v", err)
+	if err := k8sprovision.EnsureDefaultDenyNetworkPolicy(context.Background(), client, "user-1"); err != nil {
+		t.Fatalf("k8sprovision.EnsureDefaultDenyNetworkPolicy() error = %v", err)
 	}
 	policy, err := client.NetworkingV1().NetworkPolicies("user-1").Get(context.Background(), "platform-default-deny", metav1.GetOptions{})
 	if err != nil {
@@ -296,10 +297,10 @@ func TestEnsureDefaultDenyNetworkPolicyDoesNotAllowBroadHTTPEgress(t *testing.T)
 
 func TestEnsureDefaultDenyNetworkPolicyAllowsConfiguredIngressNamespace(t *testing.T) {
 	client := kubernetesfake.NewSimpleClientset()
-	if err := ensureDefaultDenyNetworkPolicy(context.Background(), client, "mcp-servers-public", "kube-system"); err != nil {
-		t.Fatalf("ensureDefaultDenyNetworkPolicy() error = %v", err)
+	if err := k8sprovision.EnsureDefaultDenyNetworkPolicy(context.Background(), client, "mcp-servers-public", "kube-system"); err != nil {
+		t.Fatalf("k8sprovision.EnsureDefaultDenyNetworkPolicy() error = %v", err)
 	}
-	policy, err := client.NetworkingV1().NetworkPolicies("mcp-servers-public").Get(context.Background(), "platform-default-deny", metav1.GetOptions{})
+	policy, err := client.NetworkingV1().NetworkPolicies("mcp-servers-public").Get(context.Background(), "platform-generic-workload-ingress", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("get networkpolicy: %v", err)
 	}
@@ -311,9 +312,9 @@ func TestEnsureDefaultDenyNetworkPolicyAllowsConfiguredIngressNamespace(t *testi
 func TestManagedNamespaceHTTPSOnlyReachesConfiguredIngressController(t *testing.T) {
 	client := kubernetesfake.NewSimpleClientset(&networkingv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: "platform-default-deny", Namespace: "mcp-team-acme"},
-		Spec:       desiredDefaultDenyNetworkPolicy("mcp-team-acme").Spec,
+		Spec:       k8sprovision.DefaultDenyNetworkPolicy("mcp-team-acme").Spec,
 	})
-	if err := ensureDefaultDenyNetworkPolicy(context.Background(), client, "mcp-team-acme", "kube-system", "traefik", " "); err != nil {
+	if err := k8sprovision.EnsureDefaultDenyNetworkPolicy(context.Background(), client, "mcp-team-acme", "kube-system", "traefik", " "); err != nil {
 		t.Fatal(err)
 	}
 	policy, err := client.NetworkingV1().NetworkPolicies("mcp-team-acme").Get(context.Background(), "platform-default-deny", metav1.GetOptions{})
@@ -364,12 +365,12 @@ func TestManagedNamespaceHTTPSOnlyReachesConfiguredIngressController(t *testing.
 	}
 }
 
-func TestEnsureDefaultDenyNetworkPolicyAllowsPlatformAPILiveInventoryIngress(t *testing.T) {
+func TestGenericDeploymentPolicyPreservesPlatformIngress(t *testing.T) {
 	client := kubernetesfake.NewSimpleClientset()
-	if err := ensureDefaultDenyNetworkPolicy(context.Background(), client, "mcp-team-acme", "kube-system"); err != nil {
-		t.Fatalf("ensureDefaultDenyNetworkPolicy() error = %v", err)
+	if err := k8sprovision.EnsureDefaultDenyNetworkPolicy(context.Background(), client, "mcp-team-acme", "kube-system"); err != nil {
+		t.Fatalf("k8sprovision.EnsureDefaultDenyNetworkPolicy() error = %v", err)
 	}
-	policy, err := client.NetworkingV1().NetworkPolicies("mcp-team-acme").Get(context.Background(), "platform-default-deny", metav1.GetOptions{})
+	policy, err := client.NetworkingV1().NetworkPolicies("mcp-team-acme").Get(context.Background(), "platform-generic-workload-ingress", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("get networkpolicy: %v", err)
 	}
@@ -793,8 +794,8 @@ func TestEnsureDefaultDenyNetworkPolicyIdempotent(t *testing.T) {
 	client := kubernetesfake.NewSimpleClientset(&networkingv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: "platform-default-deny", Namespace: "user-2"},
 	})
-	if err := ensureDefaultDenyNetworkPolicy(context.Background(), client, "user-2"); err != nil {
-		t.Fatalf("ensureDefaultDenyNetworkPolicy() with existing policy returned %v", err)
+	if err := k8sprovision.EnsureDefaultDenyNetworkPolicy(context.Background(), client, "user-2"); err != nil {
+		t.Fatalf("k8sprovision.EnsureDefaultDenyNetworkPolicy() with existing policy returned %v", err)
 	}
 }
 
@@ -852,7 +853,7 @@ func TestEnsureTeamNamespaceConfiguresTraefikIngressWatch(t *testing.T) {
 	if len(binding.Subjects) != 1 || binding.Subjects[0].Kind != rbacv1.ServiceAccountKind || binding.Subjects[0].Namespace != "traefik" || binding.Subjects[0].Name != "traefik" {
 		t.Fatalf("traefik watch binding subjects = %#v", binding.Subjects)
 	}
-	policy, err := client.NetworkingV1().NetworkPolicies("mcp-team-acme").Get(context.Background(), "platform-default-deny", metav1.GetOptions{})
+	policy, err := client.NetworkingV1().NetworkPolicies("mcp-team-acme").Get(context.Background(), "platform-generic-workload-ingress", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("network policy missing: %v", err)
 	}
@@ -892,219 +893,6 @@ func TestEnsureCatalogNamespaceAutoTraefikWatchSkipsExternalIngress(t *testing.T
 	}
 	if _, err := client.RbacV1().RoleBindings(defaultPublicCatalogNamespace).Get(context.Background(), traefikWatchRoleName, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
 		t.Fatalf("traefik watch rolebinding error = %v, want not found", err)
-	}
-}
-
-func TestEnsureTraefikWatchRBACUsesNamespaceRole(t *testing.T) {
-	cfg := teamTraefikWatchConfig{
-		namespace:      "traefik",
-		serviceAccount: "traefik",
-	}
-	existingRole := &rbacv1.Role{
-		ObjectMeta: metav1.ObjectMeta{Name: traefikWatchRoleName, Namespace: "mcp-servers-public"},
-		Rules: []rbacv1.PolicyRule{
-			{APIGroups: []string{""}, Resources: []string{"services", "endpoints"}, Verbs: []string{"get", "list", "watch"}},
-			{APIGroups: []string{"networking.k8s.io"}, Resources: []string{"ingresses"}, Verbs: []string{"get", "list", "watch"}},
-		},
-	}
-	existingBinding := &rbacv1.RoleBinding{
-		ObjectMeta: metav1.ObjectMeta{Name: traefikWatchRoleName, Namespace: "mcp-servers-public"},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "Role",
-			Name:     traefikWatchRoleName,
-		},
-		Subjects: []rbacv1.Subject{
-			{Kind: "ServiceAccount", Name: cfg.serviceAccount, Namespace: cfg.namespace},
-		},
-	}
-	client := kubernetesfake.NewSimpleClientset(existingRole, existingBinding)
-
-	if err := ensureTraefikWatchRBAC(context.Background(), client, "mcp-servers-public", cfg); err != nil {
-		t.Fatalf("ensureTraefikWatchRBAC() error = %v", err)
-	}
-	binding, err := client.RbacV1().RoleBindings("mcp-servers-public").Get(context.Background(), traefikWatchRoleName, metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("traefik watch rolebinding missing: %v", err)
-	}
-	if binding.RoleRef.Kind != "Role" || binding.RoleRef.Name != traefikWatchRoleName {
-		t.Fatalf("traefik watch binding role ref = %#v, want Role/%s", binding.RoleRef, traefikWatchRoleName)
-	}
-	role, err := client.RbacV1().Roles("mcp-servers-public").Get(context.Background(), traefikWatchRoleName, metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("traefik watch role missing: %v", err)
-	}
-	if len(role.Rules) != 4 {
-		t.Fatalf("traefik watch role rules = %#v, want 4 rules", role.Rules)
-	}
-	hasSecrets := false
-	for _, resource := range role.Rules[0].Resources {
-		if resource == "secrets" {
-			hasSecrets = true
-			break
-		}
-	}
-	if !hasSecrets {
-		t.Fatalf("traefik watch role rules = %#v, want secrets watch in namespace role", role.Rules)
-	}
-	for _, resource := range []string{"endpointslices", "configmaps", "pods"} {
-		found := false
-		for _, rule := range role.Rules {
-			for _, name := range rule.Resources {
-				if name == resource {
-					found = true
-				}
-			}
-			for _, verb := range rule.Verbs {
-				if verb != "get" && verb != "list" && verb != "watch" {
-					t.Fatalf("watch role grants mutation: %v", rule)
-				}
-			}
-		}
-		if !found {
-			t.Errorf("Traefik v3 required resource %s missing in namespace role", resource)
-		}
-	}
-}
-
-func TestEnsureTraefikDeploymentWatchesNamespaceRetriesConflict(t *testing.T) {
-	client := kubernetesfake.NewSimpleClientset(
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "registry"}},
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "mcp-platform"}},
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "mcp-observability"}},
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "mcp-servers"}},
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "mcp-team-beta"}},
-		&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{Name: "traefik", Namespace: "traefik"},
-			Spec: appsv1.DeploymentSpec{
-				Template: corev1.PodTemplateSpec{
-					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{{
-							Name: "traefik",
-							Args: []string{
-								"--providers.kubernetesingress=true",
-								"--providers.kubernetesingress.namespaces=registry,mcp-platform,mcp-observability,mcp-servers",
-							},
-						}},
-					},
-				},
-			},
-		},
-	)
-	updateAttempts := 0
-	client.Fake.PrependReactor("update", "deployments", func(action k8stesting.Action) (bool, runtime.Object, error) {
-		updateAttempts++
-		if updateAttempts == 1 {
-			return true, nil, apierrors.NewConflict(
-				schema.GroupResource{Group: "apps", Resource: "deployments"},
-				"traefik",
-				errors.New("stale deployment resource version"),
-			)
-		}
-		return false, nil, nil
-	})
-
-	err := ensureTraefikDeploymentWatchesNamespace(context.Background(), client, "mcp-team-beta", teamTraefikWatchConfig{
-		mode:       "required",
-		namespace:  "traefik",
-		deployment: "traefik",
-	})
-	if err != nil {
-		t.Fatalf("ensureTraefikDeploymentWatchesNamespace() error = %v", err)
-	}
-	if updateAttempts < 2 {
-		t.Fatalf("expected update retry after conflict, got %d attempt(s)", updateAttempts)
-	}
-	deployment, err := client.AppsV1().Deployments("traefik").Get(context.Background(), "traefik", metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("traefik deployment missing: %v", err)
-	}
-	args := strings.Join(deployment.Spec.Template.Spec.Containers[0].Args, "\n")
-	if !strings.Contains(args, "--providers.kubernetesingress.namespaces=registry,mcp-platform,mcp-observability,mcp-servers,mcp-team-beta") {
-		t.Fatalf("traefik namespace args = %q", args)
-	}
-}
-
-func TestRemoveTraefikDeploymentWatchesNamespace(t *testing.T) {
-	client := kubernetesfake.NewSimpleClientset(
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "mcp-servers"}},
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "mcp-team-beta"}},
-		&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{Name: "traefik", Namespace: "traefik"},
-			Spec: appsv1.DeploymentSpec{
-				Template: corev1.PodTemplateSpec{
-					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{{
-							Name: "traefik",
-							Args: []string{
-								"--providers.kubernetesingress.namespaces=registry,mcp-servers,mcp-team-beta",
-								"--providers.kubernetescrd.namespaces=mcp-servers,mcp-team-beta",
-							},
-						}},
-					},
-				},
-			},
-		},
-	)
-	cfg := teamTraefikWatchConfig{mode: "required", namespace: "traefik", deployment: "traefik"}
-	if err := removeTraefikDeploymentWatchesNamespace(context.Background(), client, "mcp-team-beta", cfg); err != nil {
-		t.Fatalf("removeTraefikDeploymentWatchesNamespace: %v", err)
-	}
-	deployment, err := client.AppsV1().Deployments("traefik").Get(context.Background(), "traefik", metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("get traefik: %v", err)
-	}
-	args := strings.Join(deployment.Spec.Template.Spec.Containers[0].Args, "\n")
-	if strings.Contains(args, "mcp-team-beta") {
-		t.Fatalf("expected team namespace removed, got %q", args)
-	}
-	if !strings.Contains(args, "--providers.kubernetesingress.namespaces=registry,mcp-servers") {
-		t.Fatalf("ingress watch = %q", args)
-	}
-	if !strings.Contains(args, "--providers.kubernetescrd.namespaces=mcp-servers") {
-		t.Fatalf("crd watch = %q", args)
-	}
-}
-
-func TestEnsureTraefikDeploymentWatchesNamespacePrunesMissing(t *testing.T) {
-	client := kubernetesfake.NewSimpleClientset(
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "mcp-servers"}},
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "mcp-team-live"}},
-		&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{Name: "traefik", Namespace: "traefik"},
-			Spec: appsv1.DeploymentSpec{
-				Template: corev1.PodTemplateSpec{
-					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{{
-							Name: "traefik",
-							Args: []string{
-								"--providers.kubernetesingress.namespaces=mcp-servers,mcp-team-gone,mcp-team-live",
-								"--providers.kubernetescrd.namespaces=mcp-servers,mcp-team-gone,mcp-team-live",
-							},
-						}},
-					},
-				},
-			},
-		},
-	)
-	err := ensureTraefikDeploymentWatchesNamespace(context.Background(), client, "mcp-team-live", teamTraefikWatchConfig{
-		mode:       "required",
-		namespace:  "traefik",
-		deployment: "traefik",
-	})
-	if err != nil {
-		t.Fatalf("ensureTraefikDeploymentWatchesNamespace: %v", err)
-	}
-	deployment, err := client.AppsV1().Deployments("traefik").Get(context.Background(), "traefik", metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("get traefik: %v", err)
-	}
-	args := strings.Join(deployment.Spec.Template.Spec.Containers[0].Args, "\n")
-	if strings.Contains(args, "mcp-team-gone") {
-		t.Fatalf("expected missing namespace pruned, got %q", args)
-	}
-	if !strings.Contains(args, "mcp-team-live") || !strings.Contains(args, "mcp-servers") {
-		t.Fatalf("expected live namespaces kept, got %q", args)
 	}
 }
 

@@ -84,3 +84,14 @@ to `/api/` and `/auth/`, screenshots per step, and a
 Query by `data-testid` for QA hooks and by role/label for the accessibility
 assertions. Generated ids (React `useId()`) are not stable across builds — never
 select on them.
+
+For disposable Staging workspace QA, use the `workspace-browser` stage in
+`test/e2e/lib/staging-workspace-browser.sh`. It runs headless Chromium before
+account deactivation/teardown with the CLI-created member/owner and configured
+administrator. The driver consumes private fixtures on stdin and records only
+screenshots plus redacted path/status, console and layout evidence. It needs
+no desktop or manually copied login credentials. The reviewed Playwright image
+pin, locked package installation and evidence contract are documented in
+`docs/contributor/staging-e2e.md`; update those together when the tool version
+changes. A skipped stage or a mocked development run does not establish live
+browser acceptance.

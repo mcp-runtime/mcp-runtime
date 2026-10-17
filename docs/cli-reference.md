@@ -22,6 +22,7 @@ with `mcp-runtime agent create <team-slug> --name <name>`.
 | Inspect a running server | `server list` · `server get` · `server policy inspect` |
 | View analytics logs | `ops status` · `ops logs api` |
 | Check setup readiness | `cluster doctor` |
+| Inspect workload adapter certificate health | `cluster identity status --server <namespace>/<name>` |
 | Diagnose an installed cluster | `cluster diagnostics` |
 | Check an OIDC provider before mcp-auth | `auth provider-check` |
 
@@ -41,6 +42,14 @@ OAuth example listens on port `8081` and uses its standalone server-side OAuth
 route. Gateway-enabled examples apply Runtime grants, sessions, policy, and
 gateway audit; standalone OAuth validates tokens in the MCP server itself.
 `--from-server http://localhost:8088` appends `/mcp` automatically.
+
+Tool discovery first probes MCP `2026-07-28` with [`server/discover` and the
+Streamable HTTP compatibility rules](https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning). If the
+endpoint returns an HTTP 400 without a recognized modern protocol error, the
+CLI falls back to the `2025-11-25` initialize handshake. Unsupported-version
+and header-mismatch errors are surfaced; they do not trigger a legacy retry.
+This compatibility applies to CLI tool discovery only and does not certify
+gateway, adapter, streaming, or extension support for either revision.
 
 ## Access model
 
@@ -371,9 +380,12 @@ exclusive.
 `server get <name>` prints a JSON detail record from the platform API. Alongside
 readiness, endpoint, authentication configuration, and declared tools, it
 includes the most recently probed live tools, prompts, and resources when a
-probe has completed. `liveInventoryError` explains why a live inventory is not
-available; it can be empty while the first probe is still running. Credential
-values are never included.
+probe has completed. `runtimeStatus` reports transport, connection readiness,
+authentication source, the last observed error, and the most recent probe time.
+For viewers allowed to inspect server activity, it also reports the latest
+observed session and tool call. `liveInventoryError` explains why a live
+inventory is not available; it can be empty while the first probe is still
+running. Credential values and request payloads are never included.
 
 In explicit direct Kubernetes mode, use
 `server list --use-kube --namespace mcp-team-acme`. This requires operator
@@ -587,6 +599,18 @@ identity headers are not supported.
 
 The platform issues certificates only when an enabled `MCPAccessGrant` matches the server, signed-in user, and agent. Apply the grant first with `access grant apply`.
 
+Before creating a session, `adapter enroll` checks the operator's existing
+adapter-certificate choice, matching operator/API issuer and trust domain, issuer
+readiness, and the selected route's actual client-certificate TLSOption and
+workload CA bundle reference. Configuration drift, unreadable configuration and
+routes without client-certificate verification fail with the current readiness
+state. `update` installs the required read-only permissions without enabling
+certificates on an installation where the operator has them off. The API repeats
+these checks before session and certificate issuance. A later failure removes
+only the newly created, caller-owned session while it is still pending;
+reused and completed sessions survive, including concurrent enrollment cleanup.
+Completing enrollment cannot undo an administrator's concurrent revocation.
+
 `--platform-url` takes scheme and host only, with no `/api` path. It defaults to the URL saved by `auth login` or `$MCP_PLATFORM_API_URL`.
 
 ```bash
@@ -626,6 +650,13 @@ identity. Certificate identity requires an `https` runtime URL.
 
 See [Agent adapters](connect-clients.md#enterprise-mtls-and-spiffe) for gateway and Traefik certificate setup.
 
+On macOS, `adapter profile` and `adapter service` manage the per-user
+background adapter daemon. This CLI preview does not yet ship the planned
+native Dock app or signed/notarized distribution; desktop sleep/wake,
+two-profile isolation and full lifecycle acceptance remain open. See the
+[macOS service guide](connect-clients.md#macos-background-adapter-service-cli-preview)
+for profile authorization, client configuration and credential handling.
+
 ## agent
 
 Create and manage immutable, team-scoped agent identities used by access grants
@@ -652,6 +683,16 @@ team. The API rejects unknown, malformed, inactive, and wrong-team agent IDs.
 
 ## team
 
+For account-wide cleanup, `mcp-runtime user deactivate <user-id> --yes --json`
+permanently disables a platform account and returns non-secret committed cleanup
+counts. This administrator-only command removes memberships and revokes stored
+API keys, registry credentials, refresh tokens and human MCP sessions, retaining
+audit history and the identity tombstone. Repeating cleanup is idempotent.
+The signed-in administrator, last active administrator and sole active team
+owners are protected; transfer authority first. This differs from membership-only
+`team user remove`. See [Teams and access](teams-and-access.md) for the disposable
+test-identity workflow and gateway sync/registry bearer expiry limits.
+
 Platform admins create teams. A team owner can add users to their own team
 or update their team role.
 
@@ -663,18 +704,26 @@ MCP_PLATFORM_API_PROFILE=admin mcp-runtime team list
 MCP_PLATFORM_API_PROFILE=admin mcp-runtime team create acme --name "Acme Corp"
 
 MCP_PLATFORM_API_PROFILE=admin mcp-runtime team user create acme \
-  --email alice@acme.com --password '...' --role owner
+  --email alice@acme.com --role owner
 
 # Add an existing platform user to a team or update their team role. Use their
 # immutable user ID; their password stays unchanged.
 MCP_PLATFORM_API_PROFILE=admin mcp-runtime team user add acme <user-id> --role member
 
+MCP_PLATFORM_API_PROFILE=admin mcp-runtime team user remove acme <user-id>
+
 MCP_PLATFORM_API_PROFILE=admin mcp-runtime team user list acme
 ```
 
-A saved login token keeps the membership from the moment it was issued. Run
-`mcp-runtime auth login` again before `server build`, `server push`, or
-`server deploy` for that team.
+`team user create` prompts twice for a hidden password. For automation, pass it
+through stdin with `--password-stdin`; the command line does not accept a
+password value. Removing a team's only owner requires `--confirm-last-owner`.
+Membership removal does not delete the platform account or revoke account-wide
+API keys and sessions.
+
+After validating a saved login token, the APIs resolve current account and
+membership state. Role and membership changes take effect on the next request;
+directory outages deny access rather than relying on stale token claims.
 
 Team users log in with:
 
@@ -787,32 +836,81 @@ mcp-runtime setup \
 `--strict-prod` requires TLS, rejects dev-only registry assumptions such as
 `registry.local`, and forces a stable production-style registry endpoint.
 `--mtls-cluster-issuer` names the cert-manager `ClusterIssuer` for workload
-certificates; name your enterprise issuer, or use a pre-provisioned bundled
-`mcp-runtime-ca` in production. Only `--test-mode` generates a missing bundled
-CA and defaults the workload issuer to `mcp-runtime-ca`. Full
+certificates. Production requires a dedicated enterprise-managed workload issuer
+with an independent signing root. The shared bundled `mcp-runtime-ca` is accepted
+for workload identity only in `--test-mode`, which also generates a missing CA.
+Full
 flow: [Agent adapters](connect-clients.md#enterprise-mtls-and-spiffe).
 
 #### Bundled workload CA lifecycle
 
-When `--mtls-cluster-issuer mcp-runtime-ca` is selected, setup validates the
-`cert-manager/mcp-runtime-ca` Secret before accepting it: the certificate and
-key must match, the certificate must be a CA with `keyCertSign`, and it must be
-inside its validity window. Setup never prints key material.
+**Production:** setup rejects `--mtls-cluster-issuer=mcp-runtime-ca` before TLS
+provisioning. Renaming the issuer or copying its root to another Secret does not
+make it independent: CA-backed issuers must use a separate signing key from the
+bundled registry/internal-TLS CA. A workload issuer also cannot be the issuer
+selected for internal registry TLS. This release supports enterprise-owned
+workload PKI; it does not offer a production bundled-workload-CA lifecycle.
 
-- **Production** setup fails if the Secret is missing (it will not mint a new
-  root silently), invalid, expired, or has under 180 days remaining. Prefer an
-  enterprise issuer for production.
-- **Test mode** generates a missing CA, still fails on invalid or expired CAs,
-  and only warns when the root is near expiry.
-- cert-manager does not rotate a CA Secret or reissue leaves when it changes.
-  Rotate with overlap: back up the current Secret to encrypted off-host storage
-  first; create the new root and publish a trust bundle containing both roots;
-  switch the issuer to the new root and reissue leaf certificates
-  (adapter, gateway/Traefik, registry); remove the old root only after every
-  leaf is reissued. Restore a lost Secret from the encrypted backup, then re-run
-  setup to re-validate. Limit access to the Secret in `cert-manager`.
-- The bundled registry/internal TLS still shares this root. Splitting the
-  workload and registry signing roots is tracked under #535 and is not yet done.
+Before setup, the PKI administrator must provision a dedicated workload
+`ClusterIssuer` and retain ownership of its signing keys. Setup requires its
+current generation to be Ready. For a CA-backed issuer, the certificate/key must
+match, the certificate must have CA constraints and `keyCertSign`, be currently
+valid, and have at least 180 days remaining. Missing, unreadable and invalid
+Secrets fail closed. The public CA chain must be complete, ordered from the
+signing CA to its self-signed root, and verifiable: an intermediate signed by
+the registry root is still shared trust and is rejected. The final root also
+needs at least 180 days remaining. No CA signing key anywhere in the workload
+chain may be reused in the registry chain, including an intermediate key
+reissued under a different root. Vault/Venafi-backed issuers retain their provider's health,
+backup and key-custody responsibilities. ACME and self-signed issuers are not
+workload signing roots. Setup never prints private material.
+
+To migrate an existing shared-root installation, preserve the registry CA,
+registry leaf and node registry trust. Have the PKI administrator provision the
+independent workload issuer, distribute its public trust to the adapter clients,
+and select it with `--with-tls --mtls-cluster-issuer=<dedicated-issuer>`. Do not
+delete or replace the registry CA to initialize workload identity. Existing
+workload identities need the overlap procedure below before issuer migration.
+
+**Test mode:** the bundled root may still serve both local registry and workload
+certificates. Setup generates it only when absent, rejects invalid/expired
+material, and warns below 180 days remaining. A failed API read is not treated
+as an absent Secret and never triggers root generation.
+
+The production PKI owner must maintain an encrypted, access-controlled off-host
+backup of signing material, issuer configuration and public trust, or the external
+provider's equivalent disaster-recovery mechanism. Restrict Secret/key access to
+that owner and the signer. Practice restore on a disposable target: recover the
+same root/key, validate its fingerprint and certificate/key match, restore issuer
+readiness and public trust, then re-run setup and the read-only identity health
+command. A new root is a rotation, not recovery of a lost root. Never place
+plaintext key exports in logs, shell history or support artifacts.
+
+For an enterprise-managed rollover, record the old root fingerprint and expiry,
+verify the encrypted backup, publish old+new public trust to every adapter and
+gateway/Traefik trust consumer **before** issuer cutover, and verify both chains.
+The PKI owner then changes the issuer, explicitly renews gateway/Traefik leaves
+and renews/re-enrolls adapters through supported adapter workflows. cert-manager
+does not automatically reissue leaves when a CA Secret changes. Keep overlapping
+trust until all old leaves and maximum adapter certificate lifetimes have drained;
+only then remove old trust. Registry/public-TLS issuers and certificates stay
+outside this workload rotation. During rollback, restore the old issuer but retain
+both roots until any newly issued leaves have also migrated or expired. Confirm
+root and leaf expiry with `cluster identity status` and monitor signer readiness;
+a successful setup is not continuous expiry monitoring.
+
+Gateways reload their mounted client-CA bundle every minute, independently of
+serving-certificate changes. Publish old and new public CAs during the overlap;
+after leaf migration, removing the retired root takes effect for new TLS
+handshakes, including TLS session resumption, once the updated mount is observed.
+An unreadable, malformed, private-key-bearing or oversized replacement is rejected
+and the last validated trust remains active. Reload failures appear in gateway
+logs without file contents or key material. Existing TLS connections retain their
+connection lifetime; root retirement does not revoke an existing agent session.
+Use the supported session-revocation workflow when immediate access revocation
+is required. The enterprise PKI owner performs root creation, trust distribution,
+issuer cutover, backup/recovery and leaf reissuance; the gateway trust reload
+handles a valid updated mount without requiring a gateway restart.
 
 ### Local and single-node clusters
 
@@ -897,7 +995,8 @@ With `--only`, CRD apply is skipped so a scoped image update cannot mutate
 cluster schemas; re-run without `--only` to apply schema changes. `--dry-run`
 prints the plan only and does not apply CRDs or roll images.
 
-A release can also declare the ServiceAccounts and RBAC its workloads need
+A release can also declare the ServiceAccounts, RBAC and supported platform
+NetworkPolicies its workloads need
 (`platformObjects`) and per-component Deployment wiring (ServiceAccount, token
 mount and required env). update creates or corrects only those declared objects
 and fields before rolling images, so a release such as v0.7.2 (gateway-to-ingest
@@ -1026,6 +1125,7 @@ mcp-runtime cluster cert apply
 mcp-runtime cluster cert wait --timeout 10m
 
 mcp-runtime cluster doctor                                   # pre-setup readiness
+mcp-runtime cluster identity status --server mcp-servers-public/example-server # workload issuer/route mTLS health
 KUBECONFIG=~/.kube/config mcp-runtime cluster diagnostics    # post-setup diagnostic
 
 # Repair operator RBAC from this release after an image-only update.
@@ -1037,6 +1137,20 @@ mcp-runtime cluster operator-rbac apply --kubeconfig /path/to/kubeconfig --conte
 bundled MCP Auth is installed, it also grants the operator `patch` on only the
 `mcp-platform/mcp-auth-server` Deployment. It does not change workload images,
 Secrets, or tenant namespace bindings.
+
+`cluster identity status` is a read-only check for a selected MCPServer. It
+compares the operator deployment's adapter-certificate, issuer, and trust-domain
+settings with the runtime API's configured values; checks workload
+`ClusterIssuer` readiness; and reports the selected route's client-certificate
+TLSOption, public CA subject, issuer, SHA-256 fingerprint, expiry, and trusted
+bundle fingerprint. Both deployments resolve the selected container's literal
+environment, ConfigMap key references and declared `envFrom` sources using
+Kubernetes precedence. Unreadable or Secret-backed configuration is a failed
+check; it is never reported as disabled. The check follows the route's actual
+TLSOption, including explicit overrides, and rejects plaintext routes or options
+that do not verify client certificates. Adapter certificates disabled in the operator are reported
+as off by choice. The command reads only the public `ca.crt`/`tls.ca` fields and
+never reads or prints Secret private keys or credentials.
 
 ## Further reading
 

@@ -6,7 +6,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 
 	policypkg "mcp-runtime/pkg/policy"
 )
@@ -88,6 +90,80 @@ func TestReloadPolicyRetainsLastKnownGoodOnInvalidUpdate(t *testing.T) {
 	}
 	if pol.Revision != good.Revision {
 		t.Fatalf("currentPolicy revision = %q, want %q", pol.Revision, good.Revision)
+	}
+}
+
+func TestPolicyReloadConcurrentAuthorization(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "policy.json")
+	write := func(allow bool) {
+		writeStampedPolicy(t, file, func(doc *policypkg.Document) {
+			doc.Policy.PolicyVersion = "deny"
+			if allow {
+				doc.Policy.PolicyVersion = "allow"
+			}
+			doc.Tools = []policypkg.Tool{{Name: "tool", RequiredTrust: "low", SideEffect: "read"}}
+			doc.Grants = []policypkg.Grant{{Name: "grant", HumanID: "alice", MaxTrust: "high", AllowedSideEffects: []string{"read"}, Disabled: !allow}}
+		})
+	}
+	write(true)
+	server := newCacheTestServer(file)
+	if err := server.reloadPolicy(); err != nil {
+		t.Fatal(err)
+	}
+	stop := make(chan struct{})
+	errors := make(chan string, 1)
+	var readers sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		readers.Add(1)
+		go func() {
+			defer readers.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				doc, err := server.currentPolicy()
+				if err != nil {
+					select {
+					case errors <- err.Error():
+					default:
+					}
+					return
+				}
+				decision := policypkg.Authorize(doc, policypkg.Request{Identity: policypkg.Identity{HumanID: "alice"}, RPCMethod: "tools/call", ToolName: "tool"}, time.Now())
+				if decision.Allowed != (doc.Policy.PolicyVersion == "allow") || decision.PolicyVersion != doc.Policy.PolicyVersion {
+					select {
+					case errors <- "mixed policy document/index snapshot":
+					default:
+					}
+					return
+				}
+			}
+		}()
+	}
+	defer func() { close(stop); readers.Wait() }()
+	for i := 0; i < 20; i++ {
+		write(i%2 == 0)
+		if err := server.reloadPolicy(); err != nil {
+			t.Fatal(err)
+		}
+		before := server.loadPolicySnapshot()
+		if err := os.WriteFile(file, []byte(`{"schema_version":"invalid"}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := server.reloadPolicy(); err == nil {
+			t.Fatal("accepted invalid reload")
+		}
+		after := server.loadPolicySnapshot()
+		if after.Policy != before.Policy || after.Revision != before.Revision || !after.Ready {
+			t.Fatal("invalid reload replaced compiled snapshot")
+		}
+	}
+	select {
+	case err := <-errors:
+		t.Fatal(err)
+	default:
 	}
 }
 

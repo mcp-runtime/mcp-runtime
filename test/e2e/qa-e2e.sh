@@ -150,6 +150,8 @@ PLATFORM_PORT="${PLATFORM_PORT:-18083}"
 TEMPO_PORT="${TEMPO_PORT:-13200}"
 LOKI_PORT="${LOKI_PORT:-13100}"
 API_SERVICE_PORT="${API_SERVICE_PORT:-18091}"
+RUNTIME_API_SERVICE_PORT="${RUNTIME_API_SERVICE_PORT:-18109}"
+ANALYTICS_API_SERVICE_PORT="${ANALYTICS_API_SERVICE_PORT:-18110}"
 UI_SERVICE_PORT="${UI_SERVICE_PORT:-18092}"
 INGEST_SERVICE_PORT="${INGEST_SERVICE_PORT:-18093}"
 SERVER_PROXY_PORT="${SERVER_PROXY_PORT:-18094}"
@@ -229,6 +231,11 @@ E2E_MAX_MCP_SERVERS="${E2E_MAX_MCP_SERVERS:-0}"
 E2E_VALIDATE_SCENARIOS_ONLY="${E2E_VALIDATE_SCENARIOS_ONLY:-0}"
 E2E_KEEP_CLUSTER="${E2E_KEEP_CLUSTER:-0}"
 E2E_CACHE_MODE="${E2E_CACHE_MODE:-0}"
+E2E_SCOPED_CILIUM="${E2E_SCOPED_CILIUM:-0}"
+case "${E2E_SCOPED_CILIUM}" in
+  0|1) ;;
+  *) echo "E2E_SCOPED_CILIUM must be 0 or 1" >&2; exit 1 ;;
+esac
 E2E_IMAGE_PREP_PARALLELISM="${E2E_IMAGE_PREP_PARALLELISM:-3}"
 E2E_IMAGE_MIRROR_PARALLELISM="${E2E_IMAGE_MIRROR_PARALLELISM:-${E2E_IMAGE_PREP_PARALLELISM}}"
 E2E_IMAGE_BUILD_PARALLELISM="${E2E_IMAGE_BUILD_PARALLELISM:-}"
@@ -514,6 +521,10 @@ log_line info "Local smoke/governance checks use direct curl-based MCP HTTP; Ope
 if [[ "${E2E_VALIDATE_SCENARIOS_ONLY}" == "1" ]]; then
   exit 0
 fi
+if [[ "${E2E_SCOPED_CILIUM}" == "1" ]]; then
+  source "${PROJECT_ROOT}/test/e2e/lib/cilium.sh"
+  scoped_cilium_guard
+fi
 
 git config --global --add safe.directory "${PROJECT_ROOT}" >/dev/null 2>&1 || true
 
@@ -521,6 +532,7 @@ WORKDIR="$(mktemp -d)"
 E2E_PIPELINE_CONFIG_DIR="${WORKDIR}/e2e-pipeline-config"
 mkdir -p "${E2E_PIPELINE_CONFIG_DIR}"
 STAGE_LOG_DIR="${WORKDIR}/stage-logs"
+source "${PROJECT_ROOT}/test/e2e/lib/rollout-diagnostics.sh"
 KIND_CONFIG="$(mktemp)"
 KUBECONFIG_FILE="$(mktemp)"
 KUBECONFIG_BACKUP_FILE="$(mktemp)"
@@ -743,30 +755,6 @@ wait_for_traefik_http_response() {
     sleep 1
   done
   return 1
-}
-
-# Run rollout status with diagnostics on failure.
-rollout_status_with_logs() {
-  local namespace="$1"
-  local kind="$2"
-  local name="$3"
-  local timeout="$4"
-
-  set +e
-  kubectl rollout status "${kind}/${name}" -n "${namespace}" --timeout="${timeout}"
-  local status=$?
-  set -e
-
-  if [[ ${status} -ne 0 ]]; then
-    echo "[debug] rollout failed for ${kind}/${name}; collecting diagnostics" >&2
-    kubectl describe "${kind}/${name}" -n "${namespace}" || true
-    kubectl get pods -n "${namespace}" -l "app=${name}" -o wide || true
-    kubectl describe pods -n "${namespace}" -l "app=${name}" || true
-    kubectl logs -n "${namespace}" -l "app=${name}" --all-containers=true --tail=200 || true
-    kubectl logs -n "${namespace}" "deploy/${name}" --all-containers=true --tail=200 || true
-  fi
-
-  return ${status}
 }
 
 assert_file_contains() {
@@ -1548,9 +1536,9 @@ print(json.dumps({"email": os.environ["PLATFORM_ADMIN_EMAIL"], "password": os.en
   )
   env "${platform_env[@]}" ./bin/mcp-runtime team create "${team_slug}" \
     --name "E2E adapter ${team_slug}" >/dev/null
-  env "${platform_env[@]}" ./bin/mcp-runtime team user create "${team_slug}" \
+  printf '%s\n' "${member_password}" | env "${platform_env[@]}" ./bin/mcp-runtime team user create "${team_slug}" \
     --email "${member_email}" \
-    --password "${member_password}" \
+    --password-stdin \
     --role member >/dev/null
 
   ADAPTER_TEAM_SLUG="${team_slug}"
@@ -2839,6 +2827,16 @@ run_api_platform_http_flows() {
   log_line policy "validating targeted platform API request paths"
   ensure_api_port_forward
   ensure_gateway_port_forward
+  port_forward_bg mcp-platform mcp-runtime-api "${RUNTIME_API_SERVICE_PORT}" 8084 "${WORKDIR}/audience-runtime-port-forward.log"
+  port_forward_bg mcp-observability mcp-analytics-api "${ANALYTICS_API_SERVICE_PORT}" 8085 "${WORKDIR}/audience-analytics-port-forward.log"
+  PLATFORM_URL="http://127.0.0.1:${PLATFORM_PORT}" \
+  DIRECT_PLATFORM_URL="http://127.0.0.1:${API_SERVICE_PORT}" \
+  DIRECT_RUNTIME_URL="http://127.0.0.1:${RUNTIME_API_SERVICE_PORT}" \
+  DIRECT_ANALYTICS_URL="http://127.0.0.1:${ANALYTICS_API_SERVICE_PORT}" \
+  PLATFORM_ADMIN_EMAIL="${PLATFORM_ADMIN_EMAIL}" \
+  PLATFORM_ADMIN_PASSWORD="${PLATFORM_ADMIN_PASSWORD}" \
+  BIN="${PROJECT_ROOT}/bin/mcp-runtime" \
+  python3 test/e2e/audience_isolation.py
   API_BASE="http://127.0.0.1:${PLATFORM_PORT}/api/v1" \
   GATEWAY_API_BASE="http://127.0.0.1:${PLATFORM_PORT}/api/v1" \
   API_KEY="${API_KEY}" \
@@ -2911,30 +2909,6 @@ run_selected_http_flow_scenarios() {
   fi
 }
 
-wait_for_named_server_ready() {
-  local server_name="$1"
-  local namespace="${2:-mcp-servers}"
-  local tries="${3:-60}"
-  local i
-  for i in $(seq 1 "${tries}"); do
-    local deployment_ready
-    local phase
-    local service_ready
-    local ingress_ready
-    deployment_ready="$(kubectl get mcpserver "${server_name}" -n "${namespace}" -o jsonpath='{.status.deploymentReady}' 2>/dev/null || true)"
-    service_ready="$(kubectl get mcpserver "${server_name}" -n "${namespace}" -o jsonpath='{.status.serviceReady}' 2>/dev/null || true)"
-    ingress_ready="$(kubectl get mcpserver "${server_name}" -n "${namespace}" -o jsonpath='{.status.ingressReady}' 2>/dev/null || true)"
-    phase="$(kubectl get mcpserver "${server_name}" -n "${namespace}" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
-    if [[ "${deployment_ready}" == "true" && "${service_ready}" == "true" && "${ingress_ready}" == "true" && "${phase}" == "Ready" ]]; then
-      return 0
-    fi
-    sleep 2
-  done
-  echo "timed out waiting for MCPServer ${server_name} to report core readiness and phase Ready" >&2
-  kubectl get mcpserver "${server_name}" -n "${namespace}" -o yaml || true
-  return 1
-}
-
 print_gateway_policy_debug() {
   local policy_json
   policy_json="$(kubectl get configmap "${SERVER_NAME}-gateway-policy" -n mcp-servers -o "jsonpath={.data.policy\.json}" 2>/dev/null || true)"
@@ -2988,29 +2962,13 @@ wait_for_server_ready() {
   wait_for_named_server_ready "${SERVER_NAME}" "mcp-servers" "${1:-60}"
 }
 
-wait_for_deployment_exists() {
-  local namespace="$1"
-  local name="$2"
-  local tries="${3:-60}"
-  local i
-  for i in $(seq 1 "${tries}"); do
-    if kubectl get deployment "${name}" -n "${namespace}" >/dev/null 2>&1; then
-      return 0
-    fi
-    sleep 2
-  done
-  echo "timed out waiting for deployment ${name} in namespace ${namespace}" >&2
-  kubectl get deployment -n "${namespace}" || true
-  return 1
-}
-
 restart_deployment_pods() {
   local namespace="$1"
   local name="$2"
   local timeout="${3:-180s}"
 
   kubectl rollout restart "deploy/${name}" -n "${namespace}" >/dev/null
-  kubectl rollout status "deploy/${name}" -n "${namespace}" --timeout="${timeout}"
+  rollout_status_with_logs "${namespace}" deploy "${name}" "${timeout}" "${name}"
 }
 
 init_example_metadata() {
@@ -3190,16 +3148,7 @@ deploy_example_server_via_pipeline() {
 
   echo "[deploy] waiting for ${server_name} rollout"
   wait_for_deployment_exists mcp-servers "${server_name}"
-  if ! kubectl rollout status "deploy/${server_name}" -n mcp-servers --timeout=180s; then
-    echo "[debug] ${server_name} rollout failed; collecting diagnostics" >&2
-    kubectl get mcpserver "${server_name}" -n mcp-servers -o yaml || true
-    kubectl get deploy,rs,pods,svc,ingress,configmap -n mcp-servers || true
-    kubectl describe deployment "${server_name}" -n mcp-servers || true
-    kubectl describe pods -n mcp-servers -l "app=${server_name}" || true
-    kubectl logs -n mcp-servers -l "app=${server_name}" --all-containers=true --tail=200 || true
-    kubectl logs -n mcp-runtime deploy/mcp-runtime-operator-controller-manager --all-containers=true --tail=200 || true
-    exit 1
-  fi
+  rollout_status_with_logs mcp-servers deploy "${server_name}" 180s "${server_name}" || exit $?
   wait_for_named_server_ready "${server_name}" "mcp-servers" 60
 }
 
@@ -3982,13 +3931,26 @@ containerdConfigPatches:
     endpoint = ["http://127.0.0.1:32000"]
 EOF
 
+if [[ "${E2E_SCOPED_CILIUM}" == "1" ]]; then
+  cat >> "${KIND_CONFIG}" <<'YAML'
+networking:
+  disableDefaultCNI: true
+  podSubnet: 10.244.0.0/16
+YAML
+fi
+
 run_logged_stage "start local registry" start_local_registry
 
 if cache_mode_enabled && kind_cluster_exists; then
   echo "[kind] reusing cluster ${CLUSTER_NAME}"
 else
   echo "[kind] creating cluster ${CLUSTER_NAME}"
-  run_logged_stage "kind create cluster" kind create cluster --name "${CLUSTER_NAME}" --config "${KIND_CONFIG}" --wait 120s
+  if [[ "${E2E_SCOPED_CILIUM}" == "1" ]]; then
+    run_logged_stage "kind create cluster" kind create cluster --name "${CLUSTER_NAME}" --config "${KIND_CONFIG}" --kubeconfig "${KUBECONFIG_FILE}" --wait 0s
+    run_logged_stage "install scoped Cilium" install_scoped_cilium
+  else
+    run_logged_stage "kind create cluster" kind create cluster --name "${CLUSTER_NAME}" --config "${KIND_CONFIG}" --wait 120s
+  fi
 fi
 connect_local_registry_to_kind_network
 
@@ -4410,16 +4372,7 @@ EOF
 
   echo "[deploy] waiting for MCP server rollout"
   wait_for_deployment_exists mcp-servers "${SERVER_NAME}"
-  if ! kubectl rollout status "deploy/${SERVER_NAME}" -n mcp-servers --timeout=180s; then
-    echo "[debug] MCP server rollout failed; collecting diagnostics" >&2
-    kubectl get mcpserver "${SERVER_NAME}" -n mcp-servers -o yaml || true
-    kubectl get deploy,rs,pods,svc,ingress,configmap -n mcp-servers || true
-    kubectl describe deployment "${SERVER_NAME}" -n mcp-servers || true
-    kubectl describe pods -n mcp-servers || true
-    kubectl logs -n mcp-servers -l "app=${SERVER_NAME}" --all-containers=true --tail=200 || true
-    kubectl logs -n mcp-runtime deploy/mcp-runtime-operator-controller-manager --all-containers=true --tail=200 || true
-    exit 1
-  fi
+  rollout_status_with_logs mcp-servers deploy "${SERVER_NAME}" 180s "${SERVER_NAME}" || exit $?
   wait_for_server_ready
 
   echo "[cli] checking server mutation helpers"
@@ -4749,9 +4702,9 @@ print(json.dumps({"email": os.environ["PLATFORM_ADMIN_EMAIL"], "password": os.en
     env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime auth status >/dev/null
     env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team list >/dev/null
     env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team create "${DEEP_CLI_TEAM_SLUG}" --name "E2E CLI ${DEEP_CLI_TEAM_SLUG}" >/dev/null
-    env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team user create "${DEEP_CLI_TEAM_SLUG}" \
+    printf '%s\n' "test-password-123" | env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team user create "${DEEP_CLI_TEAM_SLUG}" \
       --email "${DEEP_CLI_USER_EMAIL}" \
-      --password "test-password-123" \
+      --password-stdin \
       --role member >/dev/null
     env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team user list "${DEEP_CLI_TEAM_SLUG}" >/dev/null
     env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime server list --namespace mcp-servers >/dev/null
@@ -5270,12 +5223,6 @@ EOF
   run_logged_stage "deploy OAuth MCP server manifests" bash -lc "MCP_RUNTIME_CONFIG_DIR=\"${E2E_PIPELINE_CONFIG_DIR}\" ./bin/mcp-runtime server generate --metadata-file \"${OAUTH_METADATA_FILE}\" --output \"${OAUTH_MANIFEST_DIR}\" && ./bin/mcp-runtime server --use-kube apply --file \"${OAUTH_MANIFEST_DIR}/${OAUTH_SERVER_NAME}.yaml\""
   wait_for_deployment_exists mcp-servers "${OAUTH_SERVER_NAME}"
   if ! restart_deployment_pods mcp-servers "${OAUTH_SERVER_NAME}" 180s; then
-    echo "[debug] OAuth MCP server rollout failed; collecting diagnostics" >&2
-    kubectl get mcpserver "${OAUTH_SERVER_NAME}" -n mcp-servers -o yaml || true
-    kubectl get deploy,rs,pods,svc,ingress,configmap -n mcp-servers || true
-    kubectl describe deployment "${OAUTH_SERVER_NAME}" -n mcp-servers || true
-    kubectl describe pods -n mcp-servers || true
-    kubectl logs -n mcp-servers -l "app=${OAUTH_SERVER_NAME}" --all-containers=true --tail=200 || true
     exit 1
   fi
   wait_for_named_server_ready "${OAUTH_SERVER_NAME}"
@@ -5325,9 +5272,6 @@ EOF
     ./bin/mcp-runtime server --use-kube apply \
       --file "${GO_OAUTH_MANIFEST_DIR}/${GO_EXAMPLE_STANDALONE_NAME}.yaml"
   if ! restart_deployment_pods mcp-servers "${GO_EXAMPLE_STANDALONE_NAME}" 180s; then
-    echo "[debug] Go SDK OAuth server rollout failed" >&2
-    kubectl get mcpserver "${GO_EXAMPLE_STANDALONE_NAME}" -n mcp-servers -o yaml || true
-    kubectl logs -n mcp-servers -l "app=${GO_EXAMPLE_STANDALONE_NAME}" --all-containers=true --tail=200 || true
     exit 1
   fi
   wait_for_named_server_ready "${GO_EXAMPLE_STANDALONE_NAME}"
@@ -5967,9 +5911,9 @@ print(json.dumps({"email": os.environ["PLATFORM_ADMIN_EMAIL"], "password": os.en
   env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime auth status >/dev/null
   env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team list >/dev/null
   env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team create "${DEEP_CLI_TEAM_SLUG}" --name "E2E CLI ${DEEP_CLI_TEAM_SLUG}" >/dev/null
-  env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team user create "${DEEP_CLI_TEAM_SLUG}" \
+  printf '%s\n' "test-password-123" | env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team user create "${DEEP_CLI_TEAM_SLUG}" \
     --email "${DEEP_CLI_USER_EMAIL}" \
-    --password "test-password-123" \
+    --password-stdin \
     --role member >/dev/null
   env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime team user list "${DEEP_CLI_TEAM_SLUG}" >/dev/null
   env "${DEEP_PLATFORM_ENV[@]}" ./bin/mcp-runtime server list --namespace mcp-servers >/dev/null
@@ -6880,7 +6824,7 @@ check(
     "grafana Prometheus datasource includes route prefix",
     f"grafana Prometheus datasource URL is missing /prometheus route prefix: {prometheus_datasource}",
 )
-# Server-card deep links (/grafana/d/mcp-server/mcp-server?viewPanel=1..4)
+# Server-card deep links (/grafana/d/mcp-server/mcp-server?viewPanel=2..5)
 # need the provisioned dashboard and the datasource uid its panels pin (#543).
 check(
     prometheus_uid == "prometheus",
@@ -6895,12 +6839,20 @@ grafana_server_dashboard = wait_for_json(
     delay=2,
     description="grafana mcp-server dashboard",
 )
-grafana_server_panel_ids = {panel.get("id") for panel in grafana_server_dashboard["dashboard"].get("panels", [])}
-check(
-    {1, 2, 3, 4} <= grafana_server_panel_ids,
-    "grafana mcp-server dashboard has the server-card panels",
-    f"grafana mcp-server dashboard panels {sorted(grafana_server_panel_ids)} miss server-card viewPanel ids 1-4",
-)
+grafana_server_panels = {panel.get("id"): panel for panel in grafana_server_dashboard["dashboard"].get("panels", [])}
+server_card_panel_mapping = {
+    "request_rate": (2, "tools/call rate · 1h"),
+    "deny_rate": (3, "Policy denies · 1h"),
+    "latency_p95": (4, "tools/call p95 · 1h"),
+    "upstream_5xx_rate": (5, "Upstream 5xx rate · 1h"),
+}
+for metric, (panel_id, title) in server_card_panel_mapping.items():
+    panel = grafana_server_panels.get(panel_id, {})
+    check(
+        panel.get("title") == title and panel.get("datasource", {}).get("uid") == "prometheus",
+        f"grafana {metric} deep link targets panel {panel_id}: {title}",
+        f"grafana {metric} panel {panel_id} has wrong title/datasource or is missing: {panel}",
+    )
 
 grafana_gateway_counts = {}
 grafana_gateway_services = set()
@@ -7102,6 +7054,11 @@ PY
   fi
 fi
 
+fi
+
+if [[ "${E2E_SCOPED_CILIUM}" == "1" ]]; then
+  source "${PROJECT_ROOT}/test/e2e/scenarios/scoped-observability.sh"
+  run_scoped_observability_acceptance
 fi
 
 if scenario_selected "smoke-auth"; then
