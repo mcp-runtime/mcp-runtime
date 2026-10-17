@@ -163,6 +163,7 @@ type EventFilters struct {
 	Source                  string
 	EventType               string
 	Server                  string
+	ServerUID               string
 	Namespace               string
 	TeamID                  string
 	SubjectTeamID           string
@@ -233,6 +234,10 @@ func buildEventFilterWhereClause(filters EventFilters) (string, []interface{}) {
 	if filters.Server != "" {
 		conditions = append(conditions, "server = ?")
 		args = append(args, filters.Server)
+	}
+	if filters.ServerUID != "" {
+		conditions = append(conditions, "JSONExtractString(payload, 'server_uid') = ?")
+		args = append(args, filters.ServerUID)
 	}
 	if filters.Namespace != "" {
 		conditions = append(conditions, "namespace = ?")
