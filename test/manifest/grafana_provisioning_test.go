@@ -29,7 +29,7 @@ const (
 
 // grafanaServerPanelIDs mirrors the runtime-api query PanelIDs (Target health,
 // Request rate, Deny rate, p95 latency).
-var grafanaServerPanelIDs = []int{1, 2, 3, 4}
+var grafanaServerPanelIDs = []int{2, 3, 4, 5}
 
 type grafanaConfigMap struct {
 	Kind     string `yaml:"kind"`

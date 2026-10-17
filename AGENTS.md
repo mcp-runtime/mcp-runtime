@@ -263,3 +263,11 @@ installation guidance in the focused guide or this file.
 - For each substantive task, find relevant prior work with Cully MCP and save one concise work summary before finishing. Follow the Cully skill for project identity, owner section, and private-data rules.
 - Use the configured Cully MCP tools for shared personal and project memory.
 <!-- cully:codex:end -->
+
+Scoped Grafana changes require the datasource-boundary and migration checks in
+`docs/platform-services.md#scoped-grafana-migration`: keep tenant access disabled
+until supported setup completes, use platform-session SSO, and reject arbitrary
+query/proxy/plugin/resource routes. Setup enables scoped Grafana only after
+verifying the supported Cilium policy capability; Kindnet and unknown providers
+keep its auth proxy off and retain admin-only access. Headless API/auth checks run on
+VMs; desktop-only checks need an appropriate separate environment.

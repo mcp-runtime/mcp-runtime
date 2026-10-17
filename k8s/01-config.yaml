@@ -4,6 +4,10 @@ metadata:
   name: mcp-shared-config
   namespace: mcp-platform
 data:
+  # Explicit public origin for Grafana's required-Origin CSRF check.
+  UI_PUBLIC_ORIGIN: "http://localhost:18080"
+  # setup enables this only after hardened ingress/policies and rollout succeed.
+  GRAFANA_SCOPED_USER_ACCESS: "false"
   CLICKHOUSE_ADDR: "clickhouse.mcp-observability.svc.cluster.local:9000"
   CLICKHOUSE_DB: "mcp"
   KAFKA_BROKERS: "kafka.mcp-observability.svc.cluster.local:9092"

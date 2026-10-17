@@ -32,12 +32,12 @@ use HTTP, Kafka, ClickHouse, Postgres, or local files.
 | **platform-api** | Postgres-backed; no Kubernetes client. | Identity, auth, registry forwardAuth, admin namespaces/audit, `/internal/*` for runtime-api and analytics-api. | `k8s/08-platform-api-rbac.yaml` grants only user-key secret access. |
 | **runtime-api** | Kubernetes-aware via `pkg/k8sclient`. | MCPServer reconciliation helpers, grants/sessions, deployments, registry push (pod-local emptyDir + `POD_IP`). Broad ClusterRole in `k8s/08-runtime-api-rbac.yaml`. | Main privileged API for cluster mutations. NetworkPolicy egress to platform-api:8080 in `k8s/22-split-api-networkpolicy.yaml`. |
 | **analytics-api** | ClickHouse-only; `automountServiceAccountToken: false`. | Events, stats, usage queries; resolves display names via platform-api `/internal/*`. | No Kubernetes RBAC. NetworkPolicy egress to platform-api:8080. |
-| **gateway** | Kubernetes-aware Traefik ingress controller. | Watches Ingress, Service, Endpoint, Secret, and IngressClass resources for the namespaces it serves. The shared ingress overlays watch `registry`, `mcp-platform`, `mcp-observability`, `mcp-log-collector`, `mcp-servers`, `mcp-servers-org`, and `mcp-servers-public`. | Keep watched namespaces explicit, avoid cluster-wide ingress watches unless required, keep Grafana admin-gated, do not expose Prometheus directly on public hosts, and keep redaction middleware limited to routes that need it. |
+| **gateway** | Kubernetes-aware Traefik ingress controller. | Watches Ingress, Service, Endpoint, Secret, and IngressClass resources for the namespaces it serves. The shared ingress overlays watch `registry`, `mcp-platform`, `mcp-observability`, `mcp-log-collector`, `mcp-servers`, `mcp-servers-org`, and `mcp-servers-public`. | Keep watched namespaces explicit, avoid cluster-wide ingress watches unless required, route Grafana through the platform session and runtime query boundary, do not expose Prometheus directly on public hosts, and keep redaction middleware limited to routes that need it. |
 | **mcp-gateway** | Kubernetes-integrated but Kubernetes API-agnostic. It is injected into MCP server pods and reads operator-rendered policy from mounted files and env vars. | Does not need a Kubernetes client or API access. It forwards MCP traffic to the local server container and emits audit events to ingest, authenticating with a short-lived projected ServiceAccount token (audience `mcp-ingest`) that ingest validates via TokenReview. | Keep `automountServiceAccountToken: false`, read-only policy mounts, `readOnlyRootFilesystem`, dropped capabilities, and non-root execution. The projected token is only valid for ingest; ingest accepts it only from the `mcp-workload` ServiceAccount. An optional `ANALYTICS_API_KEY` is ingest-scoped, not an admin API key. |
 | **ui** | Kubernetes API-agnostic. | Serves the browser UI and proxies allowlisted read-only `GET /api/ui/v1/*` dashboard paths to runtime-api (`RUNTIME_UPSTREAM`) or analytics-api (`ANALYTICS_UPSTREAM`) using the server-held UI session credential. Login still uses `API_UPSTREAM` against platform-api. All other `/api/v1/*` traffic stays on Traefik split-API ingress. | Keep it behind TLS for public hosts, retain the security headers in `services/ui`, set `UI_REQUIRE_HTTPS=false` for deliberate local HTTP or a secured external TLS terminator, set `UI_FORCE_SECURE_COOKIE=true` when a TLS-terminating proxy does not send `X-Forwarded-Proto: https`, and do not grant it Kubernetes RBAC. The shipped Deployment runs two replicas with `UI_SESSION_STORE=postgres`. Session rows live in the shared `ui_sessions` table, encrypted with `UI_SESSION_ENCRYPTION_KEY` from `mcp-ui-credentials`. Rotating that key forces re-login. The gateway does not hold the cookie, so it can scale with the UI. |
 | **ingest** | Kubernetes API-agnostic. | Authenticates `/events`, validates request size and event shape, and writes to Kafka. | Require `INGEST_API_KEYS` or OIDC for real deployments, use ingest-only keys, restrict network access to proxy/gateway callers, and keep the public `/ingest` route off production hosts unless intentionally exposed. |
 | **processor** | Kubernetes API-agnostic. | Consumes Kafka and writes ClickHouse. It only exposes health and metrics. | Do not expose it through ingress. Restrict network access to Kafka, ClickHouse, metrics scraping, and tracing endpoints. |
-| **storage and observability** | Mixed. ClickHouse, Kafka, Postgres, Grafana, Prometheus, Tempo, Loki, and the OTel collector are Kubernetes API-agnostic in the bundled manifests; Promtail is Kubernetes-aware so it can discover pod logs. | Data stores and dashboards back audit, identity, metrics, traces, and logs. Promtail has pod read/watch RBAC. | Review persistence, retention, backups, and dashboard auth before production use. The generated platform-host observability route uses `platform-admin-auth@file`; provide equivalent auth if you replace repo-managed Traefik, and review Promtail's cluster log visibility before enabling it on multi-tenant clusters. |
+| **storage and observability** | Mixed. ClickHouse, Kafka, Postgres, Grafana, Prometheus, Tempo, Loki, and the OTel collector are Kubernetes API-agnostic in the bundled manifests; Promtail is Kubernetes-aware so it can discover pod logs. | Data stores and dashboards back audit, identity, metrics, traces, and logs. Promtail has pod read/watch RBAC. | Review persistence, retention, backups, and dashboard auth before production use. The generated Grafana route targets the UI session proxy; runtime-api enforces server ownership on each tenant datasource query. Preserve that route and the scoped observability NetworkPolicies when replacing Traefik, and review Promtail's cluster log visibility before enabling it on multi-tenant clusters. |
 
 In production, give Kubernetes API access only to **runtime-api**, ingress
 controllers, the runtime operator, and log collectors that need it. For services
@@ -173,52 +173,110 @@ For local `setup --test-mode` clusters, setup seeds two email/password logins:
 | **runtime-api** | `/api/v1/runtime/*` (servers, tools, grants, sessions, adapter sessions/certificates, observability), `/api/v1/deployments/*`, `/api/v1/dashboard/*`, `/api/v1/user/api-keys` | `mcp-runtime-api:8084` | Runtime governance, registry push, dashboard summary. |
 | **analytics-api** | `/api/v1/stats`, `/api/v1/events`, `/api/v1/sources`, `/api/v1/event-types`, `/api/v1/analytics/*`, `/api/v1/user/analytics/*` | `mcp-analytics-api:8085` | ClickHouse query surfaces. All except `/api/v1/user/analytics/*` are admin-only. |
 | **Ingest** | `/ingest/events` | `mcp-ingest:8081/events` | Event intake used by `mcp-gateway`. Local path-based ingress strips `/ingest`. A public-host install does not publish this route; gateways call the in-cluster Service. |
-| **Grafana** | `/grafana` | `grafana:3000` | Admin observability UI. The generated platform-host route is guarded by `platform-admin-auth@file`; Grafana still keeps its own login unless you wire auth proxy settings. Tenant-scoped access is intentionally not exposed by the user dashboard. |
+| **Grafana** | `/grafana` | `mcp-ui:8082` → `mcp-runtime-api:8084` → `grafana:3000` | Platform-session SSO. Tenant requests use the fixed, live-server-authorized query boundary; admins retain unfiltered datasource access. Direct Grafana ingress is blocked by NetworkPolicy. |
 | **Prometheus** | Not exposed | `prometheus:9090` | Internal metrics backend and Grafana datasource. Use a temporary `kubectl port-forward` only for backend debugging. |
 | **MCP gateway sidecar** | per-server route, for example `/oauth-example-go-2025-11-25-gateway/mcp` | pod-local sidecar port | Enforces policy and forwards to the MCP server container. |
 
-### Admin Grafana access
+### Grafana access
 
-Administration → Usage analytics includes a **Detailed activity** button that
-opens Grafana Explore at `/grafana/explore`. Platform admins can use its
-provisioned Prometheus, Loki, and Tempo data sources to inspect metrics, logs,
-and traces in one place. Grafana remains protected by the platform admin
-forward-auth route. Platform health also links to Grafana; it does not expose a
-separate Prometheus UI link.
+After a complete setup with supported Cilium enforcement, the platform session
+signs the user into Grafana. Other providers retain admin-only Grafana with its
+existing login and admin forward-auth gate; its auth proxy stays disabled.
+Administration → Usage analytics opens `/grafana/explore`; admins retain access
+to Prometheus, Loki, and Tempo without tenant filters. Server cards link eligible
+viewers to the provisioned **MCP Server** dashboard. Panels 2–5 show one-hour
+tools/call rate, policy deny count, tools/call p95, and allowed upstream 5xx rate.
+Every generated URL includes the immutable server UID.
 
-Server cards link admins to the provisioned **MCP Server** dashboard
-(`/grafana/d/mcp-server/mcp-server`, panels 1–4 for Target health, Request
-rate, Deny rate, and p95 latency). Setup applies `k8s/19-grafana-datasources.yaml`
-(datasource uids `prometheus`, `tempo`, and `loki`) and
-`k8s/21-grafana-dashboards.yaml` before `k8s/12-grafana.yaml`, which mounts the
-dashboard provider and every dashboard file. A change to either ConfigMap
-changes Grafana's pod template so it restarts and re-reads provisioning. The
-card shows the dashboard and panel links together, and only when runtime-api
-marks the Grafana link available. runtime-api does not probe Grafana, so
-`mcp-runtime cluster doctor` reports **platform Grafana
-provisioning** drift (missing dashboard, unpinned Prometheus uid, or missing
-mounts); rerun setup to repair it. `mcp-runtime update` changes images and
-the ServiceAccounts, RBAC and Deployment wiring a release declares, so it does
-not repair Grafana provisioning drift (ConfigMaps).
+Setup provisions the dashboard and datasources before Grafana and enables its
+auth proxy. UI forwards only the platform session's stored credential to
+runtime-api, which reauthenticates every request and supplies the Grafana
+identity. Client-provided identity, organization, authorization, and Grafana
+session-cookie headers are discarded. Grafana never issues a browser login
+cookie through this path, so platform logout also removes Grafana access.
+Writes require the configured exact public Origin; `UI_PUBLIC_ORIGIN` defaults
+to `http://localhost:18080` locally and setup derives it from the public host and
+TLS options. Custom frontends must set their actual origin, including port.
+Grafana HTML uses its native response-specific nonce Content Security Policy;
+the console keeps its separate policy. A missing Grafana policy fails closed.
 
-Grafana has two independent authentication layers: the platform ingress gate
-(`platform-admin-auth`) and Grafana's own persisted admin account. Passing the
-gate does not prove the Grafana login works, and changing the bootstrap
-password in `mcp-grafana-credentials` does not update an existing persisted
-account. A browser that clears the gate but then sees `password-auth.failed`
-indicates credential drift. `mcp-runtime cluster doctor` runs the same probe
-as **platform Grafana admin credential drift** and fails when Grafana rejects
-the configured credentials; it never resets the account. Diagnose it read-only with
-`mcp-runtime ops grafana check`, which probes from inside the Grafana pod
-(so it bypasses the gate and reports only the Grafana login layer) and never
-resets anything. Recover deliberately with
-`mcp-runtime ops grafana reset-admin-password --yes`: it runs only when
-drift is detected, copies the Grafana database inside the pod volume to
-`/var/lib/grafana/backups/` first, passes the configured password to the Grafana
-CLI over stdin inside the pod, verifies authenticated API access, and preserves
-dashboards and datasources. It overwrites any password an operator set inside
-Grafana. Keep working credentials and the Grafana URL only in your private
-operator `infra.env`.
+Tenant dashboard and Explore requests support only the four fixed Prometheus
+queries supplied by runtime-api for currently observable servers. Unknown or
+edited PromQL, expression datasources, arbitrary datasource proxy/resource
+requests, Grafana Live, snapshots, rendering, query history, and tenant Loki or
+Tempo queries are rejected. This is deliberately bounded Explore access:
+opening Explore does not grant unrestricted PromQL/LogQL authoring. Tenant
+container logs remain available in the server detail through its fixed Loki
+endpoint; traces and unrestricted observability remain admin-only. The exact
+native alert-rules, correlations, metric metadata, metric-name and label feeds
+return empty platform-owned responses. Exemplars likewise return no samples;
+their expressions require the same authorization, except Grafana's literal
+`test` capability probe, which never queries a backend. No tenant auxiliary
+feed reads a global store. Native query-history and Live calls remain denied,
+so Explore does not save query history or open a Live connection.
+
+Grafana basic authentication remains enabled only for pod-local diagnostics and
+credential recovery (`mcp-runtime ops grafana check` and
+`mcp-runtime ops grafana reset-admin-password --yes`). Browser Basic credentials
+are discarded by the session proxy. Keep Grafana credentials private.
+
+### Scoped Grafana migration
+
+Existing installs must refresh setup using this release's CLI/source and the
+same host, TLS, storage, registry, and mcp-auth choices used to install them.
+For the contributor Kind cluster, the supported refresh is:
+
+```bash
+./bin/mcp-runtime setup --test-mode --ingress-manifest config/ingress/overlays/http
+```
+
+For public installs, follow the existing deployment runbook and repeat its
+`mcp-runtime setup` invocation with the installation's original options. Review
+the target and preserve certificates and the mcp-auth choice. Do not substitute
+manual ingress, Secret, or database edits.
+
+Setup keeps `GRAFANA_SCOPED_USER_ACCESS=false` while applying the new session
+route, Grafana auth proxy, and `23-scoped-observability-networkpolicy.yaml`.
+With verified policy capability it removes the old direct Grafana ingresses,
+waits for workload readiness, then
+enables the flag and rolls runtime-api. A partial setup leaves tenant access
+disabled. `update` skips just the two scoped Grafana policies on an admin-only
+installation and includes the reason in its plan; unrelated updates continue.
+For an installation claiming the scoped feature is enabled, update refuses
+policy apply before any mutation if the auth-proxy/session-route migration is
+incomplete. Update never enables the flag or auth proxy.
+
+The initial supported capability is a fully current, ready and available
+`kube-system/cilium` DaemonSet with a `cilium-agent` container and
+`kube-system/cilium-config` explicitly setting `enable-k8s-networkpolicy=true`
+and `enable-policy=default` or `always`, without disabling argument/environment
+overrides. The current agent revision must run `cilium-agent` with explicit
+`--enable-policy=default` (or `always`) and `--enable-k8s-networkpolicy=true`;
+configuration intent alone is insufficient because config sources can be stale
+or overridden. Setup checks those live capabilities before enabling proxy auth;
+there is no boolean bypass. [Cilium policy enforcement modes](https://docs.cilium.io/en/stable/security/policy/intro/)
+and [agent readiness checks](https://docs.cilium.io/en/stable/network/kubernetes/troubleshooting/)
+describe the underlying capability. This check establishes supported configured
+capability; live traffic tests still verify the deployed network boundary.
+The option keys, environment names, and argument binding were checked against
+[Cilium v1.20.3 option source](https://github.com/cilium/cilium/blob/v1.20.3/pkg/option/config.go)
+and [agent flags](https://github.com/cilium/cilium/blob/v1.20.3/daemon/cmd/daemon_main.go)
+on 2026-10-17. Setup also refuses other ingress policies that could select the
+telemetry backends and existing native Cilium policy resources. Clusters using
+those policy extensions remain admin-only until their query boundary has a
+supported isolation review; setup does not remove or weaken their policies.
+Before proxy auth starts and again before tenant activation, the installed
+telemetry policy must exactly match this release's source.
+
+Standard Kind kindnet does not enforce these policies. Kindnet, unknown
+providers, and unready/disabled Cilium keep both tenant access and Grafana auth
+proxy off, retain the admin-gated route, and print migration guidance. Setup
+does not install a CNI. A Kind-only API test cannot prove the network boundary.
+Only runtime-api may reach Grafana's auth-proxy listener. Shared Prometheus,
+Loki, and Tempo endpoints admit only the declared platform, collector, and
+scraper peers. Tenant workloads and ingress controllers cannot reach those
+services directly. Preserve these ingress policies; a separate broad allow
+policy is additive and can defeat isolation.
 
 ### Scoped user observability
 
@@ -226,23 +284,28 @@ The Servers workspace links to gateway metrics only for MCP Servers with
 `spec.gateway.enabled: true`. Standalone servers without the gateway have no
 gateway scrape target, so the UI omits their metrics and the runtime API rejects
 gateway observability queries for them. For gateway-enabled servers, links
-include the selected server's namespace and name. The bundled Grafana route is
-admin-only, so these links are shown to admins by default.
+include the selected server's namespace, name, and immutable UID. Shared-catalog
+viewers keep the card and connect configuration; only the publishing user or an
+admin receives observability. Team members receive their team-server observability.
 
 The API checks the live `MCPServer` before returning links or querying
 Prometheus. Normal users are limited to their team namespaces or explicitly
 caller-owned catalog servers. Their server detail page also shows recent Loki
-logs scoped to the authorized server namespace, workload label, and object UID. Grafana
-remains admin-only because its shared Prometheus and Loki datasources do not
-enforce tenant isolation; a dashboard URL template or visibility flag cannot
-make those datasources safe for tenant users.
+logs scoped to the authorized server namespace, workload label, and object UID.
+After the supported setup migration, the same principals receive bounded Grafana links.
+Authorization happens at the datasource request boundary, never in a dashboard
+variable or caller-supplied header.
 
-Authorized server details also show a fixed one-hour metrics summary: `tools/call`
-rate and p95, allowed-call HTTP 5xx rate, policy deny count, and the slowest
-tool p95 after at least five calls. Runtime-api builds these PromQL queries from
-the live server identity and returns numeric results; callers cannot submit
-PromQL. This provides scoped values without exposing Grafana Explore or its
-shared datasources to tenants.
+Authorized server cards and details show a fixed one-hour metrics summary:
+`tools/call` rate and p95, allowed-call HTTP 5xx rate, policy deny count, and the
+slowest tool name only after ClickHouse contains at least five allowed
+`tools/call` rows for that tool, current UID, and hour; the largest observed p95
+selects the name. Missing or unlabelled historical rows never supply a name. Cards fetch summaries only as they
+approach the viewport and share the detail view's short-lived query cache.
+Runtime-api builds these PromQL queries from the live server identity and
+returns numeric results; callers cannot submit PromQL. The dashboard and
+bounded Explore path use the same fixed one-hour queries and repeat live server
+authorization for every target in a batch.
 
 The operator sets `mcpruntime.org/server-uid` on stable and canary pods.
 Prometheus and Promtail copy it into `server_uid`, and runtime-api includes the
@@ -255,7 +318,8 @@ must reconcile onto the labelled pod template before new telemetry appears.
 Prometheus requests use
 `/api/v1/runtime/observability/prometheus/query?namespace=<namespace>&server=<server>&query_id=<id>`.
 The `query_id` is allowlisted (`up`, `request_rate`, `deny_rate`,
-`latency_p95`); arbitrary PromQL is never accepted. `PROMETHEUS_API_URL`
+`latency_p95`, `upstream_5xx_rate`); `up` remains available only for explicit legacy
+API links. Arbitrary PromQL is never accepted. `PROMETHEUS_API_URL`
 defaults to `http://prometheus.mcp-observability.svc:9090/prometheus`.
 
 The Prometheus query API link form depends on the caller. Requests that arrive
@@ -276,12 +340,12 @@ The numeric summary uses
 the endpoint applies the same owner/team authorization and fixed-query policy.
 
 The bundled dashboard is provisioned at `/grafana/d/mcp-server/mcp-server` and
-is available directly to admins. To use another admin dashboard, set
+uses the scoped session path after a supported setup migration. To use another
+admin dashboard on an unmigrated admin-only installation, set
 `GRAFANA_SERVER_DASHBOARD_URL` to a URL template containing `{namespace}` and
-`{server}`. Its first four panel IDs must correspond to the four metric links
-above. Tenant-safe Grafana SSO requires a separate integration that enforces
-server scope at the data-source boundary; this runtime does not grant that
-access through `GRAFANA_SCOPED_USER_ACCESS`.
+`{server}`. Tenant access always uses the bundled fixed-query dashboard rather
+than an arbitrary template. Its panels 2–5 correspond to the fixed metric links
+above; dashboard variables alone never authorize a datasource request.
 
 The bundled Prometheus uses read-only Kubernetes discovery for annotated
 MCPServer Services and scrapes the gateway sidecar `/metrics` endpoint.
@@ -614,7 +678,7 @@ mcp-runtime ops port-forward grafana
 mcp-runtime ops restart gateway
 mcp-runtime ops restart --all
 
-# Grafana admin credential drift (see Admin Grafana access)
+# Grafana admin credential drift (see Grafana access)
 mcp-runtime ops grafana check
 mcp-runtime ops grafana reset-admin-password --yes
 ```

@@ -91,6 +91,7 @@ type gatewayServer struct {
 	policyFile             string
 	serverName             string
 	serverNamespace        string
+	serverUID              string
 	clusterName            string
 	verifiedSPIFFEHeader   string
 	trustedProxySPIFFE     string

@@ -6,6 +6,7 @@ import { StatusBadge } from "../../ui/Badge";
 import { Icon } from "../../ui/Icon";
 import { EmptyState } from "../../ui/States";
 import { formatAbsolute, formatAge } from "../../lib/format";
+import { ServerCardMetrics } from "./ServerCardMetrics";
 import {
   serverAuthInfo,
   isServerReady,
@@ -126,9 +127,9 @@ export function ServerList({
           // link available; panel links never render without it (issue #543).
           const grafanaAvailable = Boolean(observability?.grafana.available && observability.grafana.url);
           const grafanaPanelLinks = grafanaAvailable
-            ? observability?.prometheus.queries.filter((query) => query.grafana_url) ?? []
+            ? observability?.prometheus.queries.filter((query) => query.id !== "up" && query.grafana_url) ?? []
             : [];
-          const hasObservability = grafanaAvailable;
+          const hasObservability = Boolean(observability);
 
           return (
             <li key={key}>
@@ -250,7 +251,8 @@ export function ServerList({
 
                 {hasObservability ? (
                   <div className="server-card-observability" data-testid="server-card-observability">
-                    <span className="observability-label">Metrics</span>
+                    <span className="observability-label">Metrics · 1h</span>
+                    <ServerCardMetrics key={`${server.namespace}/${server.name}/${server.uid || ""}`} server={server} />
                     {grafanaAvailable && observability?.grafana.url ? (
                       <a
                         className="quiet-link"

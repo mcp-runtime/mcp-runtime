@@ -10,6 +10,9 @@
 # ServiceAccount/RBAC and supported platform NetworkPolicy objects, as "<Kind>/<namespace>/<name>" (namespaced) or
 # "<Kind>/<name>" (cluster-scoped). Validated: no wildcard or escalating rules.
 platformObjects:
+  # The updater refuses these policies until supported setup migrated Grafana.
+  - NetworkPolicy/mcp-observability/mcp-scoped-observability-ingress
+  - NetworkPolicy/mcp-platform/mcp-runtime-api-grafana-egress
   - NetworkPolicy/mcp-observability/kafka-client-ingress
   - ServiceAccount/mcp-runtime/mcp-runtime-operator-controller-manager
   - ClusterRole/mcp-runtime-operator-role
