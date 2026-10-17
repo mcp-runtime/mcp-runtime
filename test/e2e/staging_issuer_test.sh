@@ -38,4 +38,19 @@ unset MCP_WORKLOAD_ISSUER_APPROVAL_ACK
 staging_run_stage issuer critical fixture staging_prepare_workload_issuer
 [[ "$(staging_stage_status issuer)" == passed ]]
 [[ "${MCP_WORKLOAD_ISSUER_APPROVAL_ACK:-}" == true ]]
+# Failed init jobs must retain a bounded useful error, with credentials removed.
+unset E2E_PLATFORM_API_TOKEN
+staging_platform_namespaces() { printf '%s\n' mcp-observability; }
+kubectl() {
+  case "$*" in
+    *'logs job/kafka-topic-init'*) printf '%s\n' 'Permission denied: /private/password; password=fixture-password Bearer fixture-token';;
+    *'get secret '*) return 1;;
+  esac
+  return 0
+}
+staging_collect_diagnostics "$TMP/diagnostics"
+grep -q 'Permission denied' "$TMP/diagnostics/mcp-observability-kafka-topic-init.log"
+if grep -q 'fixture-password\|fixture-token' "$TMP/diagnostics/mcp-observability-kafka-topic-init.log"; then
+  echo 'initialization diagnostics leaked credentials' >&2; exit 1
+fi
 echo 'staging issuer offline regressions passed'

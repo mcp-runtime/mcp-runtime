@@ -164,7 +164,7 @@ backup_platform_runtime() {
 install_dependencies() {
   if command -v apt-get >/dev/null 2>&1; then
     apt-get update
-    apt-get install -y ca-certificates curl git jq make openssh-client openssl
+    apt-get install -y ca-certificates curl git jq make openssh-client openssl python3
     # Setup builds the platform images with Docker (driven by make) on the
     # machine running the CLI, which for this runner is the VM itself.
     if ! command -v docker >/dev/null 2>&1; then
@@ -174,9 +174,9 @@ install_dependencies() {
       apt-get install -y docker-buildx || apt-get install -y docker-buildx-plugin || true
     fi
   elif command -v dnf >/dev/null 2>&1; then
-    dnf install -y ca-certificates curl git jq make openssh-clients openssl
+    dnf install -y ca-certificates curl git jq make openssh-clients openssl python3
   elif command -v apk >/dev/null 2>&1; then
-    apk add --no-cache ca-certificates curl git jq make openssh-client openssl
+    apk add --no-cache ca-certificates curl git jq make openssh-client openssl python3
   else
     log "no supported package manager found; assuming curl, git, jq, make, openssl and docker are preinstalled"
   fi
@@ -184,7 +184,7 @@ install_dependencies() {
     systemctl enable --now docker || true
   fi
   local cmd
-  for cmd in curl git jq make openssl docker; do
+  for cmd in curl git jq make openssl python3 docker; do
     require_command "${cmd}"
   done
   [[ "$(uname -m)" == x86_64 ]] || fail "the staging Helm fixture currently supports x86_64 VMs"
