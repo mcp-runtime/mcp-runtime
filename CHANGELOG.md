@@ -33,6 +33,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 ### Changed
 
 - Scoped Grafana requires a supported setup refresh with verified Cilium policy capability to move ingress behind the UI/runtime authorization boundary and install telemetry isolation. Kindnet and unknown providers retain admin-only access with Grafana auth proxy disabled. Update skips the scoped policies until migration and refuses incomplete enabled wiring before mutation. Preserve the installation’s host, TLS, storage, registry and mcp-auth options; see [migration guidance](docs/platform-services.md#scoped-grafana-migration) ([#699](https://github.com/mcp-runtime/mcp-runtime/issues/699)).
+- Gateways compile immutable tool, session and subject-grant indexes when activating a validated policy, keeping lookups independent of unrelated policy entries and retaining the last valid snapshot after a failed reload ([#319](https://github.com/mcp-runtime/mcp-runtime/issues/319)).
 
 - Operator policy reconciliation looks up grants by their effective target server using a cache index, avoiding copies and scans of unrelated grants while preserving cross-namespace references. Runtime sessions remain platform-owned ([#657](https://github.com/mcp-runtime/mcp-runtime/issues/657)).
 

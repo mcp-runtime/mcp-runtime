@@ -94,6 +94,16 @@ to the same server UID and must not advance the global freshness timestamp.
 Authorization remains in process and still enforces expiry, revocation, grants,
 side effects, and trust restrictions.
 
+Validated policy reloads compile immutable tool-name and subject-grant indexes
+before atomically activating the new document. Legacy embedded session bindings
+also have ID/subject indexes; current platform-synchronized sessions continue to
+use the separate server-scoped session cache. A failed load or compilation keeps
+the previous complete document and its indexes. Indexes do not change policy JSON,
+revision digests or schema versions. Expiry, revocation and monitor/enforcing
+decisions are evaluated on every request; they are not cached decisions.
+See the [policy benchmark results](../../.codex/skills/cluster-ops/references/performance.md#policy-lookup-microbenchmarks)
+for the bounded VM comparison and its limits.
+
 A known epoch/cursor reset or an explicit `401`/`403` identity rejection
 immediately invalidates cached authority. It cannot keep serving the old
 snapshot while a relist fails. `SESSION_SYNC_STALE_WINDOW` can shorten the
