@@ -1,0 +1,14 @@
+Create a password-login user and add them to a team
+
+Usage:
+  mcp-runtime team user create [team-slug] [flags]
+
+Flags:
+      --email string      Platform account email
+  -h, --help              help for create
+      --password-stdin    Read the platform account password from stdin instead of prompting
+      --role string       Team role for the user: member or owner (default "member")
+      --username string   Alias for --email
+
+Global Flags:
+      --debug   Enable debug mode with structured error logging

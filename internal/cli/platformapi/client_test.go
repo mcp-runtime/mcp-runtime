@@ -373,6 +373,8 @@ func TestPlatformClientTeamAndServerRoutes(t *testing.T) {
 					StatusCode: http.StatusOK,
 					Body:       io.NopCloser(strings.NewReader(`{"membership":{"team_slug":"core","team_namespace":"mcp-team-core","user_id":"user-1","email":"member@example.com","role":"member"}}`)),
 				}, nil
+			case r.Method == http.MethodDelete && r.URL.Path == "/api/v1/runtime/teams/core/members/user-1":
+				return &http.Response{StatusCode: http.StatusNoContent, Body: io.NopCloser(strings.NewReader(""))}, nil
 			case r.Method == http.MethodGet && r.URL.Path == "/api/v1/runtime/servers":
 				if got := r.URL.Query().Get("namespace"); got != "" {
 					t.Fatalf("list runtime servers namespace query = %q, want empty", got)
@@ -446,6 +448,9 @@ func TestPlatformClientTeamAndServerRoutes(t *testing.T) {
 	}
 	if upserted.UserID != "user-1" || upserted.Role != "member" {
 		t.Fatalf("upserted membership = %#v", upserted)
+	}
+	if err := client.DeleteTeamMember(context.Background(), "core", "user-1"); err != nil {
+		t.Fatalf("DeleteTeamMember() error = %v", err)
 	}
 	servers, err := client.ListRuntimeServers(context.Background(), "")
 	if err != nil {

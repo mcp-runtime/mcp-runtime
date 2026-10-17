@@ -1,0 +1,15 @@
+Read the deployed workload issuer, SPIFFE trust-domain configuration, public CA metadata, and selected server route client-certificate trust without changing cluster resources.
+
+Usage:
+  mcp-runtime cluster identity [command]
+
+Available Commands:
+  status      Check workload issuer and trust-domain health
+
+Flags:
+  -h, --help   help for identity
+
+Global Flags:
+      --debug   Enable debug mode with structured error logging
+
+Use "mcp-runtime cluster identity [command] --help" for more information about a command.
