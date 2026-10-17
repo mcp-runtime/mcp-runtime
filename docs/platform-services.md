@@ -465,6 +465,13 @@ not reach the upstream MCP server. With `policy.mode: observe` the call is
 allowed before identity, session, grant, side-effect, and trust checks run. The
 audit trail still records it, but nothing is enforced.
 
+`MCPAccessGrant.spec.mode: monitor` is narrower: it shadows only that matched
+grant's tool, trust, and side-effect restrictions. The gateway records the
+original denial as `would_deny` while allowing the call after identity and
+required-session checks. Disabled or expired grants and matching enforce-mode
+denials remain blocking. Monitor policies use schema v5 and are rejected by
+older gateways.
+
 ### First-party OAuth authorization server
 
 The bundled `mcp-auth-server` is an opt-in authorization server for test

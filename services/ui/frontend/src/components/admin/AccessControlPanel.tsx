@@ -14,7 +14,7 @@ import { PageHeader } from "../../ui/PageHeader";
 import { expiryState, formatAbsolute, formatTimestamp } from "../../lib/format";
 import { useAdminReload, useGrants, useSessions } from "../../hooks/useAdminData";
 import { useCatalog } from "../../hooks/useCatalog";
-import { createGrant, createSession, revokeGrantSessions, setGrantDisabled, setSessionRevoked } from "../../api/admin";
+import { createGrant, createSession, revokeGrantSessions, setGrantDisabled, setGrantMode, setSessionRevoked } from "../../api/admin";
 import { readRuntimeConfig } from "../../api/config";
 import { accessKey, subjectLabel } from "../../api/types";
 import type { GrantSummary, SessionSummary } from "../../api/types";
@@ -37,6 +37,7 @@ function defaultNamespace(current: string): string {
 
 function emptyGrantDraft(namespace: string): GrantDraft {
   return {
+    mode: "enforce",
     name: "",
     namespace: defaultNamespace(namespace),
     server: "",
@@ -179,6 +180,19 @@ export function AccessControlPanel({
     });
   }
 
+  function askChangeGrantMode(grant: GrantSummary) {
+    const mode = grant.mode === "monitor" ? "enforce" : "monitor";
+    setConfirm({
+      title: `Set grant "${grant.name}" to ${mode}?`,
+      body: mode === "monitor"
+        ? "This grant will record policy denials without blocking calls. Identity, session and other enforcing grant checks still apply."
+        : "This grant will block calls that exceed its tool, trust or side-effect restrictions.",
+      confirmLabel: `Set to ${mode}`,
+      destructive: false,
+      onConfirm: () => runAction(`mode:${accessKey(grant)}`, `Grant "${grant.name}" set to ${mode}.`, () => setGrantMode(grant.namespace, grant.name, mode)),
+    });
+  }
+
   function askToggleSession(session: SessionSummary) {
     const revoke = !session.revoked;
     setConfirm({
@@ -242,6 +256,16 @@ export function AccessControlPanel({
           cell: (grant) => grant.serverRef?.name || "—",
         },
         { id: "subject", header: "Subject", width: "24%", cell: (grant) => subjectLabel(grant.subject) },
+        {
+          id: "mode",
+          header: "Mode",
+          cell: (grant) => <div className="cell-actions">
+            <span>{grant.mode || "enforce"}</span>
+            {canManage ? <Button variant="ghost" size="sm" data-testid="grant-mode-toggle" busy={busyKey === `mode:${accessKey(grant)}`} onClick={() => askChangeGrantMode(grant)}>
+              {grant.mode === "monitor" ? "Enforce" : "Monitor"}
+            </Button> : null}
+          </div>,
+        },
         {
           id: "trust",
           header: "Trust ceiling",
@@ -500,6 +524,7 @@ export function AccessControlPanel({
           onSubmit={() =>
             void runAction("create-grant", `Grant "${grantDraft.name}" created.`, async () => {
               await createGrant({
+                mode: grantDraft.mode || "enforce",
                 name: grantDraft.name.trim(),
                 namespace: grantDraft.namespace.trim(),
                 serverRef: { name: grantDraft.server.trim() },
