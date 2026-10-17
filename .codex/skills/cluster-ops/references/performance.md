@@ -35,3 +35,12 @@ replace a baseline to make a result green. Missing cluster/baseline access is
 blocked coverage unless baseline creation was the requested task.
 
 Gateway per-tool metrics distinguish allowed/denied calls and HTTP status. Use `mcp_gateway_tool_call_duration_seconds` for tool latency; configured names are bounded to 128 and unknown/overflow names use `__other__`. A sampled observation can link to Tempo via an exemplar. HTTP 200 does not prove a successful MCP tool result; inspect the server execution span for `isError` failures.
+
+Upstream capacity rejects before dispatch with HTTP 429 / `upstream_backpressure`;
+an open circuit returns HTTP 503 / `upstream_unavailable`. Policy decision counters
+retain the authorization result for these operational failures. GET session streams
+and upgrades have a separate capacity budget; POST SSE responses retain an active
+RPC slot. Actual SSE responses have no unary body deadline. A stalled unary body
+can time out after HTTP 200 headers, so check the audit `upstream_timeout` reason
+and partial-response failure rather than looking only for HTTP 504. See the
+gateway upstream bounds in `docs/platform-services.md`.

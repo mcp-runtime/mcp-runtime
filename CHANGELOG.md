@@ -20,6 +20,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Changed
 
+- Gateway upstream requests use bounded RPC/session-stream capacity and a circuit breaker, with complete unary deadlines and preserved SSE response lifetimes. Operational rejections have distinct audit reasons while policy counters retain the authorization result ([#311](https://github.com/mcp-runtime/mcp-runtime/issues/311)).
+
 - Operator policy reconciliation looks up grants by their effective target server using a cache index, avoiding copies and scans of unrelated grants while preserving cross-namespace references. Runtime sessions remain platform-owned ([#657](https://github.com/mcp-runtime/mcp-runtime/issues/657)).
 
 ### Fixed

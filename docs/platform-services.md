@@ -95,6 +95,39 @@ event trace and a `clickhouse.insert_batch` span for the batch operation. Batch
 spans include Kafka topic, partition, first/last offset, and per-partition
 offset ranges.
 
+### Gateway upstream bounds
+
+Each gateway has a dedicated upstream connection pool (128 idle connections,
+90-second idle expiry and a five-second TLS handshake timeout). Admission is
+immediate: at most 128 active RPCs and 32 GET session streams/HTTP upgrades.
+Excess requests receive HTTP 429 with `upstream_backpressure` before dispatch;
+the gateway never rejects an already-executed tool merely because its response
+uses SSE. A streaming POST remains an active RPC within that budget. Long-lived
+GET streams cannot consume the RPC budget or force RPCs to wait for a connection
+slot. These are per-gateway bounds, not a cluster-wide rate limiter.
+
+Upstream headers have a 30-second bound. Unary responses also have a 30-second
+total deadline through their body. Since MCP clients advertise both JSON and SSE
+in Accept, the actual response Content-Type selects the body behavior: SSE and
+upgrades have no body deadline and remain tied to client cancellation. If a
+timeout happens after headers were sent, the gateway aborts the partial HTTP
+response; it cannot rewrite its status to 504. Audit retains `upstream_timeout`
+and the actual response status, and finalizes even on that abort.
+
+Five consecutive connection/timeout or 502/503/504 failures open the upstream
+circuit for five seconds. Requests then fail before dispatch with HTTP 503 and
+`upstream_unavailable`. After the cooldown exactly one probe is allowed; success
+restores traffic and failure reopens the circuit. Old in-flight completions
+cannot close a newer open circuit. Client cancellations do not count as failures.
+Both capacity and circuit rejections are audited with distinct reasons. Policy
+decision counters still describe authorization, so these operational failures
+do not become grant-denial counts.
+
+Headless regression coverage uses real local HTTP servers: stalled unary bodies,
+SSE lifetimes, eight held-open GET streams alongside 100 RPCs, capacity rejection,
+half-open recovery, stale completion and abort/audit handling. This is bounded
+functional concurrency coverage, not a staging load test or production sizing.
+
 ### Follow one MCP request
 
 The synchronous path is **Traefik → MCP gateway → MCP server → external API**.
