@@ -159,7 +159,7 @@ func readIdentityDeploymentConfig(kubectl core.KubectlRunner, namespace, deploym
 		return nil, fmt.Errorf("cannot decode Deployment %s/%s", namespace, deploymentName)
 	}
 	if deployment.Generation > deployment.Status.ObservedGeneration {
-		return nil, fmt.Errorf("Deployment configuration is not yet observed")
+		return nil, fmt.Errorf("deployment configuration is not yet observed")
 	}
 	return workloadidentity.DeploymentConfig(context.Background(), &deployment, container, keys, func(_ context.Context, namespace, name string) (*corev1.ConfigMap, error) {
 		raw, err := readKubectlOutput(kubectl, []string{"get", "configmap", name, "-n", namespace, "--ignore-not-found", "-o", "json"})
