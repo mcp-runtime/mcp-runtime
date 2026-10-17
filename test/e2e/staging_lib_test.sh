@@ -349,6 +349,137 @@ snapshot_none_case() (
 )
 expect_fail "staging restore reports when no snapshot exists" snapshot_none_case
 
+adapter_grant_convergence_case() (
+  local scenario="$1" state="${TMP}/grant-probe-${1}" body="${TMP}/grant-probe-${1}.json"
+  : >"${state}"
+  STAGING_ADAPTER_POLICY_WAIT_SECONDS=30
+  if [[ "${scenario}" == persistent ]]; then STAGING_ADAPTER_POLICY_WAIT_SECONDS=0; fi
+  sleep() { SECONDS=$((SECONDS + 3)); }
+  staging_adapter_capture_policy_status() { printf captured >>"${state}"; }
+  staging_adapter_mcp_post() {
+    printf call >>"${state}"
+    case "${scenario}" in
+      converges)
+        if [[ "$(cat "${state}")" == call ]]; then
+          printf '{"error":"no_matching_grant"}' >"$4"; printf 403
+        else
+          printf '{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"pong"}]}}' >"$4"; printf 200
+        fi ;;
+      persistent) printf '{"error":"no_matching_grant"}' >"$4"; printf 403 ;;
+      identity) printf '{"error":"missing_identity"}' >"$4"; printf 401 ;;
+      denied) printf '{"error":"tool_denied"}' >"$4"; printf 403 ;;
+      malformed) printf '{"jsonrpc":"2.0","id":2,"result":{"isError":true,"content":[{"type":"text","text":"pong"}]}}' >"$4"; printf 200 ;;
+      ambiguous) printf '{"jsonrpc":"2.0","id":2,"error":{"code":-1},"result":{"content":[{"type":"text","text":"pong"}]}}' >"$4"; printf 200 ;;
+      wrong-id) printf '{"jsonrpc":"2.0","id":999,"result":{"content":[{"type":"text","text":"pong"}]}}' >"$4"; printf 200 ;;
+    esac
+  }
+  local status=0
+  staging_adapter_wait_granted_tool /certs https://mcp.e2e.invalid/demo/mcp "${body}" - || status=$?
+  if [[ "${scenario}" == converges ]]; then
+    [[ "${status}" == 0 && "$(cat "${state}")" == callcall ]]
+  elif [[ "${scenario}" == persistent ]]; then
+    [[ "${status}" != 0 && "$(cat "${state}")" == callcaptured ]]
+  else
+    [[ "${status}" != 0 && "$(cat "${state}")" == call ]]
+  fi
+)
+expect_ok "adapter grant probe waits for grant publication" adapter_grant_convergence_case converges
+expect_ok "persistent grant miss fails with active-policy diagnostics" adapter_grant_convergence_case persistent
+expect_ok "adapter identity error fails without retry" adapter_grant_convergence_case identity
+expect_ok "adapter explicit tool denial fails without retry" adapter_grant_convergence_case denied
+expect_ok "HTTP200 MCP error is not accepted as a granted call" adapter_grant_convergence_case malformed
+expect_ok "ambiguous JSON-RPC error and result fails granted probe" adapter_grant_convergence_case ambiguous
+expect_ok "unrelated JSON-RPC ID fails granted probe" adapter_grant_convergence_case wrong-id
+
+monitor_event_case() (
+  local scenario="$1" mode=monitor input="${TMP}/monitor-${1}.json"
+  MT_ACME_NS=team-test MT_ACME_SERVER=tools-test MT_GLOBEX_AGENT_ID=agent-test STAGING_MONITOR_SESSION=session-test
+  jq -n '{events:[{trace_id:"0123456789abcdef0123456789abcdef",namespace:"team-test",server:"tools-test",agent_id:"agent-test",session_id:"session-test",tool_name:"add",decision:"allow",payload:{status:200,would_deny:true,would_deny_reason:"tool_denied"}}]}' >"${input}"
+  case "${scenario}" in
+    foreign-trace) jq '.events[0].trace_id="foreign"' "${input}" >"${input}.new"; mv "${input}.new" "${input}" ;;
+    foreign-session) jq '.events[0].session_id="foreign"' "${input}" >"${input}.new"; mv "${input}.new" "${input}" ;;
+    missing-shadow) jq 'del(.events[0].payload.would_deny)' "${input}" >"${input}.new"; mv "${input}.new" "${input}" ;;
+    wrong-reason) jq '.events[0].payload.would_deny_reason="trust_denied"' "${input}" >"${input}.new"; mv "${input}.new" "${input}" ;;
+    enforce|enforce-shadow)
+      mode=enforce
+      jq '.events[0].decision="deny" | .events[0].payload.status=403 | .events[0].payload.reason="tool_denied"' "${input}" >"${input}.new"; mv "${input}.new" "${input}"
+      if [[ "${scenario}" == enforce ]]; then
+        jq 'del(.events[0].payload.would_deny)' "${input}" >"${input}.new"; mv "${input}.new" "${input}"
+      fi ;;
+    encoded) jq '.events[0].payload |= tojson' "${input}" >"${input}.new"; mv "${input}.new" "${input}" ;;
+  esac
+  staging_monitor_event "${input}" 0123456789abcdef0123456789abcdef "${mode}" >/dev/null
+)
+expect_ok "monitor accepts exact trace and session would-deny audit" monitor_event_case monitor
+expect_ok "monitor accepts JSON-encoded audit payload" monitor_event_case encoded
+expect_ok "enforce accepts real denial audit" monitor_event_case enforce
+expect_fail "monitor rejects foreign trace" monitor_event_case foreign-trace
+expect_fail "monitor rejects foreign session" monitor_event_case foreign-session
+expect_fail "monitor requires would-deny flag" monitor_event_case missing-shadow
+expect_fail "monitor requires exact tool-denied reason" monitor_event_case wrong-reason
+expect_fail "enforce rejects shadow-only audit" monitor_event_case enforce-shadow
+
+monitor_ambiguous_rpc_case() (
+  local dir="${TMP}/monitor-ambiguous-rpc"
+  mkdir -p "${dir}"
+  staging_monitor_post() {
+    printf '{"jsonrpc":"2.0","id":307,"error":{"code":-1},"result":{"content":[{"type":"text","text":"12"}]}}' >"$1/response.json"
+    printf 200
+  }
+  staging_monitor_expect_call "${dir}" /certs mcp-test monitor "${dir}/evidence.json"
+)
+expect_fail "monitor rejects ambiguous JSON-RPC error with forged successful result" monitor_ambiguous_rpc_case
+
+monitor_api_profile_case() (
+  STAGING_MT_CONFIG_DIR="${TMP}/monitor-config" PLATFORM_URL=https://platform.e2e.invalid BIN=monitor_fake_cli
+  export KUBECONFIG=/must-not-use MCP_PLATFORM_API_TOKEN=ambient-secret
+  monitor_fake_cli() {
+    [[ -z "${KUBECONFIG}" && -z "${MCP_PLATFORM_API_TOKEN}" && "${MCP_RUNTIME_CONFIG_DIR}" == "${STAGING_MT_CONFIG_DIR}" &&
+      "${MCP_PLATFORM_API_PROFILE}" == fixture-owner && "$*" == 'access grant get fixture --namespace fixture-team' ]]
+  }
+  staging_monitor_cli fixture-owner access grant get fixture --namespace fixture-team
+)
+expect_ok "monitor grant management uses isolated supported API CLI profile" monitor_api_profile_case
+
+deactivation_acceptance_case() (
+  local scenario="$1" flag="${TMP}/deactivated-${1}"
+  WORK_DIR="${TMP}/deactivation-${1}" STAGING_ARTIFACT_DIR="${TMP}/deactivation-${1}/artifacts"
+  STAGING_MT_RUN_ID=test STAGING_MT_CONFIG_DIR="${WORK_DIR}/config" PLATFORM_URL=https://platform.e2e.invalid
+  STAGING_MONITOR_USER_ID=11111111-2222-3333-4444-555555555555 STAGING_MONITOR_CREDENTIAL_DIR=/certs STAGING_MONITOR_MCP_SESSION=mcp-test
+  mkdir -p "${WORK_DIR}/grant-monitor" "${STAGING_ARTIFACT_DIR}/grant-monitor" "${STAGING_MT_CONFIG_DIR}"
+  printf '{"accounts":{"globex-user-test":{"token":"test-token"}}}' >"${STAGING_MT_CONFIG_DIR}/config.json"
+  printf session-test >"${WORK_DIR}/grant-monitor/sessions"
+  staging_stage_status() { printf passed; }
+  staging_mt_read_agents() { return 0; }
+  sleep() { SECONDS=$((SECONDS + 10)); }
+  staging_http_code() {
+    if [[ "${*: -1}" != "${PLATFORM_URL}/api/v1/auth/me" || "${scenario}" == unknown-route ]]; then printf 404
+    elif [[ "${scenario}" == live-token ]]; then printf 200
+    else printf 401; fi
+  }
+  staging_monitor_post() {
+    if [[ ! -f "${flag}" ]]; then
+      printf '{"jsonrpc":"2.0","id":536,"result":{"content":[{"type":"text","text":"12"}]}}' >"$1/response.json"; printf 200
+    else
+      if [[ "${scenario}" == wrong-denial ]]; then printf '{"error":"tool_denied"}' >"$1/response.json"; else printf '{"error":"session_revoked"}' >"$1/response.json"; fi
+      printf 403
+    fi
+  }
+  staging_monitor_cli() {
+    if [[ "$*" == *'--help'* || "$*" == *'access session delete'* ]]; then return 0; fi
+    local already=false count=1
+    if [[ -f "${flag}" ]]; then already=true count=0; fi
+    : >"${flag}"
+    jq -n --arg id "${STAGING_MONITOR_USER_ID}" --argjson already "${already}" --argjson count "${count}" \
+      '{user_id:$id,status:"deactivated",already_deactivated:$already,revoked_sessions:$count,revoked_api_keys:0,revoked_registry_credentials:0,revoked_refresh_tokens:0,removed_memberships:0}'
+  }
+  staging_check_account_deactivation
+)
+expect_ok "deactivation verifies saved token, existing session and idempotent CLI cleanup" deactivation_acceptance_case revoked
+expect_fail "deactivation cannot pass on unrelated tool denial" deactivation_acceptance_case wrong-denial
+expect_fail "deactivation cannot pass while saved token remains valid" deactivation_acceptance_case live-token
+expect_fail "deactivation cannot mistake an unknown token-probe route for revocation" deactivation_acceptance_case unknown-route
+
 if [[ "${FAILURES}" -ne 0 ]]; then
   echo "${FAILURES} staging lib test(s) failed" >&2
   exit 1

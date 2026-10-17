@@ -34,6 +34,8 @@ STAGING_SKIP_RC=77
 # Shared enroll credential-dir parser (scoped …/certs/<hash>/ PEMs).
 # shellcheck source=adapter-certificates.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/adapter-certificates.sh"
+# shellcheck source=staging-grant-monitor.sh
+source "$(dirname "${BASH_SOURCE[0]}")/staging-grant-monitor.sh"
 
 staging_log() { printf '[%s] %s\n' "${STAGING_LOG_PREFIX}" "$*"; }
 staging_warn() { printf '[%s] WARNING: %s\n' "${STAGING_LOG_PREFIX}" "$*" >&2; }
@@ -1673,12 +1675,10 @@ staging_adapter_assert_https_matrix() {
   done
   staging_log "${label} initialize via ${url}: HTTP 200"
 
-  code="$(staging_adapter_mcp_post "${credential_dir}" "${url}" \
-    '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"aaa-ping","arguments":{}}}' "${body}" "${token_arg}")"
-  if [[ "${code}" == "200" ]]; then
-    staging_log "${label} granted tool aaa-ping: HTTP 200"
+  if staging_adapter_wait_granted_tool "${credential_dir}" "${url}" "${body}" "${token_arg}"; then
+    staging_log "${label} granted tool aaa-ping: HTTP 200 pong"
   else
-    staging_err "${label} granted tool aaa-ping: HTTP ${code}: $(head -c 400 "${body}")"
+    staging_err "${label} granted tool aaa-ping failed: $(head -c 400 "${body}")"
     failed=1
   fi
   code="$(staging_adapter_mcp_post "${credential_dir}" "${url}" \
@@ -2041,6 +2041,8 @@ staging_run_platform_stages() {
   staging_run_stage multitenancy soft "a tenant build/push/deploy, grant, adapter call, or event check failed; read multitenancy.log from the bottom" staging_check_multitenancy
   staging_run_stage adapter-enrollment soft "adapter HTTPS certificate enrollment failed: setup did not pass MCP_ADAPTER_CERTIFICATES/MCP_TRUST_DOMAIN/MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE to the operator, the cert-only IngressRoute/TLSOption/gateway certificate never converged (adapter-enrollment/operator.log, traefik-crs.yaml, certificates-describe.txt), the CertificateRequest was not signed or the session not owned (adapter-enrollment/runtime-api.log), the gateway rejected the SPIFFE identity, or (when E2E_MCP_OAUTH_ACCESS_TOKEN is set) the OAuth+cert cell failed" staging_check_adapter_enrollment
   staging_run_stage governance soft "a grant/session deny path allowed traffic, or a granted agent was refused" staging_check_governance
+  staging_run_stage grant-monitor soft "monitor/enforce CLI mode switching, identity denial, or trace-correlated would-deny audit failed" staging_check_grant_monitor
   staging_run_stage analytics soft "events did not reach the analytics API/ClickHouse (ingest -> kafka -> processor path)" staging_check_analytics
   staging_run_stage registry-route-after-user-flows soft "a push/deploy/reconcile stage rewrote the registry Ingress rule host (Traefik 404 on the registry host); compare registry Ingress hosts in both registry-route stage logs" staging_check_registry_route
+  staging_run_stage account-deactivation soft "account deactivation did not revoke the CLI-created user's saved token and enrolled certificate/session" staging_check_account_deactivation
 }
