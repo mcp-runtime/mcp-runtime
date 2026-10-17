@@ -107,7 +107,6 @@ export FAKE_RBAC_GAP=1
 e2e_collect_rollout_diagnostics mcp-servers deployment demo demo
 grep -F 'collection_gap: warning-events unavailable (kubectl exit 1)' "${diag_dir}/demo-warning-events.json" >/dev/null
 
-echo '[pass] rollout failure diagnostics are bounded, sanitized, and collected before cleanup'
 
 # Setup can fail before any named MCPServer wait. Preserve platform rollout
 # state and namespace events without serializing pod env/Secret data.
@@ -131,3 +130,5 @@ assert cleanup.index('e2e_collect_setup_diagnostics') < cleanup.index('cp -R') <
 workflow = (root / '.github/workflows/scoped-observability-e2e.yaml').read_text()
 assert '.e2e-artifacts/scoped-observability/rollout-diagnostics/' in workflow
 PY
+
+echo '[pass] rollout failure diagnostics are bounded, sanitized, and collected before cleanup'
