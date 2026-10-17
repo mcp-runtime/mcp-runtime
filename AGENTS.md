@@ -64,6 +64,10 @@ public kubelet trust. Keep its exact projected-token audience/ServiceAccount
 boundary, node UID/address/TLS checks and missing-series semantics intact.
 PVC reservations and local `du` fallback must never become historical consumed
 bytes. See `docs/platform-services.md#resource-history-for-sizing`.
+The focused Cilium scope/resource-history security fixture has a fresh-cluster
+guard and pinned Helm/Cilium tools; see
+`docs/contributor/local-kind.md#enforcing-cilium-security-acceptance`. Keep its
+direct CNI/probe provisioning confined to that explicit disposable test.
 Sessions are managed through the platform CLI/UI and stored by platform-api;
 Kubernetes session writes do not change authorization. See
 `docs/contributor/gateway-session-sync.md` for the dedicated port, workload

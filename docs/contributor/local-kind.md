@@ -478,3 +478,58 @@ Resource history needs supported setup trust and projected-token wiring; see
 The E2E report distinguishes missing series from zero usage and retains local
 kubelet/host/volume observations separately. Verify clean named Kind setup and
 same-window coverage before interpreting the report as sizing evidence.
+
+### Enforcing Cilium security acceptance
+
+The focused **Scoped Observability E2E** workflow creates its own disposable
+Kind cluster with default CNI disabled and the official Cilium **1.20.3** chart.
+It uses Kubernetes IPAM, kube-proxy, and explicit
+`--enable-policy=default` / `--enable-k8s-networkpolicy=true` agent flags.
+The fixed values are in `test/e2e/fixtures/cilium-values.yaml`; see the
+[official Kind installation guide](https://docs.cilium.io/en/stable/installation/kind/)
+and [pinned chart source](https://github.com/cilium/cilium/tree/v1.20.3/install/kubernetes/cilium)
+(reviewed 2026-10-17). This test-specific CNI installation and temporary
+uncredentialed tenant probe Pod are explicit security fixtures. Product setup,
+teams, users, image publication and server deployment use supported CLI paths.
+
+Besides the standard QA prerequisites, this fixture requires Helm. The pinned
+Linux AMD64 version is **3.22.1**, downloaded from
+`https://get.helm.sh/helm-v3.22.1-linux-amd64.tar.gz` and verified against SHA256
+`896cf63684a42a723d61c980369d6e588330927deb13676ca0d85006dd6da0ea` from the
+[official release](https://github.com/helm/helm/releases/tag/v3.22.1)
+(reviewed 2026-10-17). Extract its `linux-amd64/helm` into a private tools
+directory and add that directory to this command's `PATH`; no global tool
+upgrade is required.
+
+Run only with a new cluster and unused cluster-named registry:
+
+```bash
+export KUBECONFIG="$(mktemp)"
+E2E_SCOPED_CILIUM=1 CLUSTER_NAME=mcp-scope-e2e-local-680 \
+  LOCAL_REGISTRY_NAME=mcp-scope-e2e-local-680-mirror LOCAL_REGISTRY_PORT=25068 \
+  E2E_CACHE_MODE=0 E2E_KEEP_CLUSTER=0 E2E_SCENARIOS=smoke-auth \
+  E2E_CAPTURE_RESOURCES=1 E2E_ARTIFACT_DIR="$PWD/.e2e-artifacts/scoped" \
+  bash test/e2e/qa-e2e.sh
+```
+
+The guard rejects an existing cluster or registry before installing cleanup
+traps. Every Cilium command uses the fixture's private kubeconfig, and the
+context and live Node provider IDs must match the new named Docker Kind
+cluster. Leave the default HTTP port at 18080, or set `UI_PUBLIC_ORIGIN` to
+the exact local UI origin when selecting another `TRAEFIK_PORT`.
+
+Acceptance requires current successful authenticated resource scrapes, real
+current-UID Grafana data through owner/team platform sessions, unrelated-team
+and arbitrary-query denials, admin access, and logout revocation. An allowed
+UI health request proves the tenant probe is working before service and direct
+Pod access to Grafana, Prometheus, Loki and Tempo must fail without any HTTP
+response, including forged Grafana identity headers. Evidence records the
+current probe UID, ready Cilium generation and exact live ingress policy.
+Missing driver volume statistics remain unavailable; PVC reservations never
+count as consumption. The resource report compares the same collection window
+with local kubelet samples and records collector overhead. This is a bounded
+functional security journey, without load testing or CPU/heap profiles.
+
+A host failing to create the Kind network, including exhausted Docker address
+pools, has not passed live acceptance. Use the clean GitHub runner; do not
+alter shared Docker networks or substitute an unsupported Kind network.

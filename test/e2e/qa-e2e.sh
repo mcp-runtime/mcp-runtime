@@ -229,6 +229,11 @@ E2E_MAX_MCP_SERVERS="${E2E_MAX_MCP_SERVERS:-0}"
 E2E_VALIDATE_SCENARIOS_ONLY="${E2E_VALIDATE_SCENARIOS_ONLY:-0}"
 E2E_KEEP_CLUSTER="${E2E_KEEP_CLUSTER:-0}"
 E2E_CACHE_MODE="${E2E_CACHE_MODE:-0}"
+E2E_SCOPED_CILIUM="${E2E_SCOPED_CILIUM:-0}"
+case "${E2E_SCOPED_CILIUM}" in
+  0|1) ;;
+  *) echo "E2E_SCOPED_CILIUM must be 0 or 1" >&2; exit 1 ;;
+esac
 E2E_IMAGE_PREP_PARALLELISM="${E2E_IMAGE_PREP_PARALLELISM:-3}"
 E2E_IMAGE_MIRROR_PARALLELISM="${E2E_IMAGE_MIRROR_PARALLELISM:-${E2E_IMAGE_PREP_PARALLELISM}}"
 E2E_IMAGE_BUILD_PARALLELISM="${E2E_IMAGE_BUILD_PARALLELISM:-}"
@@ -513,6 +518,10 @@ fi
 log_line info "Local smoke/governance checks use direct curl-based MCP HTTP; OpenAI/Anthropic real-client agent checks are disabled"
 if [[ "${E2E_VALIDATE_SCENARIOS_ONLY}" == "1" ]]; then
   exit 0
+fi
+if [[ "${E2E_SCOPED_CILIUM}" == "1" ]]; then
+  source "${PROJECT_ROOT}/test/e2e/lib/cilium.sh"
+  scoped_cilium_guard
 fi
 
 git config --global --add safe.directory "${PROJECT_ROOT}" >/dev/null 2>&1 || true
@@ -3910,13 +3919,26 @@ containerdConfigPatches:
     endpoint = ["http://127.0.0.1:32000"]
 EOF
 
+if [[ "${E2E_SCOPED_CILIUM}" == "1" ]]; then
+  cat >> "${KIND_CONFIG}" <<'YAML'
+networking:
+  disableDefaultCNI: true
+  podSubnet: 10.244.0.0/16
+YAML
+fi
+
 run_logged_stage "start local registry" start_local_registry
 
 if cache_mode_enabled && kind_cluster_exists; then
   echo "[kind] reusing cluster ${CLUSTER_NAME}"
 else
   echo "[kind] creating cluster ${CLUSTER_NAME}"
-  run_logged_stage "kind create cluster" kind create cluster --name "${CLUSTER_NAME}" --config "${KIND_CONFIG}" --wait 120s
+  if [[ "${E2E_SCOPED_CILIUM}" == "1" ]]; then
+    run_logged_stage "kind create cluster" kind create cluster --name "${CLUSTER_NAME}" --config "${KIND_CONFIG}" --kubeconfig "${KUBECONFIG_FILE}" --wait 0s
+    run_logged_stage "install scoped Cilium" install_scoped_cilium
+  else
+    run_logged_stage "kind create cluster" kind create cluster --name "${CLUSTER_NAME}" --config "${KIND_CONFIG}" --wait 120s
+  fi
 fi
 connect_local_registry_to_kind_network
 
@@ -7012,6 +7034,11 @@ PY
   fi
 fi
 
+fi
+
+if [[ "${E2E_SCOPED_CILIUM}" == "1" ]]; then
+  source "${PROJECT_ROOT}/test/e2e/scenarios/scoped-observability.sh"
+  run_scoped_observability_acceptance
 fi
 
 if scenario_selected "smoke-auth"; then

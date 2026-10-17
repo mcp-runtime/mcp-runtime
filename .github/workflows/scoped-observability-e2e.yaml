@@ -1,0 +1,84 @@
+name: Scoped Observability E2E
+
+on:
+  workflow_dispatch: {}
+  pull_request:
+    paths:
+      - .github/workflows/scoped-observability-e2e.yaml
+      - pkg/resourcehistory/**
+      - internal/cli/setup/platform/resource_history*
+      - internal/cli/setup/platform/scoped_grafana*
+      - internal/cli/update/resource_history*
+      - services/runtime-api/internal/runtimeapi/grafana*
+      - services/runtime-api/internal/runtimeapi/resource_history*
+      - services/ui/grafana_proxy*
+      - k8s/11-prometheus.yaml
+      - k8s/23-scoped-observability-networkpolicy.yaml
+      - k8s/24-resource-history-networkpolicy.yaml
+      - test/e2e/scoped_observability*
+      - test/e2e/qa-e2e.sh
+      - test/e2e/scenarios/scoped-observability.sh
+      - test/e2e/lib/cilium.sh
+      - test/e2e/fixtures/cilium-values.yaml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scoped-observability-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cilium:
+    name: Cilium Scoped Observability
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install pinned Linux tools
+        run: |
+          curl --retry 5 --retry-all-errors -fsSL -o kubectl https://dl.k8s.io/release/v1.34.1/bin/linux/amd64/kubectl
+          curl --retry 5 --retry-all-errors -fsSL -o kind https://github.com/kubernetes-sigs/kind/releases/download/v0.30.0/kind-linux-amd64
+          curl --retry 5 --retry-all-errors -fsSL -o helm.tar.gz https://get.helm.sh/helm-v3.22.1-linux-amd64.tar.gz
+          echo '896cf63684a42a723d61c980369d6e588330927deb13676ca0d85006dd6da0ea  helm.tar.gz' | sha256sum -c -
+          tar -xzf helm.tar.gz linux-amd64/helm
+          chmod +x kubectl kind linux-amd64/helm
+          sudo mv kubectl kind linux-amd64/helm /usr/local/bin/
+      - name: Fresh Cilium setup, scope isolation and resource history
+        env:
+          E2E_SCOPED_CILIUM: "1"
+          E2E_SCENARIOS: smoke-auth
+          E2E_MAX_MCP_SERVERS: "2"
+          E2E_IMAGE_BUILD_PARALLELISM: "2"
+          E2E_CAPTURE_RESOURCES: "1"
+          E2E_CACHE_MODE: "0"
+          E2E_KEEP_CLUSTER: "0"
+          E2E_ARTIFACT_DIR: ${{ github.workspace }}/.e2e-artifacts/scoped-observability
+          E2E_IMAGE_CACHE: "1"
+          MCP_SETUP_IMAGE_CACHE: "1"
+          E2E_IMAGE_CACHE_REGISTRY: ghcr.io/${{ github.repository_owner }}/mcp-runtime
+          GOMAXPROCS: "4"
+          GOFLAGS: -p=4
+        run: |
+          export CLUSTER_NAME="mcp-scope-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          export LOCAL_REGISTRY_NAME="${CLUSTER_NAME}-mirror"
+          export LOCAL_REGISTRY_PORT=$((20000 + ((GITHUB_RUN_ID + GITHUB_RUN_ATTEMPT) % 20000)))
+          export KUBECONFIG="$(mktemp)"
+          bash test/e2e/qa-e2e.sh
+      - name: Upload redacted acceptance and resource reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scoped-observability-artifacts
+          path: |
+            .e2e-artifacts/scoped-observability/scoped-observability.json
+            .e2e-artifacts/scoped-observability/scoped-network-evidence.json
+            .e2e-artifacts/scoped-observability/resource-usage/summary.*
+            .e2e-artifacts/scoped-observability/resource-usage/grafana.*
+          retention-days: 7
