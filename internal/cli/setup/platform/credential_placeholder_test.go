@@ -103,3 +103,18 @@ func TestRenderTestModeExemptsPlaceholderCredentials(t *testing.T) {
 		t.Fatal("test mode must preserve the existing value untouched")
 	}
 }
+
+func TestRenderPreservesNonSecretMetadataNamedLikePlaceholder(t *testing.T) {
+	placeholderEnv(t, "")
+	values := map[string]string{"POSTGRES_USER": placeholderValue, "POSTGRES_DB": placeholderValue}
+	manifest, err := renderAnalyticsSecretManifestWithReader(readerWith(values))
+	if err != nil {
+		t.Fatalf("non-secret username and database name must remain valid: %v", err)
+	}
+	data := secretStringDataFromManifest(t, manifest)
+	for key, want := range values {
+		if data[key] != want {
+			t.Fatalf("%s changed: got %q", key, data[key])
+		}
+	}
+}
