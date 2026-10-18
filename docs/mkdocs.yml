@@ -136,5 +136,6 @@ nav:
       - Developer References:
           - Package Docs Hosting: internals/pkgsite.md
           - Design Background: internals/gateway-platform-inspirations.md
+          - Tool Call Idempotency ADR: internals/gateway-idempotency.md
           - Tests and Coverage: internals/testing.md
       - Registry Authentication: internals/registry-auth.md
