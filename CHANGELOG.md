@@ -59,6 +59,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Fixed
 
+- Check the real gateway-session route for the uncredentialed Cilium positive control and require its HTTP 401 response. The tenant listener intentionally has no public health route; timeouts, HTTP 404 and unexpected successful access cannot pass as connectivity evidence.
+
 - Give the disposable Cilium tenant probe the same managed-workload network label as a deployed MCP server, so the platform API positive control can reach its permitted gateway listener before checking telemetry isolation. The probe remains uncredentialed and production policies are unchanged ([#800](https://github.com/tavric-labs/mcp-runtime/pull/800)).
 
 - Cilium observability acceptance uses the configured public UI Origin while connecting through IPv4 loopback, and reports Grafana query failures immediately. Supported setup grants resource-history access to exact currently trusted node addresses on TCP 10250; rerun setup to refresh this policy after node or trust changes ([#831](https://github.com/mcp-runtime/mcp-runtime/issues/831)).

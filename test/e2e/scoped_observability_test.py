@@ -12,6 +12,15 @@ import scoped_observability
 
 
 class ScopedObservabilityTests(unittest.TestCase):
+    def test_gateway_positive_control_requires_the_real_authentication_response(self):
+        scoped_observability.validate_gateway_positive_control(
+            subprocess.CompletedProcess([], 1, "", "  HTTP/1.1 401 Unauthorized\n"))
+        for code, output in ((1, "wget: download timed out"), (1, "HTTP/1.1 404 Not Found\n"),
+                             (1, "HTTP/1.1 403 Forbidden\n"), (1, "HTTP/1.1 503 Unavailable\n"),
+                             (0, "HTTP/1.1 200 OK\n")):
+            with self.subTest(code=code, output=output), self.assertRaises(AssertionError):
+                scoped_observability.validate_gateway_positive_control(subprocess.CompletedProcess([], code, "", output))
+
     def test_network_probe_requires_an_uncredentialed_managed_workload(self):
         def probe(labels=None, token=False, phase="Running"):
             return {"metadata": {"labels": labels or {}},
