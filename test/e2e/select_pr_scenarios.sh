@@ -65,7 +65,7 @@ classify_path() {
       add_scenario "adapter-certificates"
       return
       ;;
-    test/e2e/scenarios/credential-broker.sh|test/e2e/credential_broker_assertions*.py|test/e2e/fixtures/credential-echo/*|pkg/credentialbroker/*|pkg/credentialheaders/*|internal/cli/credential/*|services/platform-api/internal/credentialapi/*|services/platform-api/internal/platformstore/credentials*|services/platform-api/credentials.go|services/mcp-gateway/credential_*)
+    test/e2e/scenarios/credential-broker.sh|test/e2e/credential_broker_assertions*.py|test/e2e/fixtures/credential-echo/*|pkg/credentialbroker/*|internal/cli/credential/*|services/platform-api/internal/credentialapi/*|services/platform-api/internal/platformstore/credentials*|services/platform-api/credentials.go|services/mcp-gateway/credential_*)
       # Broker packages: the credential-broker scenario exercises them. The
       # gateway and platform paths also run their own broader scenarios below.
       add_scenario "credential-broker"
@@ -103,6 +103,11 @@ classify_path() {
       ;;
     pkg/credentialheaders/*|internal/agentadapter/credential_headers*)
       # Delegated header auth at the gateway and adapter header mode.
+      # pkg/credentialheaders is also the broker header contract, so that
+      # path runs credential-broker as well as the gateway scenarios.
+      if [[ "${path}" == pkg/credentialheaders/* ]]; then
+        add_scenario "credential-broker"
+      fi
       add_scenario "governance"
       add_scenario "trust"
       add_scenario "oauth"
