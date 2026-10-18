@@ -36,7 +36,7 @@ type Handler struct {
 	Store        Store
 	Kube         client.Client
 	Authenticate func(context.Context, string) (sessionstate.Server, error)
-	Providers    map[string]cb.Provider
+	Providers    cb.Registry
 	// Limits bounds resolution requests per source address (before TokenReview)
 	// and per server, and briefly remembers provider failures. Nil uses a
 	// process-wide default.
@@ -97,7 +97,14 @@ func (h Handler) Management(w http.ResponseWriter, r *http.Request) {
 			if !decode(w, r, source) {
 				return
 			}
-			if source.Namespace != ns || source.Name != name || source.Validate() != nil {
+			if source.Namespace != ns || source.Name != name {
+				http.Error(w, "invalid source metadata", http.StatusBadRequest)
+				return
+			}
+			if err := source.Validate(); errors.Is(err, cb.ErrProviderNotSupported) {
+				http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+				return
+			} else if err != nil {
 				http.Error(w, "invalid source metadata", http.StatusBadRequest)
 				return
 			}
@@ -254,7 +261,7 @@ func (h Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 	fetch := func(_ sessionstate.Session, bindings []cb.Binding, sources []cb.Source) (cb.Delivery, error) {
 		out := cb.Delivery{Headers: map[string]string{}}
 		for i, binding := range bindings {
-			provider := h.Providers[sources[i].Provider]
+			provider := h.Providers.Reader(sources[i].Provider)
 			if provider == nil {
 				return cb.Delivery{}, cb.ErrUnavailable
 			}

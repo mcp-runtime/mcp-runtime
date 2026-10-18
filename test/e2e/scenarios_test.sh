@@ -9,6 +9,7 @@ python3 "${SCRIPT_DIR}/resource_usage_test.py"
 python3 "${SCRIPT_DIR}/grafana_capture_test.py"
 python3 "${SCRIPT_DIR}/scoped_observability_test.py"
 python3 "${SCRIPT_DIR}/session_revocation_test.py"
+(cd "${SCRIPT_DIR}" && python3 credential_broker_assertions_test.py)
 bash "${SCRIPT_DIR}/namespace_placement_test.sh"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 QA_E2E_SCRIPT="${PROJECT_ROOT}/test/e2e/qa-e2e.sh"
@@ -26,6 +27,24 @@ assert "port_transition_assert_old_route" in scenario
 assert "port-transition-retained" in scenario and "port-transition-promoted" in scenario
 print("[pass] #533 fault-injected route scenario remains wired to guarded Kind QA")
 PY
+
+python3 - "${QA_E2E_SCRIPT}" "${SCRIPT_DIR}/scenarios/credential-broker.sh" <<'PY'
+from pathlib import Path
+import sys
+qa = Path(sys.argv[1]).read_text(encoding="utf-8")
+scenario = Path(sys.argv[2]).read_text(encoding="utf-8")
+assert 'source "${PROJECT_ROOT}/test/e2e/scenarios/credential-broker.sh"' in qa
+assert "run_e2e_credential_broker_scenario" in qa
+for needle in ("credential source apply", "credential binding apply", "--expect bound", "--expect none",
+               "no-reserved-headers", "revoke-sessions", "not yet supported", "credential_access:denied"):
+    assert needle in scenario, needle
+# No product-state shortcuts: only the seeded backing Secret may use kubectl create.
+assert "kubectl apply" not in scenario and "kubectl patch" not in scenario and "curl -X PUT" not in scenario
+print("[pass] credential-broker scenario wired, CLI-only for product state")
+PY
+output="$(env -u E2E_CREDENTIAL_BROKER_URL PROJECT_ROOT="${PROJECT_ROOT}" bash -c 'source "$PROJECT_ROOT/test/e2e/scenarios/credential-broker.sh"; run_e2e_credential_broker_scenario' 2>&1)"
+printf '%s\n' "${output}" | grep -q "SKIPPED, NOT TESTED" || { echo "[fail] credential-broker must skip loudly without a broker origin" >&2; exit 1; }
+echo "[pass] credential-broker skips loudly without a verified HTTPS origin"
 
 run_valid() {
   local name="$1"
@@ -78,6 +97,7 @@ run_valid "multitenancy" "smoke-auth,multitenancy" "smoke-auth,multitenancy"
 run_valid "api-platform" "api-platform" "api-platform"
 run_valid "ui-auth" "ui-auth" "ui-auth"
 run_valid "adapter-proxy" "adapter-proxy" "adapter-proxy"
+run_valid "credential-broker" "credential-broker" "credential-broker"
 run_valid "adapter-certificates" "adapter-certificates" "adapter-certificates,oauth"
 run_valid "cli-platform" "cli-platform" "cli-platform"
 run_invalid "removed-mtls" "mtls" "unsupported E2E scenario: mtls"
@@ -198,6 +218,14 @@ selector_expect "runtime-team" "smoke-auth,api-platform,multitenancy" "services/
 selector_expect "broad" "smoke-auth" "api/v1alpha1/mcpserver_types.go"
 selector_expect "harness" "smoke-auth" "test/e2e/qa-e2e.sh" ".github/workflows/ci.yaml" "go.mod"
 selector_expect "unknown" "smoke-auth" "pkg/platforminventory/credentials.go"
+selector_expect "broker-pkg" "smoke-auth,credential-broker" "pkg/credentialbroker/registry.go"
+selector_expect "broker-headers" "smoke-auth,credential-broker" "pkg/credentialheaders/headers.go"
+selector_expect "broker-cli" "smoke-auth,credential-broker,cli-platform" "internal/cli/credential/credential.go"
+selector_expect "broker-api" "smoke-auth,credential-broker,api-platform" "services/platform-api/internal/credentialapi/handler.go"
+selector_expect "broker-api-root" "smoke-auth,credential-broker,api-platform" "services/platform-api/credentials.go"
+selector_expect "broker-store" "smoke-auth,credential-broker,api-platform,cli-platform,multitenancy" "services/platform-api/internal/platformstore/credentials.go"
+selector_expect "broker-gateway" "smoke-auth,credential-broker,governance,trust,oauth,adapter-certificates" "services/mcp-gateway/credential_broker.go"
+selector_expect "broker-scenario" "smoke-auth,credential-broker" "test/e2e/scenarios/credential-broker.sh"
 selector_expect "staging-e2e-only" "smoke-auth" "test/e2e/staging-vm.sh" "test/e2e/lib/staging.sh" ".github/workflows/staging-e2e.yaml"
 
 python3 - "${PROJECT_ROOT}/.github/workflows/staging-e2e.yaml" "${PROJECT_ROOT}/test/e2e/qa-e2e.sh" "${PROJECT_ROOT}/docs/contributor/staging-e2e.md" "${PROJECT_ROOT}/.github/workflows/ci.yaml" <<'PY'

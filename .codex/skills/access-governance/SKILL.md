@@ -11,7 +11,7 @@ description: Apply and debug MCP Runtime access grants, agent sessions, gateway 
 |------|--------|
 | **UI** | Create/apply grants and sessions; toggle enable/revoke |
 | **CLI (default)** | `mcp-runtime auth login --api-url <url>` → `agent create|list|...` and `access grant init` / `access grant apply --file …` |
-| **Credential broker** | `credential source` / `credential binding` manage metadata only; current session and exact tool/server constraints gate private gateway delivery. See `docs/credential-broker.md` for provider identity, exact Secret RBAC, HTTPS/v6 migration and cleanup. |
+| **Credential broker** | `credential source` / `credential binding` manage metadata only; current session and exact tool/server constraints gate private gateway delivery. Only the Kubernetes Secret provider is supported (cloud providers are planned, unregistered). See `docs/credential-broker.md` for the provider interface, exact Secret RBAC, HTTPS/v6 migration and cleanup. |
 | **Adapter (recommended for agents)** | `adapter proxy --server <name> --agent <id> [--auto-refresh]` → certificate-backed platform session; add OAuth only when the server configures it |
 | **Optional header adapter** | `adapter proxy --auth-mode header --runtime-url https://… --credential-header-env Name=ENV` injects client-local credential headers and does not enroll a certificate. Direct clients can send the same headers without the adapter. |
 | **macOS background adapter** | `adapter profile add` and `adapter service install` persist isolated, owner-protected profiles. The native companion uses the same versioned management API through its bundled CLI. Local client credentials stay separate from upstream OAuth; closing the app leaves the daemon running. |

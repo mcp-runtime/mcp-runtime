@@ -6,8 +6,11 @@ reference; a namespace owner binds that source to a live server UID, explicit
 tools, a human, a managed agent and a team. An optional session ID narrows the
 binding further. Management requests contain metadata only.
 
-Sources support Kubernetes Secrets, Google Secret Manager, AWS Secrets Manager,
-Azure Key Vault and Vault KV v2. Runtime reads the current backing value for each
+**Only the Kubernetes Secret provider is supported today.** GCP Secret Manager,
+AWS Secrets Manager, Azure Key Vault and Vault are planned and not implemented;
+source creation for them is refused with "provider ... is not yet supported"
+(HTTP 422 from the API, the same message from the CLI). See
+[Providers](#providers). Runtime reads the current backing value for each
 authorized call. It does not copy values into Postgres, policy ConfigMaps,
 workload environment variables or management responses.
 
@@ -29,8 +32,7 @@ The command checks actual ingress destinations and grant-read permissions
 before updating the operator. Missing migration fails without changing it.
 The gateway verifies the platform certificate using its system trust roots;
 there is no HTTP or insecure-TLS fallback. This feature requires an HTTPS
-installation. Setup refreshes retain the configured origin, native cloud
-identity labels and canonical Vault projected-token configuration.
+installation. Setup refreshes retain the configured origin.
 
 Generate server metadata with `server init`. Add `credentialBindings` to that
 server's `.mcp/servers.yaml` entry, keeping its normal tool declarations:
@@ -123,53 +125,61 @@ Bindings for different tools may coexist; every binding applicable to a called
 tool must authorize the current subject. Conflicting delivery headers fail
 closed. A tool without an applicable binding receives no broker credential.
 
-## GCP source
+## Providers
 
-Configure [Workload Identity Federation for GKE](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/workload-identity)
-for the existing `mcp-platform/mcp-platform-api` ServiceAccount and grant access
-to the exact backing secret. For linked IAM service accounts, the supported
-command adds the ServiceAccount annotation and rolls the platform API:
+| Provider | Status |
+|---|---|
+| `kubernetes` | Supported. Exact same-namespace Secret name and key; no `version`. |
+| `gcp`, `aws`, `azure`, `vault` | Planned, not implemented. Not registered anywhere; sources are refused. |
 
-```bash
-mcp-runtime credential configure \
-  --broker-url https://platform.example.com \
-  --gcp-service-account broker@your-project.iam.gserviceaccount.com \
-  --kubeconfig /path/to/cluster.yaml --context selected-context --yes
-```
+The credential configure flags for cloud workload identity are hidden and
+refuse to run. The Kubernetes provider needs no cloud account.
 
-Use `provider: "gcp"`,
-`resource: "projects/your-project/secrets/upstream-api-token"` and
-`version: "latest"` or an explicit version/alias. Omit `key`. The broker uses
-Application Default Credentials and the authenticated
-[Secret Manager access API](https://docs.cloud.google.com/secret-manager/docs/reference/rest/v1/projects.secrets.versions/access).
-It does not accept service-account keys through management APIs. Reuse the same
-binding workflow. A new accessible `latest` version is read on the next call;
-an unavailable or disabled version denies delivery.
+### Provider interface (for contributors)
 
-## Other providers
+`pkg/credentialbroker` defines the one seam the broker resolves through:
 
-| Provider | Source reference | Workload identity |
-|---|---|---|
-| `aws` | Exact Secrets Manager ARN; optional `version` is a version stage, default `AWSCURRENT`; omit `key` | Official SDK default chain. `--aws-role-arn ARN` configures the existing ServiceAccount after [EKS IAM federation](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html) is established. Scope IAM/KMS permission to the exact secret. HTTP data endpoint overrides are rejected. |
-| `azure` | `https://VAULT.vault.azure.net/secrets/NAME`; optional version; omit `key` | Official SDK `DefaultAzureCredential`. `--azure-client-id UUID` sets ServiceAccount and Pod identity metadata after [AKS federation](https://learn.microsoft.com/en-us/azure/aks/workload-identity-overview) is configured. Restrict Key Vault read authority. |
-| `vault` | KV v2 `MOUNT/PATH`; `key` selects a string field; optional numeric version | `--vault-url https://vault.example.com --vault-role ROLE` configures a ten-minute `mcp-runtime-vault` projected token. The Vault Kubernetes auth role must bind `mcp-platform/mcp-platform-api`, that audience and a narrow KV read policy. The broker uses `/v1/auth/kubernetes/login`, then `/v1/MOUNT/data/PATH`. Use short Vault token TTLs. |
+- `Provider` is the reader interface: `Read(ctx, Source) (Value, error)`. It
+  returns the current value and an opaque version, and must not leak provider
+  error text or values.
+- `Registry` maps a provider kind to its `Provider`. `Registry.Register` and
+  `Registry.Reader` honour only kinds enabled by `ProviderSupported`
+  (`pkg/credentialbroker/registry.go`), so a reader for a disabled kind can
+  neither be registered nor resolved.
+- The platform API builds its registry in
+  `services/platform-api/internal/credentialapi/providers.go` (`Providers`),
+  and `Handler.fetch` resolves each source through `Registry.Reader`.
+- `Source.Validate` (`pkg/credentialbroker/types.go`) refuses disabled kinds
+  with `ErrProviderNotSupported` before any provider-specific check;
+  `validateReference` holds the reference rules per kind.
 
-Use these flags with `credential configure`, including `--broker-url`, explicit
-`--kubeconfig`, `--context` and `--yes`. Cloud federation and provider IAM are
-infrastructure prerequisites; administrator credentials are never uploaded to
-Runtime. Vault's HTTPS origin is administrator-selected process configuration,
-not a binding-supplied endpoint. Provider data reads use verified HTTPS or the
-authenticated Kubernetes API. Missing identity, keys, IAM or provider APIs fail
-without returning provider error bodies or values.
+`credentialapi/cloud_readers.go` still holds reference readers for GCP, AWS,
+Azure and Vault. They are untested reference code: never verified against a live
+provider, not registered, and unreachable from the broker or gateway. Their SDK
+and HTTP fixture tests call them directly.
+
+### Adding a provider later
+
+1. Implement `cb.Provider` for the kind (start from the reference reader if one
+   exists); return `cb.ErrUnavailable` on any failure and never include provider
+   text or values.
+2. Enable the kind: add it to `ProviderSupported` and remove it from
+   `knownUnsupportedProvider` in `pkg/credentialbroker`, and register the reader
+   in `credentialapi.providers`.
+3. Add validation: the kind's exact-reference rules in `validateReference`
+   (and any `credential configure` support it needs, with the flags unhidden).
+4. Add tests: reference validation, the reader against a fixture and, before
+   claiming support, a live-provider verification; update the registry tests
+   that assert only `kubernetes` is registered.
+5. Add a docs row to the table above and a CHANGELOG entry.
 
 ## Rotation, revocation and cleanup
 
-Rotate values in their backing provider. Kubernetes reads use current Secret
-data; unpinned cloud/Vault references read the current version per call, without
-server redeployment. To change metadata, save `get` output, edit permitted fields
+Rotate the Secret value in Kubernetes. Reads use current Secret data on every
+call, without server redeployment. To change metadata, save `get` output, edit permitted fields
 and apply it with its returned `revision`. Stale updates/deletes return conflict.
-A Kubernetes reference change may require revoking its old exact-Secret grant
-before authorizing the new reference.
+A reference change may require revoking its old exact-Secret grant before
+authorizing the new reference.
 
 Disable a binding or source with an exact-revision update to stop subsequent
 delivery. Current account, managed-agent, team membership, session revocation,
@@ -259,8 +269,6 @@ the credentials bound to that server's already-authorized tools, nothing wider.
 - A failed provider read is remembered for 5 seconds per server and source
   revision (bounded to 1024 entries, no values stored), so a down provider is
   not hammered and returns `503` immediately.
-- Source `version` values accept only `[A-Za-z0-9_-]` (or `latest`); dots and
-  slashes are rejected.
 
 ## Upgrade gate: analytics TLS
 
@@ -271,3 +279,12 @@ Kafka installs must take encrypted backups and restore into a fresh TLS
 installation (see "Analytics transport security" in
 [platform-services.md](platform-services.md)) before updating to a release that
 includes the credential broker. Test-mode installs are exempt.
+
+## QA E2E
+
+`test/e2e/scenarios/credential-broker.sh` (scenario `credential-broker`) drives
+the Kubernetes provider through the CLI and gateway with a fixture server that
+reports only SHA-256 fingerprints of the reserved headers it receives. It needs
+`E2E_CREDENTIAL_BROKER_URL`, a verified HTTPS platform origin trusted by gateway
+system roots; default Kind test-mode has none, so the scenario then reports a
+loud skip. It had not run against a cluster when added.

@@ -130,7 +130,7 @@ func TestGCPProviderUsesADCExactVersionAndObservesRotation(t *testing.T) {
 	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", file)
 	peerURL, _ := url.Parse(peer.URL)
 	client := &http.Client{Transport: cloudPeerTransport{host: "secretmanager.googleapis.com", peer: peerURL, base: peer.Client().Transport}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	provider := providers(nil, client)["gcp"]
+	provider := cloudReaders(client)["gcp"]
 	ctx := context.WithValue(t.Context(), oauth2.HTTPClient, peer.Client())
 	for i := 1; i <= 2; i++ {
 		value, err := provider.Read(ctx, cb.Source{Resource: resource})
@@ -170,7 +170,7 @@ func TestAWSProviderUsesAmbientSigningExactARNAndSafeFailure(t *testing.T) {
 	defer peer.Close()
 	u, _ := url.Parse(peer.URL)
 	client := &http.Client{Transport: cloudPeerTransport{host: "secretsmanager.us-east-1.amazonaws.com", peer: u, base: peer.Client().Transport}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	provider := providers(nil, client)["aws"]
+	provider := cloudReaders(client)["aws"]
 	source := cb.Source{Resource: arn, Version: "AWSCURRENT"}
 	value, err := provider.Read(t.Context(), source)
 	if err != nil || string(value.Bytes) != "fixture-aws-value" {
@@ -213,7 +213,7 @@ func TestVaultProviderUsesProjectedWorkloadLoginExactKVPathAndRotation(t *testin
 	t.Setenv("CREDENTIAL_VAULT_KUBERNETES_TOKEN_FILE", file)
 	client := peer.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	provider := providers(nil, client)["vault"]
+	provider := cloudReaders(client)["vault"]
 	for i := 1; i <= 2; i++ {
 		value, err := provider.Read(t.Context(), cb.Source{Resource: "secret/team/upstream", Key: "token"})
 		if err != nil || string(value.Bytes) != fmt.Sprintf("fixture-vault-value-%d", i) {
