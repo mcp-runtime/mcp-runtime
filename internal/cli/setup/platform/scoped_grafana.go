@@ -71,7 +71,10 @@ func enableScopedGrafanaClientGo() error {
 	}); err != nil {
 		return err
 	}
-	return waitForRolloutStatusWithClientGo("deployment", "mcp-runtime-api", namespace, 3*time.Minute)
+	if err := waitForRolloutStatusWithClientGo("deployment", "mcp-runtime-api", namespace, 3*time.Minute); err != nil {
+		return fmt.Errorf("runtime API rollout after enabling scoped Grafana: %w", err)
+	}
+	return nil
 }
 
 func deleteLegacyGrafanaIngress(ctx context.Context, client kubernetes.Interface, namespace, name string) error {

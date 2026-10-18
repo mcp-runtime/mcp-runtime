@@ -38,7 +38,7 @@ elif args[:2] == ["get", "mcpserver"]:
       "status":{"phase":"Failed","observedGeneration":4,"deploymentReady":False,
       "conditions":[{"type":"DeploymentReady","status":"False","reason":"ReconcileError",
       "message":"forbidden: cannot list EndpointSlices", "observedGeneration":4}]}}))
-elif args[:2] == ["get", "deployment,replicaset,pod"]:
+elif args[:1] == ["get"] and args[1] in ("deployment,replicaset,pod", "deployment,statefulset,daemonset,replicaset,pod"):
     print(json.dumps({"kind":"List","items":[
       {"kind":"Deployment","metadata":{"name":"demo","namespace":"mcp-servers","generation":4},
        "spec":{"replicas":1,"template":{"spec":{"containers":[{"env":[{"name":"PASSWORD","value":"never-upload-this-secret"}]}]}}},
@@ -53,6 +53,9 @@ elif args[:2] == ["get", "events"]:
         raise SystemExit(1)
     print(json.dumps({"items":[{"type":"Warning","reason":"FailedScheduling","message":"insufficient memory",
       "count":2,"involvedObject":{"kind":"Pod","name":"demo-abc"}}]}))
+elif args[:1] == ["logs"] and "-l" in args:
+    print('[pod/runtime-api/container] 2026/10/17 14:00:00 workload network policy reconciliation failed: Get "https://user:never-upload-password@10.96.0.1:443/api/v1/namespaces": context deadline exceeded')
+    print('unrelated request payload: never-upload-payload')
 elif args[:1] == ["logs"]:
     print('{"level":"error","msg":"reconcile failed","authorization":"Bearer never-upload-token","error":"forbidden to list MCPServers","tool_payload":{"argument":"never-upload-payload"}}')
 else:
@@ -106,5 +109,30 @@ PY
 export FAKE_RBAC_GAP=1
 e2e_collect_rollout_diagnostics mcp-servers deployment demo demo
 grep -F 'collection_gap: warning-events unavailable (kubectl exit 1)' "${diag_dir}/demo-warning-events.json" >/dev/null
+
+
+# Setup can fail before any named MCPServer wait. Preserve platform rollout
+# state and namespace events without serializing pod env/Secret data.
+export FAKE_RBAC_GAP=0
+e2e_collect_setup_diagnostics
+for namespace in mcp-platform mcp-observability mcp-runtime; do
+  [[ -s "${diag_dir}/setup-${namespace}-workloads.json" ]]
+  [[ -s "${diag_dir}/setup-${namespace}-warning-events.json" ]]
+done
+grep -F 'ImagePullBackOff' "${diag_dir}/setup-mcp-platform-workloads.json" >/dev/null
+grep -F 'context deadline exceeded' "${diag_dir}/setup-runtime-init.log" >/dev/null
+if grep -R -E 'never-upload|Bearer never-upload' "${diag_dir}"; then
+  echo '[fail] setup diagnostics leaked credentials or pod environment' >&2
+  exit 1
+fi
+python3 - "${ROOT}" <<'PY'
+import pathlib, sys
+root = pathlib.Path(sys.argv[1])
+script = (root / 'test/e2e/qa-e2e.sh').read_text()
+cleanup = script.split('cleanup() {', 1)[1].split('trap cleanup EXIT', 1)[0]
+assert cleanup.index('e2e_collect_setup_diagnostics') < cleanup.index('cp -R') < cleanup.index('kind delete cluster')
+workflow = (root / '.github/workflows/scoped-observability-e2e.yaml').read_text()
+assert '.e2e-artifacts/scoped-observability/rollout-diagnostics/' in workflow
+PY
 
 echo '[pass] rollout failure diagnostics are bounded, sanitized, and collected before cleanup'
