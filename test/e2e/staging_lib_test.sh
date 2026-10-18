@@ -340,6 +340,35 @@ diagnostics_before_login_case() (
 expect_ok "diagnostics continue after setup fails before login" diagnostics_before_login_case missing
 expect_ok "diagnostics collect sessions after login" diagnostics_before_login_case authenticated
 
+# `kubectl logs deploy/<name>` returns ONE pod. A deployment with replicas (the
+# operator runs two, one of them the standby) must have every replica collected,
+# otherwise the leader's log is the one that goes missing.
+replica_logs_case() (
+  local mode="$1" out="${TMP}/replica-logs-${1}"
+  kubectl() {
+    case "$*" in
+      *"get pods"*)
+        if [[ "${mode}" == fallback ]]; then return 0; fi
+        printf 'op-abc-1\top-abc\nop-abc-2\top-abc\nop-sidecar-xyz-1\top-sidecar-xyz\nother-q-1\tother-q\n'
+        ;;
+      *"logs pod/op-abc-1"*) printf 'standby replica log\n' ;;
+      *"logs pod/op-abc-2"*) printf 'leader replica log\n' ;;
+      *"logs pod/op-sidecar-xyz-1"*) printf 'WRONG sibling deployment\n' ;;
+      *"logs pod/other-q-1"*) printf 'WRONG other deployment\n' ;;
+      *"logs deploy/op"*) printf 'single pod fallback log\n' ;;
+    esac
+    return 0
+  }
+  staging_collect_deploy_logs mcp-runtime op 400 "${out}" || return 1
+  if [[ "${mode}" == fallback ]]; then
+    grep -q 'single pod fallback log' "${out}"
+  else
+    grep -q 'standby replica log' "${out}" && grep -q 'leader replica log' "${out}" && ! grep -q WRONG "${out}"
+  fi
+)
+expect_ok "diagnostics collect every replica of a deployment" replica_logs_case replicas
+expect_ok "diagnostics fall back to deployment logs when no pods match" replica_logs_case fallback
+
 printf '\033[30;42m SUCCESS \033[0m ok check — fine\n\033[30;101m  ERROR  \033[0m \033[91mplatform OIDC configuration — org mode\033[0m\n\033[30;101m         \033[0m continuation line\n  ERROR   MCPServer reconcile smoke — timed out\n' >"${TMP}/diag.log"
 expect_eq "failed checks parsed" "$(staging_failed_checks "${TMP}/diag.log" | paste -sd'|' -)" \
   "MCPServer reconcile smoke|platform OIDC configuration"
