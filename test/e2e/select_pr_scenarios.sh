@@ -65,6 +65,18 @@ classify_path() {
       add_scenario "adapter-certificates"
       return
       ;;
+    test/e2e/scenarios/credential-broker.sh|test/e2e/credential_broker_assertions*.py|test/e2e/fixtures/credential-echo/*|pkg/credentialbroker/*|pkg/credentialheaders/*|internal/cli/credential/*|services/platform-api/internal/credentialapi/*|services/platform-api/internal/platformstore/credentials*|services/platform-api/credentials.go|services/mcp-gateway/credential_*)
+      # Broker packages: the credential-broker scenario exercises them. The
+      # gateway and platform paths also run their own broader scenarios below.
+      add_scenario "credential-broker"
+      case "${path}" in
+        services/mcp-gateway/*) add_scenario "governance"; add_scenario "trust"; add_scenario "oauth"; add_scenario "adapter-certificates" ;;
+        services/platform-api/internal/platformstore/*) add_scenario "api-platform"; add_scenario "cli-platform"; add_scenario "multitenancy" ;;
+        services/platform-api/*) add_scenario "api-platform" ;;
+        internal/cli/credential/*) add_scenario "cli-platform" ;;
+      esac
+      return
+      ;;
     test/e2e/scenarios/platform-update.sh)
       add_scenario "platform-update"
       return

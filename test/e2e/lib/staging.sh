@@ -554,6 +554,25 @@ staging_platform_namespaces() {
   printf '%s\n' mcp-runtime mcp-platform mcp-observability mcp-log-collector registry cert-manager mcp-servers traefik kube-system
 }
 
+# Collect the logs of EVERY pod a deployment owns. `kubectl logs deploy/<name>`
+# picks a single pod, so with replicas (the operator runs two, one on standby) the
+# leader's log is the one that can go missing. Pods are matched through their
+# ReplicaSet owner (<deployment>-<hash>), so a sibling like <deployment>-sidecar
+# is not mixed in. Falls back to the deployment form when no pod matches.
+staging_collect_deploy_logs() {
+  local ns="$1" deploy="$2" tail_lines="$3" out="$4" pod found=0
+  : >"${out}"
+  while IFS= read -r pod; do
+    [[ -n "${pod}" ]] || continue
+    found=1
+    kubectl -n "${ns}" logs "pod/${pod}" --all-containers --prefix --tail="${tail_lines}" >>"${out}" 2>&1 || true
+  done < <(kubectl -n "${ns}" get pods -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.ownerReferences[0].name}{"\n"}{end}' 2>/dev/null |
+    awk -F'\t' -v d="${deploy}" '$2 ~ ("^" d "-[a-z0-9]+$") {print $1}')
+  if [[ "${found}" -eq 0 ]]; then
+    kubectl -n "${ns}" logs "deploy/${deploy}" --all-containers --prefix --tail="${tail_lines}" >>"${out}" 2>&1 || true
+  fi
+}
+
 staging_collect_diagnostics() {
   local out="$1" ns deploy
   mkdir -p "${out}"
@@ -586,8 +605,8 @@ staging_collect_diagnostics() {
     kubectl -n "${ns}" get pods -o wide >"${out}/${ns}-pods.txt" 2>&1 || true
     kubectl -n "${ns}" describe pods >"${out}/${ns}-pods-describe.txt" 2>&1 || true
     for deploy in $(kubectl -n "${ns}" get deploy -o name 2>/dev/null); do
-      kubectl -n "${ns}" logs "${deploy}" --all-containers --prefix --tail=400 \
-        >"${out}/${ns}-${deploy#deployment.apps/}.log" 2>&1 || true
+      staging_collect_deploy_logs "${ns}" "${deploy#deployment.apps/}" 400 \
+        "${out}/${ns}-${deploy#deployment.apps/}.log"
     done
   done < <(staging_platform_namespaces)
   local pair secret_ns secret_name
@@ -1468,11 +1487,11 @@ staging_adapter_diagnostics() {
     kubectl -n "${ns}" describe pods -l "app=${server}" >"${out}/${server}-pods-describe.txt" 2>&1 || true
     kubectl -n "${ns}" logs "deploy/${server}" --all-containers --prefix --tail=300 >"${out}/${server}.log" 2>&1 || true
   done
-  kubectl -n mcp-runtime logs deploy/mcp-runtime-operator-controller-manager --tail=400 >"${out}/operator.log" 2>&1 || true
-  kubectl -n mcp-platform logs deploy/mcp-runtime-api --tail=400 >"${out}/runtime-api.log" 2>&1 || true
+  staging_collect_deploy_logs mcp-runtime mcp-runtime-operator-controller-manager 400 "${out}/operator.log"
+  staging_collect_deploy_logs mcp-platform mcp-runtime-api 400 "${out}/runtime-api.log"
   local traefik_ns
   traefik_ns="$(staging_traefik_namespace 2>/dev/null || true)"
-  [[ -z "${traefik_ns}" ]] || kubectl -n "${traefik_ns}" logs deploy/traefik --tail=300 >"${out}/traefik.log" 2>&1 || true
+  [[ -z "${traefik_ns}" ]] || staging_collect_deploy_logs "${traefik_ns}" traefik 300 "${out}/traefik.log"
   staging_err "adapter-enrollment evidence saved under ${out#"${STAGING_ARTIFACT_DIR}/"}/"
 }
 
@@ -1976,6 +1995,7 @@ staging_check_multitenancy() {
     ADMIN_TOKEN_INPUT="${E2E_PLATFORM_API_TOKEN}" RUN_ID="${STAGING_MT_RUN_ID}" \
     MCP_RUNTIME_CONFIG_DIR="${STAGING_MT_CONFIG_DIR}" VERIFY_DEPLOY_PULL_SECRET=1 \
     BIN="${BIN}" WORK_DIR="${WORK_DIR}/multitenancy" \
+    ANALYTICS_INGEST_URL="${STAGING_ANALYTICS_INGEST_URL:-https://mcp-ingest.mcp-observability.svc.cluster.local:8081/events}" \
     bash "${ROOT_DIR}/hack/qa/multitenancy-test.sh" | tee "${STAGING_ARTIFACT_DIR}/multitenancy.log"
   # Evidence that the tenant server went through build -> push -> deploy and is
   # pulled in-cluster from the public registry.
@@ -2031,6 +2051,21 @@ staging_check_governance() {
   [[ "${failed}" == "0" ]]
 }
 
+# Query ClickHouse from inside its pod. Strict setup removes the plaintext native
+# port (9000) and serves only TLS on 9440, so the client must use the same TLS
+# config the init jobs use. Without that config (plaintext installs) the plain
+# client is used unchanged. The config path is overridable for the offline test.
+staging_clickhouse_query() {
+  local query="$1"
+  local config="${STAGING_CLICKHOUSE_CLIENT_CONFIG:-/etc/mcp-analytics/ca/clickhouse-client.xml}"
+  kubectl -n mcp-observability exec statefulset/clickhouse -- sh -c '
+    if [ -f "$2" ]; then
+      exec clickhouse-client --config-file="$2" --secure --port=9440 --host=clickhouse --query "$1"
+    fi
+    exec clickhouse-client --query "$1"
+  ' _ "${query}" "${config}"
+}
+
 staging_check_analytics() {
   local dir="${STAGING_ARTIFACT_DIR}" count
   staging_api_curl --fail "${PLATFORM_URL}/api/v1/stats" >"${dir}/analytics-stats.json"
@@ -2039,8 +2074,7 @@ staging_check_analytics() {
   count="$(jq '(.events // .data // .) | if type == "array" then length else 0 end' "${dir}/analytics-events.json")"
   staging_log "analytics API returned ${count} event(s)"
   local ch
-  ch="$(kubectl -n mcp-observability exec statefulset/clickhouse -- clickhouse-client \
-    --query "SELECT count() FROM mcp.events" 2>/dev/null | tr -d '[:space:]' || true)"
+  ch="$(staging_clickhouse_query "SELECT count() FROM mcp.events" 2>/dev/null | tr -d '[:space:]' || true)"
   staging_log "ClickHouse mcp.events rows: ${ch:-unavailable}"
   if [[ "$(staging_stage_status multitenancy)" != "passed" ]]; then
     staging_log "no tenant traffic this run; analytics reachability checked only"
@@ -2052,8 +2086,7 @@ staging_check_analytics() {
     return 1
   }
   local server_rows
-  server_rows="$(kubectl -n mcp-observability exec statefulset/clickhouse -- clickhouse-client \
-    --query "SELECT count() FROM mcp.events WHERE server = '${MT_ACME_SERVER}'" | tr -d '[:space:]')"
+  server_rows="$(staging_clickhouse_query "SELECT count() FROM mcp.events WHERE server = '${MT_ACME_SERVER}'" | tr -d '[:space:]')"
   staging_log "ClickHouse rows for ${MT_ACME_SERVER}: ${server_rows}"
   [[ "${server_rows}" =~ ^[0-9]+$ && "${server_rows}" -gt 0 ]] || {
     staging_err "no ClickHouse events for the tenant server ${MT_ACME_SERVER}"
