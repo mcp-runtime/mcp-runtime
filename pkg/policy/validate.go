@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"mcp-runtime/pkg/credentialbroker"
 	"mcp-runtime/pkg/credentialheaders"
 )
 
@@ -43,6 +44,18 @@ func Validate(doc *Document) error {
 	}
 	if strings.TrimSpace(string(doc.Server.Name)) == "" {
 		return fmt.Errorf("policy: server.name is required")
+	}
+	if len(doc.CredentialBindings) > 0 {
+		if len(doc.CredentialBindings) > 16 || doc.Policy == nil || doc.Policy.Mode != "allow-list" || doc.Policy.DefaultDecision != "deny" || doc.Session == nil || !doc.Session.Required || doc.Session.Store != "platform" || (doc.Auth != nil && doc.Auth.Mode == "header") {
+			return fmt.Errorf("policy: credential bindings require enforced allow-list/deny and platform sessions")
+		}
+		seen := map[string]bool{}
+		for _, name := range doc.CredentialBindings {
+			if !credentialbroker.NameValid(name) || seen[name] {
+				return fmt.Errorf("policy: invalid or duplicate credential binding")
+			}
+			seen[name] = true
+		}
 	}
 	if doc.Session != nil && doc.Session.Store == "platform" {
 		if strings.TrimSpace(doc.Server.UID) == "" {

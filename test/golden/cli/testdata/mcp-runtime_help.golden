@@ -16,6 +16,7 @@ Available Commands:
   catalog     Search MCP Runtime catalogs
   cluster     Manage Kubernetes cluster
   completion  Generate the autocompletion script for the specified shell
+  credential  Manage scoped credential sources and bindings
   help        Help about any command
   ops         Operate the bundled platform stack (admin only)
   registry    Manage container registry

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -19,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
+	cb "mcp-runtime/pkg/credentialbroker"
 	"mcp-runtime/pkg/kubeworkload"
 	"mcp-runtime/pkg/mcpdefaults"
 	"mcp-runtime/pkg/sessionstate"
@@ -237,6 +239,10 @@ func (r *MCPServerReconciler) buildDeploymentContainers(mcpServer *mcpv1alpha1.M
 			return nil, nil, err
 		}
 		containers = append(containers, gatewayContainer)
+		if len(mcpServer.Spec.CredentialBindings) > 0 {
+			expiry := int64(600)
+			volumes = append(volumes, corev1.Volume{Name: "gateway-credential-token", VolumeSource: corev1.VolumeSource{Projected: &corev1.ProjectedVolumeSource{Sources: []corev1.VolumeProjection{{ServiceAccountToken: &corev1.ServiceAccountTokenProjection{Audience: "mcp-runtime-credential-broker", ExpirationSeconds: &expiry, Path: "token"}}}}}})
+		}
 		volumes = append(volumes, corev1.Volume{
 			Name: gatewayPolicyVolumeName,
 			VolumeSource: corev1.VolumeSource{
@@ -533,6 +539,16 @@ func (r *MCPServerReconciler) buildGatewayContainer(mcpServer *mcpv1alpha1.MCPSe
 		{Name: "OAUTH_INTERNAL_ISSUER_URL", Value: r.oauthInternalIssuerURL()},
 	}
 	if !mcpv1alpha1.AuthUsesHeaderMode(mcpServer.Spec.Auth) {
+		if len(mcpServer.Spec.CredentialBindings) > 0 {
+			origin, err := url.Parse(r.GatewayCredentialBrokerURL)
+			if !cb.LocalUpstream(mcpServer.Spec.Gateway.UpstreamURL, int(mcpServer.Spec.Port)) {
+				return corev1.Container{}, fmt.Errorf("credential delivery requires the MCP server's same-Pod loopback upstream")
+			}
+			if err != nil || origin.Scheme != "https" || origin.Host == "" || origin.User != nil || origin.RawQuery != "" || origin.Fragment != "" || (origin.Path != "" && origin.Path != "/") {
+				return corev1.Container{}, fmt.Errorf("credential bindings require a configured HTTPS credential broker; run mcp-runtime credential configure")
+			}
+			envVars = append(envVars, corev1.EnvVar{Name: "CREDENTIAL_BROKER_URL", Value: r.GatewayCredentialBrokerURL}, corev1.EnvVar{Name: "CREDENTIAL_BROKER_TOKEN_FILE", Value: "/var/run/mcp-runtime/credential-broker/token"})
+		}
 		syncURL := strings.TrimSpace(r.GatewaySessionSyncURL)
 		if syncURL == "" {
 			syncURL = "http://mcp-platform-api.mcp-platform.svc.cluster.local:8085"
@@ -669,6 +685,9 @@ func (r *MCPServerReconciler) buildGatewayContainer(mcpServer *mcpv1alpha1.MCPSe
 	}
 	if !mcpv1alpha1.AuthUsesHeaderMode(mcpServer.Spec.Auth) {
 		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{Name: "gateway-session-token", MountPath: "/var/run/mcp-runtime/session-sync", ReadOnly: true})
+	}
+	if len(mcpServer.Spec.CredentialBindings) > 0 {
+		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{Name: "gateway-credential-token", MountPath: "/var/run/mcp-runtime/credential-broker", ReadOnly: true})
 	}
 	if r.analyticsEnabled(mcpServer) {
 		if r.AnalyticsCAConfigMap != "" {

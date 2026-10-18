@@ -75,6 +75,8 @@ type MCPServerReconciler struct {
 	GatewayOTLPEndpoint string
 	// GatewaySessionSyncURL overrides the internal platform session listener.
 	GatewaySessionSyncURL string
+	// GatewayCredentialBrokerURL must be an administrator-selected HTTPS origin.
+	GatewayCredentialBrokerURL string
 
 	// DefaultAnalyticsIngestURL is the default analytics ingest endpoint used when analytics is enabled.
 	DefaultAnalyticsIngestURL string
@@ -145,7 +147,7 @@ type resourceReadiness = operatorutil.ResourceReadiness
 //+kubebuilder:rbac:groups=mcpruntime.org,resources=mcpservers/finalizers,verbs=update
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch
 //+kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;delete
-//+kubebuilder:rbac:groups="",resources=pods,verbs=list;patch
+//+kubebuilder:rbac:groups="",resources=pods,verbs=list;patch;watch
 //+kubebuilder:rbac:groups=discovery.k8s.io,resources=endpointslices,verbs=get;list;watch
 //+kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch
 //+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete

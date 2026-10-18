@@ -107,6 +107,8 @@ type gatewayServer struct {
 	oauthProviders         map[string]*oauthProvider
 	policyState            atomic.Value
 	sessionSync            *gatewaySessionSync
+	credentialBroker       *credentialBroker
+	upstreamURL            *url.URL
 }
 
 type statusRecorder struct {

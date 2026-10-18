@@ -69,6 +69,7 @@ func main() {
 
 	srv := &gatewayServer{
 		proxy:                  proxy,
+		upstreamURL:            target,
 		metrics:                newGatewayMetrics(prometheus.DefaultRegisterer),
 		analyticsURL:           analyticsURL,
 		apiKey:                 apiKey,
@@ -93,6 +94,13 @@ func main() {
 	}
 	if err := srv.startPolicyCache(); err != nil {
 		log.Fatalf("initial policy load failed: %v", err)
+	}
+	if brokerURL := strings.TrimSpace(os.Getenv("CREDENTIAL_BROKER_URL")); brokerURL != "" {
+		var err error
+		srv.credentialBroker, err = newCredentialBroker(brokerURL, os.Getenv("CREDENTIAL_BROKER_TOKEN_FILE"), os.Getenv("CREDENTIAL_BROKER_CA_FILE"))
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 	if baseURL := strings.TrimSpace(os.Getenv("SESSION_SYNC_URL")); baseURL != "" {
 		staleWindow := sessionstate.DefaultStaleWindow

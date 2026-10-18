@@ -9,7 +9,7 @@ Flags:
   -h, --help                      help for config
       --ingress string            Ingress controller to install (traefik|none) (default "traefik")
       --ingress-manifest string   Manifest to apply when installing the ingress controller (default "config/ingress/overlays/prod")
-      --kubeconfig string         Path to kubeconfig file (default: ~/.kube/config; auto-detects /etc/rancher/k3s/k3s.yaml on k3s hosts)
+      --kubeconfig string         Path to kubeconfig file (default: single-file $KUBECONFIG, else ~/.kube/config; auto-detects /etc/rancher/k3s/k3s.yaml on k3s hosts)
       --name string               Cluster name for cloud provider kubeconfig (default "mcp-runtime")
       --project string            Project ID (GKE, planned)
       --provider string           Cloud provider for kubeconfig (eks; aks/gke planned)

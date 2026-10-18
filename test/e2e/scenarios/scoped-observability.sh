@@ -23,9 +23,9 @@ run_scoped_observability_acceptance() (
   password="scope-test-password-123"; probe="scope-network-probe"; target="${WORKDIR}/scoped-target.json"
   scoped_observability_cli "${API_KEY}" team create "${team}" --name 'Scoped observability owner' >/dev/null
   scoped_observability_cli "${API_KEY}" team create "${foreign_team}" --name 'Unrelated observability tenant' >/dev/null
-  scoped_observability_cli "${API_KEY}" team user create "${team}" --email "${owner}" --password "${password}" --role owner >/dev/null
-  scoped_observability_cli "${API_KEY}" team user create "${team}" --email "${member}" --password "${password}" --role member >/dev/null
-  scoped_observability_cli "${API_KEY}" team user create "${foreign_team}" --email "${foreign}" --password "${password}" --role owner >/dev/null
+  printf '%s\n' "${password}" | scoped_observability_cli "${API_KEY}" team user create "${team}" --email "${owner}" --password-stdin --role owner >/dev/null
+  printf '%s\n' "${password}" | scoped_observability_cli "${API_KEY}" team user create "${team}" --email "${member}" --password-stdin --role member >/dev/null
+  printf '%s\n' "${password}" | scoped_observability_cli "${API_KEY}" team user create "${foreign_team}" --email "${foreign}" --password-stdin --role owner >/dev/null
   owner_token="$(SCOPED_EMAIL="${owner}" SCOPED_PASSWORD="${password}" SCOPED_API="http://127.0.0.1:${API_SERVICE_PORT}" python3 -c '
 import json,os,urllib.request
 r=urllib.request.Request(os.environ["SCOPED_API"]+"/api/v1/auth/login",data=json.dumps({"email":os.environ["SCOPED_EMAIL"],"password":os.environ["SCOPED_PASSWORD"]}).encode(),headers={"Content-Type":"application/json"})

@@ -38,7 +38,8 @@ subjects:
     namespace: mcp-platform
 ---
 # Gateways may run in any managed tenant namespace. Read only the live bound
-# workload controller chain; no list/watch, Secret reads, or tenant mutations.
+# workload controller chain and current grant; no list/watch, broad Secret
+# reads, or tenant mutations. Exact Secret GET requires explicit source RBAC.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -54,7 +55,7 @@ rules:
     resources: ["replicasets", "deployments"]
     verbs: ["get"]
   - apiGroups: ["mcpruntime.org"]
-    resources: ["mcpservers"]
+    resources: ["mcpservers", "mcpaccessgrants"]
     verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
