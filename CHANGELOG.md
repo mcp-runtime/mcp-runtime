@@ -59,6 +59,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Fixed
 
+- Give the disposable Cilium tenant probe the managed-workload network label required by the platform API positive control, while retaining no ServiceAccount token and the unchanged telemetry boundary ([#800](https://github.com/tavric-labs/mcp-runtime/pull/800), [#811](https://github.com/tavric-labs/mcp-runtime/pull/811)).
+
 - Provision an independent workload CA and verify CertificateRequest approval on the disposable staging VM before strict setup; retain the previous TLS snapshot when certificate APIs are absent.
 - Cilium observability acceptance uses the configured public UI Origin while connecting through IPv4 loopback, and reports Grafana query failures immediately. Supported setup grants resource-history access to exact currently trusted node addresses on TCP 10250; rerun setup to refresh this policy after node or trust changes ([#831](https://github.com/mcp-runtime/mcp-runtime/issues/831)).
 

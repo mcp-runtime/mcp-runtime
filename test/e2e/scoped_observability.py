@@ -239,6 +239,15 @@ def manifest_policy(output, namespace, name):
     return matches[0]
 
 
+def validate_network_probe(probe):
+    check(probe["status"]["phase"] == "Running" and probe["spec"].get("automountServiceAccountToken") is False,
+          "network evidence uses the current uncredentialed tenant probe")
+    # The gateway read listener admits managed workload peers, not every Pod
+    # in a tenant namespace. Match the deployed server's network identity.
+    check(probe["metadata"].get("labels", {}).get("app.kubernetes.io/managed-by") == "mcp-runtime",
+          "tenant probe has the managed workload label required by platform API ingress")
+
+
 def network():
     kube = ["kubectl", "--kubeconfig", os.environ["SCOPED_KUBECONFIG"]]
     namespace, pod = os.environ["SCOPED_NAMESPACE"], os.environ["SCOPED_PROBE"]
@@ -246,7 +255,7 @@ def network():
         return json.loads(subprocess.check_output(kube + ["get", *args, "-o", "json"], text=True))
 
     probe = get("pod", pod, "-n", namespace)
-    check(probe["status"]["phase"] == "Running" and probe["spec"].get("automountServiceAccountToken") is False, "network evidence uses the current uncredentialed tenant probe")
+    validate_network_probe(probe)
     agents = get("daemonset", "cilium", "-n", "kube-system")
     config = get("configmap", "cilium-config", "-n", "kube-system")
     check(agents["status"]["observedGeneration"] >= agents["metadata"]["generation"] and agents["status"]["numberReady"] == agents["status"]["desiredNumberScheduled"] > 0,

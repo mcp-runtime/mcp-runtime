@@ -12,6 +12,18 @@ import scoped_observability
 
 
 class ScopedObservabilityTests(unittest.TestCase):
+    def test_network_probe_requires_an_uncredentialed_managed_workload(self):
+        def probe(labels=None, token=False, phase="Running"):
+            return {"metadata": {"labels": labels or {}},
+                    "spec": {"automountServiceAccountToken": token}, "status": {"phase": phase}}
+        managed = {"app.kubernetes.io/managed-by": "mcp-runtime"}
+        scoped_observability.validate_network_probe(probe(managed))
+        for value in (probe(), probe({"app.kubernetes.io/managed-by": "other"}),
+                      probe(managed, token=True), probe(managed, token=None),
+                      probe(managed, phase="Pending")):
+            with self.subTest(value=value), self.assertRaises(AssertionError):
+                scoped_observability.validate_network_probe(value)
+
     def test_missing_and_non_numeric_frames_do_not_pass_acceptance(self):
         def frame(kind, values):
             return json.dumps({"results": {"A": {"frames": [{"schema": {"fields": [{"type": kind}]}, "data": {"values": [values]}}]}}})
