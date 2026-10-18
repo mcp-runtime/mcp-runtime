@@ -220,6 +220,25 @@ def functional():
         "notes": ["Absent driver volume history remains missing; reservations are not consumption.", "See grafana.json for same-window kubelet comparisons and overhead."]}, indent=2) + "\n")
 
 
+def manifest_policy(output, namespace, name):
+    # kubectl create -o json emits separate JSON documents for a multi-document
+    # YAML file. Other kubectl paths return a List; validate both without
+    # relying on source order or accidentally comparing the egress policy.
+    decoder = json.JSONDecoder()
+    objects = []
+    remaining = output.strip()
+    while remaining:
+        document, end = decoder.raw_decode(remaining)
+        objects.extend(document.get("items", []) if document.get("kind") == "List" else [document])
+        remaining = remaining[end:].strip()
+    matches = [item for item in objects if item.get("kind") == "NetworkPolicy"
+               and item.get("metadata", {}).get("namespace") == namespace
+               and item.get("metadata", {}).get("name") == name]
+    if len(matches) != 1:
+        raise AssertionError("release manifest must contain exactly one named telemetry policy")
+    return matches[0]
+
+
 def network():
     kube = ["kubectl", "--kubeconfig", os.environ["SCOPED_KUBECONFIG"]]
     namespace, pod = os.environ["SCOPED_NAMESPACE"], os.environ["SCOPED_PROBE"]
@@ -234,7 +253,7 @@ def network():
           "current Cilium generation is fully ready")
     check(config["data"].get("enable-policy") == "default" and config["data"].get("enable-k8s-networkpolicy") == "true", "running Cilium config explicitly enables Kubernetes policy")
     policy = get("networkpolicy", "mcp-scoped-observability-ingress", "-n", "mcp-observability")
-    canonical = json.loads(subprocess.check_output(kube + ["create", "--dry-run=client", "-f", str(Path(__file__).resolve().parents[2] / "k8s/23-scoped-observability-networkpolicy.yaml"), "-o", "json"], text=True))["items"][0]
+    canonical = manifest_policy(subprocess.check_output(kube + ["create", "--dry-run=client", "-f", str(Path(__file__).resolve().parents[2] / "k8s/23-scoped-observability-networkpolicy.yaml"), "-o", "json"], text=True), "mcp-observability", "mcp-scoped-observability-ingress")
     check(policy["spec"] == canonical["spec"], "live telemetry rule exactly matches the release security boundary")
     services = {name: get("svc", name, "-n", "mcp-observability")["spec"]["clusterIP"]
                 for name in ("grafana", "prometheus", "loki", "tempo")}

@@ -61,6 +61,21 @@ class GrafanaQueryTests(unittest.TestCase):
         self.assertFalse(scoped_observability.query_has_series(200, b'{"results":{"A":{"frames":[]}}}'))
 
 
+class ManifestPolicyTests(unittest.TestCase):
+    def test_kubectl_stream_and_list_select_the_exact_named_policy(self):
+        target = {"kind": "NetworkPolicy", "metadata": {"name": "boundary", "namespace": "observability"}, "spec": {"policyTypes": ["Ingress"]}}
+        other = {"kind": "NetworkPolicy", "metadata": {"name": "egress", "namespace": "platform"}, "spec": {"policyTypes": ["Egress"]}}
+        stream = json.dumps(other) + "\n" + json.dumps(target) + "\n"
+        listing = json.dumps({"kind": "List", "items": [other, target]})
+        for output in (stream, listing, json.dumps(target)):
+            self.assertEqual(scoped_observability.manifest_policy(output, "observability", "boundary"), target)
+        for items in ([], [other], [target, target]):
+            with self.assertRaises(AssertionError):
+                scoped_observability.manifest_policy(json.dumps({"kind": "List", "items": items}), "observability", "boundary")
+        with self.assertRaises(ValueError):
+            scoped_observability.manifest_policy(stream + "not-json", "observability", "boundary")
+
+
 class MCPOriginTests(unittest.TestCase):
     def test_gateway_mcp_uses_the_tls_origin_when_ui_stays_on_http(self):
         with mock.patch.dict(os.environ, {"SCOPED_UI_BASE": "http://127.0.0.1:18080", "SCOPED_MCP_BASE": "https://127.0.0.1:18443"}):
