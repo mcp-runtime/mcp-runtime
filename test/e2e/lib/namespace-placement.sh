@@ -38,14 +38,21 @@ EOF
 }
 
 # kind|namespace|name|env|value
+#
+# runtime-api must dial ClickHouse in the observability namespace on the port
+# the installation exposes. Test-mode installs keep the plaintext native port
+# (9000); strict installs encrypt analytics traffic and use the TLS port (9440).
+# Staging E2E sets NAMESPACE_PLACEMENT_CLICKHOUSE_PORT=9440 because it always
+# runs strict setup; QA E2E leaves it unset.
 namespace_placement_env() {
-  cat <<'EOF'
+  local clickhouse_port="${NAMESPACE_PLACEMENT_CLICKHOUSE_PORT:-9000}"
+  cat <<EOF
 deployment|mcp-platform|mcp-ui|API_UPSTREAM|http://mcp-platform-api.mcp-platform.svc.cluster.local:8080
 deployment|mcp-platform|mcp-ui|RUNTIME_UPSTREAM|http://mcp-runtime-api.mcp-platform.svc.cluster.local:8084
 deployment|mcp-platform|mcp-ui|ANALYTICS_UPSTREAM|http://mcp-analytics-api.mcp-observability.svc.cluster.local:8085
 deployment|mcp-platform|mcp-platform-api|RUNTIME_CONTROL_URL|http://mcp-runtime-api.mcp-platform.svc.cluster.local:8084
 deployment|mcp-platform|mcp-runtime-api|PLATFORM_API_URL|http://mcp-platform-api.mcp-platform.svc.cluster.local:8080
-deployment|mcp-platform|mcp-runtime-api|CLICKHOUSE_ADDR|clickhouse.mcp-observability.svc.cluster.local:9000
+deployment|mcp-platform|mcp-runtime-api|CLICKHOUSE_ADDR|clickhouse.mcp-observability.svc.cluster.local:${clickhouse_port}
 deployment|mcp-observability|mcp-analytics-api|PLATFORM_API_URL|http://mcp-platform-api.mcp-platform.svc.cluster.local:8080
 EOF
 }
