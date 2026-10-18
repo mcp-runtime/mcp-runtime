@@ -1,5 +1,9 @@
 # Multi-Team Isolation
 
+For approved upstream credentials scoped to a server, tool and current managed
+agent session, see [Scoped credential broker](credential-broker.md). Its CLI
+and management APIs contain metadata only.
+
 Each team has its own place to deploy servers and manage access. Kubernetes
 namespaces keep those resources separate, and the platform checks team
 membership before allowing changes. A team can share a server with another

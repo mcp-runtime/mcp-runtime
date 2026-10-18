@@ -37,9 +37,11 @@ func newUpstreamReverseProxyWithTimeout(target *url.URL, responseHeaderTimeout t
 			req.SetURL(target)
 			req.Out.Host = target.Host
 			req.SetXForwarded()
+			sanitizeCredentialRequestTrailers(req)
 		},
-		Transport:    newUpstreamTransport(responseHeaderTimeout),
-		ErrorHandler: handleUpstreamError,
+		Transport:      newUpstreamTransport(responseHeaderTimeout),
+		ModifyResponse: sanitizeCredentialResponse,
+		ErrorHandler:   handleUpstreamError,
 	}
 	return proxy
 }
@@ -55,7 +57,7 @@ func newUpstreamTransport(responseHeaderTimeout time.Duration) http.RoundTripper
 	transport.IdleConnTimeout = 90 * time.Second
 	transport.TLSHandshakeTimeout = 5 * time.Second
 	transport.ResponseHeaderTimeout = responseHeaderTimeout
-	return newResilientUpstreamTransport(serviceutil.TracedTransport(transport), responseHeaderTimeout, 128, 32, 5, 5*time.Second)
+	return newResilientUpstreamTransport(serviceutil.TracedTransport(credentialTrailerTransport{base: transport}), responseHeaderTimeout, 128, 32, 5, 5*time.Second)
 }
 
 func handleUpstreamError(w http.ResponseWriter, r *http.Request, err error) {

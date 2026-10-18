@@ -92,7 +92,7 @@ func TestPostgresAccountDeactivationRevokesCredentialsSessionsAndIsIdempotent(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	auth := platformauth.Authenticator{Secret: s.jwtSecret, Audience: platformauth.AudienceRuntime, Principals: s}
+	auth := platformauth.Authenticator{Secret: s.jwtSecret, Audience: platformauth.AudiencePlatform, Principals: s}
 	request := httptest.NewRequest(http.MethodGet, "/private", nil)
 	request.Header.Set("Authorization", "Bearer "+bearer)
 	if _, ok, err := auth.AuthenticateRequest(request); err != nil || !ok {

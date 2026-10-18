@@ -24,6 +24,7 @@ const SchemaVersionGrantExpiry = "v2"
 // activate. Documents carrying any other version fail validation and are
 // rejected before activation.
 var supportedSchemaVersions = map[string]struct{}{
+	SchemaVersionCredentialBroker: {},
 	SchemaVersion:                 {},
 	SchemaVersionGrantExpiry:      {},
 	SchemaVersionDelegatedHeaders: {},
@@ -38,12 +39,19 @@ const SchemaVersionSessionSync = "v4"
 // SchemaVersionGrantMonitor requires consumers to honor per-grant monitor mode.
 const SchemaVersionGrantMonitor = "v5"
 
+// SchemaVersionCredentialBroker requires authenticated per-call secret delivery.
+// Older gateways must reject this policy rather than forward without resolving.
+const SchemaVersionCredentialBroker = "v6"
+
 // SchemaVersionDelegatedHeaders is required when auth.mode is header. Older
 // gateways reject the document instead of ignoring delegated header fields.
 const SchemaVersionDelegatedHeaders = "v3"
 
 // RequiredSchemaVersion returns the lowest schema version that can carry doc.
 func RequiredSchemaVersion(doc *Document) string {
+	if doc != nil && len(doc.CredentialBindings) > 0 {
+		return SchemaVersionCredentialBroker
+	}
 	if doc != nil && doc.Session != nil && doc.Session.Store == "platform" {
 		if hasMonitorGrant(doc) {
 			return SchemaVersionGrantMonitor
@@ -78,6 +86,8 @@ func schemaRank(version string) int {
 		return 4
 	case SchemaVersionGrantMonitor:
 		return 5
+	case SchemaVersionCredentialBroker:
+		return 6
 	default:
 		return 0
 	}
@@ -106,7 +116,8 @@ type ToolName string
 
 // Document is the root gateway policy document that contains all policy configuration.
 type Document struct {
-	compiled *compiledIndex
+	CredentialBindings []string `json:"credential_bindings,omitempty"`
+	compiled           *compiledIndex
 	// SchemaVersion identifies the compatibility of the rendered JSON contract.
 	SchemaVersion string `json:"schema_version"`
 	// Revision is a deterministic SHA-256 digest of the canonical rendered

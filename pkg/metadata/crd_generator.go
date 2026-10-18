@@ -27,12 +27,13 @@ func GenerateCRD(server *ServerMetadata, outputPath string) error {
 			Labels:    publishScopeLabels(server.Scope),
 		},
 		Spec: mcpv1alpha1.MCPServerSpec{
-			Description: server.Description,
-			TeamID:      server.TeamID,
-			Image:       imageRefForClusterPull(server.Image),
-			ImageTag:    server.ImageTag,
-			Port:        server.Port,
-			Replicas:    server.Replicas,
+			CredentialBindings: append([]string(nil), server.CredentialBindings...),
+			Description:        server.Description,
+			TeamID:             server.TeamID,
+			Image:              imageRefForClusterPull(server.Image),
+			ImageTag:           server.ImageTag,
+			Port:               server.Port,
+			Replicas:           server.Replicas,
 		},
 	}
 

@@ -14,6 +14,7 @@ with `mcp-runtime agent create <team-slug> --name <name>`.
 | Log in | `auth login` → `auth use <profile>` |
 | Deploy a server | `server init` → `server validate` → `server build image` → `server push` → `server deploy` |
 | Grant an agent access | `access grant init` → `server validate --grant-file` → `access grant apply` |
+| Bind an upstream credential | `credential source apply --file source.json` → `credential binding apply --file binding.json`; [provider setup and scope](credential-broker.md) |
 | Create a session manually | `access session init` → `access session apply` |
 | Connect an MCP client | `adapter proxy --server ... --agent ... --auto-refresh` |
 | Find a tool | `catalog tools` · `catalog tool <name>` |
