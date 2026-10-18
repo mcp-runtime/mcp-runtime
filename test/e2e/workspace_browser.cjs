@@ -7,6 +7,7 @@ const tls = require('node:tls');
 const crypto = require('node:crypto');
 const assert = require('node:assert/strict');
 const { chromium } = require(process.env.WORKSPACE_PLAYWRIGHT_MODULE || 'playwright');
+const { serverListStartedByClick, menuServerListFailure } = require('./workspace_browser_menu.cjs');
 
 async function verifiedCertificatePin(base, caPEM) {
   if (base.protocol === 'http:') return [];
@@ -73,6 +74,27 @@ async function main() {
         const url = new URL(response.url());
         if (url.origin === base.origin && (/\/api\//.test(url.pathname) || /\/auth\//.test(url.pathname))) evidence.network.push({ path: url.pathname, method: response.request().method(), status: response.status(), authenticated });
       });
+      const apiRequests = [];
+      let apiInflight = 0;
+      const trackedApiURL = request => {
+        const url = new URL(request.url());
+        if (url.origin !== base.origin || !(/\/api\//.test(url.pathname) || /\/auth\//.test(url.pathname))) return null;
+        return url;
+      };
+      page.on('request', request => {
+        const url = trackedApiURL(request);
+        if (!url) return;
+        apiInflight += 1;
+        apiRequests.push({ path: url.pathname, search: redact(url.search), method: request.method(), startedAt: Date.now() });
+      });
+      const finishApi = request => { if (trackedApiURL(request)) apiInflight = Math.max(0, apiInflight - 1); };
+      page.on('requestfinished', finishApi);
+      page.on('requestfailed', finishApi);
+      evidence.apiRequests = apiRequests;
+      const waitForApiIdle = async () => {
+        const deadline = Date.now() + 15000;
+        while (apiInflight > 0 && Date.now() < deadline) await page.waitForTimeout(50);
+      };
       const json = async endpoint => page.evaluate(async endpoint => {
         const response = await fetch(endpoint, { credentials: 'same-origin' });
         if (!response.ok) throw new Error('read-only verification returned ' + response.status + ' for ' + endpoint);
@@ -104,12 +126,14 @@ async function main() {
         check(membership && membership.role === name, name + ': fixture role comes from real membership');
         await page.getByText('Gateway activity across your user and team namespaces in the last seven days. These are not exclusively your actions.').waitFor();
       }
-      const serverRequests = () => evidence.network.filter(event => event.path === '/api/ui/v1/runtime/servers').length;
-      const beforeMenu = serverRequests();
+      await waitForApiIdle();
+      const clickAt = Date.now();
+      evidence.accountMenuClickAt = clickAt;
       await page.getByTestId('account-trigger').filter({ visible: true }).click();
       await page.getByRole('region', { name: 'Account details' }).getByRole('link', { name: 'My workspace', exact: true }).waitFor();
       await page.waitForTimeout(250);
-      check(serverRequests() === beforeMenu, name + ': account menu performs no server-list request');
+      const startedByMenu = serverListStartedByClick(apiRequests, clickAt);
+      check(startedByMenu.length === 0, startedByMenu.length === 0 ? name + ': account menu performs no server-list request' : menuServerListFailure(name, apiRequests, clickAt));
       await page.keyboard.press('Escape');
       await page.getByRole('link', { name: 'Open server catalog', exact: true }).click();
       await page.waitForURL('**/#/servers');
