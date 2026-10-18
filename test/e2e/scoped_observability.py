@@ -15,6 +15,23 @@ import urllib.request
 from pathlib import Path
 
 
+def ui_origin():
+    # Browser Origin follows the configured public UI, independently of the
+    # IPv4 loopback address used to reach the disposable port-forward.
+    return os.environ.get("SCOPED_UI_ORIGIN", os.environ["SCOPED_UI_BASE"]).rstrip("/")
+
+
+def query_has_series(status, body):
+    if status != 200:
+        raise AssertionError(f"scoped Grafana query failed with HTTP {status}")
+    result = json.loads(body)
+    for ref, value in result.get("results", {}).items():
+        if value.get("error") or value.get("status", 200) >= 400:
+            # Do not dump backend responses, which can contain query payloads.
+            raise AssertionError(f"scoped Grafana datasource query {ref} failed")
+    return frames_present(body)
+
+
 def mcp_origin():
     # Adapter-certificate IngressRoutes listen on Traefik websecure. The UI
     # stays on the plain HTTP forward, so MCP must use SCOPED_MCP_BASE when
@@ -101,6 +118,17 @@ def frames_present(body):
     return bool(frame_numbers(body))
 
 
+def query(client, expr, forged=False):
+    base = os.environ["SCOPED_UI_BASE"]
+    now = int(time.time() * 1000)
+    headers = {"Origin": ui_origin()}
+    if forged:
+        headers.update({"X-WEBAUTH-USER": "forged-admin", "X-WEBAUTH-ROLE": "Admin", "X-Grafana-Org-Id": "2"})
+    return request(client, base + "/grafana/api/ds/query", "POST", {
+        "from": str(now - 3600000), "to": str(now), "queries": [{"refId": "A", "expr": expr,
+        "datasource": {"uid": "prometheus", "type": "prometheus"}, "range": True, "intervalMs": 15000, "maxDataPoints": 2000}]}, headers)
+
+
 def functional():
     base = os.environ["SCOPED_UI_BASE"]
     target = json.loads(Path(os.environ["SCOPED_TARGET"]).read_text())
@@ -122,15 +150,6 @@ def functional():
     status, headers, body = request(owner, urllib.parse.urljoin(base, dashboard))
     check(status == 200 and b"grafanaBootData" in body and headers.get("Content-Security-Policy"), "native Grafana dashboard boot is protected by its nonce CSP")
     check(not any(cookie.name == "grafana_session" for cookie in cookies), "platform session does not issue a Grafana login cookie")
-
-    def query(client, expr, forged=False):
-        now = int(time.time() * 1000)
-        headers = {"Origin": base}
-        if forged:
-            headers.update({"X-WEBAUTH-USER": "forged-admin", "X-WEBAUTH-ROLE": "Admin", "X-Grafana-Org-Id": "2"})
-        return request(client, base + "/grafana/api/ds/query", "POST", {
-            "from": str(now - 3600000), "to": str(now), "queries": [{"refId": "A", "expr": expr,
-            "datasource": {"uid": "prometheus", "type": "prometheus"}, "range": True, "intervalMs": 15000, "maxDataPoints": 2000}]}, headers)
 
     # A bounded functional conversation creates real metrics; this is not a
     # staging load test or a throughput/latency benchmark.
@@ -163,7 +182,7 @@ def functional():
     deadline = time.monotonic() + 180
     while True:
         status, _, body = query(owner, expression)
-        if status == 200 and frames_present(body):
+        if query_has_series(status, body):
             break
         if time.monotonic() >= deadline:
             raise AssertionError("scoped Grafana did not receive real gateway series")
@@ -192,9 +211,9 @@ def functional():
             # Historical successes alone cannot hide a currently failing source.
             instant_status, _, instant_body = request(admin, base + "/grafana/api/ds/query", "POST", {
                 "from": str(int(time.time() * 1000) - 60000), "to": str(int(time.time() * 1000)),
-                "queries": [{"refId": "A", "expr": expr, "datasource": {"uid": "prometheus", "type": "prometheus"}, "instant": True}]}, {"Origin": base})
+                "queries": [{"refId": "A", "expr": expr, "datasource": {"uid": "prometheus", "type": "prometheus"}, "instant": True}]}, {"Origin": ui_origin()})
             check(instant_status == 200 and frame_numbers(instant_body) and all(number == 1 for number in frame_numbers(instant_body)), "current authenticated " + name + " is successful")
-    check(request(owner, base + "/auth/logout", "POST", {}, {"Origin": base, "X-CSRF-Token": owner.scoped_csrf_token})[0] == 200, "platform session logout succeeds")
+    check(request(owner, base + "/auth/logout", "POST", {}, {"Origin": ui_origin(), "X-CSRF-Token": owner.scoped_csrf_token})[0] == 200, "platform session logout succeeds")
     check(request(owner, base + "/grafana/api/health")[0] == 401, "platform logout revokes Grafana access")
     Path(os.environ["SCOPED_REPORT"]).write_text(json.dumps({"functional": "passed", "resources": resource,
         "notes": ["Absent driver volume history remains missing; reservations are not consumption.", "See grafana.json for same-window kubelet comparisons and overhead."]}, indent=2) + "\n")

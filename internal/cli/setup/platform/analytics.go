@@ -264,6 +264,9 @@ func deployAnalyticsManifestsClientGo(logger *zap.Logger, images AnalyticsImageS
 	if err := ensureRuntimeKubernetesAPIEgressClientGo(); err != nil {
 		return err
 	}
+	if err := ensureResourceHistoryNodeEgressClientGo(); err != nil {
+		return err
+	}
 
 	if err := applyPlatformIngressIfConfigured(); err != nil {
 		return err
@@ -427,6 +430,9 @@ func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap
 		}
 	}
 	if err := ensureRuntimeKubernetesAPIEgressClientGo(); err != nil {
+		return err
+	}
+	if err := ensureResourceHistoryNodeEgressClientGo(); err != nil {
 		return err
 	}
 

@@ -160,7 +160,9 @@ TLS, storage, registry and auth options:
 - Other clusters supply a trusted **public** serving CA bundle through
   `MCP_KUBELET_METRICS_CA_FILE=/path/to/kubelet-serving-ca.pem` in setup's
   environment. Serving certificates must cover each node's InternalIP and
-  kubelets must enable webhook bearer authentication/authorization. Mixed or
+  kubelets must enable webhook bearer authentication/authorization. Setup grants TCP 10250 egress to
+  exact currently trusted node UID/InternalIP pairs, including on enforcing Cilium.
+  Rerun setup after replacing nodes or changing their addresses/trust. Mixed or
   private PEM bundles are rejected; the API CA is not assumed to sign kubelets.
 
 Setup saves public trust in `mcp-platform/mcp-kubelet-resource-trust`. Refresh
