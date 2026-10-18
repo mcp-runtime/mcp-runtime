@@ -5,6 +5,7 @@ import json
 import math
 import os
 import re
+import ssl
 import subprocess
 import sys
 import time
@@ -12,6 +13,25 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+
+
+def mcp_origin():
+    # Adapter-certificate IngressRoutes listen on Traefik websecure. The UI
+    # stays on the plain HTTP forward, so MCP must use SCOPED_MCP_BASE when
+    # the scenario points it at the TLS port.
+    configured = os.environ.get("SCOPED_MCP_BASE", "").strip()
+    if configured:
+        return configured.rstrip("/")
+    return os.environ["SCOPED_UI_BASE"].rstrip("/")
+
+
+def mcp_opener():
+    origin = urllib.parse.urlsplit(mcp_origin())
+    # Kind Traefik's default certificate SAN is not 127.0.0.1. The rest of the
+    # E2E harness uses the same loopback exception (qa-e2e.sh --tls-insecure-skip-verify).
+    if origin.scheme == "https" and origin.hostname in {"127.0.0.1", "localhost"}:
+        return urllib.request.build_opener(urllib.request.HTTPSHandler(context=ssl._create_unverified_context()))
+    return urllib.request.build_opener()
 
 
 def check(condition, message):
@@ -116,20 +136,21 @@ def functional():
     # staging load test or a throughput/latency benchmark.
     protocol = os.environ["SCOPED_PROTOCOL"]
     mcp_headers = {"Accept": "application/json, text/event-stream", "Mcp-Protocol-Version": protocol}
-    endpoint = base + "/" + server + "/mcp"
+    endpoint = mcp_origin() + "/" + server + "/mcp"
+    mcp = mcp_opener()
     deadline = time.monotonic() + 90
     while True:
-        status, response_headers, _ = request(anonymous, endpoint, "POST", {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": protocol, "capabilities": {}, "clientInfo": {"name": "scoped-history-qa", "version": "1"}}}, mcp_headers)
+        status, response_headers, _ = request(mcp, endpoint, "POST", {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": protocol, "capabilities": {}, "clientInfo": {"name": "scoped-history-qa", "version": "1"}}}, mcp_headers)
         if status == 200 or time.monotonic() >= deadline:
             break
         time.sleep(2)
-    check(status == 200, "tenant fixture MCP initialize succeeds")
+    check(status == 200, "tenant fixture MCP initialize succeeds (status %s)" % status)
     if response_headers.get("Mcp-Session-Id"):
         mcp_headers["Mcp-Session-Id"] = response_headers["Mcp-Session-Id"]
-    status, _, _ = request(anonymous, endpoint, "POST", {"jsonrpc": "2.0", "method": "notifications/initialized"}, mcp_headers)
+    status, _, _ = request(mcp, endpoint, "POST", {"jsonrpc": "2.0", "method": "notifications/initialized"}, mcp_headers)
     check(status in (200, 202), "tenant fixture MCP initialized notification succeeds")
     for index in range(5):
-        status, _, result = request(anonymous, endpoint, "POST", {"jsonrpc": "2.0", "id": index + 2, "method": "tools/call", "params": {"name": "aaa-ping", "arguments": {}}}, mcp_headers)
+        status, _, result = request(mcp, endpoint, "POST", {"jsonrpc": "2.0", "id": index + 2, "method": "tools/call", "params": {"name": "aaa-ping", "arguments": {}}}, mcp_headers)
         check(status == 200 and b"pong" in result, "tenant fixture tools/call succeeds")
     deadline = time.monotonic() + 180
     while True:
