@@ -21,4 +21,11 @@ if restore < 0 or client < 0 or restore > client:
     raise SystemExit("Traefik port-forward must be restored before the scoped UI client")
 PY
 
+e2e_adapter_certificates_enabled() { return 0; }
+TRAEFIK_PORT=18080
+TRAEFIK_TLS_PORT=18443
+[[ "$(scoped_mcp_origin)" == "https://127.0.0.1:18443" ]]
+e2e_adapter_certificates_enabled() { return 1; }
+[[ "$(scoped_mcp_origin)" == "http://127.0.0.1:18080" ]]
+
 echo "[pass] scoped observability restores the Traefik port-forward before the UI client"

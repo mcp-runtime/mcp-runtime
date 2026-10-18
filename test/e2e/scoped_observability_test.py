@@ -43,6 +43,19 @@ scoped_cilium_guard
                 self.assertEqual(result.returncode == 0, expected, result.stderr)
 
 
+class MCPOriginTests(unittest.TestCase):
+    def test_gateway_mcp_uses_the_tls_origin_when_ui_stays_on_http(self):
+        with mock.patch.dict(os.environ, {"SCOPED_UI_BASE": "http://127.0.0.1:18080", "SCOPED_MCP_BASE": "https://127.0.0.1:18443"}):
+            self.assertEqual(scoped_observability.mcp_origin(), "https://127.0.0.1:18443")
+
+    def test_gateway_mcp_follows_the_ui_origin_without_a_tls_override(self):
+        env = os.environ.copy()
+        env.pop("SCOPED_MCP_BASE", None)
+        env["SCOPED_UI_BASE"] = "http://127.0.0.1:18080"
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertEqual(scoped_observability.mcp_origin(), "http://127.0.0.1:18080")
+
+
 class RequestRetryTests(unittest.TestCase):
     class Response:
         status = 200
