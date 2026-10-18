@@ -44,7 +44,12 @@ def request(client, url, method="GET", body=None, headers=None, retry_connection
                 return response.status, response.headers, response.read()
         except urllib.error.HTTPError as error:
             return error.code, error.headers, error.read()
-        except CONNECTION_ERRORS as error:
+        except (*CONNECTION_ERRORS, urllib.error.URLError) as error:
+            # urllib wraps a refused or reset connection as URLError(reason=...), so
+            # look at the reason too. Other URLErrors (DNS, TLS) are not retried.
+            reason = getattr(error, "reason", error)
+            if not isinstance(error, CONNECTION_ERRORS) and not isinstance(reason, CONNECTION_ERRORS):
+                raise
             if attempt == attempts:
                 raise
             print(f"[retry] {method} {urllib.parse.urlsplit(url).path} dropped ({type(error).__name__}), attempt {attempt}/{attempts}", file=sys.stderr, flush=True)
