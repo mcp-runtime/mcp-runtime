@@ -257,10 +257,13 @@ def network():
     check(policy["spec"] == canonical["spec"], "live telemetry rule exactly matches the release security boundary")
     services = {name: get("svc", name, "-n", "mcp-observability")["spec"]["clusterIP"]
                 for name in ("grafana", "prometheus", "loki", "tempo")}
-    ui = json.loads(subprocess.check_output(kube + ["get", "svc", "mcp-ui", "-n", "mcp-platform", "-o", "json"], text=True))["spec"]["clusterIP"]
+    # Tenant default egress explicitly permits platform-api:8085, whereas
+    # UI:8082 is not an allowed peer. The positive control must use a route
+    # the actual tenant policy permits before interpreting backend denials.
+    platform_api = get("svc", "mcp-platform-api", "-n", "mcp-platform")["spec"]["clusterIP"]
     command = kube + ["exec", "-n", namespace, pod, "--", "wget", "-T", "3", "-S", "-O", "/dev/null", "--header=X-WEBAUTH-USER: forged-admin", "--header=X-WEBAUTH-ROLE: Admin"]
-    control = subprocess.run(command + [f"http://{ui}:8082/health"], capture_output=True, text=True, timeout=10)
-    check(control.returncode == 0 and "200" in control.stderr, "tenant probe can reach a healthy allowed UI peer")
+    control = subprocess.run(command + [f"http://{platform_api}:8085/health"], capture_output=True, text=True, timeout=10)
+    check(control.returncode == 0 and "200" in control.stderr, "tenant probe can reach its healthy allowed platform API peer")
     denied = []
     for name, port, path in (("grafana", 3000, "/grafana/api/health"), ("prometheus", 9090, "/prometheus/api/v1/query?query=up"), ("loki", 3100, "/ready"), ("tempo", 3200, "/ready")):
         pods = get("pods", "-n", "mcp-observability", "-l", "app=" + name)["items"]
@@ -270,7 +273,7 @@ def network():
             result = subprocess.run(command + [f"http://{address}:{port}{path}"], capture_output=True, text=True, timeout=10)
             check(result.returncode != 0 and not re.search(r"HTTP/\d", result.stdout + result.stderr), "Cilium blocks tenant service/direct-pod " + name + " including forged auth-proxy identity")
         denied.append(name)
-    evidence = {"probe_uid": probe["metadata"]["uid"], "probe_namespace": namespace, "cilium_generation": agents["metadata"]["generation"], "policy_uid": policy["metadata"]["uid"], "policy_resource_version": policy["metadata"]["resourceVersion"], "denied_backends": denied, "allowed_control": "UI health"}
+    evidence = {"probe_uid": probe["metadata"]["uid"], "probe_namespace": namespace, "cilium_generation": agents["metadata"]["generation"], "policy_uid": policy["metadata"]["uid"], "policy_resource_version": policy["metadata"]["resourceVersion"], "denied_backends": denied, "allowed_control": "platform API health"}
     Path(os.environ["SCOPED_REPORT"]).with_name("scoped-network-evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
     path = Path(os.environ["SCOPED_REPORT"])
     report = json.loads(path.read_text())
