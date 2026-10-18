@@ -51,8 +51,9 @@ type OperatorConfig struct {
 	GatewayProxyImage string
 
 	// GatewayOTLPEndpoint is the OTLP/HTTP endpoint injected into MCP gateway sidecars.
-	GatewayOTLPEndpoint   string
-	GatewaySessionSyncURL string
+	GatewayOTLPEndpoint        string
+	GatewaySessionSyncURL      string
+	GatewayCredentialBrokerURL string
 
 	// AnalyticsIngestURL is the default analytics ingest endpoint for gateway sidecars.
 	AnalyticsIngestURL string
@@ -88,6 +89,7 @@ func LoadOperatorConfig() *OperatorConfig {
 		GatewayProxyImage:             os.Getenv("MCP_GATEWAY_PROXY_IMAGE"),
 		GatewayOTLPEndpoint:           os.Getenv("MCP_GATEWAY_OTEL_EXPORTER_OTLP_ENDPOINT"),
 		GatewaySessionSyncURL:         strings.TrimSpace(os.Getenv("MCP_GATEWAY_SESSION_SYNC_URL")),
+		GatewayCredentialBrokerURL:    strings.TrimSpace(os.Getenv("MCP_GATEWAY_CREDENTIAL_BROKER_URL")),
 		AnalyticsIngestURL:            os.Getenv("MCP_ANALYTICS_INGEST_URL"),
 		OAuthInternalIssuerURL:        strings.TrimSpace(os.Getenv("OAUTH_INTERNAL_ISSUER_URL")),
 		ClusterName:                   getEnvOrDefault("MCP_CLUSTER_NAME", "local"),

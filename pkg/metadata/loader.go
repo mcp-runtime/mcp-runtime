@@ -8,6 +8,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"mcp-runtime/pkg/credentialbroker"
 	"mcp-runtime/pkg/credentialheaders"
 	"mcp-runtime/pkg/mcpdefaults"
 	"mcp-runtime/pkg/publishscope"
@@ -73,6 +74,18 @@ func LoadFromDirectory(dirPath string) (*RegistryFile, error) {
 }
 
 func setDefaults(server *ServerMetadata) error {
+	if len(server.CredentialBindings) > 0 {
+		if len(server.CredentialBindings) > 16 || server.Policy == nil || server.Policy.Mode != PolicyModeAllowList || server.Policy.DefaultDecision != PolicyDecisionDeny || (server.Gateway != nil && server.Gateway.Enabled != nil && !*server.Gateway.Enabled) || (server.Auth != nil && server.Auth.Mode == "header") {
+			return fmt.Errorf("credential bindings require an enabled gateway and explicit allow-list/deny policy")
+		}
+		seen := map[string]bool{}
+		for _, name := range server.CredentialBindings {
+			if !credentialbroker.NameValid(name) || seen[name] {
+				return fmt.Errorf("credential binding names must be unique namespace-local names")
+			}
+			seen[name] = true
+		}
+	}
 	scope, err := publishscope.Normalize(string(server.Scope))
 	if err != nil {
 		return err
@@ -169,6 +182,9 @@ func setDefaults(server *ServerMetadata) error {
 		if server.Gateway.UpstreamURL == "" {
 			server.Gateway.UpstreamURL = fmt.Sprintf("http://127.0.0.1:%d", server.Port)
 		}
+	}
+	if len(server.CredentialBindings) > 0 && server.Gateway != nil && !credentialbroker.LocalUpstream(server.Gateway.UpstreamURL, int(server.Port)) {
+		return fmt.Errorf("credential delivery requires the server's same-Pod loopback upstream")
 	}
 	if server.Analytics != nil && !server.Analytics.Disabled {
 		if server.Analytics.Source == "" {

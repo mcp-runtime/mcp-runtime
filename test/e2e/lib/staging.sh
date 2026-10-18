@@ -2081,7 +2081,9 @@ staging_run_platform_stages() {
   mkdir -p "${MCP_RUNTIME_CONFIG_DIR}"
   chmod 700 "${MCP_RUNTIME_CONFIG_DIR}"
   export MCP_RUNTIME_CONFIG_DIR
-  staging_run_stage namespace-placement critical "a workload, owner Secret, shared ConfigMap, or service URL is still aimed at the old combined namespace" namespace_placement_verify
+  # Staging always runs strict setup, which encrypts analytics traffic: runtime-api
+  # dials ClickHouse's TLS port, not the plaintext one QA test mode keeps.
+  NAMESPACE_PLACEMENT_CLICKHOUSE_PORT=9440 staging_run_stage namespace-placement critical "a workload, owner Secret, shared ConfigMap, or service URL is still aimed at the old combined namespace" namespace_placement_verify
   staging_run_stage diagnostics soft "setup finished but cluster diagnostics/doctor report unmet checks; read the failing check names" staging_check_diagnostics
   staging_run_stage rollouts soft "a platform deployment is not Ready or a pod is stuck in image pull/crash loop; see diagnostics/<ns>-pods-describe.txt" staging_check_rollouts
   staging_run_stage cluster-issuer soft "the ACME ClusterIssuer is not Ready (account registration failed or wrong directory); see diagnostics/clusterissuers.yaml" staging_check_cluster_issuer
