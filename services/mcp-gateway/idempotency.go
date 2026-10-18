@@ -118,7 +118,11 @@ func (s *gatewayServer) idempotentUpstream(ex *Exchange) Result {
 	ex.Idempotency.KeyHash = scoped[:idempotencyKeyHashAuditLen]
 
 	store := s.idemStore()
-	entry, status := store.begin(scoped, reqHash)
+	principal := hashFields("idem-principal-v1", ex.Identity.HumanID, ex.Identity.AgentID, ex.Identity.TeamID)
+	entry, status := store.begin(idemScope{
+		Principal: principal,
+		Session:   hashFields("idem-session-v1", principal, ex.Identity.SessionID),
+	}, scoped, reqHash)
 	scope := s.metricScope(ex.Policy)
 	switch status {
 	case idemReplay:
@@ -185,7 +189,7 @@ func (s *gatewayServer) idempotentUpstream(ex *Exchange) Result {
 	case code < 200 || code >= 300:
 		store.release(entry)
 		ex.Idempotency.Outcome = "released"
-	case capture.stream || capture.overflow:
+	case capture.stream || capture.overflow || capture.encoded:
 		store.tombstone(entry, idemNotReplayable)
 		ex.Idempotency.Outcome = "not_replayable"
 	default:
@@ -203,6 +207,7 @@ type idemCapture struct {
 	max      int
 	status   int
 	stream   bool
+	encoded  bool
 	overflow bool
 	body     bytes.Buffer
 }
@@ -214,6 +219,10 @@ func (c *idemCapture) WriteHeader(code int) {
 		c.status = code
 		ct := strings.ToLower(strings.TrimSpace(strings.SplitN(c.header().Get("Content-Type"), ";", 2)[0]))
 		c.stream = ct == "text/event-stream"
+		// A Content-Encoding body is stored compressed and replay would need
+		// Vary-aware negotiation; deliver it but do not replay it.
+		enc := strings.ToLower(strings.TrimSpace(c.header().Get("Content-Encoding")))
+		c.encoded = enc != "" && enc != "identity"
 	}
 	c.ResponseWriter.WriteHeader(code)
 }

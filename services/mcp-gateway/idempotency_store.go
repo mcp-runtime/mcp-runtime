@@ -45,7 +45,17 @@ const (
 	idemStateNotReplayable
 )
 
+// idemScope identifies who a key belongs to, as opaque hashes. Principal is the
+// verified principal; Session is the principal plus session. Quotas are applied
+// per Session scope and in aggregate per Principal.
+type idemScope struct {
+	Principal string
+	Session   string
+}
+
 type idempotencyEntry struct {
+	scope     idemScope
+	seq       uint64
 	scopedKey string
 	reqHash   string
 	state     idemState
@@ -62,7 +72,7 @@ type idempotencyEntry struct {
 type idempotencyStore interface {
 	// begin atomically reserves scopedKey for reqHash or reports why not. For
 	// idemReplay the returned entry carries the stored reply.
-	begin(scopedKey, reqHash string) (*idempotencyEntry, idemStatus)
+	begin(scope idemScope, scopedKey, reqHash string) (*idempotencyEntry, idemStatus)
 	// complete stores a replayable reply, or a not-replayable tombstone when
 	// the reply exceeds the store's size cap.
 	complete(e *idempotencyEntry, reply idempotentReply)
@@ -78,6 +88,13 @@ type idempotencyLimits struct {
 	MaxEntries  int
 	MaxInflight int
 	MaxReply    int
+
+	// Per-scope quotas next to the global caps. A zero value means no limit.
+	MaxScopeEntries      int
+	MaxScopeInflight     int
+	MaxPrincipalEntries  int
+	MaxPrincipalInflight int
+	MaxScopeTombstones   int
 }
 
 // defaultIdempotencyLimits bounds one gateway sidecar to about 8 MiB of stored
@@ -87,6 +104,12 @@ var defaultIdempotencyLimits = idempotencyLimits{
 	MaxEntries:  256,
 	MaxInflight: 32,
 	MaxReply:    32 << 10,
+
+	MaxScopeEntries:      32,
+	MaxScopeInflight:     4,
+	MaxPrincipalEntries:  64,
+	MaxPrincipalInflight: 8,
+	MaxScopeTombstones:   8,
 }
 
 type memoryIdempotencyStore struct {
@@ -95,6 +118,7 @@ type memoryIdempotencyStore struct {
 	now      func() time.Time
 	entries  map[string]*idempotencyEntry
 	inflight int
+	seq      uint64
 }
 
 func newIdempotencyStore(limits idempotencyLimits, now func() time.Time) *memoryIdempotencyStore {
@@ -108,9 +132,12 @@ func (s *memoryIdempotencyStore) MaxReply() int { return s.limits.MaxReply }
 
 // sweepLocked drops expired entries. The store is small and bounded, so a
 // linear scan per reservation is cheap.
+// sweepLocked drops expired completed entries and tombstones. In-flight
+// entries are never swept: a long-running body must not let a duplicate start
+// the key. They leave only through complete, tombstone or release.
 func (s *memoryIdempotencyStore) sweepLocked(now time.Time) {
 	for k, e := range s.entries {
-		if !now.Before(e.expires) {
+		if e.state != idemStateInFlight && !now.Before(e.expires) {
 			s.dropLocked(k, e)
 		}
 	}
@@ -123,7 +150,26 @@ func (s *memoryIdempotencyStore) dropLocked(k string, e *idempotencyEntry) {
 	delete(s.entries, k)
 }
 
-func (s *memoryIdempotencyStore) begin(scopedKey, reqHash string) (*idempotencyEntry, idemStatus) {
+// evictOldestLocked removes the oldest completed replayable entry accepted by
+// match. In-flight entries and tombstones are never evicted: evicting a
+// tombstone would permit re-execution after an ambiguous outcome.
+func (s *memoryIdempotencyStore) evictOldestLocked(match func(*idempotencyEntry) bool) bool {
+	var oldest *idempotencyEntry
+	for _, e := range s.entries {
+		if e.state == idemStateDone && match(e) && (oldest == nil || e.seq < oldest.seq) {
+			oldest = e
+		}
+	}
+	if oldest == nil {
+		return false
+	}
+	s.dropLocked(oldest.scopedKey, oldest)
+	return true
+}
+
+func atLimit(n, limit int) bool { return limit > 0 && n >= limit }
+
+func (s *memoryIdempotencyStore) begin(scope idemScope, scopedKey, reqHash string) (*idempotencyEntry, idemStatus) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := s.now()
@@ -143,10 +189,46 @@ func (s *memoryIdempotencyStore) begin(scopedKey, reqHash string) (*idempotencyE
 			return nil, idemInFlight
 		}
 	}
-	if len(s.entries) >= s.limits.MaxEntries || s.inflight >= s.limits.MaxInflight {
+	var scopeEntries, scopeInflight, scopeTombs, principalEntries, principalInflight int
+	for _, e := range s.entries {
+		if e.scope.Principal == scope.Principal {
+			principalEntries++
+			if e.state == idemStateInFlight {
+				principalInflight++
+			}
+		}
+		if e.scope.Session == scope.Session {
+			scopeEntries++
+			switch e.state {
+			case idemStateInFlight:
+				scopeInflight++
+			case idemStateUnknown, idemStateNotReplayable:
+				scopeTombs++
+			}
+		}
+	}
+	l := s.limits
+	// A new key could end in a tombstone; if this scope's tombstone budget is
+	// spent, fail closed for this scope only instead of risking re-execution.
+	if atLimit(scopeTombs, l.MaxScopeTombstones) ||
+		atLimit(scopeInflight, l.MaxScopeInflight) ||
+		atLimit(principalInflight, l.MaxPrincipalInflight) ||
+		atLimit(s.inflight, l.MaxInflight) {
 		return nil, idemCapacity
 	}
-	e := &idempotencyEntry{scopedKey: scopedKey, reqHash: reqHash, state: idemStateInFlight, expires: now.Add(s.limits.TTL)}
+	if atLimit(scopeEntries, l.MaxScopeEntries) &&
+		!s.evictOldestLocked(func(e *idempotencyEntry) bool { return e.scope.Session == scope.Session }) {
+		return nil, idemCapacity
+	}
+	if atLimit(principalEntries, l.MaxPrincipalEntries) &&
+		!s.evictOldestLocked(func(e *idempotencyEntry) bool { return e.scope.Principal == scope.Principal }) {
+		return nil, idemCapacity
+	}
+	if atLimit(len(s.entries), l.MaxEntries) &&
+		!s.evictOldestLocked(func(*idempotencyEntry) bool { return true }) {
+		return nil, idemCapacity
+	}
+	e := &idempotencyEntry{scope: scope, scopedKey: scopedKey, reqHash: reqHash, state: idemStateInFlight, expires: now.Add(l.TTL)}
 	s.entries[scopedKey] = e
 	s.inflight++
 	return e, idemStarted
@@ -159,6 +241,8 @@ func (s *memoryIdempotencyStore) finishLocked(e *idempotencyEntry, state idemSta
 	if e.state == idemStateInFlight {
 		s.inflight--
 	}
+	s.seq++
+	e.seq = s.seq
 	e.state = state
 	e.expires = s.now().Add(s.limits.TTL)
 }

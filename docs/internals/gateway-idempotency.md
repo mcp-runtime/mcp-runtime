@@ -51,7 +51,10 @@ header nothing changes: no hashing, no storage, no extra headers.
     outcome is ambiguous. A `failed-unknown` tombstone is stored and a retry
     returns `409 idempotency_outcome_unknown`. The gateway **never re-executes**
     the tool; the client must reconcile through the tool's own state;
-  - the response is a stream (`text/event-stream`) or exceeds the reply cap: it
+  - the response carries a `Content-Encoding` (other than identity), is a stream
+    (`text/event-stream`) or exceeds the reply cap. Content-encoded replies are
+    not stored because replay would need `Accept-Encoding`/`Vary` negotiation,
+    and the simpler safe choice is to deliver once and refuse replay. The reply
     is delivered to the first caller unbuffered, a tombstone is stored, and a
     retry returns `409 idempotency_response_not_replayable`. Streaming
     responses are therefore not deduplicated; they are only protected against
@@ -64,20 +67,44 @@ header nothing changes: no hashing, no storage, no extra headers.
 
 | Limit | Value |
 |---|---|
-| Entry TTL (completed, replayable or tombstone) | 5 minutes |
-| Max entries (live) | 256 |
-| Max in-flight entries | 32 |
+| Entry TTL (completed replies and tombstones; starts at completion) | 5 minutes |
+| Max entries (global) | 256 |
+| Max in-flight entries (global) | 32 |
+| Max entries / in-flight per scope (principal + session) | 32 / 4 |
+| Max entries / in-flight per principal across sessions | 64 / 8 |
+| Max tombstones per scope | 8 |
 | Max stored reply body | 32 KiB |
 
-Reaching the entry or in-flight cap returns `429 idempotency_capacity` for
-keyed requests only; unkeyed traffic is unaffected. Expired entries are swept on
-access.
+Quotas nest: one scope or principal filling its share does not block others.
+When a quota or the global entry cap is reached, the store evicts the oldest
+**completed replayable** entry (within the scope, principal or globally,
+respectively) instead of refusing. It never evicts an in-flight entry or a
+tombstone, because evicting a tombstone would allow re-execution after an
+ambiguous outcome, and evicting an in-flight entry would let a duplicate start.
+If nothing is evictable, or an in-flight cap is reached, or the scope's
+tombstone budget is spent (a new key could end in a tombstone the store could
+not keep), keyed requests of that scope fail closed with
+`429 idempotency_capacity`; unkeyed traffic is unaffected. Eviction of a
+completed entry loses only the replay (a later retry may run the tool again), so
+an attacker can shorten a victim's replay window only by filling the global cap,
+which requires several principals' worth of quota.
+In-flight entries are exempt from TTL expiry; they leave only by completion,
+tombstone or release, so a slowly streaming body cannot let a duplicate start.
+Completed entries and tombstones expire by TTL.
+
+A 2xx reply that carries a JSON-RPC error or an `isError` tool result is stored
+and replayed like any other 2xx. The tool ran and produced a definitive answer;
+re-running it on a retry could repeat a side effect. Clients that want to
+re-run after a tool-level error must use a new key.
 
 ### Observability
 
 Audit events and metrics never carry the raw key or payload. Audit events add
 `idempotency` (outcome enum) and `idempotency_key_hash` (first 16 hex characters
-of the scoped SHA-256). Metric `mcp_gateway_idempotency_total{namespace,server,outcome}`
+of the scoped SHA-256 over key, principal, session and server UID). That hash is
+truncated and unsalted: someone who already holds the audit log could brute-force
+it only for low-entropy keys, which is acceptable here because the log already
+names the principal and session. Use high-entropy keys (for example UUIDs). Metric `mcp_gateway_idempotency_total{namespace,server,outcome}`
 uses a bounded outcome enum: `first`, `replay`, `conflict`, `in_flight`,
 `unknown_outcome`, `not_replayable`, `capacity`, `rejected`.
 

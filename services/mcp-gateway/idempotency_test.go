@@ -66,6 +66,7 @@ func (h *idemHarness) call(t *testing.T, key, body, sid string) *httptest.Respon
 	req := httptest.NewRequest(http.MethodPost, "http://proxy.example.com/mcp", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept-Encoding", "gzip")
 	if key != "" {
 		req.Header.Set("Idempotency-Key", key)
 	}
@@ -335,5 +336,46 @@ func TestIdempotencyNeverRecordsRawKeyOrPayload(t *testing.T) {
 		if s, ok := v.(string); ok && strings.Contains(s, idemRawKey) {
 			t.Fatalf("raw key in audit field %s", k)
 		}
+	}
+}
+
+func TestIdempotencyContentEncodedReplyIsNotReplayable(t *testing.T) {
+	h := newIdemHarness(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Encoding", "gzip")
+		_, _ = w.Write([]byte{0x1f, 0x8b, 0x08, 0x00, 0x00})
+	})
+	first := h.call(t, idemRawKey, toolBody, "session-1")
+	if first.Code != 200 || first.Header().Get("Content-Encoding") != "gzip" {
+		t.Fatalf("first response altered: %d %v", first.Code, first.Header())
+	}
+	wantStatus(t, h.call(t, idemRawKey, toolBody, "session-1"), 409, "idempotency_response_not_replayable")
+	if h.hits.Load() != 1 {
+		t.Fatalf("hits = %d, want 1", h.hits.Load())
+	}
+}
+
+func TestIdempotencyRevokedOrExpiredSessionDeniedBeforeReplay(t *testing.T) {
+	for name, mutate := range map[string]func(*policypkg.Document){
+		"revoked": func(d *policypkg.Document) { d.Sessions[0].Revoked = true },
+		"expired": func(d *policypkg.Document) {
+			d.Sessions[0].ExpiresAt = time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)
+		},
+		"binding_removed": func(d *policypkg.Document) { d.Sessions = d.Sessions[1:] },
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newIdemHarness(t, okJSON)
+			wantStatus(t, h.call(t, idemRawKey, toolBody, "session-1"), 200, "done")
+			doc := idemPolicy(h.issuer.url)
+			mutate(doc)
+			h.s.snapshotPolicy(policySnapshot{Policy: doc, Ready: true, LoadedAt: time.Now()})
+			rec := h.call(t, idemRawKey, toolBody, "session-1")
+			if rec.Code == 200 || rec.Header().Get("Idempotency-Replayed") != "" {
+				t.Fatalf("replay served after session %s: %d %s", name, rec.Code, rec.Body.String())
+			}
+			if h.hits.Load() != 1 {
+				t.Fatalf("hits = %d", h.hits.Load())
+			}
+		})
 	}
 }
