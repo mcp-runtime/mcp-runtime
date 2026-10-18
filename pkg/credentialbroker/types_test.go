@@ -9,6 +9,8 @@ import (
 const testHuman = "11111111-1111-1111-1111-111111111111"
 const testTeam = "22222222-2222-2222-2222-222222222222"
 
+// Cloud reference checks run through validateReference: those providers are
+// disabled (see registry_test.go) but their reference rules are retained.
 func TestProviderReferencesCannotSelectAnotherNamespaceOrEndpoint(t *testing.T) {
 	valid := []Source{
 		{Provider: "kubernetes", Resource: "upstream-token", Key: "token"},
@@ -19,7 +21,7 @@ func TestProviderReferencesCannotSelectAnotherNamespaceOrEndpoint(t *testing.T) 
 	}
 	for _, source := range valid {
 		source.Namespace, source.Name, source.TeamID = "team-one", "upstream", testTeam
-		if err := source.Validate(); err != nil {
+		if err := source.validateReference(); err != nil {
 			t.Fatalf("provider %s: %v", source.Provider, err)
 		}
 	}
@@ -29,7 +31,7 @@ func TestProviderReferencesCannotSelectAnotherNamespaceOrEndpoint(t *testing.T) 
 		{Provider: "gcp", Resource: "https://evil.test/secret"}, {Provider: "vault", Resource: "secret/../private", Key: "token"}, {Provider: "missing", Resource: "secret"},
 	} {
 		source.Namespace, source.Name, source.TeamID = "team-one", "upstream", testTeam
-		if source.Validate() == nil {
+		if source.validateReference() == nil {
 			t.Fatalf("accepted unsafe %s reference", source.Provider)
 		}
 	}
@@ -44,7 +46,7 @@ func TestProviderVersionCannotTraverseOrNest(t *testing.T) {
 	for provider, resource := range resources {
 		for version, ok := range map[string]bool{"latest": true, "3": true, "AWSCURRENT": true, "a_b-C9": true, "..": false, ".": false, "a/b": false, "": true, "a.b": false, "v:x": false} {
 			source := Source{Provider: provider, Resource: resource, Version: version, Namespace: "team-one", Name: "upstream", TeamID: testTeam}
-			if got := source.Validate() == nil; got != ok {
+			if got := source.validateReference() == nil; got != ok {
 				t.Errorf("%s version %q: accepted=%v want %v", provider, version, got, ok)
 			}
 		}

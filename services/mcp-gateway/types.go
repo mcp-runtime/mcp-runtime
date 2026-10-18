@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -51,6 +52,10 @@ type rpcInspection struct {
 	// (or no content-type) and is therefore a genuine MCP client attempt that
 	// should be audited even when Method could not be extracted.
 	IsRPCAttempt bool
+	// ParamsRaw and IDRaw are the request params and JSON-RPC id, retained only
+	// to derive an opt-in idempotency request hash.
+	ParamsRaw json.RawMessage
+	IDRaw     json.RawMessage
 }
 
 type oauthProvider struct {
@@ -109,6 +114,8 @@ type gatewayServer struct {
 	sessionSync            *gatewaySessionSync
 	credentialBroker       *credentialBroker
 	upstreamURL            *url.URL
+	idem                   idempotencyStore
+	idemOnce               sync.Once
 }
 
 type statusRecorder struct {

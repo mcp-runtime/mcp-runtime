@@ -11,7 +11,8 @@ set -euo pipefail
 # Set E2E_SCENARIOS to a comma-separated subset for local debugging.
 # Supported values: all, smoke-auth, governance, trust, oauth, observability,
 # multitenancy, api-platform, ui-auth, adapter-proxy, adapter-certificates,
-# cli-platform, platform-update.
+# cli-platform, platform-update, credential-broker (needs E2E_CREDENTIAL_BROKER_URL;
+# skips loudly without it).
 # observability requires the full traffic suite: smoke-auth, governance, trust, oauth.
 #
 # Set E2E_DEEP_REQUEST_FLOWS=1 for pre-release runs that should exercise
@@ -433,11 +434,11 @@ validate_scenarios() {
   local scenario
   for scenario in "${E2E_SCENARIO_LIST[@]}"; do
     case "${scenario}" in
-      all|smoke-auth|governance|trust|oauth|observability|multitenancy|api-platform|ui-auth|adapter-proxy|adapter-certificates|cli-platform|platform-update)
+      all|smoke-auth|governance|trust|oauth|observability|multitenancy|api-platform|ui-auth|adapter-proxy|adapter-certificates|cli-platform|platform-update|credential-broker)
          ;;
       *)
          echo "unsupported E2E scenario: ${scenario}" >&2
-         echo "supported values: all, smoke-auth, governance, trust, oauth, observability, multitenancy, api-platform, ui-auth, adapter-proxy, adapter-certificates, cli-platform, platform-update" >&2
+         echo "supported values: all, smoke-auth, governance, trust, oauth, observability, multitenancy, api-platform, ui-auth, adapter-proxy, adapter-certificates, cli-platform, platform-update, credential-broker" >&2
         exit 1
         ;;
     esac
@@ -7106,6 +7107,12 @@ fi
 
 if scenario_selected "platform-update"; then
   run_e2e_platform_update_scenario
+fi
+
+if scenario_selected "credential-broker"; then
+  source "${PROJECT_ROOT}/test/e2e/scenarios/cross-team.sh"
+  source "${PROJECT_ROOT}/test/e2e/scenarios/credential-broker.sh"
+  run_e2e_credential_broker_scenario
 fi
 
 echo "[cli] checking platform restart command"

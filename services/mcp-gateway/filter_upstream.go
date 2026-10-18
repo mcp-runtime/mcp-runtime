@@ -15,6 +15,14 @@ import (
 // (all set by earlier stages) and must not mutate them. It always returns Respond
 // so the pipeline halts and stage 6 (audit) runs from the orchestrator.
 func (s *gatewayServer) upstreamFilter(ex *Exchange) Result {
+	if len(ex.R.Header.Values(idempotencyKeyHeader)) > 0 {
+		return s.idempotentUpstream(ex)
+	}
+	return s.forwardUpstream(ex)
+}
+
+// forwardUpstream prepares and proxies the request to the upstream MCP server.
+func (s *gatewayServer) forwardUpstream(ex *Exchange) Result {
 	if !s.injectCredentials(ex) {
 		ex.Decision = policypkg.Deny(http.StatusServiceUnavailable, "credential_unavailable", ex.Decision.PolicyVersion)
 		http.Error(ex.W, "credential unavailable", http.StatusServiceUnavailable)
