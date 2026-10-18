@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"reflect"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -128,10 +129,23 @@ func TestTestModeDefaultsWorkloadIssuer(t *testing.T) {
 	}
 }
 
+func TestBuildSetupStepsProductionAnalyticsRunsTLSBeforeRegistry(t *testing.T) {
+	steps := buildSetupSteps(&SetupContext{Plan: setupplan.Plan{DeployAnalytics: true}})
+	got := make([]string, len(steps))
+	for i, s := range steps {
+		got[i] = s.Name()
+	}
+	want := []string{"preflight", "cluster", "catalog-namespace", "tls", "registry", "operator-image", "analytics-images", "operator-deploy", "analytics-deploy", "verify"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("steps = %v, want %v", got, want)
+	}
+}
+
 func TestBuildSetupStepsOrderWithAnalytics(t *testing.T) {
 	ctx := &SetupContext{
 		Plan: setupplan.Plan{
 			DeployAnalytics: true,
+			TestMode:        true,
 		},
 	}
 	steps := buildSetupSteps(ctx)

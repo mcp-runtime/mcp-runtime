@@ -489,22 +489,36 @@ func deployAnalyticsManifestsWithKubectl(kubectl core.KubectlRunner, logger *zap
 }
 
 // ensureRuntimeKubernetesAPIEgressClientGo adds the discovered Kubernetes API
-// destination to the runtime API NetworkPolicy. Service IPs are inside the
-// cluster CIDR, so a broad public 0.0.0.0/0 rule does not reliably cover them
-// on k3s/Cilium and similar CNIs. Discovering the Service and client endpoint
-// keeps setup portable across distributions and API ports.
+// destination to the NetworkPolicies of the platform workloads that use
+// in-cluster Kubernetes credentials: the runtime API and the platform API
+// (gateway session-sync TokenReview and live workload reads). Service IPs are
+// inside the cluster CIDR, so a broad public 0.0.0.0/0 rule does not reliably
+// cover them on k3s/Cilium and similar CNIs. Discovering the Service and client
+// endpoint keeps setup portable across distributions and API ports.
 func ensureRuntimeKubernetesAPIEgressClientGo() error {
+	for _, target := range []struct{ component, policy string }{
+		{"runtime-api", "mcp-runtime-api-platform-egress"},
+		{"platform-api", "mcp-platform-api-egress"},
+	} {
+		if err := ensureKubernetesAPIEgressPolicyClientGo(target.component, target.policy); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ensureKubernetesAPIEgressPolicyClientGo(component, policyName string) error {
 	clients, err := platformKubernetesClients()
 	if err != nil {
 		return err
 	}
 	ctx := context.Background()
-	policy, err := clients.Clientset.NetworkingV1().NetworkPolicies(core.ComponentNamespace("runtime-api")).Get(ctx, "mcp-runtime-api-platform-egress", metav1.GetOptions{})
+	policy, err := clients.Clientset.NetworkingV1().NetworkPolicies(core.ComponentNamespace(component)).Get(ctx, policyName, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("read runtime API NetworkPolicy: %w", err)
+		return fmt.Errorf("read %s NetworkPolicy: %w", component, err)
 	}
 
 	addCIDR := func(cidr string, port int32) {
@@ -573,8 +587,8 @@ func ensureRuntimeKubernetesAPIEgressClientGo() error {
 			}
 		}
 	}
-	if _, err := clients.Clientset.NetworkingV1().NetworkPolicies(core.ComponentNamespace("runtime-api")).Update(ctx, policy, metav1.UpdateOptions{}); err != nil {
-		return fmt.Errorf("update runtime API Kubernetes API egress: %w", err)
+	if _, err := clients.Clientset.NetworkingV1().NetworkPolicies(core.ComponentNamespace(component)).Update(ctx, policy, metav1.UpdateOptions{}); err != nil {
+		return fmt.Errorf("update %s Kubernetes API egress: %w", component, err)
 	}
 	return nil
 }
@@ -1008,6 +1022,12 @@ func renderAnalyticsManifest(content string, images AnalyticsImageSet, imagePull
 	for oldValue, newValue := range replacements {
 		rendered = strings.ReplaceAll(rendered, oldValue, newValue)
 	}
+	if core.DefaultCLIConfig.InternalAnalyticsTLS {
+		rendered, err = renderAnalyticsTransportManifest(rendered)
+		if err != nil {
+			return "", err
+		}
+	}
 	if strings.Contains(rendered, "GF_AUTH_PROXY_ENABLED") || strings.Contains(rendered, "name: mcp-platform-gateway-observability") {
 		supported, _ := scopedGrafanaPolicyCapability()
 		if supported && strings.Contains(rendered, "GF_AUTH_PROXY_ENABLED") {
@@ -1235,6 +1255,9 @@ func renderAnalyticsConfigManifestWithReaders(content, platformMode string, imag
 		}
 		out.Write(rendered)
 	}
+	if core.DefaultCLIConfig.InternalAnalyticsTLS {
+		return renderAnalyticsTransportManifest(out.String())
+	}
 	return out.String(), nil
 }
 
@@ -1348,6 +1371,7 @@ func ownedCredential(key string) (namespace, name string, err error) {
 }
 
 func renderAnalyticsSecretManifestWithReader(readSecret analyticsSecretValueReader) (string, error) {
+	readSecret = guardPlaceholderCredentials(readSecret)
 	if err := validatePlatformAdminEnvironment(); err != nil {
 		return "", err
 	}
