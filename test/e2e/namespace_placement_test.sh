@@ -79,7 +79,7 @@ install_fake_kubectl() {
         *API_UPSTREAM*) printf '%s' 'http://mcp-platform-api.mcp-platform.svc.cluster.local:8080' ;;
         *RUNTIME_CONTROL_URL*) printf '%s' 'http://mcp-runtime-api.mcp-platform.svc.cluster.local:8084' ;;
         *PLATFORM_API_URL*) printf '%s' 'http://mcp-platform-api.mcp-platform.svc.cluster.local:8080' ;;
-        *CLICKHOUSE_ADDR*) printf '%s' 'clickhouse.mcp-observability.svc.cluster.local:9000' ;;
+        *CLICKHOUSE_ADDR*) printf '%s' "clickhouse.mcp-observability.svc.cluster.local:${FAKE_CLICKHOUSE_PORT:-9000}" ;;
         *) printf '%s' 'wrong' ;;
       esac
       return 0
@@ -104,6 +104,11 @@ run_mode() {
 TMP="$(mktemp -d)"
 trap 'rm -rf "${TMP}"' EXIT
 run_mode "clean install placement" clean yes
+# Strict (non-test) installs encrypt analytics traffic, so runtime-api must dial
+# ClickHouse's TLS port. Test-mode installs keep the plaintext port.
+FAKE_CLICKHOUSE_PORT=9440 NAMESPACE_PLACEMENT_CLICKHOUSE_PORT=9440 run_mode "strict install accepts the ClickHouse TLS port" clean yes
+FAKE_CLICKHOUSE_PORT=9000 NAMESPACE_PLACEMENT_CLICKHOUSE_PORT=9440 run_mode "strict install refuses a pinned plaintext ClickHouse port" clean no
+FAKE_CLICKHOUSE_PORT=9440 run_mode "test-mode install refuses the TLS port" clean no
 run_mode "refuses a second platform certificate" tls-in-observability no
 run_mode "refuses a missing observability workload" missing-ingest no
 run_mode "accepts k3s Traefik watching every namespace" k3s-traefik yes
