@@ -140,7 +140,15 @@ def functional():
     mcp = mcp_opener()
     deadline = time.monotonic() + 90
     while True:
-        status, response_headers, _ = request(mcp, endpoint, "POST", {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": protocol, "capabilities": {}, "clientInfo": {"name": "scoped-history-qa", "version": "1"}}}, mcp_headers)
+        try:
+            status, response_headers, _ = request(mcp, endpoint, "POST", {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": protocol, "capabilities": {}, "clientInfo": {"name": "scoped-history-qa", "version": "1"}}}, mcp_headers)
+        except urllib.error.URLError as error:
+            reason = getattr(error, "reason", error)
+            if time.monotonic() >= deadline or not isinstance(reason, CONNECTION_ERRORS):
+                raise
+            print("[retry] POST MCP initialize dropped (%s)" % type(reason).__name__, file=sys.stderr, flush=True)
+            time.sleep(2)
+            continue
         if status == 200 or time.monotonic() >= deadline:
             break
         time.sleep(2)
