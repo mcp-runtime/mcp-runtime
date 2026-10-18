@@ -263,11 +263,24 @@ func (s *gatewayServer) emitAuditFromExchange(ex *Exchange) {
 	} else if rpcMethod == "" && !ex.Inspection.IsRPCAttempt {
 		return
 	}
-	s.emitAuditEvent(
-		ex.R, ex.OriginalPath, rpcMethod, ex.Inspection.ToolName,
+	s.emitAuditPayload(ex.R, s.auditPayloadForExchange(ex, ex.R))
+}
+
+// auditPayloadForExchange builds the audit payload and adds the opt-in
+// idempotency fields: an outcome enum and a truncated hash, never the raw key.
+func (s *gatewayServer) auditPayloadForExchange(ex *Exchange, r *http.Request) map[string]any {
+	payload := s.auditPayload(
+		r, ex.OriginalPath, ex.Inspection.Method, ex.Inspection.ToolName,
 		ex.Identity, ex.Policy, ex.Decision,
 		ex.W.status, time.Since(ex.StartTime).Milliseconds(), ex.W.bytes,
 	)
+	if ex.Idempotency.Outcome != "" {
+		payload["idempotency"] = ex.Idempotency.Outcome
+	}
+	if ex.Idempotency.KeyHash != "" {
+		payload["idempotency_key_hash"] = ex.Idempotency.KeyHash
+	}
+	return payload
 }
 
 // writeDeniedResponse writes the HTTP denial response for the current exchange.
@@ -297,22 +310,8 @@ func gatewayDeniedPayload(_ *policypkg.Document, decision policypkg.Decision) ma
 	return map[string]any{"error": decision.Reason}
 }
 
-func (s *gatewayServer) emitAuditEvent(
-	r *http.Request,
-	path, rpcMethod, toolName string,
-	authCtx identityContext,
-	policy *policypkg.Document,
-	decision policypkg.Decision,
-	status int,
-	latencyMs int64,
-	bytesOut int,
-) {
-	envelope, err := events.NewEnvelope(
-		s.source,
-		s.eventType,
-		s.auditPayload(r, path, rpcMethod, toolName, authCtx, policy, decision, status, latencyMs, bytesOut),
-		time.Now().UTC(),
-	)
+func (s *gatewayServer) emitAuditPayload(r *http.Request, payload map[string]any) {
+	envelope, err := events.NewEnvelope(s.source, s.eventType, payload, time.Now().UTC())
 	if err != nil {
 		return
 	}

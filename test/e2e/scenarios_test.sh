@@ -342,3 +342,21 @@ bash "${SCRIPT_DIR}/adapter_certificates_test.sh"
 
 selector_expect "session-revocation-probe" "smoke-auth,adapter-certificates" "test/e2e/session_revocation.py"
 selector_expect "session-revocation-tests" "smoke-auth,adapter-certificates" "test/e2e/session_revocation_test.py"
+
+# `team user create` rejects --password so a password never lands on a command
+# line. Harness scripts must pipe it with --password-stdin; a stale call only
+# fails when its scenario runs on a live cluster.
+python3 - "${PROJECT_ROOT}" <<'PY'
+import pathlib, re, sys
+root = pathlib.Path(sys.argv[1])
+stale = []
+for base in ("test/e2e", "hack/qa"):
+    for script in sorted((root / base).rglob("*.sh")):
+        if script.name == "scenarios_test.sh":
+            continue
+        for number, line in enumerate(script.read_text().splitlines(), 1):
+            if "team user create" in line and re.search(r"--password(?!-stdin)\b", line):
+                stale.append(f"{script.relative_to(root)}:{number}")
+assert not stale, "team user create must use --password-stdin: " + ", ".join(stale)
+print("[pass] harness scripts pass team user passwords on stdin")
+PY
