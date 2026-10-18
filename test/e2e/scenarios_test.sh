@@ -8,6 +8,7 @@ python3 "${SCRIPT_DIR}/image_architecture_test.py"
 python3 "${SCRIPT_DIR}/resource_usage_test.py"
 python3 "${SCRIPT_DIR}/grafana_capture_test.py"
 python3 "${SCRIPT_DIR}/scoped_observability_test.py"
+bash "${SCRIPT_DIR}/scoped_observability_port_test.sh"
 python3 "${SCRIPT_DIR}/session_revocation_test.py"
 (cd "${SCRIPT_DIR}" && python3 credential_broker_assertions_test.py)
 bash "${SCRIPT_DIR}/namespace_placement_test.sh"
