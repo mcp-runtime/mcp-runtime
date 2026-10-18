@@ -91,6 +91,7 @@ def request(client, url, method="GET", body=None, headers=None, retry_connection
                 raise
             print(f"[retry] {method} {urllib.parse.urlsplit(url).path} dropped ({type(error).__name__}), attempt {attempt}/{attempts}", file=sys.stderr, flush=True)
             time.sleep(CONNECTION_BACKOFF_SECONDS)
+    raise RuntimeError("request retry attempts exhausted")
 
 
 def session(base, email=None, key=None):
