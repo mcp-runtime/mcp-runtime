@@ -27,9 +27,12 @@ var (
 	ErrDenied      = errors.New("credential access denied")
 	ErrUnavailable = errors.New("credential provider unavailable")
 	ErrConflict    = errors.New("credential revision conflict")
-	ErrNotFound    = errors.New("credential metadata not found")
-	nameRE         = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
-	fieldRE        = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,128}$`)
+	// ErrTokenRejected marks a definite workload-token rejection (not a transient
+	// TokenReview/API failure).
+	ErrTokenRejected = errors.New("workload token rejected")
+	ErrNotFound      = errors.New("credential metadata not found")
+	nameRE           = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+	fieldRE          = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,128}$`)
 	// versionRE excludes dots so a version can never be "." or ".." when
 	// providers embed it in a URL path (for example /versions/<v>:access).
 	versionRE = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)

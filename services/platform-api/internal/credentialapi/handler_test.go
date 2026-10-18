@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -129,7 +130,7 @@ func newFixture(t *testing.T, mutate func(*mcpv1.MCPServer, *mcpv1.MCPAccessGran
 		Store: store, Kube: kube,
 		Authenticate: func(_ context.Context, token string) (sessionstate.Server, error) {
 			if token != "pod-token" {
-				return sessionstate.Server{}, errors.New("bad token")
+				return sessionstate.Server{}, fmt.Errorf("%w: bad token", cb.ErrTokenRejected)
 			}
 			return sessionstate.Server{Namespace: "ns", Name: "srv", UID: "uid-1"}, nil
 		},
@@ -352,7 +353,7 @@ func countingAuth(f *fixture, reviews *int) {
 	f.handler.Authenticate = func(_ context.Context, token string) (sessionstate.Server, error) {
 		*reviews++
 		if token != "pod-token" {
-			return sessionstate.Server{}, errors.New("bad token")
+			return sessionstate.Server{}, fmt.Errorf("%w: bad token", cb.ErrTokenRejected)
 		}
 		return sessionstate.Server{Namespace: "ns", Name: "srv", UID: "uid-1"}, nil
 	}
@@ -475,5 +476,96 @@ func TestNegativeCacheAndLimitersAreBounded(t *testing.T) {
 	}
 	if len(l.failures) > failureMaxItems || len(l.source.items) > limiterMaxKeys || len(l.authBad)+len(l.authOK) > authCacheMax {
 		t.Fatalf("unbounded: %d failures %d sources", len(l.failures), len(l.source.items))
+	}
+}
+
+func TestTransientTokenReviewErrorIsNotCachedAndFailsOnlyThatRequest(t *testing.T) {
+	f := newFixture(t, nil)
+	calls := 0
+	f.handler.Authenticate = func(context.Context, string) (sessionstate.Server, error) {
+		calls++
+		if calls == 1 {
+			return sessionstate.Server{}, errors.New("apiserver timeout")
+		}
+		return sessionstate.Server{Namespace: "ns", Name: "srv", UID: "uid-1"}, nil
+	}
+	if w := resolve(f.handler, nil); w.Code != http.StatusServiceUnavailable || strings.Contains(w.Body.String(), secret) {
+		t.Fatalf("transient failure must fail closed with 503, got %d", w.Code)
+	}
+	if w := resolve(f.handler, nil); w.Code != http.StatusOK {
+		t.Fatalf("a valid caller must succeed right after an API blip, got %d", w.Code)
+	}
+}
+
+func TestDefiniteRejectionIsCached(t *testing.T) {
+	f := newFixture(t, nil)
+	reviews := 0
+	countingAuth(&f, &reviews)
+	for i := 0; i < 5; i++ {
+		if w := resolve(f.handler, withToken("junk")); w.Code != http.StatusForbidden {
+			t.Fatalf("got %d", w.Code)
+		}
+	}
+	if reviews != 1 {
+		t.Fatalf("definite rejection must be cached, reviews=%d", reviews)
+	}
+}
+
+func exhaustColdBudget(f fixture, reviews *int) {
+	for i := 0; i < int(reviewBurst)*3; i++ {
+		resolve(f.handler, func(r *http.Request) {
+			r.Header.Set("Authorization", "Bearer cold-"+strconv.Itoa(i))
+			r.RemoteAddr = "198.51.100." + strconv.Itoa(i%250+1) + ":1"
+		})
+	}
+}
+
+func TestExpiredRecentlyValidTokenRenewsWhileColdBudgetIsExhausted(t *testing.T) {
+	f := newFixture(t, nil)
+	reviews := 0
+	countingAuth(&f, &reviews)
+	now := time.Unix(1000, 0)
+	f.handler.Limits.Now = func() time.Time { return now }
+	f.handler.Limits.server.burst, f.handler.Limits.server.rate = 100000, 100000
+	if w := resolve(f.handler, nil); w.Code != http.StatusOK {
+		t.Fatalf("initial: %d", w.Code)
+	}
+	exhaustColdBudget(f, &reviews)
+	if w := resolve(f.handler, withToken("cold-new")); w.Code != http.StatusTooManyRequests {
+		t.Fatalf("unknown token must still be throttled, got %d", w.Code)
+	}
+	now = now.Add(authCacheTTL + 5*time.Second) // expired, inside the renewal window
+	exhaustColdBudget(f, &reviews)
+	if w := resolve(f.handler, nil); w.Code != http.StatusOK {
+		t.Fatalf("recently valid token must renew despite exhausted cold budget, got %d", w.Code)
+	}
+	// A different token cannot ride on that renewal.
+	if w := resolve(f.handler, withToken("pod-token-2")); w.Code != http.StatusTooManyRequests {
+		t.Fatalf("other token renewed through another's entry: %d", w.Code)
+	}
+	// Past the renewal window the token is cold again.
+	now = now.Add(authRenewWindow + time.Second)
+	exhaustColdBudget(f, &reviews)
+	if w := resolve(f.handler, nil); w.Code != http.StatusTooManyRequests {
+		t.Fatalf("token past the renewal window is cold, got %d", w.Code)
+	}
+}
+
+func TestRenewalIsRateLimitedPerToken(t *testing.T) {
+	f := newFixture(t, nil)
+	reviews := 0
+	countingAuth(&f, &reviews)
+	now := time.Unix(1000, 0)
+	f.handler.Limits.Now = func() time.Time { return now }
+	resolve(f.handler, nil)
+	reviews = 0
+	for i := 0; i < 50; i++ {
+		e := f.handler.Limits.authOK[tokenHash("pod-token")]
+		e.until = now.Add(-time.Millisecond)
+		f.handler.Limits.authOK[tokenHash("pod-token")] = e
+		resolve(f.handler, nil)
+	}
+	if reviews > int(renewBurst)+1 {
+		t.Fatalf("renewal reviews unbounded: %d", reviews)
 	}
 }

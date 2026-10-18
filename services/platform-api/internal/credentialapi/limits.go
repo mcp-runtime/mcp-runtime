@@ -29,6 +29,9 @@ const (
 	authCacheTTL    = 10 * time.Second // verified Pod token identity
 	authBadTTL      = 5 * time.Second  // rejected token
 	authCacheMax    = 4096
+	authRenewWindow = 60 * time.Second // expired-but-recently-valid tokens may renew
+	renewRate       = 1.0              // per-token renewal reviews per second
+	renewBurst      = 3.0
 )
 
 type bucket struct {
@@ -94,6 +97,7 @@ type Limits struct {
 	authOK   map[string]authEntry
 	authBad  map[string]time.Time
 	review   *tokenBuckets // global TokenReview budget for cold tokens
+	renew    *tokenBuckets // per-token renewal budget, separate from review
 }
 
 type authEntry struct {
@@ -109,6 +113,7 @@ func NewLimits() *Limits {
 		failures: map[string]time.Time{},
 		authOK:   map[string]authEntry{},
 		authBad:  map[string]time.Time{},
+		renew:    &tokenBuckets{rate: renewRate, burst: renewBurst, maxKeys: authCacheMax, items: map[string]*bucket{}},
 		review:   &tokenBuckets{rate: reviewRate, burst: reviewBurst, maxKeys: 1, items: map[string]*bucket{}},
 	}
 }
@@ -139,24 +144,47 @@ func tokenHash(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// CachedAuth returns a recent TokenReview verdict for a token hash.
-func (l *Limits) CachedAuth(key string) (server sessionstate.Server, valid, known bool) {
+type authState int
+
+const (
+	authUnknown   authState = iota
+	authValid               // fresh verified identity
+	authRejected            // recent definite rejection
+	authRenewable           // expired within authRenewWindow of a valid verdict
+)
+
+// CachedAuth returns the cached verdict state for a token hash.
+func (l *Limits) CachedAuth(key string) (sessionstate.Server, authState) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := l.Now()
-	if e, ok := l.authOK[key]; ok {
-		if now.Before(e.until) {
-			return e.server, true, true
-		}
-		delete(l.authOK, key)
-	}
 	if until, ok := l.authBad[key]; ok {
 		if now.Before(until) {
-			return sessionstate.Server{}, false, true
+			return sessionstate.Server{}, authRejected
 		}
 		delete(l.authBad, key)
 	}
-	return sessionstate.Server{}, false, false
+	if e, ok := l.authOK[key]; ok {
+		if now.Before(e.until) {
+			return e.server, authValid
+		}
+		if now.Before(e.until.Add(authRenewWindow - authCacheTTL)) {
+			return e.server, authRenewable
+		}
+		delete(l.authOK, key)
+	}
+	return sessionstate.Server{}, authUnknown
+}
+
+// AllowRenewal charges only the token's own renewal budget, never the cold-token
+// or per-source budgets.
+func (l *Limits) AllowRenewal(key string) bool { return l.renew.allow(key, l.Now()) }
+
+// ForgetAuth drops a token's valid verdict after a definite rejection.
+func (l *Limits) ForgetAuth(key string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.authOK, key)
 }
 
 func (l *Limits) RecordAuth(key string, server sessionstate.Server, valid bool) {
@@ -165,7 +193,7 @@ func (l *Limits) RecordAuth(key string, server sessionstate.Server, valid bool) 
 	now := l.Now()
 	if len(l.authOK)+len(l.authBad) >= authCacheMax {
 		for k, e := range l.authOK {
-			if !now.Before(e.until) {
+			if !now.Before(e.until.Add(authRenewWindow - authCacheTTL)) {
 				delete(l.authOK, k)
 			}
 		}

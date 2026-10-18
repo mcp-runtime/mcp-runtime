@@ -239,17 +239,21 @@ the credentials bound to that server's already-authorized tools, nothing wider.
 - `POST /api/v1/credential-resolutions` is on the public ingress because the
   gateway reaches it over HTTPS. A valid Pod-bound token for the dedicated
   audience is always required. The verdict for each exact token is cached by
-  SHA-256 hash (never the token): 10 seconds when valid, 5 seconds when
-  rejected, bounded to 4096 entries. Cached tokens skip TokenReview and every
-  pre-authentication limiter, so unauthenticated traffic that shares the
-  ingress or proxy address cannot deny a valid caller. Only cold (unseen)
-  tokens consume a per-source budget (10/s, burst 20 by `MCP_TRUSTED_PROXY_CIDRS`
-  client address when configured) and a global TokenReview budget (50/s, burst
-  100); excess cold tokens receive `429` with `Retry-After: 1`. Residual: a
-  gateway presenting a brand-new token during a flood of cold invalid tokens may
-  see `429` and should retry; a revoked Pod token can be honored for up to 10
-  seconds, while session, grant, server and binding state is still re-checked on
-  every call.
+  SHA-256 hash (never the token), bounded to 4096 entries. A valid verdict is
+  honored for 10 seconds, so a deleted or terminating Pod's token can still
+  resolve for up to 10 seconds; session, grant, server and binding state is
+  re-checked on every call. Only definite rejections (not authenticated,
+  audience mismatch, not Pod-bound, ownership-chain mismatch) are cached, for 5
+  seconds; a TokenReview or API-server error fails that request with `503` and
+  is never cached. Cached tokens skip every pre-authentication limiter, so
+  unauthenticated traffic sharing the ingress or proxy address cannot deny a
+  valid caller. A token that was valid within the last 60 seconds renews through
+  its own per-token budget (1/s, burst 3), separate from cold traffic. Only
+  unknown tokens consume the per-source budget (10/s, burst 20; set
+  `MCP_TRUSTED_PROXY_CIDRS` so the client, not the proxy, is the key) and the
+  global TokenReview budget (50/s, burst 100); excess receives `429` with
+  `Retry-After: 1`. Residual: a gateway presenting a brand-new token during a
+  flood of unknown tokens may see `429` and should retry.
 - After authentication each server is limited to 20/s (burst 40) and returns
   `429` beyond that.
 - A failed provider read is remembered for 5 seconds per server and source

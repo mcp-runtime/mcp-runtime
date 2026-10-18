@@ -193,21 +193,42 @@ func (h Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 	// traffic sharing a source or proxy address cannot deny a valid caller.
 	token := strings.TrimPrefix(credential, "Bearer ")
 	key := tokenHash(token)
-	server, valid, known := limits.CachedAuth(key)
-	if !known {
-		// Only cold tokens consume the per-source and global TokenReview budgets.
-		if !limits.AllowColdReview(platformauth.RequestIP(r)) {
+	server, state := limits.CachedAuth(key)
+	switch state {
+	case authValid:
+	case authRejected:
+		respondError(w, cb.ErrDenied)
+		return
+	default:
+		// Cold tokens consume the per-source and global budgets. A token that was
+		// valid within authRenewWindow renews through its own per-token budget, so
+		// unknown-token traffic cannot starve renewal of a known caller.
+		allowed := false
+		if state == authRenewable {
+			allowed = limits.AllowRenewal(key)
+		} else {
+			allowed = limits.AllowColdReview(platformauth.RequestIP(r))
+		}
+		if !allowed {
 			respondError(w, errRateLimited)
 			return
 		}
 		var err error
 		server, err = h.Authenticate(ctx, token)
-		valid = err == nil
-		limits.RecordAuth(key, server, valid)
-	}
-	if !valid {
-		respondError(w, cb.ErrDenied)
-		return
+		switch {
+		case err == nil:
+			limits.RecordAuth(key, server, true)
+		case errors.Is(err, cb.ErrTokenRejected):
+			// Only definite rejections are cached.
+			limits.ForgetAuth(key)
+			limits.RecordAuth(key, sessionstate.Server{}, false)
+			respondError(w, cb.ErrDenied)
+			return
+		default:
+			// Transient TokenReview/API failure: fail closed for this request only.
+			respondError(w, cb.ErrUnavailable)
+			return
+		}
 	}
 	if !limits.AllowServer(server.UID) {
 		respondError(w, errRateLimited)
