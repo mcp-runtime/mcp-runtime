@@ -116,6 +116,19 @@ func (s Source) Validate() error {
 	if strings.ContainsAny(s.Resource+s.Key+s.Version, "\r\n\x00") || len(s.Resource) > 1024 || len(s.Version) > 128 {
 		return errors.New("invalid provider reference")
 	}
+	if knownUnsupportedProvider(s.Provider) {
+		return ErrProviderNotSupported
+	}
+	if !ProviderSupported(s.Provider) {
+		return errors.New("unsupported credential provider")
+	}
+	return s.validateReference()
+}
+
+// validateReference checks a provider-specific reference. The non-Kubernetes
+// cases are retained for when those providers are enabled through
+// ProviderSupported; Validate does not reach them today.
+func (s Source) validateReference() error {
 	switch s.Provider {
 	case "kubernetes":
 		if !NameValid(s.Resource) || !fieldRE.MatchString(s.Key) || s.Version != "" {

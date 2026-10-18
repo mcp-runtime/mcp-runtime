@@ -125,6 +125,11 @@ func configureCommand() *cobra.Command {
 	var origin, kubeconfig, kubeContext, vaultURL, vaultRole, gcpAccount, awsRole, azureClient string
 	var yes bool
 	cmd := &cobra.Command{Use: "configure", Short: "Configure the operator's verified HTTPS broker origin", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+		// Only the Kubernetes Secret provider is supported. The cloud workload
+		// identity helpers below are retained, unreachable, for later enablement.
+		if gcpAccount != "" || awsRole != "" || azureClient != "" || vaultURL != "" || vaultRole != "" {
+			return cb.ErrProviderNotSupported
+		}
 		if gcpAccount != "" && !regexp.MustCompile(`^[a-z0-9-]+@[a-z0-9-]+\.iam\.gserviceaccount\.com$`).MatchString(gcpAccount) {
 			return errors.New("invalid GCP workload service-account email")
 		}
@@ -179,6 +184,9 @@ func configureCommand() *cobra.Command {
 	cmd.Flags().StringVar(&gcpAccount, "gcp-service-account", "", "GKE workload identity service-account email (cloud IAM federation must already be configured)")
 	cmd.Flags().StringVar(&awsRole, "aws-role-arn", "", "EKS workload identity role ARN (cloud IAM federation must already be configured)")
 	cmd.Flags().StringVar(&azureClient, "azure-client-id", "", "Azure workload identity client UUID (cloud federation must already be configured)")
+	for _, name := range []string{"vault-url", "vault-role", "gcp-service-account", "aws-role-arn", "azure-client-id"} {
+		_ = cmd.Flags().MarkHidden(name) // cloud providers are planned, not supported
+	}
 	cmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "Explicit kubeconfig path")
 	cmd.Flags().StringVar(&kubeContext, "context", "", "Explicit Kubernetes context")
 	cmd.Flags().BoolVar(&yes, "yes", false, "Confirm the operator configuration change")
