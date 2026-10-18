@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"log"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/segmentio/kafka-go"
 )
 
 const (
@@ -84,6 +86,7 @@ type kafkaReadiness struct {
 	brokers      []string
 	interval     time.Duration
 	timeout      time.Duration
+	tlsConfig    *tls.Config
 	maxStaleness time.Duration
 	lookupHost   func(ctx context.Context, host string) ([]string, error)
 	dial         func(ctx context.Context, network, address string) (net.Conn, error)
@@ -221,6 +224,35 @@ func (k *kafkaReadiness) probe(ctx context.Context) (string, error) {
 		for _, addr := range addrs {
 			connectStart := k.now()
 			conn, err := k.dial(ctx, "tcp", net.JoinHostPort(addr, port))
+			if err == nil && k.tlsConfig != nil {
+				config := k.tlsConfig.Clone()
+				config.ServerName = host
+				encrypted := tls.Client(conn, config)
+				if handshakeErr := encrypted.HandshakeContext(ctx); handshakeErr != nil {
+					_ = conn.Close()
+					err = fmt.Errorf("Kafka TLS handshake failed: %w", handshakeErr)
+				} else {
+					conn = encrypted
+					// TLS 1.3 can finish the client handshake before the server's
+					// client-certificate rejection arrives. A read-only metadata
+					// exchange proves the broker actually accepted this identity.
+					brokerConn := kafka.NewConn(encrypted, "", 0)
+					deadline, _ := ctx.Deadline()
+					if deadline.IsZero() {
+						deadline = time.Now().Add(kafkaReadinessTimeout)
+					}
+					if deadlineErr := brokerConn.SetDeadline(deadline); deadlineErr != nil {
+						err = deadlineErr
+					} else if brokers, metadataErr := brokerConn.Brokers(); metadataErr != nil {
+						err = fmt.Errorf("Kafka TLS metadata probe failed: %w", metadataErr)
+					} else if len(brokers) == 0 {
+						err = errNoKafkaBrokers
+					}
+					if err != nil {
+						_ = brokerConn.Close()
+					}
+				}
+			}
 			connectElapsed := k.now().Sub(connectStart)
 			k.metrics.observe("connect", connectElapsed)
 			timings = append(timings, fmt.Sprintf("%s connect=%s", broker, connectElapsed))

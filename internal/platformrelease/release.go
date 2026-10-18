@@ -65,6 +65,7 @@ func GenerateReleaseManifest(opts ReleaseOptions) (*Manifest, error) {
 	}
 	if err := m.ApplyReleaseExtras(ReleaseExtras{
 		RequiresAudienceExchange: release.RequiresAudienceExchange,
+		RequiresAnalyticsTLS:     release.RequiresAnalyticsTLS,
 		PlatformObjects:          objects,
 		ConfigMaps:               configMaps,
 		Wiring:                   release.Components,

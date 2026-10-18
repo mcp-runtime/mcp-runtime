@@ -100,8 +100,18 @@ func main() {
 		log.Fatal(err)
 	}
 
+	kafkaTLS, err := serviceutil.ClientTLSFromEnv("KAFKA")
+	if err != nil {
+		log.Fatalf("configure Kafka TLS: %v", err)
+	}
 	writer := newKafkaWriter(brokers, topic)
+	if kafkaTLS != nil {
+		transport := &kafka.Transport{TLS: kafkaTLS, DialTimeout: 10 * time.Second, IdleTimeout: 90 * time.Second}
+		defer transport.CloseIdleConnections()
+		writer.Transport = transport
+	}
 	readiness := newKafkaReadiness(brokers, newKafkaReadinessMetrics(prometheus.DefaultRegisterer))
+	readiness.tlsConfig = kafkaTLS
 	go readiness.Run(ctx)
 
 	server := &ingestServer{
@@ -155,7 +165,7 @@ func main() {
 		IdleTimeout:       60 * time.Second,
 	}
 	go func() {
-		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := serviceutil.ListenAndServeHTTP(httpServer); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("server failed: %v", err)
 		}
 	}()
