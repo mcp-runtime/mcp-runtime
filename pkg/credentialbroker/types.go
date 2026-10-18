@@ -30,7 +30,10 @@ var (
 	ErrNotFound    = errors.New("credential metadata not found")
 	nameRE         = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 	fieldRE        = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,128}$`)
-	uuidRE         = regexp.MustCompile(`^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$`)
+	// versionRE excludes dots so a version can never be "." or ".." when
+	// providers embed it in a URL path (for example /versions/<v>:access).
+	versionRE = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
+	uuidRE    = regexp.MustCompile(`^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$`)
 )
 
 // Source is an administrator-approved exact backing reference. No provider
@@ -116,16 +119,16 @@ func (s Source) Validate() error {
 			return errors.New("a Kubernetes source requires a same-namespace Secret name and key; version must be omitted")
 		}
 	case "gcp":
-		if !regexp.MustCompile(`^projects/[a-zA-Z0-9_-]+/secrets/[a-zA-Z0-9_-]+$`).MatchString(s.Resource) || s.Key != "" || (s.Version != "" && !fieldRE.MatchString(s.Version)) {
+		if !regexp.MustCompile(`^projects/[a-zA-Z0-9_-]+/secrets/[a-zA-Z0-9_-]+$`).MatchString(s.Resource) || s.Key != "" || (s.Version != "" && !versionRE.MatchString(s.Version)) {
 			return errors.New("invalid GCP secret reference")
 		}
 	case "aws":
-		if !regexp.MustCompile(`^arn:aws[a-z-]*:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[A-Za-z0-9/_+=.@-]+$`).MatchString(s.Resource) || s.Key != "" || (s.Version != "" && !fieldRE.MatchString(s.Version)) {
+		if !regexp.MustCompile(`^arn:aws[a-z-]*:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[A-Za-z0-9/_+=.@-]+$`).MatchString(s.Resource) || s.Key != "" || (s.Version != "" && !versionRE.MatchString(s.Version)) {
 			return errors.New("AWS source requires an exact Secrets Manager ARN")
 		}
 	case "azure":
 		u, err := url.Parse(s.Resource)
-		if err != nil || u.Scheme != "https" || !strings.HasSuffix(u.Hostname(), ".vault.azure.net") || u.Host != u.Hostname() || u.User != nil || u.RawQuery != "" || u.Fragment != "" || !regexp.MustCompile(`^/secrets/[A-Za-z0-9-]+$`).MatchString(u.Path) || s.Key != "" || (s.Version != "" && !fieldRE.MatchString(s.Version)) {
+		if err != nil || u.Scheme != "https" || !strings.HasSuffix(u.Hostname(), ".vault.azure.net") || u.Host != u.Hostname() || u.User != nil || u.RawQuery != "" || u.Fragment != "" || !regexp.MustCompile(`^/secrets/[A-Za-z0-9-]+$`).MatchString(u.Path) || s.Key != "" || (s.Version != "" && !versionRE.MatchString(s.Version)) {
 			return errors.New("an Azure source requires an exact HTTPS Key Vault secret URL")
 		}
 	case "vault":

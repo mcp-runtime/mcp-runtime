@@ -216,3 +216,46 @@ invalid UTF-8 values are rejected instead of being silently encoded or corrupted
 Credentials are unavailable to unrelated tools, delegated-header mode,
 revoked/incomplete sessions or arbitrary network upstreams. There is no raw-value
 management/UI endpoint or workload environment/file projection in this mode.
+
+### Residual risk: gateway token scope
+
+The broker authenticates the server's own gateway Pod-bound token, not a
+per-call proof. That token is accepted for any live session of that server and
+for any tool its current grant and a matching binding allow. This is an
+accepted design residual risk: the token is mounted only into the gateway
+sidecar (never the MCP server container), the broker re-checks the session,
+grant, server UID/retiring state and binding revisions on every resolution,
+and every use is audited. Compromise of the gateway container therefore exposes
+the credentials bound to that server's already-authorized tools, nothing wider.
+
+## Availability controls
+
+- The provider read runs outside the platform-wide session lock. The broker
+  reads provider metadata, fetches the value without holding any database lock,
+  then takes the lock and re-validates the session, subjects, bindings and
+  sources (exact revisions), server UID/retiring state and grant before it
+  audits and returns anything. A revocation that lands during the read denies
+  the request and no value is returned.
+- `POST /api/v1/credential-resolutions` is on the public ingress because the
+  gateway reaches it over HTTPS. Before any TokenReview, requests are limited
+  per source address (10/s, burst 20; behind a proxy set
+  `MCP_TRUSTED_PROXY_CIDRS` so the client address, not the proxy, is used).
+  Callers that exceed it receive `429` with `Retry-After: 1`. A valid Pod-bound
+  token for the dedicated audience is still required.
+- After authentication each server is limited to 20/s (burst 40) and returns
+  `429` beyond that.
+- A failed provider read is remembered for 5 seconds per server and source
+  revision (bounded to 1024 entries, no values stored), so a down provider is
+  not hammered and returns `503` immediately.
+- Source `version` values accept only `[A-Za-z0-9_-]` (or `latest`); dots and
+  slashes are rejected.
+
+## Upgrade gate: analytics TLS
+
+`config/release/wiring.yaml` sets `requiresAnalyticsTLS: true`. Release
+manifests require the analytics mutual-TLS wiring before ordinary image
+updates, and the updater refuses legacy plaintext wiring. Existing plaintext
+Kafka installs must take encrypted backups and restore into a fresh TLS
+installation (see "Analytics transport security" in
+[platform-services.md](platform-services.md)) before updating to a release that
+includes the credential broker. Test-mode installs are exempt.

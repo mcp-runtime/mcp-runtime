@@ -26,7 +26,10 @@ type Store interface {
 	ListCredentials(context.Context, platformauth.Principal, string, string) ([]json.RawMessage, error)
 	PutCredential(context.Context, platformauth.Principal, *cb.Source, *cb.Binding) (json.RawMessage, error)
 	DeleteCredential(context.Context, platformauth.Principal, string, string, string, int64) error
-	UseCredentials(context.Context, sessionstate.Server, cb.ResolutionRequest, func(sessionstate.Session, []cb.Binding, []cb.Source) (cb.Delivery, error)) (cb.Delivery, error)
+	// UseCredentials calls authorize before and again after fetch. fetch (provider
+	// I/O) must run without holding shared locks; the value is returned only if
+	// the second authorize, run after re-reading current state, still allows it.
+	UseCredentials(ctx context.Context, server sessionstate.Server, request cb.ResolutionRequest, authorize func(sessionstate.Session, []cb.Binding, []cb.Source) error, fetch func(sessionstate.Session, []cb.Binding, []cb.Source) (cb.Delivery, error)) (cb.Delivery, error)
 }
 
 type Handler struct {
@@ -34,6 +37,10 @@ type Handler struct {
 	Kube         client.Client
 	Authenticate func(context.Context, string) (sessionstate.Server, error)
 	Providers    map[string]cb.Provider
+	// Limits bounds resolution requests per source address (before TokenReview)
+	// and per server, and briefly remembers provider failures. Nil uses a
+	// process-wide default.
+	Limits *Limits
 }
 
 func (h Handler) Management(w http.ResponseWriter, r *http.Request) {
@@ -178,6 +185,11 @@ func (h Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 		respondError(w, cb.ErrDenied)
 		return
 	}
+	limits := h.limits()
+	if !limits.AllowSource(platformauth.RequestIP(r)) {
+		respondError(w, errRateLimited)
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 	server, err := h.Authenticate(ctx, strings.TrimPrefix(credential, "Bearer "))
@@ -185,25 +197,41 @@ func (h Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 		respondError(w, cb.ErrDenied)
 		return
 	}
+	if !limits.AllowServer(server.UID) {
+		respondError(w, errRateLimited)
+		return
+	}
 	var request cb.ResolutionRequest
 	if !decode(w, r, &request) {
 		return
 	}
-	result, err := h.Store.UseCredentials(ctx, server, request, func(session sessionstate.Session, bindings []cb.Binding, sources []cb.Source) (cb.Delivery, error) {
+	authorize := func(session sessionstate.Session, bindings []cb.Binding, _ []cb.Source) error {
 		if err := h.authorize(ctx, server, session, request); err != nil {
-			return cb.Delivery{}, err
+			return err
 		}
+		for _, binding := range bindings {
+			if err := h.checkBinding(ctx, binding); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	// fetch runs the bounded provider read. It must not hold shared locks; the
+	// store re-validates grant, session, server and binding revisions after it.
+	fetch := func(_ sessionstate.Session, bindings []cb.Binding, sources []cb.Source) (cb.Delivery, error) {
 		out := cb.Delivery{Headers: map[string]string{}}
 		for i, binding := range bindings {
-			if err := h.checkBinding(ctx, binding); err != nil {
-				return cb.Delivery{}, err
-			}
 			provider := h.Providers[sources[i].Provider]
 			if provider == nil {
 				return cb.Delivery{}, cb.ErrUnavailable
 			}
+			failure := limits.failureKey(server.UID, sources[i])
+			if limits.RecentFailure(failure) {
+				return cb.Delivery{}, cb.ErrUnavailable
+			}
 			value, err := provider.Read(ctx, sources[i])
 			if err != nil || !cb.ValidValue(value.Bytes) {
+				limits.RecordFailure(failure)
 				return cb.Delivery{}, cb.ErrUnavailable
 			}
 			header := http.CanonicalHeaderKey(binding.Header)
@@ -212,13 +240,9 @@ func (h Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 			}
 			out.Headers[header] = string(value.Bytes)
 		}
-		// Re-read grant/server after provider I/O. Revocation/current-principal
-		// checks in the store remain locked until this access is durably audited.
-		if err := h.authorize(ctx, server, session, request); err != nil {
-			return cb.Delivery{}, err
-		}
 		return out, nil
-	})
+	}
+	result, err := h.Store.UseCredentials(ctx, server, request, authorize, fetch)
 	if err != nil {
 		respondError(w, err)
 		return
@@ -310,6 +334,9 @@ func respondError(w http.ResponseWriter, err error) {
 	status := http.StatusServiceUnavailable
 	message := "credential operation unavailable"
 	switch {
+	case errors.Is(err, errRateLimited):
+		w.Header().Set("Retry-After", "1")
+		status, message = http.StatusTooManyRequests, "credential resolution rate limited"
 	case errors.Is(err, cb.ErrDenied):
 		status, message = http.StatusForbidden, "credential access denied"
 	case errors.Is(err, cb.ErrConflict):

@@ -7,8 +7,10 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -30,11 +32,12 @@ const (
 )
 
 type fakeStore struct {
-	session  sessionstate.Session
-	bindings []cb.Binding
-	sources  []cb.Source
-	deleted  bool
-	put      bool
+	session    sessionstate.Session
+	bindings   []cb.Binding
+	sources    []cb.Source
+	deleted    bool
+	afterFetch func()
+	put        bool
 }
 
 func (s *fakeStore) ListCredentials(context.Context, platformauth.Principal, string, string) ([]json.RawMessage, error) {
@@ -48,8 +51,25 @@ func (s *fakeStore) DeleteCredential(context.Context, platformauth.Principal, st
 	s.deleted = true
 	return nil
 }
-func (s *fakeStore) UseCredentials(_ context.Context, _ sessionstate.Server, _ cb.ResolutionRequest, fn func(sessionstate.Session, []cb.Binding, []cb.Source) (cb.Delivery, error)) (cb.Delivery, error) {
-	return fn(s.session, s.bindings, s.sources)
+
+// UseCredentials mirrors the real store contract: authorize, fetch with no lock,
+// then authorize again after state is re-read (afterFetch simulates a change
+// that happens during the provider read).
+func (s *fakeStore) UseCredentials(_ context.Context, _ sessionstate.Server, _ cb.ResolutionRequest, authorize func(sessionstate.Session, []cb.Binding, []cb.Source) error, fetch func(sessionstate.Session, []cb.Binding, []cb.Source) (cb.Delivery, error)) (cb.Delivery, error) {
+	if err := authorize(s.session, s.bindings, s.sources); err != nil {
+		return cb.Delivery{}, err
+	}
+	out, err := fetch(s.session, s.bindings, s.sources)
+	if err != nil {
+		return cb.Delivery{}, err
+	}
+	if s.afterFetch != nil {
+		s.afterFetch()
+	}
+	if err := authorize(s.session, s.bindings, s.sources); err != nil {
+		return cb.Delivery{}, err
+	}
+	return out, nil
 }
 
 type valueProvider struct{ value []byte }
@@ -114,6 +134,7 @@ func newFixture(t *testing.T, mutate func(*mcpv1.MCPServer, *mcpv1.MCPAccessGran
 			return sessionstate.Server{Namespace: "ns", Name: "srv", UID: "uid-1"}, nil
 		},
 		Providers: map[string]cb.Provider{"kubernetes": valueProvider{[]byte(secret)}},
+		Limits:    NewLimits(),
 	}}
 }
 
@@ -276,5 +297,126 @@ func TestBindingManagementChecksLiveServerUIDAndTools(t *testing.T) {
 	}
 	if c := put(func(b *cb.Binding) { b.Tools = []string{"ghost"} }); c != http.StatusForbidden || f.store.put {
 		t.Fatalf("unknown tool got %d", c)
+	}
+}
+
+type countingProvider struct {
+	calls int
+	err   error
+}
+
+func (p *countingProvider) Read(context.Context, cb.Source) (cb.Value, error) {
+	p.calls++
+	if p.err != nil {
+		return cb.Value{}, p.err
+	}
+	return cb.Value{Bytes: []byte(secret)}, nil
+}
+
+func TestResolveDeniesWhenGrantRevokedDuringProviderRead(t *testing.T) {
+	f := newFixture(t, nil)
+	f.store.afterFetch = func() {
+		g := &mcpv1.MCPAccessGrant{}
+		if err := f.handler.Kube.Get(context.Background(), types.NamespacedName{Namespace: "ns", Name: "g1"}, g); err != nil {
+			t.Fatal(err)
+		}
+		g.Spec.Disabled = true
+		if err := f.handler.Kube.Update(context.Background(), g); err != nil {
+			t.Fatal(err)
+		}
+	}
+	w := resolve(f.handler, nil)
+	if w.Code != http.StatusForbidden || strings.Contains(w.Body.String(), secret) {
+		t.Fatalf("revocation during provider read must deny without value, got %d", w.Code)
+	}
+}
+
+func TestResolveRateLimitsPerServerAndReturns429(t *testing.T) {
+	f := newFixture(t, nil)
+	now := time.Unix(1000, 0)
+	f.handler.Limits.Now = func() time.Time { return now }
+	f.handler.Limits.source.burst, f.handler.Limits.source.rate = 1000, 1000
+	var last int
+	for i := 0; i < int(serverBurst)+1; i++ {
+		last = resolve(f.handler, nil).Code
+	}
+	if last != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 once the per-server burst is spent, got %d", last)
+	}
+	now = now.Add(2 * time.Second)
+	if w := resolve(f.handler, nil); w.Code != http.StatusOK {
+		t.Fatalf("bucket must refill, got %d", w.Code)
+	}
+}
+
+func TestResolveRateLimitsPerSourceBeforeTokenReview(t *testing.T) {
+	f := newFixture(t, nil)
+	reviews := 0
+	f.handler.Authenticate = func(context.Context, string) (sessionstate.Server, error) {
+		reviews++
+		return sessionstate.Server{}, errors.New("bad token")
+	}
+	now := time.Unix(1000, 0)
+	f.handler.Limits.Now = func() time.Time { return now }
+	var codes []int
+	for i := 0; i < int(sourceBurst)+5; i++ {
+		codes = append(codes, resolve(f.handler, nil).Code)
+	}
+	if reviews != int(sourceBurst) || codes[len(codes)-1] != http.StatusTooManyRequests {
+		t.Fatalf("TokenReview must be bounded per source: reviews=%d last=%d", reviews, codes[len(codes)-1])
+	}
+	other := func(r *http.Request) { r.RemoteAddr = "198.51.100.9:4000" }
+	if w := resolve(f.handler, other); w.Code != http.StatusForbidden {
+		t.Fatalf("another source has its own budget, got %d", w.Code)
+	}
+	// Missing-bearer requests never reach TokenReview or consume budget.
+	before := reviews
+	resolve(f.handler, func(r *http.Request) { r.Header.Del("Authorization") })
+	if reviews != before {
+		t.Fatal("unauthenticated request reached TokenReview")
+	}
+}
+
+func TestProviderFailureNegativeCacheExpiresAndHoldsNoSecret(t *testing.T) {
+	f := newFixture(t, nil)
+	p := &countingProvider{err: errors.New("down")}
+	f.handler.Providers["kubernetes"] = p
+	now := time.Unix(1000, 0)
+	f.handler.Limits.Now = func() time.Time { return now }
+	f.handler.Limits.source.burst, f.handler.Limits.source.rate = 1000, 1000
+	f.handler.Limits.server.burst, f.handler.Limits.server.rate = 1000, 1000
+	for i := 0; i < 3; i++ {
+		if w := resolve(f.handler, nil); w.Code != http.StatusServiceUnavailable {
+			t.Fatalf("got %d", w.Code)
+		}
+	}
+	if p.calls != 1 {
+		t.Fatalf("failure must be cached briefly, provider called %d times", p.calls)
+	}
+	now = now.Add(failureTTL + time.Second)
+	resolve(f.handler, nil)
+	if p.calls != 2 {
+		t.Fatalf("negative cache must expire, provider called %d times", p.calls)
+	}
+	p.err = nil
+	now = now.Add(failureTTL + time.Second)
+	if w := resolve(f.handler, nil); w.Code != http.StatusOK {
+		t.Fatalf("recovered provider must be served, got %d", w.Code)
+	}
+	for k := range f.handler.Limits.failures {
+		if strings.Contains(k, secret) {
+			t.Fatal("secret in cache key")
+		}
+	}
+}
+
+func TestNegativeCacheAndLimitersAreBounded(t *testing.T) {
+	l := NewLimits()
+	for i := 0; i < failureMaxItems*3; i++ {
+		l.RecordFailure(strconv.Itoa(i))
+		l.AllowSource(strconv.Itoa(i))
+	}
+	if len(l.failures) > failureMaxItems || len(l.source.items) > limiterMaxKeys {
+		t.Fatalf("unbounded: %d failures %d sources", len(l.failures), len(l.source.items))
 	}
 }

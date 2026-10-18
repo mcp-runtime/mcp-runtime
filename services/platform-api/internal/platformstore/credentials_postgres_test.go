@@ -215,6 +215,28 @@ func TestPostgresCredentialBrokerAPIIsolationRotationRevocationAndAudit(t *testi
 	}
 	grant.Spec.Disabled = false
 	_ = kube.Update(ctx, grant)
+	// The provider read must not hold the platform-wide session lock: revoke the
+	// session from inside the read (it would block until the 3s deadline if the
+	// lock were held) and require the already-read value to be withheld.
+	h.Providers["kubernetes"] = credentialTestProvider(func(ctx context.Context, source cb.Source) (cb.Value, error) {
+		value, err := originalProvider.Read(ctx, source)
+		if err != nil {
+			return value, err
+		}
+		revokeCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if err = s.SetSessionRevoked(revokeCtx, session.Namespace, string(session.Binding.Name), true, "fixture_revoked_during_read"); err != nil {
+			t.Errorf("session revoke blocked by provider read lock: %v", err)
+		}
+		return value, nil
+	})
+	if w = resolve("fixture-pod-token"); w.Code != 403 || strings.Contains(w.Body.String(), "fixture-upstream") {
+		t.Fatalf("session revoked during provider read released a value: %d", w.Code)
+	}
+	h.Providers["kubernetes"] = originalProvider
+	if err = s.SetSessionRevoked(ctx, session.Namespace, string(session.Binding.Name), false, "fixture_restored"); err != nil {
+		t.Fatal(err)
+	}
 	if err = s.SetSessionRevoked(ctx, session.Namespace, string(session.Binding.Name), true, "fixture_revoked"); err != nil {
 		t.Fatal(err)
 	}

@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"slices"
 	"time"
 
@@ -295,99 +294,176 @@ func credentialAudit(ctx context.Context, tx *sql.Tx, human, action, ns, name, s
 	return err
 }
 
-// UseCredentials serializes resolution with account/agent/session revocation
-// and metadata writes. The bounded provider read and canonical grant check run
-// inside this transaction; a value is returned only after durable usage audit.
-func (s *Store) UseCredentials(ctx context.Context, server sessionstate.Server, request cb.ResolutionRequest, resolve func(sessionstate.Session, []cb.Binding, []cb.Source) (cb.Delivery, error)) (out cb.Delivery, err error) {
-	if len(request.Bindings) == 0 || len(request.Bindings) > 16 {
-		return out, cb.ErrDenied
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return out, err
-	}
-	defer tx.Rollback()
-	if err = lockSessionState(ctx, tx); err != nil {
-		return out, err
-	}
-	audited := false
-	human, agent, team := "", "", ""
-	defer func() {
-		if !audited && err != nil {
-			if auditErr := credentialAudit(ctx, tx, human, "credential_access", server.Namespace, "resolution", "denied", agent, team); auditErr != nil {
-				out, err = cb.Delivery{}, cb.ErrUnavailable
-				return
-			}
-			if commitErr := tx.Commit(); commitErr != nil {
-				out, err = cb.Delivery{}, cb.ErrUnavailable
-			}
-		}
-	}()
+// credentialSnapshot is the authorization-relevant state one resolution reads.
+type credentialSnapshot struct {
+	session            sessionstate.Session
+	bindings           []cb.Binding
+	sources            []cb.Source
+	human, agent, team string
+}
+
+// loadCredentialSnapshot reads and checks session, subjects, bindings and
+// sources through q. It never touches the provider.
+func loadCredentialSnapshot(ctx context.Context, tx *sql.Tx, server sessionstate.Server, request cb.ResolutionRequest, snap *credentialSnapshot) error {
 	var raw []byte
-	if err = tx.QueryRowContext(ctx, `SELECT data FROM sessions WHERE id=$1`, request.Session).Scan(&raw); err != nil {
-		return out, cb.ErrDenied
+	if err := tx.QueryRowContext(ctx, `SELECT data FROM sessions WHERE id=$1`, request.Session).Scan(&raw); err != nil {
+		return cb.ErrDenied
 	}
 	var session sessionstate.Session
-	if err = json.Unmarshal(raw, &session); err != nil {
-		return out, err
+	if err := json.Unmarshal(raw, &session); err != nil {
+		return err
 	}
 	b := session.Binding
-	human, agent, team = string(b.HumanID), string(b.AgentID), string(b.TeamID)
+	snap.session = session
+	snap.human, snap.agent, snap.team = string(b.HumanID), string(b.AgentID), string(b.TeamID)
 	expiry, e := time.Parse(time.RFC3339, b.ExpiresAt)
 	if e != nil || !expiry.After(time.Now()) || b.Revoked || session.RevokedAt != nil || session.ServerNamespace != server.Namespace || session.ServerName != server.Name || session.ServerUID != server.UID || session.Annotations[sessionstate.AdapterEnrollmentPendingAnnotation] != "" || session.GrantName == "" || session.GrantNamespace == "" {
-		return out, cb.ErrDenied
+		return cb.ErrDenied
 	}
-	if err = credentialSubjects(ctx, tx, string(b.HumanID), string(b.AgentID), string(b.TeamID)); err != nil {
-		return out, err
+	if err := credentialSubjects(ctx, tx, snap.human, snap.agent, snap.team); err != nil {
+		return err
 	}
-	bindings := make([]cb.Binding, 0, len(request.Bindings))
-	sources := make([]cb.Source, 0, len(request.Bindings))
+	snap.bindings = make([]cb.Binding, 0, len(request.Bindings))
+	snap.sources = make([]cb.Source, 0, len(request.Bindings))
 	seen := map[string]bool{}
 	for _, name := range request.Bindings {
 		if seen[name] || !cb.NameValid(name) {
-			return out, cb.ErrDenied
+			return cb.ErrDenied
 		}
 		seen[name] = true
 		var binding cb.Binding
-		if err = credentialRead(ctx, tx, server.Namespace, "bindings", name, &binding); err != nil {
-			return out, err
+		if err := credentialRead(ctx, tx, server.Namespace, "bindings", name, &binding); err != nil {
+			return err
 		}
 		if !slices.Contains(binding.Tools, request.Tool) {
 			continue
 		}
-		if binding.Server != server.Name || binding.ServerUID != server.UID || !binding.Matches(string(b.HumanID), string(b.AgentID), string(b.TeamID), request.Session, request.Tool) {
-			return out, cb.ErrDenied
+		if binding.Server != server.Name || binding.ServerUID != server.UID || !binding.Matches(snap.human, snap.agent, snap.team, request.Session, request.Tool) {
+			return cb.ErrDenied
 		}
 		var source cb.Source
-		if err = credentialRead(ctx, tx, server.Namespace, "sources", binding.Source, &source); err != nil {
-			return out, err
+		if err := credentialRead(ctx, tx, server.Namespace, "sources", binding.Source, &source); err != nil {
+			return err
 		}
-		if !source.Allows(string(b.HumanID), string(b.TeamID)) {
-			return out, cb.ErrDenied
+		if !source.Allows(snap.human, snap.team) {
+			return cb.ErrDenied
 		}
-		bindings = append(bindings, binding)
-		sources = append(sources, source)
+		snap.bindings = append(snap.bindings, binding)
+		snap.sources = append(snap.sources, source)
 	}
-	out, err = resolve(session, bindings, sources)
-	status := "success"
+	return nil
+}
+
+// sameCredentialMetadata reports whether every binding and source is still at
+// the revision the provider read was based on.
+func sameCredentialMetadata(a, b credentialSnapshot) bool {
+	if len(a.bindings) != len(b.bindings) || a.session.ID != b.session.ID {
+		return false
+	}
+	for i := range a.bindings {
+		if a.bindings[i].Name != b.bindings[i].Name || a.bindings[i].Revision != b.bindings[i].Revision || a.sources[i].Name != b.sources[i].Name || a.sources[i].Revision != b.sources[i].Revision {
+			return false
+		}
+	}
+	return true
+}
+
+// auditCredentialUse writes one metadata-only audit row per binding (or one
+// "resolution" row when none applied) into tx.
+func auditCredentialUse(ctx context.Context, tx *sql.Tx, snap credentialSnapshot, ns, status string) error {
+	for _, binding := range snap.bindings {
+		if err := credentialAudit(ctx, tx, snap.human, "credential_access", ns, binding.Name, status, snap.agent, snap.team); err != nil {
+			return err
+		}
+	}
+	if len(snap.bindings) == 0 {
+		return credentialAudit(ctx, tx, snap.human, "credential_access", ns, "resolution", status, snap.agent, snap.team)
+	}
+	return nil
+}
+
+// auditCredentialDenied records a denial in its own short transaction. Audit
+// inserts do not need the shared session-state lock.
+func (s *Store) auditCredentialDenied(ctx context.Context, snap credentialSnapshot, ns string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		status = "denied"
+		return cb.ErrUnavailable
 	}
-	for _, binding := range bindings {
-		if auditErr := credentialAudit(ctx, tx, string(b.HumanID), "credential_access", server.Namespace, binding.Name, status, string(b.AgentID), string(b.TeamID)); auditErr != nil {
-			return cb.Delivery{}, fmt.Errorf("credential audit unavailable")
+	defer tx.Rollback()
+	if err = auditCredentialUse(ctx, tx, snap, ns, "denied"); err != nil {
+		return cb.ErrUnavailable
+	}
+	if err = tx.Commit(); err != nil {
+		return cb.ErrUnavailable
+	}
+	return nil
+}
+
+// UseCredentials resolves in three phases so the slow provider read never
+// holds the platform-wide session_sync_state row lock:
+//
+//  1. an unlocked snapshot of session, subjects, bindings and sources, plus a
+//     first authorize pre-check;
+//  2. fetch (provider I/O) with no transaction and no lock;
+//  3. under lockSessionState, re-read everything, require unchanged binding and
+//     source revisions, run authorize again, durably audit, then commit.
+//
+// A value is returned only if phase 3 succeeds; any change or error fails
+// closed with no value.
+func (s *Store) UseCredentials(ctx context.Context, server sessionstate.Server, request cb.ResolutionRequest, authorize func(sessionstate.Session, []cb.Binding, []cb.Source) error, fetch func(sessionstate.Session, []cb.Binding, []cb.Source) (cb.Delivery, error)) (cb.Delivery, error) {
+	if len(request.Bindings) == 0 || len(request.Bindings) > 16 {
+		return cb.Delivery{}, cb.ErrDenied
+	}
+	deny := func(snap credentialSnapshot, err error) (cb.Delivery, error) {
+		if auditErr := s.auditCredentialDenied(ctx, snap, server.Namespace); auditErr != nil {
+			return cb.Delivery{}, auditErr
 		}
+		return cb.Delivery{}, err
 	}
-	if len(bindings) == 0 {
-		if auditErr := credentialAudit(ctx, tx, human, "credential_access", server.Namespace, "resolution", status, agent, team); auditErr != nil {
-			return cb.Delivery{}, cb.ErrUnavailable
-		}
+	var first credentialSnapshot
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return cb.Delivery{}, err
 	}
-	audited = true
-	if commitErr := tx.Commit(); commitErr != nil {
-		return cb.Delivery{}, commitErr
+	err = loadCredentialSnapshot(ctx, tx, server, request, &first)
+	_ = tx.Rollback()
+	if err != nil {
+		return deny(first, err)
+	}
+	if err = authorize(first.session, first.bindings, first.sources); err != nil {
+		return deny(first, err)
+	}
+	// Phase 2: provider I/O, no database transaction or lock held.
+	out, err := fetch(first.session, first.bindings, first.sources)
+	if err != nil {
+		return deny(first, err)
+	}
+	// Phase 3: re-validate under the lock so revocation that happened during
+	// the read is honored before anything is returned.
+	tx, err = s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return cb.Delivery{}, err
+	}
+	defer tx.Rollback()
+	if err = lockSessionState(ctx, tx); err != nil {
+		return cb.Delivery{}, err
+	}
+	var second credentialSnapshot
+	err = loadCredentialSnapshot(ctx, tx, server, request, &second)
+	if err == nil && !sameCredentialMetadata(first, second) {
+		err = cb.ErrDenied
+	}
+	if err == nil {
+		err = authorize(second.session, second.bindings, second.sources)
 	}
 	if err != nil {
+		_ = tx.Rollback()
+		return deny(second, err)
+	}
+	if err = auditCredentialUse(ctx, tx, second, server.Namespace, "success"); err != nil {
+		return cb.Delivery{}, cb.ErrUnavailable
+	}
+	if err = tx.Commit(); err != nil {
 		return cb.Delivery{}, err
 	}
 	return out, nil

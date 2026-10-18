@@ -112,6 +112,6 @@ func (*metadataStub) PutCredential(context.Context, platformauth.Principal, *cb.
 func (*metadataStub) DeleteCredential(context.Context, platformauth.Principal, string, string, string, int64) error {
 	return nil
 }
-func (*metadataStub) UseCredentials(context.Context, sessionstate.Server, cb.ResolutionRequest, func(sessionstate.Session, []cb.Binding, []cb.Source) (cb.Delivery, error)) (cb.Delivery, error) {
+func (*metadataStub) UseCredentials(context.Context, sessionstate.Server, cb.ResolutionRequest, func(sessionstate.Session, []cb.Binding, []cb.Source) error, func(sessionstate.Session, []cb.Binding, []cb.Source) (cb.Delivery, error)) (cb.Delivery, error) {
 	return cb.Delivery{}, nil
 }

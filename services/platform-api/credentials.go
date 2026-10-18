@@ -11,7 +11,7 @@ import (
 )
 
 func (s *apiServer) registerCredentials(mux *http.ServeMux) {
-	h := credentialapi.Handler{}
+	h := credentialapi.Handler{Limits: credentialapi.NewLimits()}
 	if s.platform != nil {
 		h.Store = s.platform
 	}

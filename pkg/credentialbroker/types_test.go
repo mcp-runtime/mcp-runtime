@@ -35,6 +35,22 @@ func TestProviderReferencesCannotSelectAnotherNamespaceOrEndpoint(t *testing.T) 
 	}
 }
 
+func TestProviderVersionCannotTraverseOrNest(t *testing.T) {
+	resources := map[string]string{
+		"gcp":   "projects/project-1/secrets/upstream",
+		"aws":   "arn:aws:secretsmanager:us-east-1:123456789012:secret:upstream-Abc123",
+		"azure": "https://fixture.vault.azure.net/secrets/upstream",
+	}
+	for provider, resource := range resources {
+		for version, ok := range map[string]bool{"latest": true, "3": true, "AWSCURRENT": true, "a_b-C9": true, "..": false, ".": false, "a/b": false, "": true, "a.b": false, "v:x": false} {
+			source := Source{Provider: provider, Resource: resource, Version: version, Namespace: "team-one", Name: "upstream", TeamID: testTeam}
+			if got := source.Validate() == nil; got != ok {
+				t.Errorf("%s version %q: accepted=%v want %v", provider, version, got, ok)
+			}
+		}
+	}
+}
+
 func TestBindingRequiresExplicitFullIdentityToolsAndReservedDeliveryHeader(t *testing.T) {
 	base := Binding{Namespace: "team-one", Name: "upstream", Source: "source", Server: "server", ServerUID: "uid", Tools: []string{"search"}, HumanID: testHuman, AgentID: "agt_01arz3ndektsv4rrffq69g5fav", TeamID: testTeam, Header: HeaderPrefix + "Token"}
 	if err := base.Validate(); err != nil {
