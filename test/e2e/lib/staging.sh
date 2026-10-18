@@ -2060,6 +2060,21 @@ staging_check_governance() {
   [[ "${failed}" == "0" ]]
 }
 
+# Query ClickHouse from inside its pod. Strict setup removes the plaintext native
+# port (9000) and serves only TLS on 9440, so the client must use the same TLS
+# config the init jobs use. Without that config (plaintext installs) the plain
+# client is used unchanged. The config path is overridable for the offline test.
+staging_clickhouse_query() {
+  local query="$1"
+  local config="${STAGING_CLICKHOUSE_CLIENT_CONFIG:-/etc/mcp-analytics/ca/clickhouse-client.xml}"
+  kubectl -n mcp-observability exec statefulset/clickhouse -- sh -c '
+    if [ -f "$2" ]; then
+      exec clickhouse-client --config-file="$2" --secure --port=9440 --host=clickhouse --query "$1"
+    fi
+    exec clickhouse-client --query "$1"
+  ' _ "${query}" "${config}"
+}
+
 staging_check_analytics() {
   local dir="${STAGING_ARTIFACT_DIR}" count
   staging_api_curl --fail "${PLATFORM_URL}/api/v1/stats" >"${dir}/analytics-stats.json"
@@ -2068,8 +2083,7 @@ staging_check_analytics() {
   count="$(jq '(.events // .data // .) | if type == "array" then length else 0 end' "${dir}/analytics-events.json")"
   staging_log "analytics API returned ${count} event(s)"
   local ch
-  ch="$(kubectl -n mcp-observability exec statefulset/clickhouse -- clickhouse-client \
-    --query "SELECT count() FROM mcp.events" 2>/dev/null | tr -d '[:space:]' || true)"
+  ch="$(staging_clickhouse_query "SELECT count() FROM mcp.events" 2>/dev/null | tr -d '[:space:]' || true)"
   staging_log "ClickHouse mcp.events rows: ${ch:-unavailable}"
   if [[ "$(staging_stage_status multitenancy)" != "passed" ]]; then
     staging_log "no tenant traffic this run; analytics reachability checked only"
@@ -2081,8 +2095,7 @@ staging_check_analytics() {
     return 1
   }
   local server_rows
-  server_rows="$(kubectl -n mcp-observability exec statefulset/clickhouse -- clickhouse-client \
-    --query "SELECT count() FROM mcp.events WHERE server = '${MT_ACME_SERVER}'" | tr -d '[:space:]')"
+  server_rows="$(staging_clickhouse_query "SELECT count() FROM mcp.events WHERE server = '${MT_ACME_SERVER}'" | tr -d '[:space:]')"
   staging_log "ClickHouse rows for ${MT_ACME_SERVER}: ${server_rows}"
   [[ "${server_rows}" =~ ^[0-9]+$ && "${server_rows}" -gt 0 ]] || {
     staging_err "no ClickHouse events for the tenant server ${MT_ACME_SERVER}"

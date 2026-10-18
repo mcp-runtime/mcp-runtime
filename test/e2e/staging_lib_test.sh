@@ -369,6 +369,33 @@ replica_logs_case() (
 expect_ok "diagnostics collect every replica of a deployment" replica_logs_case replicas
 expect_ok "diagnostics fall back to deployment logs when no pods match" replica_logs_case fallback
 
+# Strict setup removes ClickHouse's plaintext port, so a bare `clickhouse-client`
+# inside the pod gets "Connection refused (localhost:9000)". The staging probe
+# must use the same TLS client config the init jobs use, and fall back to the
+# plain client only where that config is absent.
+clickhouse_probe_case() (
+  local mode="$1" bin="${TMP}/ch-bin-${1}" cfg="${TMP}/ch-client-${1}.xml" out
+  mkdir -p "${bin}"
+  printf '#!/bin/sh\nprintf "%%s\\n" "$*"\n' >"${bin}/clickhouse-client"
+  chmod +x "${bin}/clickhouse-client"
+  if [[ "${mode}" == tls ]]; then : >"${cfg}"; fi
+  kubectl() {
+    # kubectl -n <ns> exec statefulset/clickhouse -- <command...>
+    while [[ "$1" != "--" ]]; do shift; done
+    shift
+    PATH="${bin}:${PATH}" "$@"
+  }
+  STAGING_CLICKHOUSE_CLIENT_CONFIG="${cfg}"
+  out="$(staging_clickhouse_query "SELECT 1")" || return 1
+  if [[ "${mode}" == tls ]]; then
+    [[ "${out}" == *"--config-file=${cfg}"* && "${out}" == *"--secure"* && "${out}" == *"--port=9440"* && "${out}" == *"--host=clickhouse"* && "${out}" == *"SELECT 1"* ]]
+  else
+    [[ "${out}" == "--query SELECT 1" ]]
+  fi
+)
+expect_ok "clickhouse probe uses the TLS client config when present" clickhouse_probe_case tls
+expect_ok "clickhouse probe falls back to the plain client without it" clickhouse_probe_case plain
+
 printf '\033[30;42m SUCCESS \033[0m ok check — fine\n\033[30;101m  ERROR  \033[0m \033[91mplatform OIDC configuration — org mode\033[0m\n\033[30;101m         \033[0m continuation line\n  ERROR   MCPServer reconcile smoke — timed out\n' >"${TMP}/diag.log"
 expect_eq "failed checks parsed" "$(staging_failed_checks "${TMP}/diag.log" | paste -sd'|' -)" \
   "MCPServer reconcile smoke|platform OIDC configuration"
