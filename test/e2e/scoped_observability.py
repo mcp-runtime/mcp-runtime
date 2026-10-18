@@ -1,4 +1,5 @@
 """Real platform-session scoped Grafana and isolated resource-history acceptance."""
+import http.client
 import http.cookiejar
 import json
 import math
@@ -19,24 +20,42 @@ def check(condition, message):
     print("[pass] " + message, flush=True)
 
 
-def request(client, url, method="GET", body=None, headers=None):
+# A dropped connection (the Traefik port-forward being recycled right after a
+# server deploy, for example) is retried a few times. Each retry is logged so a
+# real crash that closes every connection still fails the run and shows up.
+CONNECTION_ATTEMPTS = 4
+CONNECTION_BACKOFF_SECONDS = 2
+CONNECTION_ERRORS = (http.client.RemoteDisconnected, ConnectionResetError, ConnectionRefusedError, BrokenPipeError)
+
+
+def request(client, url, method="GET", body=None, headers=None, retry_connection=None):
     headers = dict(headers or {})
     if body is not None:
         body = json.dumps(body).encode()
         headers.setdefault("Content-Type", "application/json")
-    req = urllib.request.Request(url, data=body, method=method, headers=headers)
-    try:
-        with client.open(req, timeout=15) as response:
-            return response.status, response.headers, response.read()
-    except urllib.error.HTTPError as error:
-        return error.code, error.headers, error.read()
+    # Retrying could double-submit a write, so only safe methods retry unless the
+    # caller says the request is idempotent (the login call does).
+    retry = method in ("GET", "HEAD") if retry_connection is None else retry_connection
+    attempts = CONNECTION_ATTEMPTS if retry else 1
+    for attempt in range(1, attempts + 1):
+        req = urllib.request.Request(url, data=body, method=method, headers=headers)
+        try:
+            with client.open(req, timeout=15) as response:
+                return response.status, response.headers, response.read()
+        except urllib.error.HTTPError as error:
+            return error.code, error.headers, error.read()
+        except CONNECTION_ERRORS as error:
+            if attempt == attempts:
+                raise
+            print(f"[retry] {method} {urllib.parse.urlsplit(url).path} dropped ({type(error).__name__}), attempt {attempt}/{attempts}", file=sys.stderr, flush=True)
+            time.sleep(CONNECTION_BACKOFF_SECONDS)
 
 
 def session(base, email=None, key=None):
     cookies = http.cookiejar.CookieJar()
     client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookies))
     body = {"api_key": key} if key else {"email": email, "password": os.environ["SCOPED_PASSWORD"]}
-    status, _, response_body = request(client, base + "/auth/login", "POST", body)
+    status, _, response_body = request(client, base + "/auth/login", "POST", body, retry_connection=True)
     check(status == 200, "platform session login succeeds")
     client.scoped_csrf_token = json.loads(response_body)["csrf_token"]
     return client, cookies
