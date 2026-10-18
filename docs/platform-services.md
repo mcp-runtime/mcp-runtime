@@ -435,7 +435,12 @@ or overridden. Setup checks those live capabilities before enabling proxy auth;
 there is no boolean bypass. [Cilium policy enforcement modes](https://docs.cilium.io/en/stable/security/policy/intro/)
 and [agent readiness checks](https://docs.cilium.io/en/stable/network/kubernetes/troubleshooting/)
 describe the underlying capability. This check establishes supported configured
-capability; live traffic tests still verify the deployed network boundary.
+capability; live traffic tests still verify the deployed network boundary. Setup
+also discovers the Kubernetes API Service and its ready EndpointSlice backends
+for runtime-api egress. A kubeconfig loopback tunnel is not an in-cluster API
+destination; the backend rules use only the discovered IPs and TCP ports.
+[Cilium CIDR matching for API servers](https://docs.cilium.io/en/stable/security/policy/layer3/#selecting-pods-or-nodes-with-cidr-ipblock)
+describes the fixture's `policyCIDRMatchMode: [nodes]` requirement.
 The option keys, environment names, and argument binding were checked against
 [Cilium v1.20.3 option source](https://github.com/cilium/cilium/blob/v1.20.3/pkg/option/config.go)
 and [agent flags](https://github.com/cilium/cilium/blob/v1.20.3/daemon/cmd/daemon_main.go)

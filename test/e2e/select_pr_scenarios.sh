@@ -74,6 +74,54 @@ classify_path() {
       # uses the separate Staging E2E suite.
       return
       ;;
+    internal/operator/ingress.go|internal/operator/route_ownership*.go)
+      # Per-server Traefik routes and current-UID ownership: the request
+      # paths that prove isolation are the gateway scenarios and the oauth
+      # route through ingress.
+      add_scenario "governance"
+      add_scenario "trust"
+      add_scenario "oauth"
+      return
+      ;;
+    internal/cli/cluster/doctor/workload_identity*.go|pkg/workloadidentity/*|services/runtime-api/internal/runtimeapi/adapter_preflight*)
+      # Workload-signer guards and the adapter enrollment preflight.
+      add_scenario "adapter-certificates"
+      add_scenario "cli-platform"
+      return
+      ;;
+    pkg/credentialheaders/*|internal/agentadapter/credential_headers*)
+      # Delegated header auth at the gateway and adapter header mode.
+      add_scenario "governance"
+      add_scenario "trust"
+      add_scenario "oauth"
+      add_scenario "adapter-proxy"
+      return
+      ;;
+    pkg/publicroutes/*|pkg/platformmode/*)
+      # Public route and platform-mode config shared by setup, the UI and APIs.
+      add_scenario "ui-auth"
+      add_scenario "api-platform"
+      add_scenario "cli-platform"
+      return
+      ;;
+    pkg/sessionstate/*)
+      # Session manifests shared by the gateway, access flows and the APIs.
+      add_scenario "api-platform"
+      add_scenario "governance"
+      add_scenario "adapter-proxy"
+      return
+      ;;
+    pkg/registryauth/*|pkg/egresscidrs/*)
+      add_scenario "api-platform"
+      add_scenario "cli-platform"
+      return
+      ;;
+    pkg/mcpdefaults/*)
+      add_scenario "governance"
+      add_scenario "trust"
+      add_scenario "cli-platform"
+      return
+      ;;
     internal/operator/mtls*|internal/cli/certmanager/*|traefik-plugins/spiffe-identity/*|config/cert-manager/*|pkg/identity/*|pkg/certauth/*)
       # Certificate enrollment. The runner adds the oauth scenario because
       # those assertions live in that block.

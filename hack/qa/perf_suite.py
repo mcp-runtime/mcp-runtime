@@ -125,22 +125,27 @@ def decode_rpc(raw, content_type, request_id):
 
 
 def bounded_body(response, limit, deadline):
-    chunks, size = [], 0
-    while True:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise TimeoutError("Benchmark response exceeded its total deadline")
-        raw = getattr(response.fp, "raw", None)
-        sock = getattr(raw, "_sock", None)
-        if sock is not None:
-            sock.settimeout(remaining)
-        chunk = response.read1(min(65536, limit - size + 1))
-        if not chunk:
-            return b"".join(chunks)
-        chunks.append(chunk)
-        size += len(chunk)
-        if size > limit:
-            raise ValueError("Benchmark response exceeds its bounded body limit")
+    try:
+        chunks, size = [], 0
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("Benchmark response exceeded its total deadline")
+            raw = getattr(response.fp, "raw", None)
+            sock = getattr(raw, "_sock", None)
+            if sock is not None:
+                sock.settimeout(remaining)
+            chunk = response.read1(min(65536, limit - size + 1))
+            if not chunk:
+                return b"".join(chunks)
+            chunks.append(chunk)
+            size += len(chunk)
+            if size > limit:
+                raise ValueError("Benchmark response exceeds its bounded body limit")
+    finally:
+        # read1 reaching EOF does not close persistent responses on every
+        # supported Python. Finish them explicitly before connection reuse.
+        response.close()
 
 
 class MCPClient:
