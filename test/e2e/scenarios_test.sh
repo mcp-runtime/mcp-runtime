@@ -390,3 +390,18 @@ for base in ("test/e2e", "hack/qa"):
 assert not stale, "team user create must use --password-stdin: " + ", ".join(stale)
 print("[pass] harness scripts pass team user passwords on stdin")
 PY
+
+# Strict (non-test) setup encrypts analytics traffic and the operator refuses a
+# server whose analytics ingest URL is not https, so the multitenancy suite must
+# not fall back to the plaintext default it keeps for QA test mode. A stale
+# default only shows up on the Staging VM, as a tenant server that never reconciles.
+python3 - "${SCRIPT_DIR}" <<'PY'
+import pathlib, re, sys
+staging = (pathlib.Path(sys.argv[1]) / "lib" / "staging.sh").read_text(encoding="utf-8")
+body = re.search(r"staging_check_multitenancy\(\) \{.*?\n\}\n", staging, re.DOTALL)
+assert body, "staging_check_multitenancy not found"
+setting = re.search(r"ANALYTICS_INGEST_URL=\"?(\$\{[^}]*\}|[^\s\"]+)", body.group(0))
+assert setting, "staging multitenancy must set ANALYTICS_INGEST_URL explicitly"
+assert "https://" in setting.group(1), f"staging multitenancy ingest URL must be https, got {setting.group(1)}"
+print("[pass] staging multitenancy uses an https analytics ingest URL")
+PY
