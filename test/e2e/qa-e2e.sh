@@ -749,11 +749,32 @@ traefik_http_responding() {
   [[ "${status}" =~ ^[1-5][0-9]{2}$ ]]
 }
 
+# A recycled kubectl port-forward can still accept TCP and then reset the TLS
+# handshake. Any HTTP status means Traefik completed the handshake.
+traefik_tls_responding() {
+  local status
+  status="$(curl -k --http1.1 -sS --connect-timeout 2 --max-time 3 -o /dev/null -w '%{http_code}' \
+    "https://127.0.0.1:${TRAEFIK_TLS_PORT}/" 2>/dev/null || true)"
+  [[ "${status}" =~ ^[1-5][0-9]{2}$ ]]
+}
+
 wait_for_traefik_http_response() {
   local tries="${1:-10}"
   local attempt
   for attempt in $(seq 1 "${tries}"); do
     if traefik_http_responding; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+wait_for_traefik_tls_response() {
+  local tries="${1:-10}"
+  local attempt
+  for attempt in $(seq 1 "${tries}"); do
+    if traefik_tls_responding; then
       return 0
     fi
     sleep 1
@@ -1003,7 +1024,7 @@ recover_traefik_port_forward_if_needed() {
 # which breaks the port-forward with "broken pipe". Call this before any mTLS curl
 # that runs after the cert-issuance wait.
 recover_traefik_tls_port_forward_if_needed() {
-  if port_is_listening "${TRAEFIK_TLS_PORT}"; then
+  if traefik_tls_responding; then
     return 0
   fi
 
@@ -1012,13 +1033,28 @@ recover_traefik_tls_port_forward_if_needed() {
     wait "${TRAEFIK_TLS_PORT_FORWARD_PID}" >/dev/null 2>&1 || true
   fi
   TRAEFIK_TLS_PORT_FORWARD_PID=""
+  stop_listener_on_port "${TRAEFIK_TLS_PORT}"
 
-  TRAEFIK_TLS_PORT_FORWARD_RESTARTS=$((TRAEFIK_TLS_PORT_FORWARD_RESTARTS + 1))
-  local log_file="${WORKDIR}/traefik-tls-port-forward-restart-${TRAEFIK_TLS_PORT_FORWARD_RESTARTS}.log"
-  echo "[port-forward] restarting Traefik TLS port-forward on localhost:${TRAEFIK_TLS_PORT}" >&2
-  port_forward_bg traefik traefik "${TRAEFIK_TLS_PORT}" 8443 "${log_file}" || return 1
-  TRAEFIK_TLS_PORT_FORWARD_PID="${LAST_MANAGED_PID}"
-  wait_port "${TRAEFIK_TLS_PORT}" 30
+  local attempt log_file
+  for attempt in 1 2 3; do
+    TRAEFIK_TLS_PORT_FORWARD_RESTARTS=$((TRAEFIK_TLS_PORT_FORWARD_RESTARTS + 1))
+    log_file="${WORKDIR}/traefik-tls-port-forward-restart-${TRAEFIK_TLS_PORT_FORWARD_RESTARTS}.log"
+    echo "[port-forward] restarting Traefik TLS port-forward on localhost:${TRAEFIK_TLS_PORT} (attempt ${attempt}/3)" >&2
+    if port_forward_bg traefik traefik "${TRAEFIK_TLS_PORT}" 8443 "${log_file}" \
+      && wait_for_traefik_tls_response 10; then
+      TRAEFIK_TLS_PORT_FORWARD_PID="${LAST_MANAGED_PID}"
+      return 0
+    fi
+    if [[ -n "${LAST_MANAGED_PID:-}" ]] && kill -0 "${LAST_MANAGED_PID}" >/dev/null 2>&1; then
+      kill "${LAST_MANAGED_PID}" >/dev/null 2>&1 || true
+      wait "${LAST_MANAGED_PID}" >/dev/null 2>&1 || true
+    fi
+    stop_listener_on_port "${TRAEFIK_TLS_PORT}"
+    TRAEFIK_TLS_PORT_FORWARD_PID=""
+    sleep 2
+  done
+  echo "[error] Traefik TLS port-forward on localhost:${TRAEFIK_TLS_PORT} did not complete a TLS handshake after 3 attempts" >&2
+  return 1
 }
 
 # recover_traefik_port_forwards_if_needed restores the HTTP forward and, once
@@ -1034,18 +1070,17 @@ recover_traefik_port_forwards_if_needed() {
 }
 
 ensure_traefik_tls_port_forward() {
-  if [[ -n "${TRAEFIK_TLS_PORT_FORWARD_PID:-}" ]] && {
-    ! kill -0 "${TRAEFIK_TLS_PORT_FORWARD_PID}" >/dev/null 2>&1 || ! port_is_listening "${TRAEFIK_TLS_PORT}"
-  }; then
+  if [[ -n "${TRAEFIK_TLS_PORT_FORWARD_PID:-}" ]] && kill -0 "${TRAEFIK_TLS_PORT_FORWARD_PID}" >/dev/null 2>&1 && traefik_tls_responding; then
+    return 0
+  fi
+  if [[ -n "${TRAEFIK_TLS_PORT_FORWARD_PID:-}" ]] || port_is_listening "${TRAEFIK_TLS_PORT}"; then
     recover_traefik_tls_port_forward_if_needed
     return
   fi
-  if [[ -z "${TRAEFIK_TLS_PORT_FORWARD_PID:-}" ]]; then
-    port_forward_bg traefik traefik "${TRAEFIK_TLS_PORT}" 8443 "${WORKDIR}/traefik-tls-port-forward.log" || return 1
-    TRAEFIK_TLS_PORT_FORWARD_PID="${LAST_MANAGED_PID}"
-    TRAEFIK_TLS_PORT_FORWARD_RESTARTS=0
-  fi
-  if ! wait_port "${TRAEFIK_TLS_PORT}" 15; then
+  port_forward_bg traefik traefik "${TRAEFIK_TLS_PORT}" 8443 "${WORKDIR}/traefik-tls-port-forward.log" || return 1
+  TRAEFIK_TLS_PORT_FORWARD_PID="${LAST_MANAGED_PID}"
+  TRAEFIK_TLS_PORT_FORWARD_RESTARTS=0
+  if ! wait_for_traefik_tls_response 15; then
     recover_traefik_tls_port_forward_if_needed
   fi
 }
