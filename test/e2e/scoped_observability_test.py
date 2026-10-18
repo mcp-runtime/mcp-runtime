@@ -9,7 +9,6 @@ import urllib.error
 from unittest import mock
 
 import scoped_observability
-from scoped_observability import frame_numbers, frames_present
 
 
 class ScopedObservabilityTests(unittest.TestCase):
@@ -17,10 +16,10 @@ class ScopedObservabilityTests(unittest.TestCase):
         def frame(kind, values):
             return json.dumps({"results": {"A": {"frames": [{"schema": {"fields": [{"type": kind}]}, "data": {"values": [values]}}]}}})
         for value in (None, "0", True, float("nan"), float("inf")):
-            self.assertFalse(frames_present(frame("number", [value])))
-        self.assertFalse(frames_present(frame("time", [123])))
-        self.assertTrue(frames_present(frame("number", [None, 0])))
-        self.assertEqual(frame_numbers(frame("number", [1, None, 0.5])), [1, 0.5])
+            self.assertFalse(scoped_observability.frames_present(frame("number", [value])))
+        self.assertFalse(scoped_observability.frames_present(frame("time", [123])))
+        self.assertTrue(scoped_observability.frames_present(frame("number", [None, 0])))
+        self.assertEqual(scoped_observability.frame_numbers(frame("number", [1, None, 0.5])), [1, 0.5])
 
     def test_fresh_cluster_and_registry_guard_precedes_all_mutation(self):
         script = Path(__file__).parent / "lib/cilium.sh"
