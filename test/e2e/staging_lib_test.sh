@@ -6,6 +6,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 bash "${SCRIPT_DIR}/namespace_placement_test.sh"
+bash "${SCRIPT_DIR}/staging_issuer_test.sh"
 # shellcheck source=test/e2e/lib/staging.sh
 source "${SCRIPT_DIR}/lib/staging.sh"
 # shellcheck source=test/e2e/lib/k3s-installer.sh

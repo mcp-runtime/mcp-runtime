@@ -43,6 +43,7 @@ with urllib.request.urlopen(r,timeout=10) as response: print(json.load(response)
   trap 'kubectl delete pod "${probe}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true; scoped_observability_cli "${owner_token}" server delete "${server_name}" --namespace "${namespace}" >/dev/null' EXIT
   wait_for_named_server_ready "${server_name}" "${namespace}"
   kubectl get mcpserver "${server_name}" -n "${namespace}" -o json > "${target}"
+  wait_port "${TRAEFIK_PORT}"
   SCOPED_UI_BASE="http://localhost:${TRAEFIK_PORT}" SCOPED_API_KEY="${API_KEY}" \
     SCOPED_OWNER="${owner}" SCOPED_MEMBER="${member}" SCOPED_FOREIGN="${foreign}" SCOPED_PASSWORD="${password}" \
     SCOPED_TARGET="${target}" SCOPED_PROTOCOL="${MCP_PROTOCOL_VERSION}" SCOPED_REPORT="${WORKDIR}/scoped-observability.json" \

@@ -21,6 +21,9 @@
 # here prints secret values; tokens are passed through the environment and
 # never written into the artifact directory.
 
+# shellcheck source=rollout-diagnostics.sh
+source "$(dirname "${BASH_SOURCE[0]}")/rollout-diagnostics.sh"
+
 # shellcheck source=namespace-placement.sh
 source "$(dirname "${BASH_SOURCE[0]}")/namespace-placement.sh"
 
@@ -574,7 +577,7 @@ staging_collect_deploy_logs() {
 }
 
 staging_collect_diagnostics() {
-  local out="$1" ns deploy
+  local out="$1" ns deploy init_job
   mkdir -p "${out}"
   kubectl get nodes -o wide >"${out}/nodes.txt" 2>&1 || return 0
   kubectl describe nodes >"${out}/nodes-describe.txt" 2>&1 || true
@@ -607,6 +610,12 @@ staging_collect_diagnostics() {
     for deploy in $(kubectl -n "${ns}" get deploy -o name 2>/dev/null); do
       staging_collect_deploy_logs "${ns}" "${deploy#deployment.apps/}" 400 \
         "${out}/${ns}-${deploy#deployment.apps/}.log"
+    done
+    # Initialization can fail before Deployments exist; preserve those errors
+    # without uploading Secret values from client diagnostic output.
+    for init_job in kafka-topic-init clickhouse-init; do
+      kubectl -n "${ns}" logs "job/${init_job}" --all-containers --prefix --tail=160 2>&1 |
+        e2e_diag_redact_text >"${out}/${ns}-${init_job}.log" || true
     done
   done < <(staging_platform_namespaces)
   local pair secret_ns secret_name
@@ -1421,9 +1430,9 @@ staging_configure_adapter_certificates() {
     return 0
   fi
   export MCP_ADAPTER_CERTIFICATES=true
-  # The staging VM is disposable and uses the bundled mcp-runtime-ca without
-  # approver-policy; acknowledge that so the setup approval gate passes.
-  export MCP_WORKLOAD_ISSUER_APPROVAL_ACK="${MCP_WORKLOAD_ISSUER_APPROVAL_ACK:-true}"
+  # The fixture sets the approval acknowledgement only after live allow/deny
+  # probes succeed; an inherited acknowledgement cannot substitute for them.
+  unset MCP_WORKLOAD_ISSUER_APPROVAL_ACK
   export MCP_TRUST_DOMAIN="${MCP_TRUST_DOMAIN:-$(staging_adapter_trust_domain)}"
   export MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE="${MCP_DEFAULT_INGRESS_TLS_SECRET_NAMESPACE:-${STAGING_ADAPTER_TLS_NAMESPACE_DEFAULT}}"
 }
