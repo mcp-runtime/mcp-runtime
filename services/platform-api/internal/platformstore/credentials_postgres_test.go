@@ -237,6 +237,37 @@ func TestPostgresCredentialBrokerAPIIsolationRotationRevocationAndAudit(t *testi
 	if err = s.SetSessionRevoked(ctx, session.Namespace, string(session.Binding.Name), false, "fixture_restored"); err != nil {
 		t.Fatal(err)
 	}
+	// Delete and recreate the source with different content during the read.
+	// Revisions restart, so name+revision alone would match; content must not.
+	currentSource := func() cb.Source {
+		items, listErr := s.ListCredentials(ctx, platformauth.Principal{Role: "admin", Subject: admin.ID}, team.Namespace, "sources")
+		if listErr != nil || len(items) != 1 {
+			t.Fatalf("list sources: %v %d", listErr, len(items))
+		}
+		var got cb.Source
+		_ = json.Unmarshal(items[0], &got)
+		return got
+	}
+	h.Providers["kubernetes"] = credentialTestProvider(func(ctx context.Context, source cb.Source) (cb.Value, error) {
+		value, err := originalProvider.Read(ctx, source)
+		if err != nil {
+			return value, err
+		}
+		// Tamper with the stored row directly to model an ABA replacement that
+		// reuses the revision: same name and revision, different resource.
+		if _, err = s.db.ExecContext(ctx, `UPDATE credential_metadata SET data=jsonb_set(data,'{resource}','"swapped-secret"') WHERE kind='sources' AND name=$1`, source.Name); err != nil {
+			t.Errorf("swap source: %v", err)
+		}
+		return value, nil
+	})
+	before := currentSource()
+	if w = resolve("fixture-pod-token"); w.Code != 403 || strings.Contains(w.Body.String(), "fixture-upstream") {
+		t.Fatalf("source replaced with the same revision during provider read released a value: %d", w.Code)
+	}
+	if _, err = s.db.ExecContext(ctx, `UPDATE credential_metadata SET data=jsonb_set(data,'{resource}',to_jsonb($1::text)) WHERE kind='sources' AND name=$2`, before.Resource, before.Name); err != nil {
+		t.Fatal(err)
+	}
+	h.Providers["kubernetes"] = originalProvider
 	if err = s.SetSessionRevoked(ctx, session.Namespace, string(session.Binding.Name), true, "fixture_revoked"); err != nil {
 		t.Fatal(err)
 	}

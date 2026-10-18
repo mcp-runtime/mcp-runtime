@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"slices"
 	"time"
 
@@ -354,18 +355,16 @@ func loadCredentialSnapshot(ctx context.Context, tx *sql.Tx, server sessionstate
 	return nil
 }
 
-// sameCredentialMetadata reports whether every binding and source is still at
-// the revision the provider read was based on.
+// sameCredentialMetadata reports whether the session identity and every
+// binding and source are unchanged in full content since the provider read was
+// based on them. Names and revisions alone are not enough: a delete+recreate can
+// reuse a revision with different Provider/Resource/Key/subjects.
 func sameCredentialMetadata(a, b credentialSnapshot) bool {
-	if len(a.bindings) != len(b.bindings) || a.session.ID != b.session.ID {
-		return false
-	}
-	for i := range a.bindings {
-		if a.bindings[i].Name != b.bindings[i].Name || a.bindings[i].Revision != b.bindings[i].Revision || a.sources[i].Name != b.sources[i].Name || a.sources[i].Revision != b.sources[i].Revision {
-			return false
-		}
-	}
-	return true
+	sa, sb := a.session, b.session
+	return sa.ID == sb.ID && sa.ServerNamespace == sb.ServerNamespace && sa.ServerName == sb.ServerName && sa.ServerUID == sb.ServerUID &&
+		sa.GrantNamespace == sb.GrantNamespace && sa.GrantName == sb.GrantName &&
+		a.human == b.human && a.agent == b.agent && a.team == b.team &&
+		reflect.DeepEqual(a.bindings, b.bindings) && reflect.DeepEqual(a.sources, b.sources)
 }
 
 // auditCredentialUse writes one metadata-only audit row per binding (or one

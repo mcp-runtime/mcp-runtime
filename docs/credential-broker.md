@@ -233,15 +233,23 @@ the credentials bound to that server's already-authorized tools, nothing wider.
 - The provider read runs outside the platform-wide session lock. The broker
   reads provider metadata, fetches the value without holding any database lock,
   then takes the lock and re-validates the session, subjects, bindings and
-  sources (exact revisions), server UID/retiring state and grant before it
+  sources (full content, so a delete and recreate that reuses a revision is caught), server UID/retiring state and grant before it
   audits and returns anything. A revocation that lands during the read denies
   the request and no value is returned.
 - `POST /api/v1/credential-resolutions` is on the public ingress because the
-  gateway reaches it over HTTPS. Before any TokenReview, requests are limited
-  per source address (10/s, burst 20; behind a proxy set
-  `MCP_TRUSTED_PROXY_CIDRS` so the client address, not the proxy, is used).
-  Callers that exceed it receive `429` with `Retry-After: 1`. A valid Pod-bound
-  token for the dedicated audience is still required.
+  gateway reaches it over HTTPS. A valid Pod-bound token for the dedicated
+  audience is always required. The verdict for each exact token is cached by
+  SHA-256 hash (never the token): 10 seconds when valid, 5 seconds when
+  rejected, bounded to 4096 entries. Cached tokens skip TokenReview and every
+  pre-authentication limiter, so unauthenticated traffic that shares the
+  ingress or proxy address cannot deny a valid caller. Only cold (unseen)
+  tokens consume a per-source budget (10/s, burst 20 by `MCP_TRUSTED_PROXY_CIDRS`
+  client address when configured) and a global TokenReview budget (50/s, burst
+  100); excess cold tokens receive `429` with `Retry-After: 1`. Residual: a
+  gateway presenting a brand-new token during a flood of cold invalid tokens may
+  see `429` and should retry; a revoked Pod token can be honored for up to 10
+  seconds, while session, grant, server and binding state is still re-checked on
+  every call.
 - After authentication each server is limited to 20/s (burst 40) and returns
   `429` beyond that.
 - A failed provider read is remembered for 5 seconds per server and source

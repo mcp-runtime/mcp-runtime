@@ -186,14 +186,26 @@ func (h Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limits := h.limits()
-	if !limits.AllowSource(platformauth.RequestIP(r)) {
-		respondError(w, errRateLimited)
-		return
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	server, err := h.Authenticate(ctx, strings.TrimPrefix(credential, "Bearer "))
-	if err != nil {
+	// A recent verdict for this exact token (keyed by its hash, never stored in
+	// clear) skips TokenReview and every pre-authentication limiter, so invalid
+	// traffic sharing a source or proxy address cannot deny a valid caller.
+	token := strings.TrimPrefix(credential, "Bearer ")
+	key := tokenHash(token)
+	server, valid, known := limits.CachedAuth(key)
+	if !known {
+		// Only cold tokens consume the per-source and global TokenReview budgets.
+		if !limits.AllowColdReview(platformauth.RequestIP(r)) {
+			respondError(w, errRateLimited)
+			return
+		}
+		var err error
+		server, err = h.Authenticate(ctx, token)
+		valid = err == nil
+		limits.RecordAuth(key, server, valid)
+	}
+	if !valid {
 		respondError(w, cb.ErrDenied)
 		return
 	}

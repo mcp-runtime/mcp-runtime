@@ -1,12 +1,15 @@
 package credentialapi
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"strconv"
 	"sync"
 	"time"
 
 	cb "mcp-runtime/pkg/credentialbroker"
+	"mcp-runtime/pkg/sessionstate"
 )
 
 var errRateLimited = errors.New("credential resolution rate limited")
@@ -21,6 +24,11 @@ const (
 	limiterMaxKeys  = 4096
 	failureTTL      = 5 * time.Second
 	failureMaxItems = 1024
+	reviewRate      = 50.0 // cold TokenReview creates per second, all sources
+	reviewBurst     = 100.0
+	authCacheTTL    = 10 * time.Second // verified Pod token identity
+	authBadTTL      = 5 * time.Second  // rejected token
+	authCacheMax    = 4096
 )
 
 type bucket struct {
@@ -83,6 +91,14 @@ type Limits struct {
 
 	mu       sync.Mutex
 	failures map[string]time.Time
+	authOK   map[string]authEntry
+	authBad  map[string]time.Time
+	review   *tokenBuckets // global TokenReview budget for cold tokens
+}
+
+type authEntry struct {
+	server sessionstate.Server
+	until  time.Time
 }
 
 func NewLimits() *Limits {
@@ -91,6 +107,9 @@ func NewLimits() *Limits {
 		server:   &tokenBuckets{rate: serverRate, burst: serverBurst, maxKeys: limiterMaxKeys, items: map[string]*bucket{}},
 		Now:      time.Now,
 		failures: map[string]time.Time{},
+		authOK:   map[string]authEntry{},
+		authBad:  map[string]time.Time{},
+		review:   &tokenBuckets{rate: reviewRate, burst: reviewBurst, maxKeys: 1, items: map[string]*bucket{}},
 	}
 }
 
@@ -107,8 +126,75 @@ func (h Handler) limits() *Limits {
 	return defaultLimits
 }
 
-func (l *Limits) AllowSource(addr string) bool { return l.source.allow(addr, l.Now()) }
-func (l *Limits) AllowServer(uid string) bool  { return l.server.allow(uid, l.Now()) }
+// AllowColdReview charges the global TokenReview budget and the per-source
+// budget. It applies only to tokens not already verified or rejected recently,
+// so traffic with unknown tokens can never throttle a cached valid caller.
+func (l *Limits) AllowColdReview(addr string) bool {
+	now := l.Now()
+	return l.source.allow(addr, now) && l.review.allow("all", now)
+}
+
+func tokenHash(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
+}
+
+// CachedAuth returns a recent TokenReview verdict for a token hash.
+func (l *Limits) CachedAuth(key string) (server sessionstate.Server, valid, known bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := l.Now()
+	if e, ok := l.authOK[key]; ok {
+		if now.Before(e.until) {
+			return e.server, true, true
+		}
+		delete(l.authOK, key)
+	}
+	if until, ok := l.authBad[key]; ok {
+		if now.Before(until) {
+			return sessionstate.Server{}, false, true
+		}
+		delete(l.authBad, key)
+	}
+	return sessionstate.Server{}, false, false
+}
+
+func (l *Limits) RecordAuth(key string, server sessionstate.Server, valid bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := l.Now()
+	if len(l.authOK)+len(l.authBad) >= authCacheMax {
+		for k, e := range l.authOK {
+			if !now.Before(e.until) {
+				delete(l.authOK, k)
+			}
+		}
+		for k, until := range l.authBad {
+			if !now.Before(until) {
+				delete(l.authBad, k)
+			}
+		}
+		// Prefer evicting rejected tokens so a flood cannot push out valid callers.
+		for k := range l.authBad {
+			if len(l.authOK)+len(l.authBad) < authCacheMax {
+				break
+			}
+			delete(l.authBad, k)
+		}
+		for k := range l.authOK {
+			if len(l.authOK)+len(l.authBad) < authCacheMax {
+				break
+			}
+			delete(l.authOK, k)
+		}
+	}
+	if valid {
+		l.authOK[key] = authEntry{server, now.Add(authCacheTTL)}
+	} else {
+		l.authBad[key] = now.Add(authBadTTL)
+	}
+}
+func (l *Limits) AllowServer(uid string) bool { return l.server.allow(uid, l.Now()) }
 
 func (l *Limits) failureKey(serverUID string, s cb.Source) string {
 	return serverUID + "|" + s.Namespace + "/" + s.Name + "@" + strconv.FormatInt(s.Revision, 10)

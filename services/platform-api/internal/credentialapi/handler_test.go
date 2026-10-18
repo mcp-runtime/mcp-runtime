@@ -335,7 +335,6 @@ func TestResolveRateLimitsPerServerAndReturns429(t *testing.T) {
 	f := newFixture(t, nil)
 	now := time.Unix(1000, 0)
 	f.handler.Limits.Now = func() time.Time { return now }
-	f.handler.Limits.source.burst, f.handler.Limits.source.rate = 1000, 1000
 	var last int
 	for i := 0; i < int(serverBurst)+1; i++ {
 		last = resolve(f.handler, nil).Code
@@ -349,31 +348,88 @@ func TestResolveRateLimitsPerServerAndReturns429(t *testing.T) {
 	}
 }
 
-func TestResolveRateLimitsPerSourceBeforeTokenReview(t *testing.T) {
+func countingAuth(f *fixture, reviews *int) {
+	f.handler.Authenticate = func(_ context.Context, token string) (sessionstate.Server, error) {
+		*reviews++
+		if token != "pod-token" {
+			return sessionstate.Server{}, errors.New("bad token")
+		}
+		return sessionstate.Server{Namespace: "ns", Name: "srv", UID: "uid-1"}, nil
+	}
+}
+
+func withToken(token string) func(*http.Request) {
+	return func(r *http.Request) { r.Header.Set("Authorization", "Bearer "+token) }
+}
+
+func TestInvalidTokenFloodNeverDeniesCachedValidCaller(t *testing.T) {
 	f := newFixture(t, nil)
 	reviews := 0
-	f.handler.Authenticate = func(context.Context, string) (sessionstate.Server, error) {
-		reviews++
-		return sessionstate.Server{}, errors.New("bad token")
-	}
+	countingAuth(&f, &reviews)
 	now := time.Unix(1000, 0)
 	f.handler.Limits.Now = func() time.Time { return now }
-	var codes []int
-	for i := 0; i < int(sourceBurst)+5; i++ {
-		codes = append(codes, resolve(f.handler, nil).Code)
+	f.handler.Limits.server.burst, f.handler.Limits.server.rate = 100000, 100000
+	if w := resolve(f.handler, nil); w.Code != http.StatusOK {
+		t.Fatalf("valid caller: %d", w.Code)
 	}
-	if reviews != int(sourceBurst) || codes[len(codes)-1] != http.StatusTooManyRequests {
-		t.Fatalf("TokenReview must be bounded per source: reviews=%d last=%d", reviews, codes[len(codes)-1])
+	for i := 0; i < 500; i++ {
+		resolve(f.handler, withToken("junk-"+strconv.Itoa(i)))
+		if w := resolve(f.handler, nil); w.Code != http.StatusOK {
+			t.Fatalf("flood of invalid tokens from the same address denied a valid caller at %d: %d", i, w.Code)
+		}
 	}
-	other := func(r *http.Request) { r.RemoteAddr = "198.51.100.9:4000" }
-	if w := resolve(f.handler, other); w.Code != http.StatusForbidden {
-		t.Fatalf("another source has its own budget, got %d", w.Code)
+}
+
+func TestInvalidTokensAreThrottledAndTokenReviewIsBounded(t *testing.T) {
+	f := newFixture(t, nil)
+	reviews := 0
+	countingAuth(&f, &reviews)
+	now := time.Unix(1000, 0)
+	f.handler.Limits.Now = func() time.Time { return now }
+	limited := 0
+	for i := 0; i < 500; i++ {
+		if resolve(f.handler, withToken("junk-"+strconv.Itoa(i))).Code == http.StatusTooManyRequests {
+			limited++
+		}
 	}
-	// Missing-bearer requests never reach TokenReview or consume budget.
+	if limited == 0 || reviews > int(sourceBurst) {
+		t.Fatalf("cold invalid tokens must be throttled: limited=%d reviews=%d", limited, reviews)
+	}
+	// Repeating the same tokens never reaches TokenReview again.
 	before := reviews
-	resolve(f.handler, func(r *http.Request) { r.Header.Del("Authorization") })
-	if reviews != before {
-		t.Fatal("unauthenticated request reached TokenReview")
+	for i := 0; i < 50; i++ {
+		resolve(f.handler, withToken("junk-0"))
+		resolve(f.handler, nil)
+	}
+	if reviews > before+1 {
+		t.Fatalf("cached tokens hit TokenReview: %d -> %d", before, reviews)
+	}
+	if w := resolve(f.handler, withToken("junk-0")); w.Code != http.StatusForbidden {
+		t.Fatalf("cached invalid token must be 403, got %d", w.Code)
+	}
+}
+
+func TestAuthCacheExpiresAndHoldsOnlyHashes(t *testing.T) {
+	f := newFixture(t, nil)
+	reviews := 0
+	countingAuth(&f, &reviews)
+	now := time.Unix(1000, 0)
+	f.handler.Limits.Now = func() time.Time { return now }
+	for i := 0; i < 5; i++ {
+		resolve(f.handler, nil)
+	}
+	if reviews != 1 {
+		t.Fatalf("valid token reviewed %d times", reviews)
+	}
+	now = now.Add(authCacheTTL + time.Second)
+	resolve(f.handler, nil)
+	if reviews != 2 {
+		t.Fatalf("auth cache must expire, reviews=%d", reviews)
+	}
+	for k := range f.handler.Limits.authOK {
+		if strings.Contains(k, "pod-token") {
+			t.Fatal("token value used as cache key")
+		}
 	}
 }
 
@@ -414,9 +470,10 @@ func TestNegativeCacheAndLimitersAreBounded(t *testing.T) {
 	l := NewLimits()
 	for i := 0; i < failureMaxItems*3; i++ {
 		l.RecordFailure(strconv.Itoa(i))
-		l.AllowSource(strconv.Itoa(i))
+		l.AllowColdReview(strconv.Itoa(i))
+		l.RecordAuth(strconv.Itoa(i), sessionstate.Server{}, false)
 	}
-	if len(l.failures) > failureMaxItems || len(l.source.items) > limiterMaxKeys {
+	if len(l.failures) > failureMaxItems || len(l.source.items) > limiterMaxKeys || len(l.authBad)+len(l.authOK) > authCacheMax {
 		t.Fatalf("unbounded: %d failures %d sources", len(l.failures), len(l.source.items))
 	}
 }
