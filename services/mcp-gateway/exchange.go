@@ -93,6 +93,9 @@ type Exchange struct {
 	// policyFilter). When true, emitAuditFromExchange does nothing, because no
 	// identity or authorization decision was established for the request.
 	SkipAudit bool
+
+	// Idempotency records the opt-in Idempotency-Key outcome for audit.
+	Idempotency idempotencyAudit
 }
 
 // newExchange initialises an Exchange for a fresh inbound request.

@@ -63,6 +63,7 @@ type gatewayMetrics struct {
 	analyticsDropsTotal    prometheus.Counter
 	analyticsEmitFailures  *prometheus.CounterVec
 	oauthOutcomesTotal     *prometheus.CounterVec
+	idempotencyTotal       *prometheus.CounterVec
 	requestDurationSeconds *prometheus.HistogramVec
 	inflightRequests       *prometheus.GaugeVec
 	requestBytesTotal      *prometheus.CounterVec
@@ -112,6 +113,10 @@ func newGatewayMetrics(registerer prometheus.Registerer) *gatewayMetrics {
 			Name: "mcp_gateway_oauth_outcomes_total",
 			Help: "OAuth bearer-token authentication outcomes at MCP gateway sidecars. The outcome label is a bounded enum.",
 		}, []string{"namespace", "server", "outcome"}),
+		idempotencyTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "mcp_gateway_idempotency_total",
+			Help: "Opt-in Idempotency-Key outcomes for governed tool calls. The outcome label is a bounded enum; keys and payloads are never labels.",
+		}, []string{"namespace", "server", "outcome"}),
 		requestDurationSeconds: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "mcp_gateway_request_duration_seconds",
 			Help:    "End-to-end request duration observed by MCP gateway sidecars.",
@@ -149,6 +154,7 @@ func newGatewayMetrics(registerer prometheus.Registerer) *gatewayMetrics {
 			m.analyticsDropsTotal,
 			m.analyticsEmitFailures,
 			m.oauthOutcomesTotal,
+			m.idempotencyTotal,
 			m.requestDurationSeconds,
 			m.inflightRequests,
 			m.requestBytesTotal,
@@ -343,4 +349,21 @@ func metricRPCMethod(method string) string {
 	default:
 		return "other"
 	}
+}
+
+// idempotencyOutcomes is the closed set of idempotency outcome label values.
+var idempotencyOutcomes = map[string]bool{
+	"first": true, "replay": true, "conflict": true, "in_flight": true,
+	"unknown_outcome": true, "not_replayable": true, "capacity": true,
+	"rejected": true, "released": true,
+}
+
+func (m *gatewayMetrics) recordIdempotency(scope gatewayMetricScope, outcome string) {
+	if m == nil {
+		return
+	}
+	if !idempotencyOutcomes[outcome] {
+		outcome = "other"
+	}
+	m.idempotencyTotal.WithLabelValues(scope.Namespace, scope.Server, outcome).Inc()
 }

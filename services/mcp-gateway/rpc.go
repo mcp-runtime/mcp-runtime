@@ -11,6 +11,7 @@ import (
 )
 
 type rpcRequest struct {
+	ID     json.RawMessage `json:"id"`
 	Method string          `json:"method"`
 	Params json.RawMessage `json:"params"`
 }
@@ -61,9 +62,11 @@ func inspectRPCRequest(r *http.Request) rpcInspection {
 	}
 
 	return rpcInspection{
-		Method:   req.Method,
-		ToolName: toolName,
-		ToolCall: policypkg.IsToolCallMethod(req.Method),
+		Method:    req.Method,
+		ToolName:  toolName,
+		ToolCall:  policypkg.IsToolCallMethod(req.Method),
+		ParamsRaw: req.Params,
+		IDRaw:     req.ID,
 	}
 }
 
