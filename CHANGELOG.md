@@ -56,6 +56,9 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Fixed
 
+- `setup` now adds the discovered Kubernetes API Service/endpoint addresses to the platform API NetworkPolicy as it already does for the runtime API. On enforcing CNIs (Cilium, k3s) where `0.0.0.0/0` does not cover cluster-internal addresses, gateway session sync previously failed TokenReview and gateways answered `503 policy_unavailable` for adapter and session traffic. Rerun `setup` (or `update`) to refresh the policy.
+- Analytics TLS setup now also moves analytics-api and runtime-api inline `CLICKHOUSE_ADDR` overrides to the secure native port 9440, so analytics-api readiness no longer fails with 503 against TLS-only ClickHouse. Rerun `setup` or `update` to apply.
+
 - Give non-root analytics clients and Kafka topic initialization the filesystem groups needed to read private TLS volumes without making key files world-readable.
 
 - Production workload identity requires a ready, dedicated enterprise issuer and rejects the shared bundled registry CA, aliased/copied signing keys, and unhealthy CA-backed issuers before TLS provisioning. Migrate by preserving registry trust and selecting an independently managed workload issuer; the bundled workload root remains available in test mode ([#535](https://github.com/mcp-runtime/mcp-runtime/issues/535)).
