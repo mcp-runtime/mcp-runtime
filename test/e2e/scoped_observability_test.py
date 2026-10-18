@@ -43,6 +43,25 @@ scoped_cilium_guard
                 self.assertEqual(result.returncode == 0, expected, result.stderr)
 
 
+class GrafanaQueryTests(unittest.TestCase):
+    def test_public_origin_is_independent_of_loopback_transport(self):
+        with mock.patch.dict(os.environ, {"SCOPED_UI_BASE": "http://127.0.0.1:18080", "SCOPED_UI_ORIGIN": "http://localhost:18080"}):
+            client = mock.MagicMock()
+            response = client.open.return_value.__enter__.return_value
+            response.status, response.headers = 200, {}
+            response.read.return_value = b'{"results":{"A":{"frames":[]}}}'
+            scoped_observability.query(client, 'rate(mcp_gateway_requests_total[5m])')
+            sent = client.open.call_args.args[0]
+            self.assertEqual(sent.full_url, "http://127.0.0.1:18080/grafana/api/ds/query")
+            self.assertEqual(sent.get_header("Origin"), "http://localhost:18080")
+
+    def test_query_errors_fail_immediately_instead_of_waiting_for_series(self):
+        for status, body in ((403, b'{"error":"csrf_failed"}'), (200, b'{"results":{"A":{"error":"backend failed"}}}')):
+            with self.subTest(status=status), self.assertRaises(AssertionError):
+                scoped_observability.query_has_series(status, body)
+        self.assertFalse(scoped_observability.query_has_series(200, b'{"results":{"A":{"frames":[]}}}'))
+
+
 class MCPOriginTests(unittest.TestCase):
     def test_gateway_mcp_uses_the_tls_origin_when_ui_stays_on_http(self):
         with mock.patch.dict(os.environ, {"SCOPED_UI_BASE": "http://127.0.0.1:18080", "SCOPED_MCP_BASE": "https://127.0.0.1:18443"}):

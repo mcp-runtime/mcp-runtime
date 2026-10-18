@@ -64,7 +64,8 @@ with urllib.request.urlopen(r,timeout=10) as response: print(json.load(response)
   wait_for_named_server_ready "${server_name}" "${namespace}"
   kubectl get mcpserver "${server_name}" -n "${namespace}" -o json > "${target}"
   ensure_scoped_observability_ui
-  SCOPED_UI_BASE="http://127.0.0.1:${TRAEFIK_PORT}" SCOPED_MCP_BASE="$(scoped_mcp_origin)" SCOPED_API_KEY="${API_KEY}" \
+  SCOPED_UI_ORIGIN="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get configmap mcp-shared-config -n mcp-platform -o jsonpath='{.data.UI_PUBLIC_ORIGIN}')" \
+    SCOPED_UI_BASE="http://127.0.0.1:${TRAEFIK_PORT}" SCOPED_MCP_BASE="$(scoped_mcp_origin)" SCOPED_API_KEY="${API_KEY}" \
     SCOPED_OWNER="${owner}" SCOPED_MEMBER="${member}" SCOPED_FOREIGN="${foreign}" SCOPED_PASSWORD="${password}" \
     SCOPED_TARGET="${target}" SCOPED_PROTOCOL="${MCP_PROTOCOL_VERSION}" SCOPED_REPORT="${WORKDIR}/scoped-observability.json" \
     python3 "${PROJECT_ROOT}/test/e2e/scoped_observability.py"

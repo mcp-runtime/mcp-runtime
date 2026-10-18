@@ -59,6 +59,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Fixed
 
+- Cilium observability acceptance uses the configured public UI Origin while connecting through IPv4 loopback, and reports Grafana query failures immediately. Supported setup grants resource-history access to exact currently trusted node addresses on TCP 10250; rerun setup to refresh this policy after node or trust changes ([#831](https://github.com/mcp-runtime/mcp-runtime/issues/831)).
+
 - Setup adds ready Kubernetes API EndpointSlice backends and their exact TCP ports to runtime-api egress, including when the installer connects through a loopback tunnel. Scoped Grafana rollout errors now identify the runtime-api deployment ([#809](https://github.com/mcp-runtime/mcp-runtime/issues/809)).
 
 - Performance probes close each HTTP response before reusing the connection, avoiding `ResponseNotReady` on supported Python versions ([#809](https://github.com/mcp-runtime/mcp-runtime/issues/809)).
