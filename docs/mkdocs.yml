@@ -104,6 +104,7 @@ nav:
       - CLI Commands: cli-reference.md
       - API and Resources: api-reference.md
       - Authentication and Authorization: security/authz-matrix.md
+      - In-Cluster Audit Assessment: security/issue-110-assessment.md
       - Go Packages: https://docs.pkg.mcpruntime.org/github.com/mcp-runtime/mcp-runtime
   - Development and Testing:
       - Overview: contributor/README.md
