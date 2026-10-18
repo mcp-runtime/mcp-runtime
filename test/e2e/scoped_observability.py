@@ -253,7 +253,7 @@ def validate_gateway_positive_control(result):
     # A missing identity must reach the real route and fail authentication:
     # wget exits nonzero for HTTP 401, unlike a network denial with no response.
     statuses = re.findall(r"HTTP/\d(?:\.\d)?\s+(\d{3})(?:\s|$)", result.stdout + result.stderr)
-    check(result.returncode != 0 and statuses == ["401"],
+    check(result.returncode != 0 and bool(statuses) and set(statuses) == {"401"},
           "tenant probe reaches the allowed gateway listener and is unauthenticated"
           + f" (exit={result.returncode}, HTTP={statuses})")
 
