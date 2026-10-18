@@ -197,6 +197,22 @@ selector_expect "team-management" "smoke-auth,api-platform,cli-platform,multiten
 selector_expect "runtime-team" "smoke-auth,api-platform,multitenancy" "services/runtime-api/internal/runtimeapi/team_members.go"
 selector_expect "broad" "smoke-auth" "api/v1alpha1/mcpserver_types.go"
 selector_expect "harness" "smoke-auth" "test/e2e/qa-e2e.sh" ".github/workflows/ci.yaml" "go.mod"
+selector_expect "operator-ingress-isolation" "smoke-auth,governance,trust,oauth" "internal/operator/ingress.go" "internal/operator/route_ownership.go"
+selector_expect "workload-signer" "smoke-auth,adapter-certificates,cli-platform" "pkg/workloadidentity/config.go" "internal/cli/cluster/doctor/workload_identity.go"
+selector_expect "delegated-header-auth" "smoke-auth,governance,trust,oauth,adapter-proxy" "pkg/credentialheaders/headers.go"
+selector_expect "adapter-header-mode" "smoke-auth,governance,trust,oauth,adapter-proxy" "internal/agentadapter/credential_headers.go"
+selector_expect "public-routes" "smoke-auth,ui-auth,api-platform,cli-platform" "pkg/publicroutes/routes.go"
+selector_expect "platform-mode" "smoke-auth,ui-auth,api-platform,cli-platform" "pkg/platformmode/platformmode.go"
+selector_expect "session-state" "smoke-auth,api-platform,governance,adapter-proxy" "pkg/sessionstate/types.go"
+selector_expect "registry-auth" "smoke-auth,api-platform,cli-platform" "pkg/registryauth/pull.go"
+selector_expect "egress-cidrs" "smoke-auth,api-platform,cli-platform" "pkg/egresscidrs/cidrs.go"
+selector_expect "mcp-defaults" "smoke-auth,governance,trust,cli-platform" "pkg/mcpdefaults/defaults.go"
+selector_expect "ui-session-proxy" "smoke-auth,ui-auth" "services/ui/internal/proxy/session_proxy.go"
+selector_expect "ui-public-routes-file" "smoke-auth,ui-auth" "services/ui/public_routes.go"
+selector_expect "gateway-client-ca-reload" "smoke-auth,governance,trust,oauth,adapter-certificates" "services/mcp-gateway/client_ca_reload.go"
+selector_expect "ingest-auth" "smoke-auth,governance,trust,oauth,observability" "services/ingest/tokenreview.go"
+selector_expect "analytics-api" "smoke-auth,api-platform" "services/analytics-api/main.go"
+selector_expect "analytics-clickhouse-tls" "smoke-auth,governance,trust,oauth,observability" "pkg/clickhouse/client.go"
 selector_expect "unknown" "smoke-auth" "pkg/platforminventory/credentials.go"
 selector_expect "staging-e2e-only" "smoke-auth" "test/e2e/staging-vm.sh" "test/e2e/lib/staging.sh" ".github/workflows/staging-e2e.yaml"
 
@@ -314,6 +330,48 @@ bash "${SCRIPT_DIR}/adapter_certificates_test.sh"
 
 selector_expect "session-revocation-probe" "smoke-auth,adapter-certificates" "test/e2e/session_revocation.py"
 selector_expect "session-revocation-tests" "smoke-auth,adapter-certificates" "test/e2e/session_revocation_test.py"
+
+# Coverage wiring for the fail-closed UI/ingest assertions and the Staging
+# disposable-target guard. These are offline checks of the harness source.
+python3 - "${SCRIPT_DIR}" "${PROJECT_ROOT}" <<'PY'
+import pathlib, re, sys
+e2e, root = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+ui = (e2e / "ui_auth_flows.py").read_text(encoding="utf-8")
+for needle in ("csrf_failed", "X-CSRF-Token", "http://evil.example", "method_not_allowed", "X-Forwarded-User"):
+    assert needle in ui, f"ui-auth flows must keep asserting {needle}"
+assert "check_session_boundaries(base, label" in ui, "both UI and gateway routes must run the session-boundary checks"
+qa = (e2e / "qa-e2e.sh").read_text(encoding="utf-8")
+for needle in ("ingest rejected event with", "ingest /{probe} probe body is redacted", 'INGEST_SERVICE_BASE="http://127.0.0.1:${INGEST_SERVICE_PORT}"'):
+    assert needle in qa, f"observability pass must keep asserting: {needle}"
+print("[pass] UI session-boundary and ingest fail-closed assertions are wired")
+
+# The Staging guard escape hatches live only in the guard library and its
+# docs. No workflow or other script may set them, so CI can never weaken the
+# disposable-target check.
+allowed = {"test/e2e/lib/staging.sh", "test/e2e/staging_lib_test.sh", "test/e2e/scenarios_test.sh"}
+offenders = []
+for base in (root / ".github", root / "test"):
+    for path in base.rglob("*"):
+        if not path.is_file() or path.suffix in {".png", ".gz"}:
+            continue
+        rel = path.relative_to(root).as_posix()
+        if rel in allowed:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        if "E2E_GUARD_ALLOW_" in text:
+            offenders.append(rel)
+assert not offenders, f"E2E_GUARD_ALLOW_* escape hatches referenced outside the guard: {offenders}"
+guard = (e2e / "lib" / "staging.sh").read_text(encoding="utf-8")
+assert sorted(set(re.findall(r"E2E_GUARD_ALLOW_[A-Z_]+", guard))) == [
+    "E2E_GUARD_ALLOW_UNRESOLVED_PRODUCTION", "E2E_GUARD_ALLOW_VM_DNS_MISMATCH",
+], "a new guard escape hatch needs review and a guard test"
+for wf in (root / ".github" / "workflows").glob("*.yaml"):
+    assert "E2E_GUARD_ALLOW_" not in wf.read_text(encoding="utf-8"), f"{wf.name} must not set guard escape hatches"
+print("[pass] Staging guard escape hatches are not set by workflows or harness scripts")
+PY
 
 # `team user create` rejects --password so a password never lands on a command
 # line. Harness scripts must pipe it with --password-stdin; a stale call only

@@ -4,6 +4,11 @@ import subprocess
 import unittest
 from pathlib import Path
 
+import http.client
+import urllib.error
+from unittest import mock
+
+import scoped_observability
 from scoped_observability import frame_numbers, frames_present
 
 
@@ -36,6 +41,64 @@ scoped_cilium_guard
             with self.subTest(overrides=overrides):
                 result = subprocess.run(["bash", "-c", body], env={**baseline, **overrides}, capture_output=True, text=True)
                 self.assertEqual(result.returncode == 0, expected, result.stderr)
+
+
+class RequestRetryTests(unittest.TestCase):
+    class Response:
+        status = 200
+        headers = {}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self):
+            return b"{}"
+
+    def client(self, failures, error):
+        calls = {"count": 0}
+
+        def open_(req, timeout=None):
+            calls["count"] += 1
+            if calls["count"] <= failures:
+                raise error
+            return self.Response()
+
+        return mock.Mock(open=open_), calls
+
+    def run_request(self, client, method, **kwargs):
+        with mock.patch.object(scoped_observability.time, "sleep"):
+            return scoped_observability.request(client, "http://example.test/x", method, **kwargs)
+
+    def test_safe_requests_retry_a_dropped_connection(self):
+        client, calls = self.client(2, http.client.RemoteDisconnected("closed"))
+        self.assertEqual(self.run_request(client, "GET")[0], 200)
+        self.assertEqual(calls["count"], 3)
+
+    def test_unsafe_requests_do_not_retry_unless_asked(self):
+        client, calls = self.client(1, http.client.RemoteDisconnected("closed"))
+        with self.assertRaises(http.client.RemoteDisconnected):
+            self.run_request(client, "POST", body={"a": 1})
+        self.assertEqual(calls["count"], 1)
+        client, calls = self.client(1, http.client.RemoteDisconnected("closed"))
+        self.assertEqual(self.run_request(client, "POST", body={"a": 1}, retry_connection=True)[0], 200)
+        self.assertEqual(calls["count"], 2)
+
+    def test_persistent_connection_failure_still_fails(self):
+        client, calls = self.client(99, http.client.RemoteDisconnected("closed"))
+        with self.assertRaises(http.client.RemoteDisconnected):
+            self.run_request(client, "GET")
+        self.assertEqual(calls["count"], scoped_observability.CONNECTION_ATTEMPTS)
+
+    def test_http_errors_are_not_retried_as_connection_failures(self):
+        error = urllib.error.HTTPError("http://example.test/x", 503, "unavailable", {}, None)
+        client, calls = self.client(1, error)
+        with mock.patch.object(error, "read", return_value=b"x"):
+            status = self.run_request(client, "GET")[0]
+        self.assertEqual(status, 503)
+        self.assertEqual(calls["count"], 1)
 
 
 if __name__ == "__main__":
