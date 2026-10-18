@@ -86,6 +86,19 @@ class RequestRetryTests(unittest.TestCase):
         self.assertEqual(self.run_request(client, "POST", body={"a": 1}, retry_connection=True)[0], 200)
         self.assertEqual(calls["count"], 2)
 
+    def test_urllib_wrapped_connection_errors_are_retried(self):
+        # urllib raises URLError(reason=ConnectionRefusedError) for a refused
+        # connection, not the bare exception.
+        client, calls = self.client(2, urllib.error.URLError(ConnectionRefusedError(111, "refused")))
+        self.assertEqual(self.run_request(client, "GET")[0], 200)
+        self.assertEqual(calls["count"], 3)
+
+    def test_urllib_errors_that_are_not_connection_drops_are_not_retried(self):
+        client, calls = self.client(1, urllib.error.URLError(OSError("name resolution failed")))
+        with self.assertRaises(urllib.error.URLError):
+            self.run_request(client, "GET")
+        self.assertEqual(calls["count"], 1)
+
     def test_persistent_connection_failure_still_fails(self):
         client, calls = self.client(99, http.client.RemoteDisconnected("closed"))
         with self.assertRaises(http.client.RemoteDisconnected):
