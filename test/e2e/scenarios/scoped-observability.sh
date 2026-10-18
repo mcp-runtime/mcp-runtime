@@ -71,8 +71,10 @@ with urllib.request.urlopen(r,timeout=10) as response: print(json.load(response)
     python3 "${PROJECT_ROOT}/test/e2e/scoped_observability.py"
 
   # Security-specific fixture exception: a read-only uncredentialed Pod probes
-  # the tenant network, with no product resources hand-written or bypassed.
+  # the tenant network. Match the managed workload peer selector for the
+  # platform API positive control; this label grants no telemetry ingress.
   kubectl run "${probe}" -n "${namespace}" --image=nginx:1.27-alpine --restart=Never \
+    --labels=app.kubernetes.io/managed-by=mcp-runtime \
     --overrides='{"spec":{"automountServiceAccountToken":false,"securityContext":{"runAsNonRoot":true,"runAsUser":65534,"seccompProfile":{"type":"RuntimeDefault"}},"containers":[{"name":"scope-network-probe","image":"nginx:1.27-alpine","command":["/bin/sh","-c","sleep 300"],"resources":{"requests":{"cpu":"10m","memory":"16Mi"},"limits":{"memory":"32Mi"}},"securityContext":{"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":true,"capabilities":{"drop":["ALL"]}}}]}}' \
     --command -- /bin/sh -c 'sleep 300' >/dev/null
   kubectl wait pod "${probe}" -n "${namespace}" --for=condition=Ready --timeout=120s >/dev/null
