@@ -248,6 +248,16 @@ def validate_network_probe(probe):
           "tenant probe has the managed workload label required by platform API ingress")
 
 
+def validate_gateway_positive_control(result):
+    # The tenant-facing listener deliberately has no public health endpoint.
+    # A missing identity must reach the real route and fail authentication:
+    # wget exits nonzero for HTTP 401, unlike a network denial with no response.
+    statuses = re.findall(r"HTTP/\d(?:\.\d)?\s+(\d{3})(?:\s|$)", result.stdout + result.stderr)
+    check(result.returncode != 0 and statuses == ["401"],
+          "tenant probe reaches the allowed gateway listener and is unauthenticated"
+          + f" (exit={result.returncode}, HTTP={statuses})")
+
+
 def network():
     kube = ["kubectl", "--kubeconfig", os.environ["SCOPED_KUBECONFIG"]]
     namespace, pod = os.environ["SCOPED_NAMESPACE"], os.environ["SCOPED_PROBE"]
@@ -271,8 +281,8 @@ def network():
     # the actual tenant policy permits before interpreting backend denials.
     platform_api = get("svc", "mcp-platform-api", "-n", "mcp-platform")["spec"]["clusterIP"]
     command = kube + ["exec", "-n", namespace, pod, "--", "wget", "-T", "3", "-S", "-O", "/dev/null", "--header=X-WEBAUTH-USER: forged-admin", "--header=X-WEBAUTH-ROLE: Admin"]
-    control = subprocess.run(command + [f"http://{platform_api}:8085/health"], capture_output=True, text=True, timeout=10)
-    check(control.returncode == 0 and "200" in control.stderr, "tenant probe can reach its healthy allowed platform API peer")
+    control = subprocess.run(command + [f"http://{platform_api}:8085/internal/gateway/v1/sessions"], capture_output=True, text=True, timeout=10)
+    validate_gateway_positive_control(control)
     denied = []
     for name, port, path in (("grafana", 3000, "/grafana/api/health"), ("prometheus", 9090, "/prometheus/api/v1/query?query=up"), ("loki", 3100, "/ready"), ("tempo", 3200, "/ready")):
         pods = get("pods", "-n", "mcp-observability", "-l", "app=" + name)["items"]
@@ -282,7 +292,7 @@ def network():
             result = subprocess.run(command + [f"http://{address}:{port}{path}"], capture_output=True, text=True, timeout=10)
             check(result.returncode != 0 and not re.search(r"HTTP/\d", result.stdout + result.stderr), "Cilium blocks tenant service/direct-pod " + name + " including forged auth-proxy identity")
         denied.append(name)
-    evidence = {"probe_uid": probe["metadata"]["uid"], "probe_namespace": namespace, "cilium_generation": agents["metadata"]["generation"], "policy_uid": policy["metadata"]["uid"], "policy_resource_version": policy["metadata"]["resourceVersion"], "denied_backends": denied, "allowed_control": "platform API health"}
+    evidence = {"probe_uid": probe["metadata"]["uid"], "probe_namespace": namespace, "cilium_generation": agents["metadata"]["generation"], "policy_uid": policy["metadata"]["uid"], "policy_resource_version": policy["metadata"]["resourceVersion"], "denied_backends": denied, "allowed_control": "platform API gateway authentication (HTTP 401)"}
     Path(os.environ["SCOPED_REPORT"]).with_name("scoped-network-evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
     path = Path(os.environ["SCOPED_REPORT"])
     report = json.loads(path.read_text())

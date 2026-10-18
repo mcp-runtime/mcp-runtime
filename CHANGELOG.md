@@ -59,6 +59,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Fixed
 
+- Require the real gateway session route to return HTTP 401 to the uncredentialed Cilium positive control; a timeout, missing health route or unexpected successful access no longer counts as valid connectivity evidence.
+
 - Give the disposable Cilium tenant probe the managed-workload network label required by the platform API positive control, while retaining no ServiceAccount token and the unchanged telemetry boundary ([#800](https://github.com/tavric-labs/mcp-runtime/pull/800), [#811](https://github.com/tavric-labs/mcp-runtime/pull/811)).
 
 - Provision an independent workload CA and verify CertificateRequest approval on the disposable staging VM before strict setup; retain the previous TLS snapshot when certificate APIs are absent.
