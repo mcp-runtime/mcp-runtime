@@ -569,6 +569,7 @@ expect_fail "deactivation cannot pass while saved token remains valid" deactivat
 expect_fail "deactivation cannot mistake an unknown token-probe route for revocation" deactivation_acceptance_case unknown-route
 
 expect_ok "workspace browser private fixture boundary" python3 "${SCRIPT_DIR}/workspace_browser_fixture_test.py"
+expect_ok "workspace browser menu check ignores server lists started before the click" node --test "${SCRIPT_DIR}/workspace_browser_menu_test.cjs"
 workspace_browser_transport_case() (
   ROOT_DIR="${SCRIPT_DIR}/../.." WORK_DIR="${TMP}/workspace-browser" STAGING_ARTIFACT_DIR="${TMP}/browser-artifacts"
   STAGING_MT_CONFIG_DIR="${TMP}/browser-config" STAGING_MT_RUN_ID=test
