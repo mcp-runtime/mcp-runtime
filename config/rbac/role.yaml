@@ -30,6 +30,7 @@ rules:
   verbs:
   - list
   - patch
+  - watch
 - apiGroups:
   - ""
   resources:
