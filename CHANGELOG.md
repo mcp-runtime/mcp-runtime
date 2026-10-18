@@ -55,6 +55,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Fixed
 
+- `cluster init` and `cluster config` now honor an explicitly exported single-path `KUBECONFIG` before default discovery (`~/.kube/config`, host k3s path); `--kubeconfig` keeps precedence. A missing or unreadable `KUBECONFIG` target, or a multi-path `KUBECONFIG` list, is a clear error instead of silently using a different cluster; pass `--kubeconfig` or export a single file ([#813](https://github.com/mcp-runtime/mcp-runtime/issues/813)).
 - `setup` now adds the discovered Kubernetes API Service/endpoint addresses to the platform API NetworkPolicy as it already does for the runtime API. On enforcing CNIs (Cilium, k3s) where `0.0.0.0/0` does not cover cluster-internal addresses, gateway session sync previously failed TokenReview and gateways answered `503 policy_unavailable` for adapter and session traffic. Rerun `setup` (or `update`) to refresh the policy.
 - Analytics TLS setup now also moves analytics-api and runtime-api inline `CLICKHOUSE_ADDR` overrides to the secure native port 9440, so analytics-api readiness no longer fails with 503 against TLS-only ClickHouse. Rerun `setup` or `update` to apply.
 

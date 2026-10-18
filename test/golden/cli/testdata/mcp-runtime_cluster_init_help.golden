@@ -6,7 +6,7 @@ Usage:
 Flags:
       --context string      Kubernetes context to use
   -h, --help                help for init
-      --kubeconfig string   Path to kubeconfig file (default: ~/.kube/config; auto-detects /etc/rancher/k3s/k3s.yaml on k3s hosts)
+      --kubeconfig string   Path to kubeconfig file (default: single-file $KUBECONFIG, else ~/.kube/config; auto-detects /etc/rancher/k3s/k3s.yaml on k3s hosts)
 
 Global Flags:
       --debug   Enable debug mode with structured error logging

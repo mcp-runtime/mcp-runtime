@@ -107,6 +107,9 @@ func resolveKubeconfigPathWithStat(kubeconfig string, stat func(string) (os.File
 	if kubeconfig != "" {
 		return kubeconfig, nil
 	}
+	if envPath := strings.TrimSpace(os.Getenv("KUBECONFIG")); envPath != "" {
+		return resolveExplicitEnvKubeconfig(envPath, stat)
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		wrappedErr := core.WrapWithBase(core.ErrGetHomeDirectoryFailed, err, fmt.Sprintf("failed to get home directory: %v", err))
@@ -130,6 +133,26 @@ func resolveKubeconfigPathWithStat(kubeconfig string, stat func(string) (os.File
 	}
 
 	return defaultPath, nil
+}
+
+// resolveExplicitEnvKubeconfig validates an explicitly exported KUBECONFIG.
+// An explicit selection is authoritative: it is never replaced by default
+// discovery, and a list of paths is rejected because init/config must target
+// one unambiguous cluster configuration file.
+func resolveExplicitEnvKubeconfig(envPath string, stat func(string) (os.FileInfo, error)) (string, error) {
+	if strings.ContainsRune(envPath, os.PathListSeparator) {
+		err := fmt.Errorf("KUBECONFIG contains multiple paths (separated by %q); set KUBECONFIG to a single kubeconfig file or pass --kubeconfig", string(os.PathListSeparator))
+		wrapped := core.WrapWithBaseAndContext(core.ErrKubeconfigNotReadable, err, err.Error(), map[string]any{"source": "KUBECONFIG", "component": "cluster"})
+		core.Error("KUBECONFIG path list is not supported")
+		return "", wrapped
+	}
+	if _, err := stat(envPath); err != nil {
+		msg := fmt.Sprintf("kubeconfig %q selected by KUBECONFIG environment variable not found or not readable: %v", envPath, err)
+		wrapped := core.WrapWithBaseAndContext(core.ErrKubeconfigNotReadable, err, msg, map[string]any{"kubeconfig": envPath, "source": "KUBECONFIG", "component": "cluster"})
+		core.Error("Kubeconfig from KUBECONFIG not readable")
+		return "", wrapped
+	}
+	return envPath, nil
 }
 
 // ConfigureKubeconfig sets KUBECONFIG and optionally switches context.
