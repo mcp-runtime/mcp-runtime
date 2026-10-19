@@ -33,6 +33,8 @@ source "${ROOT_DIR}/test/e2e/lib/staging.sh"
 source "${ROOT_DIR}/test/e2e/lib/cluster-wait.sh"
 # shellcheck source=test/e2e/lib/k3s-installer.sh
 source "${ROOT_DIR}/test/e2e/lib/k3s-installer.sh"
+# shellcheck source=test/e2e/lib/staging-issuer.sh
+source "${ROOT_DIR}/test/e2e/lib/staging-issuer.sh"
 # shellcheck source=test/e2e/lib/platform-snapshot.sh
 source "${ROOT_DIR}/test/e2e/lib/platform-snapshot.sh"
 
@@ -97,7 +99,7 @@ if [[ -f "${BACKUP_DIR}/e2e.env" ]]; then
   source "${BACKUP_DIR}/e2e.env"
   set +a
 fi
-export E2E_MTLS_CLUSTER_ISSUER="${E2E_MTLS_CLUSTER_ISSUER-mcp-runtime-ca}"
+export E2E_MTLS_CLUSTER_ISSUER="${E2E_MTLS_CLUSTER_ISSUER-mcp-e2e-workload}"
 staging_enable_mcp_auth_for_run "${E2E_WITH_MCP_AUTH_OVERRIDE:-false}"
 # Adapter certificates on gateway routes are an opt-in platform feature; setup
 # reads MCP_ADAPTER_CERTIFICATES, MCP_TRUST_DOMAIN and
@@ -151,6 +153,8 @@ backup_platform_runtime() {
     ! kubectl -n mcp-platform get secret mcp-platform-tls >/dev/null 2>&1; then
     staging_skip "public certificates are not issued yet; keeping the previous snapshot"
   fi
+  kubectl get crd certificates.cert-manager.io >/dev/null 2>&1 ||
+    staging_skip "certificate APIs are unavailable; keeping the previous snapshot"
   load_platform_backup_helpers
   staging_snapshot_identity
   log "capturing platform runtime backup before cluster cleanup"
@@ -160,7 +164,7 @@ backup_platform_runtime() {
 install_dependencies() {
   if command -v apt-get >/dev/null 2>&1; then
     apt-get update
-    apt-get install -y ca-certificates curl git jq make openssh-client openssl
+    apt-get install -y ca-certificates curl git jq make openssh-client openssl python3
     # Setup builds the platform images with Docker (driven by make) on the
     # machine running the CLI, which for this runner is the VM itself.
     if ! command -v docker >/dev/null 2>&1; then
@@ -170,9 +174,9 @@ install_dependencies() {
       apt-get install -y docker-buildx || apt-get install -y docker-buildx-plugin || true
     fi
   elif command -v dnf >/dev/null 2>&1; then
-    dnf install -y ca-certificates curl git jq make openssh-clients openssl
+    dnf install -y ca-certificates curl git jq make openssh-clients openssl python3
   elif command -v apk >/dev/null 2>&1; then
-    apk add --no-cache ca-certificates curl git jq make openssh-client openssl
+    apk add --no-cache ca-certificates curl git jq make openssh-client openssl python3
   else
     log "no supported package manager found; assuming curl, git, jq, make, openssl and docker are preinstalled"
   fi
@@ -180,9 +184,13 @@ install_dependencies() {
     systemctl enable --now docker || true
   fi
   local cmd
-  for cmd in curl git jq make openssl docker; do
+  for cmd in curl git jq make openssl python3 docker; do
     require_command "${cmd}"
   done
+  [[ "$(uname -m)" == x86_64 ]] || fail "the staging Helm fixture currently supports x86_64 VMs"
+  curl --retry 5 --retry-all-errors -fsSL https://get.helm.sh/helm-v3.22.1-linux-amd64.tar.gz -o "${WORK_DIR}/helm.tar.gz"
+  (cd "${WORK_DIR}" && echo '896cf63684a42a723d61c980369d6e588330927deb13676ca0d85006dd6da0ea  helm.tar.gz' | sha256sum -c -)
+  tar -xzf "${WORK_DIR}/helm.tar.gz" -C "${WORK_DIR}" linux-amd64/helm
   docker info >/dev/null 2>&1 || fail "the Docker daemon is not running"
   docker version --format 'docker {{.Server.Version}}'
   docker buildx version || log "docker buildx is unavailable; setup falls back to docker build"
@@ -369,10 +377,7 @@ stage_restore_snapshot() {
   load_platform_backup_helpers
   staging_snapshot_select_latest "${BACKUP_DIR}/platform-runtime"
   log "restoring platform runtime snapshot $(readlink "${BACKUP_DIR}/platform-runtime/latest")"
-  # Certificates and ClusterIssuers fail to apply before setup installs the
-  # cert-manager CRDs; the Secrets, which are what avoids a new ACME order, do
-  # not need them.
-  mcpruntime_org_restore_platform_runtime || log "some snapshot objects could not be applied before setup (expected for cert-manager kinds)"
+  mcpruntime_org_restore_platform_runtime || log "some snapshot objects could not be restored; inspect the snapshot restore log"
   local file pem
   for file in registry-tls mcp-platform-tls; do
     kubectl -n "$([[ ${file} == registry-tls ]] && echo registry || echo mcp-platform)" get secret "${file}" \
@@ -547,6 +552,8 @@ staging_run_stage go-toolchain critical "no usable Go toolchain or the CLI faile
 staging_run_stage traefik critical "the bundled Traefik never became ready" wait_for_traefik 300
 staging_run_stage doctor-before soft "pre-setup doctor could not run at all" stage_doctor_before
 ensure_platform_admin_config
+staging_run_stage certificate-controller critical "cert-manager fixture failed before snapshot restore" staging_install_certificate_controller
 staging_run_stage restore-snapshot soft "the platform snapshot could not be applied; setup will issue fresh certificates" stage_restore_snapshot
+staging_run_stage workload-issuer critical "dedicated workload issuer or approval probes failed" staging_prepare_workload_issuer
 staging_run_stage setup critical "setup failed; read the last ERROR in setup.log (image pull x509/auth, ACME, webhook, or rollout timeout) and diagnostics/events.txt" stage_setup
 staging_run_platform_stages
