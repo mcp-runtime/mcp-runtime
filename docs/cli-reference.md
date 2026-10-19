@@ -1012,6 +1012,13 @@ needs a ServiceAccount that does not exist is blocked until you re-run without
 `--only`. The plan lists each object (`create`, `update` or `skipped`) and the
 wiring change per component.
 
+The resource-history kubelet policy derives exact node host CIDRs on TCP 10250
+from setup-provisioned serving trust and current node UID/InternalIP pairs,
+both during planning and when applying. Missing trust permits no destinations;
+invalid or unreadable trust stops the operation. Update preserves the trust
+ConfigMap and never copies arbitrary live egress rules. Rerun supported setup
+after replacing nodes or changing serving trust; `--dry-run` is read-only.
+
 Release-declared ConfigMap keys are applied while preserving unrelated keys;
 dependent workloads restart and failed rollouts restore the previous keys.
 `--platform-mode org|public` also sets `PLATFORM_MODE` in existing shared

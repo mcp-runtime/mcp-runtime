@@ -64,6 +64,24 @@ with urllib.request.urlopen(r,timeout=10) as response: print(json.load(response)
   wait_for_named_server_ready "${server_name}" "${namespace}"
   kubectl get mcpserver "${server_name}" -n "${namespace}" -o json > "${target}"
   ensure_scoped_observability_ui
+  # Exercise setup -> update -> repeat-update before measuring resources and
+  # tenant denials. Use the release's static policy, not a copy of live rules.
+  local update_dir resource_after pass
+  update_dir="${WORKDIR}/scoped-update"
+  mkdir -p "${update_dir}"
+  platform_update_write_manifest "${update_dir}/current.json"
+  jq --rawfile policy "${PROJECT_ROOT}/k8s/24-resource-history-networkpolicy.yaml" \
+    '.platformObjects = $policy' "${update_dir}/current.json" > "${update_dir}/release.json"
+  resource_after="$(date +%s)"
+  for pass in first repeat; do
+    ./bin/mcp-runtime update --kubeconfig "${KUBECONFIG_FILE}" --context "${context}" \
+      --release-manifest "${update_dir}/release.json" --dry-run --output json > "${update_dir}/plan-${pass}.json"
+    jq -e '[.plan.platformObjects[] | select(.key == "NetworkPolicy/mcp-platform/mcp-runtime-api-resource-history-egress" and .action == "skipped")] | length == 1' \
+      "${update_dir}/plan-${pass}.json" >/dev/null
+    ./bin/mcp-runtime update --kubeconfig "${KUBECONFIG_FILE}" --context "${context}" \
+      --release-manifest "${update_dir}/release.json" --yes > "${update_dir}/apply-${pass}.txt"
+  done
+  SCOPED_RESOURCE_AFTER="${resource_after}" \
   SCOPED_UI_ORIGIN="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get configmap mcp-shared-config -n mcp-platform -o jsonpath='{.data.UI_PUBLIC_ORIGIN}')" \
     SCOPED_UI_BASE="http://127.0.0.1:${TRAEFIK_PORT}" SCOPED_MCP_BASE="$(scoped_mcp_origin)" SCOPED_API_KEY="${API_KEY}" \
     SCOPED_OWNER="${owner}" SCOPED_MEMBER="${member}" SCOPED_FOREIGN="${foreign}" SCOPED_PASSWORD="${password}" \

@@ -18,6 +18,7 @@ those workflows rather than duplicating cluster management.
 | Image vulnerability review | `ci/trivy-platform-images.sh` | Builds/scans locally; excludes unfixed CVEs under the existing scanner policy |
 | Multi-team demo | `qa/multitenancy-test.sh` | Loopback or disposable staging only; private credentials and scoped cleanup |
 | E2E image reuse | `qa/image-cache/` | Content-hash cache consumed by QA E2E |
+| Scoped observability acceptance | `../test/e2e/scenarios/scoped-observability.sh` via QA E2E | Guarded disposable Cilium Kind; setup/update convergence, fresh resource samples and tenant denials; prerequisites and inputs in [local Kind](../docs/contributor/local-kind.md#enforcing-cilium-security-acceptance) |
 | Release component manifest | `release/platformmanifest/` | Source of truth shared with `mcp-runtime update` |
 | Hosted release acceptance | `deploy/acceptance/` | Disposable runner; checks publish/deploy, grant/session and allowed/denied calls |
 | Reference platform recovery/update | `deploy/reference/` | Explicit profile, source ref, context and cluster UID; see its README |

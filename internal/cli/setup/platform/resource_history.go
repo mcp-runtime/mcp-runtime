@@ -15,7 +15,6 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -253,44 +252,18 @@ func ensureResourceHistoryNodeEgressClientGo() error {
 
 func ensureResourceHistoryNodeEgressWith(ctx context.Context, client kubernetes.Interface) error {
 	namespace := core.ComponentNamespace("runtime-api")
-	policy, err := client.NetworkingV1().NetworkPolicies(namespace).Get(ctx, "mcp-runtime-api-resource-history-egress", metav1.GetOptions{})
+	policy, err := client.NetworkingV1().NetworkPolicies(namespace).Get(ctx, resourcehistory.NodeEgressPolicy, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		return nil
 	}
 	if err != nil {
 		return fmt.Errorf("read resource history egress: %w", err)
 	}
-	policy.Spec.Egress = nil
-	cm, err := client.CoreV1().ConfigMaps(namespace).Get(ctx, resourcehistory.TrustConfigMap, metav1.GetOptions{})
-	if err != nil && !apierrors.IsNotFound(err) {
-		return fmt.Errorf("read resource history trust: %w", err)
+	egress, err := resourcehistory.NodeEgress(ctx, client, namespace)
+	if err != nil {
+		return err
 	}
-	if err == nil {
-		targets, decodeErr := resourcehistory.DecodeTargets(cm.Data["targets.json"])
-		if decodeErr != nil {
-			return decodeErr
-		}
-		nodes, listErr := client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-		if listErr != nil {
-			return fmt.Errorf("list resource history egress nodes: %w", listErr)
-		}
-		for _, node := range nodes.Items {
-			target, ok := targets[node.Name]
-			if !ok || target.UID != string(node.UID) {
-				continue
-			}
-			for _, address := range node.Status.Addresses {
-				if address.Type != corev1.NodeInternalIP || address.Address != target.Address {
-					continue
-				}
-				policy.Spec.Egress = append(policy.Spec.Egress, networkingv1.NetworkPolicyEgressRule{
-					To:    []networkingv1.NetworkPolicyPeer{{IPBlock: &networkingv1.IPBlock{CIDR: networkHostCIDR(net.ParseIP(address.Address))}}},
-					Ports: []networkingv1.NetworkPolicyPort{{Protocol: protocolPtr(corev1.ProtocolTCP), Port: intstrPtr(10250)}},
-				})
-				break
-			}
-		}
-	}
+	policy.Spec.Egress = egress
 	if _, err := client.NetworkingV1().NetworkPolicies(namespace).Update(ctx, policy, metav1.UpdateOptions{}); err != nil {
 		return fmt.Errorf("update resource history node egress: %w", err)
 	}
