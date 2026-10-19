@@ -1038,6 +1038,9 @@ and cancel sibling builds. Existing tags are reused except for commit-tagged
 release images: these are rebuilt from a clean checkout of the exact source
 commit even if the tag exists. Without `--build`, images must already be
 published.
+Source verification ignores inherited `GIT_*` variables, so a Git hook or
+another repository's environment cannot redirect the commit and cleanliness
+checks away from the selected `--source` checkout.
 Registry probes for external Docker targets run before builds, including commit-tagged images, so invalid
 Docker registry credentials fail before an expensive build. `--dry-run` skips
 registry access and does not require Docker. Bundled `.svc.cluster.local`

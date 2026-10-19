@@ -82,8 +82,8 @@ respectively) instead of refusing. It never evicts an in-flight entry or a
 tombstone, because evicting a tombstone would allow re-execution after an
 ambiguous outcome, and evicting an in-flight entry would let a duplicate start.
 If nothing is evictable, or an in-flight cap is reached, or the scope's
-tombstone budget is spent (a new key could end in a tombstone the store could
-not keep), keyed requests of that scope fail closed with
+tombstone budget is spent or reserved by in-flight keys (each could end in a
+tombstone the store must keep), keyed requests of that scope fail closed with
 `429 idempotency_capacity`; unkeyed traffic is unaffected. Eviction of a
 completed entry loses only the replay (a later retry may run the tool again), so
 an attacker can shorten a victim's replay window only by filling the global cap,
@@ -91,6 +91,9 @@ which requires several principals' worth of quota.
 In-flight entries are exempt from TTL expiry; they leave only by completion,
 tombstone or release, so a slowly streaming body cannot let a duplicate start.
 Completed entries and tombstones expire by TTL.
+Each in-flight key reserves one tombstone slot until its outcome is known.
+A replayable completion or release frees that reservation; an ambiguous or
+non-replayable outcome consumes the slot without evicting another tombstone.
 
 A 2xx reply that carries a JSON-RPC error or an `isError` tool result is stored
 and replayed like any other 2xx. The tool ran and produced a definitive answer;

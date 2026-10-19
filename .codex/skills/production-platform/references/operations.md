@@ -65,7 +65,7 @@ KUBECONFIG="$PROD_KUBECONFIG" ./bin/mcp-runtime cluster doctor
   [production observability workflow](../../../../docs/reference-deployment.md#production-observability-and-debugging).
   For each concrete maintainability or debugging gap, find or create an
   evidence-based repository issue and attach it to
-  [Maintainability and Debuggability Improvement](https://github.com/orgs/mcp-runtime/projects/1).
+  [Maintainability and Debuggability Improvement](https://github.com/orgs/tavric-labs/projects/1).
 
 - Manage supported operations through the CLI and platform UI. If team,
   publishing, deployment, access, update, or cleanup commands fail, reproduce

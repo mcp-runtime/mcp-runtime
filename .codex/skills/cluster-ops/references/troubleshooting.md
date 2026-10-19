@@ -49,7 +49,7 @@ them. Check collection coverage and correlate request/trace IDs with client
 logs. Follow the [production observability workflow](../../../../docs/reference-deployment.md#production-observability-and-debugging).
 Find or create an actionable repository ticket for each concrete
 maintainability or debugging gap and attach it to
-[Maintainability and Debuggability Improvement](https://github.com/orgs/mcp-runtime/projects/1).
+[Maintainability and Debuggability Improvement](https://github.com/orgs/tavric-labs/projects/1).
 
 ## Full checklist
 

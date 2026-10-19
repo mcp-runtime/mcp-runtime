@@ -19,6 +19,8 @@ migration is required beyond the 0.11.0 notes.
 
 ### Fixed
 
+- Release image source verification ignores inherited Git environment variables so the selected `--source` checkout and index are checked directly. Its Git test fixture also isolates temporary repository writes from commit-hook metadata ([#843](https://github.com/tavric-labs/mcp-runtime/issues/843)).
+- Gateway idempotency admission reserves tombstone capacity for in-flight requests, keeping the per-session limit bounded when concurrent calls finish with ambiguous or non-replayable outcomes. Existing protected keys remain available; new keyed calls receive `429 idempotency_capacity` while the session's remaining tombstone slots are reserved ([#842](https://github.com/tavric-labs/mcp-runtime/issues/842)).
 - The operator derives the analytics ingest URL instead of trusting a stored one. An MCPServer whose `spec.analytics.ingestURL` still holds the plain-`http` platform ingest URL written by an older release (`mcp-ingest.<namespace>.svc[.cluster.local]` or the operator's own ingest host) now uses the operator's HTTPS default, so the server reconciles and rolls instead of failing with `managed analytics transport requires an HTTPS ingest URL`. No manual edit is needed; external `http` URLs and URLs with embedded credentials are still rejected.
 - MCP gateway OAuth issuer discovery and JWKS fetches use the system trust store again instead of the analytics ingest CA, so authenticated requests to servers with a public HTTPS issuer no longer fail with `503 oauth_provider_unavailable` (regression in 0.11.0). Analytics ingest TLS is unchanged and still pins the internal CA.
 

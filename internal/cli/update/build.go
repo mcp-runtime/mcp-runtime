@@ -376,6 +376,7 @@ func verifyReleaseSource(ctx context.Context, source, commit string) error {
 	// #nosec G204 -- source is a resolved repository directory, passed as one
 	// argument to fixed git subcommands without a shell.
 	cmd := exec.CommandContext(ctx, "git", "-C", source, "rev-parse", "HEAD")
+	cmd.Env = releaseSourceGitEnv()
 	got, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("read release source commit: %w", err)
@@ -386,6 +387,7 @@ func verifyReleaseSource(ctx context.Context, source, commit string) error {
 	// #nosec G204 -- source is a resolved repository directory, passed as one
 	// argument to fixed git subcommands without a shell.
 	cmd = exec.CommandContext(ctx, "git", "-C", source, "status", "--porcelain", "--untracked-files=normal")
+	cmd.Env = releaseSourceGitEnv()
 	status, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("check release source cleanliness: %w", err)
@@ -394,6 +396,18 @@ func verifyReleaseSource(ctx context.Context, source, commit string) error {
 		return fmt.Errorf("release source checkout has local changes; use a clean checkout of %s", commit)
 	}
 	return nil
+}
+
+func releaseSourceGitEnv() []string {
+	// Git hooks export repository/index selectors that override -C. These
+	// local, read-only checks must inspect the explicitly selected source.
+	var env []string
+	for _, entry := range os.Environ() {
+		if !strings.HasPrefix(entry, "GIT_") {
+			env = append(env, entry)
+		}
+	}
+	return env
 }
 
 func buildComponentImage(ctx context.Context, source, platform string, spec imageBuildSpec, image string, out io.Writer) error {
