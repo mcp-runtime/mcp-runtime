@@ -575,6 +575,9 @@ cleanup() {
   if [[ "${BASH_SUBSHELL:-0}" -ne 0 ]]; then
     return 0
   fi
+  if [[ "${e2e_status}" -ne 0 ]]; then
+    e2e_collect_setup_diagnostics || true
+  fi
   if [[ -n "${RESOURCE_CAPTURE_PID}" ]]; then
     kill -TERM "${RESOURCE_CAPTURE_PID}" >/dev/null 2>&1 || true
     wait "${RESOURCE_CAPTURE_PID}" 2>/dev/null || true
@@ -746,11 +749,32 @@ traefik_http_responding() {
   [[ "${status}" =~ ^[1-5][0-9]{2}$ ]]
 }
 
+# A recycled kubectl port-forward can still accept TCP and then reset the TLS
+# handshake. Any HTTP status means Traefik completed the handshake.
+traefik_tls_responding() {
+  local status
+  status="$(curl -k --http1.1 -sS --connect-timeout 2 --max-time 3 -o /dev/null -w '%{http_code}' \
+    "https://127.0.0.1:${TRAEFIK_TLS_PORT}/" 2>/dev/null || true)"
+  [[ "${status}" =~ ^[1-5][0-9]{2}$ ]]
+}
+
 wait_for_traefik_http_response() {
   local tries="${1:-10}"
   local attempt
   for attempt in $(seq 1 "${tries}"); do
     if traefik_http_responding; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+wait_for_traefik_tls_response() {
+  local tries="${1:-10}"
+  local attempt
+  for attempt in $(seq 1 "${tries}"); do
+    if traefik_tls_responding; then
       return 0
     fi
     sleep 1
@@ -1000,7 +1024,7 @@ recover_traefik_port_forward_if_needed() {
 # which breaks the port-forward with "broken pipe". Call this before any mTLS curl
 # that runs after the cert-issuance wait.
 recover_traefik_tls_port_forward_if_needed() {
-  if port_is_listening "${TRAEFIK_TLS_PORT}"; then
+  if traefik_tls_responding; then
     return 0
   fi
 
@@ -1009,13 +1033,28 @@ recover_traefik_tls_port_forward_if_needed() {
     wait "${TRAEFIK_TLS_PORT_FORWARD_PID}" >/dev/null 2>&1 || true
   fi
   TRAEFIK_TLS_PORT_FORWARD_PID=""
+  stop_listener_on_port "${TRAEFIK_TLS_PORT}"
 
-  TRAEFIK_TLS_PORT_FORWARD_RESTARTS=$((TRAEFIK_TLS_PORT_FORWARD_RESTARTS + 1))
-  local log_file="${WORKDIR}/traefik-tls-port-forward-restart-${TRAEFIK_TLS_PORT_FORWARD_RESTARTS}.log"
-  echo "[port-forward] restarting Traefik TLS port-forward on localhost:${TRAEFIK_TLS_PORT}" >&2
-  port_forward_bg traefik traefik "${TRAEFIK_TLS_PORT}" 8443 "${log_file}" || return 1
-  TRAEFIK_TLS_PORT_FORWARD_PID="${LAST_MANAGED_PID}"
-  wait_port "${TRAEFIK_TLS_PORT}" 30
+  local attempt log_file
+  for attempt in 1 2 3; do
+    TRAEFIK_TLS_PORT_FORWARD_RESTARTS=$((TRAEFIK_TLS_PORT_FORWARD_RESTARTS + 1))
+    log_file="${WORKDIR}/traefik-tls-port-forward-restart-${TRAEFIK_TLS_PORT_FORWARD_RESTARTS}.log"
+    echo "[port-forward] restarting Traefik TLS port-forward on localhost:${TRAEFIK_TLS_PORT} (attempt ${attempt}/3)" >&2
+    if port_forward_bg traefik traefik "${TRAEFIK_TLS_PORT}" 8443 "${log_file}" \
+      && wait_for_traefik_tls_response 10; then
+      TRAEFIK_TLS_PORT_FORWARD_PID="${LAST_MANAGED_PID}"
+      return 0
+    fi
+    if [[ -n "${LAST_MANAGED_PID:-}" ]] && kill -0 "${LAST_MANAGED_PID}" >/dev/null 2>&1; then
+      kill "${LAST_MANAGED_PID}" >/dev/null 2>&1 || true
+      wait "${LAST_MANAGED_PID}" >/dev/null 2>&1 || true
+    fi
+    stop_listener_on_port "${TRAEFIK_TLS_PORT}"
+    TRAEFIK_TLS_PORT_FORWARD_PID=""
+    sleep 2
+  done
+  echo "[error] Traefik TLS port-forward on localhost:${TRAEFIK_TLS_PORT} did not complete a TLS handshake after 3 attempts" >&2
+  return 1
 }
 
 # recover_traefik_port_forwards_if_needed restores the HTTP forward and, once
@@ -1031,18 +1070,17 @@ recover_traefik_port_forwards_if_needed() {
 }
 
 ensure_traefik_tls_port_forward() {
-  if [[ -n "${TRAEFIK_TLS_PORT_FORWARD_PID:-}" ]] && {
-    ! kill -0 "${TRAEFIK_TLS_PORT_FORWARD_PID}" >/dev/null 2>&1 || ! port_is_listening "${TRAEFIK_TLS_PORT}"
-  }; then
+  if [[ -n "${TRAEFIK_TLS_PORT_FORWARD_PID:-}" ]] && kill -0 "${TRAEFIK_TLS_PORT_FORWARD_PID}" >/dev/null 2>&1 && traefik_tls_responding; then
+    return 0
+  fi
+  if [[ -n "${TRAEFIK_TLS_PORT_FORWARD_PID:-}" ]] || port_is_listening "${TRAEFIK_TLS_PORT}"; then
     recover_traefik_tls_port_forward_if_needed
     return
   fi
-  if [[ -z "${TRAEFIK_TLS_PORT_FORWARD_PID:-}" ]]; then
-    port_forward_bg traefik traefik "${TRAEFIK_TLS_PORT}" 8443 "${WORKDIR}/traefik-tls-port-forward.log" || return 1
-    TRAEFIK_TLS_PORT_FORWARD_PID="${LAST_MANAGED_PID}"
-    TRAEFIK_TLS_PORT_FORWARD_RESTARTS=0
-  fi
-  if ! wait_port "${TRAEFIK_TLS_PORT}" 15; then
+  port_forward_bg traefik traefik "${TRAEFIK_TLS_PORT}" 8443 "${WORKDIR}/traefik-tls-port-forward.log" || return 1
+  TRAEFIK_TLS_PORT_FORWARD_PID="${LAST_MANAGED_PID}"
+  TRAEFIK_TLS_PORT_FORWARD_RESTARTS=0
+  if ! wait_for_traefik_tls_response 15; then
     recover_traefik_tls_port_forward_if_needed
   fi
 }
@@ -4140,8 +4178,8 @@ assert_file_contains "Status: LOGIN REQUIRED" "${WORKDIR}/cli-status-no-login.tx
 
 echo "[cli] checking bootstrap, cluster, registry, and ops commands"
 ./bin/mcp-runtime bootstrap --provider generic
-./bin/mcp-runtime cluster init
-./bin/mcp-runtime cluster config --ingress none
+./bin/mcp-runtime cluster init --kubeconfig "${KUBECONFIG_FILE}"
+./bin/mcp-runtime cluster config --ingress none --kubeconfig "${KUBECONFIG_FILE}"
 ./bin/mcp-runtime cluster provision \
   --provider kind \
   --name "${CLUSTER_NAME}-dry-run" \
@@ -5984,6 +6022,7 @@ if scenario_selected "observability" && checkpoint_enabled "observability"; then
   API_BASE="http://127.0.0.1:${PLATFORM_PORT}/api/v1" \
   API_KEY="${API_KEY}" \
   INGEST_API_KEY="${INGEST_API_KEY}" \
+  INGEST_SERVICE_BASE="http://127.0.0.1:${INGEST_SERVICE_PORT}" \
   SERVER_NAME="${SERVER_NAME}" \
   OAUTH_SERVER_NAME="${OAUTH_SERVER_NAME}" \
   OAUTH_HUMAN_ID="${OAUTH_HUMAN_ID}" \
@@ -6008,6 +6047,7 @@ import urllib.request
 api_base = os.environ["API_BASE"]
 api_key = os.environ["API_KEY"]
 ingest_api_key = os.environ["INGEST_API_KEY"]
+ingest_service_base = os.environ["INGEST_SERVICE_BASE"]
 server_name = os.environ["SERVER_NAME"]
 oauth_server_name = os.environ["OAUTH_SERVER_NAME"]
 oauth_human_id = os.environ["OAUTH_HUMAN_ID"]
@@ -6365,6 +6405,39 @@ check(
     "pii redaction ingest accepted event",
     f"pii redaction: unexpected status {status}, body={resp_body}",
 )
+
+# Ingest fails closed: a missing, wrong or spoofed-identity credential never
+# reaches Kafka, and unauthenticated probes reveal no broker detail.
+def raw_status(url, *, method="GET", headers=None, body=None):
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.getcode(), resp.read().decode()
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read().decode()
+
+unauth_event = {"timestamp": "2026-03-29T00:00:00Z", "source": "ingest-fail-closed-e2e", "event_type": "auth.check", "payload": {}}
+for label, extra in (
+    ("no credential", {}),
+    ("wrong api key", {"x-api-key": "wrong-" + ingest_api_key}),
+    ("spoofed forwarded identity", {"x-forwarded-for": "127.0.0.1", "x-forwarded-user": "admin", "x-mcp-role": "admin"}),
+):
+    status, resp_body = raw_status(
+        f"{platform_base}/ingest/events", method="POST", body=unauth_event,
+        headers={"content-type": "application/json", **extra},
+    )
+    check(status in (401, 403), f"ingest rejected event with {label}", f"ingest {label}: status {status}, body={resp_body}")
+    check(ingest_api_key not in resp_body, f"ingest {label} rejection omitted credentials", f"ingest leaked key: {resp_body}")
+for probe in ("live", "ready", "health"):
+    status, resp_body = raw_status(f"{ingest_service_base}/{probe}")
+    check(status in (200, 503), f"ingest /{probe} probe answered", f"ingest /{probe}: status {status}, body={resp_body}")
+    lowered = resp_body.lower()
+    check(
+        "kafka:" not in lowered and ".svc" not in lowered and ":9092" not in lowered and ingest_api_key not in resp_body,
+        f"ingest /{probe} probe body is redacted",
+        f"ingest /{probe} leaked internal detail: {resp_body}",
+    )
 
 # api-platform/ui-auth flows do not emit service.route.check; seed one ingest event
 # so /api/event-types includes it before the analytics assertions below.

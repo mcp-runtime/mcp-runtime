@@ -59,6 +59,17 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Fixed
 
+- Check the real gateway-session route for the uncredentialed Cilium positive control and require its HTTP 401 response. The tenant listener intentionally has no public health route; timeouts, HTTP 404 and unexpected successful access cannot pass as connectivity evidence.
+
+- Give the disposable Cilium tenant probe the same managed-workload network label as a deployed MCP server, so the platform API positive control can reach its permitted gateway listener before checking telemetry isolation. The probe remains uncredentialed and production policies are unchanged ([#800](https://github.com/tavric-labs/mcp-runtime/pull/800)).
+
+- Cilium observability acceptance uses the configured public UI Origin while connecting through IPv4 loopback, and reports Grafana query failures immediately. Supported setup grants resource-history access to exact currently trusted node addresses on TCP 10250; rerun setup to refresh this policy after node or trust changes ([#831](https://github.com/mcp-runtime/mcp-runtime/issues/831)).
+
+- Setup adds ready Kubernetes API EndpointSlice backends and their exact TCP ports to runtime-api egress, including when the installer connects through a loopback tunnel. Scoped Grafana rollout errors now identify the runtime-api deployment ([#809](https://github.com/mcp-runtime/mcp-runtime/issues/809)).
+
+- Performance probes close each HTTP response before reusing the connection, avoiding `ResponseNotReady` on supported Python versions ([#809](https://github.com/mcp-runtime/mcp-runtime/issues/809)).
+
+- Failed Kind setup retains bounded, redacted platform workload status and warning events before teardown, including scoped Cilium CI runs ([#809](https://github.com/mcp-runtime/mcp-runtime/issues/809)).
 - `cluster init` and `cluster config` now honor an explicitly exported single-path `KUBECONFIG` before default discovery (`~/.kube/config`, host k3s path); `--kubeconfig` keeps precedence. A missing or unreadable `KUBECONFIG` target, or a multi-path `KUBECONFIG` list, is a clear error instead of silently using a different cluster; pass `--kubeconfig` or export a single file ([#813](https://github.com/mcp-runtime/mcp-runtime/issues/813)).
 - `setup` now adds the discovered Kubernetes API Service/endpoint addresses to the platform API NetworkPolicy as it already does for the runtime API. On enforcing CNIs (Cilium, k3s) where `0.0.0.0/0` does not cover cluster-internal addresses, gateway session sync previously failed TokenReview and gateways answered `503 policy_unavailable` for adapter and session traffic. Rerun `setup` (or `update`) to refresh the policy.
 - Analytics TLS setup now also moves analytics-api and runtime-api inline `CLICKHOUSE_ADDR` overrides to the secure native port 9440, so analytics-api readiness no longer fails with 503 against TLS-only ClickHouse. Rerun `setup` or `update` to apply.

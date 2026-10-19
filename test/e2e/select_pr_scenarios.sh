@@ -65,7 +65,7 @@ classify_path() {
       add_scenario "adapter-certificates"
       return
       ;;
-    test/e2e/scenarios/credential-broker.sh|test/e2e/credential_broker_assertions*.py|test/e2e/fixtures/credential-echo/*|pkg/credentialbroker/*|pkg/credentialheaders/*|internal/cli/credential/*|services/platform-api/internal/credentialapi/*|services/platform-api/internal/platformstore/credentials*|services/platform-api/credentials.go|services/mcp-gateway/credential_*)
+    test/e2e/scenarios/credential-broker.sh|test/e2e/credential_broker_assertions*.py|test/e2e/fixtures/credential-echo/*|pkg/credentialbroker/*|internal/cli/credential/*|services/platform-api/internal/credentialapi/*|services/platform-api/internal/platformstore/credentials*|services/platform-api/credentials.go|services/mcp-gateway/credential_*)
       # Broker packages: the credential-broker scenario exercises them. The
       # gateway and platform paths also run their own broader scenarios below.
       add_scenario "credential-broker"
@@ -84,6 +84,59 @@ classify_path() {
     test/e2e/*|.github/workflows/ci.yaml|.github/workflows/pre-release-regression.yaml|go.mod|go.sum|Makefile*|Dockerfile*)
       # The baseline install builds the images and runs setup. Pre-release
       # uses the separate Staging E2E suite.
+      return
+      ;;
+    internal/operator/ingress.go|internal/operator/route_ownership*.go)
+      # Per-server Traefik routes and current-UID ownership: the request
+      # paths that prove isolation are the gateway scenarios and the oauth
+      # route through ingress.
+      add_scenario "governance"
+      add_scenario "trust"
+      add_scenario "oauth"
+      return
+      ;;
+    internal/cli/cluster/doctor/workload_identity*.go|pkg/workloadidentity/*|services/runtime-api/internal/runtimeapi/adapter_preflight*)
+      # Workload-signer guards and the adapter enrollment preflight.
+      add_scenario "adapter-certificates"
+      add_scenario "cli-platform"
+      return
+      ;;
+    pkg/credentialheaders/*|internal/agentadapter/credential_headers*)
+      # Delegated header auth at the gateway and adapter header mode.
+      # pkg/credentialheaders is also the broker header contract, so that
+      # path runs credential-broker as well as the gateway scenarios.
+      if [[ "${path}" == pkg/credentialheaders/* ]]; then
+        add_scenario "credential-broker"
+      fi
+      add_scenario "governance"
+      add_scenario "trust"
+      add_scenario "oauth"
+      add_scenario "adapter-proxy"
+      return
+      ;;
+    pkg/publicroutes/*|pkg/platformmode/*)
+      # Public route and platform-mode config shared by setup, the UI and APIs.
+      add_scenario "ui-auth"
+      add_scenario "api-platform"
+      add_scenario "cli-platform"
+      return
+      ;;
+    pkg/sessionstate/*)
+      # Session manifests shared by the gateway, access flows and the APIs.
+      add_scenario "api-platform"
+      add_scenario "governance"
+      add_scenario "adapter-proxy"
+      return
+      ;;
+    pkg/registryauth/*|pkg/egresscidrs/*)
+      add_scenario "api-platform"
+      add_scenario "cli-platform"
+      return
+      ;;
+    pkg/mcpdefaults/*)
+      add_scenario "governance"
+      add_scenario "trust"
+      add_scenario "cli-platform"
       return
       ;;
     internal/operator/mtls*|internal/cli/certmanager/*|traefik-plugins/spiffe-identity/*|config/cert-manager/*|pkg/identity/*|pkg/certauth/*)

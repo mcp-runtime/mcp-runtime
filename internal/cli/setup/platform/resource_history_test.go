@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
@@ -94,5 +95,52 @@ func TestResourceHistoryDoesNotReadForeignKindNode(t *testing.T) {
 		if err == nil {
 			t.Fatal("foreign node trusted")
 		}
+	}
+}
+
+func TestResourceHistoryEgressUsesOnlyCurrentTrustedNodes(t *testing.T) {
+	ctx := context.Background()
+	server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer server.Close()
+	certificate := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw}))
+	targets, err := resourcehistory.EncodeTargets([]resourcehistory.Target{
+		{Name: "current", UID: "current-uid", Address: "172.18.0.2", ServerName: "current", CertificatePEM: certificate},
+		{Name: "replaced", UID: "old-uid", Address: "172.18.0.3", ServerName: "replaced", CertificatePEM: certificate},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := fake.NewSimpleClientset(
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: resourcehistory.TrustConfigMap, Namespace: "mcp-platform"}, Data: map[string]string{"targets.json": targets}},
+		&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "current", UID: "current-uid"}, Status: corev1.NodeStatus{Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "172.18.0.2"}}}},
+		&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "replaced", UID: "new-uid"}, Status: corev1.NodeStatus{Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "172.18.0.3"}}}},
+		&networkingv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "mcp-runtime-api-resource-history-egress", Namespace: "mcp-platform"}},
+	)
+	for range 2 {
+		if err := ensureResourceHistoryNodeEgressWith(ctx, client); err != nil {
+			t.Fatal(err)
+		}
+	}
+	policy, err := client.NetworkingV1().NetworkPolicies("mcp-platform").Get(ctx, "mcp-runtime-api-resource-history-egress", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(policy.Spec.Egress) != 1 {
+		t.Fatalf("expected only current trusted node, got %+v", policy.Spec.Egress)
+	}
+	rule := policy.Spec.Egress[0]
+	if len(rule.To) != 1 || rule.To[0].IPBlock == nil || rule.To[0].IPBlock.CIDR != "172.18.0.2/32" || len(rule.Ports) != 1 || rule.Ports[0].Port.IntVal != 10250 || *rule.Ports[0].Protocol != corev1.ProtocolTCP {
+		t.Fatalf("unexpected kubelet permission: %+v", rule)
+	}
+	// Trust removal must revoke stale permissions, including a previous broad rule.
+	if err := client.CoreV1().ConfigMaps("mcp-platform").Delete(ctx, resourcehistory.TrustConfigMap, metav1.DeleteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureResourceHistoryNodeEgressWith(ctx, client); err != nil {
+		t.Fatal(err)
+	}
+	policy, err = client.NetworkingV1().NetworkPolicies("mcp-platform").Get(ctx, policy.Name, metav1.GetOptions{})
+	if err != nil || len(policy.Spec.Egress) != 0 {
+		t.Fatalf("stale node permission retained: %+v, %v", policy, err)
 	}
 }

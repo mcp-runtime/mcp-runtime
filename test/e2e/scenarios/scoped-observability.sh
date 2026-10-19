@@ -8,6 +8,26 @@ scoped_observability_cli() {
     MCP_RUNTIME_CONFIG_DIR="${WORKDIR}/scoped-cli" "${PROJECT_ROOT}/bin/mcp-runtime" "$@"
 }
 
+# server deploy reconciles ingress and can drop the Traefik port-forward.
+# A TCP listen check is not enough: the UI client then keeps retrying a closed
+# port. Restore the forward, including an HTTP response, before that client.
+ensure_scoped_observability_ui() {
+  recover_traefik_port_forward_if_needed
+  if declare -F e2e_adapter_certificates_enabled >/dev/null && e2e_adapter_certificates_enabled; then
+    ensure_traefik_tls_port_forward
+  fi
+}
+
+# Gateway IngressRoutes are on websecure when adapter certificates are on.
+# The UI login stays on the HTTP forward.
+scoped_mcp_origin() {
+  if declare -F e2e_adapter_certificates_enabled >/dev/null && e2e_adapter_certificates_enabled; then
+    printf 'https://127.0.0.1:%s' "${TRAEFIK_TLS_PORT}"
+    return
+  fi
+  printf 'http://127.0.0.1:%s' "${TRAEFIK_PORT}"
+}
+
 run_scoped_observability_acceptance() (
   set -euo pipefail
   local context owner_token namespace server_name team foreign_team owner member foreign password target probe
@@ -43,14 +63,18 @@ with urllib.request.urlopen(r,timeout=10) as response: print(json.load(response)
   trap 'kubectl delete pod "${probe}" -n "${namespace}" --ignore-not-found --wait=false >/dev/null 2>&1 || true; scoped_observability_cli "${owner_token}" server delete "${server_name}" --namespace "${namespace}" >/dev/null' EXIT
   wait_for_named_server_ready "${server_name}" "${namespace}"
   kubectl get mcpserver "${server_name}" -n "${namespace}" -o json > "${target}"
-  SCOPED_UI_BASE="http://localhost:${TRAEFIK_PORT}" SCOPED_API_KEY="${API_KEY}" \
+  ensure_scoped_observability_ui
+  SCOPED_UI_ORIGIN="$(kubectl --kubeconfig "${KUBECONFIG_FILE}" get configmap mcp-shared-config -n mcp-platform -o jsonpath='{.data.UI_PUBLIC_ORIGIN}')" \
+    SCOPED_UI_BASE="http://127.0.0.1:${TRAEFIK_PORT}" SCOPED_MCP_BASE="$(scoped_mcp_origin)" SCOPED_API_KEY="${API_KEY}" \
     SCOPED_OWNER="${owner}" SCOPED_MEMBER="${member}" SCOPED_FOREIGN="${foreign}" SCOPED_PASSWORD="${password}" \
     SCOPED_TARGET="${target}" SCOPED_PROTOCOL="${MCP_PROTOCOL_VERSION}" SCOPED_REPORT="${WORKDIR}/scoped-observability.json" \
     python3 "${PROJECT_ROOT}/test/e2e/scoped_observability.py"
 
   # Security-specific fixture exception: a read-only uncredentialed Pod probes
-  # the tenant network, with no product resources hand-written or bypassed.
+  # the tenant network. Match the managed workload peer selector for the
+  # platform API positive control; this label grants no telemetry ingress.
   kubectl run "${probe}" -n "${namespace}" --image=nginx:1.27-alpine --restart=Never \
+    --labels=app.kubernetes.io/managed-by=mcp-runtime \
     --overrides='{"spec":{"automountServiceAccountToken":false,"securityContext":{"runAsNonRoot":true,"runAsUser":65534,"seccompProfile":{"type":"RuntimeDefault"}},"containers":[{"name":"scope-network-probe","image":"nginx:1.27-alpine","command":["/bin/sh","-c","sleep 300"],"resources":{"requests":{"cpu":"10m","memory":"16Mi"},"limits":{"memory":"32Mi"}},"securityContext":{"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":true,"capabilities":{"drop":["ALL"]}}}]}}' \
     --command -- /bin/sh -c 'sleep 300' >/dev/null
   kubectl wait pod "${probe}" -n "${namespace}" --for=condition=Ready --timeout=120s >/dev/null

@@ -1,9 +1,11 @@
 """Real platform-session scoped Grafana and isolated resource-history acceptance."""
+import http.client
 import http.cookiejar
 import json
 import math
 import os
 import re
+import ssl
 import subprocess
 import sys
 import time
@@ -13,30 +15,90 @@ import urllib.request
 from pathlib import Path
 
 
+def ui_origin():
+    # Browser Origin follows the configured public UI, independently of the
+    # IPv4 loopback address used to reach the disposable port-forward.
+    return os.environ.get("SCOPED_UI_ORIGIN", os.environ["SCOPED_UI_BASE"]).rstrip("/")
+
+
+def query_has_series(status, body):
+    if status != 200:
+        raise AssertionError(f"scoped Grafana query failed with HTTP {status}")
+    result = json.loads(body)
+    for ref, value in result.get("results", {}).items():
+        if value.get("error") or value.get("status", 200) >= 400:
+            # Do not dump backend responses, which can contain query payloads.
+            raise AssertionError(f"scoped Grafana datasource query {ref} failed")
+    return frames_present(body)
+
+
+def mcp_origin():
+    # Adapter-certificate IngressRoutes listen on Traefik websecure. The UI
+    # stays on the plain HTTP forward, so MCP must use SCOPED_MCP_BASE when
+    # the scenario points it at the TLS port.
+    configured = os.environ.get("SCOPED_MCP_BASE", "").strip()
+    if configured:
+        return configured.rstrip("/")
+    return os.environ["SCOPED_UI_BASE"].rstrip("/")
+
+
+def mcp_opener():
+    origin = urllib.parse.urlsplit(mcp_origin())
+    # Kind Traefik's default certificate SAN is not 127.0.0.1. The rest of the
+    # E2E harness uses the same loopback exception (qa-e2e.sh --tls-insecure-skip-verify).
+    if origin.scheme == "https" and origin.hostname in {"127.0.0.1", "localhost"}:
+        return urllib.request.build_opener(urllib.request.HTTPSHandler(context=ssl._create_unverified_context()))
+    return urllib.request.build_opener()
+
+
 def check(condition, message):
     if not condition:
         raise AssertionError(message)
     print("[pass] " + message, flush=True)
 
 
-def request(client, url, method="GET", body=None, headers=None):
+# A dropped connection (the Traefik port-forward being recycled right after a
+# server deploy, for example) is retried a few times. Each retry is logged so a
+# real crash that closes every connection still fails the run and shows up.
+CONNECTION_ATTEMPTS = 4
+CONNECTION_BACKOFF_SECONDS = 2
+CONNECTION_ERRORS = (http.client.RemoteDisconnected, ConnectionResetError, ConnectionRefusedError, BrokenPipeError)
+
+
+def request(client, url, method="GET", body=None, headers=None, retry_connection=None):
     headers = dict(headers or {})
     if body is not None:
         body = json.dumps(body).encode()
         headers.setdefault("Content-Type", "application/json")
-    req = urllib.request.Request(url, data=body, method=method, headers=headers)
-    try:
-        with client.open(req, timeout=15) as response:
-            return response.status, response.headers, response.read()
-    except urllib.error.HTTPError as error:
-        return error.code, error.headers, error.read()
+    # Retrying could double-submit a write, so only safe methods retry unless the
+    # caller says the request is idempotent (the login call does).
+    retry = method in ("GET", "HEAD") if retry_connection is None else retry_connection
+    attempts = CONNECTION_ATTEMPTS if retry else 1
+    for attempt in range(1, attempts + 1):
+        req = urllib.request.Request(url, data=body, method=method, headers=headers)
+        try:
+            with client.open(req, timeout=15) as response:
+                return response.status, response.headers, response.read()
+        except urllib.error.HTTPError as error:
+            return error.code, error.headers, error.read()
+        except (*CONNECTION_ERRORS, urllib.error.URLError) as error:
+            # urllib wraps a refused or reset connection as URLError(reason=...), so
+            # look at the reason too. Other URLErrors (DNS, TLS) are not retried.
+            reason = getattr(error, "reason", error)
+            if not isinstance(error, CONNECTION_ERRORS) and not isinstance(reason, CONNECTION_ERRORS):
+                raise
+            if attempt == attempts:
+                raise
+            print(f"[retry] {method} {urllib.parse.urlsplit(url).path} dropped ({type(error).__name__}), attempt {attempt}/{attempts}", file=sys.stderr, flush=True)
+            time.sleep(CONNECTION_BACKOFF_SECONDS)
+    raise RuntimeError("request retry attempts exhausted")
 
 
 def session(base, email=None, key=None):
     cookies = http.cookiejar.CookieJar()
     client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookies))
     body = {"api_key": key} if key else {"email": email, "password": os.environ["SCOPED_PASSWORD"]}
-    status, _, response_body = request(client, base + "/auth/login", "POST", body)
+    status, _, response_body = request(client, base + "/auth/login", "POST", body, retry_connection=True)
     check(status == 200, "platform session login succeeds")
     client.scoped_csrf_token = json.loads(response_body)["csrf_token"]
     return client, cookies
@@ -55,6 +117,17 @@ def frame_numbers(body):
 
 def frames_present(body):
     return bool(frame_numbers(body))
+
+
+def query(client, expr, forged=False):
+    base = os.environ["SCOPED_UI_BASE"]
+    now = int(time.time() * 1000)
+    headers = {"Origin": ui_origin()}
+    if forged:
+        headers.update({"X-WEBAUTH-USER": "forged-admin", "X-WEBAUTH-ROLE": "Admin", "X-Grafana-Org-Id": "2"})
+    return request(client, base + "/grafana/api/ds/query", "POST", {
+        "from": str(now - 3600000), "to": str(now), "queries": [{"refId": "A", "expr": expr,
+        "datasource": {"uid": "prometheus", "type": "prometheus"}, "range": True, "intervalMs": 15000, "maxDataPoints": 2000}]}, headers)
 
 
 def functional():
@@ -79,38 +152,38 @@ def functional():
     check(status == 200 and b"grafanaBootData" in body and headers.get("Content-Security-Policy"), "native Grafana dashboard boot is protected by its nonce CSP")
     check(not any(cookie.name == "grafana_session" for cookie in cookies), "platform session does not issue a Grafana login cookie")
 
-    def query(client, expr, forged=False):
-        now = int(time.time() * 1000)
-        headers = {"Origin": base}
-        if forged:
-            headers.update({"X-WEBAUTH-USER": "forged-admin", "X-WEBAUTH-ROLE": "Admin", "X-Grafana-Org-Id": "2"})
-        return request(client, base + "/grafana/api/ds/query", "POST", {
-            "from": str(now - 3600000), "to": str(now), "queries": [{"refId": "A", "expr": expr,
-            "datasource": {"uid": "prometheus", "type": "prometheus"}, "range": True, "intervalMs": 15000, "maxDataPoints": 2000}]}, headers)
-
     # A bounded functional conversation creates real metrics; this is not a
     # staging load test or a throughput/latency benchmark.
     protocol = os.environ["SCOPED_PROTOCOL"]
     mcp_headers = {"Accept": "application/json, text/event-stream", "Mcp-Protocol-Version": protocol}
-    endpoint = base + "/" + server + "/mcp"
+    endpoint = mcp_origin() + "/" + server + "/mcp"
+    mcp = mcp_opener()
     deadline = time.monotonic() + 90
     while True:
-        status, response_headers, _ = request(anonymous, endpoint, "POST", {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": protocol, "capabilities": {}, "clientInfo": {"name": "scoped-history-qa", "version": "1"}}}, mcp_headers)
+        try:
+            status, response_headers, _ = request(mcp, endpoint, "POST", {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": protocol, "capabilities": {}, "clientInfo": {"name": "scoped-history-qa", "version": "1"}}}, mcp_headers)
+        except urllib.error.URLError as error:
+            reason = getattr(error, "reason", error)
+            if time.monotonic() >= deadline or not isinstance(reason, CONNECTION_ERRORS):
+                raise
+            print("[retry] POST MCP initialize dropped (%s)" % type(reason).__name__, file=sys.stderr, flush=True)
+            time.sleep(2)
+            continue
         if status == 200 or time.monotonic() >= deadline:
             break
         time.sleep(2)
-    check(status == 200, "tenant fixture MCP initialize succeeds")
+    check(status == 200, "tenant fixture MCP initialize succeeds (status %s)" % status)
     if response_headers.get("Mcp-Session-Id"):
         mcp_headers["Mcp-Session-Id"] = response_headers["Mcp-Session-Id"]
-    status, _, _ = request(anonymous, endpoint, "POST", {"jsonrpc": "2.0", "method": "notifications/initialized"}, mcp_headers)
+    status, _, _ = request(mcp, endpoint, "POST", {"jsonrpc": "2.0", "method": "notifications/initialized"}, mcp_headers)
     check(status in (200, 202), "tenant fixture MCP initialized notification succeeds")
     for index in range(5):
-        status, _, result = request(anonymous, endpoint, "POST", {"jsonrpc": "2.0", "id": index + 2, "method": "tools/call", "params": {"name": "aaa-ping", "arguments": {}}}, mcp_headers)
+        status, _, result = request(mcp, endpoint, "POST", {"jsonrpc": "2.0", "id": index + 2, "method": "tools/call", "params": {"name": "aaa-ping", "arguments": {}}}, mcp_headers)
         check(status == 200 and b"pong" in result, "tenant fixture tools/call succeeds")
     deadline = time.monotonic() + 180
     while True:
         status, _, body = query(owner, expression)
-        if status == 200 and frames_present(body):
+        if query_has_series(status, body):
             break
         if time.monotonic() >= deadline:
             raise AssertionError("scoped Grafana did not receive real gateway series")
@@ -139,12 +212,50 @@ def functional():
             # Historical successes alone cannot hide a currently failing source.
             instant_status, _, instant_body = request(admin, base + "/grafana/api/ds/query", "POST", {
                 "from": str(int(time.time() * 1000) - 60000), "to": str(int(time.time() * 1000)),
-                "queries": [{"refId": "A", "expr": expr, "datasource": {"uid": "prometheus", "type": "prometheus"}, "instant": True}]}, {"Origin": base})
+                "queries": [{"refId": "A", "expr": expr, "datasource": {"uid": "prometheus", "type": "prometheus"}, "instant": True}]}, {"Origin": ui_origin()})
             check(instant_status == 200 and frame_numbers(instant_body) and all(number == 1 for number in frame_numbers(instant_body)), "current authenticated " + name + " is successful")
-    check(request(owner, base + "/auth/logout", "POST", {}, {"Origin": base, "X-CSRF-Token": owner.scoped_csrf_token})[0] == 200, "platform session logout succeeds")
+    check(request(owner, base + "/auth/logout", "POST", {}, {"Origin": ui_origin(), "X-CSRF-Token": owner.scoped_csrf_token})[0] == 200, "platform session logout succeeds")
     check(request(owner, base + "/grafana/api/health")[0] == 401, "platform logout revokes Grafana access")
     Path(os.environ["SCOPED_REPORT"]).write_text(json.dumps({"functional": "passed", "resources": resource,
         "notes": ["Absent driver volume history remains missing; reservations are not consumption.", "See grafana.json for same-window kubelet comparisons and overhead."]}, indent=2) + "\n")
+
+
+def manifest_policy(output, namespace, name):
+    # kubectl create -o json emits separate JSON documents for a multi-document
+    # YAML file. Other kubectl paths return a List; validate both without
+    # relying on source order or accidentally comparing the egress policy.
+    decoder = json.JSONDecoder()
+    objects = []
+    remaining = output.strip()
+    while remaining:
+        document, end = decoder.raw_decode(remaining)
+        objects.extend(document.get("items", []) if document.get("kind") == "List" else [document])
+        remaining = remaining[end:].strip()
+    matches = [item for item in objects if item.get("kind") == "NetworkPolicy"
+               and item.get("metadata", {}).get("namespace") == namespace
+               and item.get("metadata", {}).get("name") == name]
+    if len(matches) != 1:
+        raise AssertionError("release manifest must contain exactly one named telemetry policy")
+    return matches[0]
+
+
+def validate_network_probe(probe):
+    check(probe["status"]["phase"] == "Running" and probe["spec"].get("automountServiceAccountToken") is False,
+          "network evidence uses the current uncredentialed tenant probe")
+    # The gateway read listener admits managed workload peers, not every Pod
+    # in a tenant namespace. Match the deployed server's network identity.
+    check(probe["metadata"].get("labels", {}).get("app.kubernetes.io/managed-by") == "mcp-runtime",
+          "tenant probe has the managed workload label required by platform API ingress")
+
+
+def validate_gateway_positive_control(result):
+    # The tenant-facing listener deliberately has no public health endpoint.
+    # A missing identity must reach the real route and fail authentication:
+    # wget exits nonzero for HTTP 401, unlike a network denial with no response.
+    statuses = re.findall(r"HTTP/\d(?:\.\d)?\s+(\d{3})(?:\s|$)", result.stdout + result.stderr)
+    check(result.returncode != 0 and bool(statuses) and set(statuses) == {"401"},
+          "tenant probe reaches the allowed gateway listener and is unauthenticated"
+          + f" (exit={result.returncode}, HTTP={statuses})")
 
 
 def network():
@@ -154,21 +265,24 @@ def network():
         return json.loads(subprocess.check_output(kube + ["get", *args, "-o", "json"], text=True))
 
     probe = get("pod", pod, "-n", namespace)
-    check(probe["status"]["phase"] == "Running" and probe["spec"].get("automountServiceAccountToken") is False, "network evidence uses the current uncredentialed tenant probe")
+    validate_network_probe(probe)
     agents = get("daemonset", "cilium", "-n", "kube-system")
     config = get("configmap", "cilium-config", "-n", "kube-system")
     check(agents["status"]["observedGeneration"] >= agents["metadata"]["generation"] and agents["status"]["numberReady"] == agents["status"]["desiredNumberScheduled"] > 0,
           "current Cilium generation is fully ready")
     check(config["data"].get("enable-policy") == "default" and config["data"].get("enable-k8s-networkpolicy") == "true", "running Cilium config explicitly enables Kubernetes policy")
     policy = get("networkpolicy", "mcp-scoped-observability-ingress", "-n", "mcp-observability")
-    canonical = json.loads(subprocess.check_output(kube + ["create", "--dry-run=client", "-f", str(Path(__file__).resolve().parents[2] / "k8s/23-scoped-observability-networkpolicy.yaml"), "-o", "json"], text=True))["items"][0]
+    canonical = manifest_policy(subprocess.check_output(kube + ["create", "--dry-run=client", "-f", str(Path(__file__).resolve().parents[2] / "k8s/23-scoped-observability-networkpolicy.yaml"), "-o", "json"], text=True), "mcp-observability", "mcp-scoped-observability-ingress")
     check(policy["spec"] == canonical["spec"], "live telemetry rule exactly matches the release security boundary")
     services = {name: get("svc", name, "-n", "mcp-observability")["spec"]["clusterIP"]
                 for name in ("grafana", "prometheus", "loki", "tempo")}
-    ui = json.loads(subprocess.check_output(kube + ["get", "svc", "mcp-ui", "-n", "mcp-platform", "-o", "json"], text=True))["spec"]["clusterIP"]
+    # Tenant default egress explicitly permits platform-api:8085, whereas
+    # UI:8082 is not an allowed peer. The positive control must use a route
+    # the actual tenant policy permits before interpreting backend denials.
+    platform_api = get("svc", "mcp-platform-api", "-n", "mcp-platform")["spec"]["clusterIP"]
     command = kube + ["exec", "-n", namespace, pod, "--", "wget", "-T", "3", "-S", "-O", "/dev/null", "--header=X-WEBAUTH-USER: forged-admin", "--header=X-WEBAUTH-ROLE: Admin"]
-    control = subprocess.run(command + [f"http://{ui}:8082/health"], capture_output=True, text=True, timeout=10)
-    check(control.returncode == 0 and "200" in control.stderr, "tenant probe can reach a healthy allowed UI peer")
+    control = subprocess.run(command + [f"http://{platform_api}:8085/internal/gateway/v1/sessions"], capture_output=True, text=True, timeout=10)
+    validate_gateway_positive_control(control)
     denied = []
     for name, port, path in (("grafana", 3000, "/grafana/api/health"), ("prometheus", 9090, "/prometheus/api/v1/query?query=up"), ("loki", 3100, "/ready"), ("tempo", 3200, "/ready")):
         pods = get("pods", "-n", "mcp-observability", "-l", "app=" + name)["items"]
@@ -178,7 +292,7 @@ def network():
             result = subprocess.run(command + [f"http://{address}:{port}{path}"], capture_output=True, text=True, timeout=10)
             check(result.returncode != 0 and not re.search(r"HTTP/\d", result.stdout + result.stderr), "Cilium blocks tenant service/direct-pod " + name + " including forged auth-proxy identity")
         denied.append(name)
-    evidence = {"probe_uid": probe["metadata"]["uid"], "probe_namespace": namespace, "cilium_generation": agents["metadata"]["generation"], "policy_uid": policy["metadata"]["uid"], "policy_resource_version": policy["metadata"]["resourceVersion"], "denied_backends": denied, "allowed_control": "UI health"}
+    evidence = {"probe_uid": probe["metadata"]["uid"], "probe_namespace": namespace, "cilium_generation": agents["metadata"]["generation"], "policy_uid": policy["metadata"]["uid"], "policy_resource_version": policy["metadata"]["resourceVersion"], "denied_backends": denied, "allowed_control": "platform API gateway authentication (HTTP 401)"}
     Path(os.environ["SCOPED_REPORT"]).with_name("scoped-network-evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
     path = Path(os.environ["SCOPED_REPORT"])
     report = json.loads(path.read_text())

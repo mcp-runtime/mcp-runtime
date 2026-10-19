@@ -63,6 +63,50 @@ def check_vite_assets(base, label, index_html):
     return script_path, style_path
 
 
+def check_session_boundaries(base, label, login_body, cookie, cookie_headers):
+    """CSRF, spoofed-credential and write-allowlist boundaries of the session proxy.
+
+    Every request here is rejected before it reaches runtime-api, so nothing is
+    mutated. The api-keys route is a real allow-listed write route.
+    """
+    login = json.loads(login_body)
+    csrf_token = login.get("csrf_token", "")
+    check(csrf_token, f"{label} login returned a CSRF token", f"{label} login omitted csrf_token")
+    session_id = cookie.split("=", 1)[1]
+    check(session_id not in login_body, f"{label} login body omitted the session id", f"{label} login leaked the session id")
+    check(api_key not in login_body, f"{label} login body omitted the API key", f"{label} login leaked the API key")
+    status_doc = expect_json(f"{base}/auth/status", headers=cookie_headers)
+    check(status_doc.get("csrf_token") == csrf_token, f"{label} /auth/status CSRF token matches login", f"{label} CSRF token changed: {status_doc}")
+
+    write_url = f"{base}/api/ui/v1/user/api-keys"
+    # Unsafe method with a valid session but no token, a wrong token, or a
+    # cross-origin Origin with a valid token must fail closed.
+    expect_status(write_url, 403, method="POST", headers=cookie_headers, body={}, contains="csrf_failed")
+    expect_status(write_url, 403, method="POST", headers={**cookie_headers, "X-CSRF-Token": "wrong-" + csrf_token}, body={}, contains="csrf_failed")
+    expect_status(
+        write_url, 403, method="POST", body={},
+        headers={**cookie_headers, "X-CSRF-Token": csrf_token, "Origin": "http://evil.example"},
+        contains="csrf_failed",
+    )
+    # Without a session, a CSRF token alone must not authenticate.
+    expect_status(write_url, 401, method="POST", headers={"X-CSRF-Token": csrf_token}, body={}, contains="unauthorized")
+    # Credentials supplied by the browser are never forwarded as the caller's identity.
+    spoofed = {
+        "X-API-Key": api_key,
+        "Authorization": f"Bearer {api_key}",
+        "X-Forwarded-User": "admin",
+        "X-Mcp-Role": "admin",
+    }
+    expect_status(f"{base}/api/ui/v1/runtime/servers", 401, headers=spoofed, contains="unauthorized")
+    # Identity headers alone never satisfy the Grafana admin gate.
+    expect_status(f"{base}/auth/admin-check", 401, headers={"X-Forwarded-User": "admin", "X-Mcp-Role": "admin"})
+    # Writes outside the proxy allowlist are refused even with a valid token.
+    expect_status(
+        f"{base}/api/ui/v1/runtime/servers", 405, method="POST",
+        headers={**cookie_headers, "X-CSRF-Token": csrf_token}, body={}, contains="method_not_allowed",
+    )
+
+
 def check_ui_auth(base, label, *, include_observability=False):
     expect_status(f"{base}/auth/status", 200, contains='"authenticated":false')
     expect_status(f"{base}/api/ui/v1/runtime/servers", 401, contains='"error":"unauthorized"')
@@ -87,6 +131,7 @@ def check_ui_auth(base, label, *, include_observability=False):
     proxy_body = json.dumps(proxy_payload)
     check(api_key not in proxy_body, f"{label} session proxy omitted API key", f"{label} session proxy leaked API key")
     check("Bearer " not in proxy_body, f"{label} session proxy omitted bearer token", f"{label} session proxy leaked bearer")
+    check_session_boundaries(base, label, login_body, cookie, cookie_headers)
     if include_observability:
         expect_status(f"{base}/grafana/api/health", 200, headers=cookie_headers, contains="database")
         expect_status(f"{base}/prometheus/-/healthy", 404, headers=cookie_headers)

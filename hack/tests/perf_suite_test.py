@@ -99,6 +99,13 @@ class PerfTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             perf.compare(reference, reference, float("nan"))
 
+    def test_rpc_closes_response_before_reusing_connection(self):
+        client = perf.MCPClient(self.url)
+        self.addCleanup(client.close)
+        _, _, response = client.rpc("initialize", {"protocolVersion": client.headers["Mcp-Protocol-Version"]})
+        self.assertTrue(response.isclosed())
+        client.rpc("notifications/initialized", notification=True)
+
     def test_real_local_http_measurements_have_exact_counts(self):
         result = perf.adapter_latency(self.url, 3)
         perf.validate_measurement(result)
@@ -149,6 +156,8 @@ class PerfTests(unittest.TestCase):
             fp = None
             def read1(self, _):
                 return b"more-data"
+            def close(self):
+                pass
         with self.assertRaises(ValueError):
             perf.bounded_body(Response(), 3, time.monotonic() + 1)
         with self.assertRaises(TimeoutError):
