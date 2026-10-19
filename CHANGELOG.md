@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Fixed
+
+- The operator derives the analytics ingest URL instead of trusting a stored one. An MCPServer whose `spec.analytics.ingestURL` still holds the plain-`http` platform ingest URL written by an older release (`mcp-ingest.<namespace>.svc[.cluster.local]` or the operator's own ingest host) now uses the operator's HTTPS default, so the server reconciles and rolls instead of failing with `managed analytics transport requires an HTTPS ingest URL`. No manual edit is needed; external `http` URLs and URLs with embedded credentials are still rejected.
+
 ## [0.11.0] - 2026-10-19
 
 This breaking release binds platform login tokens to platform-api and exchanges

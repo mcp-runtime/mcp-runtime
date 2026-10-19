@@ -23,10 +23,7 @@ func (r *MCPServerReconciler) reconcileAnalyticsCA(ctx context.Context, server *
 	if r.AnalyticsCAConfigMap == "" || !gatewayEnabled(server) || !r.analyticsEnabled(server) {
 		return nil
 	}
-	endpoint := r.DefaultAnalyticsIngestURL
-	if server.Spec.Analytics != nil && strings.TrimSpace(server.Spec.Analytics.IngestURL) != "" {
-		endpoint = server.Spec.Analytics.IngestURL
-	}
+	endpoint := effectiveAnalyticsIngestURL(server, r.DefaultAnalyticsIngestURL)
 	parsed, err := url.Parse(endpoint)
 	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil {
 		return fmt.Errorf("managed analytics transport requires an HTTPS ingest URL without embedded credentials")
