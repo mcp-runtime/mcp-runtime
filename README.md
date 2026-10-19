@@ -22,7 +22,7 @@ The workflow has three steps:
 2. **Grant access.** An access grant (`mcp-runtime access grant init`) lets a person, agent, or team call specific tools on that server, up to a maximum trust level and only with the side effects you allow.
 3. **Open a session.** An agent session (`mcp-runtime access session init`) time-boxes that access for one agent, and you can revoke it at any time.
 
-On every call, a gateway in front of the server checks the caller's identity, session, trust level, and the tool's side effect before the call reaches your code, and records the decision for audit. Under the hood these are the `MCPServer`, `MCPAccessGrant`, and `MCPAgentSession` resources, and the operator creates the Deployment, Service, Ingress, and policy for you.
+On every call, a gateway in front of the server checks the caller's identity, session, trust level, and the tool's side effect before the call reaches your code, and records the decision for audit. `MCPServer` and `MCPAccessGrant` are cluster resources, and the operator creates the Deployment, Service, Ingress, and policy for you. Agent sessions are platform records in Postgres: create and revoke them with the CLI or UI. `MCPAgentSession` YAML is only an admin apply input, and Kubernetes session objects do not authorize calls.
 
 A public preview runs at [platform.mcpruntime.org](https://platform.mcpruntime.org/). The same stack installs into your own cluster with `mcp-runtime setup`.
 
@@ -34,7 +34,7 @@ A public preview runs at [platform.mcpruntime.org](https://platform.mcpruntime.o
 
 ## Features
 
-- `MCPServer`, `MCPAccessGrant`, and `MCPAgentSession` are namespaced CRDs, so servers, access, and sessions are visible and reviewable with `kubectl`.
+- `MCPServer` and `MCPAccessGrant` are namespaced CRDs, so servers and grants are visible and reviewable with `kubectl`. Agent sessions are stored by the platform and synchronized to the gateway.
 - The `mcp-gateway` sidecar applies deny-by-default tool rules, trust ceilings, side-effect limits, session expiry, and revocation on every `tools/call`.
 - Every allow and deny decision is recorded with the identity, tool, reason, and policy version, and is queryable through the platform API and dashboards.
 - `adapter proxy` gives IDEs, agent frameworks, and scripts a local Streamable HTTP endpoint that adds a session-bound client certificate with automatic refresh and forwards OAuth when the target requires it.
@@ -50,7 +50,7 @@ A public preview runs at [platform.mcpruntime.org](https://platform.mcpruntime.o
   `--server <name> --agent <id>` once an enabled grant exists; `--auto-refresh`
   renews the certificate (see [Agent Adapter](docs/connect-clients.md))
 - Platform UI for authenticated MCP catalog browsing, platform state, and web operations
-- `MCPServer`, `MCPAccessGrant`, and `MCPAgentSession` CRDs
+- `MCPServer` and `MCPAccessGrant` CRDs, plus platform-stored agent sessions
 - Kubernetes operator for `Deployment`, `Service`, `Ingress`, and policy materialization
 - Internal or provisioned registry workflows
 - Optional gateway enforcement for identity, tool policy, trust, and audit emission

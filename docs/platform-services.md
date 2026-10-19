@@ -801,7 +801,7 @@ is the token issuer and resource-owner login boundary.
 
 ## Governance UI walkthrough
 
-The UI's **Governance** tab creates and operates the same `MCPAccessGrant` and `MCPAgentSession` resources the CLI manages. The same flows are available via the Runtime Governance API ([API → Runtime Governance](api-reference.md#runtime-governance-api)).
+The UI's **Governance** tab creates and operates the same grants and sessions the CLI manages. Grants are `MCPAccessGrant` resources. Sessions are platform records; `MCPAgentSession` YAML is an admin apply input and is not the authorization store. The same flows are available via the Runtime Governance API ([API → Runtime Governance](api-reference.md#runtime-governance-api)).
 
 | Action | What it does |
 |---|---|

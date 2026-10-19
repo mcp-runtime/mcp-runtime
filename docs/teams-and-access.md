@@ -62,12 +62,13 @@ Recommended namespace shape:
 
 | Team | Namespace | Resources in that namespace |
 |---|---|---|
-| Acme | `mcp-team-acme` | Acme `MCPServer`, `MCPAccessGrant`, `MCPAgentSession`, secrets, configmaps |
-| Globex | `mcp-team-globex` | Globex `MCPServer`, `MCPAccessGrant`, `MCPAgentSession`, secrets, configmaps |
+| Acme | `mcp-team-acme` | Acme `MCPServer`, `MCPAccessGrant`, secrets, configmaps |
+| Globex | `mcp-team-globex` | Globex `MCPServer`, `MCPAccessGrant`, secrets, configmaps |
 
-Keep each server's grants and sessions in the same namespace as the server they
-govern. When `serverRef.namespace` is omitted, clients and renderers should
-treat the current resource namespace as the intended boundary.
+Keep each server's grants in the same namespace as the server they govern.
+Agent sessions are platform records for that server, not objects you edit in
+the namespace. When `serverRef.namespace` is omitted, clients and renderers
+should treat the current resource namespace as the intended boundary.
 
 ## Provisioning a team namespace
 
@@ -387,8 +388,9 @@ server owner's team without joining through namespace names.
 1. Use `mcp-runtime team create` to provision a namespace per team or tenant
    boundary.
 2. Bind team admins only to their namespace.
-3. Put each team's `MCPServer`, `MCPAccessGrant`, `MCPAgentSession`, analytics
-   secrets, and image pull secrets in that namespace.
+3. Put each team's `MCPServer`, `MCPAccessGrant`, analytics secrets, and image
+   pull secrets in that namespace. Create sessions through the platform CLI or
+   UI for those servers.
 4. Set `spec.teamID` on every team-owned `MCPServer`.
 5. Set `subject.teamID` on grants and sessions, or use the platform API so it
    defaults missing values from the owning server team. Use an explicit foreign
