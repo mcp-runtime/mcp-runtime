@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Fixed
+
+- MCP gateway OAuth issuer discovery and JWKS fetches use the system trust store again instead of the analytics ingest CA, so authenticated requests to servers with a public HTTPS issuer no longer fail with `503 oauth_provider_unavailable` (regression in 0.11.0). Analytics ingest TLS is unchanged and still pins the internal CA.
+
 ## [0.11.0] - 2026-10-19
 
 This breaking release binds platform login tokens to platform-api and exchanges
