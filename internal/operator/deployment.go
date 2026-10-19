@@ -599,14 +599,11 @@ func (r *MCPServerReconciler) buildGatewayContainer(mcpServer *mcpv1alpha1.MCPSe
 	}
 	if r.analyticsEnabled(mcpServer) {
 		analytics := mcpServer.Spec.Analytics
-		ingestURL := ""
+		ingestURL := effectiveAnalyticsIngestURL(mcpServer, r.DefaultAnalyticsIngestURL)
 		source := mcpServer.Name + defaultAnalyticsSourceSuffix
 		eventType := defaultAnalyticsEventType
 		var apiKeyRef *mcpv1alpha1.SecretKeyRef
 		if analytics != nil {
-			if v := strings.TrimSpace(analytics.IngestURL); v != "" {
-				ingestURL = v
-			}
 			if v := strings.TrimSpace(analytics.Source); v != "" {
 				source = v
 			}
@@ -614,9 +611,6 @@ func (r *MCPServerReconciler) buildGatewayContainer(mcpServer *mcpv1alpha1.MCPSe
 				eventType = v
 			}
 			apiKeyRef = analytics.APIKeySecretRef
-		}
-		if ingestURL == "" {
-			ingestURL = strings.TrimSpace(r.DefaultAnalyticsIngestURL)
 		}
 		if r.AnalyticsCAConfigMap != "" {
 			envVars = append(envVars, corev1.EnvVar{Name: "ANALYTICS_TLS_CA_FILE", Value: "/var/run/mcp-runtime/analytics-ca/ca.crt"})
@@ -954,12 +948,5 @@ func (r *MCPServerReconciler) analyticsEnabled(mcpServer *mcpv1alpha1.MCPServer)
 	if mcpServer.Spec.Analytics != nil && mcpServer.Spec.Analytics.Disabled {
 		return false
 	}
-	url := ""
-	if mcpServer.Spec.Analytics != nil {
-		url = strings.TrimSpace(mcpServer.Spec.Analytics.IngestURL)
-	}
-	if url == "" {
-		url = strings.TrimSpace(r.DefaultAnalyticsIngestURL)
-	}
-	return url != ""
+	return effectiveAnalyticsIngestURL(mcpServer, r.DefaultAnalyticsIngestURL) != ""
 }
