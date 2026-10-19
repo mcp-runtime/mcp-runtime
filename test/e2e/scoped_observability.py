@@ -210,9 +210,16 @@ def functional():
             check(resource[name]["series_present"], "resource history has " + name + " series")
         if name in ("collection_success", "scrape_source"):
             # Historical successes alone cannot hide a currently failing source.
-            instant_status, _, instant_body = request(admin, base + "/grafana/api/ds/query", "POST", {
-                "from": str(int(time.time() * 1000) - 60000), "to": str(int(time.time() * 1000)),
-                "queries": [{"refId": "A", "expr": expr, "datasource": {"uid": "prometheus", "type": "prometheus"}, "instant": True}]}, {"Origin": ui_origin()})
+            after = int(os.environ.get("SCOPED_RESOURCE_AFTER", "0"))
+            current_expr = f"{expr} and (timestamp({expr}) >= {after})" if after else expr
+            deadline = time.monotonic() + 90
+            while True:
+                instant_status, _, instant_body = request(admin, base + "/grafana/api/ds/query", "POST", {
+                    "from": str(int(time.time() * 1000) - 60000), "to": str(int(time.time() * 1000)),
+                    "queries": [{"refId": "A", "expr": current_expr, "datasource": {"uid": "prometheus", "type": "prometheus"}, "instant": True}]}, {"Origin": ui_origin()})
+                if query_has_series(instant_status, instant_body) or time.monotonic() >= deadline:
+                    break
+                time.sleep(2)
             check(instant_status == 200 and frame_numbers(instant_body) and all(number == 1 for number in frame_numbers(instant_body)), "current authenticated " + name + " is successful")
     check(request(owner, base + "/auth/logout", "POST", {}, {"Origin": ui_origin(), "X-CSRF-Token": owner.scoped_csrf_token})[0] == 200, "platform session logout succeeds")
     check(request(owner, base + "/grafana/api/health")[0] == 401, "platform logout revokes Grafana access")

@@ -491,6 +491,10 @@ and [pinned chart source](https://github.com/cilium/cilium/tree/v1.20.3/install/
 (reviewed 2026-10-17). This test-specific CNI installation and temporary
 uncredentialed tenant probe Pod are explicit security fixtures. Product setup,
 teams, users, image publication and server deployment use supported CLI paths.
+It runs a policy-declaring update twice after setup, then requires successful
+resource samples collected after that update and the existing tenant backend
+denials. The retained `scoped-update/` plans show convergence without changing
+the trusted-node egress.
 
 Besides the standard QA prerequisites, this fixture requires Helm. The pinned
 Linux AMD64 version is **3.22.1**, downloaded from

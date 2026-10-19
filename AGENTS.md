@@ -79,6 +79,9 @@ public kubelet trust. Keep its exact projected-token audience/ServiceAccount
 boundary, node UID/address/TLS checks and missing-series semantics intact.
 PVC reservations and local `du` fallback must never become historical consumed
 bytes. See `docs/platform-services.md#resource-history-for-sizing`.
+Setup and update share `pkg/resourcehistory.NodeEgress` for trusted current-node
+kubelet destinations. Keep its discovery read-only and bounded; release policy
+templates must not replace discovered host CIDRs with broad or stale live rules.
 The focused Cilium scope/resource-history security fixture has a fresh-cluster
 guard and pinned Helm/Cilium tools; see
 `docs/contributor/local-kind.md#enforcing-cilium-security-acceptance`. Keep its

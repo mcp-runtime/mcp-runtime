@@ -82,6 +82,7 @@ jobs:
             .e2e-artifacts/scoped-observability/rollout-diagnostics/
             .e2e-artifacts/scoped-observability/scoped-observability.json
             .e2e-artifacts/scoped-observability/scoped-network-evidence.json
+            .e2e-artifacts/scoped-observability/scoped-update/
             .e2e-artifacts/scoped-observability/resource-usage/summary.*
             .e2e-artifacts/scoped-observability/resource-usage/grafana.*
           retention-days: 7

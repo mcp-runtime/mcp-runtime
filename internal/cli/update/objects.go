@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
-	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -87,8 +86,8 @@ func serviceAccountPlanned(objs []platformrelease.PlatformObject, namespace, nam
 func objectAction(ctx context.Context, cs kubernetes.Interface, obj platformrelease.PlatformObject) (string, error) {
 	switch obj.Kind {
 	case "NetworkPolicy":
-		want := &networkingv1.NetworkPolicy{}
-		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, want); err != nil {
+		want, err := desiredNetworkPolicy(ctx, cs, obj)
+		if err != nil {
 			return "", err
 		}
 		live, err := cs.NetworkingV1().NetworkPolicies(obj.Namespace).Get(ctx, obj.Name, metav1.GetOptions{})
@@ -228,8 +227,8 @@ func writeObject(ctx context.Context, cs kubernetes.Interface, obj platformrelea
 	update := metav1.UpdateOptions{FieldManager: objectFieldManager}
 	switch obj.Kind {
 	case "NetworkPolicy":
-		want := &networkingv1.NetworkPolicy{}
-		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, want); err != nil {
+		want, err := desiredNetworkPolicy(ctx, cs, obj)
+		if err != nil {
 			return err
 		}
 		api := cs.NetworkingV1().NetworkPolicies(obj.Namespace)

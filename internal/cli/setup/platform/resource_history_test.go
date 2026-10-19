@@ -8,15 +8,19 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
 	"mcp-runtime/internal/cli/core"
+	"mcp-runtime/internal/cli/update"
+	"mcp-runtime/internal/platformrelease"
 	"mcp-runtime/pkg/resourcehistory"
 )
 
@@ -114,7 +118,10 @@ func TestResourceHistoryEgressUsesOnlyCurrentTrustedNodes(t *testing.T) {
 		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: resourcehistory.TrustConfigMap, Namespace: "mcp-platform"}, Data: map[string]string{"targets.json": targets}},
 		&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "current", UID: "current-uid"}, Status: corev1.NodeStatus{Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "172.18.0.2"}}}},
 		&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "replaced", UID: "new-uid"}, Status: corev1.NodeStatus{Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "172.18.0.3"}}}},
-		&networkingv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "mcp-runtime-api-resource-history-egress", Namespace: "mcp-platform"}},
+		&networkingv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "mcp-runtime-api-resource-history-egress", Namespace: "mcp-platform"}, Spec: networkingv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "mcp-runtime-api"}},
+			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeEgress},
+		}},
 	)
 	for range 2 {
 		if err := ensureResourceHistoryNodeEgressWith(ctx, client); err != nil {
@@ -131,6 +138,31 @@ func TestResourceHistoryEgressUsesOnlyCurrentTrustedNodes(t *testing.T) {
 	rule := policy.Spec.Egress[0]
 	if len(rule.To) != 1 || rule.To[0].IPBlock == nil || rule.To[0].IPBlock.CIDR != "172.18.0.2/32" || len(rule.Ports) != 1 || rule.Ports[0].Port.IntVal != 10250 || *rule.Ports[0].Protocol != corev1.ProtocolTCP {
 		t.Fatalf("unexpected kubelet permission: %+v", rule)
+	}
+	// The release template must not overwrite supported setup's discovered rules.
+	if _, err := client.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: platformrelease.OperatorNamespace}}, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.AppsV1().Deployments(platformrelease.OperatorNamespace).Create(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: platformrelease.OperatorDeployment}}, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	bundle, err := platformrelease.BundlePlatformObjects("../../../../k8s", []string{"NetworkPolicy/mcp-platform/" + resourcehistory.NodeEgressPolicy})
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := &platformrelease.Manifest{Version: "v0.11.1", PlatformObjects: bundle}
+	for range 2 {
+		plan, err := update.BuildPlan(ctx, client, manifest, update.Selection{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result := update.Apply(ctx, client, plan, update.ApplyOptions{}); result.Failed {
+			t.Fatalf("setup to update failed: %+v", result)
+		}
+		got, err := client.NetworkingV1().NetworkPolicies("mcp-platform").Get(ctx, policy.Name, metav1.GetOptions{})
+		if err != nil || !reflect.DeepEqual(got.Spec, policy.Spec) {
+			t.Fatalf("update changed setup node egress: %+v, %v", got, err)
+		}
 	}
 	// Trust removal must revoke stale permissions, including a previous broad rule.
 	if err := client.CoreV1().ConfigMaps("mcp-platform").Delete(ctx, resourcehistory.TrustConfigMap, metav1.DeleteOptions{}); err != nil {

@@ -170,7 +170,12 @@ setup when nodes are added/recreated or serving trust changes; unmatched nodes
 fail closed and their samples remain absent. Ordinary update preserves this
 trust and delivers the fixed projected Prometheus token mount, scrape config,
 RBAC and kubelet egress policy, correcting drift without changing unrelated
-volumes or mounts. It cannot invent serving trust: installations without it
+volumes or mounts. Setup and update share read-only discovery of at most 64
+current nodes: only trusted UID/InternalIP pairs receive host CIDRs on TCP 10250.
+Update rechecks trust when applying, removes stale or unrelated destinations,
+and permits no kubelet destinations when trust is missing. Invalid or unreadable
+trust stops planning/apply; dry-run never changes trust or policy.
+It cannot invent serving trust: installations without it
 need the supported setup refresh before resource samples appear. There is no
 insecure TLS fallback.
 
