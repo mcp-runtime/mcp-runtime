@@ -3,7 +3,7 @@ module mcp-gateway
 go 1.26.9
 
 require (
-	github.com/Agent-Hellboy/mcp-auth/auth-client/go v0.3.0
+	github.com/Agent-Hellboy/mcp-auth/auth-client/go v0.4.0
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/prometheus/client_golang v1.25.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.72.0
