@@ -635,7 +635,8 @@ before resuming traffic. Release bundles advertise `requiresAudienceExchange`;
 ordinary `update` then checks real split routes, their middleware ordering,
 and each active Traefik controller's mounted exchange configuration before any
 cluster write. It refuses an unmigrated install with the supported setup
-refresh instruction. A configuration flag alone cannot satisfy this check;
+refresh instruction (order and recovery steps:
+[troubleshooting](troubleshooting.md#update-refuses-token-audience-setup-migration-required)). A configuration flag alone cannot satisfy this check;
 an image-only update never migrates Ingress rules.
 Run the `audience-isolation` Staging stage or the Kind `api-platform` request
 flow to verify real gateway replacement, direct-service rejection and the

@@ -15,7 +15,7 @@ import (
 )
 
 func analyticsMigrationRequired(detail string) error {
-	return fmt.Errorf("analytics TLS setup migration required (%s); no update changes were made: preserve encrypted CA/certificate backups and data, install a fresh TLS analytics deployment and restore; see docs/platform-services.md#analytics-transport-security", detail)
+	return fmt.Errorf("analytics TLS setup migration required (%s); no update changes were made: next, preserve encrypted CA/certificate backups and data, install a fresh TLS analytics deployment with `mcp-runtime setup` from this release, restore the data, then re-run `mcp-runtime update` (setup does not convert a plaintext Kafka quorum in place); see docs/platform-services.md#analytics-transport-security", detail)
 }
 
 // Read the actual installed wiring before making any update plan. A ConfigMap

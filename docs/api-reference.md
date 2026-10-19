@@ -426,14 +426,17 @@ owns that namespace or belongs to that team.
 
 Manage access grants, sessions, and view runtime state. All `/api/v1/runtime/*`
 routes require an authenticated platform bearer token or `x-api-key`; requests
-without authentication receive `401`. `POST` requests create the Kubernetes CRs
+without authentication receive `401`, with one exception: in public platform
+mode (`--platform-mode public`), anonymous `GET /api/v1/runtime/servers` and
+`GET /api/v1/runtime/tools` are served as the synthetic `public_catalog`
+principal, which can read only the public catalog namespace. `POST` requests create the Kubernetes CRs
 that the operator renders into the gateway policy ConfigMap. Server redeploys
 must opt in with `update: true`; grants and sessions remain create-or-update.
 
 For `POST /api/v1/runtime/grants` and admin-only direct `POST /api/v1/runtime/sessions`, the API resolves `serverRef` to an `MCPServer` in the cluster. If that server does not exist, the call returns `400` with an `unknown serverRef` message. The server lookup is **not** in the same transaction as the grant/session write, so a concurrent delete can leave a stale reference (same as `kubectl apply`). Kubernetes apply errors are surfaced with the status the API server would use, when available. Non-admin grant mutations and session item mutations require the caller to be the server owner or a team owner for the server namespace; normal adapter flows use `POST /api/v1/runtime/adapter/sessions`.
 
 ```text
-GET  /api/v1/runtime/servers              # List authenticated MCP catalog entries
+GET  /api/v1/runtime/servers              # List MCP catalog entries (anonymous: public catalog only, public mode)
 GET  /api/v1/runtime/tools                # Tool inventory rows across visible servers
 GET  /api/v1/runtime/servers/{namespace}/{name} # Get one MCPServer catalog entry
 POST /api/v1/runtime/servers              # Create MCPServer; set update=true to redeploy an existing one
@@ -506,6 +509,21 @@ requires public platform mode and resolves the active public catalog namespace;
 authorized team `namespace`. If an `MCPServer` with the same name already
 exists in the target namespace, the API returns `409` unless the request body
 sets `update: true`.
+
+Anonymous `GET /api/v1/runtime/servers` in public mode has no login, defaults
+`namespace` to the public catalog namespace, and returns `403 forbidden
+namespace` for any other namespace; it never lists organization, team or
+other namespaces and cannot publish or modify. Each entry uses the same
+summary shape as authenticated callers: `name`, `namespace`, `uid`, `image`,
+`imageTag`, `description`, `ready`, `status`, `message`, `conditions`,
+`labels`, `endpoint`, `authMode`, `authHeaders` (names only), `gatewayEnabled`,
+`servicePort`, `generation`, declared `tools`, `prompts`, `resources` and
+`tasks`, `runtimeStatus`, `liveInventory`, and `access_json` (a ready-to-paste
+client connect snippet). Treat those fields as public in public mode: do not
+put anything in server labels, descriptions or images that should stay
+private. Authenticated callers instead see the namespaces they own or belong to
+plus the shared catalog namespaces for the active mode, and admins see all
+namespaces. The response also carries `publish_policy`.
 
 `POST /api/v1/runtime/servers` is governed by the platform publish policy. Admins
 configure `PLATFORM_MCP_ACTIVE_SERVER_LIMIT` (default `5`, set `0` to disable)

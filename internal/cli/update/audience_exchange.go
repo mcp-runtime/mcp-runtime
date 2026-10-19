@@ -16,7 +16,7 @@ import (
 )
 
 func audienceMigrationRequired(detail string) error {
-	return fmt.Errorf("token audience setup migration required (%s); no update changes were made: run mcp-runtime setup from this release with the installation's existing TLS, host, storage and mcp-auth options, then retry update; see docs/platform-services.md", detail)
+	return fmt.Errorf("token audience setup migration required (%s); no update changes were made: next, run `mcp-runtime setup` from this release with the installation's existing TLS, host, storage and mcp-auth options (setup first, then update), then re-run `mcp-runtime update`; see docs/troubleshooting.md#update-refuses-token-audience-setup-migration-required", detail)
 }
 
 // This is a read-only guard, not an ingress migrator. A release that narrows
