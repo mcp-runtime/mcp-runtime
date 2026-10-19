@@ -249,7 +249,7 @@ func (s *gatewayServer) oauthProviderForIssuer(ctx context.Context, issuerURL, a
 		JWKSURL:      metadata.JWKSURI,
 		Issuer:       issuerURL,
 		Audience:     audience,
-		HTTPClient:   s.httpClient,
+		HTTPClient:   s.oauthClient(),
 		JWKSCacheTTL: 10 * time.Minute,
 	}}
 	s.oauthMu.Lock()
@@ -307,7 +307,7 @@ func (s *gatewayServer) fetchAuthServerMetadataForIssuer(ctx context.Context, lo
 				req.Header.Set("X-Forwarded-Proto", "https")
 			}
 		}
-		resp, err := s.httpClient.Do(req)
+		resp, err := s.oauthClient().Do(req)
 		if err != nil {
 			lastErr = err
 			continue
