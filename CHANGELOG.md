@@ -7,6 +7,16 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-10-19
+
+This patch release restores authenticated MCP calls on installs upgraded to
+0.11.0 and makes upgrade failures easier to diagnose. Update the gateway and
+operator images together with `mcp-runtime update`. Stored `http` platform
+analytics ingest URLs in MCPServer specs are replaced by the operator's HTTPS
+default automatically, so no manual spec edit is needed. Do not set
+`OAUTH_INTERNAL_ISSUER_URL` on public or production installs. No new `setup`
+migration is required beyond the 0.11.0 notes.
+
 ### Fixed
 
 - The operator derives the analytics ingest URL instead of trusting a stored one. An MCPServer whose `spec.analytics.ingestURL` still holds the plain-`http` platform ingest URL written by an older release (`mcp-ingest.<namespace>.svc[.cluster.local]` or the operator's own ingest host) now uses the operator's HTTPS default, so the server reconciles and rolls instead of failing with `managed analytics transport requires an HTTPS ingest URL`. No manual edit is needed; external `http` URLs and URLs with embedded credentials are still rejected.
@@ -575,7 +585,8 @@ upgrade from 0.4.x; see the migration note under **Changed**.
 
 - Targeted platform updates through `mcp-runtime update`, including embedded CRD updates and `--build` to build/push missing component images before rollout ([#491](https://github.com/mcp-runtime/mcp-runtime/pull/491)).
 
-[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.8.1...v0.9.0
