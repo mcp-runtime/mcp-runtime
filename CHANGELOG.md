@@ -7,6 +7,18 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-19
+
+This breaking release binds platform login tokens to platform-api and exchanges
+them for short-lived single-audience runtime and analytics tokens. Sign in again
+after `setup`. Image-only updates do not migrate the split Ingress routes.
+Existing plaintext analytics installs need an encrypted backup, fresh TLS setup,
+and restore before image updates. Production workload identity requires a
+dedicated issuer; preserve registry trust and the current mcp-auth deployment.
+Scoped Grafana and the new ingress isolation need an enforcing CNI. Credential
+broker providers other than Kubernetes Secrets stay disabled. Rerun `setup` or
+`update` so ingest, the gateway, the operator, and the APIs move together.
+
 ### Security
 
 - Credential resolution no longer holds the platform-wide session lock while reading a provider, so a slow provider cannot stall session revocation. State is re-validated after the read, a revocation during it denies the request, and requests are rate limited (cold tokens only, per source address and globally, before TokenReview; verified tokens are cached by hash for 10 seconds and renewable for 60 seconds through a per-token budget, definite rejections for 5 seconds, and transient TokenReview errors are never cached, so invalid traffic cannot deny valid gateways; per server after authentication), and a binding or source replaced with the same revision during the read is detected by full-content comparison, with a 5-second negative cache for provider failures; excess requests receive `429`. Credential source `version` accepts only letters, digits, `_` and `-` ([#260](https://github.com/mcp-runtime/mcp-runtime/issues/260)).
@@ -34,8 +46,6 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 - `adapter enroll` checks the operator's adapter-certificate configuration, matching workload issuer/trust domain, issuer readiness, and the selected route's actual client-certificate TLSOption before creating a session. Enrollment completion preserves concurrent revocation, and failure cleanup conditionally removes only the caller's pending session. `update` installs the required read-only preflight permissions while preserving the operator's existing on/off choice ([#539](https://github.com/mcp-runtime/mcp-runtime/issues/539)).
 - Team user creation no longer accepts passwords as command-line arguments; it prompts for a hidden, confirmed password or accepts it through stdin. The CLI can remove team memberships with explicit confirmation before removing a team's only owner. Administrators can permanently deactivate disposable accounts with `user deactivate <id> --yes`, atomically revoking stored credentials and human sessions, removing memberships and recording audit while protecting sole owners/admins. Bearer requests now resolve current account and membership state through platform identity; deploy the platform, runtime and analytics APIs together, and retain their internal identity connectivity ([#536](https://github.com/mcp-runtime/mcp-runtime/issues/536)).
 - Per-user macOS adapter service controls, isolated owner-protected profiles and a native Dock companion expose local readiness, upstream authentication and bounded diagnostics. Source packaging supports Apple Silicon and Intel; signed/notarized release artifacts and real macOS lifecycle acceptance remain pending ([#656](https://github.com/mcp-runtime/mcp-runtime/issues/656)).
-- Team user creation no longer accepts passwords as command-line arguments; it prompts for a hidden, confirmed password or accepts it through stdin. The CLI can remove team memberships with explicit confirmation before removing a team's only owner. Account deactivation and account-wide credential revocation remain separate lifecycle work ([#536](https://github.com/mcp-runtime/mcp-runtime/issues/536)).
-
 - Ingest operations docs now include PromQL for Kafka readiness DNS/connect/total latency and bounded failure reasons, plus guidance for correlating slow checks with broker, node and DNS signals. This exposes investigation paths; reference-platform root-cause and under-one-second acceptance remain outstanding ([#624](https://github.com/mcp-runtime/mcp-runtime/issues/624)).
 - `mcp-runtime cluster identity status --server <namespace>/<name>` resolves deployed workload issuer/trust-domain configuration and checks cert-manager readiness, the route's actual TLSOption, and public CA fingerprints/expiry without exposing private Secret fields. Unreadable configuration and client-auth overrides fail the check ([#537](https://github.com/mcp-runtime/mcp-runtime/issues/537)).
 - `mcp-runtime server get` now includes the runtime API's latest live MCP tool, prompt, and resource inventory alongside declared server metadata and safe authentication configuration, so operators can query observed server capabilities from the CLI ([#291](https://github.com/mcp-runtime/mcp-runtime/issues/291)).
@@ -554,7 +564,8 @@ upgrade from 0.4.x; see the migration note under **Changed**.
 
 - Targeted platform updates through `mcp-runtime update`, including embedded CRD updates and `--build` to build/push missing component images before rollout ([#491](https://github.com/mcp-runtime/mcp-runtime/pull/491)).
 
-[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.8.0...v0.8.1
