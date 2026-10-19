@@ -208,9 +208,10 @@ func (s *memoryIdempotencyStore) begin(scope idemScope, scopedKey, reqHash strin
 		}
 	}
 	l := s.limits
-	// A new key could end in a tombstone; if this scope's tombstone budget is
-	// spent, fail closed for this scope only instead of risking re-execution.
-	if atLimit(scopeTombs, l.MaxScopeTombstones) ||
+	// Reserve a possible tombstone for every in-flight key. Checking only
+	// existing tombstones lets concurrent completions exceed this scope's
+	// budget; those outcomes must remain stored to prevent re-execution.
+	if atLimit(scopeTombs+scopeInflight, l.MaxScopeTombstones) ||
 		atLimit(scopeInflight, l.MaxScopeInflight) ||
 		atLimit(principalInflight, l.MaxPrincipalInflight) ||
 		atLimit(s.inflight, l.MaxInflight) {

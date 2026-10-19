@@ -153,6 +153,10 @@ go vet ./...
 ```
 
 Use targeted tests while iterating, then the full root suite before merge.
+Git fixtures must clear inherited `GIT_*` variables and disable fixture hooks
+before initializing or committing temporary repositories. Commit hooks export
+the caller's Git directory and index, which can redirect fixture writes into
+the contributor's checkout.
 Run tests inside touched service modules too. CLI help changes need golden
 updates under `test/golden/cli/testdata/`. Integration tests need envtest assets;
 pre-commit handles `KUBEBUILDER_ASSETS` for its integration hooks.
@@ -273,7 +277,7 @@ inventory; use `server list`, `cluster status`, `ops status` or
 
 For concrete maintainability/debuggability findings, search existing issues first.
 Create an actionable issue if none exists and attach it to organization project 1,
-[Maintainability and Debuggability Improvement](https://github.com/orgs/mcp-runtime/projects/1).
+[Maintainability and Debuggability Improvement](https://github.com/orgs/tavric-labs/projects/1).
 Include redacted evidence, affected components, scope, acceptance checks and
 missing instrumentation; never include private payloads or credentials.
 

@@ -748,7 +748,14 @@ func TestVerifyReleaseSource(t *testing.T) {
 	source := t.TempDir()
 	git := func(args ...string) string {
 		t.Helper()
-		cmd := exec.Command("git", append([]string{"-C", source}, args...)...)
+		cmd := exec.Command("git", append([]string{"-c", "core.hooksPath=/dev/null", "-C", source}, args...)...)
+		// Git hooks export the caller's repository and index. Fixtures must
+		// neither reuse them nor run the contributor's commit hooks.
+		for _, entry := range os.Environ() {
+			if !strings.HasPrefix(entry, "GIT_") {
+				cmd.Env = append(cmd.Env, entry)
+			}
+		}
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("git %v: %v: %s", args, err, out)
@@ -758,6 +765,11 @@ func TestVerifyReleaseSource(t *testing.T) {
 	git("init", "-q")
 	git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-q", "-m", "init")
 	commit := git("rev-parse", "HEAD")
+	// Source validation must inspect the explicit source, even when called
+	// from a hook or another Git process with repository-local variables.
+	t.Setenv("GIT_DIR", source+"/unrelated.git")
+	t.Setenv("GIT_WORK_TREE", t.TempDir())
+	t.Setenv("GIT_INDEX_FILE", source+"/unrelated-index")
 	if err := verifyReleaseSource(context.Background(), source, commit); err != nil {
 		t.Fatal(err)
 	}

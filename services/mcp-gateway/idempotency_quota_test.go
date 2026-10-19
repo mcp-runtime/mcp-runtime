@@ -128,6 +128,35 @@ func TestIdempotencyTombstoneBudgetFailsClosedPerScope(t *testing.T) {
 	mustBegin(t, st, sc("pb", "s1"), "other")
 }
 
+func TestIdempotencyTombstoneBudgetReservesInflightOutcomes(t *testing.T) {
+	st := newIdempotencyStore(quotaLimits(), nil)
+	scope := sc("pa", "s1")
+	st.tombstone(mustBegin(t, st, scope, "unknown"), idemUnknownOutcome)
+	pending := mustBegin(t, st, scope, "pending")
+	if _, status := st.begin(scope, "overflow", "h"); status != idemCapacity {
+		t.Fatalf("new key with the remaining tombstone slot reserved = %v, want capacity", status)
+	}
+	mustBegin(t, st, sc("pb", "s1"), "other")
+	if _, status := st.begin(scope, "pending", "h"); status != idemInFlight {
+		t.Fatalf("reserved key = %v, want in flight", status)
+	}
+
+	// A replayable completion frees the reservation without losing the
+	// existing tombstone. An oversized reply consumes the reserved slot.
+	st.complete(pending, idempotentReply{Status: 200})
+	next := mustBegin(t, st, scope, "next")
+	st.complete(next, idempotentReply{Status: 200, Body: make([]byte, quotaLimits().MaxReply+1)})
+	if _, status := st.begin(scope, "unknown", "h"); status != idemUnknownOutcome {
+		t.Fatalf("existing tombstone = %v, want unknown outcome", status)
+	}
+	if _, status := st.begin(scope, "next", "h"); status != idemNotReplayable {
+		t.Fatalf("oversized reply = %v, want not replayable", status)
+	}
+	if _, status := st.begin(scope, "full", "h"); status != idemCapacity {
+		t.Fatalf("new key after both tombstone slots are consumed = %v, want capacity", status)
+	}
+}
+
 func TestIdempotencyInflightEntryIsNotSweptByTTL(t *testing.T) {
 	now := time.Unix(1000, 0)
 	st := newIdempotencyStore(quotaLimits(), func() time.Time { return now })
