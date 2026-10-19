@@ -92,6 +92,7 @@ type gatewayServer struct {
 	stripPrefix            string
 	externalBaseURL        *url.URL
 	httpClient             *http.Client
+	oauthHTTPClient        *http.Client
 	oauthInternalIssuerURL string
 	policyFile             string
 	serverName             string
@@ -141,3 +142,12 @@ const (
 )
 
 // main initializes and starts the MCP gateway service.
+
+// oauthClient returns the client for OAuth discovery and JWKS fetches, which
+// must not inherit the analytics TLS trust settings.
+func (s *gatewayServer) oauthClient() *http.Client {
+	if s.oauthHTTPClient != nil {
+		return s.oauthHTTPClient
+	}
+	return s.httpClient
+}

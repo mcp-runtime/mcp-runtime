@@ -10,6 +10,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 ### Fixed
 
 - The operator derives the analytics ingest URL instead of trusting a stored one. An MCPServer whose `spec.analytics.ingestURL` still holds the plain-`http` platform ingest URL written by an older release (`mcp-ingest.<namespace>.svc[.cluster.local]` or the operator's own ingest host) now uses the operator's HTTPS default, so the server reconciles and rolls instead of failing with `managed analytics transport requires an HTTPS ingest URL`. No manual edit is needed; external `http` URLs and URLs with embedded credentials are still rejected.
+- MCP gateway OAuth issuer discovery and JWKS fetches use the system trust store again instead of the analytics ingest CA, so authenticated requests to servers with a public HTTPS issuer no longer fail with `503 oauth_provider_unavailable` (regression in 0.11.0). Analytics ingest TLS is unchanged and still pins the internal CA.
 
 ## [0.11.0] - 2026-10-19
 

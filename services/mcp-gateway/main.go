@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"log"
 	"net/http"
@@ -53,19 +54,7 @@ func main() {
 	if analyticsTLS != nil && !strings.HasPrefix(analyticsURL, "https://") {
 		log.Fatal("configured analytics TLS requires an HTTPS ingest URL")
 	}
-	analyticsTransport := otelhttp.NewTransport(&http.Transport{
-		TLSClientConfig:     analyticsTLS,
-		TLSHandshakeTimeout: 5 * time.Second,
-		MaxIdleConns:        100,
-		MaxIdleConnsPerHost: 10,
-		IdleConnTimeout:     90 * time.Second,
-	})
-
-	sharedClient := &http.Client{
-		Timeout:       3 * time.Second,
-		Transport:     analyticsTransport,
-		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-	}
+	clients := newGatewayHTTPClients(analyticsTLS)
 
 	srv := &gatewayServer{
 		proxy:                  proxy,
@@ -78,7 +67,8 @@ func main() {
 		eventType:              eventType,
 		stripPrefix:            stripPrefix,
 		externalBaseURL:        externalBaseURL,
-		httpClient:             sharedClient,
+		httpClient:             clients.analytics,
+		oauthHTTPClient:        clients.oauth,
 		oauthInternalIssuerURL: strings.TrimSpace(os.Getenv("OAUTH_INTERNAL_ISSUER_URL")),
 		policyFile:             strings.TrimSpace(os.Getenv("POLICY_FILE")),
 		serverName:             strings.TrimSpace(os.Getenv("MCP_SERVER_NAME")),
@@ -245,4 +235,37 @@ func main() {
 // initTracer initializes OpenTelemetry tracing for the service.
 func initTracer(serviceName string) (func(context.Context) error, error) {
 	return serviceutil.InitTracer(serviceName)
+}
+
+type gatewayHTTPClients struct {
+	analytics, oauth         *http.Client
+	analyticsBase, oauthBase *http.Transport
+}
+
+// newGatewayHTTPClients builds one client per trust domain. The analytics
+// client pins the internal ingest CA; the OAuth client talks to issuers and
+// JWKS endpoints, which are usually public HTTPS hosts, so it keeps the system
+// roots. Sharing one transport made public issuers fail certificate checks.
+func newGatewayHTTPClients(analyticsTLS *tls.Config) gatewayHTTPClients {
+	newBase := func(cfg *tls.Config) *http.Transport {
+		return &http.Transport{
+			TLSClientConfig:     cfg,
+			TLSHandshakeTimeout: 5 * time.Second,
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 10,
+			IdleConnTimeout:     90 * time.Second,
+		}
+	}
+	newClient := func(base *http.Transport) *http.Client {
+		return &http.Client{
+			Timeout:       3 * time.Second,
+			Transport:     otelhttp.NewTransport(base),
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		}
+	}
+	analyticsBase, oauthBase := newBase(analyticsTLS), newBase(nil)
+	return gatewayHTTPClients{
+		analytics: newClient(analyticsBase), analyticsBase: analyticsBase,
+		oauth: newClient(oauthBase), oauthBase: oauthBase,
+	}
 }
