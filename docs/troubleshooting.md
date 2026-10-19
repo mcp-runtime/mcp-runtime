@@ -317,6 +317,103 @@ resources, or finalizers. Repair the responsible controller or delete resources
 through their owning management workflow. Removing finalizers blindly can
 orphan workloads and does not repair a discovery failure.
 
+## Upgrades
+
+### Upgrading from 0.11.0 to 0.11.1
+
+0.11.1 fixes two regressions in 0.11.0: the gateway OAuth client used the
+analytics CA instead of the system trust store, and the operator rejected
+MCPServer specs that older releases stored with an `http://` platform
+`analytics.ingestURL`. Upgrade in this order, using the release's CLI:
+
+1. If `mcp-runtime update` refuses with a migration message, run the
+   [audience setup migration](#update-refuses-token-audience-setup-migration-required) first.
+2. Run `mcp-runtime update` from the 0.11.1 release so the operator, the
+   gateway sidecar image and the platform services move together.
+3. Confirm each MCPServer pod runs the new `mcp-gateway` image and is Ready.
+
+Do not hand-edit Deployments or MCPServer specs to work around either
+regression; the sections below show how to read the failure and recover.
+
+### Authenticated MCP calls return 503 (OAuth provider unavailable)
+
+Every authenticated call to a server with a public HTTPS issuer returns
+`503` with `oauth_provider_unavailable`. The cause in 0.11.0 is that the
+gateway fetched issuer discovery and JWKS with a client trusting only the
+analytics CA, so a public certificate (for example Let's Encrypt) failed
+verification. Read the gateway sidecar log of an affected server pod:
+
+```bash
+kubectl logs -n <server-namespace> deploy/<server-name> -c mcp-gateway --tail=100
+```
+
+A line mentioning `x509: certificate signed by unknown authority` while
+fetching the issuer confirms it. Upgrade the operator and gateway to 0.11.1
+(`mcp-runtime update`), which fetches OAuth metadata with system roots and
+keeps analytics ingest pinned to the internal CA.
+
+Do not set `OAUTH_INTERNAL_ISSUER_URL` on the operator in public or production
+installs. That backchannel is meant for Kind `--test-mode`. In production the
+`mcp-auth-server-ingress` NetworkPolicy admits only the Traefik and
+`kube-system` namespaces, so gateway traffic to the in-cluster Service fails
+with `connection refused`. Production keeps the public issuer by design.
+
+### MCPServer rejected: analytics transport requires an HTTPS ingest URL
+
+Symptoms: an MCPServer never rolls to a new gateway image, the sidecar keeps
+crash-looping on an old image (for example
+`policy: unsupported schema version`), and the operator log (`kubectl logs -n mcp-runtime
+deploy/mcp-runtime-operator-controller-manager`) shows `managed analytics transport requires an HTTPS ingest URL without
+embedded credentials`. Older releases stored the platform ingest URL in
+`spec.analytics.ingestURL` (for example
+`http://mcp-ingest.<namespace>.svc...:8081/events`), which 0.11.0 refuses.
+
+Upgrade the operator to 0.11.1: it derives the platform ingest URL from
+`MCP_ANALYTICS_INGEST_URL` and replaces a stored `http://` platform URL. An
+external `http://` ingest URL is still rejected. Inspect the stored value:
+
+```bash
+kubectl get mcpserver -A -o yaml | grep -n "ingestURL"
+kubectl get mcpserver <server-name> -n <server-namespace> -o yaml
+```
+
+Remove a hard-coded `analytics.ingestURL` from `.mcp/servers.yaml` and
+redeploy with `mcp-runtime server deploy <server-name> --update` so the
+platform keeps owning that value.
+
+### Update refuses: token audience setup migration required
+
+`mcp-runtime update` stops before any cluster write with
+`token audience setup migration required (...)` when a split API route lacks
+its final token-exchange middleware. Image-only updates never migrate Ingress
+rules. Run the steps in this order:
+
+1. From the target release, run `mcp-runtime setup` with the installation's
+   existing TLS, host, storage and mcp-auth options (the same flags or
+   `--env-file` used to install; see `mcp-runtime setup --help`). Confirm the
+   cluster and preserve certificates and the mcp-auth choice.
+2. Re-run `mcp-runtime update`.
+
+The same order applies to the scoped Grafana guard. Users sign in again after
+the migration.
+
+### Roll back a hand-imported image
+
+If you imported an image by hand (for example with `k3s ctr images import`) and
+set it on the operator or a platform Deployment, save the current object
+before changing anything, then undo with the Deployment history:
+
+```bash
+kubectl get deploy mcp-runtime-operator-controller-manager -n mcp-runtime -o yaml > operator-deploy.before.yaml
+# ... change and verify ...
+kubectl rollout undo deploy/mcp-runtime-operator-controller-manager -n mcp-runtime
+kubectl rollout status deploy/mcp-runtime-operator-controller-manager -n mcp-runtime
+```
+
+`kubectl rollout undo` returns to the previous ReplicaSet; the saved YAML is
+the fallback if the history was pruned. Prefer `mcp-runtime update` over hand
+imports so rollout and rollback stay on the supported path.
+
 ## Getting more help
 
 - Run `mcp-runtime <command> --help` for flag reference

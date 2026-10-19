@@ -11,6 +11,12 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 - MCP gateway OAuth issuer discovery and JWKS fetches use the system trust store again instead of the analytics ingest CA, so authenticated requests to servers with a public HTTPS issuer no longer fail with `503 oauth_provider_unavailable` (regression in 0.11.0). Analytics ingest TLS is unchanged and still pins the internal CA.
 
+### Changed
+
+- `mcp-runtime update` migration guards now name the exact next command (`mcp-runtime setup` from the target release with the install's existing options, then `mcp-runtime update`) and link to the new upgrade troubleshooting section. Behavior and when the guards fire are unchanged.
+- Docs: add a 0.11.0 to 0.11.1 upgrade note and troubleshooting for `503 oauth_provider_unavailable`, the `managed analytics transport requires an HTTPS ingest URL` operator error, the token audience migration guard order, and rolling back a hand-imported image. State that production must not set `OAUTH_INTERNAL_ISSUER_URL`.
+- Docs: correct the `GET /api/v1/runtime/servers` description: in public platform mode anonymous callers receive the public catalog namespace only.
+
 ## [0.11.0] - 2026-10-19
 
 This breaking release binds platform login tokens to platform-api and exchanges

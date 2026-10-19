@@ -78,7 +78,7 @@ func requireScopedGrafanaMigration(ctx context.Context, cs kubernetes.Interface,
 		return nil
 	}
 	blocked := func(detail string) error {
-		return fmt.Errorf("scoped Grafana setup migration required (%s); no update changes were made: run mcp-runtime setup from this release with the installation's existing TLS, host, storage and mcp-auth options, then retry update; see docs/platform-services.md#scoped-grafana-migration", detail)
+		return fmt.Errorf("scoped Grafana setup migration required (%s); no update changes were made: next, run `mcp-runtime setup` from this release with the installation's existing TLS, host, storage and mcp-auth options, then re-run `mcp-runtime update`; see docs/platform-services.md#scoped-grafana-migration", detail)
 	}
 	config, err := cs.CoreV1().ConfigMaps(platformNamespace).Get(ctx, platforminventory.SharedConfigName, metav1.GetOptions{})
 	if err != nil || !strings.EqualFold(config.Data["GRAFANA_SCOPED_USER_ACCESS"], "true") {
