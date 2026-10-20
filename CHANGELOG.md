@@ -9,7 +9,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Added
 
-- Server details offer client installation actions for Claude, Claude Code, Codex, Cursor, and VS Code using the published public endpoint and required authentication fields. Native installation dialogs and reviewable agent setup prompts complement the existing copyable configurations.
+- Server details offer client installation actions for Claude, Claude Code, Codex, Cursor, and VS Code using the published public endpoint and required authentication fields. Native installation dialogs and reviewable agent setup prompts complement the existing copyable configurations ([#846](https://github.com/tavric-labs/mcp-runtime/pull/846)).
 
 ## [0.11.1] - 2026-10-19
 
