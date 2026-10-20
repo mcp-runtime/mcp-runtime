@@ -6,6 +6,7 @@ import { Button, ButtonLink } from "../../ui/Button";
 import { CopyButton } from "../../ui/CopyButton";
 import { DetailSheet } from "../../ui/DetailSheet";
 import { formatAbsolute, formatAge } from "../../lib/format";
+import { serverInstallLinks } from "../../lib/client-install";
 import {
   clientConnectSnippet,
   serverAuthInfo,
@@ -94,6 +95,7 @@ export function ServerDetail({ server, tools, onClose, onShowTools, onSelectTool
   const prompts = serverPromptDetails(server);
   const resources = serverResourceDetails(server);
   const tasks = serverTaskDetails(server);
+  const installLinks = useMemo(() => serverInstallLinks(server), [server]);
 
   // The runtime hands back a complete MCP client config for this server. It is
   // shown in full and selectable, so it is usable even if the clipboard is
@@ -196,6 +198,27 @@ export function ServerDetail({ server, tools, onClose, onShowTools, onSelectTool
           {auth.detail}
         </p>
       </div>
+
+      {connectConfig && installLinks.length > 0 ? (
+        <section aria-label="Install in an MCP client" data-testid="server-detail-install">
+          <p className="detail-label">Install in your client</p>
+          <div className="inline-actions client-install-actions">
+            {installLinks.map((link) => (
+              <ButtonLink
+                key={link.id}
+                href={link.href}
+                size="sm"
+                data-testid={`server-install-${link.id}`}
+                target={link.href.startsWith("https:") ? "_blank" : undefined}
+                rel={link.href.startsWith("https:") ? "noopener noreferrer" : undefined}
+              >
+                {link.label}
+              </ButtonLink>
+            ))}
+          </div>
+          <p className="section-note">Review the setup in your client. Claude Code and Codex open a setup prompt; send it when you are ready. You can also copy the configuration below.</p>
+        </section>
+      ) : null}
 
       {connectConfig ? (
         <div>

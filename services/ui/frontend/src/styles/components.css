@@ -1340,6 +1340,7 @@ fieldset.field > .field-label {
 .series-dot { display: inline-block; width: 8px; height: 8px; margin-right: 5px; border-radius: 50%; background: var(--accent); }
 .series-range { display: flex; justify-content: space-between; gap: var(--space-3); color: var(--text-secondary); font-size: 11px; padding-top: 6px; }
 
+.client-install-actions { margin-block: var(--space-3); }
 .detail-tabs { display: flex; gap: 4px; overflow-x: auto; margin-top: var(--space-3); border-bottom: 1px solid var(--border); }
 .detail-tab { border: 0; border-bottom: 2px solid transparent; padding: 8px 10px; background: transparent; color: var(--text-secondary); white-space: nowrap; cursor: pointer; }
 .detail-tab:hover, .detail-tab.is-active { color: var(--text); border-bottom-color: var(--accent); }
