@@ -638,7 +638,19 @@ mcp-runtime adapter proxy \
   --tls-client-cert ~/.mcpruntime/certs/<scope>/client.crt \
   --tls-client-key ~/.mcpruntime/certs/<scope>/client.key \
   --tls-ca-bundle ~/.mcpruntime/certs/<scope>/ca.crt
+
+# macOS background daemon. Each server is a path on 127.0.0.1:8099.
+mcp-runtime adapter service install
+mcp-runtime adapter service start
+mcp-runtime adapter service profile add \
+  --server workspace-demo \
+  --namespace mcp-team-acme \
+  --agent agt_01arz3ndektsv4rrffq69g5fav \
+  --runtime-url https://mcp.example.com/workspace-demo/mcp
+mcp-runtime adapter service status --output json
 ```
+
+`adapter service` is the macOS per-user daemon for macOS 15 and macOS 26. `install` copies the current binary to `~/.mcpruntime/bin/mcp-runtime`, writes the LaunchAgent, and starts it. It listens only on `127.0.0.1:8099` and serves each profile at `http://127.0.0.1:8099/<server>/mcp`. Other localhost ports are not used. An MCP client configures that URL and does not send a local adapter token. The daemon presents the profile certificate upstream and forwards the platform OAuth bearer when the server requires one. Reconnect enrolls the session certificate again. `status` reports listener readiness separately from upstream reachability and certificate state. `uninstall` keeps profiles unless `--purge` is set. Closing the Dock app does not stop the daemon. `hack/release/macos-adapter/package.sh` builds a universal CLI and the Dock app. It signs with the hardened runtime when `CODESIGN_IDENTITY` is set and notarizes when `NOTARY_KEYCHAIN_PROFILE` is set.
 
 The enrollment output prints the actual certificate directory and TLS file
 paths. Private keys use mode `0600`; the certificate directory uses mode

@@ -1,289 +1,464 @@
-//go:build darwin || linux
-
 package adapter
 
 import (
+	"bytes"
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
-	"encoding/pem"
-	"errors"
 	"fmt"
+	"io"
+	"net"
+	"net/http"
 	"os"
-	"os/signal"
-	"syscall"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/spf13/cobra"
-	"mcp-runtime/internal/adapterservice"
+
+	"mcp-runtime/internal/adapterd"
+	"mcp-runtime/internal/cli/core"
 	"mcp-runtime/internal/cli/platformapi"
-	"mcp-runtime/pkg/authfile"
-	"mcp-runtime/pkg/certauth"
+	"mcp-runtime/pkg/runtimeconfig"
 )
 
-func addServiceCommands(parent *cobra.Command) {
-	store, _ := adapterservice.DefaultStore()
-	parent.PersistentFlags().StringVar(&store.Dir, "state-dir", store.Dir, "Owner-only adapter state directory")
-	// Keep help goldens and copied command output independent of the current
-	// user's home path while retaining the resolved absolute runtime default.
-	parent.PersistentFlags().Lookup("state-dir").DefValue = "~/.mcpruntime/adapter"
-	service := &cobra.Command{Use: "service", Short: "Manage the per-user macOS background adapter"}
-	parent.AddCommand(service)
-	for _, action := range []string{"install", "uninstall", "start", "stop", "restart", "status", "logs", "reconnect", "run"} {
-		action := action
-		var purge bool
-		cmd := &cobra.Command{Use: action, Short: map[string]string{
-			"install": "Install or update the LaunchAgent and start at login", "uninstall": "Stop and remove the LaunchAgent; preserve profiles by default",
-			"start": "Start the installed user service", "stop": "Stop the user service until started or next login", "restart": "Drain and restart the user service",
-			"status": "Show measured daemon and profile state as JSON", "logs": "Show bounded, redacted diagnostic events as JSON", "reconnect": "Reload validated profiles and reconnect without extending consent",
-			"run": "Run the protected daemon in the foreground",
-		}[action], Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
-			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
-			defer stop()
-			switch action {
-			case "install":
-				exe, err := os.Executable()
-				if err != nil {
-					return err
-				}
-				return store.Install(ctx, exe)
-			case "uninstall":
-				return store.Uninstall(ctx, purge)
-			case "start":
-				return store.Start(ctx)
-			case "stop":
-				return store.Stop(ctx)
-			case "restart":
-				if err := store.Stop(ctx); err != nil {
-					return err
-				}
-				return store.Start(ctx)
-			case "run":
-				return (&adapterservice.Daemon{Store: store, Issue: renewProfileCertificate}).Run(ctx)
-			case "status", "logs", "reconnect":
-				method, path := "GET", "/v1/status"
-				if action == "reconnect" {
-					method, path = "POST", "/v1/reload"
-				}
-				status, err := store.Request(ctx, method, path)
-				if err != nil {
-					if action != "status" {
-						return err
-					}
-					// A missing service differs from an inaccessible or unsafe socket.
-					if _, statErr := os.Lstat(store.Socket()); statErr == nil {
-						return err
-					}
-					status = adapterservice.Status{Version: adapterservice.ProtocolVersion, StartAtLogin: store.Installed(), Profiles: []adapterservice.ProfileStatus{}, Events: []adapterservice.Event{}}
-				}
-				if action == "logs" {
-					return json.NewEncoder(cmd.OutOrStdout()).Encode(status.Events)
-				}
-				return json.NewEncoder(cmd.OutOrStdout()).Encode(status)
-			}
-			return nil
-		}}
-		if action == "uninstall" {
-			cmd.Flags().BoolVar(&purge, "purge", false, "Also delete saved profiles and their credentials")
-		}
-		service.AddCommand(cmd)
+func newServiceCmd(_ *core.Runtime) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "service",
+		Short: "Install and control the per-user adapter daemon",
+		Long: `The adapter service keeps one loopback listener running for every saved
+profile. Each profile is a path on that listener, for example
+http://127.0.0.1:8099/cully/mcp. Only that port is used. Other localhost
+ports are left alone. MCP clients call the profile URL directly. The daemon
+presents that profile's enrolled certificate upstream and forwards the
+client's OAuth bearer when the server requires one.
+
+Foreground troubleshooting stays on "adapter proxy".`,
 	}
-	profiles := &cobra.Command{Use: "profile", Short: "Authorize isolated adapter profiles and configure local MCP clients"}
-	parent.AddCommand(profiles)
-	var p adapterservice.Profile
-	add := &cobra.Command{Use: "add NAME", Short: "Create a profile using the selected platform login and an authorized session", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		lock, err := store.Lock("profiles")
-		if err != nil {
-			return err
-		}
-		defer lock.Close()
-		list, err := store.Load()
-		if err != nil {
-			return err
-		}
-		for _, existing := range list {
-			if existing.Name == args[0] {
-				return errors.New("profile exists; use adapter profile authorize to renew consent")
-			}
-		}
-		p.Name = args[0]
-		p.LocalToken, err = adapterservice.Token()
-		if err != nil {
-			return err
-		}
-		// Validate the non-secret configuration before requesting platform consent.
-		candidate := p
-		candidate.PlatformURL = "https://validation.invalid"
-		candidate.PlatformToken = "pending"
-		candidate.Human = "pending"
-		candidate.Session = "pending"
-		candidate.TrustDomain = "pending"
-		candidate.SessionExpires = time.Now()
-		if err := adapterservice.ValidateProfiles(append(list, candidate)); err != nil {
-			return err
-		}
-		if err := authorizeProfile(cmd.Context(), &p); err != nil {
-			return err
-		}
-		if err := store.Save(append(list, p)); err != nil {
-			return err
-		}
-		fmt.Fprintln(cmd.OutOrStdout(), "Profile saved. Run adapter service reconnect (or install), then adapter profile client-config NAME --output FILE.")
-		return nil
-	}}
-	add.Flags().StringVar(&p.RuntimeURL, "runtime-url", "", "Platform-issued HTTPS MCP endpoint")
-	add.Flags().StringVar(&p.Namespace, "namespace", "", "Target MCPServer namespace")
-	add.Flags().StringVar(&p.Server, "server", "", "Target MCPServer name")
-	add.Flags().StringVar(&p.Agent, "agent", "", "Active managed agent ID")
-	add.Flags().StringVar(&p.Listen, "listen", "127.0.0.1:8099", "Unique local 127.0.0.1 address and port")
-	profiles.AddCommand(add)
-	for _, action := range []string{"authorize", "remove"} {
-		action := action
-		profiles.AddCommand(&cobra.Command{Use: action + " NAME", Short: map[string]string{"authorize": "Explicitly authorize a session with the selected platform login", "remove": "Remove a profile and its stored credentials"}[action], Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-			lock, err := store.Lock("profiles")
-			if err != nil {
-				return err
-			}
-			defer lock.Close()
-			list, err := store.Load()
-			if err != nil {
-				return err
-			}
-			for i := range list {
-				if list[i].Name == args[0] {
-					if action == "remove" {
-						list = append(list[:i], list[i+1:]...)
-					} else if err := authorizeProfile(cmd.Context(), &list[i]); err != nil {
-						return err
-					}
-					if err := store.Save(list); err != nil {
-						return err
-					}
-					if _, err := store.Request(cmd.Context(), "POST", "/v1/reload"); err != nil {
-						fmt.Fprintln(cmd.ErrOrStderr(), "Profiles saved; daemon reload unavailable. Run adapter service start or reconnect.")
-					}
-					return nil
-				}
-			}
-			return errors.New("profile not found")
-		}})
-	}
-	var output string
-	config := &cobra.Command{Use: "client-config NAME", Short: "Write a local MCP client config including its credential to an owner-only file", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		if output == "" {
-			return errors.New("--output FILE is required; credentials are never printed to the terminal")
-		}
-		list, err := store.Load()
-		if err != nil {
-			return err
-		}
-		for _, p := range list {
-			if p.Name == args[0] {
-				config := map[string]any{"mcpServers": map[string]any{p.Name: map[string]any{"url": "http://" + p.Listen + "/mcp", "headers": map[string]string{adapterservice.LocalCredentialHeader: p.LocalToken}}}}
-				b, err := json.MarshalIndent(config, "", "  ")
-				if err != nil {
-					return err
-				}
-				f, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600) // #nosec G304 -- explicit user-selected destination; exclusive creation and owner-only mode prevent overwrite and credential exposure.
-				if err != nil {
-					return err
-				}
-				_, writeErr := f.Write(b)
-				closeErr := f.Close()
-				if writeErr != nil {
-					return writeErr
-				}
-				if closeErr != nil {
-					return closeErr
-				}
-				fmt.Fprintln(cmd.OutOrStdout(), "Client configuration written. Treat this file as a credential; add upstream OAuth separately when required.")
-				return nil
-			}
-		}
-		return errors.New("profile not found")
-	}}
-	config.Flags().StringVar(&output, "output", "", "New file for secret client configuration (0600; refuses overwrite)")
-	profiles.AddCommand(config)
+	cmd.AddCommand(newServiceInstallCmd(), newServiceUninstallCmd(), newServiceStartCmd(), newServiceStopCmd(), newServiceRestartCmd(), newServiceStatusCmd(), newServiceLogsCmd(), newServiceRunCmd(), newServiceProfileCmd())
+	return cmd
 }
 
-func authorizeProfile(ctx context.Context, p *adapterservice.Profile) error {
-	token, base, _, err := authfile.ResolveToken()
+func newServiceInstallCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "install",
+		Short: "Install the user LaunchAgent",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if runtime.GOOS != "darwin" {
+				return fmt.Errorf("adapter service install is supported on macOS")
+			}
+			bin, err := os.Executable()
+			if err != nil {
+				return err
+			}
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return err
+			}
+			installed, err := installServiceBinary(bin, home)
+			if err != nil {
+				return err
+			}
+			path := adapterd.LaunchdPlistPath(home)
+			if err := adapterd.WriteLaunchdPlist(path, installed, launchdEnv()); err != nil {
+				return err
+			}
+			if err := startLaunchd(); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "installed %s\n", path)
+			return nil
+		},
+	}
+}
+
+func newServiceUninstallCmd() *cobra.Command {
+	var purge bool
+	cmd := &cobra.Command{
+		Use:   "uninstall",
+		Short: "Remove the LaunchAgent and stop the managed daemon",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if runtime.GOOS != "darwin" {
+				return fmt.Errorf("adapter service uninstall is supported on macOS")
+			}
+			_ = stopLaunchd()
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return err
+			}
+			if err := adapterd.RemoveLaunchdPlist(adapterd.LaunchdPlistPath(home)); err != nil {
+				return err
+			}
+			if purge {
+				dir, err := stateDir()
+				if err != nil {
+					return err
+				}
+				if err := os.RemoveAll(dir); err != nil {
+					return err
+				}
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), "uninstalled adapter service")
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&purge, "purge", false, "Delete saved profiles and local credentials")
+	return cmd
+}
+
+func newServiceStartCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "start",
+		Short: "Start the adapter daemon",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := startLaunchd(); err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), "adapter daemon started")
+			return nil
+		},
+	}
+}
+
+func newServiceStopCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "stop",
+		Short: "Stop the adapter daemon",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := stopLaunchd(); err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), "adapter daemon stopped")
+			return nil
+		},
+	}
+}
+
+func newServiceRestartCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "restart",
+		Short: "Restart the adapter daemon",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			_ = stopLaunchd()
+			if err := startLaunchd(); err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), "adapter daemon restarted")
+			return nil
+		},
+	}
+}
+
+func newServiceStatusCmd() *cobra.Command {
+	var output string
+	cmd := &cobra.Command{
+		Use:   "status",
+		Short: "Show daemon and profile status",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			st, err := fetchStatus()
+			if err != nil {
+				if output == "json" {
+					enc := json.NewEncoder(cmd.OutOrStdout())
+					enc.SetIndent("", "  ")
+					return enc.Encode(adapterd.Status{Protocol: adapterd.ProtocolVersion, ProcessRunning: false, CheckedAt: time.Now().UTC()})
+				}
+				fmt.Fprintln(cmd.OutOrStdout(), "adapter daemon is not running")
+				return nil
+			}
+			if output == "json" {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(st)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "running listen=%s ready=%t profiles=%d\n", st.ListenAddr, st.ListenerReady, len(st.Profiles))
+			for _, p := range st.Profiles {
+				fmt.Fprintf(cmd.OutOrStdout(), "%s %s auth=%s\n", p.Server, p.LocalURL, p.AuthState)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&output, "output", "text", "Output format: text or json")
+	return cmd
+}
+
+func newServiceLogsCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "logs",
+		Short: "Show recent redacted daemon logs",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			var payload struct {
+				Lines []string `json:"lines"`
+			}
+			if err := controlJSON(http.MethodGet, "/v1/logs", nil, &payload); err != nil {
+				return err
+			}
+			for _, line := range payload.Lines {
+				fmt.Fprintln(cmd.OutOrStdout(), line)
+			}
+			return nil
+		},
+	}
+}
+
+func newServiceRunCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:    "run",
+		Short:  "Run the adapter daemon in the foreground",
+		Hidden: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			d, err := openDaemon()
+			if err != nil {
+				return err
+			}
+			d.Hooks.Enroll = enrollProfile
+			d.SetStartupAtLogin(launchdInstalled())
+			ctx, cancel := context.WithCancel(cmd.Context())
+			defer cancel()
+			return d.Run(ctx)
+		},
+	}
+}
+
+func newServiceProfileCmd() *cobra.Command {
+	cmd := &cobra.Command{Use: "profile", Short: "Add or remove a daemon profile"}
+	add := &cobra.Command{
+		Use:   "add",
+		Short: "Add a profile and print its local MCP URL once",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			req := adapterd.AddProfileRequest{}
+			req.Server, _ = cmd.Flags().GetString("server")
+			req.Namespace, _ = cmd.Flags().GetString("namespace")
+			req.Team, _ = cmd.Flags().GetString("team")
+			req.Agent, _ = cmd.Flags().GetString("agent")
+			req.PlatformURL, _ = cmd.Flags().GetString("platform-url")
+			req.RuntimeURL, _ = cmd.Flags().GetString("runtime-url")
+			var created struct {
+				Profile    adapterd.Profile `json:"profile"`
+				LocalURL   string           `json:"localUrl"`
+				LocalToken string           `json:"localToken"`
+			}
+			body, _ := json.Marshal(req)
+			if err := controlJSON(http.MethodPost, "/v1/profiles", body, &created); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "local URL: %s\n", created.LocalURL)
+			return nil
+		},
+	}
+	add.Flags().String("server", "", "MCP server name")
+	add.Flags().String("namespace", "", "MCP server namespace")
+	add.Flags().String("team", "", "Team label shown in status")
+	add.Flags().String("agent", "", "Runtime agent id")
+	add.Flags().String("platform-url", "", "Platform API base URL")
+	add.Flags().String("runtime-url", "", "Upstream MCP URL")
+	_ = add.MarkFlagRequired("server")
+	_ = add.MarkFlagRequired("runtime-url")
+	remove := &cobra.Command{
+		Use:   "remove <id>",
+		Short: "Remove a profile",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			purge, _ := cmd.Flags().GetBool("purge")
+			path := "/v1/profiles/" + args[0]
+			if purge {
+				path += "?purge=true"
+			}
+			if err := controlJSON(http.MethodDelete, path, nil, nil); err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), "removed profile")
+			return nil
+		},
+	}
+	remove.Flags().Bool("purge", false, "Delete stored credentials for the profile")
+	cmd.AddCommand(add, remove)
+	return cmd
+}
+
+func openDaemon() (*adapterd.Daemon, error) {
+	dir, err := stateDir()
 	if err != nil {
-		return errors.New("sign in interactively with mcp-runtime auth login first")
+		return nil, err
 	}
-	// Reauthorization must not silently switch a profile to another platform.
-	if p.PlatformURL != "" && platformapi.NormalizeBaseURL(p.PlatformURL) != platformapi.NormalizeBaseURL(base) {
-		return errors.New("selected login belongs to another platform; select the profile's platform login")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, err
 	}
-	client, err := platformapi.NewCredentialClient(base, token)
+	runDir := filepath.Join(filepath.Dir(dir), "run")
+	secrets := secretStore(filepath.Join(dir, "secrets.json"))
+	return &adapterd.Daemon{
+		ListenAddr: adapterd.DefaultListenAddr,
+		StateDir:   dir,
+		SocketPath: filepath.Join(runDir, "adapterd.sock"),
+		Store:      adapterd.NewStore(filepath.Join(dir, "profiles.json")),
+		Secrets:    secrets,
+		Router:     adapterd.NewRouter(),
+		Logs:       adapterd.NewLogBuffer(200),
+	}, nil
+}
+
+func secretStore(file string) adapterd.SecretStore {
+	if runtime.GOOS == "darwin" {
+		if os.Getenv("MCP_RUNTIME_ADAPTER_FILE_SECRETS") == "" {
+			return adapterd.NewKeychainStore()
+		}
+	}
+	return adapterd.NewFileSecretStore(file)
+}
+
+func stateDir() (string, error) {
+	return runtimeconfig.Path("adapterd")
+}
+
+func enrollProfile(ctx context.Context, p adapterd.Profile) (adapterd.Material, error) {
+	if p.PlatformURL != "" {
+		_ = os.Setenv(EnvPlatformURL, p.PlatformURL)
+	}
+	client, err := platformapi.NewPlatformClient()
+	if err != nil {
+		return adapterd.Material{}, fmt.Errorf("sign-in required: %w", err)
+	}
+	flags := platformSessionFlags{server: p.Server, namespace: p.Namespace, agent: p.Agent, platformURL: p.PlatformURL, autoRefresh: true}
+	cred, err := issueAdapterCredential(ctx, client, flags, os.Getenv(EnvMTLSTrustDomain))
+	if err != nil {
+		return adapterd.Material{}, err
+	}
+	return adapterd.Material{CertPEM: cred.CertPEM, KeyPEM: cred.KeyPEM, CA: cred.CABundle, Expires: cred.ExpiresAt}, nil
+}
+
+func fetchStatus() (adapterd.Status, error) {
+	var st adapterd.Status
+	err := controlJSON(http.MethodGet, "/v1/status", nil, &st)
+	return st, err
+}
+
+func controlJSON(method, path string, body []byte, dest any) error {
+	sock, err := socketPath()
 	if err != nil {
 		return err
 	}
-	session, err := client.CreateAdapterSession(ctx, platformapi.AdapterSessionRequest{ServerName: p.Server, Namespace: p.Namespace, AgentID: p.Agent})
+	transport := &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			var d net.Dialer
+			return d.DialContext(ctx, "unix", sock)
+		},
+	}
+	client := &http.Client{Transport: transport, Timeout: 10 * time.Second}
+	var reader io.Reader
+	if body != nil {
+		reader = bytes.NewReader(body)
+	}
+	req, err := http.NewRequest(method, "http://adapter"+path, reader)
 	if err != nil {
-		return errors.New("profile authorization failed; check login, active agent and matching grant")
+		return err
 	}
-	if session.AgentID != p.Agent || session.ServerName != p.Server || session.Namespace != p.Namespace || session.HumanID == "" || session.Name == "" || !session.ExpiresAt.After(time.Now()) {
-		return errors.New("platform session does not match requested profile")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
 	}
-	if p.Human != "" && (p.Human != session.HumanID || p.Team != session.TeamID) {
-		return errors.New("selected login would change the profile identity; create a separate profile")
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("adapter daemon is not running: %w", err)
 	}
-	p.PlatformURL = platformapi.NormalizeBaseURL(base)
-	p.PlatformToken = token
-	p.Human = session.HumanID
-	p.Team = session.TeamID
-	p.Session = session.Name
-	p.TrustDomain = session.TrustDomain
-	p.SessionExpires = session.ExpiresAt
+	defer resp.Body.Close()
+	payload, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("adapter daemon: %s", payload)
+	}
+	if dest == nil || len(payload) == 0 {
+		return nil
+	}
+	return json.Unmarshal(payload, dest)
+}
+
+func socketPath() (string, error) {
+	dir, err := stateDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(filepath.Dir(dir), "run", "adapterd.sock"), nil
+}
+
+func installServiceBinary(src, home string) (string, error) {
+	destDir := filepath.Join(home, ".mcpruntime", "bin")
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		return "", err
+	}
+	dest := filepath.Join(destDir, "mcp-runtime")
+	in, err := os.Open(src)
+	if err != nil {
+		return "", err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
+	if err != nil {
+		return "", err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
+		return "", err
+	}
+	if err := out.Close(); err != nil {
+		return "", err
+	}
+	return dest, nil
+}
+
+func launchdEnv() map[string]string {
+	if os.Getenv("MCP_RUNTIME_ADAPTER_FILE_SECRETS") == "" {
+		return nil
+	}
+	return map[string]string{"MCP_RUNTIME_ADAPTER_FILE_SECRETS": os.Getenv("MCP_RUNTIME_ADAPTER_FILE_SECRETS")}
+}
+
+func launchdInstalled() bool {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(adapterd.LaunchdPlistPath(home))
+	return err == nil
+}
+
+func startLaunchd() error {
+	if runtime.GOOS != "darwin" {
+		return fmt.Errorf("adapter service start is supported on macOS")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	plist := adapterd.LaunchdPlistPath(home)
+	if _, err := os.Stat(plist); err != nil {
+		return fmt.Errorf("adapter service is not installed")
+	}
+	uid := os.Getuid()
+	domain := fmt.Sprintf("gui/%d", uid)
+	_ = exec.Command("launchctl", "bootout", domain, plist).Run()
+	if out, err := exec.Command("launchctl", "bootstrap", domain, plist).CombinedOutput(); err != nil {
+		return fmt.Errorf("launchctl bootstrap: %w: %s", err, out)
+	}
+	target := fmt.Sprintf("%s/%s", domain, "org.mcpruntime.adapter")
+	if out, err := exec.Command("launchctl", "kickstart", "-k", target).CombinedOutput(); err != nil {
+		return fmt.Errorf("launchctl kickstart: %w: %s", err, out)
+	}
 	return nil
 }
 
-// Renewal signs a CSR for the same session. It deliberately does not call the
-// session-creation endpoint, so a background retry cannot extend user consent.
-func renewProfileCertificate(ctx context.Context, p adapterservice.Profile) (adapterservice.Credential, error) {
-	if !time.Now().Before(p.SessionExpires) {
-		return adapterservice.Credential{}, errors.New("session expired")
+func stopLaunchd() error {
+	if runtime.GOOS != "darwin" {
+		return fmt.Errorf("adapter service stop is supported on macOS")
 	}
-	client, err := platformapi.NewCredentialClient(p.PlatformURL, p.PlatformToken)
+	home, err := os.UserHomeDir()
 	if err != nil {
-		return adapterservice.Credential{}, err
+		return err
 	}
-	key, csr, _, err := certauth.BuildSessionCSR(p.TrustDomain, p.Namespace, p.Session)
+	plist := adapterd.LaunchdPlistPath(home)
+	uid := os.Getuid()
+	out, err := exec.Command("launchctl", "bootout", fmt.Sprintf("gui/%d", uid), plist).CombinedOutput()
 	if err != nil {
-		return adapterservice.Credential{}, err
+		return fmt.Errorf("launchctl bootout: %w: %s", err, out)
 	}
-	issued, err := client.IssueAdapterCertificate(ctx, platformapi.AdapterCertificateRequest{Namespace: p.Namespace, Session: p.Session, CSR: string(csr)})
-	if err != nil {
-		return adapterservice.Credential{}, err
-	}
-	cert, err := tls.X509KeyPair([]byte(issued.Certificate), key)
-	if err != nil {
-		return adapterservice.Credential{}, err
-	}
-	leaf, err := x509.ParseCertificate(cert.Certificate[0])
-	if err != nil {
-		return adapterservice.Credential{}, err
-	}
-	expected := "spiffe://" + p.TrustDomain + "/ns/" + p.Namespace + "/session/" + p.Session
-	now := time.Now()
-	if issued.SPIFFEID != expected || !issued.ExpiresAt.After(now) || issued.ExpiresAt.After(p.SessionExpires) || leaf.NotAfter.After(issued.ExpiresAt) || leaf.NotAfter.After(p.SessionExpires) || !leaf.NotAfter.After(now) || leaf.NotBefore.After(now) {
-		return adapterservice.Credential{}, errors.New("certificate identity or lifetime mismatch")
-	}
-	block, _ := pem.Decode(csr)
-	if block == nil {
-		return adapterservice.Credential{}, errors.New("invalid generated certificate request")
-	}
-	if err := certauth.ValidateIssuedCertificatePEM(issued.Certificate, block.Bytes, expected, p.SessionExpires.Sub(now), now); err != nil {
-		return adapterservice.Credential{}, errors.New("issued certificate does not match the authorized session")
-	}
-	roots, err := x509.SystemCertPool()
-	if err != nil {
-		return adapterservice.Credential{}, err
-	}
-	if !roots.AppendCertsFromPEM([]byte(issued.CABundle)) {
-		return adapterservice.Credential{}, errors.New("invalid issued CA bundle")
-	}
-	return adapterservice.Credential{Certificate: cert, Roots: roots, Expires: leaf.NotAfter}, nil
+	return nil
 }

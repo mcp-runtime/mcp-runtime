@@ -156,7 +156,10 @@ identify the same human as the certificate-bound session. A token for another
 human is rejected. Both clients' calls are attributed to the same Runtime
 agent and session. If clients need distinct Runtime agent identities or
 session-level audit attribution, run a separate adapter proxy with its own
-certificate for each identity.
+certificate for each identity. On macOS, `mcp-runtime adapter service` keeps
+those connections in one user daemon. Each server has its own path, such as
+`http://127.0.0.1:8099/cully/mcp`, and its own certificate. The listener is
+only that loopback port. Platform OAuth is unchanged.
 
 The default listener is `127.0.0.1:8099` and does not authenticate local
 clients. Any process that can connect to it can make calls using that adapter

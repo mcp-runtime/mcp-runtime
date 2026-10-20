@@ -5,9 +5,10 @@ gateway binds the certificate identity to the OAuth subject.
 
 Available commands:
 
-  mcp-runtime adapter proxy   Local Streamable HTTP listener (for SDKs that
-                              speak MCP over HTTP).
-  mcp-runtime adapter enroll  Enroll and save a client certificate.
+  mcp-runtime adapter proxy    Local Streamable HTTP listener (for SDKs that
+                               speak MCP over HTTP).
+  mcp-runtime adapter enroll   Enroll and save a client certificate.
+  mcp-runtime adapter service  Per-user background daemon and profile paths.
 
 The adapter enrolls a session and certificate through the platform API when
 `--server` and `--agent` are supplied. An existing certificate can be
@@ -24,7 +25,7 @@ Available Commands:
   enroll      Issue platform-managed mTLS files for an external adapter
   profile     Authorize isolated adapter profiles and configure local MCP clients
   proxy       Run a local Streamable HTTP MCP proxy that forwards to the runtime
-  service     Manage the per-user macOS background adapter
+  service     Install and control the per-user adapter daemon
 
 Flags:
   -h, --help               help for adapter
