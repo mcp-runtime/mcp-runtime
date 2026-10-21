@@ -19,7 +19,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Fixed
 
-- The macOS app finds its bundled CLI for service controls, keeps action failures visible, shows service startup progress, and reads large profile lists without HTTP chunk framing errors ([#656](https://github.com/mcp-runtime/mcp-runtime/issues/656)).
+- The macOS app finds its bundled CLI for service controls, offers **Update service from this app**, keeps action failures visible, shows service startup progress, and reads large profile lists without HTTP chunk framing errors ([#656](https://github.com/mcp-runtime/mcp-runtime/issues/656)).
 - Codex installation writes valid TOML URL strings and preserves quoted duplicate entries and inline MCP tables instead of producing conflicting configuration.
 
 ### Security

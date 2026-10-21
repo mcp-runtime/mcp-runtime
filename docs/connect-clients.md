@@ -325,7 +325,8 @@ but does not revoke its platform session.
 
 For manual configuration, see the official [Cursor MCP guide](https://docs.cursor.com/context/model-context-protocol), [Codex MCP setup](https://developers.openai.com/learn/docs-mcp), [Claude Code MCP guide](https://docs.anthropic.com/en/docs/claude-code/mcp), and [VS Code MCP reference](https://code.visualstudio.com/docs/agents/reference/mcp-configuration).
 
-To update, replace the app and choose **Restart service** from the new app; the
+To update, replace the app and choose **Update service from this app** from its
+**Service** menu; the
 CLI copies a stable managed binary and preserves profiles. The app and daemon
 require management protocol version 1. To remove startup
 and stop the daemon, run `mcp-runtime adapter service uninstall`; deleting the app alone does

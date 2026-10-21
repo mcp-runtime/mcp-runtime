@@ -80,7 +80,7 @@ struct ContentView: View {
         .confirmationDialog("Uninstall the adapter service?", isPresented: $confirmUninstallService, titleVisibility: .visible) {
             Button("Uninstall service", role: .destructive) { manage("uninstall") }
         } message: {
-            Text("This removes the login item and bundled helper. Saved profiles and credentials will remain on this Mac.")
+            Text("This removes the login item and stops the service. Saved profiles and credentials will remain on this Mac.")
         }
         .confirmationDialog("Remove this local profile?", isPresented: Binding(
             get: { profileToRemove != nil },
@@ -148,6 +148,7 @@ struct ContentView: View {
                     Menu {
                         Button("Start service") { manage("start") }
                         Button("Restart service") { manage("restart") }
+                        Button("Update service from this app") { manage("install") }
                         Divider()
                         Button("Stop service…", role: .destructive) { confirmStopService = true }
                         Button("Uninstall service…", role: .destructive) { confirmUninstallService = true }
