@@ -127,7 +127,7 @@ enum ControlClient {
     }
 
     static func status() throws -> DaemonStatus {
-        let body = try request(method: "GET", path: "/v1/status", body: nil)
+        let body = try request(method: "GET", path: "/v1/status", body: nil, timeout: 5)
         do {
             return try JSONDecoder().decode(DaemonStatus.self, from: body)
         } catch {
@@ -157,7 +157,7 @@ enum ControlClient {
     static func manage(_ action: String) throws {
         let allowed = ["install", "start", "stop", "restart", "uninstall"]
         guard allowed.contains(action),
-              let executable = Bundle.main.url(forResource: "mcp-runtime", withExtension: nil, subdirectory: "Helpers") else {
+              let executable = bundledCLI() else {
             throw ControlClientError.socket("The bundled adapter CLI is unavailable. Reinstall the companion app.")
         }
         let process = Process()
@@ -194,6 +194,19 @@ enum ControlClient {
             let detail = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             throw ControlClientError.http(detail.isEmpty ? "adapter service \(action) failed" : detail)
         }
+        if ["install", "start", "restart"].contains(action) {
+            let deadline = Date().addingTimeInterval(20)
+            while Date() < deadline {
+                if let current = try? status(), current.listenerReady { return }
+                Thread.sleep(forTimeInterval: 0.2)
+            }
+            throw ControlClientError.http("The service launched, but its local listener did not become ready. Open Logs or inspect a port conflict on 127.0.0.1:8099.")
+        }
+    }
+
+    static func bundledCLI(in appURL: URL = Bundle.main.bundleURL) -> URL? {
+        let executable = appURL.appendingPathComponent("Contents/Helpers/mcp-runtime")
+        return FileManager.default.isExecutableFile(atPath: executable.path) ? executable : nil
     }
 
     static func clientConfig(id: String) throws -> Data {
@@ -214,7 +227,10 @@ enum ControlClient {
 
     static func installClient(_ client: String, profileID: String) throws -> String {
         let config = try localServerConfig(id: profileID)
-        let home = FileManager.default.homeDirectoryForCurrentUser
+        return try installClient(client, config: config, home: FileManager.default.homeDirectoryForCurrentUser)
+    }
+
+    static func installClient(_ client: String, config: (name: String, url: String, headers: [String: String]), home: URL, claudeExecutable: URL? = nil) throws -> String {
         let slug = config.name.lowercased().map { character -> Character in
             character.isASCII && (character.isLetter || character.isNumber || character == "-") ? character : "-"
         }
@@ -246,8 +262,11 @@ enum ControlClient {
             let url = home.appendingPathComponent(".codex/config.toml")
             let current = try readTextConfig(url)
             let section = "[mcp_servers.\(name)]"
-            guard !current.components(separatedBy: .newlines).contains(where: { $0.trimmingCharacters(in: .whitespaces) == section }) else {
+            guard !current.contains(name) else {
                 throw ControlClientError.http("\(name) is already configured in \(url.path). Remove that entry first if you want to replace it.")
+            }
+            if current.range(of: "(?m)^\\s*(?:mcp_servers|\"mcp_servers\"|'mcp_servers')\\s*=", options: .regularExpression) != nil {
+                throw ControlClientError.http("Codex uses an inline MCP configuration that cannot be extended safely. Export this profile's config and add it manually.")
             }
             var lines = [section, "url = \(tomlString(config.url))"]
             if !config.headers.isEmpty {
@@ -259,7 +278,7 @@ enum ControlClient {
             try writeTextConfig(current + (current.isEmpty || current.hasSuffix("\n\n") ? "" : "\n") + lines.joined(separator: "\n") + "\n", to: url)
             return "Added \(name) to \(url.path). Restart Codex to connect."
         case "Claude Code":
-            guard let executable = findExecutable("claude", extraPaths: ["/opt/homebrew/bin/claude", "/usr/local/bin/claude", home.appendingPathComponent(".local/bin/claude").path]) else {
+            guard let executable = claudeExecutable?.path ?? findExecutable("claude", extraPaths: ["/opt/homebrew/bin/claude", "/usr/local/bin/claude", home.appendingPathComponent(".local/bin/claude").path]) else {
                 throw ControlClientError.http("Claude Code CLI was not found. Install it, then try again.")
             }
             guard let token = config.headers["X-MCP-Runtime-Local-Token"] else {
@@ -268,7 +287,7 @@ enum ControlClient {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: executable)
             process.arguments = ["mcp", "add", "--transport", "http", "--scope", "user", "--header", "X-MCP-Runtime-Local-Token: \(token)", name, config.url]
-            process.environment = ["PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"]
+            process.environment = ["HOME": home.path, "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"]
             let output = Pipe()
             process.standardOutput = output
             process.standardError = output
@@ -277,7 +296,7 @@ enum ControlClient {
             process.waitUntilExit()
             guard process.terminationStatus == 0 else {
                 let detail = String(data: result, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                throw ControlClientError.http(detail.isEmpty ? "Claude Code could not add the MCP server." : detail)
+                throw ControlClientError.http(detail.isEmpty ? "Claude Code could not add the MCP server." : detail.replacingOccurrences(of: token, with: "[redacted]"))
             }
             return "Added \(name) to Claude Code for your user account. Run /mcp or restart Claude Code to connect."
         default:
@@ -342,7 +361,7 @@ enum ControlClient {
     }
 
     private static func tomlString(_ value: String) -> String {
-        let data = try! JSONSerialization.data(withJSONObject: [value])
+        let data = try! JSONSerialization.data(withJSONObject: [value], options: [.withoutEscapingSlashes])
         let encoded = String(data: data, encoding: .utf8)!
         return String(encoded.dropFirst().dropLast())
     }
@@ -355,11 +374,10 @@ enum ControlClient {
         return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
-    static func addProfile(server: String, namespace: String, team: String, agent: String, runtimeURL: String) throws {
+    static func addProfile(server: String, namespace: String, agent: String, runtimeURL: String) throws {
         let payload: [String: String] = [
             "server": server,
             "namespace": namespace,
-            "team": team,
             "agent": agent,
             "runtimeUrl": runtimeURL,
         ]
@@ -367,12 +385,19 @@ enum ControlClient {
         _ = try request(method: "POST", path: "/v1/profiles", body: body)
     }
 
-    static func request(method: String, path: String, body: Data?) throws -> Data {
+    static func request(method: String, path: String, body: Data?, timeout: Int = 30) throws -> Data {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         if fd < 0 {
             throw ControlClientError.socket("could not open socket")
         }
         defer { close(fd) }
+        var duration = timeval(tv_sec: timeout, tv_usec: 0)
+        var noSignal: Int32 = 1
+        guard setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &duration, socklen_t(MemoryLayout<timeval>.size)) == 0,
+              setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &duration, socklen_t(MemoryLayout<timeval>.size)) == 0,
+              setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSignal, socklen_t(MemoryLayout<Int32>.size)) == 0 else {
+            throw ControlClientError.socket("Could not configure the local adapter connection.")
+        }
         var addr = sockaddr_un()
         addr.sun_family = sa_family_t(AF_UNIX)
         let sock = socketPath()
@@ -395,7 +420,9 @@ enum ControlClient {
             let detail = String(cString: strerror(errno))
             throw ControlClientError.socket("could not connect to \(sock): \(detail)")
         }
-        var text = "\(method) \(path) HTTP/1.1\r\nHost: adapter\r\nConnection: close\r\n"
+        // The connection is read to EOF. HTTP/1.0 prevents chunked bodies for
+        // larger profile lists without implementing a second HTTP decoder.
+        var text = "\(method) \(path) HTTP/1.0\r\nHost: adapter\r\nConnection: close\r\n"
         if let body {
             text += "Content-Type: application/json\r\nContent-Length: \(body.count)\r\n"
         }
@@ -410,9 +437,11 @@ enum ControlClient {
             throw ControlClientError.http("empty management response (\(data.count) bytes)")
         }
         let header = String(raw[..<range.lowerBound])
+        let payload = String(raw[range.upperBound...])
         if !header.contains(" 200 ") && !header.contains(" 201 ") && !header.contains(" 204 ") {
-            throw ControlClientError.http(header)
+            let detail = payload.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw ControlClientError.http(detail.isEmpty ? header.components(separatedBy: "\r\n")[0] : String(detail.prefix(2048)))
         }
-        return Data(raw[range.upperBound...].utf8)
+        return Data(payload.utf8)
     }
 }

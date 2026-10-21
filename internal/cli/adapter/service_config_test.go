@@ -72,7 +72,7 @@ func TestServiceReinstallFromManagedBinaryPreservesExecutable(t *testing.T) {
 		t.Fatalf("managed executable was corrupted: content=%q error=%v", got, err)
 	}
 	info, err := os.Stat(managed)
-	if err != nil || info.Mode().Perm() != 0o755 {
+	if err != nil || info.Mode().Perm() != 0o700 {
 		t.Fatalf("managed executable permissions: info=%v error=%v", info, err)
 	}
 }

@@ -21,10 +21,33 @@ jobs:
     permissions:
       contents: read
 
+  macos-adapter:
+    name: Build universal macOS Adapter preview
+    if: startsWith(github.event.release.tag_name, 'v')
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Build desktop app and universal CLI with release metadata
+        env:
+          MCP_RELEASE_VERSION: ${{ github.event.release.tag_name }}
+          MCP_RELEASE_COMMIT: ${{ github.sha }}
+        run: bash hack/release/macos-adapter/package.sh "${RUNNER_TEMP}/macos-adapter-dist"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: macos-adapter-release-assets
+          path: ${{ runner.temp }}/macos-adapter-dist/*
+          if-no-files-found: error
+          retention-days: 2
+
   publish:
     name: Upload release assets
     runs-on: ubuntu-24.04
-    needs: [build]
+    needs: [build, macos-adapter]
     if: startsWith(github.event.release.tag_name, 'v')
     permissions:
       contents: write
@@ -102,6 +125,9 @@ jobs:
             install.ps1
             mcp-runtime-darwin-arm64
             mcp-runtime-darwin-amd64
+            mcp-runtime-darwin-universal
+            MCPRuntimeAdapter-unsigned-preview.zip
+            mcp-runtime-darwin-universal-unsigned-preview.zip
             mcp-runtime-linux-arm64
             mcp-runtime-linux-amd64
             mcp-runtime-windows-amd64.exe
@@ -124,6 +150,10 @@ jobs:
             echo "platform-manifest.json with crdChange must embed non-empty crds" >&2
             exit 1
           fi
+
+      - name: Checksum release assets
+        working-directory: dist
+        run: sha256sum -- * > SHA256SUMS
 
       # The GitHub Release already exists (created from the UI). Only upload
       # binaries and manifests; do not overwrite the release notes body.

@@ -284,10 +284,20 @@ staples the accepted ticket and verifies Gatekeeper before producing
 [notarization workflow](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution)
 and [Developer ID guidance](https://developer.apple.com/developer-id/).
 
+Download `MCPRuntimeAdapter-unsigned-preview.zip` from the
+[GitHub release assets](https://github.com/tavric-labs/mcp-runtime/releases/latest).
+The same release includes the universal CLI and `SHA256SUMS` to verify downloads.
+The desktop archive is an unsigned preview; Developer ID signing and notarization
+are not configured for release automation yet. macOS may require you to allow
+the app in **System Settings → Privacy & Security** after opening it.
+
 Unzip the companion archive, drag **MCP Runtime Adapter.app** into
 **Applications**, then open it. With no service installed, the empty screen
 offers **Install and start**. Sign in with `mcp-runtime auth login`, choose
-**Add your first profile**, then choose **Connect your agent** on its card. The
+**Add your first profile**, and enter the server name and active Agent ID from
+the platform's **Agents** page. The team comes from the issued platform session.
+Set **Namespace** in Advanced connection settings only when the server is outside
+your primary namespace. Then choose **Connect your agent** on its card. The
 client-specific actions add the endpoint using each app's supported format:
 
 | Agent | Install action | Configuration |

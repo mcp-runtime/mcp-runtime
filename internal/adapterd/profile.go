@@ -10,7 +10,7 @@ const (
 	// ProtocolVersion is the management API version shared by the daemon and the Dock app.
 	ProtocolVersion = 1
 	// LocalTokenHeader is the per-profile loopback credential. It is never forwarded upstream.
-	LocalTokenHeader = "X-MCP-Runtime-Local-Token"
+	LocalTokenHeader = "X-MCP-Runtime-Local-Token" // #nosec G101 -- HTTP header name; no credential value is embedded.
 	// DefaultListenAddr is the single loopback listener shared by every profile path.
 	DefaultListenAddr = "127.0.0.1:8099"
 )

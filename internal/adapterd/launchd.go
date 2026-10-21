@@ -17,7 +17,7 @@ const plistTemplate = `<?xml version="1.0" encoding="UTF-8"?>
   <string>{{.Label}}</string>
   <key>ProgramArguments</key>
   <array>
-    <string>{{.Binary}}</string>
+    <string>{{.Binary | html}}</string>
     <string>adapter</string>
     <string>service</string>
     <string>run</string>
@@ -34,8 +34,8 @@ const plistTemplate = `<?xml version="1.0" encoding="UTF-8"?>
   <key>EnvironmentVariables</key>
   <dict>
 {{- range $key, $value := .Env}}
-    <key>{{$key}}</key>
-    <string>{{$value}}</string>
+    <key>{{$key | html}}</key>
+    <string>{{$value | html}}</string>
 {{- end}}
   </dict>
 {{- end}}
@@ -50,22 +50,31 @@ func LaunchdPlistPath(home string) string {
 
 // WriteLaunchdPlist writes the user LaunchAgent. It does not start the daemon.
 func WriteLaunchdPlist(path, binary string, env map[string]string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	f, err := os.CreateTemp(filepath.Dir(path), ".adapter-*.plist")
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer os.Remove(f.Name())
 	tmpl, err := template.New("plist").Parse(plistTemplate)
 	if err != nil {
+		_ = f.Close()
 		return err
 	}
 	if err := tmpl.Execute(f, map[string]any{"Label": launchdLabel, "Binary": binary, "Env": env}); err != nil {
+		_ = f.Close()
 		return err
 	}
-	return nil
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), path)
 }
 
 // RemoveLaunchdPlist deletes the managed plist.

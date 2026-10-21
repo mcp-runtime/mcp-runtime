@@ -305,7 +305,7 @@ func newServiceProfileCmd() *cobra.Command {
 }
 
 func writeOwnerOnlyConfig(path string, config []byte) error {
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) // #nosec G304 -- explicit user-selected export path; O_EXCL prevents replacing existing files or following symlinks.
 	if err != nil {
 		return err
 	}
@@ -474,11 +474,11 @@ func socketPath() (string, error) {
 
 func installServiceBinary(src, home string) (string, error) {
 	destDir := filepath.Join(home, ".mcpruntime", "bin")
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
+	if err := os.MkdirAll(destDir, 0o700); err != nil {
 		return "", err
 	}
 	dest := filepath.Join(destDir, "mcp-runtime")
-	in, err := os.Open(src)
+	in, err := os.Open(src) // #nosec G304 -- caller provides os.Executable(); source is the CLI being installed by this user.
 	if err != nil {
 		return "", err
 	}
@@ -494,7 +494,7 @@ func installServiceBinary(src, home string) (string, error) {
 		_ = out.Close()
 		return "", err
 	}
-	if err := out.Chmod(0o755); err != nil {
+	if err := out.Chmod(0o700); err != nil {
 		_ = out.Close()
 		return "", err
 	}
@@ -549,12 +549,12 @@ func startLaunchd() error {
 	}
 	uid := os.Getuid()
 	domain := fmt.Sprintf("gui/%d", uid)
-	_ = exec.Command("launchctl", "bootout", domain, plist).Run()
-	if out, err := exec.Command("launchctl", "bootstrap", domain, plist).CombinedOutput(); err != nil {
+	_ = exec.Command("/bin/launchctl", "bootout", domain, plist).Run()                                       // #nosec G204 -- fixed executable/verb; UID domain and managed plist are separate arguments, without a shell.
+	if out, err := exec.Command("/bin/launchctl", "bootstrap", domain, plist).CombinedOutput(); err != nil { // #nosec G204 -- fixed executable/verb and structured per-user service arguments.
 		return fmt.Errorf("launchctl bootstrap: %w: %s", err, out)
 	}
 	target := fmt.Sprintf("%s/%s", domain, "org.mcpruntime.adapter")
-	if out, err := exec.Command("launchctl", "kickstart", "-k", target).CombinedOutput(); err != nil {
+	if out, err := exec.Command("/bin/launchctl", "kickstart", "-k", target).CombinedOutput(); err != nil { // #nosec G204 -- target is generated from the process UID and constant managed label.
 		return fmt.Errorf("launchctl kickstart: %w: %s", err, out)
 	}
 	return nil
@@ -570,7 +570,7 @@ func stopLaunchd() error {
 	}
 	plist := adapterd.LaunchdPlistPath(home)
 	uid := os.Getuid()
-	out, err := exec.Command("launchctl", "bootout", fmt.Sprintf("gui/%d", uid), plist).CombinedOutput()
+	out, err := exec.Command("/bin/launchctl", "bootout", fmt.Sprintf("gui/%d", uid), plist).CombinedOutput() // #nosec G204 -- fixed executable/verb and structured local owner/plist arguments, without shell expansion.
 	if err != nil {
 		return fmt.Errorf("launchctl bootout: %w: %s", err, out)
 	}

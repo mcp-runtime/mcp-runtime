@@ -1,6 +1,6 @@
 module mcp-ui
 
-go 1.26.9
+go 1.26.10
 
 require (
 	github.com/lib/pq v1.12.3

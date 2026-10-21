@@ -62,7 +62,7 @@ func (s *FileSecretStore) Delete(account string) error {
 }
 
 func (s *FileSecretStore) load() (map[string]string, error) {
-	data, err := os.ReadFile(s.path)
+	data, err := os.ReadFile(s.path) // #nosec G304 G703 -- configured local state file; account names are JSON keys, never filesystem paths.
 	if os.IsNotExist(err) {
 		return map[string]string{}, nil
 	}
@@ -80,18 +80,30 @@ func (s *FileSecretStore) load() (map[string]string, error) {
 }
 
 func (s *FileSecretStore) save(items map[string]string) error {
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil { // #nosec G703 -- directory comes from the daemon's local configuration, not MCP requests.
 		return err
 	}
 	data, err := json.Marshal(items)
 	if err != nil {
 		return err
 	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	tmp, err := os.CreateTemp(filepath.Dir(s.path), ".adapter-secrets-*") // #nosec G703 -- owner-only configured state directory; random file is created exclusively.
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, s.path)
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), s.path) // #nosec G703 -- atomically replace only the configured local state file.
 }
 
 func tokenAccount(id string) string { return "local-token:" + id }

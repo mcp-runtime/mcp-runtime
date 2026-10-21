@@ -76,7 +76,7 @@ struct InspectView: View {
     private func label(_ state: String) -> String {
         switch state {
         case "enrolled": return "Enrolled"
-        case "sign_in_required": return "Needs a grant"
+        case "sign_in_required": return "Authorization required"
         case "renewal_failed": return "Renewal failed"
         default: return "Not enrolled"
         }

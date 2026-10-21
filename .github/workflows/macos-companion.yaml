@@ -8,6 +8,9 @@ on:
       - internal/cli/adapter/**
       - hack/release/macos-adapter/**
       - .github/workflows/macos-companion.yaml
+      - .github/workflows/release.yaml
+      - go.mod
+      - go.sum
   workflow_dispatch:
 
 permissions:
@@ -29,6 +32,14 @@ jobs:
           go-version-file: go.mod
       - name: Build CLI and native Dock app for Apple Silicon and Intel
         run: bash hack/release/macos-adapter/package.sh "${RUNNER_TEMP}/macos-adapter-dist"
+      - name: Verify profile form validation and endpoint construction
+        run: |
+          swiftc desktop/macos/MCPRuntimeAdapter/ProfileDraft.swift desktop/macos/Tests/ProfileDraftTests.swift -o "${RUNNER_TEMP}/adapter-form-tests"
+          "${RUNNER_TEMP}/adapter-form-tests"
+      - name: Verify bundled helper and agent configuration installs
+        run: |
+          swiftc desktop/macos/MCPRuntimeAdapter/ControlClient.swift desktop/macos/Tests/ControlClientTests.swift -framework AppKit -o "${RUNNER_TEMP}/adapter-client-tests"
+          "${RUNNER_TEMP}/adapter-client-tests"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: macos-adapter-universal-unsigned-preview

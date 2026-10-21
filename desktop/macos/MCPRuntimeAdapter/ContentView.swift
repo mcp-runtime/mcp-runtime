@@ -13,14 +13,15 @@ struct ContentView: View {
     @State private var showLogs = false
     @State private var banner = ""
     @State private var bannerIsError = false
+    @State private var statusError = ""
     @State private var copiedID = ""
     @State private var signInCommandCopied = false
     @State private var showAdd = false
     @State private var busy = false
+    @State private var serviceAction = ""
     @State private var refreshing = false
     @State private var addServer = ""
     @State private var addNamespace = ""
-    @State private var addTeam = ""
     @State private var addAgent = ""
     @State private var addRuntime = "https://mcp.mcpruntime.org"
     @State private var addRuntimeIsFullEndpoint = false
@@ -29,6 +30,8 @@ struct ContentView: View {
     @State private var confirmStopService = false
     @State private var confirmUninstallService = false
     @State private var profileToRemove: ProfileStatus?
+    @FocusState private var focusedField: FormField?
+    private enum FormField: Hashable { case server, agent, namespace, endpoint }
 
     private let ink = Color(red: 0.09, green: 0.22, blue: 0.24)
     private let sea = Color(red: 0.07, green: 0.48, blue: 0.45)
@@ -72,7 +75,7 @@ struct ContentView: View {
         .confirmationDialog("Stop the adapter service?", isPresented: $confirmStopService, titleVisibility: .visible) {
             Button("Stop service", role: .destructive) { manage("stop") }
         } message: {
-            Text("Editors will lose access to all local MCP URLs until the service starts again.")
+            Text("Agents will lose access to all local MCP URLs until the service starts again.")
         }
         .confirmationDialog("Uninstall the adapter service?", isPresented: $confirmUninstallService, titleVisibility: .visible) {
             Button("Uninstall service", role: .destructive) { manage("uninstall") }
@@ -110,7 +113,7 @@ struct ContentView: View {
                     Text("MCP Runtime Adapter")
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(.primary)
-                    Text(daemonUp ? "Local profiles on \(listenAddr)" : "Daemon is not answering")
+                    Text(!serviceAction.isEmpty ? serviceProgress : (daemonUp ? "Local profiles on \(listenAddr)" : "Daemon is not answering"))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -123,7 +126,7 @@ struct ContentView: View {
                 .fixedSize(horizontal: false, vertical: true)
             if daemonUp && !profiles.isEmpty {
                 HStack(spacing: 8) {
-                    summaryChip("\(profiles.count) profiles", tone: sea)
+                    summaryChip("\(profiles.count) \(profiles.count == 1 ? "profile" : "profiles")", tone: sea)
                     summaryChip("\(enrolledCount) enrolled", tone: moss)
                     if blockedCount > 0 {
                         summaryChip("\(blockedCount) need attention", tone: amber)
@@ -187,7 +190,13 @@ struct ContentView: View {
                 .disabled(busy || !daemonUp || !listenerReady)
             }
             if !banner.isEmpty {
-                Label(banner, systemImage: bannerIsError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                HStack(alignment: .top) {
+                    Label(banner, systemImage: bannerIsError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button { banner = "" } label: { Image(systemName: "xmark") }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Dismiss message")
+                }
                     .font(.callout)
                     .foregroundStyle(bannerIsError ? clay : moss)
                     .textSelection(.enabled)
@@ -195,6 +204,16 @@ struct ContentView: View {
                     .padding(.vertical, 8)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background((bannerIsError ? clay : moss).opacity(0.09), in: RoundedRectangle(cornerRadius: 10))
+            }
+            if !statusError.isEmpty && ControlClient.launchAgentInstalled() {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("The adapter service is unavailable. Start or restart it from Service.", systemImage: "exclamationmark.triangle")
+                    DisclosureGroup("Connection details") {
+                        Text(statusError).textSelection(.enabled).font(.caption)
+                    }
+                }
+                .font(.callout)
+                .foregroundStyle(clay)
             }
         }
         .padding(18)
@@ -239,7 +258,7 @@ struct ContentView: View {
                         .controlSize(.small)
                         .accessibilityIdentifier("adapter.copy-sign-in-command")
                     }
-                    setupStep("2", title: "Add a profile", detail: "Enter the server name. Namespace, team, and agent are optional labels or identity details.")
+                    setupStep("2", title: "Add a profile", detail: "Enter the server name and the active Agent ID from your platform's Agents page.")
                     setupStep("3", title: "Connect your agent", detail: "Choose Cursor, Codex, Claude Code, or VS Code. MCP Runtime writes the right config for that client.")
                 }
                 .padding(16)
@@ -290,7 +309,7 @@ struct ContentView: View {
             Circle()
                 .fill(ready ? moss : amber)
                 .frame(width: 8, height: 8)
-            Text(daemonUp ? (listenerReady ? "Ready" : "Starting") : "Stopped")
+            Text(!serviceAction.isEmpty ? serviceProgress : (daemonUp ? (listenerReady ? "Ready" : "Starting") : "Stopped"))
                 .font(.caption.weight(.semibold))
         }
         .padding(.horizontal, 10)
@@ -328,6 +347,9 @@ struct ContentView: View {
                     .font(.callout.monospaced())
                     .foregroundStyle(sea)
                     .textSelection(.enabled)
+                Text("Use Connect your agent to install or export the URL with its required profile credential.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             if let human = profile.human, !human.isEmpty {
                 Text("Signed-in user: \(human)")
@@ -355,11 +377,12 @@ struct ContentView: View {
             }
             HStack {
                 Button(copiedID == profile.id ? "Copied" : "Copy local URL") { copy(profile) }
-                    .buttonStyle(.borderedProminent)
-                    .tint(sea)
+                    .buttonStyle(.bordered)
+                    .help("The URL also requires the local profile credential. Use Connect your agent for a complete configuration.")
                     .accessibilityIdentifier("adapter.copy-url.\(profile.id)")
                 Button("Inspect") { openWindow(id: "inspect", value: profile.id) }
                     .buttonStyle(.bordered)
+                    .accessibilityIdentifier("adapter.inspect.\(profile.id)")
                 Menu {
                     Button("Install in Cursor") { installClient("Cursor", profile: profile) }
                     Button("Install in Codex") { installClient("Codex", profile: profile) }
@@ -370,14 +393,14 @@ struct ContentView: View {
                 } label: {
                     Label("Connect your agent", systemImage: "arrow.up.forward.app")
                 }
-                .menuStyle(.borderlessButton)
+                .menuStyle(.borderedButton)
                 .accessibilityIdentifier("adapter.connect-agent.\(profile.id)")
-                .disabled(busy)
+                .disabled(busy || !daemonUp)
                 Button("Reconnect") { reconnect(profile.id) }
                     .buttonStyle(.bordered)
                     .accessibilityLabel("Reconnect")
                     .accessibilityIdentifier("adapter.reconnect.\(profile.id)")
-                    .disabled(busy)
+                    .disabled(busy || !daemonUp)
                 Menu {
                     Button("Remove profile…", role: .destructive) { profileToRemove = profile }
                 } label: {
@@ -433,11 +456,11 @@ struct ContentView: View {
         guard profile.authState == "enrolled" else {
             return "No session certificate yet"
         }
-        guard let exp = profile.certExpires, let date = ISO8601DateFormatter().date(from: exp) else {
+        guard let exp = profile.certExpires, let date = AdapterTimestamp.date(exp) else {
             return "Session certificate is enrolled"
         }
         let minutes = Int(date.timeIntervalSinceNow / 60)
-        if minutes < 0 {
+        if date <= Date() {
             return "Session certificate expired \(shortTime(exp))"
         }
         if minutes < 90 {
@@ -449,7 +472,7 @@ struct ContentView: View {
     private func certTone(_ profile: ProfileStatus) -> Color {
         guard profile.authState == "enrolled",
               let exp = profile.certExpires,
-              let date = ISO8601DateFormatter().date(from: exp) else {
+              let date = AdapterTimestamp.date(exp) else {
             return .primary
         }
         if date.timeIntervalSinceNow < 15 * 60 {
@@ -528,7 +551,7 @@ struct ContentView: View {
     }
 
     private func shortTime(_ raw: String) -> String {
-        if let date = ISO8601DateFormatter().date(from: raw) {
+        if let date = AdapterTimestamp.date(raw) {
             return date.formatted(date: .abbreviated, time: .shortened)
         }
         return raw
@@ -548,10 +571,7 @@ struct ContentView: View {
                     checkedAt = status.checkedAt
                     login = status.startupAtLogin
                     profiles = status.profiles
-                    if bannerIsError {
-                        banner = ""
-                        bannerIsError = false
-                    }
+                    statusError = ""
                 }
             } catch {
                 let message = redacted(error.localizedDescription) ?? "Adapter status is unavailable."
@@ -559,10 +579,9 @@ struct ContentView: View {
                 DispatchQueue.main.async {
                     refreshing = false
                     daemonUp = false
+                    listenerReady = false
                     login = installed
-                    profiles = []
-                    banner = message
-                    bannerIsError = true
+                    statusError = serviceAction.isEmpty ? message : ""
                 }
             }
         }
@@ -571,11 +590,14 @@ struct ContentView: View {
     private func manage(_ action: String) {
         guard !busy else { return }
         busy = true
+        serviceAction = action
+        statusError = ""
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 try ControlClient.manage(action)
                 DispatchQueue.main.async {
                     busy = false
+                    serviceAction = ""
                     banner = "Adapter service \(action) completed."
                     bannerIsError = false
                     refresh()
@@ -583,10 +605,22 @@ struct ContentView: View {
             } catch {
                 DispatchQueue.main.async {
                     busy = false
+                    serviceAction = ""
                     banner = error.localizedDescription
                     bannerIsError = true
                 }
             }
+        }
+    }
+
+    private var serviceProgress: String {
+        switch serviceAction {
+        case "install": return "Installing service…"
+        case "start": return "Starting service…"
+        case "restart": return "Restarting service…"
+        case "stop": return "Stopping service…"
+        case "uninstall": return "Uninstalling service…"
+        default: return "Updating service…"
         }
     }
 
@@ -703,24 +737,28 @@ struct ContentView: View {
                             .foregroundStyle(.secondary)
                     }
                     VStack(alignment: .leading, spacing: 10) {
-                        field("Server name", text: $addServer)
+                        field("Server name", text: $addServer, focus: .server)
                         Text("Required · for example, cully")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.top, -6)
-                        field("Namespace (optional)", text: $addNamespace)
-                        field("Team label (optional)", text: $addTeam)
-                        field("Agent ID (optional)", text: $addAgent)
+                        field("Agent ID", text: $addAgent, focus: .agent)
+                        Text("Required · use an active agt_… ID from the platform's Agents page.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                     if !addServer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         VStack(alignment: .leading, spacing: 5) {
                             Label("Local endpoint preview", systemImage: "link")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
-                            Text("http://127.0.0.1:8099/\(localSlug(addServer))/mcp")
+                            Text("http://\(listenAddr)/\(draft.localSlug)/mcp")
                                 .font(.callout.monospaced())
                                 .textSelection(.enabled)
                                 .foregroundStyle(sea)
+                            Text("A numeric suffix is added if this local path is already used.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                         .padding(12)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -728,7 +766,11 @@ struct ContentView: View {
                     }
                     DisclosureGroup("Advanced connection settings", isExpanded: $showAdvancedFields) {
                         VStack(alignment: .leading, spacing: 10) {
-                            field("Platform MCP URL", text: $addRuntime)
+                            field("Namespace (optional)", text: $addNamespace, focus: .namespace)
+                            Text("Defaults to your primary namespace. Set it when the server belongs to another namespace.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            field("Platform MCP URL", text: $addRuntime, focus: .endpoint)
                             Toggle("This is the complete MCP endpoint URL", isOn: $addRuntimeIsFullEndpoint)
                                 .toggleStyle(.checkbox)
                             Text(addRuntimeIsFullEndpoint
@@ -737,7 +779,7 @@ struct ContentView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             if !addServer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                Text("Platform MCP endpoint: \(resolvedRuntimeURL)")
+                                Text("Platform MCP endpoint: \(draft.endpoint ?? "Enter a valid URL")")
                                     .font(.caption.monospaced())
                                     .textSelection(.enabled)
                                     .foregroundStyle(.secondary)
@@ -762,6 +804,7 @@ struct ContentView: View {
             Divider()
             HStack {
                 Button("Cancel") { showAdd = false }
+                    .keyboardShortcut(.cancelAction)
                     .accessibilityLabel("Cancel")
                     .accessibilityIdentifier("adapter.add.cancel")
                     .disabled(busy)
@@ -781,19 +824,23 @@ struct ContentView: View {
                 .accessibilityLabel("Connect profile")
                 .accessibilityIdentifier("adapter.add.submit")
                 .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
                 .tint(sea)
-                .disabled(busy || addServer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || addRuntime.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !listenerReady)
+                .disabled(busy || draft.serverName.isEmpty || draft.agentID.isEmpty || !listenerReady)
             }
             .padding(16)
         }
         .frame(width: 520, height: 620)
+        .interactiveDismissDisabled(busy)
+        .onAppear { focusedField = .server }
     }
 
-    private func field(_ title: String, text: Binding<String>) -> some View {
+    private func field(_ title: String, text: Binding<String>, focus: FormField) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
             TextField(title, text: text)
                 .textFieldStyle(.roundedBorder)
+                .focused($focusedField, equals: focus)
                 .accessibilityLabel(Text(title))
                 .accessibilityIdentifier("adapter.field.\(title.replacingOccurrences(of: " ", with: "-").lowercased())")
         }
@@ -801,26 +848,22 @@ struct ContentView: View {
 
     private func submitAdd() {
         guard !busy else { return }
-        let server = addServer.trimmingCharacters(in: .whitespacesAndNewlines)
-        let runtime = resolvedRuntimeURL
-        let namespace = addNamespace.trimmingCharacters(in: .whitespacesAndNewlines)
-        let team = addTeam.trimmingCharacters(in: .whitespacesAndNewlines)
-        let agent = addAgent.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard validMCPURL(runtime) else {
-            addError = "Enter a valid HTTP or HTTPS MCP URL with a host."
+        let submitted = draft
+        if let validation = submitted.validationMessage {
+            addError = validation
             return
         }
+        guard let runtime = submitted.endpoint else { return }
         busy = true
         DispatchQueue.global(qos: .userInitiated).async {
             do {
-                try ControlClient.addProfile(server: server, namespace: namespace, team: team, agent: agent, runtimeURL: runtime)
+                try ControlClient.addProfile(server: submitted.serverName, namespace: submitted.namespaceName, agent: submitted.agentID, runtimeURL: runtime)
                 DispatchQueue.main.async {
                     busy = false
                     showAdd = false
                     addError = ""
                     addServer = ""
                     addNamespace = ""
-                    addTeam = ""
                     addAgent = ""
                     addRuntime = "https://mcp.mcpruntime.org"
                     addRuntimeIsFullEndpoint = false
@@ -840,18 +883,9 @@ struct ContentView: View {
         }
     }
 
-    private var resolvedRuntimeURL: String {
-        let raw = addRuntime.trimmingCharacters(in: .whitespacesAndNewlines)
-        if addRuntimeIsFullEndpoint { return raw }
-        return raw.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/" + addServer.trimmingCharacters(in: .whitespacesAndNewlines) + "/mcp"
-    }
-
-    private func validMCPURL(_ raw: String) -> Bool {
-        guard let components = URLComponents(string: raw),
-              let scheme = components.scheme?.lowercased(),
-              ["http", "https"].contains(scheme),
-              let host = components.host, !host.isEmpty else { return false }
-        return true
+    private var draft: ProfileDraft {
+        ProfileDraft(server: addServer, agent: addAgent, namespace: addNamespace,
+                     runtimeURL: addRuntime, exactEndpoint: addRuntimeIsFullEndpoint)
     }
 
     private func localSlug(_ server: String) -> String {
