@@ -650,7 +650,7 @@ mcp-runtime adapter service profile add \
 mcp-runtime adapter service status --output json
 ```
 
-`adapter service` is the macOS per-user daemon for macOS 15 and macOS 26. `install` copies the current binary to `~/.mcpruntime/bin/mcp-runtime`, writes the LaunchAgent, and starts it. It listens only on `127.0.0.1:8099` and serves each profile at `http://127.0.0.1:8099/<server>/mcp`. Other localhost ports are not used. An MCP client configures that URL and does not send a local adapter token. The daemon presents the profile certificate upstream and forwards the platform OAuth bearer when the server requires one. Reconnect enrolls the session certificate again. `status` reports listener readiness separately from upstream reachability and certificate state. `uninstall` keeps profiles unless `--purge` is set. Closing the Dock app does not stop the daemon. `hack/release/macos-adapter/package.sh` builds a universal CLI and the Dock app. It signs with the hardened runtime when `CODESIGN_IDENTITY` is set and notarizes when `NOTARY_KEYCHAIN_PROFILE` is set.
+`adapter service` is the macOS per-user daemon. `install` copies the universal helper to `~/.mcpruntime/bin/mcp-runtime`, writes the LaunchAgent, and starts it. It listens only on `127.0.0.1:8099` and serves each profile at `http://127.0.0.1:8099/<server>/mcp`. Other localhost ports are not used. Export a client configuration with `adapter service profile client-config <id> --output FILE`; the configuration contains a per-profile local credential and is written owner-only without overwriting an existing file. The daemon requires that credential, presents the profile certificate upstream, and forwards the MCP client's OAuth bearer when the server requires one. Certificate renewal stays bound to the existing session and cannot extend its authorization expiry; an expired session needs interactive authorization. `status` reports listener readiness separately from upstream reachability and certificate state. `uninstall` keeps profiles unless `--purge` is set. Closing the Dock app does not stop the daemon. The package script builds universal CLI and Dock app binaries. Distribution signing and notarization both require `CODESIGN_IDENTITY` and `NOTARY_KEYCHAIN_PROFILE`; without them it produces clearly named unsigned preview archives.
 
 The enrollment output prints the actual certificate directory and TLS file
 paths. Private keys use mode `0600`; the certificate directory uses mode
@@ -663,11 +663,11 @@ identity. Certificate identity requires an `https` runtime URL.
 
 See [Agent adapters](connect-clients.md#enterprise-mtls-and-spiffe) for gateway and Traefik certificate setup.
 
-On macOS, `adapter profile` and `adapter service` manage the per-user
-background adapter daemon. This CLI preview does not yet ship the planned
-native Dock app or signed/notarized distribution; desktop sleep/wake,
-two-profile isolation and full lifecycle acceptance remain open. See the
-[macOS service guide](connect-clients.md#macos-background-adapter-service-cli-preview)
+On macOS, `adapter service` manages the per-user background adapter daemon,
+and the companion app provides profile and lifecycle controls. Signed and
+notarized release distribution and real desktop lifecycle acceptance still
+need release evidence. See the
+[macOS service guide](connect-clients.md#macos-background-adapter-and-companion)
 for profile authorization, client configuration and credential handling.
 
 ## agent

@@ -9,7 +9,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Added
 
-- macOS users can run the adapter as a per-user LaunchAgent. `adapter service install` copies the CLI to `~/.mcpruntime/bin/mcp-runtime` and starts the agent. One loopback listener on `127.0.0.1:8099` serves each saved profile, such as `http://127.0.0.1:8099/cully/mcp`, with its own certificate. MCP clients use that URL with no extra local header. Reconnect enrolls the session certificate again. The Dock app can add a profile and warns when a certificate has under 15 minutes left. The release script builds a universal CLI and signs with the hardened runtime when `CODESIGN_IDENTITY` is set. Supported desktop versions are macOS 15 and macOS 26 ([#656](https://github.com/mcp-runtime/mcp-runtime/issues/656)).
+- macOS users can run isolated profiles through a per-user LaunchAgent and native Dock app. The app guides first-time setup, installs profile-specific MCP config for Cursor, Codex, Claude Code, and VS Code, exposes profile and service lifecycle actions, and removes profile credentials with explicit confirmation. Local MCP clients require a profile-specific credential from `adapter service profile client-config`; certificate renewal remains bound to the existing session and expires with its authorization. The universal app and CLI package script produces unsigned preview archives by default and requires both a Developer ID identity and notary profile for distribution signing/notarization. Full desktop lifecycle acceptance remains pending ([#656](https://github.com/mcp-runtime/mcp-runtime/issues/656)).
 
 ## [0.11.1] - 2026-10-19
 

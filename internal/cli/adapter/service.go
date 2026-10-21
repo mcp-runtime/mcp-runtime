@@ -3,11 +3,14 @@ package adapter
 import (
 	"bytes"
 	"context"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,8 +20,10 @@ import (
 	"github.com/spf13/cobra"
 
 	"mcp-runtime/internal/adapterd"
+	"mcp-runtime/internal/adapterservice"
 	"mcp-runtime/internal/cli/core"
 	"mcp-runtime/internal/cli/platformapi"
+	"mcp-runtime/pkg/authfile"
 	"mcp-runtime/pkg/runtimeconfig"
 )
 
@@ -242,6 +247,8 @@ func newServiceProfileCmd() *cobra.Command {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "local URL: %s\n", created.LocalURL)
+			fmt.Fprintf(cmd.OutOrStdout(), "profile ID: %s\n", created.Profile.ID)
+			fmt.Fprintf(cmd.OutOrStdout(), "write client credentials with: mcp-runtime adapter service profile client-config %s --output FILE\n", created.Profile.ID)
 			return nil
 		},
 	}
@@ -271,8 +278,57 @@ func newServiceProfileCmd() *cobra.Command {
 		},
 	}
 	remove.Flags().Bool("purge", false, "Delete stored credentials for the profile")
-	cmd.AddCommand(add, remove)
+	var output string
+	clientConfig := &cobra.Command{
+		Use:   "client-config <id>",
+		Short: "Write an MCP client configuration with this profile's local credential",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if output == "" {
+				return fmt.Errorf("--output FILE is required; credentials are never printed to the terminal")
+			}
+			var config json.RawMessage
+			path := "/v1/profiles/" + url.PathEscape(args[0]) + "/client-config"
+			if err := controlJSON(http.MethodGet, path, nil, &config); err != nil {
+				return err
+			}
+			if err := writeOwnerOnlyConfig(output, config); err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), "Client configuration written. Treat the file as a credential; add upstream OAuth separately when required.")
+			return nil
+		},
+	}
+	clientConfig.Flags().StringVar(&output, "output", "", "New owner-only file for the secret client configuration (refuses overwrite)")
+	cmd.AddCommand(add, remove, clientConfig)
 	return cmd
+}
+
+func writeOwnerOnlyConfig(path string, config []byte) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	if err := f.Chmod(0o600); err != nil {
+		_ = f.Close()
+		_ = os.Remove(path)
+		return err
+	}
+	if _, err := f.Write(config); err != nil {
+		_ = f.Close()
+		_ = os.Remove(path)
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		_ = os.Remove(path)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(path)
+		return err
+	}
+	return nil
 }
 
 func openDaemon() (*adapterd.Daemon, error) {
@@ -310,19 +366,55 @@ func stateDir() (string, error) {
 }
 
 func enrollProfile(ctx context.Context, p adapterd.Profile) (adapterd.Material, error) {
-	if p.PlatformURL != "" {
-		_ = os.Setenv(EnvPlatformURL, p.PlatformURL)
-	}
-	client, err := platformapi.NewPlatformClient()
+	token, base, _, err := authfile.ResolveToken()
 	if err != nil {
-		return adapterd.Material{}, fmt.Errorf("sign-in required: %w", err)
+		return adapterd.Material{}, fmt.Errorf("sign-in required; run mcp-runtime auth login")
 	}
-	flags := platformSessionFlags{server: p.Server, namespace: p.Namespace, agent: p.Agent, platformURL: p.PlatformURL, autoRefresh: true}
-	cred, err := issueAdapterCredential(ctx, client, flags, os.Getenv(EnvMTLSTrustDomain))
+	base = platformapi.NormalizeBaseURL(base)
+	if p.PlatformURL != "" && platformapi.NormalizeBaseURL(p.PlatformURL) != base {
+		return adapterd.Material{}, fmt.Errorf("sign-in required; select the profile's platform login")
+	}
+	if p.Session != "" {
+		if !p.SessionExpires.After(time.Now()) {
+			return adapterd.Material{}, fmt.Errorf("session expired; reauthorize this profile interactively")
+		}
+		cred, err := renewProfileCertificate(ctx, adapterservice.Profile{
+			PlatformURL: base, PlatformToken: token, RuntimeURL: p.RuntimeURL,
+			Namespace: p.Namespace, Server: p.Server, Agent: p.Agent, Human: p.Human,
+			Team: p.Team, Session: p.Session, TrustDomain: p.TrustDomain,
+			SessionExpires: p.SessionExpires,
+		})
+		if err != nil {
+			return adapterd.Material{}, fmt.Errorf("renew the existing adapter session certificate: %w", err)
+		}
+		key, err := x509.MarshalPKCS8PrivateKey(cred.Certificate.PrivateKey)
+		if err != nil {
+			return adapterd.Material{}, fmt.Errorf("encode renewed adapter key: %w", err)
+		}
+		var certPEM []byte
+		for _, der := range cred.Certificate.Certificate {
+			certPEM = append(certPEM, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})...)
+		}
+		return adapterd.Material{
+			CertPEM: certPEM, KeyPEM: pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: key}),
+			Expires: cred.Expires, PlatformURL: base, Human: p.Human, Team: p.Team,
+			Session: p.Session, SessionExpires: p.SessionExpires, TrustDomain: p.TrustDomain,
+		}, nil
+	}
+	client, err := platformapi.NewCredentialClient(base, token)
 	if err != nil {
 		return adapterd.Material{}, err
 	}
-	return adapterd.Material{CertPEM: cred.CertPEM, KeyPEM: cred.KeyPEM, CA: cred.CABundle, Expires: cred.ExpiresAt}, nil
+	flags := platformSessionFlags{server: p.Server, namespace: p.Namespace, agent: p.Agent, platformURL: base}
+	cred, err := issueAdapterCredential(ctx, client, flags, p.TrustDomain)
+	if err != nil {
+		return adapterd.Material{}, err
+	}
+	return adapterd.Material{
+		CertPEM: cred.CertPEM, KeyPEM: cred.KeyPEM, CA: cred.CABundle, Expires: cred.ExpiresAt,
+		PlatformURL: base, Human: cred.Session.HumanID, Team: cred.Session.TeamID,
+		Session: cred.Session.Name, SessionExpires: cred.Session.ExpiresAt, TrustDomain: cred.Session.TrustDomain,
+	}, nil
 }
 
 func fetchStatus() (adapterd.Status, error) {
@@ -391,25 +483,47 @@ func installServiceBinary(src, home string) (string, error) {
 		return "", err
 	}
 	defer in.Close()
-	out, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
+	// Copy beside the destination, then replace it atomically. Reinstalling from
+	// the managed binary must not truncate the source or a running executable.
+	out, err := os.CreateTemp(destDir, ".mcp-runtime-*")
 	if err != nil {
 		return "", err
 	}
+	defer os.Remove(out.Name())
 	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
+		return "", err
+	}
+	if err := out.Chmod(0o755); err != nil {
+		_ = out.Close()
+		return "", err
+	}
+	if err := out.Sync(); err != nil {
 		_ = out.Close()
 		return "", err
 	}
 	if err := out.Close(); err != nil {
 		return "", err
 	}
+	if err := os.Rename(out.Name(), dest); err != nil {
+		return "", err
+	}
 	return dest, nil
 }
 
 func launchdEnv() map[string]string {
-	if os.Getenv("MCP_RUNTIME_ADAPTER_FILE_SECRETS") == "" {
-		return nil
+	env := map[string]string{}
+	if configDir := os.Getenv(runtimeconfig.EnvDir); configDir != "" {
+		env[runtimeconfig.EnvDir] = configDir
 	}
-	return map[string]string{"MCP_RUNTIME_ADAPTER_FILE_SECRETS": os.Getenv("MCP_RUNTIME_ADAPTER_FILE_SECRETS")}
+	if os.Getenv("MCP_RUNTIME_ADAPTER_FILE_SECRETS") == "" {
+		if len(env) == 0 {
+			return nil
+		}
+		return env
+	}
+	env["MCP_RUNTIME_ADAPTER_FILE_SECRETS"] = os.Getenv("MCP_RUNTIME_ADAPTER_FILE_SECRETS")
+	return env
 }
 
 func launchdInstalled() bool {

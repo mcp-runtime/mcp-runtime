@@ -17,19 +17,23 @@ const (
 
 // Profile is one saved connection to one MCP server.
 type Profile struct {
-	ID           string    `json:"id"`
-	Slug         string    `json:"slug"`
-	Server       string    `json:"server"`
-	Namespace    string    `json:"namespace,omitempty"`
-	Team         string    `json:"team,omitempty"`
-	Agent        string    `json:"agent,omitempty"`
-	PlatformURL  string    `json:"platformUrl,omitempty"`
-	RuntimeURL   string    `json:"runtimeUrl"`
-	CreatedAt    time.Time `json:"createdAt"`
-	CertExpires  time.Time `json:"certExpires,omitempty"`
-	AuthState    string    `json:"authState"`
-	LastError    string    `json:"lastError,omitempty"`
-	RenewalError string    `json:"renewalError,omitempty"`
+	ID             string    `json:"id"`
+	Slug           string    `json:"slug"`
+	Server         string    `json:"server"`
+	Namespace      string    `json:"namespace,omitempty"`
+	Team           string    `json:"team,omitempty"`
+	Agent          string    `json:"agent,omitempty"`
+	PlatformURL    string    `json:"platformUrl,omitempty"`
+	RuntimeURL     string    `json:"runtimeUrl"`
+	Human          string    `json:"human,omitempty"`
+	Session        string    `json:"session,omitempty"`
+	SessionExpires time.Time `json:"sessionExpires,omitempty"`
+	TrustDomain    string    `json:"trustDomain,omitempty"`
+	CreatedAt      time.Time `json:"createdAt"`
+	CertExpires    time.Time `json:"certExpires,omitempty"`
+	AuthState      string    `json:"authState"`
+	LastError      string    `json:"lastError,omitempty"`
+	RenewalError   string    `json:"renewalError,omitempty"`
 }
 
 const (

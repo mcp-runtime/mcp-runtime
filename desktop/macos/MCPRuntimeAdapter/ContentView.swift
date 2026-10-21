@@ -12,14 +12,23 @@ struct ContentView: View {
     @State private var logs: [String] = []
     @State private var showLogs = false
     @State private var banner = ""
+    @State private var bannerIsError = false
     @State private var copiedID = ""
+    @State private var signInCommandCopied = false
     @State private var showAdd = false
+    @State private var busy = false
+    @State private var refreshing = false
     @State private var addServer = ""
     @State private var addNamespace = ""
     @State private var addTeam = ""
     @State private var addAgent = ""
-    @State private var addPlatform = "https://platform.mcpruntime.org"
     @State private var addRuntime = "https://mcp.mcpruntime.org"
+    @State private var addRuntimeIsFullEndpoint = false
+    @State private var addError = ""
+    @State private var showAdvancedFields = false
+    @State private var confirmStopService = false
+    @State private var confirmUninstallService = false
+    @State private var profileToRemove: ProfileStatus?
 
     private let ink = Color(red: 0.09, green: 0.22, blue: 0.24)
     private let sea = Color(red: 0.07, green: 0.48, blue: 0.45)
@@ -38,13 +47,7 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 0) {
                 header
                 if profiles.isEmpty {
-                    ContentUnavailableView(
-                        daemonUp ? "No profiles yet" : "Adapter status unavailable",
-                        systemImage: daemonUp ? "point.3.connected.trianglepath.dotted" : "power",
-                        description: Text(banner.isEmpty
-                            ? "Add one with mcp-runtime adapter service profile add. Closing this window leaves the daemon running."
-                            : banner)
-                    )
+                    emptyState
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 12) {
@@ -60,10 +63,33 @@ struct ContentView: View {
                 }
             }
         }
-        .frame(minWidth: 560, minHeight: 620)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("adapter.root")
+        .frame(minWidth: 660, minHeight: 620)
         .onAppear { refresh() }
         .task { await poll() }
         .sheet(isPresented: $showAdd) { addSheet }
+        .confirmationDialog("Stop the adapter service?", isPresented: $confirmStopService, titleVisibility: .visible) {
+            Button("Stop service", role: .destructive) { manage("stop") }
+        } message: {
+            Text("Editors will lose access to all local MCP URLs until the service starts again.")
+        }
+        .confirmationDialog("Uninstall the adapter service?", isPresented: $confirmUninstallService, titleVisibility: .visible) {
+            Button("Uninstall service", role: .destructive) { manage("uninstall") }
+        } message: {
+            Text("This removes the login item and bundled helper. Saved profiles and credentials will remain on this Mac.")
+        }
+        .confirmationDialog("Remove this local profile?", isPresented: Binding(
+            get: { profileToRemove != nil },
+            set: { if !$0 { profileToRemove = nil } }
+        ), titleVisibility: .visible) {
+            Button("Remove profile and local credentials", role: .destructive) {
+                if let profileToRemove { removeProfile(profileToRemove) }
+                profileToRemove = nil
+            }
+        } message: {
+            Text("This removes the profile, local token, and certificate from this Mac. It does not revoke the platform session.")
+        }
     }
 
     private var header: some View {
@@ -91,7 +117,7 @@ struct ContentView: View {
                 Spacer()
                 statusPill
             }
-            Text("Each card is one platform server. Your editor calls the local URL. The daemon uses that profile’s session certificate. Inspect opens the certificate identity and platform addresses. Closing this window leaves the daemon running.")
+            Text("Connect your agent to a platform server. The adapter keeps its local MCP endpoint ready, even after you close this window.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -110,25 +136,152 @@ struct ContentView: View {
                     metaChip(shortTime(checkedAt), systemImage: "clock")
                 }
                 Spacer()
-                Button("Add profile") { showAdd = true }
-                    .buttonStyle(.borderedProminent)
-                    .tint(sea)
-                Button("Refresh") { refresh() }
-                    .buttonStyle(.bordered)
-                Button(showLogs ? "Hide logs" : "Logs") {
+                if !ControlClient.launchAgentInstalled() && !profiles.isEmpty {
+                    Button("Install and start") { manage("install") }
+                        .buttonStyle(.borderedProminent)
+                        .tint(sea)
+                        .disabled(busy)
+                } else if ControlClient.launchAgentInstalled() {
+                    Menu {
+                        Button("Start service") { manage("start") }
+                        Button("Restart service") { manage("restart") }
+                        Divider()
+                        Button("Stop service…", role: .destructive) { confirmStopService = true }
+                        Button("Uninstall service…", role: .destructive) { confirmUninstallService = true }
+                    } label: {
+                        Label("Service", systemImage: "gearshape")
+                    }
+                    .disabled(busy)
+                }
+            }
+            HStack(spacing: 8) {
+                Spacer()
+                Button {
                     showLogs.toggle()
                     if showLogs { loadLogs() }
+                } label: {
+                    Label(showLogs ? "Hide logs" : "Logs", systemImage: "text.alignleft")
                 }
                 .buttonStyle(.bordered)
+                .accessibilityLabel(showLogs ? "Hide logs" : "Logs")
+                .accessibilityIdentifier("adapter.logs")
+                Button {
+                    refresh()
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.bordered)
+                .accessibilityLabel("Refresh")
+                .accessibilityIdentifier("adapter.refresh")
+                .disabled(refreshing)
+                Button {
+                    addError = ""
+                    showAdd = true
+                } label: {
+                    Label("Add profile", systemImage: "plus")
+                }
+                .accessibilityLabel("Add profile")
+                .accessibilityIdentifier("adapter.add-profile")
+                .buttonStyle(.borderedProminent)
+                .tint(sea)
+                .disabled(busy || !daemonUp || !listenerReady)
             }
             if !banner.isEmpty {
-                Text(banner)
-                    .font(.caption)
-                    .foregroundStyle(clay)
+                Label(banner, systemImage: bannerIsError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                    .font(.callout)
+                    .foregroundStyle(bannerIsError ? clay : moss)
                     .textSelection(.enabled)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background((bannerIsError ? clay : moss).opacity(0.09), in: RoundedRectangle(cornerRadius: 10))
             }
         }
         .padding(18)
+    }
+
+    private var emptyState: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 8) {
+                Image(systemName: daemonUp ? "point.3.connected.trianglepath.dotted" : "bolt.horizontal.circle")
+                    .font(.system(size: 32, weight: .medium))
+                    .foregroundStyle(sea)
+                Text(daemonUp ? "Connect your first MCP server" : "Start your local adapter")
+                    .font(.title2.weight(.bold))
+                Text(daemonUp
+                    ? "Create a profile for a platform server. The adapter handles its session certificate and gives your agent a local MCP URL."
+                    : "Install the background service once. It stays available while the app is closed and starts when you log in.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !daemonUp {
+                Button {
+                    manage("install")
+                } label: {
+                    Label(busy ? "Starting adapter…" : "Install and start", systemImage: busy ? "hourglass" : "power")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(sea)
+                .controlSize(.large)
+                .disabled(busy)
+                setupTip("Your profiles and credentials stay on this Mac.", icon: "lock.shield")
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .top, spacing: 10) {
+                        setupStep("1", title: "Sign in", detail: "Choose the account with access to the server.")
+                        Spacer(minLength: 8)
+                        Button(signInCommandCopied ? "Copied" : "Copy command") {
+                            copySignInCommand()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .accessibilityIdentifier("adapter.copy-sign-in-command")
+                    }
+                    setupStep("2", title: "Add a profile", detail: "Enter the server name. Namespace, team, and agent are optional labels or identity details.")
+                    setupStep("3", title: "Connect your agent", detail: "Choose Cursor, Codex, Claude Code, or VS Code. MCP Runtime writes the right config for that client.")
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                Button {
+                    addError = ""
+                    showAdd = true
+                } label: {
+                    Label("Add your first profile", systemImage: "plus")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(sea)
+                .controlSize(.large)
+                .disabled(busy || !listenerReady)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: 620, maxHeight: .infinity, alignment: .topLeading)
+        .padding(28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func setupStep(_ number: String, title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(number)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(sea)
+                .frame(width: 24, height: 24)
+                .background(sea.opacity(0.12), in: Circle())
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.callout.weight(.semibold))
+                Text(detail).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func setupTip(_ title: String, icon: String) -> some View {
+        Label(title, systemImage: icon)
+            .font(.caption)
+            .foregroundStyle(.secondary)
     }
 
     private var statusPill: some View {
@@ -176,6 +329,11 @@ struct ContentView: View {
                     .foregroundStyle(sea)
                     .textSelection(.enabled)
             }
+            if let human = profile.human, !human.isEmpty {
+                Text("Signed-in user: \(human)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             VStack(alignment: .leading, spacing: 6) {
                 Label(frontLine(profile), systemImage: "checkmark.seal")
                     .font(.callout)
@@ -199,10 +357,35 @@ struct ContentView: View {
                 Button(copiedID == profile.id ? "Copied" : "Copy local URL") { copy(profile) }
                     .buttonStyle(.borderedProminent)
                     .tint(sea)
+                    .accessibilityIdentifier("adapter.copy-url.\(profile.id)")
                 Button("Inspect") { openWindow(id: "inspect", value: profile.id) }
                     .buttonStyle(.bordered)
+                Menu {
+                    Button("Install in Cursor") { installClient("Cursor", profile: profile) }
+                    Button("Install in Codex") { installClient("Codex", profile: profile) }
+                    Button("Install in Claude Code") { installClient("Claude Code", profile: profile) }
+                    Button("Install in VS Code") { installClient("VS Code", profile: profile) }
+                    Divider()
+                    Button("Export config file…") { exportConfig(profile) }
+                } label: {
+                    Label("Connect your agent", systemImage: "arrow.up.forward.app")
+                }
+                .menuStyle(.borderlessButton)
+                .accessibilityIdentifier("adapter.connect-agent.\(profile.id)")
+                .disabled(busy)
                 Button("Reconnect") { reconnect(profile.id) }
                     .buttonStyle(.bordered)
+                    .accessibilityLabel("Reconnect")
+                    .accessibilityIdentifier("adapter.reconnect.\(profile.id)")
+                    .disabled(busy)
+                Menu {
+                    Button("Remove profile…", role: .destructive) { profileToRemove = profile }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .frame(minWidth: 24)
+                }
+                .menuStyle(.borderlessButton)
+                .accessibilityLabel("More actions for \(profile.server)")
             }
             .controlSize(.small)
         }
@@ -258,7 +441,7 @@ struct ContentView: View {
             return "Session certificate expired \(shortTime(exp))"
         }
         if minutes < 90 {
-            return "Session certificate expires in \(minutes) minutes. The daemon renews it during the last 5 minutes."
+            return "Session certificate expires in \(minutes) minutes. Renewal cannot extend the authorized session."
         }
         return "Session certificate expires \(shortTime(exp))"
     }
@@ -286,9 +469,9 @@ struct ContentView: View {
     private func nextStep(_ profile: ProfileStatus) -> String {
         switch profile.authState {
         case "enrolled":
-            return "Point the editor at the local URL. Reconnect refreshes this profile’s connection."
+            return "Connect your agent to the local URL. Reconnect refreshes this profile’s connection."
         case "sign_in_required":
-            return "This server needs an access grant. After the grant exists, use Reconnect."
+            return "Sign in with mcp-runtime auth login and verify this agent has a matching access grant, then choose Reconnect."
         case "renewal_failed":
             return "The session certificate could not be renewed. Inspect shows the safe details."
         default:
@@ -330,7 +513,7 @@ struct ContentView: View {
     private func authLabel(_ state: String) -> String {
         switch state {
         case "enrolled": return "Enrolled"
-        case "sign_in_required": return "Needs a grant"
+        case "sign_in_required": return "Authorization required"
         case "renewal_failed": return "Renewal failed"
         default: return "Not enrolled"
         }
@@ -352,90 +535,350 @@ struct ContentView: View {
     }
 
     private func refresh() {
-        do {
-            let status = try ControlClient.status()
-            daemonUp = true
-            listenerReady = status.listenerReady
-            listenAddr = status.listenAddr
-            checkedAt = status.checkedAt
-            login = status.startupAtLogin
-            profiles = status.profiles
-            banner = ""
-        } catch {
-            daemonUp = false
-            profiles = []
-            banner = error.localizedDescription
+        guard !refreshing else { return }
+        refreshing = true
+        DispatchQueue.global(qos: .utility).async {
+            do {
+                let status = try ControlClient.status()
+                DispatchQueue.main.async {
+                    refreshing = false
+                    daemonUp = true
+                    listenerReady = status.listenerReady
+                    listenAddr = status.listenAddr
+                    checkedAt = status.checkedAt
+                    login = status.startupAtLogin
+                    profiles = status.profiles
+                    if bannerIsError {
+                        banner = ""
+                        bannerIsError = false
+                    }
+                }
+            } catch {
+                let message = redacted(error.localizedDescription) ?? "Adapter status is unavailable."
+                let installed = ControlClient.launchAgentInstalled()
+                DispatchQueue.main.async {
+                    refreshing = false
+                    daemonUp = false
+                    login = installed
+                    profiles = []
+                    banner = message
+                    bannerIsError = true
+                }
+            }
+        }
+    }
+
+    private func manage(_ action: String) {
+        guard !busy else { return }
+        busy = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                try ControlClient.manage(action)
+                DispatchQueue.main.async {
+                    busy = false
+                    banner = "Adapter service \(action) completed."
+                    bannerIsError = false
+                    refresh()
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    busy = false
+                    banner = error.localizedDescription
+                    bannerIsError = true
+                }
+            }
+        }
+    }
+
+    private func exportConfig(_ profile: ProfileStatus) {
+        guard !busy else { return }
+        let name = localSlug(profile.server)
+        guard let url = ControlClient.chooseClientConfigURL(suggestedName: "mcp-runtime-\(name.isEmpty ? "server" : name).json") else { return }
+        busy = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                try ControlClient.saveClientConfig(profileID: profile.id, to: url)
+                DispatchQueue.main.async {
+                    busy = false
+                    banner = "Client config saved with owner-only permissions: \(url.path)"
+                    bannerIsError = false
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    busy = false
+                    banner = error.localizedDescription
+                    bannerIsError = true
+                }
+            }
+        }
+    }
+
+    private func installClient(_ client: String, profile: ProfileStatus) {
+        guard !busy else { return }
+        busy = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let message = try ControlClient.installClient(client, profileID: profile.id)
+                DispatchQueue.main.async {
+                    busy = false
+                    banner = message
+                    bannerIsError = false
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    busy = false
+                    banner = error.localizedDescription
+                    bannerIsError = true
+                }
+            }
         }
     }
 
     private func loadLogs() {
-        do {
-            logs = try ControlClient.logs()
-        } catch {
-            logs = [error.localizedDescription]
+        DispatchQueue.global(qos: .utility).async {
+            let result: [String]
+            do {
+                result = try ControlClient.logs()
+            } catch {
+                result = [redacted(error.localizedDescription) ?? "Daemon logs are unavailable."]
+            }
+            DispatchQueue.main.async { logs = result }
         }
     }
 
     private func reconnect(_ id: String) {
-        do {
-            try ControlClient.restart(id: id)
-            refresh()
-        } catch {
-            banner = error.localizedDescription
+        guard !busy else { return }
+        busy = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                try ControlClient.restart(id: id)
+                DispatchQueue.main.async {
+                    busy = false
+                    banner = "Profile reconnected."
+                    bannerIsError = false
+                    refresh()
+                }
+            } catch {
+                let message = redacted(error.localizedDescription) ?? "Profile reconnect failed."
+                DispatchQueue.main.async {
+                    busy = false
+                    banner = message
+                    bannerIsError = true
+                }
+            }
+        }
+    }
+
+    private func removeProfile(_ profile: ProfileStatus) {
+        guard !busy else { return }
+        busy = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                try ControlClient.removeProfile(id: profile.id)
+                DispatchQueue.main.async {
+                    busy = false
+                    banner = "Removed \(profile.server) and its local credentials. The platform session was not revoked."
+                    bannerIsError = false
+                    refresh()
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    busy = false
+                    banner = redacted(error.localizedDescription) ?? "Profile could not be removed."
+                    bannerIsError = true
+                }
+            }
         }
     }
 
     private var addSheet: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Add a profile")
-                .font(.title3.weight(.semibold))
-            Text("A profile is one platform server. The daemon enrolls a session certificate for it and serves a local URL.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            field("Server", text: $addServer)
-            field("Namespace", text: $addNamespace)
-            field("Team", text: $addTeam)
-            field("Agent", text: $addAgent)
-            field("Platform API", text: $addPlatform)
-            field("Upstream MCP URL", text: $addRuntime)
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("Connect an MCP server")
+                            .font(.title2.weight(.bold))
+                        Text("Use your current mcp-runtime sign-in. Your password is never stored by the adapter.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                    VStack(alignment: .leading, spacing: 10) {
+                        field("Server name", text: $addServer)
+                        Text("Required · for example, cully")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.top, -6)
+                        field("Namespace (optional)", text: $addNamespace)
+                        field("Team label (optional)", text: $addTeam)
+                        field("Agent ID (optional)", text: $addAgent)
+                    }
+                    if !addServer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Label("Local endpoint preview", systemImage: "link")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            Text("http://127.0.0.1:8099/\(localSlug(addServer))/mcp")
+                                .font(.callout.monospaced())
+                                .textSelection(.enabled)
+                                .foregroundStyle(sea)
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(sea.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                    }
+                    DisclosureGroup("Advanced connection settings", isExpanded: $showAdvancedFields) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            field("Platform MCP URL", text: $addRuntime)
+                            Toggle("This is the complete MCP endpoint URL", isOn: $addRuntimeIsFullEndpoint)
+                                .toggleStyle(.checkbox)
+                            Text(addRuntimeIsFullEndpoint
+                                ? "The adapter uses this URL exactly, including its path and query."
+                                : "The adapter adds /<server>/mcp to this base URL. The platform API comes from your current sign-in.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            if !addServer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Text("Platform MCP endpoint: \(resolvedRuntimeURL)")
+                                    .font(.caption.monospaced())
+                                    .textSelection(.enabled)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.top, 10)
+                    }
+                    .font(.callout.weight(.semibold))
+                    if !addError.isEmpty {
+                        Label(addError, systemImage: "exclamationmark.triangle.fill")
+                            .font(.callout)
+                            .foregroundStyle(clay)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(clay.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                    }
+                }
+                .padding(22)
+            }
+            Divider()
             HStack {
                 Button("Cancel") { showAdd = false }
+                    .accessibilityLabel("Cancel")
+                    .accessibilityIdentifier("adapter.add.cancel")
+                    .disabled(busy)
                 Spacer()
-                Button("Add") { submitAdd() }
-                    .buttonStyle(.borderedProminent)
-                    .tint(sea)
-                    .disabled(addServer.isEmpty || addRuntime.isEmpty)
+                Button {
+                    submitAdd()
+                } label: {
+                    HStack(spacing: 8) {
+                        if busy {
+                            ProgressView().controlSize(.small)
+                            Text("Connecting…")
+                        } else {
+                            Label("Connect profile", systemImage: "arrow.right.circle.fill")
+                        }
+                    }
+                }
+                .accessibilityLabel("Connect profile")
+                .accessibilityIdentifier("adapter.add.submit")
+                .buttonStyle(.borderedProminent)
+                .tint(sea)
+                .disabled(busy || addServer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || addRuntime.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !listenerReady)
             }
+            .padding(16)
         }
-        .padding(20)
-        .frame(width: 460)
+        .frame(width: 520, height: 620)
     }
 
     private func field(_ title: String, text: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.caption).foregroundStyle(.secondary)
+            Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
             TextField(title, text: text)
                 .textFieldStyle(.roundedBorder)
+                .accessibilityLabel(Text(title))
+                .accessibilityIdentifier("adapter.field.\(title.replacingOccurrences(of: " ", with: "-").lowercased())")
         }
     }
 
     private func submitAdd() {
-        let runtime = addRuntime.hasSuffix("/mcp") ? addRuntime : addRuntime + "/" + addServer + "/mcp"
-        do {
-            try ControlClient.addProfile(server: addServer, namespace: addNamespace, team: addTeam, agent: addAgent, platformURL: addPlatform, runtimeURL: runtime)
-            showAdd = false
-            addServer = ""
-            refresh()
-        } catch {
-            banner = error.localizedDescription
-            showAdd = false
+        guard !busy else { return }
+        let server = addServer.trimmingCharacters(in: .whitespacesAndNewlines)
+        let runtime = resolvedRuntimeURL
+        let namespace = addNamespace.trimmingCharacters(in: .whitespacesAndNewlines)
+        let team = addTeam.trimmingCharacters(in: .whitespacesAndNewlines)
+        let agent = addAgent.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard validMCPURL(runtime) else {
+            addError = "Enter a valid HTTP or HTTPS MCP URL with a host."
+            return
         }
+        busy = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                try ControlClient.addProfile(server: server, namespace: namespace, team: team, agent: agent, runtimeURL: runtime)
+                DispatchQueue.main.async {
+                    busy = false
+                    showAdd = false
+                    addError = ""
+                    addServer = ""
+                    addNamespace = ""
+                    addTeam = ""
+                    addAgent = ""
+                    addRuntime = "https://mcp.mcpruntime.org"
+                    addRuntimeIsFullEndpoint = false
+                    banner = "Profile saved. Check its authorization status below; sign-in or Reconnect may be needed."
+                    bannerIsError = false
+                    refresh()
+                }
+            } catch {
+                let message = redacted(error.localizedDescription) ?? "Profile could not be added. Check the fields and try again."
+                DispatchQueue.main.async {
+                    busy = false
+                    addError = message
+                    banner = message
+                    bannerIsError = true
+                }
+            }
+        }
+    }
+
+    private var resolvedRuntimeURL: String {
+        let raw = addRuntime.trimmingCharacters(in: .whitespacesAndNewlines)
+        if addRuntimeIsFullEndpoint { return raw }
+        return raw.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/" + addServer.trimmingCharacters(in: .whitespacesAndNewlines) + "/mcp"
+    }
+
+    private func validMCPURL(_ raw: String) -> Bool {
+        guard let components = URLComponents(string: raw),
+              let scheme = components.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              let host = components.host, !host.isEmpty else { return false }
+        return true
+    }
+
+    private func localSlug(_ server: String) -> String {
+        let slug = server.lowercased().map { character -> Character in
+            if character.isASCII && (character.isLetter || character.isNumber || character == "-") { return character }
+            if character == "_" || character == "." || character == " " { return "-" }
+            return "\0"
+        }.filter { $0 != "\0" }
+        return String(slug).trimmingCharacters(in: CharacterSet(charactersIn: "-"))
     }
 
     private func copy(_ profile: ProfileStatus) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(profile.localUrl, forType: .string)
         copiedID = profile.id
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            if copiedID == profile.id { copiedID = "" }
+        }
+    }
+
+    private func copySignInCommand() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString("mcp-runtime auth login", forType: .string)
+        signInCommandCopied = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            signInCommandCopied = false
+        }
     }
 
     private func poll() async {

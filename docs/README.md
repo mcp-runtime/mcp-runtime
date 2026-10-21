@@ -84,9 +84,11 @@ mcp-runtime server deploy my-server --scope tenant --metadata-dir .mcp
 
 Run these commands from your server’s source directory, with a Dockerfile
 and Docker running. Use the exact image reference printed by the build command.
-The CLI generates the Kubernetes resources. To connect a client, run the
-[adapter](connect-clients.md) and point Claude Desktop, Cursor, or any MCP client
-at it. The public platform lets you test the connection. The example tool
+The CLI generates the Kubernetes resources. To connect an MCP client, follow the
+[client connection guide](connect-clients.md). On macOS, the Adapter app manages
+saved profiles and can install a profile into Cursor, Codex, Claude Code, or VS
+Code; other platforms can use the CLI proxy. The public platform lets you test
+the connection. The example tool
 calls are denied because it cannot verify which agent made them. The
 [walkthrough](hosted-quickstart.md) explains what to expect.
 

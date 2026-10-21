@@ -21,9 +21,11 @@ struct InspectView: View {
                 detail("Platform API", profile.platformUrl)
                 detail("Namespace", profile.namespace)
                 detail("Team", profile.team)
+                detail("Signed-in user", profile.human)
                 detail("Agent", profile.agent)
                 detail("Certificate from", profile.certNotBefore)
                 detail("Certificate expires", profile.certExpires)
+                detail("Session expires", profile.sessionExpires)
                 detail("Session identity", profile.certSpiffe)
                 detail("Upstream", upstream(profile))
                 if let problem = redacted(profile.renewalError ?? profile.lastError) {

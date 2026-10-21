@@ -20,10 +20,16 @@ import (
 
 // Material is certificate PEM stored for one profile.
 type Material struct {
-	CertPEM []byte
-	KeyPEM  []byte
-	CA      []byte
-	Expires time.Time
+	CertPEM        []byte
+	KeyPEM         []byte
+	CA             []byte
+	Expires        time.Time
+	PlatformURL    string
+	Human          string
+	Team           string
+	Session        string
+	SessionExpires time.Time
+	TrustDomain    string
 }
 
 // AddProfileRequest creates one profile. LocalToken is returned once.
@@ -58,6 +64,7 @@ type ProfileStatus struct {
 	Slug              string     `json:"slug"`
 	Server            string     `json:"server"`
 	Team              string     `json:"team,omitempty"`
+	Human             string     `json:"human,omitempty"`
 	Agent             string     `json:"agent,omitempty"`
 	PlatformURL       string     `json:"platformUrl,omitempty"`
 	RuntimeURL        string     `json:"runtimeUrl,omitempty"`
@@ -67,6 +74,7 @@ type ProfileStatus struct {
 	UpstreamCheckedAt time.Time  `json:"upstreamCheckedAt,omitempty"`
 	AuthState         string     `json:"authState"`
 	CertExpires       *time.Time `json:"certExpires,omitempty"`
+	SessionExpires    *time.Time `json:"sessionExpires,omitempty"`
 	CertNotBefore     *time.Time `json:"certNotBefore,omitempty"`
 	CertSPIFFE        string     `json:"certSpiffe,omitempty"`
 	RenewalError      string     `json:"renewalError,omitempty"`
@@ -84,6 +92,7 @@ type Daemon struct {
 	Router     *Router
 	Logs       *LogBuffer
 
+	profilesMu     sync.Mutex
 	mu             sync.Mutex
 	cancel         context.CancelFunc
 	listenerReady  bool
@@ -155,12 +164,16 @@ func (d *Daemon) Status() Status {
 	for _, p := range items {
 		st := ProfileStatus{
 			ID: p.ID, Slug: p.Slug, Server: p.Server, Namespace: p.Namespace, Team: p.Team, Agent: p.Agent,
-			PlatformURL: p.PlatformURL, RuntimeURL: p.RuntimeURL, LocalURL: p.LocalURL(d.ListenAddr),
+			Human: p.Human, PlatformURL: p.PlatformURL, RuntimeURL: p.RuntimeURL, LocalURL: p.LocalURL(d.ListenAddr),
 			AuthState: p.AuthState, RenewalError: p.RenewalError, LastError: p.LastError,
 		}
 		if !p.CertExpires.IsZero() {
 			exp := p.CertExpires
 			st.CertExpires = &exp
+		}
+		if !p.SessionExpires.IsZero() {
+			exp := p.SessionExpires
+			st.SessionExpires = &exp
 		}
 		if d.Secrets != nil {
 			if pemText, err := d.Secrets.Get(certAccount(p.ID)); err == nil {
@@ -188,6 +201,8 @@ func (d *Daemon) Status() Status {
 }
 
 func (d *Daemon) AddProfile(ctx context.Context, req AddProfileRequest) (Profile, string, error) {
+	d.profilesMu.Lock()
+	defer d.profilesMu.Unlock()
 	if strings.TrimSpace(req.Server) == "" || strings.TrimSpace(req.RuntimeURL) == "" {
 		return Profile{}, "", fmt.Errorf("server and runtimeUrl are required")
 	}
@@ -228,6 +243,8 @@ func (d *Daemon) AddProfile(ctx context.Context, req AddProfileRequest) (Profile
 }
 
 func (d *Daemon) DeleteProfile(id string, purge bool) error {
+	d.profilesMu.Lock()
+	defer d.profilesMu.Unlock()
 	items, err := d.Store.List()
 	if err != nil {
 		return err
@@ -241,11 +258,11 @@ func (d *Daemon) DeleteProfile(id string, purge bool) error {
 	if slug == "" {
 		return fmt.Errorf("profile %s not found", id)
 	}
-	if d.Router != nil {
-		d.Router.Delete(slug)
-	}
 	if err := d.Store.Delete(id); err != nil {
 		return err
+	}
+	if d.Router != nil {
+		d.Router.Delete(slug)
 	}
 	if purge {
 		for _, account := range []string{tokenAccount(id), certAccount(id), keyAccount(id), caAccount(id)} {
@@ -255,13 +272,42 @@ func (d *Daemon) DeleteProfile(id string, purge bool) error {
 	return nil
 }
 
+// ClientConfig returns one profile's local endpoint and credential for the
+// same-user CLI to write to an owner-only MCP client configuration file.
+func (d *Daemon) ClientConfig(id string) (Profile, string, error) {
+	items, err := d.Store.List()
+	if err != nil {
+		return Profile{}, "", err
+	}
+	for _, item := range items {
+		if item.ID != id {
+			continue
+		}
+		token, err := d.Secrets.Get(tokenAccount(id))
+		if err != nil {
+			return Profile{}, "", err
+		}
+		return item, token, nil
+	}
+	return Profile{}, "", fmt.Errorf("profile %s not found", id)
+}
+
 func (d *Daemon) RestartProfile(ctx context.Context, id string) error {
+	d.profilesMu.Lock()
+	defer d.profilesMu.Unlock()
 	items, err := d.Store.List()
 	if err != nil {
 		return err
 	}
 	for _, item := range items {
 		if item.ID == id {
+			// A user-triggered reconnect may authorize a fresh session after the
+			// previous session expired. Background renewal never clears this binding.
+			if item.AuthState == AuthSignInRequired || item.Session == "" || !item.SessionExpires.After(time.Now()) {
+				item.Session = ""
+				item.SessionExpires = time.Time{}
+				item.TrustDomain = ""
+			}
 			item = d.enroll(ctx, item)
 			if err := d.Store.Put(item); err != nil {
 				return err
@@ -295,6 +341,24 @@ func (d *Daemon) enroll(ctx context.Context, p Profile) Profile {
 	}
 	p.AuthState = AuthEnrolled
 	p.CertExpires = material.Expires
+	if material.PlatformURL != "" {
+		p.PlatformURL = material.PlatformURL
+	}
+	if material.Human != "" {
+		p.Human = material.Human
+	}
+	if material.Team != "" {
+		p.Team = material.Team
+	}
+	if material.Session != "" {
+		p.Session = material.Session
+	}
+	if !material.SessionExpires.IsZero() {
+		p.SessionExpires = material.SessionExpires
+	}
+	if material.TrustDomain != "" {
+		p.TrustDomain = material.TrustDomain
+	}
 	p.LastError = ""
 	p.RenewalError = ""
 	d.Logs.Add("enroll " + p.Slug + ": certificate stored")
@@ -365,6 +429,9 @@ func (d *Daemon) storeMaterial(id string, m Material) error {
 	if err := d.Secrets.Put(keyAccount(id), string(m.KeyPEM)); err != nil {
 		return err
 	}
+	if len(m.CA) == 0 {
+		return nil
+	}
 	return d.Secrets.Put(caAccount(id), string(m.CA))
 }
 
@@ -412,6 +479,8 @@ func (d *Daemon) renewLoop(ctx context.Context) {
 }
 
 func (d *Daemon) renewAll(ctx context.Context) {
+	d.profilesMu.Lock()
+	defer d.profilesMu.Unlock()
 	items, err := d.Store.List()
 	if err != nil {
 		return
@@ -420,11 +489,18 @@ func (d *Daemon) renewAll(ctx context.Context) {
 		if p.CertExpires.IsZero() || time.Until(p.CertExpires) > 5*time.Minute {
 			continue
 		}
+		if p.Session == "" || !p.SessionExpires.After(time.Now().Add(5*time.Minute)) {
+			p.AuthState = AuthSignInRequired
+			p.RenewalError = "session authorization expires soon; reconnect after signing in to authorize a new session"
+			_ = d.Store.Put(p)
+			d.Logs.Add("renew " + p.Slug + ": " + p.RenewalError)
+			continue
+		}
 		material, err := d.Hooks.Enroll(ctx, p)
 		if err != nil {
 			p.AuthState = AuthRenewalFailed
 			p.RenewalError = redact(err.Error())
-			if strings.Contains(strings.ToLower(err.Error()), "sign") || strings.Contains(strings.ToLower(err.Error()), "unauthorized") || strings.Contains(strings.ToLower(err.Error()), "revok") {
+			if !p.SessionExpires.After(time.Now()) || strings.Contains(strings.ToLower(err.Error()), "sign") || strings.Contains(strings.ToLower(err.Error()), "unauthorized") || strings.Contains(strings.ToLower(err.Error()), "revok") {
 				p.AuthState = AuthSignInRequired
 			}
 			_ = d.Store.Put(p)
@@ -455,7 +531,14 @@ func proxyHandler(runtimeURL string, certPEM, keyPEM, caPEM []byte) (http.Handle
 	}
 	tlsCfg := &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
 	if len(caPEM) > 0 {
-		_ = caPEM
+		roots, err := x509.SystemCertPool()
+		if err != nil {
+			return nil, fmt.Errorf("load system HTTPS trust roots: %w", err)
+		}
+		if !roots.AppendCertsFromPEM(caPEM) {
+			return nil, fmt.Errorf("issued CA bundle contains no valid certificates")
+		}
+		tlsCfg.RootCAs = roots
 	}
 	transport := &agentadapter.RuntimeTransport{Base: agentadapter.NewHTTPTransportWithTLS(tlsCfg)}
 	return agentadapter.NewHTTPProxyHandler(agentadapter.ProxyConfig{

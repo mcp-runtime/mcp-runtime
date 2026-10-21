@@ -6,7 +6,7 @@ struct MCPRuntimeAdapterApp: App {
         WindowGroup {
             ContentView()
         }
-        .defaultSize(width: 640, height: 720)
+        .defaultSize(width: 720, height: 760)
 
         WindowGroup(id: "inspect", for: String.self) { profileID in
             InspectView(profileID: profileID.wrappedValue ?? "")

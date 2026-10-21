@@ -1,6 +1,7 @@
 package adapterd
 
 import (
+	"crypto/subtle"
 	"net/http"
 	"strings"
 	"sync"
@@ -69,13 +70,18 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		http.NotFound(w, req)
 		return
 	}
+	provided := req.Header.Get(LocalTokenHeader)
+	if route.Token == "" || provided == "" || subtle.ConstantTimeCompare([]byte(provided), []byte(route.Token)) != 1 {
+		http.Error(w, "local profile credential required", http.StatusUnauthorized)
+		return
+	}
 	if route.Handler == nil {
 		http.Error(w, "profile is not enrolled", http.StatusServiceUnavailable)
 		return
 	}
-	// Drop a client-supplied local header so it cannot be treated as an upstream credential.
-	req.Header.Del(LocalTokenHeader)
 	clone := req.Clone(req.Context())
+	// Drop the local credential so it cannot be treated as an upstream credential.
+	clone.Header.Del(LocalTokenHeader)
 	clone.URL.Path = rest
 	clone.URL.RawPath = ""
 	route.Handler.ServeHTTP(w, clone)

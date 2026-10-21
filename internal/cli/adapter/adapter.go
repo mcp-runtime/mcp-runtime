@@ -35,7 +35,6 @@ Direct HTTP clients can send those credentials without an adapter.`,
 	}
 	cmd.AddCommand(newProxyCmd(runtime))
 	cmd.AddCommand(newEnrollCmd(runtime))
-	addServiceCommands(cmd)
 	cmd.AddCommand(newServiceCmd(runtime))
 	return cmd
 }

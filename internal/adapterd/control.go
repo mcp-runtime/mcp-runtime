@@ -27,6 +27,7 @@ func (c *Control) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/status", c.status)
 	mux.HandleFunc("GET /v1/logs", c.logs)
 	mux.HandleFunc("POST /v1/profiles", c.addProfile)
+	mux.HandleFunc("GET /v1/profiles/{id}/client-config", c.clientConfig)
 	mux.HandleFunc("DELETE /v1/profiles/{id}", c.deleteProfile)
 	mux.HandleFunc("POST /v1/profiles/{id}/restart", c.restartProfile)
 	mux.HandleFunc("POST /v1/shutdown", c.shutdown)
@@ -121,6 +122,22 @@ func (c *Control) deleteProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (c *Control) clientConfig(w http.ResponseWriter, r *http.Request) {
+	profile, token, err := c.Daemon.ClientConfig(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"mcpServers": map[string]any{
+			profile.Server: map[string]any{
+				"url":     profile.LocalURL(c.Daemon.ListenAddr),
+				"headers": map[string]string{LocalTokenHeader: token},
+			},
+		},
+	})
 }
 
 func (c *Control) restartProfile(w http.ResponseWriter, r *http.Request) {

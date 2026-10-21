@@ -20,7 +20,7 @@ those workflows rather than duplicating cluster management.
 | E2E image reuse | `qa/image-cache/` | Content-hash cache consumed by QA E2E |
 | Scoped observability acceptance | `../test/e2e/scenarios/scoped-observability.sh` via QA E2E | Guarded disposable Cilium Kind; setup/update convergence, fresh resource samples and tenant denials; prerequisites and inputs in [local Kind](../docs/contributor/local-kind.md#enforcing-cilium-security-acceptance) |
 | Release component manifest | `release/platformmanifest/` | Source of truth shared with `mcp-runtime update` |
-| macOS adapter package | `release/macos-adapter/package.sh` | Builds darwin arm64 and amd64 CLI binaries, a universal binary, and the Dock app including its icon. Signs with the hardened runtime when `CODESIGN_IDENTITY` is set and notarizes when `NOTARY_KEYCHAIN_PROFILE` is set. Does not install a LaunchAgent or contact a cluster. |
+| macOS adapter package | `release/macos-adapter/package.sh` | Builds universal arm64/amd64 CLI and Dock app artifacts. Produces explicitly named unsigned preview archives by default; distribution signing and notarization require both `CODESIGN_IDENTITY` and `NOTARY_KEYCHAIN_PROFILE`. Does not install a LaunchAgent or contact a platform or cluster. |
 | Hosted release acceptance | `deploy/acceptance/` | Disposable runner; checks publish/deploy, grant/session and allowed/denied calls |
 | Reference platform recovery/update | `deploy/reference/` | Explicit profile, source ref, context and cluster UID; see its README |
 | Go package documentation | `deploy/pkgsite/` | CI-built image, isolated source rewrite, tested remote rollback |
