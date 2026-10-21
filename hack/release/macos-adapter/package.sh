@@ -61,7 +61,7 @@ build_cli arm64
 build_cli amd64
 lipo -create "${BUILD_TMP}/mcp-runtime-darwin-arm64" "${BUILD_TMP}/mcp-runtime-darwin-amd64" \
   -output "${BUILD_TMP}/mcp-runtime"
-lipo -verify_arch arm64 x86_64 "${BUILD_TMP}/mcp-runtime"
+lipo "${BUILD_TMP}/mcp-runtime" -verify_arch arm64 x86_64
 "${BUILD_TMP}/mcp-runtime" --version | grep -F "${PACKAGE_VERSION}"
 
 APP="${BUILD_TMP}/MCPRuntimeAdapter.app"
@@ -88,7 +88,7 @@ for swift_arch in arm64 x86_64; do
 done
 lipo -create "${BUILD_TMP}/MCPRuntimeAdapter-arm64" "${BUILD_TMP}/MCPRuntimeAdapter-x86_64" \
   -output "${APP}/Contents/MacOS/MCPRuntimeAdapter"
-lipo -verify_arch arm64 x86_64 "${APP}/Contents/MacOS/MCPRuntimeAdapter"
+lipo "${APP}/Contents/MacOS/MCPRuntimeAdapter" -verify_arch arm64 x86_64
 cp "${BUILD_TMP}/mcp-runtime" "${APP}/Contents/Helpers/mcp-runtime"
 cp "${BUILD_TMP}/mcp-runtime" "${OUT}/mcp-runtime-darwin-universal"
 plutil -lint "${APP}/Contents/Info.plist"
