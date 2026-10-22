@@ -27,6 +27,12 @@ function stubTeams(options: { gateSlug?: string } = {}) {
 
   const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
     const url = String(input);
+    const agentMatch = url.match(/\/runtime\/teams\/([^/]+)\/agents/);
+    if (agentMatch) {
+      const slug = decodeURIComponent(agentMatch[1]);
+      if (options.gateSlug === slug) await gate;
+      return { ok: true, status: 200, json: async () => ({ agents: [{ id: `agt-${slug}`, name: `${slug} agent`, team_id: slug === "acme" ? "t-1" : "t-2", team_slug: slug, status: "active" }] }) } as Response;
+    }
     const memberMatch = url.match(/\/runtime\/teams\/([^/]+)\/members/);
     if (memberMatch) {
       const slug = decodeURIComponent(memberMatch[1]);
@@ -193,5 +199,36 @@ describe("team account errors and existing users", () => {
     await user.click(screen.getByTestId("team-user-submit"));
     expect(screen.getByTestId("team-user-form")).toHaveTextContent("Use at least 8 characters.");
     expect(fetchMock.mock.calls.every(call => !String(call[0]).endsWith("/users"))).toBe(true);
+  });
+});
+
+
+describe("team overview", () => {
+  it("shows membership totals and associated agents for the selected team", async () => {
+    stubTeams();
+    renderTeams();
+    const overview = await screen.findByTestId("team-overview");
+    await screen.findByTestId("team-members-table");
+    expect(within(overview).getByText("t-1")).toBeInTheDocument();
+    expect(within(overview).getByRole("group", { name: "Selected team membership" })).toHaveTextContent("Members1");
+    expect(within(overview).getByRole("group", { name: "Selected team membership" })).toHaveTextContent("Owners1");
+    expect(await screen.findByRole("link", { name: "acme agent" })).toHaveAttribute("href", "#/agents?team=acme&agent=agt-acme");
+  });
+
+  it("clears old agents, members and an open member form when switching teams", async () => {
+    const user = userEvent.setup();
+    const { release } = stubTeams({ gateSlug: "globex" });
+    renderTeams();
+    await screen.findByRole("link", { name: "acme agent" });
+    await user.click(screen.getByTestId("team-user-toggle"));
+    await user.type(screen.getByTestId("team-user-email"), "not-submitted@example.com");
+    await user.selectOptions(screen.getByTestId("team-select-input"), "globex");
+    await screen.findByTestId("team-agents-loading");
+    expect(screen.queryByRole("link", { name: "acme agent" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("team-user-form")).not.toBeInTheDocument();
+    expect(screen.queryByText("alice@example.com")).not.toBeInTheDocument();
+    release();
+    await screen.findByRole("link", { name: "globex agent" });
+    expect(screen.getByTestId("team-members-table")).toHaveTextContent("bob@example.com");
   });
 });

@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Added
+
+- Team management shows selected-team identity, member and owner counts, member join dates, and associated active/inactive agents with creator attribution and links to their details. Cursor paging labels loaded agent counts explicitly; independent directory failures retain unknown counts and switching teams clears stale rows and member forms ([#851](https://github.com/tavric-labs/mcp-runtime/issues/851)).
+
 ## [0.12.0] - 2026-10-22
 
 ### Added

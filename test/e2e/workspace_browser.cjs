@@ -99,9 +99,29 @@ async function main() {
         const response = await fetch(endpoint, { credentials: 'same-origin' });
         if (!response.ok) throw new Error('read-only verification returned ' + response.status + ' for ' + endpoint);
         return response.json();
-      }, new URL(endpoint, base).pathname);
+      }, new URL(endpoint, base).pathname + new URL(endpoint, base).search);
       const go = async hash => { await page.goto(new URL('/' + hash, base).href, { waitUntil: 'domcontentloaded' }); };
       const section = id => page.locator('section[aria-labelledby="' + id + '"]');
+      const verifyTeamDirectory = async team => {
+        const prefix = '/api/ui/v1/runtime/teams/' + encodeURIComponent(team.slug);
+        const members = (await json(prefix + '/members')).members;
+        const agentPage = await json(prefix + '/agents?limit=100');
+        await page.getByTestId('team-overview').waitFor();
+        await page.getByTestId('team-members-table').waitFor();
+        await page.getByTestId('team-agents-table').waitFor();
+        const metric = (group, label) => page.getByRole('group', { name: group, exact: true }).locator('.metric-card').filter({ has: page.getByText(label, { exact: true }) }).locator('.metric-value');
+        await metric('Selected team membership', 'Members').filter({ hasText: new RegExp('^' + members.length.toLocaleString('en-US') + '$') }).waitFor();
+        await metric('Selected team membership', 'Owners').filter({ hasText: new RegExp('^' + members.filter(member => member.role === 'owner').length.toLocaleString('en-US') + '$') }).waitFor();
+        await metric('Loaded team agents', 'Agents loaded').filter({ hasText: new RegExp('^' + agentPage.agents.length.toLocaleString('en-US') + '$') }).waitFor();
+        check(agentPage.agents.every(agent => agent.team_id === team.id && agent.team_slug === team.slug), name + ': associated agents match the selected team');
+        check(true, name + ': team member, owner and loaded-agent counts match real authorized APIs');
+        for (const width of [1280, 390]) {
+          await page.setViewportSize({ width, height: 900 });
+          check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), name + ': team overview fits ' + width + 'px');
+          await page.screenshot({ path: path.join(output, name + '-team-overview-' + width + '.png'), fullPage: true });
+        }
+        await page.setViewportSize({ width: 1280, height: 900 });
+      };
       await go('#/signin');
       await page.getByTestId('login-email').fill(identity.email);
       await page.getByTestId('login-password').fill(identity.password);
@@ -159,6 +179,7 @@ async function main() {
         await page.getByRole('heading', { name: 'Team management', exact: true }).waitFor();
         await page.getByTestId('teams-table').waitFor();
         await page.getByTestId('team-members-table').waitFor();
+        await verifyTeamDirectory(ownedTeam);
         check(await page.getByTestId('team-create-toggle').count() === 0, 'owner: scoped membership management avoids platform team creation');
         await page.getByRole('link', { name: 'Back to My workspace', exact: true }).click();
       }
@@ -172,6 +193,12 @@ async function main() {
         check(true, name + ': analytics failure leaves membership and server sections usable');
         await page.unrouteAll({ behavior: 'wait' });
       } else {
+        const allTeams = (await json('/api/ui/v1/runtime/teams')).teams;
+        check(allTeams.length > 0, 'admin: fixture provides a team to inspect');
+        await go('#/admin/teams');
+        await page.getByTestId('team-select-input').selectOption(allTeams[0].slug);
+        await verifyTeamDirectory(allTeams[0]);
+        await go('#/workspace');
         await page.getByText(/Administrator authority is platform-wide/).waitFor();
         await page.locator('.notice').filter({ hasText: 'Administrator authority is platform-wide' }).getByRole('link', { name: 'Platform overview', exact: true }).click();
         await page.getByRole('heading', { name: 'Platform overview', exact: true }).waitFor();
