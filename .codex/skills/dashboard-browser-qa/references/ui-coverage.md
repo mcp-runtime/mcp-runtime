@@ -130,6 +130,11 @@ Server cards:
 Actions:
 
 - Details opens the detail panel and loads recent activity.
+- Published HTTP connect configs show client install actions in Details. Check
+  the public endpoint and header fields in Cursor/VS Code payloads and coding
+  agent prompts, keyboard access, mobile wrapping, and missing-config hiding.
+  Claude's web action is omitted when headers are required. Native app handoff
+  requires an installed client; browser fixtures only verify the link payloads.
 - Copy URL and Copy JSON show success or fallback/error feedback.
 - Card Enter/Space selection works where the card is keyboard focusable.
 - Retire is tested only against a temporary `qa-audit-*` MCPServer.

@@ -646,6 +646,32 @@ describe("ServersWorkspace connect config, protocol inventory, and observability
     return fetchMock;
   }
 
+  it("offers the five install clients in server details and retains manual setup", async () => {
+    const user = userEvent.setup();
+    stubRichCatalog();
+    renderWorkspace({ authenticated: true });
+    await screen.findByTestId("server-list");
+    await user.click(screen.getAllByTestId("server-card-details")[0]);
+    const install = screen.getByRole("region", { name: "Install in an MCP client" });
+    expect(within(install).getAllByRole("link")).toHaveLength(5);
+    expect(new URL(within(install).getByRole("link", { name: "Add to Claude", exact: true }).getAttribute("href")!).searchParams.get("connectorUrl")).toBe("http://x/mcp");
+    expect(within(install).getByRole("link", { name: "Install in Cursor" })).toHaveAttribute("href", expect.stringContaining("cursor://"));
+    expect(screen.getByRole("tab", { name: "Raw JSON" })).toBeInTheDocument();
+    expect(screen.getByTestId("server-detail-copy-config")).toBeInTheDocument();
+    const results = await axe(screen.getByTestId("server-detail"), { rules: { "color-contrast": { enabled: false } } });
+    expect(results).toHaveNoViolations();
+  });
+
+  it("does not offer installation when the runtime has not published a client config", async () => {
+    const user = userEvent.setup();
+    stubCatalog();
+    renderWorkspace({ authenticated: true });
+    await screen.findByTestId("server-list");
+    await user.click(screen.getAllByTestId("server-card-details")[0]);
+    expect(screen.queryByTestId("server-detail-install")).not.toBeInTheDocument();
+    expect(screen.getByTestId("server-detail-no-config")).toBeInTheDocument();
+  });
+
   it("copies the connect config to the clipboard and offers it only when access_json is present", async () => {
     const user = userEvent.setup();
     stubRichCatalog();

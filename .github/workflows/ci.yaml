@@ -16,6 +16,12 @@ permissions:
   pull-requests: read
 
 jobs:
+  release-build:
+    name: Release CLI cross-platform builds
+    needs: changed-paths
+    if: needs.changed-paths.outputs.code == 'true'
+    uses: ./.github/workflows/release-build.yaml
+
   changed-paths:
     name: Detect Docs/Website/Articles Changes
     runs-on: ubuntu-24.04
