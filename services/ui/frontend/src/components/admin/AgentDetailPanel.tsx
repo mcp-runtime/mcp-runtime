@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { createGrant, getAgent, revokeGrantSessions, setGrantDisabled, setSessionRevoked } from "../../api/admin";
 import { ForbiddenError, UnauthorizedError } from "../../api/client";
-import type { AgentRecord, GrantSummary, SessionSummary } from "../../api/types";
+import type { AgentRecord, CertificateIssuance, GrantSummary, SessionSummary } from "../../api/types";
 import { useAdminReload, useTeams, ADMIN_QUERY_KEY } from "../../hooks/useAdminData";
 import { useCatalog } from "../../hooks/useCatalog";
 import { formatTimestamp } from "../../lib/format";
@@ -19,6 +19,7 @@ import { sessionState } from "./AccessControlPanel";
 import { AgentLifecycleDialog } from "./AgentLifecycleDialog";
 import { AccessLink, AuthorizingGrant, revocationLabel } from "../access/accessLinks";
 import { MetricGrid } from "../../ui/MetricCard";
+import { AgentActivityPanel } from "./AgentActivityPanel";
 
 type Props = { id: string; platformAdmin: boolean; onBack: () => void };
 
@@ -76,15 +77,27 @@ export function AgentDetailPanel({ id, platformAdmin, onBack }: Props) {
     { id: "cause", header: "Revocation cause", cell: revocationLabel },
     { id: "actions", header: "Actions", cell: (session) => canManageResource(session.namespace) && !session.revoked ? <Button variant="ghost" size="sm" disabled={busy} onClick={() => setConfirm({ title: `Revoke session “${session.name}”?`, body: "Future tool calls made with this session will be denied.", confirmLabel: "Revoke session", destructive: true, onConfirm: () => act(`Session “${session.name}” revoked.`, () => setSessionRevoked(session.namespace, session.name, true)) })}>Revoke</Button> : null },
   ]);
+  const certificates = query.data.certificates;
+  const certificateColumns = buildColumns<CertificateIssuance>([
+    { id: "issued", header: "Issued", rowHeader: true, cell: row => formatTimestamp(row.issued_at) },
+    { id: "session", header: "Session", cell: row => <AccessLink kind="session" name={row.session} namespace={row.namespace} agent={agent.id} /> },
+    { id: "server", header: "Server", cell: row => `${row.namespace}/${row.server}` },
+    { id: "human", header: "Delegating human", cell: row => row.human_id || "Unreported" },
+    { id: "expires", header: "Certificate expires", cell: row => formatTimestamp(row.not_after) },
+    { id: "serial", header: "Serial / fingerprint", cell: row => <><span className="copy-value">{row.serial}</span><span className="cell-detail copy-value">{row.fingerprint_sha256}</span></> },
+  ]);
 
   return <div data-testid="agent-detail">
-    <PageHeader title={agent.name} breadcrumb={[{ label: "Agents", onClick: onBack }, { label: agent.name }]} actions={<Button variant="secondary" icon="chevronLeft" onClick={onBack}>Back to agents</Button>} />
+    <PageHeader title={agent.name} breadcrumb={[{ label: "Agents", onClick: onBack }, { label: agent.name }]} actions={<><Button variant="secondary" disabled={query.isFetching} onClick={() => void query.refetch()}>Refresh agent</Button><Button variant="secondary" icon="chevronLeft" onClick={onBack}>Back to agents</Button></>} />
     <dl className="detail-grid">
       <div><dt>Stable ID</dt><dd className="copy-row"><span className="copy-value">{agent.id}</span><CopyButton value={agent.id} label="Copy agent ID" /></dd></div>
       <div><dt>Owning team</dt><dd>{agent.team_slug}</dd></div>
+      <div><dt>Created by</dt><dd>{agent.created_by || "Not recorded"}</dd></div>
+      <div><dt>Created</dt><dd>{agent.created_at ? formatTimestamp(agent.created_at) : "Not recorded"}</dd></div>
+      <div><dt>Updated</dt><dd>{agent.updated_at ? formatTimestamp(agent.updated_at) : "Not recorded"}</dd></div>
       <div><dt>Status</dt><dd><StatusBadge tone={agent.status === "active" ? "ready" : "attention"}>{agent.status}</StatusBadge></dd></div>
     </dl>
-    <MetricGrid label="Visible session lifecycle" metrics={["Active", "Expired", "Revoked"].map((label) => ({ label: `Visible ${label.toLowerCase()} sessions`, value: sessions.filter((session) => sessionState(session).label === label).length }))} />
+    <MetricGrid label="Visible session lifecycle" metrics={[{ label: "Visible sessions issued", value: sessions.length }, ...["Active", "Expired", "Revoked"].map((label) => ({ label: `Visible ${label.toLowerCase()} sessions`, value: sessions.filter((session) => sessionState(session).label === label).length }))]} />
     <p className="section-note">Counts and history cover sessions visible to your account.</p>
     {canManage ? <Button variant="secondary" onClick={() => setLifecycle(true)}>{agent.status === "active" ? "Deactivate agent" : "Reactivate agent"}</Button> : null}
     {notice ? <p className="notice notice-success" role="status">{notice}</p> : null}
@@ -100,6 +113,16 @@ export function AgentDetailPanel({ id, platformAdmin, onBack }: Props) {
     </section> : null}
     <section className="section"><h2 className="section-title">Applicable grants</h2><DataTable columns={grantColumns} rows={grants} rowKey={(grant) => `${grant.namespace}/${grant.name}`} caption="Grants applicable to this agent and visible to you." regionLabel="Agent grants" testId="agent-grants-table" emptyMessage="No applicable grants." /></section>
     <section className="section"><h2 className="section-title">Sessions</h2><DataTable columns={sessionColumns} rows={sessions} rowKey={(session) => `${session.namespace}/${session.name}`} caption="Agent sessions visible to you, including expired and revoked history." regionLabel="Agent sessions" testId="agent-sessions-table" emptyMessage="No sessions visible." /></section>
+    <section className="section" aria-label="Agent certificate issuance">
+      <h2 className="section-title">Recorded certificate issuance</h2>
+      <p className="section-note">Certificates are issued to a human-delegated session for this agent. A session can have multiple certificates. Recording starts with v0.12.0; older or unrecorded issuance is unknown. Only public metadata is shown. Expired or revoked sessions invalidate access even if a certificate has time remaining.</p>
+      {certificates ? <>
+        <MetricGrid label="Recorded certificates" metrics={[{ label: "Recorded certificates issued", value: certificates.recorded, hint: "Last 7 days, within your agent visibility" }]} />
+        <p className="section-note">{formatTimestamp(certificates.since)} – {formatTimestamp(certificates.until)}. Showing the latest {certificates.recent.length} of {certificates.recorded} recorded issuances (maximum 100).</p>
+        <DataTable columns={certificateColumns} rows={certificates.recent} rowKey={row => `${row.fingerprint_sha256}/${row.issued_at}`} caption="Recorded certificate issuance; private keys and certificate PEM are never displayed." regionLabel="Agent certificate history" testId="agent-certificates-table" emptyMessage="No certificate issuance recorded in this window. This does not establish that no older certificates exist." />
+      </> : <ErrorState title="Certificate history is unavailable." detail={query.data.certificates_error || "The service did not return recorded issuance data."} onRetry={() => void query.refetch()} testId="agent-certificates-error" />}
+    </section>
+    <AgentActivityPanel key={agent.id} agentID={agent.id} platformAdmin={platformAdmin} />
     <section className="section"><h2 className="section-title">Connect this agent</h2><ol><li>Have a team owner or platform admin create an enabled grant for this agent and the target server.</li><li>Sign in with <code>mcp-runtime auth login --api-url &lt;platform-url&gt;</code>.</li><li>Start <code>mcp-runtime adapter proxy --runtime-url &lt;https-mcp-url&gt; --server &lt;server&gt; --namespace &lt;namespace&gt; --agent {agent.id} --auto-refresh</code>. It creates an authorized session and enrolls a certificate in memory. For a saved certificate, use <code>mcp-runtime adapter enroll</code> with the same server, namespace, and agent.</li></ol><p className="section-note">The private key stays local. OAuth targets also require a bearer token from the MCP client. A grant alone does not establish a connection; direct clients follow the server’s gateway policy.</p></section>
     {confirm ? <ConfirmDialog {...confirm} busy={busy} onCancel={() => setConfirm(null)} /> : null}
     {lifecycle ? <AgentLifecycleDialog agent={agent} onClose={() => setLifecycle(false)} onChanged={reload} /> : null}

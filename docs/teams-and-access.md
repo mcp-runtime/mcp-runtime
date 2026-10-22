@@ -35,6 +35,37 @@ The source-of-truth data plane is:
   claims, or from the
   session named by a verified adapter certificate.
 
+## Inspect an agent's ownership and activity
+
+Open **Agents** and select an agent. The detail view shows its owning team,
+creator's recorded user ID, creation/update times, applicable grants and visible
+sessions. The creator is historical attribution; the owning team controls the
+agent. Session rows identify the delegating human and authorizing grant, with
+expiry and revocation state. Counts cover only sessions visible to your account.
+
+**Recorded certificate issuance** is separate from session counts because one
+session can receive several renewed certificates. The count covers recorded
+issuances in the last seven days; the table shows the latest 100 with human,
+session, server, serial, fingerprint and certificate expiry. Recording begins
+with v0.12.0. Older or unrecorded certificates are unknown, so zero recorded
+issuances does not mean no certificates have ever existed. Private keys and
+certificate PEM are never shown. A revoked/expired session denies access even
+before a certificate's expiry. History failures leave identity/access usable
+and display unavailable data instead of zero.
+
+**MCP tool activity** filters analytics by the exact Agent ID and `tools/call`,
+with one-hour, 24-hour and seven-day windows. It shows call totals, gateway
+allow/deny decisions, HTTP failures, per-tool/server groups and recent human and
+session attribution. Tables are capped at 50 rows; totals cover the selected
+window. Team users see their authorized namespace/resource-team activity;
+shared catalog and foreign-resource calls can be excluded. Administrators can
+see platform-wide activity for the selected agent.
+
+An allowed gateway decision is not proof a tool succeeded: MCP errors can use
+HTTP 200. The view shows observed MCP activity, not the agent's full task,
+prompts or intent. Analytics failures are reported separately from directory,
+grant, session and certificate data.
+
 ## When to use this
 
 To delegate through the dashboard, open **Access control**, select the resource

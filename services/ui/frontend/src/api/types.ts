@@ -377,6 +377,28 @@ export type AgentDetail = {
   grants: GrantSummary[];
   sessions: SessionSummary[];
   can_manage: boolean;
+  certificates?: CertificateActivity;
+  certificates_error?: string;
+};
+
+export type CertificateIssuance = {
+  namespace: string;
+  session: string;
+  server: string;
+  human_id: string;
+  serial: string;
+  fingerprint_sha256: string;
+  spiffe_id: string;
+  not_before: string;
+  not_after: string;
+  issued_at: string;
+};
+
+export type CertificateActivity = {
+  recorded: number;
+  since: string;
+  until: string;
+  recent: CertificateIssuance[];
 };
 
 export type TeamMembership = {
@@ -402,6 +424,7 @@ export type AgentRecord = {
   status: "active" | "inactive";
   created_at?: string;
   updated_at?: string;
+  created_by?: string;
 };
 
 export type AgentPage = {
@@ -538,6 +561,7 @@ export type UsageTotals = {
 };
 
 export type UsageFilterParams = {
+  agent_id?: string;
   window_hours?: string;
   scope?: string;
   team_id?: string;
@@ -603,6 +627,7 @@ export type UsageResponse = {
   window_start?: string;
   window_end?: string;
   filters?: {
+    agent_id?: string;
     namespaces?: string[];
     team_ids?: string[];
     server?: string;

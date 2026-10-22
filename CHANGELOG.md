@@ -14,6 +14,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 - macOS users can run isolated profiles through a per-user LaunchAgent and native Dock app. The app guides first-time setup, requires an active Agent ID, supports custom MCP endpoints, installs profile-specific MCP config for Cursor, Codex, Claude Code, and VS Code, and exposes profile and service lifecycle actions. Releases include the universal CLI, an explicitly named unsigned desktop preview, and SHA-256 checksums. Developer ID signing/notarization and sleep/wake acceptance remain pending ([#656](https://github.com/mcp-runtime/mcp-runtime/issues/656)).
 - The website offers the macOS app download and setup instructions. The shell installer accepts `--with-desktop` on macOS 13+, verifies CLI/app release checksums, and installs the app in `~/Applications` without sudo while preserving an existing app bundle.
 - Adapter profiles show an **OAuth required** tag from the platform server configuration, with guidance to authorize through the MCP client separately from certificate enrollment.
+- Agent details show the owning team, creator, visible session counts, recorded certificate issuance and exact-agent MCP tool analytics with explicit time/visibility limits. Certificate recording begins with this release; older issuance is unknown. No database reset is needed ([#848](https://github.com/tavric-labs/mcp-runtime/issues/848)).
 
 ### Changed
 

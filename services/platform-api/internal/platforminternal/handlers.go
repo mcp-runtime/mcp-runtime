@@ -71,6 +71,27 @@ func (h Handler) agentPath(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := parts[0]
+	if len(parts) == 2 && parts[1] == "certificates" && r.Method == http.MethodGet {
+		reader, ok := h.Store.(interface {
+			AgentCertificates(context.Context, string, string) (internalapi.CertificateActivity, error)
+		})
+		if !ok {
+			apihttp.WriteEnvelope(w, http.StatusServiceUnavailable, apihttp.CodeQueryFailed, "certificate history unavailable")
+			return
+		}
+		humanID := strings.TrimSpace(r.URL.Query().Get("human_id"))
+		if len(id) > 128 || len(humanID) > 128 {
+			apihttp.WriteEnvelope(w, http.StatusBadRequest, apihttp.CodeInvalidRequestBody, "invalid certificate history filter")
+			return
+		}
+		activity, err := reader.AgentCertificates(r.Context(), id, humanID)
+		if err != nil {
+			apihttp.WriteEnvelope(w, http.StatusServiceUnavailable, apihttp.CodeQueryFailed, "certificate history unavailable")
+			return
+		}
+		writeJSON(w, http.StatusOK, activity)
+		return
+	}
 	if len(parts) == 1 && r.Method == http.MethodGet {
 		item, ok, err := h.Store.GetAgent(r.Context(), id)
 		if err != nil {

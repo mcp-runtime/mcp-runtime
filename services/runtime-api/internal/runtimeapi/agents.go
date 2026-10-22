@@ -12,6 +12,7 @@ import (
 
 	"mcp-runtime-api/internal/platformclient"
 	mcpaccess "mcp-runtime/pkg/access"
+	"mcp-runtime/pkg/internalapi"
 	"mcp-runtime/pkg/serviceutil"
 )
 
@@ -160,7 +161,25 @@ func (s *RuntimeServer) HandleRuntimeAgentPath(w http.ResponseWriter, r *http.Re
 			return
 		}
 		grants, sessions := access.forAgent(item, manager)
-		writeJSON(w, http.StatusOK, map[string]any{"agent": item, "grants": grants, "sessions": sessions, "can_manage": manager})
+		response := map[string]any{"agent": item, "grants": grants, "sessions": sessions, "can_manage": manager}
+		// Directory/access stays usable when the independent history store fails.
+		response["certificates_error"] = "Recorded certificate history is unavailable."
+		if reader, ok := s.identity.(interface {
+			AgentCertificates(context.Context, string, string) (internalapi.CertificateActivity, error)
+		}); ok {
+			humanID := p.UserID()
+			if manager {
+				humanID = ""
+			}
+			historyCtx, cancelHistory := context.WithTimeout(ctx, 3*time.Second)
+			certificates, err := reader.AgentCertificates(historyCtx, item.ID, humanID)
+			cancelHistory()
+			if err == nil {
+				response["certificates"] = certificates
+				delete(response, "certificates_error")
+			}
+		}
+		writeJSON(w, http.StatusOK, response)
 		return
 	}
 	if p.Role != roleAdmin && p.TeamRole(teamSlug) != teamRoleOwner {

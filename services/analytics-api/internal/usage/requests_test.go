@@ -25,6 +25,26 @@ func TestAdminRequestFiltersAreParameterizedAndCombined(t *testing.T) {
 	}
 }
 
+func TestAgentUsageFilterIntersectsTenantVisibility(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/user/analytics/usage?agent_id=agent-one&rpc_method=tools/call", nil)
+	scope := scopeFromRequest(request, 7, 50)
+	scope.Namespaces = []string{"team-a"}
+	scope.TeamIDs = []string{"authority-a"}
+	where, args := WhereClause(scope)
+	if !strings.Contains(where, "agent_id = ?") || !strings.Contains(where, "namespace IN") || !strings.Contains(where, "team_id") || strings.Contains(where, "agent-one") {
+		t.Fatalf("agent filter replaced visibility or was interpolated: %s", where)
+	}
+	found := false
+	for _, arg := range args {
+		if arg == "agent-one" {
+			found = true
+		}
+	}
+	if !found || scope.Filters().AgentID != "agent-one" {
+		t.Fatal("missing exact agent filter/echo")
+	}
+}
+
 func TestTenantUsageScopeDoesNotBecomeActorTeamScope(t *testing.T) {
 	where, args := WhereClause(QueryScope{Namespaces: []string{"team-a"}, TeamIDs: []string{"resource-a"}, Since: time.Unix(100, 0), Until: time.Unix(200, 0)})
 	if !strings.Contains(where, "JSONExtractString(payload, 'team_id')") || strings.Contains(where, "subject_team_id") {
