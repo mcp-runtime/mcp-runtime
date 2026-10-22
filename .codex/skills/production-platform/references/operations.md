@@ -298,6 +298,11 @@ sessions already exist for the selected `RUN_ID`.
 ## Staging E2E (disposable VM)
 
 Runbook: [`docs/contributor/staging-e2e.md`](../../../docs/contributor/staging-e2e.md).
+Pre-release Regression also builds every distributed CLI target, including
+Windows, using the reusable release build workflow. Require those jobs as well
+as staging to pass before publishing; Linux staging does not cover Windows
+compilation.
+
 Pre-release Regression runs the staging workflow, and it can be dispatched
 manually; merges to `main` do not run it. CI runs QA E2E on PRs or manual
 dispatch, using `test/e2e/qa-e2e.sh` with Kind, and skips it on main pushes.

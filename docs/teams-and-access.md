@@ -147,6 +147,13 @@ then enter that user ID and select a role. **Create account in this team** is fo
 new accounts and requires a temporary password of at least eight characters.
 Validation failures appear in the form; an existing email offers the membership
 form rather than resetting the account password. Platform admins and team owners can manage members in their teams.
+Selecting a team shows its identifier, namespace, recorded creation date, member
+and owner counts, and associated active and inactive agents. Member rows include
+roles and recorded join dates. Agent rows link to details and show stable IDs,
+creator attribution and recorded creation dates. **Load more agents** follows the
+directory cursor; counts describe loaded agents until the directory is complete.
+Directory errors appear independently and unavailable counts remain unknown.
+The recorded creator is the registering user, not every human using an agent.
 The APIs resolve the current account and membership after validating a saved
 login token. Membership changes take effect on the next API request; directory
 lookup failures deny access rather than trusting a stale token's roles.

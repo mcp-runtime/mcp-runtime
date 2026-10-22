@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { AsyncSection } from "./AsyncSection";
+import { TeamAgentsPanel } from "./TeamAgentsPanel";
 import { StatusBadge } from "../../ui/Badge";
 import { Button } from "../../ui/Button";
 import { ConfirmDialog, type ConfirmRequest } from "../../ui/ConfirmDialog";
@@ -9,6 +10,8 @@ import { DataTable, buildColumns } from "../../ui/DataTable";
 import { SelectField, TextField } from "../../ui/Field";
 import { Icon } from "../../ui/Icon";
 import { PageHeader } from "../../ui/PageHeader";
+import { MetricGrid } from "../../ui/MetricCard";
+import { formatTimestamp } from "../../lib/format";
 import { EmptyState, ErrorState, LoadingState } from "../../ui/States";
 import { useAdminReload, useTeamMembers, useTeams } from "../../hooks/useAdminData";
 import { createTeam, createTeamUser, removeTeamMember, setTeamMemberRole } from "../../api/admin";
@@ -34,6 +37,13 @@ export function TeamsPanel({ onSignIn, managedTeams, initialTeam }: TeamsPanelPr
   const [teamForm, setTeamForm] = useState<{ slug: string; name: string } | null>(null);
   const [userForm, setUserForm] = useState<{ email: string; password: string; role: string; existing?: boolean; userID?: string } | null>(null);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  useEffect(() => {
+    setUserForm(null);
+    setConfirm(null);
+    setFormErrors({});
+    setError("");
+    setUserConflict(false);
+  }, [selectedSlug]);
 
   // Keep a valid selection without ever pointing at a team that has gone away.
   useEffect(() => {
@@ -136,6 +146,7 @@ export function TeamsPanel({ onSignIn, managedTeams, initialTeam }: TeamsPanelPr
                 className="link-button"
                 aria-pressed={team.slug === selectedSlug}
                 data-testid="team-select"
+                disabled={busyKey !== ""}
                 onClick={() => setSelectedSlug(team.slug)}
               >
                 {team.name || team.slug}
@@ -169,14 +180,15 @@ export function TeamsPanel({ onSignIn, managedTeams, initialTeam }: TeamsPanelPr
             <Button
               variant={team.slug === selectedSlug ? "primary" : "ghost"}
               size="sm"
+              disabled={busyKey !== ""}
               onClick={() => setSelectedSlug(team.slug)}
             >
-              {team.slug === selectedSlug ? "Selected" : "Manage members"}
+              {team.slug === selectedSlug ? "Selected" : "View team"}
             </Button>
           ),
         },
       ]),
-    [selectedSlug]
+    [selectedSlug, busyKey]
   );
 
   const memberColumns = useMemo(
@@ -208,6 +220,11 @@ export function TeamsPanel({ onSignIn, managedTeams, initialTeam }: TeamsPanelPr
               <CopyButton value={member.user_id} label={`Copy the user ID for ${member.email || member.user_id}`} />
             </span>
           ),
+        },
+        {
+          id: "joined",
+          header: "Joined",
+          cell: (member) => member.created_at ? formatTimestamp(member.created_at) : "Not recorded",
         },
         {
           id: "actions",
@@ -272,7 +289,7 @@ export function TeamsPanel({ onSignIn, managedTeams, initialTeam }: TeamsPanelPr
       <PageHeader
         title="Teams"
         breadcrumb={[{ label: managedTeams ? "My workspace" : "Administration" }, { label: "Teams" }]}
-        description="Tenant teams, the namespace each one owns, and their membership."
+        description="Team ownership, members, namespaces, and associated agents."
         actions={
           <>
             <Button variant="secondary" icon="refresh" onClick={reload} data-testid="teams-refresh">
@@ -346,7 +363,7 @@ export function TeamsPanel({ onSignIn, managedTeams, initialTeam }: TeamsPanelPr
           <h2 className="section-title" id="teams-title">
             Team directory
           </h2>
-          <p className="section-note">Select a team to manage its members.</p>
+          <p className="section-note">Select a team to see its members and agents.</p>
         </div>
         <AsyncSection
           query={teamsQuery}
@@ -369,6 +386,20 @@ export function TeamsPanel({ onSignIn, managedTeams, initialTeam }: TeamsPanelPr
         </AsyncSection>
       </section>
 
+      {selectedTeam ? <section className="section" aria-label="Selected team overview" data-testid="team-overview">
+        <h2 className="section-title">{selectedTeam.name || selectedTeam.slug}</h2>
+        <dl className="detail-grid">
+          <div><dt>Team ID</dt><dd className="copy-row"><span className="copy-value">{selectedTeam.id}</span><CopyButton value={selectedTeam.id} label="Copy selected team ID" /></dd></div>
+          <div><dt>Slug</dt><dd>{selectedTeam.slug}</dd></div>
+          <div><dt>Namespace</dt><dd>{selectedTeam.namespace || "Not recorded"}</dd></div>
+          <div><dt>Created</dt><dd>{selectedTeam.created_at ? formatTimestamp(selectedTeam.created_at) : "Not recorded"}</dd></div>
+        </dl>
+        <MetricGrid label="Selected team membership" metrics={[
+          { label: "Members", value: membersQuery.isSuccess ? members.length : undefined, hint: "Includes owners" },
+          { label: "Owners", value: membersQuery.isSuccess ? members.filter(member => member.role === "owner").length : undefined },
+        ]} />
+      </section> : null}
+
       <section className="section">
         <div className="section-head">
           <h2 className="section-title" id="team-members-title">
@@ -384,6 +415,7 @@ export function TeamsPanel({ onSignIn, managedTeams, initialTeam }: TeamsPanelPr
             <SelectField
               label="Team"
               value={selectedSlug}
+              disabled={busyKey !== ""}
               data-testid="team-select-input"
               options={teams.map((team) => ({ value: team.slug, label: team.name || team.slug }))}
               onChange={(event) => setSelectedSlug(event.target.value)}
@@ -525,6 +557,8 @@ export function TeamsPanel({ onSignIn, managedTeams, initialTeam }: TeamsPanelPr
           />
         )}
       </section>
+
+      {selectedTeam ? <TeamAgentsPanel key={selectedTeam.id} team={selectedTeam} members={membersQuery.isSuccess ? members : undefined} /> : null}
 
       {confirm ? (
         <ConfirmDialog
