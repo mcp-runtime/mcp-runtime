@@ -7,7 +7,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
-## [0.12.0] - 2026-10-21
+## [0.12.0] - 2026-10-22
 
 ### Added
 
