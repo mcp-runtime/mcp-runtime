@@ -7,6 +7,12 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-10-22
+
+### Fixed
+
+- Windows CLI releases build again: certificate renewal uses the portable adapter profile instead of importing a macOS/Linux service implementation. CI and pre-release checks now build every distributed CLI target, including Windows. The incomplete 0.12.0 release was returned to draft after its Windows build failed; its tag is preserved, and 0.12.1 delivers the desktop and CLI assets described below. No additional setup or data reset is required ([#849](https://github.com/tavric-labs/mcp-runtime/issues/849)).
+
 ## [0.12.0] - 2026-10-22
 
 ### Added
@@ -610,7 +616,8 @@ upgrade from 0.4.x; see the migration note under **Changed**.
 
 - Targeted platform updates through `mcp-runtime update`, including embedded CRD updates and `--build` to build/push missing component images before rollout ([#491](https://github.com/mcp-runtime/mcp-runtime/pull/491)).
 
-[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.12.1...HEAD
+[0.12.1]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.10.0...v0.11.0

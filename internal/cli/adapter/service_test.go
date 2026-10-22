@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"mcp-runtime/internal/adapterservice"
+	"mcp-runtime/internal/adapterd"
 	"mcp-runtime/internal/cli/platformapi"
 	"mcp-runtime/pkg/certauth"
 )
@@ -131,10 +131,10 @@ func TestServiceRenewalCertificateLifetime(t *testing.T) {
 			original := http.DefaultTransport
 			http.DefaultTransport = server.Client().Transport
 			defer func() { http.DefaultTransport = original }()
-			credential, err := renewProfileCertificate(context.Background(), adapterservice.Profile{
-				PlatformURL: server.URL, PlatformToken: "test-token", TrustDomain: "example.org",
+			credential, err := renewProfileCertificate(context.Background(), adapterd.Profile{
+				PlatformURL: server.URL, TrustDomain: "example.org",
 				Namespace: "team-a", Session: "session-1", SessionExpires: expiry,
-			})
+			}, "test-token")
 			if (err != nil) != tc.wantError {
 				t.Fatalf("renewal error=%v, want failure=%v", err, tc.wantError)
 			}
