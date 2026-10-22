@@ -10,6 +10,11 @@ because it never touches the production cluster.
 
 ## Runner
 
+Pre-release Regression also builds all distributed CLI targets (Linux and macOS
+on amd64/arm64, plus Windows amd64) through the same reusable workflow as the
+release. These build checks complement the Linux staging journey and must pass
+before publishing a release; staging alone does not prove Windows compilation.
+
 The `Staging E2E (Disposable VM)` workflow packages the checkout, copies it to
 the disposable VM, and runs `test/e2e/staging-vm.sh` there over SSH, so the CLI
 runs next to k3s. The assertions, the target guard, and the stage runner live

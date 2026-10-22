@@ -20,7 +20,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"mcp-runtime/internal/adapterd"
-	"mcp-runtime/internal/adapterservice"
 	"mcp-runtime/internal/cli/core"
 	"mcp-runtime/internal/cli/platformapi"
 	"mcp-runtime/pkg/authfile"
@@ -392,12 +391,9 @@ func enrollProfile(ctx context.Context, p adapterd.Profile) (material adapterd.M
 		if !p.SessionExpires.After(time.Now()) {
 			return adapterd.Material{}, fmt.Errorf("session expired; reauthorize this profile interactively")
 		}
-		cred, err := renewProfileCertificate(ctx, adapterservice.Profile{
-			PlatformURL: base, PlatformToken: token, RuntimeURL: p.RuntimeURL,
-			Namespace: p.Namespace, Server: p.Server, Agent: p.Agent, Human: p.Human,
-			Team: p.Team, Session: p.Session, TrustDomain: p.TrustDomain,
-			SessionExpires: p.SessionExpires,
-		})
+		renewalProfile := p
+		renewalProfile.PlatformURL = base
+		cred, err := renewProfileCertificate(ctx, renewalProfile, token)
 		if err != nil {
 			return adapterd.Material{}, fmt.Errorf("renew the existing adapter session certificate: %w", err)
 		}
