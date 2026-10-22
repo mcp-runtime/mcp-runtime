@@ -175,4 +175,5 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DE
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_image_ref ON audit_logs(image_ref);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_agent_id ON audit_logs(agent_id);
+CREATE INDEX IF NOT EXISTS idx_audit_certificate_agent_time ON audit_logs(agent_id, created_at DESC) WHERE action = 'adapter.certificate.issued';
 `

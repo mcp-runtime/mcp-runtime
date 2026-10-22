@@ -26,6 +26,18 @@ connection, and dashboard workflows below.
 
     The installer detects your CPU and installs the binary to `~/.local/bin`.
 
+    On macOS 13+, add `--with-desktop` to install the universal Adapter app in
+    `~/Applications` too:
+
+    ```sh
+    curl -fsSL https://raw.githubusercontent.com/mcp-runtime/mcp-runtime/main/install.sh | sh -s -- --with-desktop
+    ```
+
+    This is an unsigned desktop preview; macOS may require allowing it in
+    **System Settings → Privacy & Security**. Downloads are checksum-verified
+    and existing app bundles are preserved. See the
+    [macOS adapter guide](connect-clients.md#macos-background-adapter-and-companion).
+
 === "Linux"
 
     ```bash

@@ -181,6 +181,22 @@ func (c *Client) ListAgents(ctx context.Context, teamSlug, statusFilter, q, curs
 	return page, nil
 }
 
+func (c *Client) AgentCertificates(ctx context.Context, id, humanID string) (internalapi.CertificateActivity, error) {
+	path := "/internal/identity/agents/" + url.PathEscape(id) + "/certificates"
+	if humanID != "" {
+		path += "?human_id=" + url.QueryEscape(humanID)
+	}
+	var out internalapi.CertificateActivity
+	status, err := c.authorizedJSON(ctx, http.MethodGet, path, nil, &out)
+	if err != nil {
+		return out, err
+	}
+	if status != http.StatusOK {
+		return out, fmt.Errorf("certificate history: status %d", status)
+	}
+	return out, nil
+}
+
 func (c *Client) GetAgent(ctx context.Context, id string) (Agent, bool, error) {
 	var item Agent
 	status, err := c.authorizedJSON(ctx, http.MethodGet, "/internal/identity/agents/"+url.PathEscape(id), nil, &item)

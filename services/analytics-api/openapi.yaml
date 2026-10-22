@@ -134,6 +134,10 @@ paths:
       summary: Query platform-wide MCP gateway usage (admin only)
       parameters:
         - in: query
+          name: agent_id
+          description: Exact agent ID, intersected with all other filters and echoed in filters.agent_id.
+          schema: {type: string, maxLength: 256}
+        - in: query
           name: limit
           schema: { type: integer, minimum: 1, maximum: 50, default: 10 }
         - in: query
@@ -200,6 +204,17 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
   /api/v1/user/analytics/usage:
     get:
+      parameters:
+        - in: query
+          name: agent_id
+          description: Exact agent ID. Narrows the caller's authorized namespace/resource-team scope; never grants access to another team.
+          schema: {type: string, maxLength: 256}
+        - in: query
+          name: rpc_method
+          schema: {type: string, maxLength: 256}
+        - in: query
+          name: window_hours
+          schema: {type: integer, minimum: 1, maximum: 8760}
       responses:
         "200":
           description: user usage

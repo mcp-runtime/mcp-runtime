@@ -10,6 +10,7 @@ function setup(options: { role?: "admin" | "user"; teamRole?: "owner" | "member"
   const agent = () => ({ id: "agt_01arz3ndektsv4rrffq69g5fav", team_id: "team-acme", team_slug: "acme", name: "Ops Agent", status });
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
+    if (url.includes("/user/analytics/usage")) return { ok: true, status: 200, json: async () => ({ filters: { agent_id: "agt_01arz3ndektsv4rrffq69g5fav" }, totals: { events: 0, allowed: 0, denied: 0 }, recent: [], requests: [] }) } as unknown as Response;
     if (url.endsWith("/runtime/teams")) {
       return { ok: true, status: 200, json: async () => ({ teams: [{ id: "team-acme", slug: "acme", name: "Acme", namespace: "mcp-team-acme", role: options.teamRole || "owner" }] }) } as unknown as Response;
     }

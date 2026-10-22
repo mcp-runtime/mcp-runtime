@@ -120,6 +120,7 @@ type UsageResponse struct {
 }
 
 type UsageFilters struct {
+	AgentID       string   `json:"agent_id,omitempty"`
 	Namespaces    []string `json:"namespaces,omitempty"`
 	TeamIDs       []string `json:"team_ids,omitempty"`
 	Server        string   `json:"server,omitempty"`
@@ -132,6 +133,7 @@ type UsageFilters struct {
 }
 
 type QueryScope struct {
+	AgentID       string
 	Since         time.Time
 	WindowDays    int
 	Limit         int
@@ -171,6 +173,7 @@ func scopeFromRequest(r *http.Request, windowDays, limit int) QueryScope {
 		since = now.Add(-time.Duration(clampInt(hours, 1, maxWindowDays*24)) * time.Hour)
 	}
 	return QueryScope{
+		AgentID:       strings.TrimSpace(r.URL.Query().Get("agent_id")),
 		Since:         since,
 		Until:         now,
 		WindowDays:    windowDays,
@@ -261,6 +264,7 @@ func emptyUsageResponse(scope QueryScope) UsageResponse {
 
 func (scope QueryScope) Filters() UsageFilters {
 	return UsageFilters{
+		AgentID:       scope.AgentID,
 		Namespaces:    dedupeStrings(scope.Namespaces),
 		TeamIDs:       dedupeStrings(scope.TeamIDs),
 		Server:        scope.Server,

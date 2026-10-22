@@ -67,6 +67,18 @@ export async function readUserUsage(windowDays: number, server?: string): Promis
   };
 }
 
+export async function readAgentUsage(agentID: string, hours: number): Promise<UsageResponse> {
+  const body = await fetchJSON(withQuery("/user/analytics/usage", {
+    agent_id: agentID, rpc_method: "tools/call", window_hours: String(hours), limit: "50",
+  })) as UsageResponse;
+  // An older service can ignore unknown filters. Never present its platform-
+  // wide totals as if they belong to this agent.
+  if (body?.filters?.agent_id !== agentID || !body.totals) {
+    throw new Error("Agent activity is unavailable: the analytics service did not confirm the agent filter.");
+  }
+  return body;
+}
+
 export async function listTeams(): Promise<TeamMembership[]> {
   return asArray<TeamMembership>(await fetchJSON("/runtime/teams"), "teams");
 }

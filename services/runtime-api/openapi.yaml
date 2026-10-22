@@ -463,3 +463,28 @@ components:
           type: array
           items: { type: object, description: Caller-visible MCPAgentSession summary }
         can_manage: { type: boolean }
+        certificates_error: {type: string, description: Independent history failure; agent identity and access remain available.}
+        certificates:
+          type: object
+          description: Recorded certificate issuance in the last seven days, within caller visibility. Recording starts with 0.12.0; missing historical records cannot be counted.
+          required: [recorded, since, until, recent]
+          properties:
+            recorded: {type: integer, minimum: 0}
+            since: {type: string, format: date-time}
+            until: {type: string, format: date-time}
+            recent:
+              type: array
+              maxItems: 100
+              items:
+                type: object
+                properties:
+                  namespace: {type: string}
+                  session: {type: string}
+                  server: {type: string}
+                  human_id: {type: string}
+                  serial: {type: string}
+                  fingerprint_sha256: {type: string}
+                  spiffe_id: {type: string}
+                  not_before: {type: string, format: date-time}
+                  not_after: {type: string, format: date-time}
+                  issued_at: {type: string, format: date-time}

@@ -1,24 +1,29 @@
-Manage the per-user macOS background adapter
+The adapter service keeps one loopback listener running for every saved
+profile. Each profile is a path on that listener, for example
+http://127.0.0.1:8099/cully/mcp. Only that port is used. Other localhost
+ports are left alone. MCP clients call the profile URL directly. The daemon
+presents that profile's enrolled certificate upstream and forwards the
+client's OAuth bearer when the server requires one.
+
+Foreground troubleshooting stays on "adapter proxy".
 
 Usage:
   mcp-runtime adapter service [command]
 
 Available Commands:
-  install     Install or update the LaunchAgent and start at login
-  logs        Show bounded, redacted diagnostic events as JSON
-  reconnect   Reload validated profiles and reconnect without extending consent
-  restart     Drain and restart the user service
-  run         Run the protected daemon in the foreground
-  start       Start the installed user service
-  status      Show measured daemon and profile state as JSON
-  stop        Stop the user service until started or next login
-  uninstall   Stop and remove the LaunchAgent; preserve profiles by default
+  install     Install the user LaunchAgent
+  logs        Show recent redacted daemon logs
+  profile     Add or remove a daemon profile
+  restart     Restart the adapter daemon
+  start       Start the adapter daemon
+  status      Show daemon and profile status
+  stop        Stop the adapter daemon
+  uninstall   Remove the LaunchAgent and stop the managed daemon
 
 Flags:
   -h, --help   help for service
 
 Global Flags:
-      --debug              Enable debug mode with structured error logging
-      --state-dir string   Owner-only adapter state directory (default "~/.mcpruntime/adapter")
+      --debug   Enable debug mode with structured error logging
 
 Use "mcp-runtime adapter service [command] --help" for more information about a command.

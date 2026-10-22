@@ -42,5 +42,4 @@ Flags:
       --trust-domain string                 Optional platform SPIFFE trust domain override for adapter certificate enrollment; default: $MCP_TRUST_DOMAIN
 
 Global Flags:
-      --debug              Enable debug mode with structured error logging
-      --state-dir string   Owner-only adapter state directory (default "~/.mcpruntime/adapter")
+      --debug   Enable debug mode with structured error logging

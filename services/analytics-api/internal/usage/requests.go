@@ -38,7 +38,7 @@ type UsageFacets struct {
 
 func validateUsageFilters(r *http.Request) error {
 	q := r.URL.Query()
-	for _, key := range []string{"server", "namespace", "team_id", "tool_name", "rpc_method", "policy_version"} {
+	for _, key := range []string{"agent_id", "server", "namespace", "team_id", "tool_name", "rpc_method", "policy_version"} {
 		if len(q.Get(key)) > 256 {
 			return fmt.Errorf("%s must be at most 256 characters", key)
 		}
@@ -82,6 +82,7 @@ func appendRequestFilters(scope QueryScope, conditions []string, args []any) ([]
 		conditions = append(conditions, "(endsWith(source, '-gateway') OR JSONExtractString(payload, 'rpc_method') != '')")
 	}
 	for _, filter := range []struct{ expression, value string }{
+		{"agent_id", scope.AgentID},
 		{"JSONExtractString(payload, 'rpc_method')", scope.RPCMethod},
 		{"JSONExtractString(payload, 'policy_version')", scope.PolicyVersion},
 	} {

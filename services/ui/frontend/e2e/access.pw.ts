@@ -16,6 +16,7 @@ async function fixture(page: Page, partial = false) {
     if (path === "/runtime/teams") json = { teams: [{ id: "B", slug: "b", name: "B", namespace: "team-b", role: "owner" }] };
     else if (path === "/runtime/teams/b/agents") json = { agents: [agent()] };
     else if (path === "/runtime/agents/agt-b") json = { agent: agent(), grants: [grant], sessions: [session()], can_manage: true };
+    else if (path === "/user/analytics/usage") json = { filters: { agent_id: url.searchParams.get("agent_id") }, totals: { events: 0, allowed: 0, denied: 0 }, requests: [], recent: [] };
     else if (path === "/runtime/agents/agt-b/deactivate") {
       inactive = true;
       if (partial) return route.fulfill({ status: 500, json: { message: "agent is inactive but session revocation is incomplete; retry deactivation" } });
@@ -42,6 +43,46 @@ test("agent → session → exact authorizing grant shares namespace-safe detail
   await expect(page.getByLabel("Loaded decision breakdown")).toContainText("would_deny: 1");
   await page.goBack();
   await expect(page.getByTestId("access-detail-kicker")).toHaveText("team-a / MCPAgentSession");
+});
+
+test("agent ownership, certificate issuance and exact-agent tool activity remain distinct on mobile", async ({ page }) => {
+  await fixture(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const now = new Date().toISOString();
+  await page.route("**/api/ui/v1/runtime/agents/agt-b", route => route.fulfill({ json: {
+    agent: { id: "agt-b", name: "B Agent", team_id: "B", team_slug: "b", status: "active", created_by: "creator-user", created_at: now, updated_at: now },
+    grants: [], sessions: [], can_manage: true,
+    certificates: { recorded: 2, since: now, until: now, recent: [{ namespace: "team-a", session: "session-b", server: "demo", human_id: "alice", serial: "abc123", fingerprint_sha256: "a".repeat(64), spiffe_id: "spiffe://example.org/ns/team-a/session/session-b", not_before: now, not_after: "2099-01-01T00:00:00Z", issued_at: now }] },
+  } }));
+  const activityQueries: URLSearchParams[] = [];
+  await page.route("**/api/ui/v1/user/analytics/usage?**", route => {
+    const query = new URL(route.request().url()).searchParams;
+    activityQueries.push(query);
+    return route.fulfill({ json: { filters: { agent_id: query.get("agent_id") }, totals: { events: 12, allowed: 10, denied: 2, http_failures: 2 }, requests: [{ namespace: "team-a", server: "demo", rpc_method: "tools/call", tool_name: "echo", decision: "allow", events: 10, http_failures: 0, last_seen: now, trace_id: "test-trace" }], recent: [] } });
+  });
+  await page.goto("/#/agents?team=b&agent=agt-b");
+  await expect(page.getByText("creator-user", { exact: true })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Visible session lifecycle" })).toContainText("Visible sessions issued0");
+  await expect(page.getByRole("group", { name: "Recorded certificates", exact: true })).toContainText("2");
+  await expect(page.getByRole("group", { name: "Agent tool call totals" })).toContainText("12");
+  expect(activityQueries[0].get("agent_id")).toBe("agt-b");
+  expect(activityQueries[0].get("rpc_method")).toBe("tools/call");
+  await page.getByLabel("Activity time range").selectOption("24");
+  await expect.poll(() => activityQueries.some(query => query.get("window_hours") === "24")).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: test.info().outputPath("agent-accountability-mobile.png"), fullPage: true });
+});
+
+test("denied agent details do not fetch activity or reveal certificate records", async ({ page }) => {
+  await fixture(page);
+  await page.route("**/api/ui/v1/runtime/agents/agt-b", route => route.fulfill({ status: 403, json: { message: "forbidden" } }));
+  let activityReads = 0;
+  await page.route("**/api/ui/v1/user/analytics/usage?**", route => { activityReads++; return route.fulfill({ json: {} }); });
+  await page.goto("/#/agents?team=b&agent=agt-b");
+  await expect(page.getByTestId("agent-detail-error")).toBeVisible();
+  await expect(page.getByTestId("agent-mcp-activity")).toHaveCount(0);
+  await expect(page.getByTestId("agent-certificates-table")).toHaveCount(0);
+  expect(activityReads).toBe(0);
 });
 
 test("deactivation previews impact and exposes partial failures with final state", async ({ page }) => {

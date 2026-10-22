@@ -1,19 +1,17 @@
-Authorize isolated adapter profiles and configure local MCP clients
+Add or remove a daemon profile
 
 Usage:
-  mcp-runtime adapter profile [command]
+  mcp-runtime adapter service profile [command]
 
 Available Commands:
-  add           Create a profile using the selected platform login and an authorized session
-  authorize     Explicitly authorize a session with the selected platform login
-  client-config Write a local MCP client config including its credential to an owner-only file
-  remove        Remove a profile and its stored credentials
+  add           Add a profile and print its local MCP URL once
+  client-config Write an MCP client configuration with this profile's local credential
+  remove        Remove a profile
 
 Flags:
   -h, --help   help for profile
 
 Global Flags:
-      --debug              Enable debug mode with structured error logging
-      --state-dir string   Owner-only adapter state directory (default "~/.mcpruntime/adapter")
+      --debug   Enable debug mode with structured error logging
 
-Use "mcp-runtime adapter profile [command] --help" for more information about a command.
+Use "mcp-runtime adapter service profile [command] --help" for more information about a command.

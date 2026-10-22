@@ -45,6 +45,10 @@ func (s *Service) HandleUserUsage(w http.ResponseWriter, r *http.Request) {
 		apihttp.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
+	if err := validateUsageFilters(r); err != nil {
+		apihttp.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_filter", "message": err.Error()})
+		return
+	}
 
 	limit := clampInt(queryInt(r, "limit", 10), 1, 50)
 	windowDays := clampInt(queryInt(r, "window_days", defaultWindowDays), 1, maxWindowDays)
