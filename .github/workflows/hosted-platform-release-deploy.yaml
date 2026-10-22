@@ -155,6 +155,7 @@ jobs:
 
           export KUBECONFIG="$kubeconfig"
           make build
+          ./bin/mcp-runtime cluster doctor
           if [[ "$VERIFY_ONLY" != true ]]; then
             ./bin/mcp-runtime update --to "$RELEASE_TAG" --dry-run --build --source . \
               --expect-cluster-id "$MCP_EXPECTED_CLUSTER_UID" \

@@ -23,6 +23,7 @@ class HostedReleaseWorkflow(unittest.TestCase):
         self.tool('sshpass', "import os,json,sys\nwith open(os.environ['COMMAND_LOG'],'a') as f: f.write(json.dumps(sys.argv[1:])+'\\n')\n")
         self.tool('bash', """import os,json,pathlib,sys
 assert sys.argv[1:] == ['hack/deploy/reference/backup.sh', '--setup']
+if os.environ.get('FAKE_BACKUP_FAIL'): sys.exit(1)
 profile=pathlib.Path(os.environ['MCP_DEPLOY_ENV'])
 assert profile.stat().st_mode & 0o077 == 0
 assert 'MCP_EXPECTED_CLUSTER_UID' in profile.read_text()
@@ -43,7 +44,7 @@ with open(os.environ['COMMAND_LOG'],'a') as f: f.write(json.dumps(['backup', '--
         path.write_text('#!/usr/bin/env python3\n' + body)
         path.chmod(0o755)
 
-    def run_snapshot(self, uid='cluster-a', verify=False):
+    def run_snapshot(self, uid='cluster-a', verify=False, fail_backup=False):
         source = WORKFLOW.read_text()
         start = source.index('          actual_cluster_uid=')
         end = source.index('\n          sshpass -e ssh', source.index('Verified protected pre-update snapshot', start))
@@ -54,6 +55,8 @@ with open(os.environ['COMMAND_LOG'],'a') as f: f.write(json.dumps(['backup', '--
                'FAKE_CLUSTER_UID': uid, 'MCP_EXPECTED_CLUSTER_UID': 'cluster-a',
                'VERIFY_ONLY': 'true' if verify else 'false', 'RELEASE_TAG': 'v0.12.1',
                'GITHUB_RUN_ID': '123', 'GITHUB_RUN_ATTEMPT': '1'}
+        if fail_backup:
+            env['FAKE_BACKUP_FAIL'] = '1'
         result = subprocess.run(['/bin/bash', '-c', script], env=env, text=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         calls = [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []
@@ -79,6 +82,11 @@ with open(os.environ['COMMAND_LOG'],'a') as f: f.write(json.dumps(['backup', '--
         self.assertIn('sha256sum -c SHA256SUMS', calls[3][-1])
         self.assertIn('/root/.mcpruntime/backups/releases/v0.12.1-123-1', result.stdout)
 
+    def test_failed_backup_stops_before_remote_copy(self):
+        result, calls = self.run_snapshot(fail_backup=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(calls, [])
+
     def test_every_update_is_bound_to_expected_cluster(self):
         source = WORKFLOW.read_text()
         commands = re.findall(r'\./bin/mcp-runtime update[^\n]*', source.replace('\\\n', ' '))
@@ -87,6 +95,7 @@ with open(os.environ['COMMAND_LOG'],'a') as f: f.write(json.dumps(['backup', '--
             self.assertIn('--expect-cluster-id "$MCP_EXPECTED_CLUSTER_UID"', command)
         self.assertLess(source.index('actual_cluster_uid='), source.index('get secret mcp-ui-credentials'))
         self.assertLess(source.index('Verified protected pre-update snapshot'), source.index('./bin/mcp-runtime update'))
+        self.assertLess(source.index('./bin/mcp-runtime cluster doctor'), source.index('./bin/mcp-runtime update'))
 
     def test_deployment_shell_syntax_and_lint(self):
         source = WORKFLOW.read_text().split('      - name: Deploy and verify Runtime', 1)[1]
