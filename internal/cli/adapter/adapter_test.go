@@ -20,13 +20,22 @@ func TestAdapterCommandRegistersSupportedCommands(t *testing.T) {
 	for _, child := range cmd.Commands() {
 		subs[child.Use] = true
 	}
-	if len(subs) != 4 {
+	if len(subs) != 3 {
 		t.Fatalf("unexpected adapter commands: %v", subs)
 	}
-	for _, want := range []string{"proxy", "enroll", "service", "profile"} {
+	for _, want := range []string{"proxy", "enroll", "service"} {
 		if !subs[want] {
 			t.Fatalf("adapter command missing %q subcommand; got %v", want, subs)
 		}
+	}
+	services := 0
+	for _, child := range cmd.Commands() {
+		if child.Name() == "service" {
+			services++
+		}
+	}
+	if services != 1 {
+		t.Fatalf("adapter has %d service commands, want exactly one", services)
 	}
 }
 

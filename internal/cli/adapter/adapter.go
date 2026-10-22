@@ -20,9 +20,10 @@ gateway binds the certificate identity to the OAuth subject.
 
 Available commands:
 
-  mcp-runtime adapter proxy   Local Streamable HTTP listener (for SDKs that
-                              speak MCP over HTTP).
-  mcp-runtime adapter enroll  Enroll and save a client certificate.
+  mcp-runtime adapter proxy    Local Streamable HTTP listener (for SDKs that
+                               speak MCP over HTTP).
+  mcp-runtime adapter enroll   Enroll and save a client certificate.
+  mcp-runtime adapter service  Per-user background daemon and profile paths.
 
 The adapter enrolls a session and certificate through the platform API when
 ` + "`--server`" + ` and ` + "`--agent`" + ` are supplied. An existing certificate can be
@@ -34,6 +35,6 @@ Direct HTTP clients can send those credentials without an adapter.`,
 	}
 	cmd.AddCommand(newProxyCmd(runtime))
 	cmd.AddCommand(newEnrollCmd(runtime))
-	addServiceCommands(cmd)
+	cmd.AddCommand(newServiceCmd(runtime))
 	return cmd
 }

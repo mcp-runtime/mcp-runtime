@@ -91,6 +91,20 @@ export PATH="$HOME/.local/bin:$PATH"
 mcp-runtime --version
 ```
 
+On macOS 13 or later, add `--with-desktop` to install the CLI and the Adapter
+desktop preview together (Apple Silicon and Intel):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mcp-runtime/mcp-runtime/main/install.sh | sh -s -- --with-desktop
+```
+
+The app installs to `~/Applications/MCPRuntimeAdapter.app` without sudo. It is
+an **unsigned preview**; macOS may require allowing it in **System Settings →
+Privacy & Security**. Open it and choose **Install and start**. The installer
+verifies release checksums and preserves any existing app. See the
+[macOS adapter guide](docs/connect-clients.md#macos-background-adapter-and-companion) for setup
+and updates. Set `MCP_RUNTIME_APP_DIR` to choose another app directory.
+
 For Windows, installation options, and your first hosted deployment, follow the
 [Quickstart](docs/hosted-quickstart.md). No Kubernetes cluster is needed to use the
 hosted platform.

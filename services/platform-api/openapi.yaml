@@ -112,6 +112,28 @@ paths:
         "403": {description: "Workload identity, current policy or binding denied"}
         "404": {description: Approved credential metadata absent}
         "503": {description: "Provider, store, Kubernetes or audit unavailable; no values returned"}
+  /internal/identity/agents/{agent_id}/certificates:
+    get:
+      summary: Read recorded certificate issuance for an agent (internal service authentication)
+      description: Runtime API must authorize agent visibility first and supply human_id for non-managers. Counts cover the last seven days and history is limited to 100 public metadata records. Unrecorded historical certificates are not inferred from sessions.
+      parameters:
+        - {name: agent_id, in: path, required: true, schema: {type: string, maxLength: 128}}
+        - {name: human_id, in: query, schema: {type: string, maxLength: 128}, description: Exact delegated human filter; empty permits the already-authorized agent manager's scope.}
+      responses:
+        "200":
+          description: Recorded issuance count, explicit time window and latest public certificate metadata; never keys or PEM.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [recorded, since, until, recent]
+                properties:
+                  recorded: {type: integer, minimum: 0}
+                  since: {type: string, format: date-time}
+                  until: {type: string, format: date-time}
+                  recent: {type: array, maxItems: 100, items: {type: object}}
+        "401": {description: Internal authentication required}
+        "503": {description: Recorded history unavailable}
   /internal/operations/counts:
     get:
       description: Internal bearer-authenticated complete platform directory/session totals for the runtime administrator overview.

@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -18,6 +19,51 @@ import (
 	"mcp-runtime/internal/cli/platformapi"
 	"mcp-runtime/pkg/certauth"
 )
+
+type serverMetadataStub struct {
+	mode        string
+	err         error
+	wrongServer bool
+	called      bool
+}
+
+func (s *serverMetadataStub) GetRuntimeServer(_ context.Context, namespace, name string) (platformapi.ServerListItem, error) {
+	s.called = true
+	if s.wrongServer {
+		name = "other"
+	}
+	return platformapi.ServerListItem{Name: name, Namespace: namespace, AuthMode: s.mode}, s.err
+}
+
+func TestProfileOAuthRequirement(t *testing.T) {
+	for _, tc := range []struct {
+		name, mode, namespace string
+		err                   error
+		wrongServer           bool
+		want                  *bool
+	}{
+		{name: "OAuth", mode: "oauth", namespace: "team-a", want: ptrBool(true)},
+		{name: "certificate only", namespace: "team-a", want: ptrBool(false)},
+		{name: "header auth", mode: "header", namespace: "team-a", want: ptrBool(false)},
+		{name: "future mode is unknown", mode: "future", namespace: "team-a"},
+		{name: "denied lookup is unknown", namespace: "team-a", err: errors.New("forbidden")},
+		{name: "unresolved namespace is unknown"},
+		{name: "different server is unknown", mode: "oauth", namespace: "team-a", wrongServer: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &serverMetadataStub{mode: tc.mode, err: tc.err, wrongServer: tc.wrongServer}
+			got := profileOAuthRequirement(context.Background(), client, tc.namespace, "demo")
+			if (got == nil) != (tc.want == nil) || (got != nil && *got != *tc.want) {
+				t.Fatalf("OAuth requirement got %v, want %v", got, tc.want)
+			}
+			if tc.namespace == "" && client.called {
+				t.Fatal("queried an unresolved namespace")
+			}
+		})
+	}
+}
+
+func ptrBool(v bool) *bool { return &v }
 
 func TestServiceRenewalCertificateLifetime(t *testing.T) {
 	for _, tc := range []struct {

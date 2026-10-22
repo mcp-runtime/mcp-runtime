@@ -11,6 +11,28 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 - Server details offer client installation actions for Claude, Claude Code, Codex, Cursor, and VS Code using the published public endpoint and required authentication fields. Native installation dialogs and reviewable agent setup prompts complement the existing copyable configurations ([#846](https://github.com/tavric-labs/mcp-runtime/pull/846)).
 
+## [0.12.0] - 2026-10-22
+
+### Added
+
+- macOS users can run isolated profiles through a per-user LaunchAgent and native Dock app. The app guides first-time setup, requires an active Agent ID, supports custom MCP endpoints, installs profile-specific MCP config for Cursor, Codex, Claude Code, and VS Code, and exposes profile and service lifecycle actions. Releases include the universal CLI, an explicitly named unsigned desktop preview, and SHA-256 checksums. Developer ID signing/notarization and sleep/wake acceptance remain pending ([#656](https://github.com/mcp-runtime/mcp-runtime/issues/656)).
+- The website offers the macOS app download and setup instructions. The shell installer accepts `--with-desktop` on macOS 13+, verifies CLI/app release checksums, and installs the app in `~/Applications` without sudo while preserving an existing app bundle.
+- Adapter profiles show an **OAuth required** tag from the platform server configuration, with guidance to authorize through the MCP client separately from certificate enrollment.
+- Agent details show the owning team, creator, visible session counts, recorded certificate issuance and exact-agent MCP tool analytics with explicit time/visibility limits. Certificate recording begins with this release; older issuance is unknown. No database reset is needed ([#848](https://github.com/tavric-labs/mcp-runtime/issues/848)).
+
+### Changed
+
+- **Breaking:** local background profiles now use `adapter service profile` and require the per-profile credential from `adapter service profile client-config`; the previous top-level `adapter profile` commands are removed. Recreate older local profiles with the app or new CLI commands and replace client configurations. Existing platform sessions are not automatically revoked. Certificate renewal stays bound to the authorized session and cannot extend its expiry. No platform database reset is required for this local adapter change ([#656](https://github.com/mcp-runtime/mcp-runtime/issues/656)).
+
+### Fixed
+
+- The macOS app finds its bundled CLI for service controls, offers **Update service from this app**, keeps action failures visible, shows service startup progress, and reads large profile lists without HTTP chunk framing errors ([#656](https://github.com/mcp-runtime/mcp-runtime/issues/656)).
+- Codex installation writes valid TOML URL strings and preserves quoted duplicate entries and inline MCP tables instead of producing conflicting configuration.
+
+### Security
+
+- Build images and Go modules use Go 1.26.10 for the `crypto/x509` security update affecting prior 1.26 builds. The version and official [Go release history](https://go.dev/doc/devel/release) were reviewed on 2026-10-21. Local adapter secrets and LaunchAgent files use private, atomic writes.
+
 ## [0.11.1] - 2026-10-19
 
 This patch release restores authenticated MCP calls on installs upgraded to
@@ -592,7 +614,8 @@ upgrade from 0.4.x; see the migration note under **Changed**.
 
 - Targeted platform updates through `mcp-runtime update`, including embedded CRD updates and `--build` to build/push missing component images before rollout ([#491](https://github.com/mcp-runtime/mcp-runtime/pull/491)).
 
-[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.11.1...HEAD
+[Unreleased]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/mcp-runtime/mcp-runtime/compare/v0.9.0...v0.10.0

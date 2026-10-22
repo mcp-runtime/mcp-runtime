@@ -38,7 +38,8 @@ func TestHandleAdapterCertificateRefusesRevokedSession(t *testing.T) {
 		},
 	}
 	dyn := dynamicfake.NewSimpleDynamicClient(scheme, session)
-	svc := &AccessService{k8sClients: &k8sclient.Clients{Dynamic: dyn}, accessMgr: mcpaccess.NewManager(dyn, nil)}
+	audit := &fakeAuditWriter{}
+	svc := &AccessService{audit: audit, k8sClients: &k8sclient.Clients{Dynamic: dyn}, accessMgr: mcpaccess.NewManager(dyn, nil)}
 
 	_, csrPEM, _, err := certauth.BuildSessionCSR("cluster.local", "mcp-team-acme", "adapter-1")
 	if err != nil {
@@ -51,6 +52,9 @@ func TestHandleAdapterCertificateRefusesRevokedSession(t *testing.T) {
 
 	svc.HandleAdapterCertificate(rec, req)
 
+	if len(audit.events) != 0 {
+		t.Fatal("revoked session produced a successful issuance audit")
+	}
 	if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "revoked") {
 		t.Fatalf("status = %d body = %s, want 403 revoked", rec.Code, rec.Body.String())
 	}

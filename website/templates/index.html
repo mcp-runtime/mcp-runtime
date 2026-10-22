@@ -17,6 +17,7 @@
       </p>
       <div class="hero-actions" aria-label="Primary actions">
         <a class="button primary" href="{{ platform_url }}">Open hosted platform</a>
+        <a class="button secondary" href="#downloads">Download the macOS app</a>
         <a class="button secondary" href="{{ docs_url }}getting-started/">Install the platform</a>
         <a class="button secondary" href="{{ articles_url }}">Read articles</a>
         <a class="button secondary" href="{{ github_url }}">View GitHub</a>
@@ -41,6 +42,38 @@
       </dl>
       <div class="spec-stamp">v1alpha1</div>
     </aside>
+  </section>
+
+  <section id="downloads" class="container blueprint" aria-labelledby="downloads-title">
+    <div class="section-heading">
+      <span class="section-label">Downloads</span>
+      <h2 id="downloads-title">Connect your agent with the macOS Adapter.</h2>
+      <p>Keep your MCP connections running in the background. Add a platform profile,
+        then install its connection in Cursor, Codex, Claude Code, or VS Code.</p>
+    </div>
+    <div class="blueprint-grid download-grid">
+      <article class="blueprint-notes download-card">
+        <h3>MCP Runtime Adapter · desktop preview</h3>
+        <p>macOS 13 or later · Apple Silicon and Intel · bundled service CLI.</p>
+        <p><a class="button primary" href="{{ github_url }}/releases/latest/download/MCPRuntimeAdapter-unsigned-preview.zip">Download for macOS</a></p>
+        <p>This is an unsigned preview. After unzipping and moving the app to Applications,
+          macOS may require allowing it in System Settings → Privacy &amp; Security.
+          Open it and choose <strong>Install and start</strong>.</p>
+        <p><a href="{{ docs_url }}connect-clients/#macos-background-adapter-and-companion">Setup and update guide</a> ·
+          <a href="{{ github_url }}/releases/latest">Release notes and checksums</a></p>
+      </article>
+      <div class="code-panel" aria-label="Install the CLI and optional macOS app">
+        <div class="code-panel-bar"><span>Terminal</span><span>No sudo required</span></div>
+        <pre><code># macOS: CLI and desktop preview
+curl -fsSL https://raw.githubusercontent.com/mcp-runtime/mcp-runtime/main/install.sh | sh -s -- --with-desktop
+
+# macOS or Linux: CLI only
+curl -fsSL https://raw.githubusercontent.com/mcp-runtime/mcp-runtime/main/install.sh | sh</code></pre>
+        <p>The optional app installs in <code>~/Applications</code>; the CLI installs in
+          <code>~/.local/bin</code>. The installer checks release checksums and keeps
+          existing apps. <a href="{{ docs_url }}hosted-quickstart/">CLI setup and Windows instructions</a>.</p>
+      </div>
+    </div>
   </section>
 
   <section class="container pillars" aria-labelledby="what-it-is-title">
@@ -182,6 +215,10 @@ spec:
         <code>./bin/mcp-runtime status</code>
       </li>
     </ol>
+    <p>After setup, publish an MCP server, grant an agent access, then connect
+      Cursor, Codex, Claude Code, VS Code, or another MCP client with the
+      <a href="https://docs.mcpruntime.org/connect-clients/">client connection guide</a>.
+      On macOS, the Adapter app can install a saved profile into supported agents.</p>
   </section>
 
   <section class="container use-cases" aria-labelledby="use-cases-title">

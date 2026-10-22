@@ -2,6 +2,8 @@ package runtimeapi
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
@@ -18,6 +20,7 @@ import (
 	mcpaccess "mcp-runtime/pkg/access"
 	"mcp-runtime/pkg/certauth"
 	"mcp-runtime/pkg/identity"
+	"mcp-runtime/pkg/internalapi"
 )
 
 const adapterCertificateRequestMaxBytes = 64 << 10
@@ -171,12 +174,52 @@ func (s *AccessService) HandleAdapterCertificate(w http.ResponseWriter, r *http.
 			return
 		}
 	}
+	s.recordCertificateIssuance(r, principal, session, certificate)
 	writeJSON(w, http.StatusCreated, adapterCertificateResponse{
 		Certificate: certificate,
 		CABundle:    caBundle,
 		SPIFFEID:    expectedSPIFFEID,
 		ExpiresAt:   expiresAt,
 	})
+}
+
+func (s *AccessService) recordCertificateIssuance(r *http.Request, p principal, session *mcpaccess.MCPAgentSession, certificate string) {
+	if s.audit == nil {
+		return
+	}
+	metadata, err := certificateIssuanceMetadata(certificate, session.Namespace, session.Name, string(session.Spec.ServerRef.Name), string(session.Spec.Subject.HumanID))
+	if err != nil {
+		return
+	}
+	message, _ := json.Marshal(metadata)
+	s.audit.WriteAudit(r.Context(), auditEvent{
+		UserID: p.UserID(), Action: "adapter.certificate.issued", Resource: "session/" + session.Name,
+		Namespace: session.Namespace, Status: "success", Message: string(message),
+		AgentID: string(session.Spec.Subject.AgentID), TeamID: string(session.Spec.Subject.TeamID),
+		ServerName: string(session.Spec.ServerRef.Name), ActorIP: requestIP(r),
+		RequestID: strings.TrimSpace(r.Header.Get("X-Request-ID")), Source: auditSource(r, p), AuthIdentity: auditIdentityLabel(p),
+	})
+}
+
+func certificateIssuanceMetadata(certificate, namespace, session, server, human string) (internalapi.CertificateIssuance, error) {
+	block, _ := pem.Decode([]byte(certificate))
+	if block == nil {
+		return internalapi.CertificateIssuance{}, fmt.Errorf("certificate metadata unavailable")
+	}
+	leaf, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return internalapi.CertificateIssuance{}, fmt.Errorf("certificate metadata unavailable")
+	}
+	spiffe := ""
+	for _, uri := range leaf.URIs {
+		if uri.Scheme == "spiffe" {
+			spiffe = uri.String()
+			break
+		}
+	}
+	return internalapi.CertificateIssuance{Namespace: namespace, Session: session, Server: server, HumanID: human,
+		Serial: leaf.SerialNumber.Text(16), Fingerprint: fmt.Sprintf("%x", sha256.Sum256(leaf.Raw)),
+		SPIFFEID: spiffe, NotBefore: leaf.NotBefore.UTC(), NotAfter: leaf.NotAfter.UTC()}, nil
 }
 
 func (s *AccessService) issueSessionCertificateDER(

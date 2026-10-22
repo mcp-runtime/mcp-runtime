@@ -167,12 +167,16 @@ identify the same human as the certificate-bound session. A token for another
 human is rejected. Both clients' calls are attributed to the same Runtime
 agent and session. If clients need distinct Runtime agent identities or
 session-level audit attribution, run a separate adapter proxy with its own
-certificate for each identity.
+certificate for each identity. On macOS, `mcp-runtime adapter service` keeps
+those connections in one user daemon. Each server has its own path, such as
+`http://127.0.0.1:8099/cully/mcp`, and its own certificate. The listener is
+only that loopback port. Platform OAuth is unchanged.
 
-The default listener is `127.0.0.1:8099` and does not authenticate local
-clients. Any process that can connect to it can make calls using that adapter
-session. Keep it on loopback and share it only among clients intended to act as
-the same Runtime agent and human.
+The macOS service listener is `127.0.0.1:8099` and requires the per-profile
+`X-MCP-Runtime-Local-Token` header. Export it through the supported client
+configuration command; the daemon strips this local credential before
+forwarding the request upstream. The foreground `adapter proxy` command has
+its own listener behavior and should be treated separately.
 
 Do not set `--auth-header` when clients need different OAuth tokens. It is a
 static override applied to every outbound request, so it replaces each
@@ -238,61 +242,124 @@ credential. Session expiry still requires interactive authorization. The
 native companion is a normal Dock app with one status/control window. It uses
 the bundled CLI's protected management API, never reads credential storage,
 and leaves the daemon running when closed or quit. It reports local readiness
-separately from measured upstream authorization, profile identity, certificate
-expiry and redacted errors. Reconnect renews only the existing session; a new
-consent lifetime still requires interactive CLI authorization.
+separately from upstream host reachability, profile identity, certificate
+expiry and redacted errors. A reachable host does not prove MCP authorization.
+Background renewal stays within the existing session. After signing in,
+choosing **Reconnect** explicitly authorizes a fresh session when the previous
+one has expired or requires authorization.
 
 ```bash
-mcp-runtime adapter profile add work \
+mcp-runtime adapter service install
+mcp-runtime adapter service profile add \
+  --server workspace-assistant \
   --runtime-url https://mcp.example.com/workspace-assistant/mcp \
   --namespace mcp-team-acme \
-  --server workspace-assistant \
   --agent agt_01arz3ndektsv4rrffq69g5fav
-mcp-runtime adapter service install
-mcp-runtime adapter profile client-config work --output ~/mcp-work.json
+mcp-runtime adapter service profile client-config PROFILE_ID --output ~/mcp-work.json
 mcp-runtime adapter service status
 ```
 
 `profile add` uses the selected interactive platform login to authorize the
-session. `client-config` refuses to overwrite an existing file and writes the
-local credential with mode `0600`; protect that file as a credential. The
-daemon binds only to IPv4 loopback, rejects browser-origin requests, and
-requires the profile's local token. `service logs` and `service status` report
+session. It prints the generated profile ID for the `client-config` command.
+`client-config` refuses to overwrite an existing file and writes the local
+credential with mode `0600`; protect that file as a credential. The daemon
+binds only to IPv4 loopback, rejects browser-origin requests, and requires the
+profile's local token. `service logs` and `service status` report
 fixed redacted events and measured state, not certificates, private keys,
 tokens or MCP payloads. `service uninstall` preserves profiles unless
 `--purge` is supplied. This daemon slice is for macOS and is not a substitute
 for the existing foreground `adapter proxy` workflow on other platforms.
 
-The companion targets macOS 13 or later on Apple Silicon and Intel. Its
-authoritative target and Swift 5 language mode are in `desktop/macos/build.sh`;
+The companion and daemon use the same `MCP_RUNTIME_CONFIG_DIR` override, so
+custom profile directories remain manageable in the Dock app and survive
+LaunchAgent starts. The companion targets macOS 13 or later on Apple Silicon and Intel. Its
+authoritative target and Swift 5 language mode are in `hack/release/macos-adapter/package.sh`;
 use Xcode 14 or later from [Apple's Xcode distribution](https://developer.apple.com/xcode/)
 and select its command-line tools (`xcode-select --install` for the standalone
 tools). These requirements were reviewed on 2026-10-17; this change does not
-upgrade a developer's installed toolchain. Build each
-architecture on a Mac with those tools and the Go version in
-`go.mod`; these commands compile/package without opening the app or starting
-the daemon:
+upgrade a developer's installed toolchain. The package script builds both
+architectures without opening the app, starting the daemon or contacting a
+platform:
 
 ```bash
-bash desktop/macos/build.sh arm64 dist
-bash desktop/macos/build.sh amd64 dist
+bash hack/release/macos-adapter/package.sh dist/macos-adapter
 ```
 
-PR build artifacts are explicitly **unsigned previews**. They are not the
-signed/notarized distribution. For distribution, configure a Developer ID
-Application identity and a `notarytool` profile in the build user's Keychain,
-then set `MCP_DESKTOP_SIGNING_IDENTITY` and `MCP_DESKTOP_NOTARY_PROFILE` to those
-names and add `--sign` to each build command. Signing runs inside-out with the
-hardened runtime, submits to Apple, staples the accepted ticket and verifies
-Gatekeeper before producing `*-notarized.zip`. See Apple's
+Without release credentials the script creates explicitly named unsigned
+preview archives. For distribution, configure a Developer ID Application
+identity and a `notarytool` profile in the build user's Keychain, then set
+`CODESIGN_IDENTITY` and `NOTARY_KEYCHAIN_PROFILE` before running the same
+command. Signing runs inside-out with the hardened runtime, submits to Apple,
+staples the accepted ticket and verifies Gatekeeper before producing
+`*-notarized.zip`. See Apple's
 [notarization workflow](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution)
 and [Developer ID guidance](https://developer.apple.com/developer-id/).
 
-Install the app in Applications and use **Install and enable login startup**
-after configuring profiles. To update, replace the app and reinstall the
-service from it; the CLI copies a stable managed binary and preserves profiles.
-The app and daemon require management protocol version 1. To remove startup
-and stop the daemon, choose **Uninstall service**; deleting the app alone does
+Download `MCPRuntimeAdapter-unsigned-preview.zip` from the
+[GitHub release assets](https://github.com/tavric-labs/mcp-runtime/releases/latest).
+The same release includes the universal CLI and `SHA256SUMS` to verify downloads.
+The desktop archive is an unsigned preview; Developer ID signing and notarization
+are not configured for release automation yet. macOS may require you to allow
+the app in **System Settings → Privacy & Security** after opening it.
+
+Alternatively, install the CLI and desktop app together without sudo:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mcp-runtime/mcp-runtime/main/install.sh | sh -s -- --with-desktop
+```
+
+The installer verifies both downloads against the release's `SHA256SUMS`, places
+the CLI in `~/.local/bin` and the app in `~/Applications/MCPRuntimeAdapter.app`.
+Set `MCP_RUNTIME_INSTALL_DIR` or `MCP_RUNTIME_APP_DIR` to choose other writable
+directories, or `MCP_RUNTIME_VERSION=v0.12.0` to choose a release. It preserves
+existing app bundles: quit and move the old app aside before reinstalling.
+It does not start the app or background service, sign in, or change profiles.
+
+Unzip the companion archive, drag **MCP Runtime Adapter.app** into
+**Applications**, then open it. With no service installed, the empty screen
+offers **Install and start**. Sign in with `mcp-runtime auth login`, choose
+**Add your first profile**, and enter the server name and active Agent ID from
+the platform's **Agents** page. The team comes from the issued platform session.
+Set **Namespace** in Advanced connection settings only when the server is outside
+your primary namespace. Then choose **Connect your agent** on its card. The
+client-specific actions add the endpoint using each app's supported format:
+
+| Agent | Install action | Configuration |
+|---|---|---|
+| Cursor | **Install in Cursor** | Merges a named entry into `~/.cursor/mcp.json` (`mcpServers`). |
+| Codex | **Install in Codex** | Adds a named Streamable HTTP entry and local profile header to `~/.codex/config.toml`. |
+| Claude Code | **Install in Claude Code** | Uses `claude mcp add` with user scope and the profile's local header. |
+| VS Code | **Install in VS Code** | Merges a named entry into the current user's `mcp.json` (`servers`). |
+
+Open **Advanced connection settings** when the platform MCP endpoint is not
+`https://mcp.mcpruntime.org/<server>/mcp`. Enter any HTTP or HTTPS MCP URL. Turn
+on **This is the complete MCP endpoint URL** to use the value exactly, including
+custom paths and query parameters; leave it off to append `/<server>/mcp` to a
+base URL. The platform API address is taken from the current CLI sign-in.
+
+These install actions preserve existing entries and stop if the generated name
+is already present. The generated per-profile local credential is stored with
+the client configuration. Files written directly by the app use owner-only
+permissions; Claude Code's CLI manages its own config file.
+Profiles whose platform server configuration enables OAuth show an **OAuth
+required** tag. Complete that authorization in your MCP client; **Enrolled**
+describes the adapter certificate and does not mean OAuth sign-in is complete.
+The requirement is read when enrolling or renewing a profile. Reconnect to
+refresh it after a server configuration change. If metadata cannot be read,
+Inspect shows the OAuth requirement as unknown.
+Use **Export config file…** to choose a different destination, or copy the local
+MCP URL to configure another agent manually. Use the **Service** menu for
+start, restart, stop, and uninstall; destructive actions explain what they keep
+before continuing. Removing a profile deletes its local token and certificate,
+but does not revoke its platform session.
+
+For manual configuration, see the official [Cursor MCP guide](https://docs.cursor.com/context/model-context-protocol), [Codex MCP setup](https://developers.openai.com/learn/docs-mcp), [Claude Code MCP guide](https://docs.anthropic.com/en/docs/claude-code/mcp), and [VS Code MCP reference](https://code.visualstudio.com/docs/agents/reference/mcp-configuration).
+
+To update, replace the app and choose **Update service from this app** from its
+**Service** menu; the
+CLI copies a stable managed binary and preserves profiles. The app and daemon
+require management protocol version 1. To remove startup
+and stop the daemon, run `mcp-runtime adapter service uninstall`; deleting the app alone does
 not uninstall the daemon. Remove stored profiles only through the explicit CLI
 purge option. Signing/notarization and real macOS sleep/wake, install/update/
 uninstall and two-profile desktop acceptance still need release evidence;

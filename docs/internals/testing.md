@@ -31,6 +31,23 @@ explicit isolated Kind kubeconfig from the contributor guide.
 | Metadata | `go test ./pkg/metadata/... -count=1` | `.mcp` loading, host resolution, manifest generation |
 | Platform services | `go test -race -count=1 ./...` in each service module | API, UI, ingest, processor, proxy service logic |
 
+## macOS Adapter form checks
+
+On macOS with the Swift command-line tools and Python 3.11 or later (for TOML
+parsing), check profile validation, client config preservation, custom MCP
+endpoint construction, and timestamp display inputs from the repository root:
+
+```bash
+swiftc desktop/macos/MCPRuntimeAdapter/ProfileDraft.swift desktop/macos/Tests/ProfileDraftTests.swift -o /tmp/mcp-adapter-form-tests
+/tmp/mcp-adapter-form-tests
+swiftc desktop/macos/MCPRuntimeAdapter/ControlClient.swift desktop/macos/Tests/ControlClientTests.swift -framework AppKit -o /tmp/mcp-adapter-client-tests
+/tmp/mcp-adapter-client-tests
+```
+
+The macOS Companion Build workflow runs these checks and builds the universal
+app. These checks do not establish desktop interaction, OAuth browser redirects,
+or sleep/wake acceptance; exercise those flows with the app on a real Mac.
+
 ## Frontend and browser regressions
 
 In `services/ui/frontend`, run `npm ci`, `npm test -- --maxWorkers=4`, and

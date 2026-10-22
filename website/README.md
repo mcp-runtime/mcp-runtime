@@ -5,6 +5,11 @@ Kubernetes-native control plane to deploy, govern, and broker MCP servers, and
 serves a single home page with links to GitHub, articles, and the documentation
 site.
 
+The **Downloads** section links to the universal macOS Adapter unsigned preview,
+release checksums, setup instructions, and the CLI installer's `--with-desktop`
+option. These links use the latest GitHub release assets; keep their filenames
+aligned with `.github/workflows/release.yaml` when changing distribution signing.
+
 Documentation lives at `docs.mcpruntime.org` (deployed separately) and is
 authored as Markdown under [`../docs/`](../docs/) at the repo root. Any
 `/docs*` request to this site 302-redirects to `MCP_DOCS_URL`.
@@ -22,6 +27,15 @@ python3 app.py
 ```
 
 Then open <http://localhost:8080>.
+
+Run the rendered download-link, route, and header checks from the repository root:
+
+```sh
+python3 -m unittest discover -s website -p 'test_*.py' -v
+```
+
+CI's **Docs and website validation** job runs these checks and builds the docs
+with the production MkDocs configuration before merge.
 
 ## Configuration
 
