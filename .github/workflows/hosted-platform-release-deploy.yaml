@@ -61,7 +61,7 @@ jobs:
             [[ "$VERIFY_ONLY" != true ]]
           fi
           mkdir -p "$RUNNER_TEMP/release"
-          for attempt in $(seq 1 60); do
+          for _attempt in $(seq 1 60); do
             if gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
               --pattern platform-manifest.json --dir "$RUNNER_TEMP/release" >/dev/null 2>&1; then
               test -s "$RUNNER_TEMP/release/platform-manifest.json"
@@ -83,6 +83,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$SSHPASS"
+          umask 077
           test "$(git rev-parse HEAD)" = "$(git rev-list -n 1 "$RELEASE_TAG")"
           test -z "$(git status --porcelain)"
           sudo apt-get update -qq
@@ -95,6 +96,8 @@ jobs:
             docker logout registry.mcpruntime.org >/dev/null 2>&1 || true
             if [[ -n "$tunnel_pid" ]]; then kill "$tunnel_pid" 2>/dev/null || true; fi
             if [[ -f "$kubeconfig" ]]; then shred -u "$kubeconfig"; fi
+            rm -rf -- "${RUNNER_TEMP:?}/pre-deploy-snapshot"
+            rm -f -- "${RUNNER_TEMP:?}/pre-deploy-backup.env"
           }
           trap cleanup EXIT
 
@@ -112,12 +115,37 @@ jobs:
             -N -L 127.0.0.1:16443:127.0.0.1:6443 root@163.61.31.14 \
             > "$RUNNER_TEMP/platform-tunnel.log" 2>&1 &
           tunnel_pid=$!
-          for attempt in $(seq 1 30); do
+          for _attempt in $(seq 1 30); do
             if timeout 1 bash -c '</dev/tcp/127.0.0.1/16443' 2>/dev/null; then break; fi
             kill -0 "$tunnel_pid"
             sleep 1
           done
           timeout 1 bash -c '</dev/tcp/127.0.0.1/16443'
+
+          actual_cluster_uid="$(kubectl --kubeconfig "$kubeconfig" --context default get namespace kube-system -o jsonpath='{.metadata.uid}')"
+          test "$actual_cluster_uid" = "$MCP_EXPECTED_CLUSTER_UID"
+
+          if [[ "$VERIFY_ONLY" != true ]]; then
+            backup_profile="$RUNNER_TEMP/pre-deploy-backup.env"
+            {
+              printf 'export MCP_KUBE_CONTEXT=%q\n' default
+              printf 'export MCP_EXPECTED_CLUSTER_UID=%q\n' "$MCP_EXPECTED_CLUSTER_UID"
+              printf 'export MCP_TLS_BACKUP_DIR=%q\n' "$RUNNER_TEMP/pre-deploy-snapshot"
+            } > "$backup_profile"
+            KUBECONFIG="$kubeconfig" MCP_DEPLOY_ENV="$backup_profile" bash hack/deploy/reference/backup.sh --setup
+            snapshot="$(readlink -f "$RUNNER_TEMP/pre-deploy-snapshot/latest")"
+            test -f "$snapshot/BACKUP_COMPLETE"
+            (cd "$snapshot" && sha256sum -c SHA256SUMS >/dev/null)
+            # Keep recovery state on the VM, not in public CI artifacts. This
+            # is a configuration/TLS snapshot; it does not export database data.
+            remote_backup="/root/.mcpruntime/backups/releases/${RELEASE_TAG}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            sshpass -e ssh "${ssh_opts[@]}" root@163.61.31.14 \
+              "umask 077; mkdir -p '$remote_backup'; chmod 700 '$remote_backup'"
+            sshpass -e scp "${ssh_opts[@]}" -r "$snapshot" "root@163.61.31.14:$remote_backup/"
+            sshpass -e ssh "${ssh_opts[@]}" root@163.61.31.14 \
+              "cd '$remote_backup/$(basename "$snapshot")' && test -f BACKUP_COMPLETE && sha256sum -c SHA256SUMS >/dev/null"
+            echo "Verified protected pre-update snapshot at $remote_backup/$(basename "$snapshot")"
+          fi
 
           sshpass -e ssh "${ssh_opts[@]}" root@163.61.31.14 \
             'kubectl -n mcp-platform get secret mcp-ui-credentials -o jsonpath="{.data.UI_API_KEY}"' \
@@ -129,12 +157,15 @@ jobs:
           make build
           if [[ "$VERIFY_ONLY" != true ]]; then
             ./bin/mcp-runtime update --to "$RELEASE_TAG" --dry-run --build --source . \
+              --expect-cluster-id "$MCP_EXPECTED_CLUSTER_UID" \
               --image-platform linux/amd64 --kubeconfig "$kubeconfig" --context default
             ./bin/mcp-runtime update --to "$RELEASE_TAG" --build --source . \
+              --expect-cluster-id "$MCP_EXPECTED_CLUSTER_UID" \
               --image-platform linux/amd64 --kubeconfig "$kubeconfig" --context default --yes
           fi
           ./bin/mcp-runtime cluster doctor
           ./bin/mcp-runtime update --to "$RELEASE_TAG" --dry-run --output json \
+            --expect-cluster-id "$MCP_EXPECTED_CLUSTER_UID" \
             --kubeconfig "$kubeconfig" --context default > "$RUNNER_TEMP/live-plan.json"
           jq -c '{pendingComponents:[.plan.components[] | select(.action == "update") | .component],crdRecheck:(.plan.applyCRDs // false)}' \
             "$RUNNER_TEMP/live-plan.json"
@@ -157,12 +188,13 @@ jobs:
               '{apiVersion:"mcpruntime.org/v1alpha1",kind:"PlatformRelease",version:$version,components:[{name:"mcp-auth",repository:$repository,tag:$tag}]}' \
               > "$RUNNER_TEMP/auth-manifest.json"
             ./bin/mcp-runtime update --to "$RELEASE_TAG" \
+              --expect-cluster-id "$MCP_EXPECTED_CLUSTER_UID" \
               --release-manifest "$RUNNER_TEMP/auth-manifest.json" --only mcp-auth \
               --kubeconfig "$kubeconfig" --context default --yes
           fi
           ./bin/mcp-runtime cluster doctor
           auth_metadata_ready=false
-          for attempt in $(seq 1 12); do
+          for _attempt in $(seq 1 12); do
             if curl -fsS https://auth.mcpruntime.org/.well-known/oauth-authorization-server/mcp-auth \
               | jq -e '.issuer == "https://auth.mcpruntime.org/mcp-auth" and (["tools:read", "tools:write"] - .scopes_supported | length == 0)' >/dev/null; then
               auth_metadata_ready=true
