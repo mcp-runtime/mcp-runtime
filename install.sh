@@ -69,8 +69,9 @@ if [ "$with_desktop" = true ]; then
   macos_major=${macos_version%%.*}
   case "$macos_major" in ''|*[!0-9]*) fail 'Could not determine the macOS version.' ;; esac
   [ "$macos_major" -ge 13 ] || fail 'The Adapter app requires macOS 13 or later.'
-  [ ! -e "$app_dir/MCPRuntimeAdapter.app" ] && [ ! -L "$app_dir/MCPRuntimeAdapter.app" ] ||
+  if [ -e "$app_dir/MCPRuntimeAdapter.app" ] || [ -L "$app_dir/MCPRuntimeAdapter.app" ]; then
     fail "An app already exists at ${app_dir}/MCPRuntimeAdapter.app. Quit it and move it aside before reinstalling; saved profiles are kept separately."
+  fi
   command -v ditto >/dev/null 2>&1 || fail 'The macOS ditto tool is required to install the app.'
 fi
 
@@ -132,8 +133,9 @@ if [ "$with_desktop" = true ]; then
   verify "$desktop_asset" "${tmp_dir}/${desktop_asset}"
   ditto -x -k "${tmp_dir}/${desktop_asset}" "${tmp_dir}/desktop"
   app_source="${tmp_dir}/desktop/MCPRuntimeAdapter.app"
-  [ -x "$app_source/Contents/MacOS/MCPRuntimeAdapter" ] &&
-    [ -x "$app_source/Contents/Helpers/mcp-runtime" ] || fail 'The desktop archive is missing its app or bundled CLI.'
+  if [ ! -x "$app_source/Contents/MacOS/MCPRuntimeAdapter" ] || [ ! -x "$app_source/Contents/Helpers/mcp-runtime" ]; then
+    fail 'The desktop archive is missing its app or bundled CLI.'
+  fi
   mkdir -p "$app_dir" || fail "Cannot create ${app_dir}. Choose a writable MCP_RUNTIME_APP_DIR."
   app_stage=$(mktemp -d "$app_dir/.mcp-runtime-adapter.XXXXXX")
   ditto "$app_source" "$app_stage/MCPRuntimeAdapter.app"
@@ -146,7 +148,9 @@ fi
 
 success "Installed mcp-runtime to ${install_dir}/mcp-runtime"
 if [ "$with_desktop" = true ]; then
-  [ ! -e "$app_dir/MCPRuntimeAdapter.app" ] && [ ! -L "$app_dir/MCPRuntimeAdapter.app" ] || fail 'The app destination appeared during installation; the existing app was preserved.'
+  if [ -e "$app_dir/MCPRuntimeAdapter.app" ] || [ -L "$app_dir/MCPRuntimeAdapter.app" ]; then
+    fail 'The app destination appeared during installation; the existing app was preserved.'
+  fi
   mv "$app_stage/MCPRuntimeAdapter.app" "$app_dir/MCPRuntimeAdapter.app"
   success "Installed Adapter preview to ${app_dir}/MCPRuntimeAdapter.app"
   info 'Unsigned preview: macOS may require allowing the app in System Settings > Privacy & Security.'
