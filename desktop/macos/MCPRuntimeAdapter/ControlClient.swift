@@ -41,6 +41,7 @@ struct ProfileStatus: Decodable, Identifiable {
     var namespace: String?
     var localUrl: String
     var authState: String
+    var oauthRequired: Bool?
     var certExpires: String?
     var sessionExpires: String?
     var certNotBefore: String?

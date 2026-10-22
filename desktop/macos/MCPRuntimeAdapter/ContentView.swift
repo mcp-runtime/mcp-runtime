@@ -333,12 +333,28 @@ struct ContentView: View {
                     }
                 }
                 Spacer()
+                if profile.oauthRequired == true {
+                    Label("OAuth required", systemImage: "lock.shield")
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(sea.opacity(0.14), in: Capsule())
+                        .foregroundStyle(sea)
+                        .help("This server requires OAuth in addition to the adapter certificate. Complete sign-in in your MCP client.")
+                        .accessibilityIdentifier("adapter.oauth-required.\(profile.id)")
+                }
                 Text(authLabel(profile.authState))
                     .font(.caption.weight(.bold))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
                     .background(tone.opacity(0.16), in: Capsule())
                     .foregroundStyle(tone)
+            }
+            if profile.oauthRequired == true {
+                Text("Authorize this server in your MCP client. The adapter forwards its OAuth bearer; Enrolled refers to the adapter certificate.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text("Local URL")

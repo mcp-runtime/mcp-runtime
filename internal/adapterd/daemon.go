@@ -30,6 +30,8 @@ type Material struct {
 	Session        string
 	SessionExpires time.Time
 	TrustDomain    string
+	Namespace      string
+	OAuthRequired  *bool
 }
 
 // AddProfileRequest creates one profile. LocalToken is returned once.
@@ -73,6 +75,7 @@ type ProfileStatus struct {
 	UpstreamReachable *bool      `json:"upstreamReachable"`
 	UpstreamCheckedAt time.Time  `json:"upstreamCheckedAt,omitempty"`
 	AuthState         string     `json:"authState"`
+	OAuthRequired     *bool      `json:"oauthRequired,omitempty"`
 	CertExpires       *time.Time `json:"certExpires,omitempty"`
 	SessionExpires    *time.Time `json:"sessionExpires,omitempty"`
 	CertNotBefore     *time.Time `json:"certNotBefore,omitempty"`
@@ -166,6 +169,7 @@ func (d *Daemon) Status() Status {
 			ID: p.ID, Slug: p.Slug, Server: p.Server, Namespace: p.Namespace, Team: p.Team, Agent: p.Agent,
 			Human: p.Human, PlatformURL: p.PlatformURL, RuntimeURL: p.RuntimeURL, LocalURL: p.LocalURL(d.ListenAddr),
 			AuthState: p.AuthState, RenewalError: p.RenewalError, LastError: p.LastError,
+			OAuthRequired: p.OAuthRequired,
 		}
 		if !p.CertExpires.IsZero() {
 			exp := p.CertExpires
@@ -341,6 +345,10 @@ func (d *Daemon) enroll(ctx context.Context, p Profile) Profile {
 	}
 	p.AuthState = AuthEnrolled
 	p.CertExpires = material.Expires
+	p.OAuthRequired = material.OAuthRequired
+	if material.Namespace != "" {
+		p.Namespace = material.Namespace
+	}
 	if material.PlatformURL != "" {
 		p.PlatformURL = material.PlatformURL
 	}
@@ -514,6 +522,7 @@ func (d *Daemon) renewAll(ctx context.Context) {
 		}
 		p.AuthState = AuthEnrolled
 		p.CertExpires = material.Expires
+		p.OAuthRequired = material.OAuthRequired
 		p.RenewalError = ""
 		_ = d.Store.Put(p)
 		_ = d.mount(ctx, p)

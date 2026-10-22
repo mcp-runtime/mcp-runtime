@@ -365,7 +365,7 @@ func stateDir() (string, error) {
 	return runtimeconfig.Path("adapterd")
 }
 
-func enrollProfile(ctx context.Context, p adapterd.Profile) (adapterd.Material, error) {
+func enrollProfile(ctx context.Context, p adapterd.Profile) (material adapterd.Material, err error) {
 	token, base, _, err := authfile.ResolveToken()
 	if err != nil {
 		return adapterd.Material{}, fmt.Errorf("sign-in required; run mcp-runtime auth login")
@@ -374,6 +374,20 @@ func enrollProfile(ctx context.Context, p adapterd.Profile) (adapterd.Material, 
 	if p.PlatformURL != "" && platformapi.NormalizeBaseURL(p.PlatformURL) != base {
 		return adapterd.Material{}, fmt.Errorf("sign-in required; select the profile's platform login")
 	}
+	client, err := platformapi.NewCredentialClient(base, token)
+	if err != nil {
+		return adapterd.Material{}, err
+	}
+	// OAuth is a separate requirement from the enrolled certificate. Metadata is
+	// advisory: a missing/denied lookup must not break certificate enrollment or
+	// be reported as "OAuth not required".
+	defer func() {
+		if err == nil {
+			metadataCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+			defer cancel()
+			material.OAuthRequired = profileOAuthRequirement(metadataCtx, client, material.Namespace, p.Server)
+		}
+	}()
 	if p.Session != "" {
 		if !p.SessionExpires.After(time.Now()) {
 			return adapterd.Material{}, fmt.Errorf("session expired; reauthorize this profile interactively")
@@ -399,11 +413,8 @@ func enrollProfile(ctx context.Context, p adapterd.Profile) (adapterd.Material, 
 			CertPEM: certPEM, KeyPEM: pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: key}),
 			Expires: cred.Expires, PlatformURL: base, Human: p.Human, Team: p.Team,
 			Session: p.Session, SessionExpires: p.SessionExpires, TrustDomain: p.TrustDomain,
+			Namespace: p.Namespace,
 		}, nil
-	}
-	client, err := platformapi.NewCredentialClient(base, token)
-	if err != nil {
-		return adapterd.Material{}, err
 	}
 	flags := platformSessionFlags{server: p.Server, namespace: p.Namespace, agent: p.Agent, platformURL: base}
 	cred, err := issueAdapterCredential(ctx, client, flags, p.TrustDomain)
@@ -414,7 +425,30 @@ func enrollProfile(ctx context.Context, p adapterd.Profile) (adapterd.Material, 
 		CertPEM: cred.CertPEM, KeyPEM: cred.KeyPEM, CA: cred.CABundle, Expires: cred.ExpiresAt,
 		PlatformURL: base, Human: cred.Session.HumanID, Team: cred.Session.TeamID,
 		Session: cred.Session.Name, SessionExpires: cred.Session.ExpiresAt, TrustDomain: cred.Session.TrustDomain,
+		Namespace: cred.Session.Namespace,
 	}, nil
+}
+
+func profileOAuthRequirement(ctx context.Context, client interface {
+	GetRuntimeServer(context.Context, string, string) (platformapi.ServerListItem, error)
+}, namespace, server string) *bool {
+	if namespace == "" {
+		return nil
+	}
+	metadata, err := client.GetRuntimeServer(ctx, namespace, server)
+	if err != nil || metadata.Name != server || metadata.Namespace != namespace {
+		return nil
+	}
+	var required bool
+	switch metadata.AuthMode {
+	case "oauth":
+		required = true
+	case "", "header":
+		required = false
+	default:
+		return nil
+	}
+	return &required
 }
 
 func fetchStatus() (adapterd.Status, error) {

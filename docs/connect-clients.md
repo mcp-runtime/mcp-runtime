@@ -291,6 +291,19 @@ The desktop archive is an unsigned preview; Developer ID signing and notarizatio
 are not configured for release automation yet. macOS may require you to allow
 the app in **System Settings → Privacy & Security** after opening it.
 
+Alternatively, install the CLI and desktop app together without sudo:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mcp-runtime/mcp-runtime/main/install.sh | sh -s -- --with-desktop
+```
+
+The installer verifies both downloads against the release's `SHA256SUMS`, places
+the CLI in `~/.local/bin` and the app in `~/Applications/MCPRuntimeAdapter.app`.
+Set `MCP_RUNTIME_INSTALL_DIR` or `MCP_RUNTIME_APP_DIR` to choose other writable
+directories, or `MCP_RUNTIME_VERSION=v0.12.0` to choose a release. It preserves
+existing app bundles: quit and move the old app aside before reinstalling.
+It does not start the app or background service, sign in, or change profiles.
+
 Unzip the companion archive, drag **MCP Runtime Adapter.app** into
 **Applications**, then open it. With no service installed, the empty screen
 offers **Install and start**. Sign in with `mcp-runtime auth login`, choose
@@ -317,6 +330,12 @@ These install actions preserve existing entries and stop if the generated name
 is already present. The generated per-profile local credential is stored with
 the client configuration. Files written directly by the app use owner-only
 permissions; Claude Code's CLI manages its own config file.
+Profiles whose platform server configuration enables OAuth show an **OAuth
+required** tag. Complete that authorization in your MCP client; **Enrolled**
+describes the adapter certificate and does not mean OAuth sign-in is complete.
+The requirement is read when enrolling or renewing a profile. Reconnect to
+refresh it after a server configuration change. If metadata cannot be read,
+Inspect shows the OAuth requirement as unknown.
 Use **Export config file…** to choose a different destination, or copy the local
 MCP URL to configure another agent manually. Use the **Service** menu for
 start, restart, stop, and uninstall; destructive actions explain what they keep

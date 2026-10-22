@@ -420,6 +420,25 @@ pre {
   overflow-x: auto;
 }
 
+.download-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.download-card {
+  justify-content: flex-start;
+  gap: 12px;
+}
+
+.download-card p,
+.download-card h3 {
+  margin: 0;
+}
+
+.download-grid .code-panel > p {
+  padding: 0 22px 22px;
+  margin: 0;
+}
+
 .code-panel code {
   color: inherit;
   font-size: 13px;

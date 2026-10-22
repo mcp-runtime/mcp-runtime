@@ -16,6 +16,7 @@ struct InspectView: View {
             if let profile {
                 detail("Server", profile.server)
                 detail("State", label(profile.authState))
+                detail("OAuth", profile.oauthRequired.map { $0 ? "Required in your MCP client" : "Not required by server configuration" } ?? "Unknown; reconnect to refresh server metadata")
                 detail("Local URL", profile.localUrl)
                 detail("Platform MCP", profile.runtimeUrl)
                 detail("Platform API", profile.platformUrl)

@@ -59,6 +59,22 @@ jobs:
         run: |
           hack/ci/check-scripts.sh
 
+  docs-website:
+    name: Docs and website validation
+    needs: changed-paths
+    if: needs.changed-paths.outputs.docs == 'true' || needs.changed-paths.outputs.website == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install documentation and website dependencies
+        run: |
+          python3 -m venv "${RUNNER_TEMP}/docs-website-venv"
+          "${RUNNER_TEMP}/docs-website-venv/bin/pip" install -r docs/requirements.txt -r website/requirements.txt
+      - name: Check rendered download links and website routes
+        run: '"${RUNNER_TEMP}/docs-website-venv/bin/python" -m unittest discover -s website -p "test_*.py" -v'
+      - name: Build documentation with the production configuration
+        run: '"${RUNNER_TEMP}/docs-website-venv/bin/mkdocs" build -f docs/mkdocs.yml -d "${RUNNER_TEMP}/docs-site"'
+
   lint:
     name: Lint
     runs-on: ubuntu-24.04

@@ -9,6 +9,8 @@ done
 python3 -m unittest discover -s hack/tests -p '*_test.py'
 python3 hack/deploy/pkgsite/deploy_remote_test.py
 bash hack/qa/approval-policy-rehearsal_test.sh
+sh -n install.sh
+shellcheck install.sh
 while IFS= read -r -d '' script; do
   bash -n "$script"
   shellcheck -x "$script"

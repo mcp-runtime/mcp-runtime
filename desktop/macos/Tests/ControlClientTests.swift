@@ -3,6 +3,11 @@ import Foundation
 @main
 enum ControlClientTests {
     static func main() throws {
+        for requirement in ["true", "false", "null"] {
+            let bytes = Data("{\"id\":\"test\",\"server\":\"demo\",\"localUrl\":\"http://127.0.0.1:8099/demo/mcp\",\"authState\":\"enrolled\",\"oauthRequired\":\(requirement)}".utf8)
+            let profile = try JSONDecoder().decode(ProfileStatus.self, from: bytes)
+            expect(profile.oauthRequired == (requirement == "null" ? nil : requirement == "true"), "decode OAuth requirement \(requirement) without conflating it with certificate enrollment")
+        }
         let home = FileManager.default.temporaryDirectory.appendingPathComponent("adapter-client-tests-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         defer { try? FileManager.default.removeItem(at: home) }

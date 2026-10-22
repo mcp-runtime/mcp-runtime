@@ -32,6 +32,7 @@ type Profile struct {
 	CreatedAt      time.Time `json:"createdAt"`
 	CertExpires    time.Time `json:"certExpires,omitempty"`
 	AuthState      string    `json:"authState"`
+	OAuthRequired  *bool     `json:"oauthRequired,omitempty"`
 	LastError      string    `json:"lastError,omitempty"`
 	RenewalError   string    `json:"renewalError,omitempty"`
 }

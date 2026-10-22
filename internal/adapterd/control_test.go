@@ -28,6 +28,39 @@ func TestControlRejectsForeignUID(t *testing.T) {
 	}
 }
 
+func TestOAuthRequirementPersistsAndAppearsInStatus(t *testing.T) {
+	for _, value := range []bool{true, false} {
+		d := testDaemon(t.TempDir())
+		d.Hooks.Enroll = func(context.Context, Profile) (Material, error) {
+			return Material{OAuthRequired: &value, Namespace: "resolved-team"}, nil
+		}
+		p := d.enroll(context.Background(), Profile{ID: "profile-1", Server: "demo", Slug: "demo"})
+		if p.Namespace != "resolved-team" {
+			t.Fatal("lost resolved namespace")
+		}
+		if err := d.Store.Put(p); err != nil {
+			t.Fatal(err)
+		}
+		stored, err := NewStore(d.Store.path).List()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(stored) != 1 || stored[0].OAuthRequired == nil || *stored[0].OAuthRequired != value {
+			t.Fatalf("OAuth requirement lost on reload: %+v", stored)
+		}
+		status := d.Status().Profiles[0]
+		if status.OAuthRequired == nil || *status.OAuthRequired != value {
+			t.Fatal("OAuth requirement lost in status")
+		}
+		// Unknown metadata must remain distinct from a known false value.
+		d.Hooks.Enroll = func(context.Context, Profile) (Material, error) { return Material{}, nil }
+		p = d.enroll(context.Background(), p)
+		if p.OAuthRequired != nil {
+			t.Fatal("kept a stale OAuth requirement after an unknown lookup")
+		}
+	}
+}
+
 func TestAddProfileKeepsSeparatePaths(t *testing.T) {
 	dir := t.TempDir()
 	d := testDaemon(dir)
