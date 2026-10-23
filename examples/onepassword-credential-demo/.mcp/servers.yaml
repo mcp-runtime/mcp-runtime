@@ -1,9 +1,9 @@
 version: v1
 servers:
     - name: onepassword-credential-demo
-      description: OAuth-protected demo of browser and local desktop 1Password credential delivery. Public test credentials only.
+      description: "Credential gateway: validate the saved upstream Login before OAuth, then inject upstream MCP headers. Public fixtures only."
       image: registry.mcpruntime.org/public/onepassword-credential-demo
-      imageTag: demo-20261023-5
+      imageTag: login-first-review
       route: /onepassword-credential-demo/mcp
       publicPathPrefix: onepassword-credential-demo
       port: 8088
@@ -17,18 +17,17 @@ servers:
             memory: 32Mi
       scope: public
       tools:
-        - name: connect_upstream
-          description: connect_upstream tool
-          requiredTrust: low
-          sideEffect: write
         - name: upstream_status
-          description: upstream_status tool
+          description: Confirm that the upstream MCP server authenticated its required header.
           requiredTrust: low
           sideEffect: read
-        - name: disconnect_upstream
-          description: disconnect_upstream tool
+        - name: echo
+          description: Echo a message after upstream header authentication.
           requiredTrust: low
-          sideEffect: write
+          sideEffect: read
+      envVars:
+        - name: UPSTREAM_AUTH_CONFIG
+          value: /upstream-auth.json
       auth:
         issuerURL: https://auth.mcpruntime.org/mcp-auth
         audience: https://mcp.mcpruntime.org/onepassword-credential-demo/mcp

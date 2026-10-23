@@ -1,37 +1,90 @@
-# 1Password credential delivery demo
+# Upstream header authentication through 1Password and OAuth
 
-This example is a standalone OAuth-protected MCP server that acts as a small
-credential gateway for a fixed loopback test API. It demonstrates two ways to
-connect a saved 1Password Login without putting usernames or passwords in
-`mcp.json`. It does not use `onepassword-mcp-plugin`.
+This example moves upstream headers out of `mcp.json`. The upstream MCP server
+still requires its username/password Basic header on **every** request.
+The gateway supplies that header; the MCP client supplies an `mcp-auth` token.
 
-**Use only the public fixtures `demo-user` / `demo-password`.** The server
-rejects other values. Do not use this example as a production credential store.
+The Login is validated **during sign-in, before OAuth completes**. There is no
+post-login credential tool or MCP elicitation step, and the demo never saves
+anything into 1Password. Use only the public fixture Login `demo-user` /
+`demo-password`. Real credentials are rejected by the fixed test upstream.
 
-## What runs where
+The login-first implementation depends on the changes in
+[mcp-auth PR #35](https://github.com/tavric-labs/mcp-auth/pull/35).
+These PRs remain unmerged; the planned auth release and the updated example
+have not been deployed. See [validation](VALIDATION.md).
 
-- The MCP client gets an audience-bound access token from `mcp-auth` through
-  browser sign-in and PKCE. Its configuration contains the MCP URL only.
-- This example verifies that token with the published `mcp-auth` Go SDK.
-  `mcp-auth` does not receive the upstream username or password.
-- `connect_upstream` creates a random, one-use, five-minute connection link
-  bound to the verified subject and access token ID (`jti`).
-- The browser form or local connector submits the dedicated test Login over
-  HTTPS. The example validates and keeps it in memory for at most 15 minutes,
-  bounded by the access token expiry.
-- `upstream_status` uses HTTP Basic to call the fixed API listening on
-  `127.0.0.1:9099` in the same container. It returns authentication status only;
-  it does not forward the MCP OAuth bearer to that API.
+For the intended production design, reuse the existing credential plugin.
+This example is the protocol test fixture; the [ownership recommendation](ARCHITECTURE.md)
+keeps vault access and credential handling in the plugin and the broker generic.
 
-The Runtime sidecar is disabled for this example: the application itself
-verifies OAuth and supplies upstream credentials. Runtime's separate
-grants, adapter certificates and Kubernetes credential broker are not exercised.
-The checked-in `auth` metadata lets Runtime register this resource with its
-bundled authorization server.
+## Flow
 
-## Connect an MCP client
+1. A new MCP client discovers `mcp-auth`, registers and starts OAuth with PKCE.
+2. After consent, the resource-specific login method opens the gateway's
+   upstream sign-in page. The person supplies the saved Login through the
+   1Password browser extension, or a local adapter reads it through the CLI.
+3. The gateway sends those credentials to its fixed upstream authentication
+   check. Wrong credentials produce no authorization code or MCP token.
+4. Successful validation creates a bounded, in-memory credential connection.
+   The gateway returns an opaque login identity through its OAuth 2.0 adapter;
+   `mcp-auth` then issues the client's authorization code and access token.
+5. On every subsequent MCP request, the gateway verifies that OAuth token,
+   resolves its credential connection and replaces the bearer with the
+   upstream Basic header. This includes initialize and tools/list, not only
+   tool calls. The client never receives the upstream header values.
+6. OAuth refresh retains the credential connection. A new client starts its
+   own upstream sign-in and gets a separate connection.
 
-The reference deployment uses:
+The container hosts the gateway and a separate loopback MCP upstream. The
+upstream exposes `upstream_status` and `echo`; its own Basic-auth middleware
+is unchanged by the OAuth wrapper. Runtime's platform gateway sidecar is
+disabled for this standalone example. No `onepassword-mcp-plugin` is involved.
+
+## Where configuration belongs
+
+| Configuration | Location | Contents |
+|---|---|---|
+| Client-facing OAuth and deployment | [`.mcp/servers.yaml`](.mcp/servers.yaml) | Issuer, resource audience, scopes, image, two tools, and `UPSTREAM_AUTH_CONFIG` file path |
+| Upstream header requirements | [`.mcp/upstream-auth.json`](.mcp/upstream-auth.json) | Basic header scheme, username/password field names, connection TTL and subject prefix |
+| Broker login policy | [`.mcp/login-methods.example.json`](.mcp/login-methods.example.json) | The resource must use `upstream-demo`; other resources retain the existing company login |
+| Broker-to-gateway OAuth adapter | [`.mcp/mcp-auth-connectors.example.json`](.mcp/mcp-auth-connectors.example.json) | Public login/token/userinfo endpoints, callback, client ID and PKCE-compatible public-client settings |
+| Per-user vault selection | Private local adapter configuration | `op://` references to that user's saved test Login |
+| Standard remote MCP client | `mcp.json` | Gateway URL only |
+
+No usernames, passwords, vault tokens or personal item references are shipped
+in the server metadata or broker examples. `auth.mode: header` is not used:
+that existing Runtime mode expects credential headers from the client.
+The gateway's header configuration is a separate application config file,
+mounted into this example through supported Runtime `envVars`; it is not a
+new Runtime CRD field.
+
+## Broker configuration
+
+Merge the `credential-gateway` connector example into the existing
+`MCP_AUTH_CONNECTORS_FILE`; preserve all existing connector entries and their
+secret environment references. Configure `MCP_AUTH_LOGIN_METHODS_FILE` with
+the methods example and clear `MCP_AUTH_CONNECTOR` (those modes are mutually
+exclusive). For an existing login-methods installation, append the scoped
+method to the existing methods file instead of replacing it.
+
+An unscoped company method remains the default for other resources. Its
+explicit empty `subject_prefix` preserves existing provider subject IDs.
+For this resource, the explicit `resources` assignment makes
+`upstream-demo` mandatory, including direct method submissions and callbacks.
+The prefix `upstream-demo:` must match the gateway's upstream-auth config.
+
+The adapter uses plain OAuth 2.0 with PKCE and userinfo rather than OIDC ID
+tokens. It needs no fake JWKS endpoint and no shared client secret: the exact
+broker callback, one-use codes and PKCE verifier bind the handoff. All public
+production endpoints require verified HTTPS. The broker never retains the
+upstream username/password; it sees only the opaque credential identity.
+
+The examples use `https://auth.mcpruntime.org/mcp-auth` and the public MCP
+resource below. For another installation, update issuer, callback, resource
+and endpoints consistently. The application defaults match these examples.
+
+## Browser / URL-only MCP client
 
 ```json
 {
@@ -44,64 +97,29 @@ The reference deployment uses:
 }
 ```
 
-Use a client supporting MCP HTTP OAuth discovery and PKCE. Sign in and call
-`connect_upstream`. Keep the returned connection URL private until consumed or
-expired; possession permits connecting the public test credentials to that
-access token. No password is passed through MCP tool arguments or results.
+Save a dedicated 1Password Login with `demo-user`, `demo-password`, and website
+`https://mcp.mcpruntime.org/onepassword-credential-demo/mcp/login/authorize`.
+Connect with a client supporting HTTP OAuth discovery and PKCE. At the
+upstream login page, select that saved Login through the 1Password extension
+and select **Sign in and authorize MCP client**. The OAuth callback happens
+after this step. Then call `upstream_status` twice.
 
-## Browser and 1Password extension
+The extension and desktop app control their own unlock prompts. An already
+unlocked/authorized account can autofill without asking for another password.
+The gateway validates the credentials; it cannot distinguish autofill from
+manual entry. Do not claim that a fresh native unlock was verified just
+because a browser form was successfully submitted.
 
-1. Save a dedicated 1Password Login with username `demo-user`, password
-   `demo-password`, and website
-   `https://mcp.mcpruntime.org/onepassword-credential-demo/mcp/connect`.
-2. Open the URL returned by `connect_upstream` in a browser with the 1Password
-   extension installed and enabled.
-3. Focus Username or select the extension icon, choose the saved Login, and
-   select **Connect test upstream**.
-4. Call `upstream_status` twice from the same signed-in MCP client. Both calls
-   should report `authenticated: true` without asking for credentials again.
-5. Call `disconnect_upstream`. The next `upstream_status` call must fail.
+## Local desktop adapter
 
-The page exposes standard `username` and `current-password` autocomplete
-fields. Browser autofill is controlled by the extension and the user; the
-website does not launch or unlock the native 1Password app automatically.
-
-The form requires an exact same-origin POST, a Secure/HttpOnly/SameSite cookie,
-and a ticket-bound CSRF token. Its `same-origin` referrer policy preserves the
-Origin header on native form submissions while suppressing cross-origin
-referrers. Using `no-referrer` here would turn the form POST's Origin into
-`null` ([Fetch specification](https://fetch.spec.whatwg.org/#append-a-request-origin-header)).
-
-## Local desktop connector
-
-Install 1Password CLI and enable **Settings → Developer → Integrate with
-1Password CLI** in the desktop app. Sign in to your account in that app.
-Copy the dedicated test Login's username and password secret references.
-
+Enable **1Password → Settings → Developer → Integrate with 1Password CLI**.
 Build from this directory:
 
 ```bash
 go build -o bin/onepassword-connect ./cmd/connect
 ```
 
-The connector supports either a one-shot command or a local MCP tool. For a
-one-shot connection, first call the hosted `connect_upstream` tool, then run:
-
-```bash
-./bin/onepassword-connect \
-  --gateway https://mcp.mcpruntime.org/onepassword-credential-demo/mcp \
-  --username-ref 'op://YOUR-VAULT/YOUR-DEMO-ITEM/username' \
-  --password-ref 'op://YOUR-VAULT/YOUR-DEMO-ITEM/password' \
-  --connect-url 'PASTE-THE-ONE-USE-CONNECTION-URL'
-```
-
-Optionally select the account using `--account ACCOUNT-NAME-OR-ID`. When
-required, 1Password prompts you to unlock or approve CLI access using your
-configured method, including your account password. Its own authorization
-session can suppress repeated prompts; this demo does not force a new unlock
-for every field read.
-
-To expose the local `connect_from_1password` MCP tool, add a second server entry:
+Configure a local MCP server with references rather than header values:
 
 ```json
 {
@@ -109,8 +127,9 @@ To expose the local `connect_from_1password` MCP tool, add a second server entry
     "onepassword-desktop-demo": {
       "command": "/absolute/path/to/bin/onepassword-connect",
       "args": [
-        "--stdio",
+        "--stdio", "--credential-mode", "desktop", "--approve-consent",
         "--gateway", "https://mcp.mcpruntime.org/onepassword-credential-demo/mcp",
+        "--issuer", "https://auth.mcpruntime.org/mcp-auth",
         "--username-ref", "op://YOUR-VAULT/YOUR-DEMO-ITEM/username",
         "--password-ref", "op://YOUR-VAULT/YOUR-DEMO-ITEM/password"
       ]
@@ -119,26 +138,56 @@ To expose the local `connect_from_1password` MCP tool, add a second server entry
 }
 ```
 
-Call the hosted `connect_upstream` tool, then pass only its `connect_url` to
-the local `connect_from_1password` tool. Call hosted `upstream_status` twice
-and `disconnect_upstream` as above. Both client entries contain references
-or URLs, never credential values.
+`--approve-consent` explicitly authorizes this local adapter's `tools:read`
+OAuth consent. The adapter owns one cookie-bound sign-in flow, reads the two
+configured fields through `op`, submits them at the upstream login page,
+and receives its MCP OAuth token only after the upstream accepts them. It
+then serves the authenticated upstream tools over stdio. Browser mode is
+also available with `--credential-mode browser`.
 
-The local connector pins the exact HTTPS destination from `--gateway`, refuses
-redirects, and reads only the `op://` references supplied by its owner at
-startup. It removes inherited service-account, Connect, and CLI session
-environment variables before invoking `op`; this path exercises desktop/CLI
-authentication rather than a service account. It never returns `op` output or
-provider errors to the model.
+Use `--account ACCOUNT-NAME-OR-ID` to select an account. The connector removes
+inherited service-account, Connect and CLI session-token environment variables.
+It pins the broker and gateway origins, refuses external redirects, and never
+prints field values, tokens or provider errors. A cached 1Password approval
+can suppress another unlock prompt; the adapter does not force-lock accounts.
 
-## Validate, build, push and deploy
+## Validation and local acceptance
 
-Prerequisites: Docker, Runtime CLI on PATH, a saved platform login with public
-publishing permissions, and a platform with bundled `mcp-auth`. Commands below
-run from the repository root. Change the checked-in issuer, audience, image
-and the application `MCP_AUTH_RESOURCE` / `MCP_AUTH_ISSUER` environment values
-when deploying to another platform. The application defaults match this
-reference deployment.
+With an isolated kubeconfig, run from this directory:
+
+```bash
+KUBECONFIG=/path/to/empty-kubeconfig go test -race ./...
+KUBECONFIG=/path/to/empty-kubeconfig go vet ./...
+go build -o bin/credential-gateway .
+```
+
+Build the auth server from the Auth PR checkout, then run the loopback-only
+integration check using both real binaries:
+
+```bash
+python3 acceptance.py \
+  --auth-binary /path/to/mcp-auth-server \
+  --gateway-binary ./bin/credential-gateway
+```
+
+The script starts and cleans up isolated processes with public test fixtures,
+memory stores and loopback HTTP. It checks wrong credentials before OAuth,
+real code/token exchange, initialize, tool listing, repeated upstream calls,
+OAuth refresh and a separate sign-in for a second client. `DEMO_LOCAL_TEST`
+allows HTTP only for explicit loopback testing; production remains HTTPS.
+
+For an interactive installation with the new auth configuration:
+
+```bash
+go run ./cmd/check --credential-mode browser
+go run ./cmd/check --credential-mode desktop --approve-consent \
+  --username-ref 'op://YOUR-VAULT/YOUR-DEMO-ITEM/username' \
+  --password-ref 'op://YOUR-VAULT/YOUR-DEMO-ITEM/password'
+```
+
+## Build, push and deploy after review
+
+From the repository root, using the Runtime CLI:
 
 ```bash
 mcp-runtime server validate --metadata-dir examples/onepassword-credential-demo/.mcp
@@ -146,46 +195,29 @@ mcp-runtime server build image onepassword-credential-demo \
   --context examples/onepassword-credential-demo \
   --dockerfile examples/onepassword-credential-demo/Dockerfile \
   --metadata-dir examples/onepassword-credential-demo/.mcp \
-  --platform linux/amd64 --tag YOUR-UNIQUE-TAG
+  --platform linux/amd64 --tag YOUR-REVIEWED-TAG
 mcp-runtime server push \
-  --image registry.mcpruntime.org/public/onepassword-credential-demo:YOUR-UNIQUE-TAG \
+  --image registry.mcpruntime.org/public/onepassword-credential-demo:YOUR-REVIEWED-TAG \
   --scope public
 mcp-runtime server deploy onepassword-credential-demo \
-  --metadata-dir examples/onepassword-credential-demo/.mcp --scope public
+  --metadata-dir examples/onepassword-credential-demo/.mcp --scope public --update
 ```
 
-For an existing deployment, add `--update` to `server deploy`. Inspect using
-`mcp-runtime server get onepassword-credential-demo --namespace mcp-servers-public`.
-Retire only this example using
-`mcp-runtime server delete onepassword-credential-demo --namespace mcp-servers-public`.
-
-From this example directory, with an isolated kubeconfig:
-
-```bash
-KUBECONFIG=/path/to/empty-kubeconfig go test -race ./...
-KUBECONFIG=/path/to/empty-kubeconfig go vet ./...
-go run ./cmd/check --paths browser,desktop
-```
-
-The interactive acceptance client prints an OAuth sign-in URL, verifies the
-MCP handshake and tool inventory, then waits for each connection path. It
-checks two authenticated upstream calls and immediate denial after
-disconnect. Type `renew` in its terminal to obtain a fresh connection link
-after a rollout or an expired form. Tokens remain in the client process and
-are never printed or saved. The callback listens on loopback; open its login
-link on the same machine.
+Coordinate this with the separately reviewed `mcp-auth` release/configuration.
+Preserve existing login providers, signing keys, databases and TLS settings;
+use the supported Runtime release/update workflow for the auth component.
+This PR does not merge, publish that release or change production auth config.
 
 ## Limits
 
-Run exactly one replica. Connections and tickets are in memory; restart,
-redeployment, access-token refresh or token expiry requires reconnecting.
-The server verifies JWT expiry on each call, but does not implement online
-OAuth session revocation checks. `disconnect_upstream` immediately discards
-the current token's credentials and pending tickets. Expired entries are
-pruned on access and every 30 seconds, with at most 100 pending links and 100
-connections. These are demonstration limits, not a durable multi-user vault.
+The credential gateway's OAuth endpoints are a minimal adapter for this fixed
+demo upstream, not a general identity provider. Its subject is an opaque
+credential-connection reference, not an employee-directory identity. Only Basic
+authentication is implemented by this example's header config.
 
-The hosted reference used `mcp-auth` 0.4.4 when this demo was validated. It
-issues `jti` but not the later `sid` refresh-family claim; binding to `jti`
-deliberately prevents credentials carrying over to a refreshed access token.
-No update of the authorization server is required for this example.
+Run one replica. Credentials stay in memory for at most one hour; restart,
+redeployment or expiry requires signing in again. Refreshed OAuth tokens keep
+the same connection. Maps are bounded to 100 entries per stage and expired
+entries are pruned on access and periodically. The gateway verifies JWT expiry
+per request but does not implement online revocation checks. There is no
+durable multi-user vault or cross-process credential cache here.

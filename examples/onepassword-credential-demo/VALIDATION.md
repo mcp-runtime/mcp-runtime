@@ -1,64 +1,41 @@
-# Hosted validation — 2026-10-23
+# Validation — login-first implementation
 
-Endpoint: `https://mcp.mcpruntime.org/onepassword-credential-demo/mcp`
+The corrected flow validates upstream credentials before the MCP client gets
+its OAuth token. It replaces the original post-login connection experiment.
+The updated code is in Runtime PR #856 and depends on Auth PR #35.
 
-The example was built, pushed, and deployed through the Runtime CLI, using
-`server init`, `server validate`, `server build image`, `server push`, and
-`server deploy`. Interactive acceptance used
-`registry.mcpruntime.org/public/onepassword-credential-demo:demo-20261023-4`.
-The final image, `demo-20261023-5`, rebuilds the same server behavior with
-Go 1.26.10 to match current Runtime main; readiness, anonymous denial and
-discovery were checked again after that rollout.
-The server was Ready with one replica in `mcp-servers-public`.
+## Current checks
 
-The existing Runtime deployment was v0.12.1 and the existing authorization
-server was `princekrroshan01/mcp-auth-server:0.4.4`. Neither platform nor auth
-images were updated. Runtime registered the example audience from the server
-metadata while retaining the existing resource.
+- Authorization-server race tests and vet cover resource-specific login
+  selection, default-method preservation, direct-method bypass, callback
+  bypass, resource configuration and plain OAuth without fake OIDC metadata.
+- Example tests cover the pre-token login form, wrong credentials producing no
+  grant, cookie/CSRF/origin binding, PKCE verification and one-use codes.
+- Gateway protocol tests verify Basic headers on initialize and tool calls,
+  OAuth signature/audience/expiry enforcement, opaque connection isolation,
+  credential-free responses, OAuth-token refresh reuse and cache expiry.
+- Desktop-adapter tests use a fake `op` executable and verified local TLS.
+  They check that the Login is read during the owned cookie-bound OAuth flow,
+  inherited automation credentials are removed, external redirects are
+  rejected, and consent requires explicit opt-in.
 
-## Observed results
+The loopback acceptance script passed on 2026-10-23 using the real modified
+auth-server and gateway binaries. It verified that wrong credentials produce
+no OAuth grant; initialize, tools/list and two tool calls succeed with OAuth
+only from the client; a refreshed token reuses the retained upstream Login;
+and a second client must complete a new upstream sign-in and gets a separate
+credential identity. Tokens stayed in memory. No real vault or production
+server was used by that script.
 
-| Check | Result |
-|---|---|
-| Anonymous MCP request | 401 with protected-resource discovery challenge |
-| Protected-resource metadata | Exact example audience, existing mcp-auth issuer, `tools:read` |
-| Real browser OAuth sign-in | Passed with PKCE and loopback callback |
-| MCP initialize and tools/list | Passed; three expected tools |
-| Native browser form with wrong test credentials | Rejected by credential validation, after passing origin and CSRF checks |
-| User-completed browser / saved 1Password Login connection | Passed |
-| Browser connection reuse | Two upstream calls succeeded without resubmitting credentials |
-| Browser disconnect | Next upstream call denied |
-| Local 1Password CLI desktop integration | Retrieved the dedicated test Login through the approved local CLI |
-| Desktop connector submission | Passed over HTTPS to the pinned hosted example |
-| Desktop connection reuse | Two upstream calls succeeded without resubmitting credentials |
-| Desktop disconnect | Next upstream call denied |
-| Final acceptance-client result | All requested hosted checks passed; credentials discarded |
+## Production status
 
-The desktop acceptance exercised the one-shot connector, which shares its
-credential lookup/submission code with the local MCP tool. A separate stdio MCP test passed initialize/tools-list and verified that an
-unapproved destination is rejected before any 1Password read. The hosted
-desktop acceptance used the one-shot command.
+Per the review request, these PRs remain unmerged. No new `mcp-auth` release
+has been published and this login-first implementation has not been deployed.
+The public endpoint may still serve the earlier `demo-20261023-5` experiment.
+That earlier experiment passed credential delivery/reuse, but it issued OAuth
+before connecting credentials, and did not verify a fresh 1Password unlock
+prompt. Those results do not establish acceptance of this corrected flow.
 
-`go test -race ./...`, `go vet ./...`, Runtime metadata validation, and
-`git diff --check` passed. Unit/HTTP tests cover subject/token isolation,
-expiry, one-use links, rejected credentials, CSRF and origin checks, stable
-approval when a link is reopened, credential-free responses, Basic-only
-upstream authentication, OAuth signature/audience/expiry checks and refusal
-of tokens without a unique ID.
-
-## Issues found and corrected during acceptance
-
-- The ingress routes the MCP path, so the form must live at
-  `/onepassword-credential-demo/mcp/connect`, not a sibling `/connect` route.
-- The deployed auth version supplies `jti` rather than `sid`. The example
-  explicitly binds credentials to the current access token ID; refreshing
-  the token requires reconnecting.
-- `Referrer-Policy: no-referrer` turned native form POST's Origin into `null`.
-  The corrected `same-origin` policy preserves the exact-origin check.
-- Opening the same link twice used to replace its CSRF approval. The same
-  unconsumed link now retains its approval until expiry or successful use.
-
-Only public fixture credentials were used. No passwords, OAuth tokens,
-1Password field values or live connection links are retained in this report.
-The example remains deployed for review; the tested connections were
-explicitly disconnected.
+After review, release/configure the broker and deploy the updated example,
+then verify both interactive paths with the actual saved test Login. A native
+unlock prompt must be observed separately; cached access can avoid it.

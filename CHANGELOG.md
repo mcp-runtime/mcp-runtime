@@ -9,7 +9,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Added
 
-- A standalone 1Password credential-delivery MCP example demonstrates browser autofill and a local desktop/CLI connector without credential values in `mcp.json`. It uses public test credentials, OAuth verification, bounded in-memory connections, and supported Runtime build/push/deploy commands.
+- A standalone 1Password credential gateway example validates the upstream Login before OAuth completes, then supplies Basic headers on every upstream MCP request. It includes browser and desktop-adapter paths, per-server header configuration, broker login-policy examples and loopback acceptance tests; credential values stay out of `mcp.json`.
 
 ## [0.12.1] - 2026-10-23
 

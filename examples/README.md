@@ -44,8 +44,9 @@ real requests and responses through MCPSnoop.
 
 For a focused credential-delivery experiment, use
 [`onepassword-credential-demo`](onepassword-credential-demo/README.md). This
-standalone Go MCP server demonstrates browser-extension autofill and a local
-1Password CLI connector, with URL-only hosted MCP configuration and public
-test credentials. It validates OAuth itself and keeps upstream credentials
-temporarily in application memory; it does not use the Runtime sidecar or
-the separate 1Password plugin.
+standalone Go credential gateway validates the saved upstream Login during
+OAuth sign-in, then injects the required Basic header into every upstream
+MCP request. It includes browser-extension and local desktop-adapter paths,
+uses public test credentials, and requires the resource-login changes in
+mcp-auth PR #35. It does not use the Runtime sidecar or the separate
+1Password plugin.
