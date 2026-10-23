@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Added
+
+- A standalone 1Password credential-delivery MCP example demonstrates browser autofill and a local desktop/CLI connector without credential values in `mcp.json`. It uses public test credentials, OAuth verification, bounded in-memory connections, and supported Runtime build/push/deploy commands.
+
 ## [0.12.1] - 2026-10-23
 
 ### Added

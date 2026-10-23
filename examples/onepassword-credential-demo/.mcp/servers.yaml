@@ -1,0 +1,36 @@
+version: v1
+servers:
+    - name: onepassword-credential-demo
+      description: OAuth-protected demo of browser and local desktop 1Password credential delivery. Public test credentials only.
+      image: registry.mcpruntime.org/public/onepassword-credential-demo
+      imageTag: demo-20261023-5
+      route: /onepassword-credential-demo/mcp
+      publicPathPrefix: onepassword-credential-demo
+      port: 8088
+      replicas: 1
+      resources:
+        limits:
+            cpu: 250m
+            memory: 128Mi
+        requests:
+            cpu: 25m
+            memory: 32Mi
+      scope: public
+      tools:
+        - name: connect_upstream
+          description: connect_upstream tool
+          requiredTrust: low
+          sideEffect: write
+        - name: upstream_status
+          description: upstream_status tool
+          requiredTrust: low
+          sideEffect: read
+        - name: disconnect_upstream
+          description: disconnect_upstream tool
+          requiredTrust: low
+          sideEffect: write
+      auth:
+        issuerURL: https://auth.mcpruntime.org/mcp-auth
+        audience: https://mcp.mcpruntime.org/onepassword-credential-demo/mcp
+      gateway:
+        enabled: false

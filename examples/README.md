@@ -41,3 +41,11 @@ For a small unauthenticated traffic-inspection demo, use
 [`test-mcpsnoop`](test-mcpsnoop/README.md). It exposes only `echo` and
 `todays_info`, with commands to publish/deploy through the CLI and inspect the
 real requests and responses through MCPSnoop.
+
+For a focused credential-delivery experiment, use
+[`onepassword-credential-demo`](onepassword-credential-demo/README.md). This
+standalone Go MCP server demonstrates browser-extension autofill and a local
+1Password CLI connector, with URL-only hosted MCP configuration and public
+test credentials. It validates OAuth itself and keeps upstream credentials
+temporarily in application memory; it does not use the Runtime sidecar or
+the separate 1Password plugin.
