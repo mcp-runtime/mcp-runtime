@@ -23,6 +23,17 @@ A display name such as `Cursor` is not an agent ID.
 
 ## Inspect authorization in the dashboard
 
+In **Server Catalog**, open a server's **Details** and choose **Install in your
+client**. Claude opens its connector setup, Cursor and VS Code open their native
+MCP installation dialogs, and Claude Code and Codex open a setup prompt for you
+to review and send. The actions use the server's published public endpoint and
+preserve required header fields. Claude's web action is omitted for servers
+that require headers. Fill in missing credentials in your client and complete
+its authentication flow; installation does not grant platform access.
+
+The existing client configuration tabs and copy controls remain available for
+manual setup. Servers without a usable HTTP endpoint have no install actions.
+
 Open **Agents**, select an agent, and inspect its visible session history.
 Each session shows the authorizing human and the exact namespace/name of its
 recorded grant. Follow either the session or grant link to the shared access
