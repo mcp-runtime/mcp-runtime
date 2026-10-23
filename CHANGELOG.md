@@ -14,6 +14,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 - Header-only MCP example with paired optional mcp-auth credential-gateway configuration, keeping vault authorization and private user mappings out of Runtime metadata and MCP client headers ([#856](https://github.com/tavric-labs/mcp-runtime/pull/856)).
 - A standalone 1Password credential gateway example validates the upstream Login before OAuth completes, then supplies Basic headers on every upstream MCP request. It includes browser and desktop-adapter paths, per-server header configuration, broker login-policy examples and loopback acceptance tests; credential values stay out of `mcp.json`.
 
+### Fixed
+
+- Registry credential refresh with `--pull-namespace` stays limited to the explicitly selected namespaces after its first match.
+
 ## [0.12.1] - 2026-10-23
 
 ### Added
