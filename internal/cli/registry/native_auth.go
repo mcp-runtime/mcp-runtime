@@ -181,7 +181,7 @@ func configureNativeAuth(ctx context.Context, clients *k8sclient.Clients, api re
 	var targets []string
 	for _, ns := range namespaces.Items {
 		managed := strings.HasPrefix(ns.Name, "mcp-team-") || strings.HasPrefix(ns.Name, "mcp-servers") || ns.Name == platforminventory.PlatformNamespace || ns.Name == platforminventory.OperatorNamespace || ns.Name == platforminventory.ObservabilityNamespace || ns.Name == platforminventory.LogCollectorNamespace
-		if managed && (len(selected) == 0 || selected[ns.Name]) {
+		if managed && (len(opts.Namespaces) == 0 || selected[ns.Name]) {
 			targets = append(targets, ns.Name)
 			delete(selected, ns.Name)
 		}
