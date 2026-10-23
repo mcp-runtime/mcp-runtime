@@ -348,6 +348,18 @@ unmanaged configuration keys and MCP Auth remain unchanged. Supply existing Dock
 credentials through an approved login workflow; `update` never copies an
 admin key into Kubernetes pull Secrets.
 
+The **Hosted platform release deploy** workflow checks the expected kube-system
+UID before reading deployment credentials and binds each update to that identity.
+Before an update it runs the canonical protected setup backup, copies the
+snapshot to `/root/.mcpruntime/backups/releases/<tag>-<run>-<attempt>/` on the
+deployment VM, and verifies its checksums before continuing. Plaintext snapshots
+are never uploaded as CI artifacts. These snapshots include resource definitions,
+credentials and TLS state; they do not export live database contents or replace
+encrypted off-host backups for destructive recovery. Verification-only runs do
+not create snapshots or roll platform components. They still run hosted
+acceptance with temporary test resources and may update the verified-version
+badge. Cluster diagnostics run before any platform update.
+
 Full setup is separate and must be deliberate:
 
 ```bash

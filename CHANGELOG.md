@@ -7,15 +7,16 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-10-22
+
 ### Added
 
 - Team management shows selected-team identity, member and owner counts, member join dates, and associated active/inactive agents with creator attribution and links to their details. Cursor paging labels loaded agent counts explicitly; independent directory failures retain unknown counts and switching teams clears stale rows and member forms ([#851](https://github.com/tavric-labs/mcp-runtime/issues/851)).
 - Server details offer client installation actions for Claude, Claude Code, Codex, Cursor, and VS Code using the published public endpoint and required authentication fields. Native installation dialogs and reviewable agent setup prompts complement the existing copyable configurations ([#846](https://github.com/tavric-labs/mcp-runtime/pull/846)).
 
-## [0.12.1] - 2026-10-22
-
 ### Fixed
 
+- Hosted release deployments enforce the expected cluster identity on every update, check cluster diagnostics and verify a protected configuration, credential and TLS snapshot on the deployment VM before rolling workloads. Verification-only runs skip platform updates and snapshots; hosted acceptance still uses temporary test resources. Snapshots are not uploaded as plaintext CI artifacts ([#853](https://github.com/tavric-labs/mcp-runtime/issues/853)).
 - Windows CLI releases build again: certificate renewal uses the portable adapter profile instead of importing a macOS/Linux service implementation. CI and pre-release checks now build every distributed CLI target, including Windows. The incomplete 0.12.0 release was returned to draft after its Windows build failed; its tag is preserved, and 0.12.1 delivers the desktop and CLI assets described below. No additional setup or data reset is required ([#849](https://github.com/tavric-labs/mcp-runtime/issues/849)).
 
 ## [0.12.0] - 2026-10-22

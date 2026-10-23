@@ -57,6 +57,13 @@ KUBECONFIG="$PROD_KUBECONFIG" ./bin/mcp-runtime cluster doctor
 
 ## Non-Negotiables
 
+- The hosted deployment workflow checks cluster identity and takes a protected
+  setup snapshot before update. Its verified snapshot remains on the VM under
+  `/root/.mcpruntime/backups/releases/<tag>-<run>-<attempt>/`; it is not a live
+  database export or an encrypted off-host recovery backup. Verification-only
+  runs do not snapshot or roll platform components; hosted acceptance still
+  creates temporary fixtures and may publish the verified-version badge.
+
 - For production debugging, inspect Prometheus metrics, Loki logs, and Tempo
   traces at `https://platform.mcpruntime.org/grafana` for the same incident
   window. Load private credentials from `~/.mcpruntime/infra.env` without
