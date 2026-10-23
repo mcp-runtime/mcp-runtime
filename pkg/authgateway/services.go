@@ -97,8 +97,8 @@ func ServiceFor(in ServerInput, authHost, publicHost string) (Service, error) {
 		ResourceClient: ResourceClient{ClientID: "gateway-" + id, KeyID: "k1", PrivateKeyFile: ClientKeyFile},
 		Source:         SourceForm,
 	}
-	for _, header := range in.Headers {
-		field := credentialheaders.GatewayFieldName(header)
+	for i, header := range in.Headers {
+		field := credentialheaders.GatewayFieldName(i)
 		service.FormFields = append(service.FormFields, FormField{Name: field, Label: header, Secret: credentialheaders.IsSecretHeader(header, in.SecretHeaders)})
 		service.Headers = append(service.Headers, HeaderRule{Name: header, Type: "direct", Field: field})
 	}

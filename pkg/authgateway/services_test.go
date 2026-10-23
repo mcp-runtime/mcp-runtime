@@ -25,11 +25,11 @@ func TestServiceForDerivesAFormServiceFromTheServer(t *testing.T) {
 	if service.Source != SourceForm || service.ResourceClient.ClientID != "gateway-gitlab" || service.ResourceClient.PrivateKeyFile != ClientKeyFile {
 		t.Fatalf("source or client: %+v", service)
 	}
-	if len(service.FormFields) != 2 || service.FormFields[0].Name != "x-gitlab-username" || service.FormFields[0].Secret ||
-		service.FormFields[1].Name != "x-gitlab-pat-token" || !service.FormFields[1].Secret {
+	if len(service.FormFields) != 2 || service.FormFields[0].Name != "header1" || service.FormFields[0].Label != "X-GitLab-Username" || service.FormFields[0].Secret ||
+		service.FormFields[1].Name != "header2" || service.FormFields[1].Label != "X-GitLab-PAT-Token" || !service.FormFields[1].Secret {
 		t.Fatalf("form fields: %+v", service.FormFields)
 	}
-	if service.Headers[1].Name != "X-GitLab-PAT-Token" || service.Headers[1].Type != "direct" || service.Headers[1].Field != "x-gitlab-pat-token" {
+	if service.Headers[1].Name != "X-GitLab-PAT-Token" || service.Headers[1].Type != "direct" || service.Headers[1].Field != "header2" {
 		t.Fatalf("header rules: %+v", service.Headers)
 	}
 }
@@ -60,7 +60,8 @@ func TestServiceForRejectsUnsafeInput(t *testing.T) {
 		"relative path":             func(in *ServerInput) { in.IngressPath = "gitlab/mcp" },
 		"query in validation":       func(in *ServerInput) { in.ValidationPath = "/check?x=1" },
 		"traversal in validation":   func(in *ServerInput) { in.ValidationPath = "/../admin" },
-		"header not a field":        func(in *ServerInput) { in.Headers = []string{"X-One", "1-bad"} },
+		"gateway-owned header":      func(in *ServerInput) { in.Headers = []string{"X-One", "Sec-Token"} },
+		"via header":                func(in *ServerInput) { in.Headers = []string{"Via"} },
 		"unknown secret header":     func(in *ServerInput) { in.SecretHeaders = []string{"x-other"} },
 	}
 	for name, mutate := range mutations {
@@ -97,5 +98,29 @@ func TestParseAcceptsFormOnlyConfigWithoutProvider(t *testing.T) {
 	raw, _ = json.Marshal(doc)
 	if _, err := Parse(raw); err == nil {
 		t.Fatal("a vault service without a provider must be rejected")
+	}
+}
+
+func TestServiceForAcceptsAnyValidHeaderName(t *testing.T) {
+	in := gitlabInput()
+	in.Headers = []string{"Authorization", "X_Api_Key", "1st-Token", "X-Tenant.ID", "api~key"}
+	service, err := ServiceFor(in, "auth.example.com", "")
+	if err != nil {
+		t.Fatalf("valid header names were rejected: %v", err)
+	}
+	if len(service.FormFields) != 5 || len(service.Headers) != 5 {
+		t.Fatalf("want one input per header: %+v", service.FormFields)
+	}
+	for i, header := range in.Headers {
+		if service.Headers[i].Name != header || service.FormFields[i].Label != header || service.Headers[i].Field != service.FormFields[i].Name {
+			t.Fatalf("header %q lost its name or wiring: %+v %+v", header, service.Headers[i], service.FormFields[i])
+		}
+	}
+	raw, _ := json.Marshal(map[string]any{
+		"listen": map[string]any{"host": "0.0.0.0", "port": 8090}, "authorization_server": map[string]any{"issuer": "https://auth.example.com/mcp-auth"},
+		"services": []any{service},
+	})
+	if _, err := Parse(raw); err != nil {
+		t.Fatalf("derived configuration is invalid: %v", err)
 	}
 }

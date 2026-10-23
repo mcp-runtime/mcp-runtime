@@ -1246,4 +1246,9 @@ Header values a person submits are validated at the upstream before any OAuth
 code is issued, then held in mcp-auth's memory only. Applying restarts mcp-auth,
 which clears them, so people sign in again. Servers with the same name in two
 namespaces conflict. The block is accepted only with `auth.mode: header`, and
-every declared header becomes a required input.
+every declared header becomes a required input, labeled with its own name.
+Any valid HTTP header name works, including `Authorization` and names such as
+`X_Api_Key`; inputs are numbered internally, not named after the header. The
+person supplies the complete header value (for example `Bearer abc`). Only
+reserved transport and identity headers, and the few the gateway owns (`Via`,
+`Accept-Encoding`, `Last-Event-Id`, `Sec-*`), are refused when the server is pushed.
