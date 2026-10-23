@@ -14,9 +14,11 @@ The login-first implementation depends on the changes in
 These PRs remain unmerged; the planned auth release and the updated example
 have not been deployed. See [validation](VALIDATION.md).
 
-For the intended production design, reuse the existing credential plugin.
-This example is the protocol test fixture; the [ownership recommendation](ARCHITECTURE.md)
-keeps vault access and credential handling in the plugin and the broker generic.
+The consolidated implementation now lives in the optional mcp-auth credential
+bundle. Start with [vault-header-demo](../vault-header-demo/README.md) for a
+header-only upstream and the shared gateway configuration. This directory stays
+a protocol fixture for the earlier login-adapter flow; see the updated
+[ownership notes](ARCHITECTURE.md).
 
 ## Flow
 

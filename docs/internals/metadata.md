@@ -95,3 +95,15 @@ Run:
 go test ./pkg/metadata/... -count=1
 go test ./internal/cli/server -run 'TestGenerate|TestBuild' -count=1
 ```
+
+## Vault-backed upstream headers
+
+For the optional mcp-auth credential gateway, `.mcp/servers.yaml` describes the
+upstream's existing `auth.mode: header` contract and deployment. Do not add vault
+tokens, per-user mappings or credential values to this metadata. The separate
+gateway config supplies the upstream URL, validation endpoint and header
+transforms, while approved identity-to-reference mappings stay private with the
+mcp-auth operator. MCP clients connect to the gateway resource URL and use OAuth.
+The [header-only example](../../examples/vault-header-demo/README.md) includes both
+configuration shapes. This layout uses existing metadata fields and does not
+automatically provision the optional gateway or rewrite the Runtime catalog URL.

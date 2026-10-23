@@ -50,3 +50,8 @@ MCP request. It includes browser-extension and local desktop-adapter paths,
 uses public test credentials, and requires the resource-login changes in
 mcp-auth PR #35. It does not use the Runtime sidecar or the separate
 1Password plugin.
+
+For a header-only upstream using the optional consolidated mcp-auth vault
+gateway, use [vault-header-demo](vault-header-demo/README.md). Its paired JSON
+config belongs on mcp-auth; user mappings and provider authorization remain
+private to the gateway operator.

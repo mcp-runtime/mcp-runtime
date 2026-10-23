@@ -1,0 +1,11 @@
+{
+  "mappings": [{
+    "issuer": "https://auth.example.com/mcp-auth",
+    "subject": "company:replace-with-verified-user-subject",
+    "service": "vault-header-demo",
+    "fields": {
+      "username": "op://TestVault/MCPDemo/username",
+      "password": "op://TestVault/MCPDemo/password"
+    }
+  }]
+}
