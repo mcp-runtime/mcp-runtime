@@ -1,0 +1,28 @@
+version: v1
+servers:
+  - name: credential-form-demo
+    description: Two-header test upstream for the mcp-auth credential gateway sign-in form.
+    image: registry.mcpruntime.org/public/credential-form-demo
+    imageTag: form-review
+    route: /credential-form-demo/mcp
+    publicPathPrefix: credential-form-demo
+    port: 8088
+    replicas: 1
+    scope: public
+    auth:
+      mode: header
+      headers: [X-Demo-Username, X-Demo-Password]
+      credentialGateway:
+        validationPath: /auth/check
+        vaultURL: https://taranawireless.1password.com/
+    gateway:
+      enabled: false
+    tools:
+      - name: upstream_status
+        description: Confirm upstream header authentication.
+        requiredTrust: low
+        sideEffect: read
+      - name: echo
+        description: Echo an authenticated message.
+        requiredTrust: low
+        sideEffect: read

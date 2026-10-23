@@ -134,6 +134,13 @@ spec:
                         maxLength: 128
                         pattern: ^/[A-Za-z0-9._~/-]*$
                         type: string
+                      vaultURL:
+                        description: |-
+                          VaultURL is where a person finds the header values, such as a password
+                          manager's vault page (https) or app link (onepassword://). The sign-in
+                          page shows it as an open-in-new-tab link; nothing is fetched from it.
+                        maxLength: 2048
+                        type: string
                     required:
                     - validationPath
                     type: object

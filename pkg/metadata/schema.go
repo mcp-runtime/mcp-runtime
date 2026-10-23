@@ -204,6 +204,7 @@ type AuthConfig struct {
 type CredentialGatewayConfig struct {
 	ValidationPath string   `yaml:"validationPath" json:"validationPath"`
 	SecretHeaders  []string `yaml:"secretHeaders,omitempty" json:"secretHeaders,omitempty"`
+	VaultURL       string   `yaml:"vaultURL,omitempty" json:"vaultURL,omitempty"`
 }
 
 // DelegatedToolRule allows or denies one tool when auth.mode is header.

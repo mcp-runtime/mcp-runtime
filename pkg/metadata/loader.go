@@ -228,7 +228,7 @@ func validateHeaderAuth(server *ServerMetadata) error {
 		return err
 	}
 	if gateway := server.Auth.CredentialGateway; gateway != nil {
-		if err := credentialheaders.ValidateGateway(gateway.ValidationPath, gateway.SecretHeaders, server.Auth.Headers); err != nil {
+		if err := credentialheaders.ValidateGateway(gateway.ValidationPath, gateway.VaultURL, gateway.SecretHeaders, server.Auth.Headers); err != nil {
 			return err
 		}
 	}
