@@ -632,3 +632,33 @@ func secretKeyRefEqual(a, b *SecretKeyRef) bool {
 	}
 	return a.Name == b.Name && a.Key == b.Key
 }
+
+func TestLoadFromFileCredentialGateway(t *testing.T) {
+	write := func(t *testing.T, auth string) string {
+		t.Helper()
+		path := filepath.Join(t.TempDir(), "servers.yaml")
+		doc := "version: v1\nservers:\n  - name: gitlab\n    image: example.com/gitlab\n    port: 8088\n    route: /gitlab/mcp\n    auth:\n" + auth
+		if err := os.WriteFile(path, []byte(doc), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	const header = "      mode: header\n      headers: [X-GitLab-Username, X-GitLab-PAT-Token]\n"
+	file, err := LoadFromFile(write(t, header+"      credentialGateway:\n        validationPath: /auth/check\n        secretHeaders: [X-GitLab-PAT-Token]\n"))
+	if err != nil {
+		t.Fatalf("a valid credentialGateway block was rejected: %v", err)
+	}
+	gateway := file.Servers[0].Auth.CredentialGateway
+	if gateway == nil || gateway.ValidationPath != "/auth/check" || len(gateway.SecretHeaders) != 1 {
+		t.Fatalf("credentialGateway not loaded: %+v", gateway)
+	}
+	for name, auth := range map[string]string{
+		"query in path":      header + "      credentialGateway:\n        validationPath: /check?x=1\n",
+		"unknown secret":     header + "      credentialGateway:\n        validationPath: /check\n        secretHeaders: [X-Other]\n",
+		"oauth with gateway": "      issuerURL: https://issuer.example.com\n      audience: https://mcp.example.com/gitlab/mcp\n      credentialGateway:\n        validationPath: /check\n",
+	} {
+		if _, err := LoadFromFile(write(t, auth)); err == nil {
+			t.Errorf("accepted: %s", name)
+		}
+	}
+}

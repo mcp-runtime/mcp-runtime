@@ -5,6 +5,7 @@ Usage:
 
 Available Commands:
   apply       Mount private gateway configuration and expose its OAuth resource paths
+  sync        Derive gateway services from header-mode servers that declare auth.credentialGateway, then apply
 
 Flags:
   -h, --help   help for mcp-auth-gateway

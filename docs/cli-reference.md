@@ -1198,7 +1198,8 @@ read-only node credential rotation, and recovery after a partial activation.
 
 `mcp-runtime cluster mcp-auth-gateway apply` installs private config for a
 separately selected combined mcp-auth image. It requires `--file`,
-`--mappings-file`, repeated `--secret-file KEY=FILE` inputs as needed,
+`--mappings-file` (only for services that read vault references), repeated
+`--secret-file KEY=FILE` inputs as needed,
 `--tls-secret`, explicit `--kubeconfig`, `--context` and `--expect-cluster-id`.
 Review `--dry-run`, then repeat with `--yes`. All config file references use
 `/etc/mcp-auth-gateway/<key>`; mappings are mounted as `mappings.json`.
@@ -1213,3 +1214,36 @@ administrator-owned gateway audience/scope registration across MCPServer events.
 Use [the example](../examples/vault-header-demo/README.md) for provider config,
 upstream validation and acceptance steps. The raw header upstream and gateway
 OAuth URL remain different endpoints; Runtime does not rewrite catalog URLs.
+
+### Servers that need only a URL in the client
+
+A header-mode server can declare that the gateway collects its headers at
+sign-in. In `.mcp/servers.yaml`:
+
+```yaml
+servers:
+  - name: gitlab
+    route: /gitlab/mcp
+    auth:
+      mode: header
+      headers: [X-GitLab-Username, X-GitLab-PAT-Token]
+      credentialGateway:
+        validationPath: /auth/check   # GET with the headers; 2xx only if accepted
+        secretHeaders: [X-GitLab-PAT-Token]   # optional; default masks token/password/key names
+```
+
+The MCP client configuration is then `{"url": "https://<auth host>/gitlab/mcp"}`
+with no headers. `mcp-runtime cluster mcp-auth-gateway sync` reads the base
+gateway JSON (`--file`: listener, issuer and session key; no `services`
+needed) and adds one form-source service for every pushed server with this
+block: resource `https://<auth host><route>`, upstream and validation URLs on the
+server's own HTTPS host (`ingressHost`, or `--mcp-host`), and one sign-in input
+per declared header. It needs no vault provider or mappings file, takes
+`--secret-file client.pem=<file>` for the gateway's resource-client key, and
+otherwise behaves like `apply` (`--dry-run`, then `--yes`).
+
+Header values a person submits are validated at the upstream before any OAuth
+code is issued, then held in mcp-auth's memory only. Applying restarts mcp-auth,
+which clears them, so people sign in again. Servers with the same name in two
+namespaces conflict. The block is accepted only with `auth.mode: header`, and
+every declared header becomes a required input.

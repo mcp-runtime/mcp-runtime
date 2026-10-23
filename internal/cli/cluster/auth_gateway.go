@@ -16,91 +16,237 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/validation"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/retry"
+	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
 	"mcp-runtime/pkg/authgateway"
 )
 
+type gatewayOptions struct {
+	file, mappings, tls, kubeconfig, kubeContext, clusterID, mcpHost string
+	files                                                            []string
+	yes, dryRun                                                      bool
+}
+
+func (o *gatewayOptions) bind(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&o.file, "file", "", "Gateway JSON file; references must use /etc/mcp-auth-gateway/<key>")
+	cmd.Flags().StringVar(&o.mappings, "mappings-file", "", "Private identity-to-vault-reference mapping JSON file (only for vault services)")
+	cmd.Flags().StringArrayVar(&o.files, "secret-file", nil, "Mount a private KEY=FILE input (repeat for provider token, session key and resource-client key)")
+	cmd.Flags().StringVar(&o.tls, "tls-secret", "", "Existing TLS Secret covering the auth hostname; no certificate is issued")
+	cmd.Flags().StringVar(&o.kubeconfig, "kubeconfig", "", "Explicit kubeconfig path")
+	cmd.Flags().StringVar(&o.kubeContext, "context", "", "Explicit Kubernetes context")
+	cmd.Flags().StringVar(&o.clusterID, "expect-cluster-id", "", "Expected kube-system namespace UID")
+	cmd.Flags().BoolVar(&o.dryRun, "dry-run", false, "Validate inputs and show the configuration plan without writing")
+	cmd.Flags().BoolVar(&o.yes, "yes", false, "Apply the reviewed configuration without another prompt")
+}
+
+func (o *gatewayOptions) validate() error {
+	if o.file == "" || o.tls == "" || o.kubeconfig == "" || o.kubeContext == "" || o.clusterID == "" {
+		return errors.New("--file, --tls-secret, --kubeconfig, --context and --expect-cluster-id are required")
+	}
+	if !o.dryRun && !o.yes {
+		return errors.New("pass --yes after reviewing --dry-run")
+	}
+	return nil
+}
+
 func newMCPAuthGatewayCmd() *cobra.Command {
 	root := &cobra.Command{Use: "mcp-auth-gateway", Short: "Configure the optional bundled MCP Auth credential gateway"}
-	var file, mappings, tls, kubeconfig, kubeContext, clusterID string
-	var files []string
-	var yes, dryRun bool
-	cmd := &cobra.Command{Use: "apply", Short: "Mount private gateway configuration and expose its OAuth resource paths", RunE: func(cmd *cobra.Command, _ []string) error {
-		if file == "" || mappings == "" || tls == "" || kubeconfig == "" || kubeContext == "" || clusterID == "" {
-			return errors.New("--file, --mappings-file, --tls-secret, --kubeconfig, --context and --expect-cluster-id are required")
+	var applyOpts, syncOpts gatewayOptions
+	apply := &cobra.Command{Use: "apply", Short: "Mount private gateway configuration and expose its OAuth resource paths", RunE: func(cmd *cobra.Command, _ []string) error {
+		if err := applyOpts.validate(); err != nil {
+			return err
 		}
-		if !dryRun && !yes {
-			return errors.New("pass --yes after reviewing --dry-run")
-		}
-		data, err := os.ReadFile(file) // #nosec G304 -- explicit operator-supplied configuration.
+		data, err := os.ReadFile(applyOpts.file) // #nosec G304 -- explicit operator-supplied configuration.
 		if err != nil {
 			return errors.New("gateway configuration file is unreadable")
 		}
-		cfg, err := authgateway.Parse(data)
-		if err != nil {
+		return runAuthGateway(cmd, &applyOpts, data, nil)
+	}}
+	applyOpts.bind(apply)
+	sync := &cobra.Command{Use: "sync", Short: "Derive gateway services from header-mode servers that declare auth.credentialGateway, then apply", Long: `Reads the base gateway JSON (listener, issuer, session key; services optional),
+adds one form-source service for every MCPServer with auth.mode header and an
+auth.credentialGateway block, and applies the result like "apply". The headers
+a server declares in auth.headers become the sign-in inputs, so pushing the
+server's .mcp/servers.yaml and running sync configures the gateway. Each
+derived service reads its resource-client key from client.pem, supplied with
+--secret-file client.pem=<file>. Applying restarts mcp-auth, which clears
+header values people submitted at sign-in; they sign in again.`, RunE: func(cmd *cobra.Command, _ []string) error {
+		if err := syncOpts.validate(); err != nil {
 			return err
 		}
-		private, err := os.ReadFile(mappings) // #nosec G304 -- explicit private mapping input.
-		if err != nil || !json.Valid(private) {
-			return errors.New("mappings file must contain valid JSON")
-		}
-		payload := map[string][]byte{"config.json": data, "mappings.json": private}
-		for _, entry := range files {
-			key, path, ok := strings.Cut(entry, "=")
-			if !ok || len(validation.IsConfigMapKey(key)) > 0 || key == "config.json" || key == "mappings.json" || payload[key] != nil {
-				return errors.New("--secret-file must be a unique KEY=FILE with a valid Secret key")
-			}
-			b, err := os.ReadFile(path) // #nosec G304 -- explicit operator-supplied secret file; never printed.
-			if err != nil || len(b) == 0 {
-				return errors.New("a supplied secret file is unreadable or empty")
-			}
-			payload[key] = b
-		}
-		if err := validateGatewayFiles(data, payload); err != nil {
-			return err
-		}
-		rules := clientcmd.NewDefaultClientConfigLoadingRules()
-		rules.ExplicitPath = kubeconfig
-		rest, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, &clientcmd.ConfigOverrides{CurrentContext: kubeContext}).ClientConfig()
+		base, err := os.ReadFile(syncOpts.file) // #nosec G304 -- explicit operator-supplied configuration.
 		if err != nil {
-			return errors.New("selected Kubernetes context is unavailable")
+			return errors.New("gateway configuration file is unreadable")
 		}
-		client, err := kubernetes.NewForConfig(rest)
+		return runAuthGateway(cmd, &syncOpts, base, deriveGatewayServices)
+	}}
+	syncOpts.bind(sync)
+	sync.Flags().StringVar(&syncOpts.mcpHost, "mcp-host", "", "Public MCP host for servers that set no ingressHost")
+	root.AddCommand(apply, sync)
+	return root
+}
+
+// runAuthGateway validates the configuration and applies it. When derive is
+// set, the cluster is read first and the base configuration is extended with
+// the services it returns.
+func runAuthGateway(cmd *cobra.Command, o *gatewayOptions, data []byte, derive func(context.Context, *gatewayOptions, *rest.Config, []byte) ([]byte, error)) error {
+	rules := clientcmd.NewDefaultClientConfigLoadingRules()
+	rules.ExplicitPath = o.kubeconfig
+	connect := func() (kubernetes.Interface, *rest.Config, error) {
+		restConfig, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, &clientcmd.ConfigOverrides{CurrentContext: o.kubeContext}).ClientConfig()
 		if err != nil {
-			return err
+			return nil, nil, errors.New("selected Kubernetes context is unavailable")
+		}
+		client, err := kubernetes.NewForConfig(restConfig)
+		if err != nil {
+			return nil, nil, err
 		}
 		ns, err := client.CoreV1().Namespaces().Get(cmd.Context(), "kube-system", metav1.GetOptions{})
 		if err != nil {
+			return nil, nil, err
+		}
+		if string(ns.UID) != o.clusterID {
+			return nil, nil, errors.New("selected cluster ID does not match --expect-cluster-id")
+		}
+		return client, restConfig, nil
+	}
+	var client kubernetes.Interface
+	if derive != nil {
+		c, restConfig, err := connect()
+		if err != nil {
 			return err
 		}
-		if string(ns.UID) != clusterID {
-			return errors.New("selected cluster ID does not match --expect-cluster-id")
-		}
-		if err := applyAuthGateway(cmd.Context(), client, cfg, payload, tls, dryRun); err != nil {
+		client = c
+		if data, err = derive(cmd.Context(), o, restConfig, data); err != nil {
 			return err
 		}
-		action := "configured"
-		if dryRun {
-			action = "would configure"
+	}
+	cfg, err := authgateway.Parse(data)
+	if err != nil {
+		return err
+	}
+	payload := map[string][]byte{"config.json": data}
+	if o.mappings != "" {
+		private, err := os.ReadFile(o.mappings) // #nosec G304 -- explicit private mapping input.
+		if err != nil || !json.Valid(private) {
+			return errors.New("mappings file must contain valid JSON")
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "%s %s/%s: %d resource(s), gateway port %d; private values are omitted\n", action, mcpAuthNamespace, authgateway.SecretName, len(cfg.Services), cfg.Listen.Port)
-		return nil
-	}}
-	cmd.Flags().StringVar(&file, "file", "", "Gateway JSON file; references must use /etc/mcp-auth-gateway/<key>")
-	cmd.Flags().StringVar(&mappings, "mappings-file", "", "Private identity-to-vault-reference mapping JSON file")
-	cmd.Flags().StringArrayVar(&files, "secret-file", nil, "Mount a private KEY=FILE input (repeat for provider token, session key and resource-client key)")
-	cmd.Flags().StringVar(&tls, "tls-secret", "", "Existing TLS Secret covering the auth hostname; no certificate is issued")
-	cmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "Explicit kubeconfig path")
-	cmd.Flags().StringVar(&kubeContext, "context", "", "Explicit Kubernetes context")
-	cmd.Flags().StringVar(&clusterID, "expect-cluster-id", "", "Expected kube-system namespace UID")
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Validate inputs and show the configuration plan without writing")
-	cmd.Flags().BoolVar(&yes, "yes", false, "Apply the reviewed configuration without another prompt")
-	root.AddCommand(cmd)
-	return root
+		payload["mappings.json"] = private
+	} else if cfg.HasVaultServices() {
+		return errors.New("--mappings-file is required when a service reads vault references")
+	}
+	for _, entry := range o.files {
+		key, path, ok := strings.Cut(entry, "=")
+		if !ok || len(validation.IsConfigMapKey(key)) > 0 || key == "config.json" || key == "mappings.json" || payload[key] != nil {
+			return errors.New("--secret-file must be a unique KEY=FILE with a valid Secret key")
+		}
+		b, err := os.ReadFile(path) // #nosec G304 -- explicit operator-supplied secret file; never printed.
+		if err != nil || len(b) == 0 {
+			return errors.New("a supplied secret file is unreadable or empty")
+		}
+		payload[key] = b
+	}
+	if err := validateGatewayFiles(data, payload); err != nil {
+		return err
+	}
+	if client == nil {
+		c, _, err := connect()
+		if err != nil {
+			return err
+		}
+		client = c
+	}
+	if err := applyAuthGateway(cmd.Context(), client, cfg, payload, o.tls, o.dryRun); err != nil {
+		return err
+	}
+	action := "configured"
+	if o.dryRun {
+		action = "would configure"
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "%s %s/%s: %d resource(s), gateway port %d; private values are omitted\n", action, mcpAuthNamespace, authgateway.SecretName, len(cfg.Services), cfg.Listen.Port)
+	return nil
+}
+
+var mcpServerGVR = schema.GroupVersionResource{Group: "mcpruntime.org", Version: "v1alpha1", Resource: "mcpservers"}
+
+// deriveGatewayServices appends a form-source service for each header-mode
+// MCPServer that declares auth.credentialGateway.
+func deriveGatewayServices(ctx context.Context, o *gatewayOptions, restConfig *rest.Config, base []byte) ([]byte, error) {
+	dyn, err := dynamic.NewForConfig(restConfig)
+	if err != nil {
+		return nil, err
+	}
+	list, err := dyn.Resource(mcpServerGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, errors.New("could not list MCPServers in the selected cluster")
+	}
+	var servers []mcpv1alpha1.MCPServer
+	for _, item := range list.Items {
+		var server mcpv1alpha1.MCPServer
+		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(item.Object, &server); err != nil {
+			return nil, fmt.Errorf("MCPServer %s/%s could not be read", item.GetNamespace(), item.GetName())
+		}
+		servers = append(servers, server)
+	}
+	return extendGatewayConfig(base, servers, o.mcpHost)
+}
+
+// extendGatewayConfig adds the derived services to the base configuration and
+// keeps every other key of it as written.
+func extendGatewayConfig(base []byte, servers []mcpv1alpha1.MCPServer, publicHost string) ([]byte, error) {
+	var doc map[string]any
+	if err := json.Unmarshal(base, &doc); err != nil {
+		return nil, errors.New("gateway configuration must contain one JSON object")
+	}
+	authServer, _ := doc["authorization_server"].(map[string]any)
+	issuer, _ := authServer["issuer"].(string)
+	issuerURL, err := url.Parse(issuer)
+	if err != nil || issuerURL.Host == "" {
+		return nil, errors.New("gateway configuration needs authorization_server.issuer")
+	}
+	sort.Slice(servers, func(i, j int) bool {
+		if servers[i].Namespace != servers[j].Namespace {
+			return servers[i].Namespace < servers[j].Namespace
+		}
+		return servers[i].Name < servers[j].Name
+	})
+	services, _ := doc["services"].([]any)
+	seen := map[string]string{}
+	for _, server := range servers {
+		auth := server.Spec.Auth
+		if !mcpv1alpha1.AuthUsesHeaderMode(auth) || auth.CredentialGateway == nil {
+			continue
+		}
+		service, err := authgateway.ServiceFor(authgateway.ServerInput{
+			Name: server.Name, Namespace: server.Namespace, IngressHost: server.Spec.IngressHost, IngressPath: server.Spec.IngressPath,
+			Headers: auth.Headers, ValidationPath: auth.CredentialGateway.ValidationPath, SecretHeaders: auth.CredentialGateway.SecretHeaders,
+		}, issuerURL.Host, publicHost)
+		if err != nil {
+			return nil, err
+		}
+		if other, dup := seen[service.ID]; dup {
+			return nil, fmt.Errorf("servers %s and %s/%s share the gateway service id %q", other, server.Namespace, server.Name, service.ID)
+		}
+		seen[service.ID] = server.Namespace + "/" + server.Name
+		encoded, _ := json.Marshal(service)
+		var entry any
+		_ = json.Unmarshal(encoded, &entry)
+		services = append(services, entry)
+	}
+	doc["services"] = services
+	out, err := json.Marshal(doc)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func validateGatewayFiles(raw []byte, payload map[string][]byte) error {

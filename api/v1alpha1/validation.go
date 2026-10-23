@@ -321,6 +321,11 @@ func validateHeaderAuth(authPath *field.Path, auth *AuthConfig, policy *PolicyCo
 	if _, err := credentialheaders.NormalizePresence(auth.CredentialPresence); err != nil {
 		allErrs = append(allErrs, field.Invalid(authPath.Child("credentialPresence"), auth.CredentialPresence, err.Error()))
 	}
+	if auth.CredentialGateway != nil {
+		if err := credentialheaders.ValidateGateway(auth.CredentialGateway.ValidationPath, auth.CredentialGateway.SecretHeaders, auth.Headers); err != nil {
+			allErrs = append(allErrs, field.Invalid(authPath.Child("credentialGateway"), auth.CredentialGateway.ValidationPath, err.Error()))
+		}
+	}
 	if session != nil {
 		allErrs = append(allErrs, field.Forbidden(authPath, "header mode cannot require a Runtime session"))
 	}
@@ -422,6 +427,8 @@ func (r *MCPServer) validate() error {
 	if r.Spec.Auth != nil {
 		if AuthUsesHeaderMode(r.Spec.Auth) {
 			allErrs = append(allErrs, validateHeaderAuth(specPath.Child("auth"), r.Spec.Auth, r.Spec.Policy, r.Spec.Session, r.Spec.Tools)...)
+		} else if r.Spec.Auth.CredentialGateway != nil {
+			allErrs = append(allErrs, field.Forbidden(specPath.Child("auth", "credentialGateway"), "credentialGateway requires auth.mode header"))
 		}
 		seenScopes := make(map[string]bool, len(r.Spec.Auth.Scopes))
 		for i, scope := range r.Spec.Auth.Scopes {

@@ -17,7 +17,9 @@ import (
 const (
 	ResourceAnnotation = "mcpruntime.org/auth-gateway-resources"
 	MountPath          = "/etc/mcp-auth-gateway"
-	SecretName         = "mcp-auth-credential-gateway"
+	// SourceForm marks a service whose header values are submitted at sign-in.
+	SourceForm = "form"
+	SecretName = "mcp-auth-credential-gateway"
 )
 
 type Config struct {
@@ -37,7 +39,19 @@ type Config struct {
 		UpstreamURL    string   `json:"upstream_url"`
 		ValidationURL  string   `json:"validation_url"`
 		RequiredScopes []string `json:"required_scopes"`
+		Source         string   `json:"source"`
 	} `json:"services"`
+}
+
+// HasVaultServices reports whether any service reads mapped vault references,
+// which is what needs a provider and a private mappings file.
+func (c *Config) HasVaultServices() bool {
+	for _, s := range c.Services {
+		if s.Source != SourceForm {
+			return true
+		}
+	}
+	return false
 }
 
 func Parse(data []byte) (*Config, error) {
@@ -59,8 +73,11 @@ func Parse(data []byte) (*Config, error) {
 	if err != nil {
 		return nil, errors.New("gateway issuer must be an HTTPS URL")
 	}
-	if len(c.Provider) == 0 || string(c.Provider) == "null" || len(c.Services) == 0 || len(c.Services) > 16 {
-		return nil, errors.New("provider and 1-16 services are required")
+	if len(c.Services) == 0 || len(c.Services) > 16 {
+		return nil, errors.New("1-16 services are required")
+	}
+	if c.HasVaultServices() && (len(c.Provider) == 0 || string(c.Provider) == "null") {
+		return nil, errors.New("a provider is required for vault services")
 	}
 	seenID, seenURL := map[string]bool{}, map[string]bool{}
 	for _, s := range c.Services {

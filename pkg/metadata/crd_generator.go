@@ -110,6 +110,12 @@ func GenerateCRD(server *ServerMetadata, outputPath string) error {
 			Audience:           server.Auth.Audience,
 			Scopes:             append([]string(nil), server.Auth.Scopes...),
 		}
+		if gateway := server.Auth.CredentialGateway; gateway != nil {
+			mcpServer.Spec.Auth.CredentialGateway = &mcpv1alpha1.CredentialGatewayConfig{
+				ValidationPath: gateway.ValidationPath,
+				SecretHeaders:  append([]string(nil), gateway.SecretHeaders...),
+			}
+		}
 	}
 
 	if server.Policy != nil {

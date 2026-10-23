@@ -195,6 +195,15 @@ type AuthConfig struct {
 	IssuerURL          string   `yaml:"issuerURL,omitempty" json:"issuerURL,omitempty"`
 	Audience           string   `yaml:"audience,omitempty" json:"audience,omitempty"`
 	Scopes             []string `yaml:"scopes,omitempty" json:"scopes,omitempty"`
+	// CredentialGateway opts a header-mode server into the bundled mcp-auth
+	// credential gateway; see mcpv1alpha1.CredentialGatewayConfig.
+	CredentialGateway *CredentialGatewayConfig `yaml:"credentialGateway,omitempty" json:"credentialGateway,omitempty"`
+}
+
+// CredentialGatewayConfig configures the credential gateway for a header-mode server.
+type CredentialGatewayConfig struct {
+	ValidationPath string   `yaml:"validationPath" json:"validationPath"`
+	SecretHeaders  []string `yaml:"secretHeaders,omitempty" json:"secretHeaders,omitempty"`
 }
 
 // DelegatedToolRule allows or denies one tool when auth.mode is header.

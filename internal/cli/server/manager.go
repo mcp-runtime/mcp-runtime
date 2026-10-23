@@ -1100,6 +1100,12 @@ func mergeDeployMetadata(spec *mcpv1alpha1.MCPServerSpec, src *metadata.ServerMe
 			Audience:           src.Auth.Audience,
 			Scopes:             append([]string(nil), src.Auth.Scopes...),
 		}
+		if gateway := src.Auth.CredentialGateway; gateway != nil {
+			spec.Auth.CredentialGateway = &mcpv1alpha1.CredentialGatewayConfig{
+				ValidationPath: gateway.ValidationPath,
+				SecretHeaders:  append([]string(nil), gateway.SecretHeaders...),
+			}
+		}
 	}
 	if src.Policy != nil {
 		spec.Policy = &mcpv1alpha1.PolicyConfig{
