@@ -9,6 +9,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Added
 
+- Team management shows selected-team identity, member and owner counts, member join dates, and associated active/inactive agents with creator attribution and links to their details. Cursor paging labels loaded agent counts explicitly; independent directory failures retain unknown counts and switching teams clears stale rows and member forms ([#851](https://github.com/tavric-labs/mcp-runtime/issues/851)).
 - Server details offer client installation actions for Claude, Claude Code, Codex, Cursor, and VS Code using the published public endpoint and required authentication fields. Native installation dialogs and reviewable agent setup prompts complement the existing copyable configurations ([#846](https://github.com/tavric-labs/mcp-runtime/pull/846)).
 
 ## [0.12.1] - 2026-10-22

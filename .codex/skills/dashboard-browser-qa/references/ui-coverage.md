@@ -19,6 +19,13 @@ inline API error messages, duplicate-email conflict recovery, and **Add existing
 user** by user ID. Existing-user submissions must send only membership role,
 without a password. Verify refreshed member rows after successful submissions;
 the CLI `team user create` must exercise the same atomic account/membership API.
+Check the selected-team summary, member/owner counts, joined dates and inline
+active/inactive agents against authorized API responses. Follow cursor pages;
+loaded-agent counts must remain explicitly partial until complete. Switch teams
+while reads are pending and verify no previous rows or open member form remain.
+Break membership and agent reads independently, retry, and check unknown counts,
+creator fallback IDs, Agent detail links, owner/member denial and 390px bounds.
+Staging's workspace browser checks team counts and screenshots for owner/admin.
 
 Use this reference for `full-ui` audits, for `git-range` audits where the diff
 touches a listed page, or when a finding requires detailed UI reproduction.
