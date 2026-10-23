@@ -1193,3 +1193,23 @@ authentication automatically. On an existing install, activate it with
 `mcp-runtime registry enable-auth --realm https://api.example.com/api/v1/registry/token`.
 See [registry authentication](internals/registry-auth.md) for prerequisites,
 read-only node credential rotation, and recovery after a partial activation.
+
+## Optional MCP Auth credential gateway
+
+`mcp-runtime cluster mcp-auth-gateway apply` installs private config for a
+separately selected combined mcp-auth image. It requires `--file`,
+`--mappings-file`, repeated `--secret-file KEY=FILE` inputs as needed,
+`--tls-secret`, explicit `--kubeconfig`, `--context` and `--expect-cluster-id`.
+Review `--dry-run`, then repeat with `--yes`. All config file references use
+`/etc/mcp-auth-gateway/<key>`; mappings are mounted as `mappings.json`.
+
+Gateway resources use paths on the existing HTTPS auth hostname outside the
+OAuth issuer path. The command reuses its existing TLS Secret, creates the
+gateway's separate Service/HTTPS Ingress/narrow ingress NetworkPolicy, and mounts
+config, private mappings and keys in a read-only Kubernetes Secret. Secret
+contents are omitted from command output. It preserves the OAuth image, identity
+connector, signing key, PVC and other wiring. The operator retains the
+administrator-owned gateway audience/scope registration across MCPServer events.
+Use [the example](../examples/vault-header-demo/README.md) for provider config,
+upstream validation and acceptance steps. The raw header upstream and gateway
+OAuth URL remain different endpoints; Runtime does not rewrite catalog URLs.

@@ -19,7 +19,8 @@ Use only a dedicated test Login containing the public fixtures `demo-user` and
 | MCP client configuration | MCP client | Gateway resource URL only |
 
 The file is **`.mcp/servers.yaml`**, plural. No new YAML field or Runtime CRD is
-needed for this layout. Runtime does not upload companion JSON to mcp-auth or
+needed for this layout. The administrator applies companion JSON explicitly
+with `mcp-runtime cluster mcp-auth-gateway apply`; Runtime does not automatically
 rewrite its catalog entry; the upstream URL and gateway resource URL are
 different endpoints. Actual provider tokens, private keys and private mappings
 must stay out of Git and container images.
@@ -34,9 +35,9 @@ After review, using the supported Runtime CLI workflow from this directory:
 
 ```bash
 mcp-runtime server validate
-mcp-runtime server build
-mcp-runtime server push
-mcp-runtime server deploy
+mcp-runtime server build image vault-header-demo --tag credential-gateway-review
+mcp-runtime server push --image registry.mcpruntime.org/public/vault-header-demo:credential-gateway-review --scope public
+mcp-runtime server deploy vault-header-demo --scope public --tag credential-gateway-review
 ```
 
 The review image tag has not been published. These instructions do not imply a
@@ -137,3 +138,34 @@ Runtime example modules and the mcp-auth modules; Runtime CLI metadata validatio
 passed; the combined service container built; the loopback harness above passed.
 These checks use fixture credentials and a fake vault CLI and do not establish
 production, real-vault or native-prompt acceptance.
+
+## Install gateway configuration through Runtime
+
+The supported admin command mounts the private files, registers the OAuth
+resources with the operator, and creates a separate HTTPS gateway route on the
+existing auth host/certificate. Use resource URLs such as
+`https://auth.example.com/vault-header-demo/mcp` in this bundled layout. Point all
+`*_file` references inside the config to `/etc/mcp-auth-gateway/<key>`; mappings
+are `/etc/mcp-auth-gateway/mappings.json`. Private files stay local and are sent
+only to a read-only Kubernetes Secret, never printed or baked into an image.
+Deploy the matching combined auth image first, then review:
+
+```bash
+mcp-runtime cluster mcp-auth-gateway apply \
+  --file /private/gateway.json --mappings-file /private/mappings.json \
+  --secret-file provider-token=/private/provider-token \
+  --secret-file session.key=/private/session.key \
+  --secret-file client.pem=/private/client.pem \
+  --tls-secret mcp-auth-server-tls \
+  --kubeconfig /private/prod-kubeconfig --context prod-mcp-runtime \
+  --expect-cluster-id <kube-system-namespace-uid> --dry-run
+# After reviewing, repeat with --yes instead of --dry-run.
+```
+
+The command preserves the OAuth image, identity connector, signing key, PVC,
+existing ingress and unrelated deployment settings. It reuses the existing TLS
+Secret and adds no certificate issuance. The operator merges administrator-owned
+gateway resources with the normal MCPServer resource list so future reconciles
+do not erase the gateway's audiences/scopes. Secret rotation triggers a pod
+restart using the Kubernetes Secret revision, without publishing hashes of the
+secret values.

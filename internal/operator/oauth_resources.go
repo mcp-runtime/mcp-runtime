@@ -3,6 +3,7 @@ package operator
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"path"
 	"reflect"
@@ -20,6 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
+	"mcp-runtime/pkg/authgateway"
 )
 
 const (
@@ -93,6 +95,20 @@ func (r *MCPServerReconciler) reconcileBundledOAuthResources(ctx context.Context
 		return nil
 	}
 
+	// Gateway resources are registered only on this administrator-owned
+	// Deployment; tenant MCPServer audience restrictions above remain unchanged.
+	registered, err := authgateway.RegisteredResources(deployment.Annotations[authgateway.ResourceAnnotation], r.OAuthIssuerURL)
+	if err != nil {
+		return err
+	}
+	for resource, scopes := range registered {
+		if _, exists := seen[resource]; exists {
+			return fmt.Errorf("gateway resource conflicts with a server audience")
+		}
+		resources = append(resources, resource)
+		resourceScopes[resource] = scopes
+	}
+	sort.Strings(resources)
 	before := deployment.DeepCopy()
 	envs := deployment.Spec.Template.Spec.Containers[0].Env
 	upsertEnv := func(name, value string) {

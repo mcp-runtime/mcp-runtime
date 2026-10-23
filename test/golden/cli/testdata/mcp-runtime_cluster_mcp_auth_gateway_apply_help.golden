@@ -1,0 +1,19 @@
+Mount private gateway configuration and expose its OAuth resource paths
+
+Usage:
+  mcp-runtime cluster mcp-auth-gateway apply [flags]
+
+Flags:
+      --context string             Explicit Kubernetes context
+      --dry-run                    Validate inputs and show the configuration plan without writing
+      --expect-cluster-id string   Expected kube-system namespace UID
+      --file string                Gateway JSON file; references must use /etc/mcp-auth-gateway/<key>
+  -h, --help                       help for apply
+      --kubeconfig string          Explicit kubeconfig path
+      --mappings-file string       Private identity-to-vault-reference mapping JSON file
+      --secret-file stringArray    Mount a private KEY=FILE input (repeat for provider token, session key and resource-client key)
+      --tls-secret string          Existing TLS Secret covering the auth hostname; no certificate is issued
+      --yes                        Apply the reviewed configuration without another prompt
+
+Global Flags:
+      --debug   Enable debug mode with structured error logging

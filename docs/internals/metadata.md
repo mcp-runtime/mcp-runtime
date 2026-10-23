@@ -107,3 +107,6 @@ mcp-auth operator. MCP clients connect to the gateway resource URL and use OAuth
 The [header-only example](../../examples/vault-header-demo/README.md) includes both
 configuration shapes. This layout uses existing metadata fields and does not
 automatically provision the optional gateway or rewrite the Runtime catalog URL.
+Administrators can install companion config explicitly with
+`mcp-runtime cluster mcp-auth-gateway apply`; see the example for required private
+file mounts, existing TLS, and operator resource registration.
