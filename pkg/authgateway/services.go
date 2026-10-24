@@ -17,7 +17,7 @@ const DefaultScope = "tools:read"
 // administrator supplies it with --secret-file client.pem=<file>.
 const ClientKeyFile = MountPath + "/client.pem"
 
-var serviceIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,39}$`)
+var serviceIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,26}$`)
 
 // ServerInput is the part of a header-mode MCPServer the gateway needs.
 type ServerInput struct {
@@ -51,8 +51,8 @@ type ResourceClient struct {
 	PrivateKeyFile string `json:"private_key_file"`
 }
 
-// Service is a gateway service entry derived from a pushed MCPServer.
-type Service struct {
+// DerivedService is a complete gateway service entry derived from a pushed MCPServer.
+type DerivedService struct {
 	ID             string         `json:"id"`
 	ResourceURL    string         `json:"resource_url"`
 	UpstreamURL    string         `json:"upstream_url"`
@@ -68,30 +68,30 @@ type Service struct {
 // authHost at the server's own MCP path; the upstream and its validation URL
 // are the server's public HTTPS endpoint, never a tenant-chosen address.
 // publicHost overrides the server's ingress host when it has none of its own.
-func ServiceFor(in ServerInput, authHost, publicHost string) (Service, error) {
+func ServiceFor(in ServerInput, authHost, publicHost string) (DerivedService, error) {
 	where := fmt.Sprintf("server %s/%s", in.Namespace, in.Name)
 	id := strings.ToLower(in.Name)
 	if !serviceIDPattern.MatchString(id) {
-		return Service{}, fmt.Errorf("%s: name cannot be a gateway service id (lowercase letters, digits and '-', at most 40)", where)
+		return DerivedService{}, fmt.Errorf("%s: name cannot be a gateway service id (lowercase letters, digits and '-', at most 27)", where)
 	}
 	host := strings.TrimSpace(in.IngressHost)
 	if host == "" {
 		host = strings.TrimSpace(publicHost)
 	}
 	if host == "" || strings.ContainsAny(host, "/:?#@ ") {
-		return Service{}, fmt.Errorf("%s: needs an ingress host (set ingressHost or pass --mcp-host)", where)
+		return DerivedService{}, fmt.Errorf("%s: needs an ingress host (set ingressHost or pass --mcp-host)", where)
 	}
 	if !strings.HasPrefix(in.IngressPath, "/") || strings.HasSuffix(in.IngressPath, "/") || strings.Contains(in.IngressPath, "//") {
-		return Service{}, fmt.Errorf("%s: ingressPath must be an absolute path without a trailing slash", where)
+		return DerivedService{}, fmt.Errorf("%s: ingressPath must be an absolute path without a trailing slash", where)
 	}
 	if err := credentialheaders.ValidateGateway(in.ValidationPath, in.SecretHeaders, in.Headers); err != nil {
-		return Service{}, fmt.Errorf("%s: %w", where, err)
+		return DerivedService{}, fmt.Errorf("%s: %w", where, err)
 	}
 	if strings.TrimSpace(authHost) == "" {
-		return Service{}, errors.New("auth host is required")
+		return DerivedService{}, errors.New("auth host is required")
 	}
 	upstream := "https://" + host + in.IngressPath
-	service := Service{
+	service := DerivedService{
 		ID: id, ResourceURL: "https://" + authHost + in.IngressPath, UpstreamURL: upstream, ValidationURL: upstream + in.ValidationPath,
 		RequiredScopes: []string{DefaultScope},
 		ResourceClient: ResourceClient{ClientID: "gateway-" + id, KeyID: "k1", PrivateKeyFile: ClientKeyFile},

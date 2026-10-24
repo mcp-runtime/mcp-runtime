@@ -1196,24 +1196,46 @@ read-only node credential rotation, and recovery after a partial activation.
 
 ## Optional MCP Auth credential gateway
 
-`mcp-runtime cluster mcp-auth-gateway apply` installs private config for a
-separately selected combined mcp-auth image. It requires `--file`, repeated
-`--secret-file KEY=FILE` inputs as needed (the session binding key and the
-resource-client key), `--tls-secret`, explicit `--kubeconfig`, `--context` and
-`--expect-cluster-id`. Review `--dry-run`, then repeat with `--yes`. All config
-file references use `/etc/mcp-auth-gateway/<key>`.
+`mcp-runtime cluster mcp-auth-gateway apply` installs the credential gateway as its
+own workload next to MCP Auth, and wires MCP Auth to it. It takes `--file` (a
+gateway JSON that lists the services), repeated `--secret-file KEY=FILE` inputs
+(the session binding key and each service's resource-client key), `--tls-secret`,
+`--gateway-image`, explicit `--kubeconfig`, `--context` and `--expect-cluster-id`.
+Review `--dry-run`, then repeat with `--yes`. All config file references use
+`/etc/mcp-credential-gateway/<key>`.
 
-Gateway resources use paths on the existing HTTPS auth hostname outside the
-OAuth issuer path. The command reuses its existing TLS Secret, creates the
-gateway's separate Service/HTTPS Ingress/narrow ingress NetworkPolicy, and mounts
-the config and keys in a read-only Kubernetes Secret. Secret contents are omitted
-from command output. It preserves the OAuth image, identity connector, signing
-key, PVC and other wiring. The operator retains the administrator-owned gateway
-audience/scope registration across MCPServer events. Header values are never
-stored by Runtime: the gateway collects them at sign-in and keeps them in memory.
-Use [the example](../examples/credential-form-demo/README.md) for a deployable
-upstream. The raw header upstream and gateway OAuth URL remain different
-endpoints; Runtime does not rewrite catalog URLs.
+It does this, in order, and stops at the first failure:
+
+1. Checks the installed MCP Auth: one container, the same issuer, a single
+   connector (`MCP_AUTH_CONNECTOR`), and no foreign external-credentials file. It
+   refuses login methods mode, where the gateway's resource logins belong in the
+   methods file.
+2. Creates or updates the gateway's Secret (config and keys), Deployment (non-root,
+   read-only root filesystem, no capabilities, probes), Service, NetworkPolicy and
+   an Ingress that routes each service path, its `/login/*` sign-in sub-paths and
+   its protected-resource metadata on the auth host. It reuses the existing TLS
+   Secret and issues no certificate. Objects Runtime does not own are never
+   overwritten.
+3. Waits for the gateway to be ready (`--wait-timeout`). If it never is, MCP Auth is
+   left untouched.
+4. Wires MCP Auth: merges one plain OAuth connector per service into the connectors
+   ConfigMap (entries named `gateway-login-<id>`; every other connector is kept as
+   written), publishes a wiring ConfigMap (the resource logins and the gateway's
+   assertion-client public keys), and patches the MCP Auth Deployment (mount,
+   environment, allowed resources). MCP Auth restarts only if that wiring changed.
+5. Removes the objects of the earlier layout, which ran the gateway inside MCP Auth.
+
+The gateway's sign-in endpoints are what MCP Auth redirects the browser to for a
+gateway resource, so the person's header values go from the browser to the gateway
+and never reach MCP Auth. Secret contents are omitted from command output. The OAuth
+image, identity connector, signing key and PVC are untouched, and every other
+resource keeps its login. The operator retains the administrator-owned gateway
+audience/scope registration across MCPServer events. Header values are never stored
+by Runtime: the gateway keeps them in memory, so restarting MCP Auth does not clear
+them and restarting the gateway does. Use
+[the example](../examples/credential-form-demo/README.md) for a deployable upstream.
+The raw header upstream and gateway OAuth URL remain different endpoints; Runtime does
+not rewrite catalog URLs.
 
 ### Servers that need only a URL in the client
 
@@ -1243,8 +1265,8 @@ per declared header. It needs no vault provider or mappings file, takes
 otherwise behaves like `apply` (`--dry-run`, then `--yes`).
 
 Header values a person submits are validated at the upstream before any OAuth
-code is issued, then held in mcp-auth's memory only. Applying restarts mcp-auth,
-which clears them, so people sign in again. Servers with the same name in two
+code is issued, then held in the gateway's memory only. Restarting the gateway
+clears them, so people sign in again; restarting mcp-auth does not. Servers with the same name in two
 namespaces conflict. The block is accepted only with `auth.mode: header`, and
 every declared header becomes a required input, labeled with its own name.
 Any valid HTTP header name works, including `Authorization` and names such as

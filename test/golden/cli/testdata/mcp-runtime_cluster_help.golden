@@ -11,7 +11,7 @@ Available Commands:
   identity           Inspect workload adapter identity health
   init               Initialize cluster configuration
   mcp-auth-connector Manage the bundled MCP Auth identity connector
-  mcp-auth-gateway   Configure the optional bundled MCP Auth credential gateway
+  mcp-auth-gateway   Install the optional credential gateway and wire MCP Auth to it
   operator-rbac      Reconcile operator permissions from this release
   provision          Provision a new cluster
   status             Check cluster status

@@ -1,17 +1,24 @@
-Mount private gateway configuration and expose its OAuth resource paths
+Installs the credential gateway as its own workload in mcp-platform (Secret,
+Deployment, Service, Ingress, NetworkPolicy) from a gateway JSON file that lists
+its services, waits for it to be ready, then wires MCP Auth to it: a connector
+and a resource login per service, the gateway's assertion client, and the
+allowed resources. It also removes the objects of the earlier layout that ran
+the gateway inside MCP Auth.
 
 Usage:
   mcp-runtime cluster mcp-auth-gateway apply [flags]
 
 Flags:
       --context string             Explicit Kubernetes context
-      --dry-run                    Validate inputs and show the configuration plan without writing
+      --dry-run                    Validate inputs and show the plan without writing
       --expect-cluster-id string   Expected kube-system namespace UID
-      --file string                Gateway JSON file; references must use /etc/mcp-auth-gateway/<key>
+      --file string                Gateway JSON file; file references must use /etc/mcp-credential-gateway/<key>
+      --gateway-image string       Credential gateway image; defaults to the installed gateway's image on updates
   -h, --help                       help for apply
       --kubeconfig string          Explicit kubeconfig path
-      --secret-file stringArray    Mount a private KEY=FILE input (repeat for provider token, session key and resource-client key)
+      --secret-file stringArray    Mount a private KEY=FILE input (the session binding key and the resource-client key)
       --tls-secret string          Existing TLS Secret covering the auth hostname; no certificate is issued
+      --wait-timeout duration      How long to wait for the gateway to become ready before wiring mcp-auth to it (0 skips the wait) (default 3m0s)
       --yes                        Apply the reviewed configuration without another prompt
 
 Global Flags:

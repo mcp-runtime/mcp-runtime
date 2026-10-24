@@ -16,11 +16,24 @@ import (
 )
 
 const (
+	// ResourceAnnotation records the resources the gateway registered on the
+	// mcp-auth Deployment, so the operator keeps them across MCPServer events.
 	ResourceAnnotation = "mcpruntime.org/auth-gateway-resources"
-	MountPath          = "/etc/mcp-auth-gateway"
+	// GatewayName names the gateway's own workload objects in mcp-platform:
+	// Deployment, Service, Secret, Ingress and NetworkPolicy.
+	GatewayName = "mcp-credential-gateway"
+	// MountPath is where the gateway reads its configuration and keys.
+	MountPath = "/etc/mcp-credential-gateway"
+	// WiringName is the ConfigMap holding what mcp-auth reads about the gateway:
+	// the assertion client's public keys and the resource logins.
+	WiringName = "mcp-auth-gateway-wiring"
+	// WiringMountPath is where mcp-auth mounts that ConfigMap.
+	WiringMountPath = "/etc/mcp-auth-gateway-wiring"
+	// LegacyName names the objects the earlier combined-binary layout created in
+	// mcp-platform; sync removes them.
+	LegacyName = "mcp-auth-credential-gateway"
 	// SourceForm marks a service whose header values are submitted at sign-in.
 	SourceForm = "form"
-	SecretName = "mcp-auth-credential-gateway"
 )
 
 type Config struct {
@@ -31,15 +44,19 @@ type Config struct {
 	AuthorizationServer struct {
 		Issuer string `json:"issuer"`
 	} `json:"authorization_server"`
-	SessionBindingKeyFile string `json:"session_binding_key_file"`
-	Services              []struct {
-		ID             string   `json:"id"`
-		ResourceURL    string   `json:"resource_url"`
-		UpstreamURL    string   `json:"upstream_url"`
-		ValidationURL  string   `json:"validation_url"`
-		RequiredScopes []string `json:"required_scopes"`
-		Source         string   `json:"source"`
-	} `json:"services"`
+	SessionBindingKeyFile string    `json:"session_binding_key_file"`
+	Services              []Service `json:"services"`
+}
+
+// Service is the part of a gateway service entry the deployment contract reads.
+type Service struct {
+	ID             string         `json:"id"`
+	ResourceURL    string         `json:"resource_url"`
+	UpstreamURL    string         `json:"upstream_url"`
+	ValidationURL  string         `json:"validation_url"`
+	RequiredScopes []string       `json:"required_scopes"`
+	Source         string         `json:"source"`
+	ResourceClient ResourceClient `json:"resource_client"`
 }
 
 func Parse(data []byte) (*Config, error) {
@@ -70,8 +87,12 @@ func Parse(data []byte) (*Config, error) {
 		if err != nil || resource.Host != issuer.Host || resource.Path == "/" || path.Clean(resource.Path) != resource.Path || strings.HasPrefix(resource.Path, "/.well-known/") || resource.Path == issuer.Path || (strings.Trim(issuer.Path, "/") != "" && strings.HasPrefix(resource.Path, strings.TrimRight(issuer.Path, "/")+"/")) {
 			return nil, errors.New("gateway resources must use distinct paths on the existing auth host, outside the OAuth issuer path")
 		}
-		if !regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,39}$`).MatchString(s.ID) || seenID[s.ID] || seenURL[s.ResourceURL] {
-			return nil, errors.New("gateway service IDs and resources must be unique")
+		// The login method mcp-auth gets is "form-<id>", and its id is at most 32 characters.
+		if !regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,26}$`).MatchString(s.ID) || seenID[s.ID] || seenURL[s.ResourceURL] {
+			return nil, errors.New("gateway service IDs (lowercase, at most 27 characters) and resources must be unique")
+		}
+		if s.ResourceClient.ClientID == "" || s.ResourceClient.KeyID == "" || !strings.HasPrefix(s.ResourceClient.PrivateKeyFile, MountPath+"/") {
+			return nil, errors.New("each gateway service needs a resource_client with a key under " + MountPath)
 		}
 		seenID[s.ID], seenURL[s.ResourceURL] = true, true
 		up, err := httpsURL(s.UpstreamURL)

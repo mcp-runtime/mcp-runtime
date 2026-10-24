@@ -35,14 +35,18 @@ public MCP path; local runs default to `/mcp` on port 8088.
 
 ## Connect it to the gateway
 
-With the combined mcp-auth image installed, derive the gateway service from the
-pushed server and apply it (a dry run first, then `--yes`):
+Derive the gateway service from the pushed server and install the gateway next to
+mcp-auth (a dry run first, then `--yes`):
 
 ```bash
 mcp-runtime cluster mcp-auth-gateway sync --file gateway.json \
   --secret-file session.key=./session.key --secret-file client.pem=./client.pem \
+  --gateway-image <registry>/mcp-credential-gateway:<tag> \
   --tls-secret <auth tls secret> --kubeconfig ... --context ... --expect-cluster-id ... --dry-run
 ```
+
+`gateway.json` holds only the listener, the issuer and the session key reference;
+the services come from the pushed servers.
 
 Then the client configuration is just the gateway resource URL:
 
@@ -55,5 +59,6 @@ On first connect the client opens the sign-in form. Enter `demo-user` and
 before any token is issued.
 
 The gateway must be able to reach this server's public URL and `/auth/check` from
-where it runs. Applying the gateway configuration restarts mcp-auth, which clears
-the header values people submitted; they sign in again.
+where it runs, and mcp-auth must be able to reach the gateway's `/login/token` and
+`/login/userinfo`. Header values live in the gateway's memory only; restarting the
+gateway clears them and people sign in again.

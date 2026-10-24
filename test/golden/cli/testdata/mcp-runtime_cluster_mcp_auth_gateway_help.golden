@@ -1,11 +1,11 @@
-Configure the optional bundled MCP Auth credential gateway
+Install the optional credential gateway and wire MCP Auth to it
 
 Usage:
   mcp-runtime cluster mcp-auth-gateway [command]
 
 Available Commands:
-  apply       Mount private gateway configuration and expose its OAuth resource paths
-  sync        Derive gateway services from header-mode servers that declare auth.credentialGateway, then apply
+  apply       Install the credential gateway for the services in a gateway JSON file
+  sync        Derive gateway services from header-mode servers that declare auth.credentialGateway, then install
 
 Flags:
   -h, --help   help for mcp-auth-gateway
