@@ -13,7 +13,7 @@ type storeEntry struct {
 	key     storeKey
 	values  map[string]string
 	expires time.Time
-	created time.Time
+	seq     uint64
 }
 
 // Store keeps the header values a person submitted at sign-in. Values live only
@@ -27,6 +27,7 @@ type Store struct {
 
 	mu    sync.Mutex
 	items map[storeKey]*storeEntry
+	seq   uint64
 }
 
 func (s *Store) now() time.Time {
@@ -63,7 +64,8 @@ func (s *Store) Put(issuer, subject, service string, values map[string]string) {
 			delete(s.items, key)
 		}
 	}
-	s.items[k] = &storeEntry{key: k, values: copied, expires: now.Add(s.TTL), created: now}
+	s.seq++
+	s.items[k] = &storeEntry{key: k, values: copied, expires: now.Add(s.TTL), seq: s.seq}
 	limit := s.Max
 	if limit < 1 {
 		limit = 1
@@ -71,7 +73,7 @@ func (s *Store) Put(issuer, subject, service string, values map[string]string) {
 	for len(s.items) > limit {
 		var oldest *storeEntry
 		for _, entry := range s.items {
-			if oldest == nil || entry.created.Before(oldest.created) {
+			if oldest == nil || entry.seq < oldest.seq {
 				oldest = entry
 			}
 		}
