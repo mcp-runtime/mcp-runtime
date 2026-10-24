@@ -26,10 +26,6 @@ const (
 
 var testGatewayJSON = []byte(`{"listen":{"host":"0.0.0.0","port":8090},"authorization_server":{"issuer":"` + testIssuer + `"},"session_binding_key_file":"/etc/mcp-gateway-credential/session.key","services":[{"id":"demo","resource_url":"https://auth.example.com/demo/mcp","upstream_url":"https://upstream.example.com/mcp","validation_url":"https://upstream.example.com/mcp/auth/check","required_scopes":["tools:read"],"source":"form","resource_client":{"client_id":"gateway-demo","key_id":"k1","private_key_file":"/etc/mcp-gateway-credential/client.pem"}}]}`)
 
-func runtimeOwned(name string) metav1.ObjectMeta {
-	return metav1.ObjectMeta{Name: name, Namespace: mcpAuthNamespace, Labels: map[string]string{"app.kubernetes.io/managed-by": "mcp-runtime"}}
-}
-
 // authCluster is a cluster with the installed MCP Auth.
 func authCluster(mutateAuth func(*appsv1.Deployment)) *fake.Clientset {
 	group := int64(65532)
