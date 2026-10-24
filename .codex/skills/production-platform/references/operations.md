@@ -361,7 +361,7 @@ or fails, verify that public authentication is still active before retrying.
 
 Deploy a reviewed combined mcp-auth image through its separate component
 manifest. Install private config and gateway HTTPS routing with
-`mcp-runtime cluster mcp-auth-gateway apply --dry-run`, then `--yes`, using the
+`mcp-runtime cluster mcp-auth-connector credential-gateway --dry-run`, then `--yes`, using the
 explicit kubeconfig/context/cluster UID and the existing auth TLS Secret. The
 command mounts a private Secret, adds a separate Service/Ingress/NetworkPolicy
 and registers gateway resources in administrator-owned auth Deployment metadata.

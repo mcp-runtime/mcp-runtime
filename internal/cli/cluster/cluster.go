@@ -110,7 +110,6 @@ func NewWithManager(mgr *ClusterManager) *cobra.Command {
 	cmd.AddCommand(newClusterIdentityCmd(mgr))
 	cmd.AddCommand(newClusterDoctorCmd(mgr))
 	cmd.AddCommand(newMCPAuthConnectorCmd())
-	cmd.AddCommand(newMCPAuthGatewayCmd())
 	cmd.AddCommand(newOperatorRBACCmd())
 	cmd.AddCommand(newClusterDiagnosticsCmd(mgr))
 	return cmd

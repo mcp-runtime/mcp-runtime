@@ -1196,7 +1196,7 @@ read-only node credential rotation, and recovery after a partial activation.
 
 ## Optional MCP Auth credential gateway
 
-`mcp-runtime cluster mcp-auth-gateway apply` installs the credential gateway as its
+`mcp-runtime cluster mcp-auth-connector credential-gateway` installs the credential gateway as its
 own workload next to MCP Auth, and wires MCP Auth to it. The workload is one shared
 Deployment of Runtime's existing `mcp-gateway` image run in credential mode
 (`MCP_GATEWAY_MODE=credential`); there is no separate image to build or pull.
@@ -1259,7 +1259,7 @@ servers:
 ```
 
 The MCP client configuration is then `{"url": "https://<auth host>/gitlab/mcp"}`
-with no headers. `mcp-runtime cluster mcp-auth-gateway apply` reads the base
+with no headers. `mcp-runtime cluster mcp-auth-connector credential-gateway` reads the base
 gateway JSON (`--file`: listener, issuer and session key; no `services`
 needed) and adds one form-source service for every pushed server with this
 block: resource `https://<auth host><route>`, upstream and validation URLs on the

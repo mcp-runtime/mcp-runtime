@@ -66,7 +66,7 @@ rollout order. Direct CSR tests do not count as CLI adapter enrollment acceptanc
 | API / CRDs | `api/v1alpha1/`, `config/crd/bases/` |
 | Agents / adapters | `internal/cli/adapter/`, `internal/agentadapter/`, `services/runtime-api/internal/runtimeapi/adapter*.go` |
 | Access / policy | `pkg/access/`, `pkg/policy/`, `pkg/sessionstate/`; platform-api owns Postgres sessions and the gateway sync contract |
-| Optional MCP Auth credential gateway | `pkg/authgateway/`, `internal/cli/cluster/auth_gateway.go`, bundled OAuth resource reconciliation; use the explicit admin `cluster mcp-auth-gateway apply` command and retain provider-neutral core boundaries. |
+| Optional MCP Auth credential gateway | `pkg/authgateway/`, `internal/cli/cluster/auth_gateway.go`, bundled OAuth resource reconciliation; use the explicit admin `cluster mcp-auth-connector credential-gateway` command and retain provider-neutral core boundaries. |
 | Credential sources / bindings | `pkg/credentialbroker/`, `services/platform-api/internal/credentialapi/`, platform store and `internal/cli/credential/`; [provider and delivery contract](docs/credential-broker.md). Keep values out of management surfaces and retain dedicated Pod identity, current session/tool/server checks and same-Pod delivery. |
 | Cluster / manifests / registry | `pkg/controlplane/`, `pkg/k8sclient/`, `pkg/kubeworkload/`, `pkg/manifest/`, `pkg/metadata/` |
 | Platform / services | `pkg/platformstack/`, `pkg/platforminventory/`, `services/*` (separate modules where present) |

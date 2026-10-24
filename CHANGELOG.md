@@ -9,8 +9,8 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ### Added
 
-- `auth.credentialGateway` for header-mode servers (`validationPath`, optional `secretHeaders`) and `cluster mcp-auth-gateway apply`, which derives gateway services from pushed servers so a client needs only the server URL. The credential gateway is one shared workload of the existing `mcp-gateway` image (`MCP_GATEWAY_MODE=credential`) next to MCP Auth, with no new image; MCP Auth sends the browser to its sign-in page for the resource, so header values never reach MCP Auth and no identity provider or vault is involved. The MCPServer CRD gains this field; apply the CRD with the release.
-- `cluster mcp-auth-gateway apply` installs the credential gateway workload (Secret, Deployment, Service, NetworkPolicy, Ingress), waits for it, then wires MCP Auth to it (connector, resource login, assertion client, allowed resources); the operator preserves administrator-registered gateway resources alongside MCPServer audiences.
+- `auth.credentialGateway` for header-mode servers (`validationPath`, optional `secretHeaders`) and `cluster mcp-auth-connector credential-gateway`, which derives gateway services from pushed servers so a client needs only the server URL. The credential gateway is one shared workload of the existing `mcp-gateway` image (`MCP_GATEWAY_MODE=credential`) next to MCP Auth, with no new image; MCP Auth sends the browser to its sign-in page for the resource, so header values never reach MCP Auth and no identity provider or vault is involved. The MCPServer CRD gains this field; apply the CRD with the release.
+- `cluster mcp-auth-connector credential-gateway` installs the credential gateway workload (Secret, Deployment, Service, NetworkPolicy, Ingress), waits for it, then wires MCP Auth to it (connector, resource login, assertion client, allowed resources); the operator preserves administrator-registered gateway resources alongside MCPServer audiences.
 
 
 ### Fixed

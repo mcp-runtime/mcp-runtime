@@ -71,10 +71,11 @@ func (o *gatewayOptions) validate() error {
 	return nil
 }
 
-func newMCPAuthGatewayCmd() *cobra.Command {
-	root := &cobra.Command{Use: "mcp-auth-gateway", Short: "Install the optional credential gateway and wire MCP Auth to it"}
+// newCredentialGatewayCmd installs the shared credential gateway; it lives under
+// "cluster mcp-auth-connector" next to the identity connector it complements.
+func newCredentialGatewayCmd() *cobra.Command {
 	var opts gatewayOptions
-	apply := &cobra.Command{Use: "apply", Short: "Install the credential gateway for the servers that declare auth.credentialGateway", Long: `Reads the base gateway JSON (listener, issuer, session key; services optional),
+	cmd := &cobra.Command{Use: "credential-gateway", Short: "Install the credential gateway for the servers that declare auth.credentialGateway", Long: `Reads the base gateway JSON (listener, issuer, session key; services optional),
 adds one service for every MCPServer with auth.mode header and an
 auth.credentialGateway block, and installs the shared credential gateway in
 mcp-platform (Secret, Deployment, Service, Ingress, NetworkPolicy). It runs the
@@ -97,9 +98,8 @@ restarting the gateway does.`, RunE: func(cmd *cobra.Command, _ []string) error 
 		}
 		return runAuthGateway(cmd, &opts, base)
 	}}
-	opts.bind(apply)
-	root.AddCommand(apply)
-	return root
+	opts.bind(cmd)
+	return cmd
 }
 
 // runAuthGateway reads the cluster, extends the base configuration with the

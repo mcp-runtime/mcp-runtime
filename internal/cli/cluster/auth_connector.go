@@ -23,7 +23,7 @@ const (
 )
 
 func newMCPAuthConnectorCmd() *cobra.Command {
-	cmd := &cobra.Command{Use: "mcp-auth-connector", Short: "Manage the bundled MCP Auth identity connector"}
+	cmd := &cobra.Command{Use: "mcp-auth-connector", Short: "Manage the MCP Auth identity connector and the optional credential gateway"}
 	var file, connector, kubeconfig, kubeContext string
 	var yes, dryRun bool
 	apply := &cobra.Command{
@@ -74,7 +74,7 @@ func newMCPAuthConnectorCmd() *cobra.Command {
 	apply.Flags().StringVar(&kubeContext, "context", "", "Explicit Kubernetes context")
 	apply.Flags().BoolVar(&dryRun, "dry-run", false, "Show whether the connector ConfigMap would change")
 	apply.Flags().BoolVar(&yes, "yes", false, "Apply the change without an interactive prompt")
-	cmd.AddCommand(apply)
+	cmd.AddCommand(apply, newCredentialGatewayCmd())
 	return cmd
 }
 
