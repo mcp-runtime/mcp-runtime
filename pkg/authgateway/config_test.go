@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-const sample = `{"listen":{"host":"0.0.0.0","port":8090},"authorization_server":{"issuer":"https://auth.example.com/mcp-auth"},"provider":{"type":"other-vault","options":{}},"services":[{"id":"demo","resource_url":"https://auth.example.com/demo/mcp","upstream_url":"https://up.example.com/mcp","validation_url":"https://up.example.com/check","required_scopes":["tools:read"]}]}`
+const sample = `{"listen":{"host":"0.0.0.0","port":8090},"authorization_server":{"issuer":"https://auth.example.com/mcp-auth"},"services":[{"id":"demo","resource_url":"https://auth.example.com/demo/mcp","upstream_url":"https://up.example.com/mcp","validation_url":"https://up.example.com/check","required_scopes":["tools:read"]}]}`
 
 func TestGatewayConfigRejectsUnsafeRoutingAndUnknownRegistration(t *testing.T) {
 	for _, bad := range []string{

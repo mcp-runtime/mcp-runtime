@@ -42,16 +42,8 @@ For a small unauthenticated traffic-inspection demo, use
 `todays_info`, with commands to publish/deploy through the CLI and inspect the
 real requests and responses through MCPSnoop.
 
-For a focused credential-delivery experiment, use
-[`onepassword-credential-demo`](onepassword-credential-demo/README.md). This
-standalone Go credential gateway validates the saved upstream Login during
-OAuth sign-in, then injects the required Basic header into every upstream
-MCP request. It includes browser-extension and local desktop-adapter paths,
-uses public test credentials, and requires the resource-login changes in
-mcp-auth PR #35. It does not use the Runtime sidecar or the separate
-1Password plugin.
-
-For a header-only upstream using the optional consolidated mcp-auth vault
-gateway, use [vault-header-demo](vault-header-demo/README.md). Its paired JSON
-config belongs on mcp-auth; user mappings and provider authorization remain
-private to the gateway operator.
+For a header-authenticated upstream behind the optional mcp-auth credential
+gateway, use [credential-form-demo](credential-form-demo/README.md). It needs two
+headers; the gateway shows a sign-in form for them, validates them, and supplies
+them on every later request, so the MCP client holds only a URL and a bearer
+token. No vault or identity provider is involved.

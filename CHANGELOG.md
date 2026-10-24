@@ -12,8 +12,6 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 - `auth.credentialGateway` for header-mode servers (`validationPath`, optional `secretHeaders`) and `cluster mcp-auth-gateway sync`, which derives form-source gateway services from pushed servers so a client needs only the server URL. A form-only gateway needs no vault provider or mappings file. The MCPServer CRD gains this field; apply the CRD with the release.
 - `cluster mcp-auth-gateway apply` installs private configuration and TLS routes for the optional auth bundle; the operator preserves administrator-registered gateway resources alongside MCPServer audiences.
 
-- Header-only MCP example with paired optional mcp-auth credential-gateway configuration, keeping vault authorization and private user mappings out of Runtime metadata and MCP client headers ([#856](https://github.com/tavric-labs/mcp-runtime/pull/856)).
-- A standalone 1Password credential gateway example validates the upstream Login before OAuth completes, then supplies Basic headers on every upstream MCP request. It includes browser and desktop-adapter paths, per-server header configuration, broker login-policy examples and loopback acceptance tests; credential values stay out of `mcp.json`.
 
 ### Fixed
 

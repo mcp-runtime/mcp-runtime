@@ -1197,23 +1197,23 @@ read-only node credential rotation, and recovery after a partial activation.
 ## Optional MCP Auth credential gateway
 
 `mcp-runtime cluster mcp-auth-gateway apply` installs private config for a
-separately selected combined mcp-auth image. It requires `--file`,
-`--mappings-file` (only for services that read vault references), repeated
-`--secret-file KEY=FILE` inputs as needed,
-`--tls-secret`, explicit `--kubeconfig`, `--context` and `--expect-cluster-id`.
-Review `--dry-run`, then repeat with `--yes`. All config file references use
-`/etc/mcp-auth-gateway/<key>`; mappings are mounted as `mappings.json`.
+separately selected combined mcp-auth image. It requires `--file`, repeated
+`--secret-file KEY=FILE` inputs as needed (the session binding key and the
+resource-client key), `--tls-secret`, explicit `--kubeconfig`, `--context` and
+`--expect-cluster-id`. Review `--dry-run`, then repeat with `--yes`. All config
+file references use `/etc/mcp-auth-gateway/<key>`.
 
 Gateway resources use paths on the existing HTTPS auth hostname outside the
 OAuth issuer path. The command reuses its existing TLS Secret, creates the
 gateway's separate Service/HTTPS Ingress/narrow ingress NetworkPolicy, and mounts
-config, private mappings and keys in a read-only Kubernetes Secret. Secret
-contents are omitted from command output. It preserves the OAuth image, identity
-connector, signing key, PVC and other wiring. The operator retains the
-administrator-owned gateway audience/scope registration across MCPServer events.
-Use [the example](../examples/vault-header-demo/README.md) for provider config,
-upstream validation and acceptance steps. The raw header upstream and gateway
-OAuth URL remain different endpoints; Runtime does not rewrite catalog URLs.
+the config and keys in a read-only Kubernetes Secret. Secret contents are omitted
+from command output. It preserves the OAuth image, identity connector, signing
+key, PVC and other wiring. The operator retains the administrator-owned gateway
+audience/scope registration across MCPServer events. Header values are never
+stored by Runtime: the gateway collects them at sign-in and keeps them in memory.
+Use [the example](../examples/credential-form-demo/README.md) for a deployable
+upstream. The raw header upstream and gateway OAuth URL remain different
+endpoints; Runtime does not rewrite catalog URLs.
 
 ### Servers that need only a URL in the client
 

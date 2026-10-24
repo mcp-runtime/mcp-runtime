@@ -30,14 +30,13 @@ import (
 )
 
 type gatewayOptions struct {
-	file, mappings, tls, kubeconfig, kubeContext, clusterID, mcpHost string
-	files                                                            []string
-	yes, dryRun                                                      bool
+	file, tls, kubeconfig, kubeContext, clusterID, mcpHost string
+	files                                                  []string
+	yes, dryRun                                            bool
 }
 
 func (o *gatewayOptions) bind(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.file, "file", "", "Gateway JSON file; references must use /etc/mcp-auth-gateway/<key>")
-	cmd.Flags().StringVar(&o.mappings, "mappings-file", "", "Private identity-to-vault-reference mapping JSON file (only for vault services)")
 	cmd.Flags().StringArrayVar(&o.files, "secret-file", nil, "Mount a private KEY=FILE input (repeat for provider token, session key and resource-client key)")
 	cmd.Flags().StringVar(&o.tls, "tls-secret", "", "Existing TLS Secret covering the auth hostname; no certificate is issued")
 	cmd.Flags().StringVar(&o.kubeconfig, "kubeconfig", "", "Explicit kubeconfig path")
@@ -134,18 +133,9 @@ func runAuthGateway(cmd *cobra.Command, o *gatewayOptions, data []byte, derive f
 		return err
 	}
 	payload := map[string][]byte{"config.json": data}
-	if o.mappings != "" {
-		private, err := os.ReadFile(o.mappings) // #nosec G304 -- explicit private mapping input.
-		if err != nil || !json.Valid(private) {
-			return errors.New("mappings file must contain valid JSON")
-		}
-		payload["mappings.json"] = private
-	} else if cfg.HasVaultServices() {
-		return errors.New("--mappings-file is required when a service reads vault references")
-	}
 	for _, entry := range o.files {
 		key, path, ok := strings.Cut(entry, "=")
-		if !ok || len(validation.IsConfigMapKey(key)) > 0 || key == "config.json" || key == "mappings.json" || payload[key] != nil {
+		if !ok || len(validation.IsConfigMapKey(key)) > 0 || key == "config.json" || payload[key] != nil {
 			return errors.New("--secret-file must be a unique KEY=FILE with a valid Secret key")
 		}
 		b, err := os.ReadFile(path) // #nosec G304 -- explicit operator-supplied secret file; never printed.

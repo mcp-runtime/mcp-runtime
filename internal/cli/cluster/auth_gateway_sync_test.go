@@ -43,9 +43,6 @@ func TestExtendGatewayConfigDerivesServicesFromPushedServers(t *testing.T) {
 	if len(cfg.Services) != 2 || cfg.Services[0].ID != "alpha" || cfg.Services[1].ID != "zeta" {
 		t.Fatalf("services = %+v, want alpha then zeta only", cfg.Services)
 	}
-	if cfg.HasVaultServices() {
-		t.Fatal("derived services must not need a vault provider")
-	}
 	var doc map[string]any
 	_ = json.Unmarshal(out, &doc)
 	if doc["session_binding_key_file"] != "/etc/mcp-auth-gateway/session.key" {

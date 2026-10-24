@@ -10,7 +10,6 @@ Flags:
       --file string                Gateway JSON file; references must use /etc/mcp-auth-gateway/<key>
   -h, --help                       help for apply
       --kubeconfig string          Explicit kubeconfig path
-      --mappings-file string       Private identity-to-vault-reference mapping JSON file (only for vault services)
       --secret-file stringArray    Mount a private KEY=FILE input (repeat for provider token, session key and resource-client key)
       --tls-secret string          Existing TLS Secret covering the auth hostname; no certificate is issued
       --yes                        Apply the reviewed configuration without another prompt

@@ -76,7 +76,7 @@ func TestServiceForRejectsUnsafeInput(t *testing.T) {
 	}
 }
 
-func TestParseAcceptsFormOnlyConfigWithoutProvider(t *testing.T) {
+func TestParseAcceptsDerivedServicesWithoutAnyProvider(t *testing.T) {
 	service, _ := ServiceFor(gitlabInput(), "auth.example.com", "")
 	doc := map[string]any{
 		"listen": map[string]any{"host": "0.0.0.0", "port": 8090}, "authorization_server": map[string]any{"issuer": "https://auth.example.com/mcp-auth"},
@@ -87,17 +87,8 @@ func TestParseAcceptsFormOnlyConfigWithoutProvider(t *testing.T) {
 	if err != nil {
 		t.Fatalf("form-only config rejected: %v", err)
 	}
-	if cfg.HasVaultServices() {
-		t.Fatal("a form service must not need the vault")
-	}
 	if got := cfg.Resources()["https://auth.example.com/gitlab/mcp"]; len(got) != 1 || got[0] != DefaultScope {
 		t.Fatalf("resources: %v", cfg.Resources())
-	}
-	vault := map[string]any{"id": "other", "resource_url": "https://auth.example.com/other/mcp", "upstream_url": "https://u.example.com/mcp", "validation_url": "https://u.example.com/check", "required_scopes": []string{"tools:read"}}
-	doc["services"] = []any{service, vault}
-	raw, _ = json.Marshal(doc)
-	if _, err := Parse(raw); err == nil {
-		t.Fatal("a vault service without a provider must be rejected")
 	}
 }
 

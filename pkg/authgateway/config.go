@@ -1,5 +1,6 @@
 // Package authgateway owns the deployment contract for the optional bundled
-// credential gateway. It does not resolve secrets or depend on any vault SDK.
+// credential gateway. The gateway collects header values from the person at
+// sign-in; this package neither stores nor resolves any credential.
 package authgateway
 
 import (
@@ -30,9 +31,7 @@ type Config struct {
 	AuthorizationServer struct {
 		Issuer string `json:"issuer"`
 	} `json:"authorization_server"`
-	MappingsFile          string          `json:"mappings_file"`
-	SessionBindingKeyFile string          `json:"session_binding_key_file"`
-	Provider              json.RawMessage `json:"provider"`
+	SessionBindingKeyFile string `json:"session_binding_key_file"`
 	Services              []struct {
 		ID             string   `json:"id"`
 		ResourceURL    string   `json:"resource_url"`
@@ -41,17 +40,6 @@ type Config struct {
 		RequiredScopes []string `json:"required_scopes"`
 		Source         string   `json:"source"`
 	} `json:"services"`
-}
-
-// HasVaultServices reports whether any service reads mapped vault references,
-// which is what needs a provider and a private mappings file.
-func (c *Config) HasVaultServices() bool {
-	for _, s := range c.Services {
-		if s.Source != SourceForm {
-			return true
-		}
-	}
-	return false
 }
 
 func Parse(data []byte) (*Config, error) {
@@ -75,9 +63,6 @@ func Parse(data []byte) (*Config, error) {
 	}
 	if len(c.Services) == 0 || len(c.Services) > 16 {
 		return nil, errors.New("1-16 services are required")
-	}
-	if c.HasVaultServices() && (len(c.Provider) == 0 || string(c.Provider) == "null") {
-		return nil, errors.New("a provider is required for vault services")
 	}
 	seenID, seenURL := map[string]bool{}, map[string]bool{}
 	for _, s := range c.Services {

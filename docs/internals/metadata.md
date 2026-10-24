@@ -98,15 +98,12 @@ go test ./internal/cli/server -run 'TestGenerate|TestBuild' -count=1
 
 ## Vault-backed upstream headers
 
-For the optional mcp-auth credential gateway, `.mcp/servers.yaml` describes the
-upstream's existing `auth.mode: header` contract and deployment. Do not add vault
-tokens, per-user mappings or credential values to this metadata. The separate
-gateway config supplies the upstream URL, validation endpoint and header
-transforms, while approved identity-to-reference mappings stay private with the
-mcp-auth operator. MCP clients connect to the gateway resource URL and use OAuth.
-The [header-only example](../../examples/vault-header-demo/README.md) includes both
-configuration shapes. This layout uses existing metadata fields and does not
-automatically provision the optional gateway or rewrite the Runtime catalog URL.
-Administrators can install companion config explicitly with
-`mcp-runtime cluster mcp-auth-gateway apply`; see the example for required private
-file mounts, existing TLS, and operator resource registration.
+For the optional mcp-auth credential gateway, a header-mode server may add
+`auth.credentialGateway` (`validationPath`, optional `secretHeaders`) to
+`.mcp/servers.yaml`. The headers it already declares in `auth.headers` become the
+inputs of a sign-in page; do not put credential values in this metadata.
+`mcp-runtime cluster mcp-auth-gateway sync` derives the gateway's service entries
+from the pushed servers, so MCP clients need only the gateway resource URL. See
+the [credential-form example](../../examples/credential-form-demo/README.md).
+This layout does not automatically provision the gateway or rewrite the Runtime
+catalog URL.

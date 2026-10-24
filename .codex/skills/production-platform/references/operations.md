@@ -367,5 +367,4 @@ command mounts a private Secret, adds a separate Service/Ingress/NetworkPolicy
 and registers gateway resources in administrator-owned auth Deployment metadata.
 The operator preserves those resources alongside tenant MCPServer resources.
 No full setup, certificate issuance or direct Kubernetes patch is required.
-See [the header-only example](../../../../examples/vault-header-demo/README.md)
-for config ownership, mounted-file paths and real-vault acceptance limits.
+See [the credential-form example](../../../../examples/credential-form-demo/README.md).
