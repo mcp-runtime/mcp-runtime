@@ -465,7 +465,7 @@ func installGateway(ctx context.Context, c kubernetes.Interface, in gatewayInsta
 	report.notes = append(report.notes, "gateway Secret, Deployment, Service, NetworkPolicy and Ingress are in place")
 	if in.waitTimeout > 0 {
 		if err := waitForGateway(ctx, c, in.waitTimeout); err != nil {
-			return nil, fmt.Errorf("the gateway did not become ready; MCP Auth was not changed: %w", err)
+			return nil, fmt.Errorf("the gateway did not become ready; MCP Auth was not changed (if its pod cannot pull the image from the platform registry, refresh the namespace's pull credential with `mcp-runtime registry enable-auth --pull-namespace %s` and run this again): %w", mcpAuthNamespace, err)
 		}
 		report.notes = append(report.notes, "the gateway is ready")
 	}
