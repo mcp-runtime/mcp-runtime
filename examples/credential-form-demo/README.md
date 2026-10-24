@@ -60,7 +60,10 @@ On first connect the client opens the sign-in form. Enter `demo-user` and
 `demo-password`, or let your password manager fill them. A wrong value is refused
 before any token is issued.
 
+Pass `--mcp-host` as this server's public MCP host. The gateway refuses a
+different `ingressHost`. The sign-in page names the server and that host.
+
 The gateway must be able to reach this server's public URL and `/auth/check` from
 where it runs, and mcp-auth must be able to reach the gateway's `/login/token` and
 `/login/userinfo`. Header values live in the gateway's memory only; restarting the
-gateway clears them and people sign in again.
+gateway clears them and people sign in again. The session is not a platform account.

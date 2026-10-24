@@ -19,7 +19,7 @@ func TestServicesDerivedByTheCLILoadHere(t *testing.T) {
 	derived, err := authgateway.ServiceFor(authgateway.ServerInput{
 		Name: "gitlab", Namespace: "mcp-servers", IngressHost: "mcp.example.com", IngressPath: "/gitlab/mcp",
 		Headers: []string{"X-GitLab-Username", "X-GitLab-PAT-Token"}, ValidationPath: "/auth/check",
-	}, "auth.example.com", "")
+	}, "auth.example.com", "mcp.example.com")
 	if err != nil {
 		t.Fatal(err)
 	}

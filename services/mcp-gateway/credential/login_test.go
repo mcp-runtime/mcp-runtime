@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -274,6 +275,56 @@ func TestSignInRequestCannotBeCompletedTwiceOrAfterExpiry(t *testing.T) {
 	h.now = h.now.Add(2 * requestTTL)
 	if w := h.approve(request, csrf, cookie, origin, good); w.Code != http.StatusGone {
 		t.Fatalf("an expired sign-in was accepted: %d", w.Code)
+	}
+}
+
+func TestSignInPageNamesTheServerAndEscapesIt(t *testing.T) {
+	h := newHarness(t)
+	h.p.cfg.ServerName = `gitlab <script>`
+	h.p.cfg.Namespace = "mcp-servers"
+	h.p.cfg.UpstreamHost = "mcp.example.com"
+	w := h.do(httptest.NewRequest(http.MethodGet, authorizeURL(nil), nil))
+	body := w.Body.String()
+	for _, want := range []string{"gitlab &lt;script&gt;", "mcp-servers", "mcp.example.com", "not a platform account"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("sign-in page lacks %q\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, "<script>") {
+		t.Fatal("the server name was not escaped")
+	}
+}
+
+func TestParallelApproveCommitsOnce(t *testing.T) {
+	h := newHarness(t)
+	var mu sync.Mutex
+	commits := 0
+	h.p.cfg.Commit = func(subject string, values map[string]string) error {
+		if subject == "" || values["api_token"] != "good" {
+			t.Errorf("commit subject %q values %v", subject, values)
+		}
+		mu.Lock()
+		commits++
+		mu.Unlock()
+		return nil
+	}
+	request, csrf, cookie := h.start()
+	var wg sync.WaitGroup
+	codes := make([]int, 2)
+	wg.Add(2)
+	for i := 0; i < 2; i++ {
+		go func(i int) {
+			defer wg.Done()
+			codes[i] = h.approve(request, csrf, cookie, origin, good).Code
+		}(i)
+	}
+	wg.Wait()
+	seen := map[int]int{}
+	for _, code := range codes {
+		seen[code]++
+	}
+	if commits != 1 || seen[http.StatusSeeOther] != 1 || seen[http.StatusGone] != 1 {
+		t.Fatalf("commits=%d statuses=%v", commits, codes)
 	}
 }
 

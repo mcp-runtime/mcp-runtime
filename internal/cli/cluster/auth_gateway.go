@@ -440,8 +440,7 @@ func installGateway(ctx context.Context, c kubernetes.Interface, in gatewayInsta
 	if in.dryRun {
 		report.notes = append(report.notes,
 			"would create or update the gateway Secret, Deployment, Service, NetworkPolicy and Ingress",
-			"would wait for the gateway to become ready, then update the MCP Auth wiring and restart it if it changed",
-			"would remove the objects of the earlier combined layout if present")
+			"would wait for the gateway to become ready, then update the MCP Auth wiring and restart it if it changed")
 		return report, nil
 	}
 
@@ -539,8 +538,9 @@ func upsertGatewayDeployment(ctx context.Context, c kubernetes.Interface, in gat
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{Labels: labels, Annotations: map[string]string{"mcpruntime.org/gateway-secret-version": secretRevision}},
 			Spec: corev1.PodSpec{
-				ImagePullSecrets: pull,
-				SecurityContext:  &corev1.PodSecurityContext{RunAsNonRoot: &yes, RunAsUser: &runAs, RunAsGroup: &runAs, FSGroup: &fsGroup, SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}},
+				ImagePullSecrets:             pull,
+				AutomountServiceAccountToken: &no,
+				SecurityContext:              &corev1.PodSecurityContext{RunAsNonRoot: &yes, RunAsUser: &runAs, RunAsGroup: &runAs, FSGroup: &fsGroup, SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}},
 				Containers: []corev1.Container{{
 					Name: "gateway", Image: in.image, ImagePullPolicy: corev1.PullIfNotPresent,
 					Ports:           []corev1.ContainerPort{{Name: "http", ContainerPort: port}},
@@ -578,15 +578,36 @@ func upsertGatewayDeployment(ctx context.Context, c kubernetes.Interface, in gat
 func upsertGatewayNetwork(ctx context.Context, c kubernetes.Interface, in gatewayInstall) error {
 	port := in.cfg.Listen.Port
 	selector := metav1.LabelSelector{MatchLabels: map[string]string{"app": authgateway.GatewayName}}
+	dns := corev1.ProtocolUDP
+	dnsTCP := corev1.ProtocolTCP
 	policy := &networkingv1.NetworkPolicy{ObjectMeta: gatewayMeta(authgateway.GatewayName), Spec: networkingv1.NetworkPolicySpec{
-		PodSelector: selector, PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeIngress},
+		PodSelector: selector,
+		PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeIngress, networkingv1.PolicyTypeEgress},
+		// Ingress follows the auth server: Kind's Traefik is in traefik, k3s's is in kube-system.
+		// mcp-auth reaches the sign-in back channel through that ingress, and may also call the Service directly.
 		Ingress: []networkingv1.NetworkPolicyIngressRule{{
 			From: []networkingv1.NetworkPolicyPeer{
+				{NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"kubernetes.io/metadata.name": "traefik"}}},
 				{NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"kubernetes.io/metadata.name": "kube-system"}}},
 				{PodSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "mcp-auth-server"}}},
 			},
 			Ports: []networkingv1.NetworkPolicyPort{{Protocol: protocolTCP(), Port: portPointer(port)}},
 		}},
+		// Egress is DNS plus HTTPS. The gateway calls the public auth and MCP hosts.
+		// It does not need the rest of the cluster.
+		Egress: []networkingv1.NetworkPolicyEgressRule{
+			{
+				To: []networkingv1.NetworkPolicyPeer{{
+					NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"kubernetes.io/metadata.name": "kube-system"}},
+					PodSelector:       &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "kube-dns"}},
+				}},
+				Ports: []networkingv1.NetworkPolicyPort{{Protocol: &dns, Port: portPointer(53)}, {Protocol: &dnsTCP, Port: portPointer(53)}},
+			},
+			{
+				To:    []networkingv1.NetworkPolicyPeer{{IPBlock: &networkingv1.IPBlock{CIDR: "0.0.0.0/0"}}},
+				Ports: []networkingv1.NetworkPolicyPort{{Protocol: protocolTCP(), Port: portPointer(443)}},
+			},
+		},
 	}}
 	if old, err := c.NetworkingV1().NetworkPolicies(mcpAuthNamespace).Get(ctx, policy.Name, metav1.GetOptions{}); err == nil {
 		if !ownedByRuntime(old.ObjectMeta) {
@@ -630,14 +651,18 @@ func upsertGatewayNetwork(ctx context.Context, c kubernetes.Interface, in gatewa
 // protected-resource metadata on the auth host to the gateway.
 func applyGatewayIngress(ctx context.Context, c kubernetes.Interface, cfg *authgateway.Config, tlsSecret string) error {
 	class := "traefik"
+	exact := networkingv1.PathTypeExact
 	prefix := networkingv1.PathTypePrefix
 	backend := networkingv1.IngressBackend{Service: &networkingv1.IngressServiceBackend{Name: authgateway.GatewayName, Port: networkingv1.ServiceBackendPort{Number: cfg.Listen.Port}}}
 	var paths []networkingv1.HTTPIngressPath
 	for _, s := range cfg.Services {
 		u, _ := url.Parse(s.ResourceURL)
+		// Exact for the MCP path and its metadata. Prefix only for /login, so a
+		// short path cannot swallow the auth server's own routes.
 		paths = append(paths,
-			networkingv1.HTTPIngressPath{Path: u.Path, PathType: &prefix, Backend: backend},
-			networkingv1.HTTPIngressPath{Path: "/.well-known/oauth-protected-resource" + u.Path, PathType: &prefix, Backend: backend})
+			networkingv1.HTTPIngressPath{Path: u.Path, PathType: &exact, Backend: backend},
+			networkingv1.HTTPIngressPath{Path: strings.TrimRight(u.Path, "/") + "/login", PathType: &prefix, Backend: backend},
+			networkingv1.HTTPIngressPath{Path: "/.well-known/oauth-protected-resource" + u.Path, PathType: &exact, Backend: backend})
 	}
 	issuer, _ := url.Parse(cfg.AuthorizationServer.Issuer)
 	meta := gatewayMeta(authgateway.GatewayName)

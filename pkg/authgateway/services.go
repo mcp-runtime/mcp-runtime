@@ -51,9 +51,21 @@ type ResourceClient struct {
 	PrivateKeyFile string `json:"private_key_file"`
 }
 
+// platformMCPHost is the only host the gateway will call. It comes from the
+// operator (--mcp-host), never from the server spec on its own.
+func platformMCPHost(publicHost string) (string, error) {
+	host := strings.TrimSpace(publicHost)
+	if host == "" || strings.ContainsAny(host, "/:?#@ ") {
+		return "", errors.New("platform MCP host is required (--mcp-host) and must be a hostname")
+	}
+	return host, nil
+}
+
 // DerivedService is a complete gateway service entry derived from a pushed MCPServer.
 type DerivedService struct {
 	ID             string         `json:"id"`
+	ServerName     string         `json:"server_name,omitempty"`
+	Namespace      string         `json:"namespace,omitempty"`
 	ResourceURL    string         `json:"resource_url"`
 	UpstreamURL    string         `json:"upstream_url"`
 	ValidationURL  string         `json:"validation_url"`
@@ -65,21 +77,24 @@ type DerivedService struct {
 }
 
 // ServiceFor derives the gateway service for one server. The resource lives on
-// authHost at the server's own MCP path; the upstream and its validation URL
-// are the server's public HTTPS endpoint, never a tenant-chosen address.
-// publicHost overrides the server's ingress host when it has none of its own.
+// authHost at the server's own MCP path. The upstream host is only publicHost,
+// the platform MCP host from --mcp-host. A server ingressHost may repeat that
+// host and is rejected when it names anywhere else, so a publisher cannot point
+// the sign-in page at an address they choose.
 func ServiceFor(in ServerInput, authHost, publicHost string) (DerivedService, error) {
 	where := fmt.Sprintf("server %s/%s", in.Namespace, in.Name)
 	id := strings.ToLower(in.Name)
 	if !serviceIDPattern.MatchString(id) {
 		return DerivedService{}, fmt.Errorf("%s: name cannot be a gateway service id (lowercase letters, digits and '-', at most 27)", where)
 	}
-	host := strings.TrimSpace(in.IngressHost)
-	if host == "" {
-		host = strings.TrimSpace(publicHost)
+	host, err := platformMCPHost(publicHost)
+	if err != nil {
+		return DerivedService{}, fmt.Errorf("%s: %w", where, err)
 	}
-	if host == "" || strings.ContainsAny(host, "/:?#@ ") {
-		return DerivedService{}, fmt.Errorf("%s: needs an ingress host (set ingressHost or pass --mcp-host)", where)
+	if declared := strings.TrimSpace(in.IngressHost); declared != "" {
+		if strings.ContainsAny(declared, "/:?#@ ") || !strings.EqualFold(declared, host) {
+			return DerivedService{}, fmt.Errorf("%s: ingressHost %q is not the platform MCP host %q", where, declared, host)
+		}
 	}
 	if !strings.HasPrefix(in.IngressPath, "/") || strings.HasSuffix(in.IngressPath, "/") || strings.Contains(in.IngressPath, "//") {
 		return DerivedService{}, fmt.Errorf("%s: ingressPath must be an absolute path without a trailing slash", where)
@@ -92,7 +107,8 @@ func ServiceFor(in ServerInput, authHost, publicHost string) (DerivedService, er
 	}
 	upstream := "https://" + host + in.IngressPath
 	service := DerivedService{
-		ID: id, ResourceURL: "https://" + authHost + in.IngressPath, UpstreamURL: upstream, ValidationURL: upstream + in.ValidationPath,
+		ID: id, ServerName: in.Name, Namespace: in.Namespace,
+		ResourceURL: "https://" + authHost + in.IngressPath, UpstreamURL: upstream, ValidationURL: upstream + in.ValidationPath,
 		RequiredScopes: []string{DefaultScope},
 		ResourceClient: ResourceClient{ClientID: "gateway-" + id, KeyID: "k1", PrivateKeyFile: ClientKeyFile},
 		Source:         SourceForm,

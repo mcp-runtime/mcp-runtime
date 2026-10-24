@@ -1203,7 +1203,7 @@ Deployment of Runtime's existing `mcp-gateway` image run in credential mode
 `--gateway-image` defaults to the installed gateway's image, then to the
 operator's `MCP_GATEWAY_PROXY_IMAGE`. It takes `--file` (a
 base gateway JSON: listener, issuer and session key; the services are derived from
-the pushed servers), `--mcp-host` for servers without an `ingressHost`, repeated `--secret-file KEY=FILE` inputs
+the pushed servers), `--mcp-host` as the only upstream host, repeated `--secret-file KEY=FILE` inputs
 (the session binding key and each service's resource-client key), `--tls-secret`,
 `--gateway-image`, explicit `--kubeconfig`, `--context` and `--expect-cluster-id`.
 Review `--dry-run`, then repeat with `--yes`. All config file references use
@@ -1262,15 +1262,21 @@ The MCP client configuration is then `{"url": "https://<auth host>/gitlab/mcp"}`
 with no headers. `mcp-runtime gateway apply` reads the base
 gateway JSON (`--file`: listener, issuer and session key; no `services`
 needed) and adds one form-source service for every pushed server with this
-block: resource `https://<auth host><route>`, upstream and validation URLs on the
-server's own HTTPS host (`ingressHost`, or `--mcp-host`), and one sign-in input
+block: resource `https://<auth host><route>`, upstream and validation URLs on
+`--mcp-host` only. A server `ingressHost` must be empty or that same host; a
+different host is rejected, so a publisher cannot choose where the form sends
+values. The sign-in page names the server, its namespace and that host, and
+says this is not a platform account. One sign-in input is created
 per declared header. It needs no vault provider or mappings file, takes
 `--secret-file client.pem=<file>` for the gateway's resource-client key, and
 otherwise behaves like `apply` (`--dry-run`, then `--yes`).
 
 Header values a person submits are validated at the upstream before any OAuth
-code is issued, then held in the gateway's memory only. Restarting the gateway
-clears them, so people sign in again; restarting mcp-auth does not. Servers with the same name in two
+code is issued, then held in the gateway's memory only, and only after that
+sign-in wins its pending request. The resulting session subject is an opaque
+`form-<id>:` value, not a platform user: deactivating an account does not end
+it, and header-mode grants do not apply. Restarting the gateway
+clears the values, so people sign in again; restarting mcp-auth does not. Servers with the same name in two
 namespaces conflict. The block is accepted only with `auth.mode: header`, and
 every declared header becomes a required input, labeled with its own name.
 Any valid HTTP header name works, including `Authorization` and names such as

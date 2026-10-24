@@ -137,24 +137,32 @@ func SubjectPrefix(serviceID string) string { return "form-" + serviceID + ":" }
 
 func (g *Gateway) loginProvider(s Service) *LoginProvider {
 	resource, _ := url.Parse(s.ResourceURL)
+	upstream, _ := url.Parse(s.UpstreamURL)
 	return NewLoginProvider(LoginConfig{
-		ClientID:    LoginClientID(s.ID),
-		Origin:      resource.Scheme + "://" + resource.Host,
-		BasePath:    s.ResourcePath,
-		CallbackURL: g.cfg.Issuer + "/identity/callback",
-		Fields:      s.FormFields,
+		ClientID:     LoginClientID(s.ID),
+		Origin:       resource.Scheme + "://" + resource.Host,
+		BasePath:     s.ResourcePath,
+		CallbackURL:  g.cfg.Issuer + "/identity/callback",
+		Fields:       s.FormFields,
+		ServerName:   s.ServerName,
+		Namespace:    s.Namespace,
+		UpstreamHost: upstream.Host,
 		Authenticate: func(ctx context.Context, values map[string]string) (string, error) {
-			return g.authenticateForm(ctx, s, SubjectPrefix(s.ID), values)
+			return g.validateForm(ctx, s, values)
+		},
+		// Store only after LoginProvider has consumed the pending request, so a
+		// second submission of the same form cannot leave an orphaned entry.
+		Commit: func(subject string, values map[string]string) error {
+			g.store.Put(g.cfg.Issuer, SubjectPrefix(s.ID)+subject, s.ID, values)
+			return nil
 		},
 	})
 }
 
-// authenticateForm validates submitted values at the upstream and, only when it
-// accepts them, keeps them in memory under subjectPrefix plus a fresh random
-// subject. It returns the random part, which is what the sign-in hands to
-// mcp-auth. Rejected values yield ErrRejected, an unreachable upstream
-// ErrUnavailable; nothing is stored in either case.
-func (g *Gateway) authenticateForm(ctx context.Context, s Service, subjectPrefix string, submitted map[string]string) (string, error) {
+// validateForm checks submitted values at the upstream and returns the random
+// subject mcp-auth will prefix. It does not store anything: the sign-in page
+// commits the values only after it wins the pending request.
+func (g *Gateway) validateForm(ctx context.Context, s Service, submitted map[string]string) (string, error) {
 	values := make(map[string]string, len(s.FormFields))
 	for _, f := range s.FormFields {
 		values[f.Name] = submitted[f.Name]
@@ -170,7 +178,6 @@ func (g *Gateway) authenticateForm(ctx context.Context, s Service, subjectPrefix
 	if err != nil {
 		return "", ErrUnavailable
 	}
-	g.store.Put(g.cfg.Issuer, subjectPrefix+random, s.ID, values)
 	return random, nil
 }
 

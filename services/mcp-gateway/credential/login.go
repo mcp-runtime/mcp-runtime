@@ -46,10 +46,17 @@ type LoginConfig struct {
 	CallbackURL string
 	// Fields are the inputs shown, in order.
 	Fields []FormField
-	// Authenticate validates submitted values at the upstream and stores them,
-	// returning the opaque subject. It reports ErrRejected or ErrUnavailable.
+	// ServerName, Namespace and UpstreamHost are shown on the page so the
+	// person can see which server receives the values. They come from the
+	// operator-derived configuration.
+	ServerName, Namespace, UpstreamHost string
+	// Authenticate validates submitted values at the upstream and returns the
+	// opaque subject. It does not store them. It reports ErrRejected or ErrUnavailable.
 	Authenticate func(ctx context.Context, values map[string]string) (string, error)
-	Now          func() time.Time
+	// Commit stores values for subject. The page calls it only after this
+	// submission has won the pending request.
+	Commit func(subject string, values map[string]string) error
+	Now    func() time.Time
 }
 
 type loginPending struct {
@@ -183,6 +190,7 @@ button{margin-top:.75rem;width:100%;padding:.6rem;font:inherit;cursor:pointer;bo
 <input type="hidden" name="request" value="{{.Request}}">
 <input type="hidden" name="csrf" value="{{.CSRF}}">
 <p class="note">Enter the values this service needs. Your MCP client receives its token only after the service accepts them.</p>
+{{if .UpstreamHost}}<p class="note">These values are sent to <strong>{{.ServerName}}</strong>{{if .Namespace}} ({{.Namespace}}){{end}} at {{.UpstreamHost}}. This is not a platform account.</p>{{end}}
 {{range .Fields}}
 <label for="f-{{.Name}}">{{.Label}}</label>
 {{if .Secret}}<input type="password" id="f-{{.Name}}" name="{{.Name}}" autocomplete="current-password" maxlength="1024" required>
@@ -197,14 +205,18 @@ button{margin-top:.75rem;width:100%;padding:.6rem;font:inherit;cursor:pointer;bo
 `))
 
 type pageView struct {
-	Action, Request, CSRF, Error string
-	Fields                       []FormField
+	Action, Request, CSRF, Error        string
+	ServerName, Namespace, UpstreamHost string
+	Fields                              []FormField
 }
 
 func (p *LoginProvider) render(w http.ResponseWriter, id string, req loginPending, status int, message string) {
 	p.securePage(w)
 	w.WriteHeader(status)
-	_ = page.Execute(w, pageView{Action: p.cfg.BasePath + "/login/approve", Request: id, CSRF: req.csrf, Error: message, Fields: p.cfg.Fields})
+	_ = page.Execute(w, pageView{
+		Action: p.cfg.BasePath + "/login/approve", Request: id, CSRF: req.csrf, Error: message, Fields: p.cfg.Fields,
+		ServerName: p.cfg.ServerName, Namespace: p.cfg.Namespace, UpstreamHost: p.cfg.UpstreamHost,
+	})
 }
 
 func (p *LoginProvider) authorize(w http.ResponseWriter, r *http.Request) {
@@ -314,6 +326,12 @@ func (p *LoginProvider) approve(w http.ResponseWriter, r *http.Request) {
 	if len(p.codes) >= maxPending {
 		http.Error(w, "sign-in limit reached", http.StatusTooManyRequests)
 		return
+	}
+	if p.cfg.Commit != nil {
+		if err := p.cfg.Commit(subject, values); err != nil {
+			http.Error(w, "sign-in unavailable", http.StatusServiceUnavailable)
+			return
+		}
 	}
 	delete(p.requests, id)
 	p.codes[code] = loginGrant{subject: subject, challenge: req.challenge, redirect: req.redirect, expires: p.now().Add(codeTTL)}

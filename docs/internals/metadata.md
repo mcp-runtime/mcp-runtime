@@ -96,7 +96,7 @@ go test ./pkg/metadata/... -count=1
 go test ./internal/cli/server -run 'TestGenerate|TestBuild' -count=1
 ```
 
-## Vault-backed upstream headers
+## Credential gateway sign-in
 
 For the optional mcp-auth credential gateway, a header-mode server may add
 `auth.credentialGateway` (`validationPath`, optional `secretHeaders`) to

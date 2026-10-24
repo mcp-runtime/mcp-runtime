@@ -100,11 +100,14 @@ func newEnv(t *testing.T) *env {
 func (e *env) signIn(user, pass string) (string, error) {
 	svc := e.cfg.Services[0]
 	gw := New(e.cfg, e.store, nil)
-	random, err := gw.authenticateForm(nil2ctx(), svc, SubjectPrefix(svc.ID), map[string]string{"username": user, "password": pass})
+	values := map[string]string{"username": user, "password": pass}
+	random, err := gw.validateForm(nil2ctx(), svc, values)
 	if err != nil {
 		return "", err
 	}
-	return SubjectPrefix(svc.ID) + random, nil
+	subject := SubjectPrefix(svc.ID) + random
+	gw.store.Put(e.cfg.Issuer, subject, svc.ID, values)
+	return subject, nil
 }
 
 func (e *env) call(method, token, body string, hdr map[string]string) *http.Response {

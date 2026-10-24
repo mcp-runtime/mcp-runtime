@@ -53,6 +53,8 @@ type fileConfig struct {
 	} `json:"limits"`
 	Services []struct {
 		ID             string   `json:"id"`
+		ServerName     string   `json:"server_name"`
+		Namespace      string   `json:"namespace"`
 		ResourceURL    string   `json:"resource_url"`
 		UpstreamURL    string   `json:"upstream_url"`
 		ValidationURL  string   `json:"validation_url"`
@@ -99,6 +101,8 @@ type ResourceClient struct {
 // Service is one proxied MCP backend.
 type Service struct {
 	ID             string
+	ServerName     string
+	Namespace      string
 	ResourceURL    string
 	ResourcePath   string
 	UpstreamURL    string
@@ -330,13 +334,14 @@ func ParseConfig(data []byte) (*Config, error) {
 			localPaths = append(localPaths, strings.TrimPrefix(path, p))
 		}
 		for _, local := range localPaths {
-			if paths[local] || local == "/healthz" || local == "/readyz" || strings.HasPrefix(local, "/.well-known/") {
+			if paths[local] || local == "/healthz" || local == "/readyz" || local == "/.well-known" || strings.HasPrefix(local, "/.well-known/") {
 				return nil, errors.New("gateway service paths must be distinct and cannot use health or discovery routes")
 			}
 			paths[local] = true
 		}
 		c.Services = append(c.Services, Service{
-			ID: s.ID, ResourceURL: resourceURL, ResourcePath: path, UpstreamURL: upstream.String(), ValidationURL: validation.String(),
+			ID: s.ID, ServerName: s.ServerName, Namespace: s.Namespace,
+			ResourceURL: resourceURL, ResourcePath: path, UpstreamURL: upstream.String(), ValidationURL: validation.String(),
 			RequiredScopes: s.RequiredScopes,
 			Client:         ResourceClient{ClientID: s.ResourceClient.ClientID, KeyID: s.ResourceClient.KeyID, PrivateKey: priv},
 			FormFields:     fields,

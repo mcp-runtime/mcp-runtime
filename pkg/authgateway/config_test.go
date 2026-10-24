@@ -19,6 +19,8 @@ func TestGatewayConfigRejectsUnsafeRoutingAndUnknownRegistration(t *testing.T) {
 		strings.Replace(sample, `"client_id":"demo-gateway"`, `"client_id":""`, 1),
 		strings.Replace(sample, "/etc/mcp-gateway-credential/client.pem", "/etc/passwd", 1),
 		strings.Replace(sample, `"id":"demo"`, `"id":"`+strings.Repeat("a", 28)+`"`, 1),
+		strings.Replace(sample, "https://auth.example.com/mcp-auth", "https://auth.example.com", 1),
+		strings.Replace(sample, "https://auth.example.com/demo/mcp", "https://auth.example.com/.well-known", 1),
 	} {
 		if _, err := Parse([]byte(bad)); err == nil {
 			t.Fatal("unsafe gateway configuration accepted")

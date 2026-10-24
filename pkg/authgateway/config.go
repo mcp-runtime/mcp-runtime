@@ -72,8 +72,8 @@ func Parse(data []byte) (*Config, error) {
 		return nil, errors.New("gateway must listen on 0.0.0.0 with a distinct unprivileged port")
 	}
 	issuer, err := httpsURL(c.AuthorizationServer.Issuer)
-	if err != nil {
-		return nil, errors.New("gateway issuer must be an HTTPS URL")
+	if err != nil || issuer.Path == "" || issuer.Path == "/" || path.Clean(issuer.Path) != issuer.Path {
+		return nil, errors.New("gateway issuer must be an HTTPS URL mounted on a path, such as /mcp-auth")
 	}
 	if len(c.Services) == 0 || len(c.Services) > 16 {
 		return nil, errors.New("1-16 services are required")
@@ -81,8 +81,8 @@ func Parse(data []byte) (*Config, error) {
 	seenID, seenURL := map[string]bool{}, map[string]bool{}
 	for _, s := range c.Services {
 		resource, err := httpsURL(s.ResourceURL)
-		if err != nil || resource.Host != issuer.Host || resource.Path == "/" || path.Clean(resource.Path) != resource.Path || strings.HasPrefix(resource.Path, "/.well-known/") || resource.Path == issuer.Path || (strings.Trim(issuer.Path, "/") != "" && strings.HasPrefix(resource.Path, strings.TrimRight(issuer.Path, "/")+"/")) {
-			return nil, errors.New("gateway resources must use distinct paths on the existing auth host, outside the OAuth issuer path")
+		if err != nil || resource.Host != issuer.Host || !gatewayResourcePath(resource.Path, issuer.Path) {
+			return nil, errors.New("gateway resources must use distinct paths on the existing auth host, outside the OAuth issuer path and discovery routes")
 		}
 		// The login method mcp-auth gets is "form-<id>", and its id is at most 32 characters.
 		if !regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,26}$`).MatchString(s.ID) || seenID[s.ID] || seenURL[s.ResourceURL] {
@@ -110,6 +110,23 @@ func Parse(data []byte) (*Config, error) {
 		}
 	}
 	return &c, nil
+}
+
+// gatewayResourcePath reports whether path can be routed on the auth host
+// without covering the issuer or the discovery routes. A root issuer is
+// refused by the caller; this also refuses /.well-known itself, not only
+// paths underneath it.
+func gatewayResourcePath(resourcePath, issuerPath string) bool {
+	if resourcePath == "" || resourcePath == "/" || path.Clean(resourcePath) != resourcePath {
+		return false
+	}
+	if resourcePath == "/.well-known" || strings.HasPrefix(resourcePath, "/.well-known/") {
+		return false
+	}
+	if resourcePath == issuerPath || strings.HasPrefix(resourcePath, strings.TrimRight(issuerPath, "/")+"/") {
+		return false
+	}
+	return true
 }
 
 func httpsURL(raw string) (*url.URL, error) {

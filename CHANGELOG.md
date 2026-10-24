@@ -16,6 +16,7 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 ### Fixed
 
 - Registry credential refresh with `--pull-namespace` stays limited to the explicitly selected namespaces after its first match.
+- The credential gateway calls only the platform MCP host from `--mcp-host`. A server `ingressHost` that names a different host is rejected, and the sign-in page shows the server, namespace and that host. The gateway pod does not mount a service-account token, and its egress is DNS plus HTTPS.
 
 ## [0.12.1] - 2026-10-23
 

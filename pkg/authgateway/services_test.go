@@ -14,11 +14,12 @@ func gitlabInput() ServerInput {
 }
 
 func TestServiceForDerivesAFormServiceFromTheServer(t *testing.T) {
-	service, err := ServiceFor(gitlabInput(), "auth.example.com", "")
+	service, err := ServiceFor(gitlabInput(), "auth.example.com", "mcp.example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if service.ID != "gitlab" || service.ResourceURL != "https://auth.example.com/gitlab/mcp" ||
+	if service.ID != "gitlab" || service.ServerName != "gitlab" || service.Namespace != "mcp-servers" ||
+		service.ResourceURL != "https://auth.example.com/gitlab/mcp" ||
 		service.UpstreamURL != "https://mcp.example.com/gitlab/mcp" || service.ValidationURL != "https://mcp.example.com/gitlab/mcp/auth/check" {
 		t.Fatalf("urls: %+v", service)
 	}
@@ -53,7 +54,7 @@ func TestServiceForHonorsExplicitSecretHeadersAndPublicHostFallback(t *testing.T
 func TestServiceForRejectsUnsafeInput(t *testing.T) {
 	mutations := map[string]func(*ServerInput){
 		"uppercase-only invalid id": func(in *ServerInput) { in.Name = "Git_Lab" },
-		"no host":                   func(in *ServerInput) { in.IngressHost = "" },
+		"foreign host":              func(in *ServerInput) { in.IngressHost = "evil.example" },
 		"host with path":            func(in *ServerInput) { in.IngressHost = "mcp.example.com/evil" },
 		"host with credentials":     func(in *ServerInput) { in.IngressHost = "user@evil.example.com" },
 		"trailing slash path":       func(in *ServerInput) { in.IngressPath = "/gitlab/mcp/" },
@@ -67,17 +68,20 @@ func TestServiceForRejectsUnsafeInput(t *testing.T) {
 	for name, mutate := range mutations {
 		in := gitlabInput()
 		mutate(&in)
-		if _, err := ServiceFor(in, "auth.example.com", ""); err == nil {
+		if _, err := ServiceFor(in, "auth.example.com", "mcp.example.com"); err == nil {
 			t.Errorf("accepted: %s", name)
 		}
 	}
-	if _, err := ServiceFor(gitlabInput(), "", ""); err == nil {
+	if _, err := ServiceFor(gitlabInput(), "", "mcp.example.com"); err == nil {
 		t.Error("accepted an empty auth host")
+	}
+	if _, err := ServiceFor(gitlabInput(), "auth.example.com", ""); err == nil {
+		t.Error("accepted a missing platform MCP host")
 	}
 }
 
 func TestParseAcceptsDerivedServicesWithoutAnyProvider(t *testing.T) {
-	service, _ := ServiceFor(gitlabInput(), "auth.example.com", "")
+	service, _ := ServiceFor(gitlabInput(), "auth.example.com", "mcp.example.com")
 	doc := map[string]any{
 		"listen": map[string]any{"host": "0.0.0.0", "port": 8090}, "authorization_server": map[string]any{"issuer": "https://auth.example.com/mcp-auth"},
 		"services": []any{service},
@@ -95,7 +99,7 @@ func TestParseAcceptsDerivedServicesWithoutAnyProvider(t *testing.T) {
 func TestServiceForAcceptsAnyValidHeaderName(t *testing.T) {
 	in := gitlabInput()
 	in.Headers = []string{"Authorization", "X_Api_Key", "1st-Token", "X-Tenant.ID", "api~key"}
-	service, err := ServiceFor(in, "auth.example.com", "")
+	service, err := ServiceFor(in, "auth.example.com", "mcp.example.com")
 	if err != nil {
 		t.Fatalf("valid header names were rejected: %v", err)
 	}

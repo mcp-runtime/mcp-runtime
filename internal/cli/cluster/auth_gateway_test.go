@@ -92,7 +92,8 @@ func TestInstallCreatesTheGatewayWiresAuthAndRetiresTheEarlierLayout(t *testing.
 	}
 	pod, container := d.Spec.Template.Spec, d.Spec.Template.Spec.Containers[0]
 	if container.Image != "registry.example.com/mcp-gateway:v1" || pod.SecurityContext.RunAsNonRoot == nil || !*pod.SecurityContext.RunAsNonRoot ||
-		*container.SecurityContext.ReadOnlyRootFilesystem != true || *container.SecurityContext.AllowPrivilegeEscalation != false {
+		*container.SecurityContext.ReadOnlyRootFilesystem != true || *container.SecurityContext.AllowPrivilegeEscalation != false ||
+		pod.AutomountServiceAccountToken == nil || *pod.AutomountServiceAccountToken {
 		t.Fatalf("the gateway is not locked down: %+v", container.SecurityContext)
 	}
 	if len(pod.ImagePullSecrets) != 1 || pod.ImagePullSecrets[0].Name != "mcp-runtime-registry-pull" {
@@ -106,14 +107,27 @@ func TestInstallCreatesTheGatewayWiresAuthAndRetiresTheEarlierLayout(t *testing.
 	for _, p := range ingress.Spec.Rules[0].HTTP.Paths {
 		paths = append(paths, p.Path)
 	}
-	if ingress.Spec.Rules[0].Host != "auth.example.com" || strings.Join(paths, ",") != "/demo/mcp,/.well-known/oauth-protected-resource/demo/mcp" {
+	if ingress.Spec.Rules[0].Host != "auth.example.com" || strings.Join(paths, ",") != "/demo/mcp,/demo/mcp/login,/.well-known/oauth-protected-resource/demo/mcp" {
 		t.Fatalf("ingress routes %v on %s", paths, ingress.Spec.Rules[0].Host)
+	}
+	for _, p := range ingress.Spec.Rules[0].HTTP.Paths {
+		want := networkingv1.PathTypeExact
+		if p.Path == "/demo/mcp/login" {
+			want = networkingv1.PathTypePrefix
+		}
+		if p.PathType == nil || *p.PathType != want {
+			t.Fatalf("path %s type %v, want %s", p.Path, p.PathType, want)
+		}
 	}
 	if _, err := c.CoreV1().Services(mcpAuthNamespace).Get(ctx, authgateway.GatewayName, metav1.GetOptions{}); err != nil {
 		t.Fatal("no gateway Service")
 	}
-	if _, err := c.NetworkingV1().NetworkPolicies(mcpAuthNamespace).Get(ctx, authgateway.GatewayName, metav1.GetOptions{}); err != nil {
+	policy, err := c.NetworkingV1().NetworkPolicies(mcpAuthNamespace).Get(ctx, authgateway.GatewayName, metav1.GetOptions{})
+	if err != nil {
 		t.Fatal("no gateway NetworkPolicy")
+	}
+	if len(policy.Spec.PolicyTypes) != 2 || len(policy.Spec.Egress) != 2 {
+		t.Fatalf("gateway policy is not ingress and egress: %+v", policy.Spec.PolicyTypes)
 	}
 
 	// mcp-auth is wired to it without losing its own connector.

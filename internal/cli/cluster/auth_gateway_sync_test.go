@@ -32,7 +32,7 @@ func TestExtendGatewayConfigDerivesServicesFromPushedServers(t *testing.T) {
 	oauth.Spec.Auth = &mcpv1alpha1.AuthConfig{}
 	servers := []mcpv1alpha1.MCPServer{gatewayServer("zeta", "mcp-servers"), plain, oauth, gatewayServer("alpha", "mcp-servers")}
 
-	out, err := extendGatewayConfig([]byte(syncBase), servers, "")
+	out, err := extendGatewayConfig([]byte(syncBase), servers, "mcp.example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestExtendGatewayConfigDerivesServicesFromPushedServers(t *testing.T) {
 
 func TestExtendGatewayConfigKeepsExistingServicesAndRejectsConflicts(t *testing.T) {
 	base := strings.Replace(syncBase, `"session_binding_key_file"`, `"services":[{"id":"alpha","resource_url":"https://auth.example.com/x/mcp","upstream_url":"https://u.example.com/mcp","validation_url":"https://u.example.com/check","required_scopes":["tools:read"]}],"session_binding_key_file"`, 1)
-	out, err := extendGatewayConfig([]byte(base), []mcpv1alpha1.MCPServer{gatewayServer("beta", "mcp-servers")}, "")
+	out, err := extendGatewayConfig([]byte(base), []mcpv1alpha1.MCPServer{gatewayServer("beta", "mcp-servers")}, "mcp.example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestExtendGatewayConfigKeepsExistingServicesAndRejectsConflicts(t *testing.
 	if len(doc.Services) != 2 {
 		t.Fatalf("services = %d, want the administrator's plus the derived one", len(doc.Services))
 	}
-	_, err = extendGatewayConfig([]byte(syncBase), []mcpv1alpha1.MCPServer{gatewayServer("alpha", "team-a"), gatewayServer("alpha", "team-b")}, "")
+	_, err = extendGatewayConfig([]byte(syncBase), []mcpv1alpha1.MCPServer{gatewayServer("alpha", "team-a"), gatewayServer("alpha", "team-b")}, "mcp.example.com")
 	if err == nil || !strings.Contains(err.Error(), "share the gateway service id") {
 		t.Fatalf("same-named servers must conflict, got %v", err)
 	}
@@ -72,5 +72,10 @@ func TestExtendGatewayConfigKeepsExistingServicesAndRejectsConflicts(t *testing.
 	noHost.Spec.IngressHost = ""
 	if _, err := extendGatewayConfig([]byte(syncBase), []mcpv1alpha1.MCPServer{noHost}, ""); err == nil {
 		t.Fatal("a server with no public host must be rejected")
+	}
+	foreign := gatewayServer("alpha", "mcp-servers")
+	foreign.Spec.IngressHost = "evil.example"
+	if _, err := extendGatewayConfig([]byte(syncBase), []mcpv1alpha1.MCPServer{foreign}, "mcp.example.com"); err == nil || !strings.Contains(err.Error(), "not the platform MCP host") {
+		t.Fatalf("a publisher-chosen host must be rejected, got %v", err)
 	}
 }
