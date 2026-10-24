@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"sort"
@@ -71,11 +72,20 @@ func (o *gatewayOptions) validate() error {
 	return nil
 }
 
-// newCredentialGatewayCmd installs the shared credential gateway; it lives under
-// "cluster mcp-auth-connector" next to the identity connector it complements.
-func newCredentialGatewayCmd() *cobra.Command {
+// NewGateway is "mcp-runtime gateway": it manages the shared credential gateway
+// that signs people in for header-authenticated MCP servers.
+func NewGateway() *cobra.Command {
+	root := &cobra.Command{Use: "gateway", Short: "Manage the shared credential gateway", Long: `Manage the shared credential gateway: one workload of the mcp-gateway image, run in
+credential mode, that collects each person's upstream headers at sign-in and
+injects them on later requests. It is separate from the per-server gateway
+sidecars the operator manages.`}
+	root.AddCommand(newGatewayApplyCmd(), newGatewayStatusCmd())
+	return root
+}
+
+func newGatewayApplyCmd() *cobra.Command {
 	var opts gatewayOptions
-	cmd := &cobra.Command{Use: "credential-gateway", Short: "Install the credential gateway for the servers that declare auth.credentialGateway", Long: `Reads the base gateway JSON (listener, issuer, session key; services optional),
+	cmd := &cobra.Command{Use: "apply", Short: "Install the credential gateway for the servers that declare auth.credentialGateway", Long: `Reads the base gateway JSON (listener, issuer, session key; services optional),
 adds one service for every MCPServer with auth.mode header and an
 auth.credentialGateway block, and installs the shared credential gateway in
 mcp-platform (Secret, Deployment, Service, Ingress, NetworkPolicy). It runs the
@@ -102,30 +112,32 @@ restarting the gateway does.`, RunE: func(cmd *cobra.Command, _ []string) error 
 	return cmd
 }
 
+// connect opens the selected cluster and refuses a different one than expected.
+func (o *gatewayOptions) connect(ctx context.Context) (kubernetes.Interface, *rest.Config, error) {
+	rules := clientcmd.NewDefaultClientConfigLoadingRules()
+	rules.ExplicitPath = o.kubeconfig
+	restConfig, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, &clientcmd.ConfigOverrides{CurrentContext: o.kubeContext}).ClientConfig()
+	if err != nil {
+		return nil, nil, errors.New("selected Kubernetes context is unavailable")
+	}
+	client, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return nil, nil, err
+	}
+	ns, err := client.CoreV1().Namespaces().Get(ctx, "kube-system", metav1.GetOptions{})
+	if err != nil {
+		return nil, nil, err
+	}
+	if string(ns.UID) != o.clusterID {
+		return nil, nil, errors.New("selected cluster ID does not match --expect-cluster-id")
+	}
+	return client, restConfig, nil
+}
+
 // runAuthGateway reads the cluster, extends the base configuration with the
 // services its servers declare, validates the result and installs it.
 func runAuthGateway(cmd *cobra.Command, o *gatewayOptions, data []byte) error {
-	rules := clientcmd.NewDefaultClientConfigLoadingRules()
-	rules.ExplicitPath = o.kubeconfig
-	connect := func() (kubernetes.Interface, *rest.Config, error) {
-		restConfig, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, &clientcmd.ConfigOverrides{CurrentContext: o.kubeContext}).ClientConfig()
-		if err != nil {
-			return nil, nil, errors.New("selected Kubernetes context is unavailable")
-		}
-		client, err := kubernetes.NewForConfig(restConfig)
-		if err != nil {
-			return nil, nil, err
-		}
-		ns, err := client.CoreV1().Namespaces().Get(cmd.Context(), "kube-system", metav1.GetOptions{})
-		if err != nil {
-			return nil, nil, err
-		}
-		if string(ns.UID) != o.clusterID {
-			return nil, nil, errors.New("selected cluster ID does not match --expect-cluster-id")
-		}
-		return client, restConfig, nil
-	}
-	client, restConfig, err := connect()
+	client, restConfig, err := o.connect(cmd.Context())
 	if err != nil {
 		return err
 	}
@@ -808,3 +820,57 @@ func protocolTCP() *corev1.Protocol           { v := corev1.ProtocolTCP; return 
 func portPointer(p int32) *intstr.IntOrString { v := intstr.FromInt32(p); return &v }
 func mode0440() *int32                        { v := int32(0440); return &v }
 func mode0444() *int32                        { v := int32(0444); return &v }
+
+func newGatewayStatusCmd() *cobra.Command {
+	var o gatewayOptions
+	cmd := &cobra.Command{Use: "status", Short: "Show the credential gateway workload and the services it serves", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+		if o.kubeconfig == "" || o.kubeContext == "" || o.clusterID == "" {
+			return errors.New("--kubeconfig, --context and --expect-cluster-id are required")
+		}
+		client, _, err := o.connect(cmd.Context())
+		if err != nil {
+			return err
+		}
+		return writeGatewayStatus(cmd.Context(), cmd.OutOrStdout(), client)
+	}}
+	cmd.Flags().StringVar(&o.kubeconfig, "kubeconfig", "", "Explicit kubeconfig path")
+	cmd.Flags().StringVar(&o.kubeContext, "context", "", "Explicit Kubernetes context")
+	cmd.Flags().StringVar(&o.clusterID, "expect-cluster-id", "", "Expected kube-system namespace UID")
+	return cmd
+}
+
+// writeGatewayStatus prints the workload and its services. It reads only the
+// public parts of the configuration: ids and resource URLs, never key files.
+func writeGatewayStatus(ctx context.Context, out io.Writer, c kubernetes.Interface) error {
+	d, err := c.AppsV1().Deployments(mcpAuthNamespace).Get(ctx, authgateway.GatewayName, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		fmt.Fprintln(out, "the credential gateway is not installed; run `mcp-runtime gateway apply`")
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	image := ""
+	if len(d.Spec.Template.Spec.Containers) > 0 {
+		image = d.Spec.Template.Spec.Containers[0].Image
+	}
+	desired := int32(1)
+	if d.Spec.Replicas != nil {
+		desired = *d.Spec.Replicas
+	}
+	fmt.Fprintf(out, "workload: %s/%s, %d/%d ready\nimage: %s\n", mcpAuthNamespace, d.Name, d.Status.ReadyReplicas, desired, image)
+	secret, err := c.CoreV1().Secrets(mcpAuthNamespace).Get(ctx, authgateway.GatewayName, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	cfg, err := authgateway.Parse(secret.Data["config.json"])
+	if err != nil {
+		return errors.New("the installed gateway configuration is invalid")
+	}
+	fmt.Fprintf(out, "services: %d\n", len(cfg.Services))
+	for _, svc := range cfg.Services {
+		fmt.Fprintf(out, "  %s  %s\n", svc.ID, svc.ResourceURL)
+	}
+	fmt.Fprintln(out, "header values are held in the gateway's memory only; a restart signs everyone out")
+	return nil
+}

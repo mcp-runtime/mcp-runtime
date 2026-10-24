@@ -16,6 +16,7 @@ func TestAddCommandsRegistersTopLevelCommands(t *testing.T) {
 		"admin",
 		"catalog",
 		"cluster",
+		"gateway",
 		"registry",
 		"server",
 		"access",

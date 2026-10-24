@@ -1,0 +1,19 @@
+Manage the shared credential gateway: one workload of the mcp-gateway image, run in
+credential mode, that collects each person's upstream headers at sign-in and
+injects them on later requests. It is separate from the per-server gateway
+sidecars the operator manages.
+
+Usage:
+  mcp-runtime gateway [command]
+
+Available Commands:
+  apply       Install the credential gateway for the servers that declare auth.credentialGateway
+  status      Show the credential gateway workload and the services it serves
+
+Flags:
+  -h, --help   help for gateway
+
+Global Flags:
+      --debug   Enable debug mode with structured error logging
+
+Use "mcp-runtime gateway [command] --help" for more information about a command.

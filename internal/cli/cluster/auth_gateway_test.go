@@ -293,3 +293,29 @@ func TestResourceClientPublicKeysAreDerivedFromThePrivateKeys(t *testing.T) {
 		}
 	}
 }
+
+func TestGatewayStatusReportsWorkloadAndServicesWithoutKeys(t *testing.T) {
+	ctx := context.Background()
+	c := authCluster(nil)
+	var out strings.Builder
+	if err := writeGatewayStatus(ctx, &out, c); err != nil || !strings.Contains(out.String(), "not installed") {
+		t.Fatalf("before install: %q, %v", out.String(), err)
+	}
+	in := testInstall(t, false)
+	in.waitTimeout = 0
+	if _, err := installGateway(ctx, c, in); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if err := writeGatewayStatus(ctx, &out, c); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"services: 1", "demo  https://auth.example.com/demo/mcp", in.image} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("status lacks %q:\n%s", want, out.String())
+		}
+	}
+	if strings.Contains(out.String(), "client.pem") || strings.Contains(out.String(), "session.key") {
+		t.Fatalf("status names key files:\n%s", out.String())
+	}
+}

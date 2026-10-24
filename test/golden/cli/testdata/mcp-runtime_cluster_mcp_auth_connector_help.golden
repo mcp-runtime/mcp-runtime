@@ -1,11 +1,10 @@
-Manage the MCP Auth identity connector and the optional credential gateway
+Manage the bundled MCP Auth identity connector
 
 Usage:
   mcp-runtime cluster mcp-auth-connector [command]
 
 Available Commands:
-  apply              Update the existing MCP Auth connector configuration
-  credential-gateway Install the credential gateway for the servers that declare auth.credentialGateway
+  apply       Update the existing MCP Auth connector configuration
 
 Flags:
   -h, --help   help for mcp-auth-connector

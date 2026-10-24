@@ -14,7 +14,7 @@ only in the gateway's memory, so restarting MCP Auth does not clear them;
 restarting the gateway does.
 
 Usage:
-  mcp-runtime cluster mcp-auth-connector credential-gateway [flags]
+  mcp-runtime gateway apply [flags]
 
 Flags:
       --context string             Explicit Kubernetes context
@@ -22,7 +22,7 @@ Flags:
       --expect-cluster-id string   Expected kube-system namespace UID
       --file string                Gateway JSON file; file references must use /etc/mcp-gateway-credential/<key>
       --gateway-image string       mcp-gateway image to run in credential mode; defaults to the installed gateway's image, then the operator's MCP_GATEWAY_PROXY_IMAGE
-  -h, --help                       help for credential-gateway
+  -h, --help                       help for apply
       --kubeconfig string          Explicit kubeconfig path
       --mcp-host string            Public MCP host for servers that set no ingressHost
       --secret-file stringArray    Mount a private KEY=FILE input (the session binding key and the resource-client key)

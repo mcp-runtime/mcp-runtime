@@ -41,7 +41,7 @@ image in credential mode, once, for every opted-in server; `--gateway-image`
 defaults to the operator's `MCP_GATEWAY_PROXY_IMAGE`, so you can usually omit it:
 
 ```bash
-mcp-runtime cluster mcp-auth-connector credential-gateway --file gateway.json \
+mcp-runtime gateway apply --file gateway.json \
   --secret-file session.key=./session.key --secret-file client.pem=./client.pem \
   --gateway-image <registry>/mcp-gateway:<tag> \
   --tls-secret <auth tls secret> --kubeconfig ... --context ... --expect-cluster-id ... --dry-run
