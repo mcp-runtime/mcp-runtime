@@ -1202,11 +1202,12 @@ Deployment of Runtime's existing `mcp-gateway` image run in credential mode
 (`MCP_GATEWAY_MODE=credential`); there is no separate image to build or pull.
 `--gateway-image` defaults to the installed gateway's image, then to the
 operator's `MCP_GATEWAY_PROXY_IMAGE`. It takes `--file` (a
-gateway JSON that lists the services), repeated `--secret-file KEY=FILE` inputs
+base gateway JSON: listener, issuer and session key; the services are derived from
+the pushed servers), `--mcp-host` for servers without an `ingressHost`, repeated `--secret-file KEY=FILE` inputs
 (the session binding key and each service's resource-client key), `--tls-secret`,
 `--gateway-image`, explicit `--kubeconfig`, `--context` and `--expect-cluster-id`.
 Review `--dry-run`, then repeat with `--yes`. All config file references use
-`/etc/mcp-credential-gateway/<key>`.
+`/etc/mcp-gateway-credential/<key>`.
 
 It does this, in order, and stops at the first failure:
 
@@ -1227,7 +1228,6 @@ It does this, in order, and stops at the first failure:
    written), publishes a wiring ConfigMap (the resource logins and the gateway's
    assertion-client public keys), and patches the MCP Auth Deployment (mount,
    environment, allowed resources). MCP Auth restarts only if that wiring changed.
-5. Removes the objects of the earlier layout, which ran the gateway inside MCP Auth.
 
 The gateway's sign-in endpoints are what MCP Auth redirects the browser to for a
 gateway resource, so the person's header values go from the browser to the gateway
@@ -1259,7 +1259,7 @@ servers:
 ```
 
 The MCP client configuration is then `{"url": "https://<auth host>/gitlab/mcp"}`
-with no headers. `mcp-runtime cluster mcp-auth-gateway sync` reads the base
+with no headers. `mcp-runtime cluster mcp-auth-gateway apply` reads the base
 gateway JSON (`--file`: listener, issuer and session key; no `services`
 needed) and adds one form-source service for every pushed server with this
 block: resource `https://<auth host><route>`, upstream and validation URLs on the

@@ -21,17 +21,14 @@ const (
 	ResourceAnnotation = "mcpruntime.org/auth-gateway-resources"
 	// GatewayName names the gateway's own workload objects in mcp-platform:
 	// Deployment, Service, Secret, Ingress and NetworkPolicy.
-	GatewayName = "mcp-credential-gateway"
+	GatewayName = "mcp-gateway-credential"
 	// MountPath is where the gateway reads its configuration and keys.
-	MountPath = "/etc/mcp-credential-gateway"
+	MountPath = "/etc/mcp-gateway-credential"
 	// WiringName is the ConfigMap holding what mcp-auth reads about the gateway:
 	// the assertion client's public keys and the resource logins.
 	WiringName = "mcp-auth-gateway-wiring"
 	// WiringMountPath is where mcp-auth mounts that ConfigMap.
 	WiringMountPath = "/etc/mcp-auth-gateway-wiring"
-	// LegacyName names the objects the earlier combined-binary layout created in
-	// mcp-platform; sync removes them.
-	LegacyName = "mcp-auth-credential-gateway"
 	// SourceForm marks a service whose header values are submitted at sign-in.
 	SourceForm = "form"
 )

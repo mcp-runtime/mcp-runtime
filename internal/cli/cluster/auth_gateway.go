@@ -52,6 +52,7 @@ func (o *gatewayOptions) bind(cmd *cobra.Command) {
 	cmd.Flags().StringArrayVar(&o.files, "secret-file", nil, "Mount a private KEY=FILE input (the session binding key and the resource-client key)")
 	cmd.Flags().StringVar(&o.tls, "tls-secret", "", "Existing TLS Secret covering the auth hostname; no certificate is issued")
 	cmd.Flags().StringVar(&o.image, "gateway-image", "", "mcp-gateway image to run in credential mode; defaults to the installed gateway's image, then the operator's MCP_GATEWAY_PROXY_IMAGE")
+	cmd.Flags().StringVar(&o.mcpHost, "mcp-host", "", "Public MCP host for servers that set no ingressHost")
 	cmd.Flags().StringVar(&o.kubeconfig, "kubeconfig", "", "Explicit kubeconfig path")
 	cmd.Flags().StringVar(&o.kubeContext, "context", "", "Explicit Kubernetes context")
 	cmd.Flags().StringVar(&o.clusterID, "expect-cluster-id", "", "Expected kube-system namespace UID")
@@ -72,51 +73,38 @@ func (o *gatewayOptions) validate() error {
 
 func newMCPAuthGatewayCmd() *cobra.Command {
 	root := &cobra.Command{Use: "mcp-auth-gateway", Short: "Install the optional credential gateway and wire MCP Auth to it"}
-	var applyOpts, syncOpts gatewayOptions
-	apply := &cobra.Command{Use: "apply", Short: "Install the credential gateway for the services in a gateway JSON file", Long: `Installs the credential gateway as its own workload in mcp-platform (Secret,
-Deployment, Service, Ingress, NetworkPolicy) from a gateway JSON file that lists
-its services, waits for it to be ready, then wires MCP Auth to it: a connector
-and a resource login per service, the gateway's assertion client, and the
-allowed resources. It also removes the objects of the earlier layout that ran
-the gateway inside MCP Auth.`, RunE: func(cmd *cobra.Command, _ []string) error {
-		if err := applyOpts.validate(); err != nil {
-			return err
-		}
-		data, err := os.ReadFile(applyOpts.file) // #nosec G304 -- explicit operator-supplied configuration.
-		if err != nil {
-			return errors.New("gateway configuration file is unreadable")
-		}
-		return runAuthGateway(cmd, &applyOpts, data, nil)
-	}}
-	applyOpts.bind(apply)
-	sync := &cobra.Command{Use: "sync", Short: "Derive gateway services from header-mode servers that declare auth.credentialGateway, then install", Long: `Reads the base gateway JSON (listener, issuer, session key; services optional),
+	var opts gatewayOptions
+	apply := &cobra.Command{Use: "apply", Short: "Install the credential gateway for the servers that declare auth.credentialGateway", Long: `Reads the base gateway JSON (listener, issuer, session key; services optional),
 adds one service for every MCPServer with auth.mode header and an
-auth.credentialGateway block, and installs the result like "apply". The headers
-a server declares in auth.headers become the sign-in inputs, so pushing the
-server's .mcp/servers.yaml and running sync configures the gateway and MCP Auth.
-Each derived service reads its resource-client key from client.pem, supplied with
---secret-file client.pem=<file>. Header values people submit live only in the
-gateway's memory, so restarting MCP Auth does not clear them; restarting the
-gateway does.`, RunE: func(cmd *cobra.Command, _ []string) error {
-		if err := syncOpts.validate(); err != nil {
+auth.credentialGateway block, and installs the shared credential gateway in
+mcp-platform (Secret, Deployment, Service, Ingress, NetworkPolicy). It runs the
+existing mcp-gateway image in credential mode. After the gateway is ready, it
+wires MCP Auth to it: a connector and a resource login per service, the
+gateway's assertion client, and the allowed resources.
+
+The headers a server declares in auth.headers become the sign-in inputs, so
+pushing the server's .mcp/servers.yaml and running apply configures the gateway
+and MCP Auth. Each derived service reads its resource-client key from client.pem,
+supplied with --secret-file client.pem=<file>. Header values people submit live
+only in the gateway's memory, so restarting MCP Auth does not clear them;
+restarting the gateway does.`, RunE: func(cmd *cobra.Command, _ []string) error {
+		if err := opts.validate(); err != nil {
 			return err
 		}
-		base, err := os.ReadFile(syncOpts.file) // #nosec G304 -- explicit operator-supplied configuration.
+		base, err := os.ReadFile(opts.file) // #nosec G304 -- explicit operator-supplied configuration.
 		if err != nil {
 			return errors.New("gateway configuration file is unreadable")
 		}
-		return runAuthGateway(cmd, &syncOpts, base, deriveGatewayServices)
+		return runAuthGateway(cmd, &opts, base)
 	}}
-	syncOpts.bind(sync)
-	sync.Flags().StringVar(&syncOpts.mcpHost, "mcp-host", "", "Public MCP host for servers that set no ingressHost")
-	root.AddCommand(apply, sync)
+	opts.bind(apply)
+	root.AddCommand(apply)
 	return root
 }
 
-// runAuthGateway validates the configuration and installs it. When derive is
-// set, the cluster is read first and the base configuration is extended with
-// the services it returns.
-func runAuthGateway(cmd *cobra.Command, o *gatewayOptions, data []byte, derive func(context.Context, *gatewayOptions, *rest.Config, []byte) ([]byte, error)) error {
+// runAuthGateway reads the cluster, extends the base configuration with the
+// services its servers declare, validates the result and installs it.
+func runAuthGateway(cmd *cobra.Command, o *gatewayOptions, data []byte) error {
 	rules := clientcmd.NewDefaultClientConfigLoadingRules()
 	rules.ExplicitPath = o.kubeconfig
 	connect := func() (kubernetes.Interface, *rest.Config, error) {
@@ -137,16 +125,12 @@ func runAuthGateway(cmd *cobra.Command, o *gatewayOptions, data []byte, derive f
 		}
 		return client, restConfig, nil
 	}
-	var client kubernetes.Interface
-	if derive != nil {
-		c, restConfig, err := connect()
-		if err != nil {
-			return err
-		}
-		client = c
-		if data, err = derive(cmd.Context(), o, restConfig, data); err != nil {
-			return err
-		}
+	client, restConfig, err := connect()
+	if err != nil {
+		return err
+	}
+	if data, err = deriveGatewayServices(cmd.Context(), o, restConfig, data); err != nil {
+		return err
 	}
 	cfg, err := authgateway.Parse(data)
 	if err != nil {
@@ -174,13 +158,6 @@ func runAuthGateway(cmd *cobra.Command, o *gatewayOptions, data []byte, derive f
 	wiring, err := authgateway.BuildWiring(cfg, publicKeys)
 	if err != nil {
 		return err
-	}
-	if client == nil {
-		c, _, err := connect()
-		if err != nil {
-			return err
-		}
-		client = c
 	}
 	report, err := installGateway(cmd.Context(), client, gatewayInstall{cfg: cfg, payload: payload, wiring: wiring, tlsSecret: o.tls, image: o.image, dryRun: o.dryRun, waitTimeout: o.waitTimeout})
 	if err != nil {
@@ -479,13 +456,6 @@ func installGateway(ctx context.Context, c kubernetes.Interface, in gatewayInsta
 		return nil, err
 	}
 	report.notes = append(report.notes, "MCP Auth is wired to the gateway (wiring "+hash[:12]+")")
-	removed, err := removeLegacyGateway(ctx, c)
-	if err != nil {
-		return nil, err
-	}
-	if len(removed) > 0 {
-		report.notes = append(report.notes, "removed the earlier layout's "+strings.Join(removed, ", "))
-	}
 	return report, nil
 }
 
@@ -796,22 +766,13 @@ func applyAuthWiring(ctx context.Context, c kubernetes.Interface, in gatewayInst
 		set("MCP_AUTH_RESOURCE_SCOPES", string(encoded))
 		set("MCP_AUTH_EXTERNAL_CREDENTIALS_FILE", authgateway.ExternalCredentialsFile)
 		set("MCP_AUTH_RESOURCE_LOGINS_FILE", authgateway.ResourceLoginsFile)
-		kept := envs[:0]
-		for _, e := range envs {
-			if e.Name != "MCP_AUTH_CREDENTIAL_GATEWAY_CONFIG" { // the earlier layout's variable
-				kept = append(kept, e)
-			}
-		}
-		current.Spec.Template.Spec.Containers[0].Env = kept
+		current.Spec.Template.Spec.Containers[0].Env = envs
 
 		volume := corev1.Volume{Name: "gateway-wiring", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: authgateway.WiringName}, DefaultMode: mode0444()}}}
 		volumes := current.Spec.Template.Spec.Volumes[:0]
 		found := false
 		for _, v := range current.Spec.Template.Spec.Volumes {
-			switch v.Name {
-			case "credential-gateway": // the earlier layout's Secret volume
-				continue
-			case volume.Name:
+			if v.Name == volume.Name {
 				v, found = volume, true
 			}
 			volumes = append(volumes, v)
@@ -824,10 +785,7 @@ func applyAuthWiring(ctx context.Context, c kubernetes.Interface, in gatewayInst
 		mounts := current.Spec.Template.Spec.Containers[0].VolumeMounts[:0]
 		found = false
 		for _, m := range current.Spec.Template.Spec.Containers[0].VolumeMounts {
-			switch m.Name {
-			case "credential-gateway":
-				continue
-			case mount.Name:
+			if m.Name == mount.Name {
 				m, found = mount, true
 			}
 			mounts = append(mounts, m)
@@ -839,56 +797,11 @@ func applyAuthWiring(ctx context.Context, c kubernetes.Interface, in gatewayInst
 		if current.Spec.Template.Annotations == nil {
 			current.Spec.Template.Annotations = map[string]string{}
 		}
-		delete(current.Spec.Template.Annotations, "mcpruntime.org/auth-gateway-secret-version")
 		current.Spec.Template.Annotations["mcpruntime.org/gateway-wiring-hash"] = hash
 		_, err = c.AppsV1().Deployments(mcpAuthNamespace).Update(ctx, current, metav1.UpdateOptions{})
 		return err
 	})
 	return hash, err
-}
-
-// removeLegacyGateway deletes what the earlier layout, which ran the gateway
-// inside mcp-auth, left in mcp-platform. Only objects Runtime created are removed.
-func removeLegacyGateway(ctx context.Context, c kubernetes.Interface) ([]string, error) {
-	var removed []string
-	check := func(kind string, owned bool, err error, del func() error) error {
-		if apierrors.IsNotFound(err) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		if !owned {
-			return nil
-		}
-		if err := del(); err != nil && !apierrors.IsNotFound(err) {
-			return err
-		}
-		removed = append(removed, kind)
-		return nil
-	}
-	name := authgateway.LegacyName
-	secret, err := c.CoreV1().Secrets(mcpAuthNamespace).Get(ctx, name, metav1.GetOptions{})
-	if err = check("Secret", err == nil && ownedByRuntime(secret.ObjectMeta), err, func() error { return c.CoreV1().Secrets(mcpAuthNamespace).Delete(ctx, name, metav1.DeleteOptions{}) }); err != nil {
-		return nil, err
-	}
-	svc, err := c.CoreV1().Services(mcpAuthNamespace).Get(ctx, name, metav1.GetOptions{})
-	if err = check("Service", err == nil && ownedByRuntime(svc.ObjectMeta), err, func() error { return c.CoreV1().Services(mcpAuthNamespace).Delete(ctx, name, metav1.DeleteOptions{}) }); err != nil {
-		return nil, err
-	}
-	policy, err := c.NetworkingV1().NetworkPolicies(mcpAuthNamespace).Get(ctx, name, metav1.GetOptions{})
-	if err = check("NetworkPolicy", err == nil && ownedByRuntime(policy.ObjectMeta), err, func() error {
-		return c.NetworkingV1().NetworkPolicies(mcpAuthNamespace).Delete(ctx, name, metav1.DeleteOptions{})
-	}); err != nil {
-		return nil, err
-	}
-	ingress, err := c.NetworkingV1().Ingresses(mcpAuthNamespace).Get(ctx, name, metav1.GetOptions{})
-	if err = check("Ingress", err == nil && ownedByRuntime(ingress.ObjectMeta), err, func() error {
-		return c.NetworkingV1().Ingresses(mcpAuthNamespace).Delete(ctx, name, metav1.DeleteOptions{})
-	}); err != nil {
-		return nil, err
-	}
-	return removed, nil
 }
 
 func protocolTCP() *corev1.Protocol           { v := corev1.ProtocolTCP; return &v }

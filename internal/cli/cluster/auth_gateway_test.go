@@ -24,13 +24,13 @@ const (
 	testPubKey = "-----BEGIN PUBLIC KEY-----\nMIIB\n-----END PUBLIC KEY-----"
 )
 
-var testGatewayJSON = []byte(`{"listen":{"host":"0.0.0.0","port":8090},"authorization_server":{"issuer":"` + testIssuer + `"},"session_binding_key_file":"/etc/mcp-credential-gateway/session.key","services":[{"id":"demo","resource_url":"https://auth.example.com/demo/mcp","upstream_url":"https://upstream.example.com/mcp","validation_url":"https://upstream.example.com/mcp/auth/check","required_scopes":["tools:read"],"source":"form","resource_client":{"client_id":"gateway-demo","key_id":"k1","private_key_file":"/etc/mcp-credential-gateway/client.pem"}}]}`)
+var testGatewayJSON = []byte(`{"listen":{"host":"0.0.0.0","port":8090},"authorization_server":{"issuer":"` + testIssuer + `"},"session_binding_key_file":"/etc/mcp-gateway-credential/session.key","services":[{"id":"demo","resource_url":"https://auth.example.com/demo/mcp","upstream_url":"https://upstream.example.com/mcp","validation_url":"https://upstream.example.com/mcp/auth/check","required_scopes":["tools:read"],"source":"form","resource_client":{"client_id":"gateway-demo","key_id":"k1","private_key_file":"/etc/mcp-gateway-credential/client.pem"}}]}`)
 
 func runtimeOwned(name string) metav1.ObjectMeta {
 	return metav1.ObjectMeta{Name: name, Namespace: mcpAuthNamespace, Labels: map[string]string{"app.kubernetes.io/managed-by": "mcp-runtime"}}
 }
 
-// authCluster is a cluster with the installed MCP Auth and the earlier layout's objects.
+// authCluster is a cluster with the installed MCP Auth.
 func authCluster(mutateAuth func(*appsv1.Deployment)) *fake.Clientset {
 	group := int64(65532)
 	auth := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: authDeploymentName, Namespace: mcpAuthNamespace}, Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
@@ -39,19 +39,15 @@ func authCluster(mutateAuth func(*appsv1.Deployment)) *fake.Clientset {
 		Containers: []corev1.Container{{Name: "auth-server", Image: "auth-image", Env: []corev1.EnvVar{
 			{Name: "MCP_AUTH_ISSUER", Value: testIssuer}, {Name: "MCP_AUTH_CONNECTOR", Value: "keycloak"},
 			{Name: "MCP_AUTH_RESOURCES", Value: "https://mcp.example.com/ordinary/mcp"}, {Name: "KEEP", Value: "yes"},
-			{Name: "MCP_AUTH_CREDENTIAL_GATEWAY_CONFIG", Value: "/etc/mcp-auth-gateway/config.json"},
-		}, VolumeMounts: []corev1.VolumeMount{{Name: "data", MountPath: "/data"}, {Name: "credential-gateway", MountPath: "/etc/mcp-auth-gateway"}}}},
-		Volumes: []corev1.Volume{{Name: "data"}, {Name: "credential-gateway"}},
+		}, VolumeMounts: []corev1.VolumeMount{{Name: "data", MountPath: "/data"}}}},
+		Volumes: []corev1.Volume{{Name: "data"}},
 	}}}}
 	if mutateAuth != nil {
 		mutateAuth(auth)
 	}
-	legacy := runtimeOwned(authgateway.LegacyName)
 	return fake.NewSimpleClientset(auth,
 		&networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{Name: authDeploymentName, Namespace: mcpAuthNamespace}, Spec: networkingv1.IngressSpec{TLS: []networkingv1.IngressTLS{{Hosts: []string{"auth.example.com"}, SecretName: "existing-tls"}}}},
 		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: mcpAuthConnectorName, Namespace: mcpAuthNamespace}, Data: map[string]string{"connectors.json": `{"keycloak":{"issuer":"https://kc/realms/x","client_secret_env":"KC_SECRET"}}`}},
-		&corev1.Secret{ObjectMeta: legacy}, &corev1.Service{ObjectMeta: legacy},
-		&networkingv1.NetworkPolicy{ObjectMeta: legacy}, &networkingv1.Ingress{ObjectMeta: legacy},
 	)
 }
 
@@ -66,7 +62,7 @@ func testInstall(t *testing.T, dryRun bool) gatewayInstall {
 		t.Fatal(err)
 	}
 	payload := map[string][]byte{"config.json": testGatewayJSON, "client.pem": []byte("fixture-private-material"), "session.key": []byte(strings.Repeat("k", 40))}
-	return gatewayInstall{cfg: cfg, payload: payload, wiring: wiring, tlsSecret: "existing-tls", image: "registry.example.com/mcp-credential-gateway:v1", dryRun: dryRun}
+	return gatewayInstall{cfg: cfg, payload: payload, wiring: wiring, tlsSecret: "existing-tls", image: "registry.example.com/mcp-gateway:v1", dryRun: dryRun}
 }
 
 func envOf(t *testing.T, c *fake.Clientset) map[string]string {
@@ -85,7 +81,7 @@ func TestInstallCreatesTheGatewayWiresAuthAndRetiresTheEarlierLayout(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.image != "registry.example.com/mcp-credential-gateway:v1" {
+	if report.image != "registry.example.com/mcp-gateway:v1" {
 		t.Fatalf("image = %q", report.image)
 	}
 
@@ -99,7 +95,7 @@ func TestInstallCreatesTheGatewayWiresAuthAndRetiresTheEarlierLayout(t *testing.
 		t.Fatal(err)
 	}
 	pod, container := d.Spec.Template.Spec, d.Spec.Template.Spec.Containers[0]
-	if container.Image != "registry.example.com/mcp-credential-gateway:v1" || pod.SecurityContext.RunAsNonRoot == nil || !*pod.SecurityContext.RunAsNonRoot ||
+	if container.Image != "registry.example.com/mcp-gateway:v1" || pod.SecurityContext.RunAsNonRoot == nil || !*pod.SecurityContext.RunAsNonRoot ||
 		*container.SecurityContext.ReadOnlyRootFilesystem != true || *container.SecurityContext.AllowPrivilegeEscalation != false {
 		t.Fatalf("the gateway is not locked down: %+v", container.SecurityContext)
 	}
@@ -151,27 +147,6 @@ func TestInstallCreatesTheGatewayWiresAuthAndRetiresTheEarlierLayout(t *testing.
 	auth, _ := c.AppsV1().Deployments(mcpAuthNamespace).Get(ctx, authDeploymentName, metav1.GetOptions{})
 	if auth.Spec.Template.Spec.Containers[0].Image != "auth-image" || auth.Spec.Template.Annotations["mcpruntime.org/gateway-wiring-hash"] == "" {
 		t.Fatal("the auth image changed or its restart marker is missing")
-	}
-
-	// The earlier layout is gone.
-	if _, ok := env["MCP_AUTH_CREDENTIAL_GATEWAY_CONFIG"]; ok {
-		t.Fatal("the earlier layout's variable survived")
-	}
-	for _, v := range auth.Spec.Template.Spec.Volumes {
-		if v.Name == "credential-gateway" {
-			t.Fatal("the earlier layout's volume survived")
-		}
-	}
-	for _, m := range auth.Spec.Template.Spec.Containers[0].VolumeMounts {
-		if m.Name == "credential-gateway" {
-			t.Fatal("the earlier layout's mount survived")
-		}
-	}
-	if _, err := c.CoreV1().Secrets(mcpAuthNamespace).Get(ctx, authgateway.LegacyName, metav1.GetOptions{}); err == nil {
-		t.Fatal("the earlier layout's Secret survived")
-	}
-	if _, err := c.NetworkingV1().Ingresses(mcpAuthNamespace).Get(ctx, authgateway.LegacyName, metav1.GetOptions{}); err == nil {
-		t.Fatal("the earlier layout's Ingress survived")
 	}
 }
 
@@ -290,25 +265,12 @@ func TestMcpAuthIsLeftAloneWhenTheGatewayNeverBecomesReady(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 	env := envOf(t, c)
-	if env["MCP_AUTH_RESOURCE_LOGINS_FILE"] != "" || env["MCP_AUTH_CREDENTIAL_GATEWAY_CONFIG"] == "" {
+	if env["MCP_AUTH_RESOURCE_LOGINS_FILE"] != "" {
 		t.Fatal("mcp-auth was rewired although the gateway was not up")
 	}
 	connectors, _ := c.CoreV1().ConfigMaps(mcpAuthNamespace).Get(context.Background(), mcpAuthConnectorName, metav1.GetOptions{})
 	if strings.Contains(connectors.Data["connectors.json"], authgateway.ConnectorPrefix) {
 		t.Fatal("the connectors were changed before the gateway was up")
-	}
-}
-
-func TestLegacyCleanupKeepsObjectsRuntimeDoesNotOwn(t *testing.T) {
-	ctx := context.Background()
-	foreign := metav1.ObjectMeta{Name: authgateway.LegacyName, Namespace: mcpAuthNamespace}
-	c := fake.NewSimpleClientset(&corev1.Secret{ObjectMeta: foreign}, &corev1.Service{ObjectMeta: foreign})
-	removed, err := removeLegacyGateway(ctx, c)
-	if err != nil || len(removed) != 0 {
-		t.Fatalf("removed %v, %v", removed, err)
-	}
-	if _, err := c.CoreV1().Secrets(mcpAuthNamespace).Get(ctx, authgateway.LegacyName, metav1.GetOptions{}); err != nil {
-		t.Fatal("a foreign Secret was deleted")
 	}
 }
 

@@ -4,8 +4,7 @@ Usage:
   mcp-runtime cluster mcp-auth-gateway [command]
 
 Available Commands:
-  apply       Install the credential gateway for the services in a gateway JSON file
-  sync        Derive gateway services from header-mode servers that declare auth.credentialGateway, then install
+  apply       Install the credential gateway for the servers that declare auth.credentialGateway
 
 Flags:
   -h, --help   help for mcp-auth-gateway
