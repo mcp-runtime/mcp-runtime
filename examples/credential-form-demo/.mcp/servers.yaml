@@ -14,7 +14,6 @@ servers:
       headers: [X-Demo-Username, X-Demo-Password]
       credentialGateway:
         validationPath: /auth/check
-        vaultURL: https://taranawireless.1password.com/
     gateway:
       enabled: false
     tools:

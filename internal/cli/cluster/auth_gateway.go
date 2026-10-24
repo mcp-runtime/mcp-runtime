@@ -227,7 +227,7 @@ func extendGatewayConfig(base []byte, servers []mcpv1alpha1.MCPServer, publicHos
 		}
 		service, err := authgateway.ServiceFor(authgateway.ServerInput{
 			Name: server.Name, Namespace: server.Namespace, IngressHost: server.Spec.IngressHost, IngressPath: server.Spec.IngressPath,
-			Headers: auth.Headers, ValidationPath: auth.CredentialGateway.ValidationPath, SecretHeaders: auth.CredentialGateway.SecretHeaders, VaultURL: auth.CredentialGateway.VaultURL,
+			Headers: auth.Headers, ValidationPath: auth.CredentialGateway.ValidationPath, SecretHeaders: auth.CredentialGateway.SecretHeaders,
 		}, issuerURL.Host, publicHost)
 		if err != nil {
 			return nil, err

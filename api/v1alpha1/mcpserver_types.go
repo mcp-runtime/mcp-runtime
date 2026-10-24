@@ -261,11 +261,6 @@ type CredentialGatewayConfig struct {
 	// empty, headers named like a credential (token, password, key) are masked.
 	// +kubebuilder:validation:MaxItems=16
 	SecretHeaders []string `json:"secretHeaders,omitempty"`
-	// VaultURL is where a person finds the header values, such as a password
-	// manager's vault page (https) or app link (onepassword://). The sign-in
-	// page shows it as an open-in-new-tab link; nothing is fetched from it.
-	// +kubebuilder:validation:MaxLength=2048
-	VaultURL string `json:"vaultURL,omitempty"`
 }
 
 // DelegatedToolRule allows or denies one tool when auth.mode is header.

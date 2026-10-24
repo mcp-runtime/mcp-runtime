@@ -2,7 +2,6 @@ package credentialheaders
 
 import (
 	"fmt"
-	"net/url"
 	"regexp"
 	"strings"
 )
@@ -53,33 +52,13 @@ func IsSecretHeader(header string, secretHeaders []string) bool {
 	return false
 }
 
-// ValidateVaultURL accepts an empty value, an https URL, or a onepassword://
-// app link, without credentials, whitespace or markup characters. The sign-in
-// page links to it; nothing fetches it.
-func ValidateVaultURL(raw string) error {
-	if raw == "" {
-		return nil
-	}
-	u, err := url.Parse(raw)
-	if err != nil || len(raw) > 2048 || u.User != nil || strings.ContainsAny(raw, "\r\n\t \"'<>") {
-		return fmt.Errorf("credentialGateway.vaultURL must be a plain https URL or onepassword:// link")
-	}
-	if (u.Scheme == "https" && u.Host != "") || u.Scheme == "onepassword" {
-		return nil
-	}
-	return fmt.Errorf("credentialGateway.vaultURL must be a plain https URL or onepassword:// link")
-}
-
 // ValidateGateway checks the settings that opt a header-mode server into the
 // optional bundled credential gateway. validationPath is appended to the
 // server's public MCP URL; it carries no query or traversal.
-func ValidateGateway(validationPath, vaultURL string, secretHeaders, headers []string) error {
+func ValidateGateway(validationPath string, secretHeaders, headers []string) error {
 	if len(validationPath) > MaxValidationPath || !validationPathRe.MatchString(validationPath) ||
 		strings.Contains(validationPath, "//") || strings.Contains(validationPath, "..") {
 		return fmt.Errorf("credentialGateway.validationPath must be an absolute path of at most %d characters without query, '//' or '..'", MaxValidationPath)
-	}
-	if err := ValidateVaultURL(vaultURL); err != nil {
-		return err
 	}
 	known := make(map[string]struct{}, len(headers))
 	for _, header := range headers {

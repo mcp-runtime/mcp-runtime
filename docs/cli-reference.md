@@ -1230,7 +1230,6 @@ servers:
       credentialGateway:
         validationPath: /auth/check   # GET with the headers; 2xx only if accepted
         secretHeaders: [X-GitLab-PAT-Token]   # optional; default masks token/password/key names
-        vaultURL: https://acme.1password.com/   # optional; shown as an open-in-new-tab link
 ```
 
 The MCP client configuration is then `{"url": "https://<auth host>/gitlab/mcp"}`
@@ -1242,10 +1241,6 @@ server's own HTTPS host (`ingressHost`, or `--mcp-host`), and one sign-in input
 per declared header. It needs no vault provider or mappings file, takes
 `--secret-file client.pem=<file>` for the gateway's resource-client key, and
 otherwise behaves like `apply` (`--dry-run`, then `--yes`).
-
-`vaultURL` (an `https` URL or a `onepassword://` app link) puts an "open your vault"
-link beside the form so the person can open the vault page and copy the values.
-Nothing is fetched from it; other schemes and URLs with credentials are refused.
 
 Header values a person submits are validated at the upstream before any OAuth
 code is issued, then held in mcp-auth's memory only. Applying restarts mcp-auth,

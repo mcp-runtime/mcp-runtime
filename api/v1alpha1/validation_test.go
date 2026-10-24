@@ -496,11 +496,6 @@ func TestMCPServerCredentialGatewayValidation(t *testing.T) {
 	if _, err := headerGatewayServer(nil).ValidateCreate(); err != nil {
 		t.Fatalf("a header-mode server with a credential gateway block must validate: %v", err)
 	}
-	if _, err := headerGatewayServer(func(s *MCPServer) {
-		s.Spec.Auth.CredentialGateway.VaultURL = "https://taranawireless.1password.com/app"
-	}).ValidateCreate(); err != nil {
-		t.Fatalf("an https vault URL must be accepted: %v", err)
-	}
 	// Any valid HTTP header name works, including ones that are not identifiers.
 	if _, err := headerGatewayServer(func(s *MCPServer) {
 		s.Spec.Auth.Headers = []string{"Authorization", "X_Api_Key", "1st-Token"}
@@ -512,8 +507,6 @@ func TestMCPServerCredentialGatewayValidation(t *testing.T) {
 		"query in validation path": func(s *MCPServer) { s.Spec.Auth.CredentialGateway.ValidationPath = "/check?x=1" },
 		"relative validation path": func(s *MCPServer) { s.Spec.Auth.CredentialGateway.ValidationPath = "check" },
 		"traversal":                func(s *MCPServer) { s.Spec.Auth.CredentialGateway.ValidationPath = "/../admin" },
-		"unsafe vault url":         func(s *MCPServer) { s.Spec.Auth.CredentialGateway.VaultURL = "javascript:alert(1)" },
-		"http vault url":           func(s *MCPServer) { s.Spec.Auth.CredentialGateway.VaultURL = "http://vault.example.com/" },
 		"unknown secret header":    func(s *MCPServer) { s.Spec.Auth.CredentialGateway.SecretHeaders = []string{"x-other"} },
 		"gateway-owned header":     func(s *MCPServer) { s.Spec.Auth.Headers = []string{"X-One", "Sec-Token"} },
 		"oauth mode with gateway": func(s *MCPServer) {

@@ -28,7 +28,6 @@ type ServerInput struct {
 	Headers        []string
 	ValidationPath string
 	SecretHeaders  []string
-	VaultURL       string
 }
 
 // FormField is one sign-in input of a derived service.
@@ -62,7 +61,6 @@ type Service struct {
 	ResourceClient ResourceClient `json:"resource_client"`
 	Source         string         `json:"source"`
 	FormFields     []FormField    `json:"form_fields"`
-	VaultURL       string         `json:"vault_url,omitempty"`
 	Headers        []HeaderRule   `json:"headers"`
 }
 
@@ -86,7 +84,7 @@ func ServiceFor(in ServerInput, authHost, publicHost string) (Service, error) {
 	if !strings.HasPrefix(in.IngressPath, "/") || strings.HasSuffix(in.IngressPath, "/") || strings.Contains(in.IngressPath, "//") {
 		return Service{}, fmt.Errorf("%s: ingressPath must be an absolute path without a trailing slash", where)
 	}
-	if err := credentialheaders.ValidateGateway(in.ValidationPath, in.VaultURL, in.SecretHeaders, in.Headers); err != nil {
+	if err := credentialheaders.ValidateGateway(in.ValidationPath, in.SecretHeaders, in.Headers); err != nil {
 		return Service{}, fmt.Errorf("%s: %w", where, err)
 	}
 	if strings.TrimSpace(authHost) == "" {
@@ -98,7 +96,6 @@ func ServiceFor(in ServerInput, authHost, publicHost string) (Service, error) {
 		RequiredScopes: []string{DefaultScope},
 		ResourceClient: ResourceClient{ClientID: "gateway-" + id, KeyID: "k1", PrivateKeyFile: ClientKeyFile},
 		Source:         SourceForm,
-		VaultURL:       in.VaultURL,
 	}
 	for i, header := range in.Headers {
 		field := credentialheaders.GatewayFieldName(i)

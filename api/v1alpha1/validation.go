@@ -322,7 +322,7 @@ func validateHeaderAuth(authPath *field.Path, auth *AuthConfig, policy *PolicyCo
 		allErrs = append(allErrs, field.Invalid(authPath.Child("credentialPresence"), auth.CredentialPresence, err.Error()))
 	}
 	if auth.CredentialGateway != nil {
-		if err := credentialheaders.ValidateGateway(auth.CredentialGateway.ValidationPath, auth.CredentialGateway.VaultURL, auth.CredentialGateway.SecretHeaders, auth.Headers); err != nil {
+		if err := credentialheaders.ValidateGateway(auth.CredentialGateway.ValidationPath, auth.CredentialGateway.SecretHeaders, auth.Headers); err != nil {
 			allErrs = append(allErrs, field.Invalid(authPath.Child("credentialGateway"), auth.CredentialGateway.ValidationPath, err.Error()))
 		}
 	}

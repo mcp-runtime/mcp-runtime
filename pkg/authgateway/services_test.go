@@ -124,28 +124,3 @@ func TestServiceForAcceptsAnyValidHeaderName(t *testing.T) {
 		t.Fatalf("derived configuration is invalid: %v", err)
 	}
 }
-
-func TestServiceForCarriesTheVaultURL(t *testing.T) {
-	in := gitlabInput()
-	in.VaultURL = "https://taranawireless.1password.com/app"
-	service, err := ServiceFor(in, "auth.example.com", "")
-	if err != nil || service.VaultURL != in.VaultURL {
-		t.Fatalf("vault URL lost: %q %v", service.VaultURL, err)
-	}
-	in.VaultURL = "onepassword://open/i?a=A&v=V&i=I"
-	if _, err := ServiceFor(in, "auth.example.com", ""); err != nil {
-		t.Fatalf("app link rejected: %v", err)
-	}
-	for _, bad := range []string{"javascript:alert(1)", "http://vault.example.com/", "https://u:p@vault.example.com/", "https:///x", "https://v.example.com/a b", "data:text/html,x"} {
-		in.VaultURL = bad
-		if _, err := ServiceFor(in, "auth.example.com", ""); err == nil {
-			t.Errorf("accepted %q", bad)
-		}
-	}
-	in.VaultURL = ""
-	service, _ = ServiceFor(in, "auth.example.com", "")
-	raw, _ := json.Marshal(service)
-	if strings.Contains(string(raw), "vault_url") {
-		t.Fatal("an unset vault URL must be omitted from the derived configuration")
-	}
-}

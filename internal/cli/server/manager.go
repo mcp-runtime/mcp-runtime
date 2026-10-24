@@ -1104,7 +1104,6 @@ func mergeDeployMetadata(spec *mcpv1alpha1.MCPServerSpec, src *metadata.ServerMe
 			spec.Auth.CredentialGateway = &mcpv1alpha1.CredentialGatewayConfig{
 				ValidationPath: gateway.ValidationPath,
 				SecretHeaders:  append([]string(nil), gateway.SecretHeaders...),
-				VaultURL:       gateway.VaultURL,
 			}
 		}
 	}

@@ -114,7 +114,6 @@ func GenerateCRD(server *ServerMetadata, outputPath string) error {
 			mcpServer.Spec.Auth.CredentialGateway = &mcpv1alpha1.CredentialGatewayConfig{
 				ValidationPath: gateway.ValidationPath,
 				SecretHeaders:  append([]string(nil), gateway.SecretHeaders...),
-				VaultURL:       gateway.VaultURL,
 			}
 		}
 	}
