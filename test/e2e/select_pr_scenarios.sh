@@ -211,6 +211,13 @@ classify_path() {
       add_scenario "multitenancy"
       return
       ;;
+    internal/cli/cluster/auth_gateway*.go)
+      # Credential-gateway install. cli-platform covers the command; oauth
+      # covers the auth host it shares. The form itself is a unit test.
+      add_scenario "cli-platform"
+      add_scenario "oauth"
+      return
+      ;;
     internal/cli/core/*|internal/cli/platformapi/*|internal/cli/kube/*|internal/cli/kubeerr/*|internal/cli/status/*|internal/cli/platformstatus/*|internal/cli/agent/*|internal/cli/admin/*|internal/cli/bootstrap/*|\
     internal/cli/auth/*|internal/cli/cluster/*|internal/cli/registry/*|internal/cli/server/*|internal/cli/setup/*|internal/cli/ops/*)
       add_scenario "cli-platform"
@@ -248,7 +255,7 @@ classify_path() {
       add_scenario "api-platform"
       return
       ;;
-    pkg/oauthresource/*)
+    pkg/oauthresource/*|pkg/authgateway/*)
       add_scenario "oauth"
       return
       ;;
@@ -259,6 +266,11 @@ classify_path() {
       ;;
     services/ui/*)
       add_scenario "ui-auth"
+      return
+      ;;
+    services/mcp-gateway/credential/*)
+      # Credential mode is a separate process from grant and adapter enforcement.
+      add_scenario "oauth"
       return
       ;;
     services/mcp-gateway/*)
