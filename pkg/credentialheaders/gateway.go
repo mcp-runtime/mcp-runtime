@@ -52,6 +52,37 @@ func IsSecretHeader(header string, secretHeaders []string) bool {
 	return false
 }
 
+// ValidateGatewayHeader checks that a header name may be supplied by the
+// credential gateway: a valid credential header name that is not one the gateway
+// itself owns (Via, Accept-Encoding, Last-Event-Id, Sec-*).
+func ValidateGatewayHeader(name string) error {
+	if err := ValidateName(name); err != nil {
+		return err
+	}
+	lower := strings.ToLower(name)
+	if gatewayOwned[lower] || strings.HasPrefix(lower, "sec-") {
+		return fmt.Errorf("credential header %q cannot be supplied by the credential gateway", name)
+	}
+	return nil
+}
+
+// ValidateInjectedValue is the strict check applied to a value the gateway is
+// about to send upstream: non-empty, at most 8192 bytes, printable ASCII (tabs
+// allowed), and no leading or trailing whitespace. It rejects CR, LF, NUL and
+// every other control character, so a submitted value cannot add headers.
+func ValidateInjectedValue(value string) error {
+	if value == "" || len(value) > 8192 || value != strings.TrimSpace(value) {
+		return fmt.Errorf("credential value must be non-empty, at most 8192 bytes, without surrounding whitespace")
+	}
+	for i := 0; i < len(value); i++ {
+		c := value[i]
+		if (c < 0x20 && c != '\t') || c >= 0x7F {
+			return fmt.Errorf("credential value contains a control or non-ASCII character")
+		}
+	}
+	return nil
+}
+
 // ValidateGateway checks the settings that opt a header-mode server into the
 // optional bundled credential gateway. validationPath is appended to the
 // server's public MCP URL; it carries no query or traversal.
@@ -62,11 +93,10 @@ func ValidateGateway(validationPath string, secretHeaders, headers []string) err
 	}
 	known := make(map[string]struct{}, len(headers))
 	for _, header := range headers {
-		lower := strings.ToLower(header)
-		if gatewayOwned[lower] || strings.HasPrefix(lower, "sec-") {
-			return fmt.Errorf("credential header %q cannot be supplied by the credential gateway", header)
+		if err := ValidateGatewayHeader(header); err != nil {
+			return err
 		}
-		known[lower] = struct{}{}
+		known[strings.ToLower(header)] = struct{}{}
 	}
 	seen := make(map[string]struct{}, len(secretHeaders))
 	for _, secret := range secretHeaders {

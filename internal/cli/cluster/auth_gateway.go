@@ -34,6 +34,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/retry"
 	mcpv1alpha1 "mcp-runtime/api/v1alpha1"
+	"mcp-runtime/internal/platformrelease"
 	"mcp-runtime/pkg/authgateway"
 )
 
@@ -50,7 +51,7 @@ func (o *gatewayOptions) bind(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.file, "file", "", "Gateway JSON file; file references must use "+authgateway.MountPath+"/<key>")
 	cmd.Flags().StringArrayVar(&o.files, "secret-file", nil, "Mount a private KEY=FILE input (the session binding key and the resource-client key)")
 	cmd.Flags().StringVar(&o.tls, "tls-secret", "", "Existing TLS Secret covering the auth hostname; no certificate is issued")
-	cmd.Flags().StringVar(&o.image, "gateway-image", "", "Credential gateway image; defaults to the installed gateway's image on updates")
+	cmd.Flags().StringVar(&o.image, "gateway-image", "", "mcp-gateway image to run in credential mode; defaults to the installed gateway's image, then the operator's MCP_GATEWAY_PROXY_IMAGE")
 	cmd.Flags().StringVar(&o.kubeconfig, "kubeconfig", "", "Explicit kubeconfig path")
 	cmd.Flags().StringVar(&o.kubeContext, "context", "", "Explicit Kubernetes context")
 	cmd.Flags().StringVar(&o.clusterID, "expect-cluster-id", "", "Expected kube-system namespace UID")
@@ -441,7 +442,10 @@ func installGateway(ctx context.Context, c kubernetes.Interface, in gatewayInsta
 		return nil, err
 	}
 	if in.image == "" {
-		return nil, errors.New("--gateway-image is required for the first install")
+		in.image = operatorGatewayImage(ctx, c)
+	}
+	if in.image == "" {
+		return nil, errors.New("--gateway-image is required: the operator does not declare MCP_GATEWAY_PROXY_IMAGE")
 	}
 	report := &installReport{image: in.image}
 	if in.dryRun {
@@ -525,6 +529,23 @@ func equalSecretData(a, b map[string][]byte) bool {
 	return true
 }
 
+// operatorGatewayImage is the mcp-gateway image the operator injects into
+// per-server sidecars. The shared credential gateway runs the same image.
+func operatorGatewayImage(ctx context.Context, c kubernetes.Interface) string {
+	d, err := c.AppsV1().Deployments("mcp-runtime").Get(ctx, platformrelease.OperatorDeployment, metav1.GetOptions{})
+	if err != nil {
+		return ""
+	}
+	for _, container := range d.Spec.Template.Spec.Containers {
+		for _, e := range container.Env {
+			if e.Name == "MCP_GATEWAY_PROXY_IMAGE" {
+				return e.Value
+			}
+		}
+	}
+	return ""
+}
+
 func upsertGatewayDeployment(ctx context.Context, c kubernetes.Interface, in gatewayInstall, pull []corev1.LocalObjectReference, secretRevision string) error {
 	labels := map[string]string{"app": authgateway.GatewayName}
 	port := in.cfg.Listen.Port
@@ -541,7 +562,7 @@ func upsertGatewayDeployment(ctx context.Context, c kubernetes.Interface, in gat
 				Containers: []corev1.Container{{
 					Name: "gateway", Image: in.image, ImagePullPolicy: corev1.PullIfNotPresent,
 					Ports:           []corev1.ContainerPort{{Name: "http", ContainerPort: port}},
-					Env:             []corev1.EnvVar{{Name: "MCP_GATEWAY_CONFIG", Value: authgateway.MountPath + "/config.json"}},
+					Env:             []corev1.EnvVar{{Name: "MCP_GATEWAY_MODE", Value: "credential"}, {Name: "MCP_GATEWAY_CONFIG", Value: authgateway.MountPath + "/config.json"}},
 					SecurityContext: &corev1.SecurityContext{AllowPrivilegeEscalation: &no, ReadOnlyRootFilesystem: &yes, Capabilities: &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}},
 					VolumeMounts:    []corev1.VolumeMount{{Name: "config", MountPath: authgateway.MountPath, ReadOnly: true}},
 					ReadinessProbe:  &corev1.Probe{ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/readyz", Port: intstr.FromInt32(port)}}, PeriodSeconds: 10},

@@ -36,12 +36,14 @@ public MCP path; local runs default to `/mcp` on port 8088.
 ## Connect it to the gateway
 
 Derive the gateway service from the pushed server and install the gateway next to
-mcp-auth (a dry run first, then `--yes`):
+mcp-auth (a dry run first, then `--yes`). It runs Runtime's existing `mcp-gateway`
+image in credential mode, once, for every opted-in server; `--gateway-image`
+defaults to the operator's `MCP_GATEWAY_PROXY_IMAGE`, so you can usually omit it:
 
 ```bash
 mcp-runtime cluster mcp-auth-gateway sync --file gateway.json \
   --secret-file session.key=./session.key --secret-file client.pem=./client.pem \
-  --gateway-image <registry>/mcp-credential-gateway:<tag> \
+  --gateway-image <registry>/mcp-gateway:<tag> \
   --tls-secret <auth tls secret> --kubeconfig ... --context ... --expect-cluster-id ... --dry-run
 ```
 

@@ -1197,7 +1197,11 @@ read-only node credential rotation, and recovery after a partial activation.
 ## Optional MCP Auth credential gateway
 
 `mcp-runtime cluster mcp-auth-gateway apply` installs the credential gateway as its
-own workload next to MCP Auth, and wires MCP Auth to it. It takes `--file` (a
+own workload next to MCP Auth, and wires MCP Auth to it. The workload is one shared
+Deployment of Runtime's existing `mcp-gateway` image run in credential mode
+(`MCP_GATEWAY_MODE=credential`); there is no separate image to build or pull.
+`--gateway-image` defaults to the installed gateway's image, then to the
+operator's `MCP_GATEWAY_PROXY_IMAGE`. It takes `--file` (a
 gateway JSON that lists the services), repeated `--secret-file KEY=FILE` inputs
 (the session binding key and each service's resource-client key), `--tls-secret`,
 `--gateway-image`, explicit `--kubeconfig`, `--context` and `--expect-cluster-id`.

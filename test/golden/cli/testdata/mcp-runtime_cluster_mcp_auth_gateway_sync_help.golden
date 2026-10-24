@@ -16,7 +16,7 @@ Flags:
       --dry-run                    Validate inputs and show the plan without writing
       --expect-cluster-id string   Expected kube-system namespace UID
       --file string                Gateway JSON file; file references must use /etc/mcp-credential-gateway/<key>
-      --gateway-image string       Credential gateway image; defaults to the installed gateway's image on updates
+      --gateway-image string       mcp-gateway image to run in credential mode; defaults to the installed gateway's image, then the operator's MCP_GATEWAY_PROXY_IMAGE
   -h, --help                       help for sync
       --kubeconfig string          Explicit kubeconfig path
       --mcp-host string            Public MCP host for servers that set no ingressHost

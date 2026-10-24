@@ -19,12 +19,23 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	_ "go.uber.org/automaxprocs" // align GOMAXPROCS with container CPU quota
 
+	"mcp-gateway/credential"
 	"mcp-runtime/pkg/mcpdefaults"
 	"mcp-runtime/pkg/serviceutil"
 	"mcp-runtime/pkg/sessionstate"
 )
 
 func main() {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("MCP_GATEWAY_MODE")), "credential") {
+		path := strings.TrimSpace(os.Getenv("MCP_GATEWAY_CONFIG"))
+		if path == "" {
+			log.Fatal("MCP_GATEWAY_CONFIG is required in credential mode")
+		}
+		if err := credential.Run(path); err != nil {
+			log.Fatalf("credential gateway: %v", err)
+		}
+		return
+	}
 	port := serviceutil.EnvOr("PORT", strconv.Itoa(mcpdefaults.MCPGatewayPort))
 	metricsPort := serviceutil.EnvOr("METRICS_PORT", "9103")
 	upstream := serviceutil.EnvOr("UPSTREAM_URL", "http://127.0.0.1:8090")
