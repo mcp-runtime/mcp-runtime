@@ -213,6 +213,9 @@ func validateHeaderAuth(server *ServerMetadata) error {
 		if server != nil && server.Policy != nil && (len(server.Policy.DelegatedToolRules) > 0 || server.Policy.MaxSideEffect != "") {
 			return fmt.Errorf("delegated tool rules require auth.mode header")
 		}
+		if server != nil && server.Auth != nil && server.Auth.CredentialGateway != nil {
+			return fmt.Errorf("auth.credentialGateway requires auth.mode header")
+		}
 		return nil
 	}
 	if server.Auth.TokenHeader != "" || server.Auth.IssuerURL != "" || server.Auth.Audience != "" || len(server.Auth.Scopes) > 0 {
@@ -223,6 +226,11 @@ func validateHeaderAuth(server *ServerMetadata) error {
 	}
 	if _, err := credentialheaders.NormalizePresence(server.Auth.CredentialPresence); err != nil {
 		return err
+	}
+	if gateway := server.Auth.CredentialGateway; gateway != nil {
+		if err := credentialheaders.ValidateGateway(gateway.ValidationPath, gateway.SecretHeaders, server.Auth.Headers); err != nil {
+			return err
+		}
 	}
 	if server.Session != nil {
 		return fmt.Errorf("header mode cannot use a Runtime session")

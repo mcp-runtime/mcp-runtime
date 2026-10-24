@@ -112,6 +112,31 @@ spec:
                       this is unset, it defaults to the public MCP URL built from the ingress
                       host (or MCP_DEFAULT_INGRESS_HOST on the operator), TLS setting, and path.
                     type: string
+                  credentialGateway:
+                    description: |-
+                      CredentialGateway opts a header-mode server into the optional bundled
+                      mcp-auth credential gateway: clients hold only an OAuth bearer, sign in
+                      once on a page that collects the configured headers, and the gateway
+                      supplies them to this server on every request.
+                    properties:
+                      secretHeaders:
+                        description: |-
+                          SecretHeaders lists which auth.headers use a masked sign-in input. When
+                          empty, headers named like a credential (token, password, key) are masked.
+                        items:
+                          type: string
+                        maxItems: 16
+                        type: array
+                      validationPath:
+                        description: |-
+                          ValidationPath is appended to the server's public MCP URL. A GET carrying
+                          the collected headers must return 2xx only when the server accepts them.
+                        maxLength: 128
+                        pattern: ^/[A-Za-z0-9._~/-]*$
+                        type: string
+                    required:
+                    - validationPath
+                    type: object
                   credentialPresence:
                     description: |-
                       CredentialPresence is "any" (default: at least one configured header)

@@ -41,3 +41,9 @@ For a small unauthenticated traffic-inspection demo, use
 [`test-mcpsnoop`](test-mcpsnoop/README.md). It exposes only `echo` and
 `todays_info`, with commands to publish/deploy through the CLI and inspect the
 real requests and responses through MCPSnoop.
+
+For a header-authenticated upstream behind the optional mcp-auth credential
+gateway, use [credential-form-demo](credential-form-demo/README.md). It needs two
+headers; the gateway shows a sign-in form for them, validates them, and supplies
+them on every later request, so the MCP client holds only a URL and a bearer
+token. No vault or identity provider is involved.

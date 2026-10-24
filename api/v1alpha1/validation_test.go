@@ -472,3 +472,50 @@ func TestMCPServerValidateAuthScopes(t *testing.T) {
 		t.Fatalf("duplicate scope was accepted: %v", err)
 	}
 }
+
+func headerGatewayServer(mutate func(*MCPServer)) *MCPServer {
+	server := &MCPServer{
+		ObjectMeta: metav1.ObjectMeta{Name: "gitlab"},
+		Spec: MCPServerSpec{
+			Image: "example.com/mcp-server", Port: 8088,
+			Auth: &AuthConfig{
+				Mode: "header", Headers: []string{"X-GitLab-Username", "X-GitLab-PAT-Token"},
+				CredentialGateway: &CredentialGatewayConfig{ValidationPath: "/auth/check", SecretHeaders: []string{"x-gitlab-pat-token"}},
+			},
+			Tools: []ToolConfig{{Name: "echo", RequiredTrust: TrustLevelLow, SideEffect: ToolSideEffectRead}},
+		},
+	}
+	if mutate != nil {
+		mutate(server)
+	}
+	server.Default()
+	return server
+}
+
+func TestMCPServerCredentialGatewayValidation(t *testing.T) {
+	if _, err := headerGatewayServer(nil).ValidateCreate(); err != nil {
+		t.Fatalf("a header-mode server with a credential gateway block must validate: %v", err)
+	}
+	// Any valid HTTP header name works, including ones that are not identifiers.
+	if _, err := headerGatewayServer(func(s *MCPServer) {
+		s.Spec.Auth.Headers = []string{"Authorization", "X_Api_Key", "1st-Token"}
+		s.Spec.Auth.CredentialGateway.SecretHeaders = []string{"x_api_key"}
+	}).ValidateCreate(); err != nil {
+		t.Fatalf("arbitrary header names must be accepted: %v", err)
+	}
+	rejected := map[string]func(*MCPServer){
+		"query in validation path": func(s *MCPServer) { s.Spec.Auth.CredentialGateway.ValidationPath = "/check?x=1" },
+		"relative validation path": func(s *MCPServer) { s.Spec.Auth.CredentialGateway.ValidationPath = "check" },
+		"traversal":                func(s *MCPServer) { s.Spec.Auth.CredentialGateway.ValidationPath = "/../admin" },
+		"unknown secret header":    func(s *MCPServer) { s.Spec.Auth.CredentialGateway.SecretHeaders = []string{"x-other"} },
+		"gateway-owned header":     func(s *MCPServer) { s.Spec.Auth.Headers = []string{"X-One", "Sec-Token"} },
+		"oauth mode with gateway": func(s *MCPServer) {
+			s.Spec.Auth = &AuthConfig{IssuerURL: "https://issuer.example.com", Audience: "https://mcp.example.com/gitlab/mcp", CredentialGateway: &CredentialGatewayConfig{ValidationPath: "/check"}}
+		},
+	}
+	for name, mutate := range rejected {
+		if _, err := headerGatewayServer(mutate).ValidateCreate(); err == nil {
+			t.Errorf("accepted: %s", name)
+		}
+	}
+}

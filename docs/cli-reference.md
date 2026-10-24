@@ -1193,3 +1193,94 @@ authentication automatically. On an existing install, activate it with
 `mcp-runtime registry enable-auth --realm https://api.example.com/api/v1/registry/token`.
 See [registry authentication](internals/registry-auth.md) for prerequisites,
 read-only node credential rotation, and recovery after a partial activation.
+
+## Optional MCP Auth credential gateway
+
+`mcp-runtime gateway apply` installs the credential gateway as its
+own workload next to MCP Auth, and wires MCP Auth to it. The workload is one shared
+Deployment of Runtime's existing `mcp-gateway` image run in credential mode
+(`MCP_GATEWAY_MODE=credential`); there is no separate image to build or pull.
+`--gateway-image` defaults to the installed gateway's image, then to the
+operator's `MCP_GATEWAY_PROXY_IMAGE`. It takes `--file` (a
+base gateway JSON: listener, issuer and session key; the services are derived from
+the pushed servers), `--mcp-host` as the only upstream host, repeated `--secret-file KEY=FILE` inputs
+(the session binding key and each service's resource-client key), `--tls-secret`,
+`--gateway-image`, explicit `--kubeconfig`, `--context` and `--expect-cluster-id`.
+Review `--dry-run`, then repeat with `--yes`. All config file references use
+`/etc/mcp-gateway-credential/<key>`.
+
+It does this, in order, and stops at the first failure:
+
+1. Checks the installed MCP Auth: one container, the same issuer, a single
+   connector (`MCP_AUTH_CONNECTOR`), and no foreign external-credentials file. It
+   refuses login methods mode, where the gateway's resource logins belong in the
+   methods file.
+2. Creates or updates the gateway's Secret (config and keys), Deployment (non-root,
+   read-only root filesystem, no capabilities, probes), Service, NetworkPolicy and
+   an Ingress that routes each service path, its `/login/*` sign-in sub-paths and
+   its protected-resource metadata on the auth host. It reuses the existing TLS
+   Secret and issues no certificate. Objects Runtime does not own are never
+   overwritten.
+3. Waits for the gateway to be ready (`--wait-timeout`). If it never is, MCP Auth is
+   left untouched.
+4. Wires MCP Auth: merges one plain OAuth connector per service into the connectors
+   ConfigMap (entries named `gateway-login-<id>`; every other connector is kept as
+   written), publishes a wiring ConfigMap (the resource logins and the gateway's
+   assertion-client public keys), and patches the MCP Auth Deployment (mount,
+   environment, allowed resources). MCP Auth restarts only if that wiring changed.
+
+The gateway's sign-in endpoints are what MCP Auth redirects the browser to for a
+gateway resource, so the person's header values go from the browser to the gateway
+and never reach MCP Auth. Secret contents are omitted from command output. The OAuth
+image, identity connector, signing key and PVC are untouched, and every other
+resource keeps its login. The operator retains the administrator-owned gateway
+audience/scope registration across MCPServer events. Header values are never stored
+by Runtime: the gateway keeps them in memory, so restarting MCP Auth does not clear
+them and restarting the gateway does. Use
+[the example](../examples/credential-form-demo/README.md) for a deployable upstream.
+The raw header upstream and gateway OAuth URL remain different endpoints; Runtime does
+not rewrite catalog URLs.
+
+### Servers that need only a URL in the client
+
+A header-mode server can declare that the gateway collects its headers at
+sign-in. In `.mcp/servers.yaml`:
+
+```yaml
+servers:
+  - name: gitlab
+    route: /gitlab/mcp
+    auth:
+      mode: header
+      headers: [X-GitLab-Username, X-GitLab-PAT-Token]
+      credentialGateway:
+        validationPath: /auth/check   # GET with the headers; 2xx only if accepted
+        secretHeaders: [X-GitLab-PAT-Token]   # optional; default masks token/password/key names
+```
+
+The MCP client configuration is then `{"url": "https://<auth host>/gitlab/mcp"}`
+with no headers. `mcp-runtime gateway apply` reads the base
+gateway JSON (`--file`: listener, issuer and session key; no `services`
+needed) and adds one form-source service for every pushed server with this
+block: resource `https://<auth host><route>`, upstream and validation URLs on
+`--mcp-host` only. A server `ingressHost` must be empty or that same host; a
+different host is rejected, so a publisher cannot choose where the form sends
+values. The sign-in page names the server, its namespace and that host, and
+says this is not a platform account. One sign-in input is created
+per declared header. It needs no vault provider or mappings file, takes
+`--secret-file client.pem=<file>` for the gateway's resource-client key, and
+otherwise behaves like `apply` (`--dry-run`, then `--yes`).
+
+Header values a person submits are validated at the upstream before any OAuth
+code is issued, then held in the gateway's memory only, and only after that
+sign-in wins its pending request. The resulting session subject is an opaque
+`form-<id>:` value, not a platform user: deactivating an account does not end
+it, and header-mode grants do not apply. Restarting the gateway
+clears the values, so people sign in again; restarting mcp-auth does not. Servers with the same name in two
+namespaces conflict. The block is accepted only with `auth.mode: header`, and
+every declared header becomes a required input, labeled with its own name.
+Any valid HTTP header name works, including `Authorization` and names such as
+`X_Api_Key`; inputs are numbered internally, not named after the header. The
+person supplies the complete header value (for example `Bearer abc`). Only
+reserved transport and identity headers, and the few the gateway owns (`Via`,
+`Accept-Encoding`, `Last-Event-Id`, `Sec-*`), are refused when the server is pushed.

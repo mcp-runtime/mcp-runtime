@@ -241,6 +241,26 @@ type AuthConfig struct {
 	// this is unset, it defaults to the public MCP URL built from the ingress
 	// host (or MCP_DEFAULT_INGRESS_HOST on the operator), TLS setting, and path.
 	Audience string `json:"audience,omitempty"`
+	// CredentialGateway opts a header-mode server into the optional bundled
+	// mcp-auth credential gateway: clients hold only an OAuth bearer, sign in
+	// once on a page that collects the configured headers, and the gateway
+	// supplies them to this server on every request.
+	CredentialGateway *CredentialGatewayConfig `json:"credentialGateway,omitempty"`
+}
+
+// CredentialGatewayConfig configures the bundled credential gateway for one
+// header-mode server. The headers it collects are auth.headers.
+// +kubebuilder:object:generate=true
+type CredentialGatewayConfig struct {
+	// ValidationPath is appended to the server's public MCP URL. A GET carrying
+	// the collected headers must return 2xx only when the server accepts them.
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:Pattern=`^/[A-Za-z0-9._~/-]*$`
+	ValidationPath string `json:"validationPath"`
+	// SecretHeaders lists which auth.headers use a masked sign-in input. When
+	// empty, headers named like a credential (token, password, key) are masked.
+	// +kubebuilder:validation:MaxItems=16
+	SecretHeaders []string `json:"secretHeaders,omitempty"`
 }
 
 // DelegatedToolRule allows or denies one tool when auth.mode is header.

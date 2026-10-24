@@ -356,3 +356,15 @@ Public registry setup must remain fail-closed during image builds: anonymous
 `GET /v2/` must not return 200. Image helpers use the internal registry Service
 and do not require removing public ingress authentication. If setup is cancelled
 or fails, verify that public authentication is still active before retrying.
+
+## Optional bundled credential gateway
+
+Deploy a reviewed combined mcp-auth image through its separate component
+manifest. Install private config and gateway HTTPS routing with
+`mcp-runtime gateway apply --dry-run`, then `--yes`, using the
+explicit kubeconfig/context/cluster UID and the existing auth TLS Secret. The
+command mounts a private Secret, adds a separate Service/Ingress/NetworkPolicy
+and registers gateway resources in administrator-owned auth Deployment metadata.
+The operator preserves those resources alongside tenant MCPServer resources.
+No full setup, certificate issuance or direct Kubernetes patch is required.
+See [the credential-form example](../../../../examples/credential-form-demo/README.md).

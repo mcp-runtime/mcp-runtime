@@ -17,6 +17,7 @@ Available Commands:
   cluster     Manage Kubernetes cluster
   completion  Generate the autocompletion script for the specified shell
   credential  Manage scoped credential sources and bindings
+  gateway     Manage the shared credential gateway
   help        Help about any command
   ops         Operate the bundled platform stack (admin only)
   registry    Manage container registry
