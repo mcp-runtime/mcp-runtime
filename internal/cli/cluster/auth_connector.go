@@ -10,6 +10,8 @@ import (
 	"os"
 	"strings"
 
+	"mcp-runtime/pkg/authgateway"
+
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -124,7 +126,11 @@ func applyMCPAuthConnector(ctx context.Context, client kubernetes.Interface, dat
 		if err != nil {
 			return fmt.Errorf("read existing MCP Auth connector ConfigMap: %w", err)
 		}
-		if cm.Data["connectors.json"] == data {
+		merged, err := preserveGatewayConnectors(cm.Data["connectors.json"], data)
+		if err != nil {
+			return err
+		}
+		if cm.Data["connectors.json"] == merged {
 			changed = false
 			return nil
 		}
@@ -136,9 +142,57 @@ func applyMCPAuthConnector(ctx context.Context, client kubernetes.Interface, dat
 		if updated.Data == nil {
 			updated.Data = make(map[string]string)
 		}
-		updated.Data["connectors.json"] = data
+		updated.Data["connectors.json"] = merged
 		_, err = client.CoreV1().ConfigMaps(mcpAuthNamespace).Update(ctx, updated, metav1.UpdateOptions{})
 		return err
 	})
 	return changed, err
+}
+
+// preserveGatewayConnectors keeps credential-gateway connectors when an
+// identity-connector file does not mention them. gateway apply owns entries
+// named gateway-login-*; replacing the whole file with the Keycloak connector
+// removes the resource login mcp-auth needs and the new server exits.
+func preserveGatewayConnectors(existing, replacement string) (string, error) {
+	current, err := connectorDocument(existing)
+	if err != nil {
+		return "", err
+	}
+	keep := false
+	for name := range current {
+		if strings.HasPrefix(name, authgateway.ConnectorPrefix) {
+			keep = true
+			break
+		}
+	}
+	if !keep {
+		return replacement, nil
+	}
+	incoming, err := connectorDocument(replacement)
+	if err != nil {
+		return "", err
+	}
+	for name, raw := range current {
+		if strings.HasPrefix(name, authgateway.ConnectorPrefix) {
+			if _, present := incoming[name]; !present {
+				incoming[name] = raw
+			}
+		}
+	}
+	encoded, err := json.Marshal(incoming)
+	if err != nil {
+		return "", err
+	}
+	return string(encoded), nil
+}
+
+func connectorDocument(data string) (map[string]json.RawMessage, error) {
+	if strings.TrimSpace(data) == "" {
+		return map[string]json.RawMessage{}, nil
+	}
+	var doc map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(data), &doc); err != nil || doc == nil {
+		return nil, errors.New("connectors file is not a JSON object")
+	}
+	return doc, nil
 }

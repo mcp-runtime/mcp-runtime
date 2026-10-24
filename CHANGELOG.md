@@ -7,6 +7,10 @@ Earlier release notes remain available in [GitHub Releases](https://github.com/m
 
 ## [Unreleased]
 
+### Fixed
+
+- `cluster mcp-auth-connector apply` keeps `gateway-login-*` connectors that the supplied file does not mention. The hosted release deploy merges those entries before refreshing Keycloak, so an mcp-auth image rollout no longer removes the credential gateway's resource login and exits.
+
 ## [0.13.0] - 2026-10-24
 
 Optional credential gateway for header-mode servers. `mcp-runtime update` applies the new MCPServer field with this release. Resource logins need mcp-auth 0.7.0, rolled separately with `mcp-runtime update --only mcp-auth`. No database reset or fresh setup is required. Submitted headers stay in the gateway's memory on one replica, and those sessions are not platform users.

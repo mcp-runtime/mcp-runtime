@@ -173,11 +173,20 @@ jobs:
           jq -e '([.plan.components[] | select(.action == "update")] | length == 0) and ([.plan.platformObjects[]? | select(.action != "skipped")] | length == 0)' \
             "$RUNNER_TEMP/live-plan.json"
           if [[ -n "$MCP_AUTH_VERSION" ]]; then
+            # The Keycloak file is only the identity connector. A credential
+            # gateway stores its own gateway-login-* entries in the same
+            # ConfigMap; dropping them makes mcp-auth 0.7.0 exit on startup.
+            auth_connectors="$RUNNER_TEMP/mcp-auth-connectors.json"
+            current="$(kubectl --kubeconfig "$kubeconfig" --context default -n mcp-platform get configmap mcp-auth-connectors -o jsonpath='{.data.connectors\.json}' 2>/dev/null || true)"
+            if [[ -z "$current" ]]; then current='{}'; fi
+            jq -n --argjson current "$current" --argjson incoming "$(cat config/deployments/mcpruntime-org-keycloak-connectors.json)" \
+              '($current | with_entries(select(.key | startswith("gateway-login-")))) + $incoming' \
+              > "$auth_connectors"
             ./bin/mcp-runtime cluster mcp-auth-connector apply \
-              --file config/deployments/mcpruntime-org-keycloak-connectors.json \
+              --file "$auth_connectors" \
               --connector keycloak --kubeconfig "$kubeconfig" --context default --dry-run
             ./bin/mcp-runtime cluster mcp-auth-connector apply \
-              --file config/deployments/mcpruntime-org-keycloak-connectors.json \
+              --file "$auth_connectors" \
               --connector keycloak --kubeconfig "$kubeconfig" --context default --yes
 
             # Roll out the public image setup installs. The mcp-auth-server

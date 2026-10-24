@@ -585,7 +585,10 @@ its credential Secret or other platform configuration:
   --context "$PROD_CONTEXT" --yes
 ```
 
-The next MCP Auth rollout loads the updated file. Connector configuration
+The next MCP Auth rollout loads the updated file. Entries named
+`gateway-login-*` stay in place when the file does not mention them, so
+refreshing the identity connector does not remove a credential gateway's
+resource login. Connector configuration
 selects the identity provider; MCP scope policy belongs in each server's
 `auth.scopes`, which the operator passes to MCP Auth per resource.
 
